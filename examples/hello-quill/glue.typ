@@ -3,34 +3,34 @@
 // Generate the official memorandum with validated and processed input
 #show:official-memorandum.with(
   // Letterhead configuration
-  letterhead-title: {{ letterhead-title | String }},
-  letterhead-caption: {{ letterhead-caption | List }},
+  letterhead-title: {{ letterhead_title | default| String }},
+  letterhead-caption: {{ letterhead_caption | Array }},
   letterhead-seal: image("assets/dod_seal.gif"),
 
   // Frontmatter
   date: {{ date | Date }},
-  memo-for: {{ memo-for | List }},
+  memo-for: {{ memo_for | Array }},
 
   // Sender information
-  memo-from: {{ memo-from | List }},
+  memo-from: {{ memo_from | Array }},
   
   // Subject line
   subject: {{ subject | String}},
   
   // Optional references
-  references: {{ references | List}},
+  references: {{ references | Array}},
 
   //Optional cc
-  cc: {{ cc | List }},
+  cc: {{ cc | Array }},
 
   //Optional distribution
-  distribution: {{ distribution | List }},
+  distribution: {{ distribution | Array }},
 
   // Optional attachments
-  attachments: {{ attachments | List }},
+  attachments: {{ attachments | Array }},
   
   // Signature block
-  signature-block: {{ signature-block | List }},
+  signature-block: {{ signature_block | Array }},
 
-  {{BODY | Markup}}
+  {{body | Body }}
 )

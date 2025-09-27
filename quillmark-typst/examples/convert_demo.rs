@@ -72,7 +72,7 @@ fn main() {
     
     // Show frontmatter fields if present
     let frontmatter_fields: Vec<_> = parsed_doc.fields().keys()
-        .filter(|k| *k != "BODY")
+        .filter(|k| *k != "body")
         .collect();
     
     if !frontmatter_fields.is_empty() {

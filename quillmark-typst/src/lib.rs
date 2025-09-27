@@ -1,12 +1,14 @@
-use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact};
+use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact, parse::decompose, templating::Glue};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
 use serde::Deserialize;
 pub use convert::mark_to_typst;
+use filters::*;
 
 mod compiler;
 mod convert;
+mod filters;
 
 /// Configuration for a quill template
 #[derive(Debug, Clone, Deserialize)]
@@ -15,7 +17,7 @@ pub struct Quill {
     pub path: PathBuf,
     /// Name of the quill template
     pub name: String,
-    /// Main Typst file (usually "map.typ")
+    /// Main Typst file (usually "glue.typ")
     pub main_file: String,
 }
 
@@ -28,11 +30,11 @@ impl Quill {
             .to_string_lossy()
             .to_string();
         
-        // Check if map.typ exists
-        let main_file = "map.typ".to_string();
+        // Check if glue.typ exists
+        let main_file = "glue.typ".to_string();
         let main_path = path.join(&main_file);
         if !main_path.exists() {
-            return Err(format!("map.typ not found in quill: {}", path.display()).into());
+            return Err(format!("glue.typ not found in quill: {}", path.display()).into());
         }
 
         Ok(Quill {
@@ -152,8 +154,27 @@ impl Backend for TypstBackend {
         // Use the first available quill for now
         let quill = self.quills.values().next().unwrap();
         
-        // Convert markdown to Typst using the conversion logic
-        let typst_content = mark_to_typst(markdown);
+        // Parse markdown to extract frontmatter and body
+        let parsed_doc = decompose(markdown)
+            .map_err(|e| RenderError::Other(format!("Failed to parse markdown: {}", e).into()))?;
+        
+        // Read the template file
+        let template_content = fs::read_to_string(quill.main_path())
+            .map_err(|e| RenderError::Other(format!("Failed to read template file: {}", e).into()))?;
+        
+        // Create Glue instance with the template and register filters
+        let mut glue = Glue::new(template_content);
+        glue.register_filter("String", StringFilter);
+        glue.register_filter("Array", ArrayFilter); // alias expected by some templates
+        glue.register_filter("Int", IntFilter);
+        glue.register_filter("Bool", BoolFilter);
+        glue.register_filter("Date", DateTimeFilter); // alias for date filter used in templates
+        glue.register_filter("Dict", DictFilter);
+        glue.register_filter("Body", BodyFilter); // alias commonly used for body content
+        
+        // Render the template with the parsed document context
+        let typst_content = glue.compose(parsed_doc.fields().clone())
+            .map_err(|e| RenderError::Other(Box::new(e)))?;
         
         let format = opts.format.unwrap_or(OutputFormat::Pdf);
         
@@ -206,9 +227,9 @@ mod tests {
         fs::create_dir_all(quill_path.join("packages"))?;
         fs::create_dir_all(quill_path.join("assets"))?;
         
-        // Create a simple map.typ
+        // Create a simple glue.typ
         fs::write(
-            quill_path.join("map.typ"),
+            quill_path.join("glue.typ"),
             r#"#set page(width: 8.5in, height: 11in, margin: 1in)
 #set text(font: "Times New Roman", size: 12pt)
 
@@ -232,7 +253,7 @@ This is a test document with markdown content: $content$
         
         let quill = Quill::from_path(&quill_path)?;
         assert_eq!(quill.name, "test-quill");
-        assert_eq!(quill.main_file, "map.typ");
+        assert_eq!(quill.main_file, "glue.typ");
         assert!(quill.main_path().exists());
         
         quill.validate()?;
@@ -244,7 +265,7 @@ This is a test document with markdown content: $content$
         let (_temp, quill_path) = create_test_quill()?;
         let quill = Quill::from_path(&quill_path)?;
         
-        assert!(quill.main_path().ends_with("map.typ"));
+        assert!(quill.main_path().ends_with("glue.typ"));
         assert!(quill.packages_path().ends_with("packages"));
         assert!(quill.assets_path().ends_with("assets"));
         
@@ -275,8 +296,8 @@ This is a test document with markdown content: $content$
 
     #[test]
     fn test_backend_render_no_quills() {
-        let backend = TypstBackend::default();
-        let options = Options {
+        let _backend = TypstBackend::default();
+        let _options = Options {
             backend: Some("typst".to_string()),
             format: Some(OutputFormat::Pdf),
         };

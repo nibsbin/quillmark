@@ -10,4 +10,5 @@ repository = "https://github.com/nibsbin/quillmark"
 thiserror = { workspace = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_yaml = "0.9"
+serde_json = "1.0.145"
 tera = "1.20.0"
