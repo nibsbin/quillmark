@@ -6,6 +6,10 @@ description = "Typst backend for quillmark using pulldown-cmark and Typst"
 license = "MIT"
 repository = "https://github.com/nibsbin/quillmark"
 
+[[example]]
+name = "typst-convert"
+path = "examples/convert_demo.rs"
+
 [dependencies]
 quillmark-core = { path = "../quillmark-core" }
 thiserror = { workspace = true }
@@ -16,6 +20,8 @@ comemo = "0.4"
 chrono = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.9"
+pulldown-cmark = "0.13.0"
+
 
 [dev-dependencies]
 tempfile = "3.0"

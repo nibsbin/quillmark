@@ -1,8 +1,15 @@
+<<<<<<< HEAD
 use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
 use serde::Deserialize;
+=======
+use quillmark_core::{Artifact, Backend, Options, OutputFormat, RenderError};
+
+mod convert;
+pub use convert::mark_to_typst;
+>>>>>>> origin/main
 
 mod compiler;
 
@@ -138,6 +145,7 @@ impl Backend for TypstBackend {
         &[OutputFormat::Pdf, OutputFormat::Svg]
     }
 
+<<<<<<< HEAD
     fn render(&self, markdown: &str, opts: &Options) -> Result<Vec<Artifact>, RenderError> {
         // For now, we'll use a simple approach where we expect a quill to be registered
         // In a more sophisticated implementation, this could be specified in opts
@@ -182,6 +190,18 @@ impl Backend for TypstBackend {
                 })
             }
         }
+=======
+    fn render(&self, markdown: &str, _opts: &Options) -> Result<Vec<Artifact>, RenderError> {
+        // Convert markdown to Typst using our conversion logic
+        let typst_content = mark_to_typst(markdown);
+        
+        // For now, return the Typst content as bytes
+        // In a real implementation, this would compile with Typst to PDF/SVG
+        Ok(vec![Artifact {
+            bytes: typst_content.into_bytes(),
+            output_format: OutputFormat::Pdf,
+        }])
+>>>>>>> origin/main
     }
 }
 
@@ -280,6 +300,7 @@ This is a test document with markdown content: $content$
             format: Some(OutputFormat::Pdf),
         };
         
+<<<<<<< HEAD
         let result = backend.render("# Hello World", &options);
         assert!(result.is_err());
         
@@ -338,5 +359,17 @@ Some _italic_ text and `code`.
         assert!(svg_content.contains("<svg"), "Should contain SVG tags");
         
         Ok(())
+=======
+        let result = backend.render("This is *emphasis* and **strong** text.", &options);
+        assert!(result.is_ok());
+
+        let artifacts = result.unwrap();
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].output_format, OutputFormat::Pdf);
+
+        let content = String::from_utf8(artifacts[0].bytes.clone()).unwrap();
+        assert!(content.contains("_emphasis_"));
+        assert!(content.contains("*strong*"));
+>>>>>>> origin/main
     }
 }
