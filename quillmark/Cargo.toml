@@ -1,0 +1,10 @@
+[package]
+name = "quillmark"
+version = "0.1.0"
+edition = "2021"
+description = "A flexible markdown rendering library with pluggable backends"
+license = "MIT"
+repository = "https://github.com/nibsbin/quillmark"
+
+[dependencies]
+thiserror = { workspace = true }
