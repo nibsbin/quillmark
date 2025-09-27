@@ -1,4 +1,4 @@
-use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact};
+use quillmark_core::{Artifact, Backend, Options, OutputFormat, RenderError};
 
 mod convert;
 pub use convert::mark_to_typst;
@@ -65,11 +65,11 @@ mod tests {
         
         let result = backend.render("This is *emphasis* and **strong** text.", &options);
         assert!(result.is_ok());
-        
+
         let artifacts = result.unwrap();
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0].output_format, OutputFormat::Pdf);
-        
+
         let content = String::from_utf8(artifacts[0].bytes.clone()).unwrap();
         assert!(content.contains("_emphasis_"));
         assert!(content.contains("*strong*"));
