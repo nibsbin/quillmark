@@ -49,33 +49,26 @@ let backend = TypstBackend::with_quill("hello-quill")?;
         format: Some(quillmark_core::OutputFormat::Pdf),
     };
     
-    match backend.render(markdown, &options) {
-        Ok(artifacts) => {
-            println!("✓ Successfully compiled {} artifact(s)", artifacts.len());
-            
-            for (i, artifact) in artifacts.iter().enumerate() {
-                match artifact.output_format {
-                    quillmark_core::OutputFormat::Pdf => {
-                        let filename = if i == 0 { "output.pdf".to_string() } else { format!("output_{}.pdf", i) };
-                        let filepath = output_dir.join(&filename);
-                        fs::write(&filepath, &artifact.bytes)?;
-                        println!("  → Saved PDF: {} ({} bytes)", filepath.display(), artifact.bytes.len());
-                    }
-                    quillmark_core::OutputFormat::Svg => {
-                        let filename = if i == 0 { "output.svg".to_string() } else { format!("output_{}.svg", i) };
-                        let filepath = output_dir.join(&filename);
-                        fs::write(&filepath, &artifact.bytes)?;
-                        println!("  → Saved SVG: {} ({} bytes)", filepath.display(), artifact.bytes.len());
-                    }
-                    quillmark_core::OutputFormat::Txt => {
-                        println!("  → Text format not supported by Typst backend");
-                    }
-                }
+    let artifacts = backend.render(markdown, &options).unwrap();
+    println!("✓ Successfully compiled {} artifact(s)", artifacts.len());
+
+    for (i, artifact) in artifacts.iter().enumerate() {
+        match artifact.output_format {
+            quillmark_core::OutputFormat::Pdf => {
+                let filename = if i == 0 { "output.pdf".to_string() } else { format!("output_{}.pdf", i) };
+                let filepath = output_dir.join(&filename);
+                fs::write(&filepath, &artifact.bytes)?;
+                println!("  → Saved PDF: {} ({} bytes)", filepath.display(), artifact.bytes.len());
             }
-        }
-        Err(e) => {
-            println!("✗ Compilation failed: {}", e);
-            return Err(e.into());
+            quillmark_core::OutputFormat::Svg => {
+                let filename = if i == 0 { "output.svg".to_string() } else { format!("output_{}.svg", i) };
+                let filepath = output_dir.join(&filename);
+                fs::write(&filepath, &artifact.bytes)?;
+                println!("  → Saved SVG: {} ({} bytes)", filepath.display(), artifact.bytes.len());
+            }
+            quillmark_core::OutputFormat::Txt => {
+                println!("  → Text format not supported by Typst backend");
+            }
         }
     }
     
@@ -86,20 +79,15 @@ let backend = TypstBackend::with_quill("hello-quill")?;
         format: Some(quillmark_core::OutputFormat::Svg),
     };
     
-    match backend.render(markdown, &svg_options) {
-        Ok(artifacts) => {
-            println!("✓ Successfully compiled {} SVG page(s)", artifacts.len());
-            
-            for (i, artifact) in artifacts.iter().enumerate() {
-                let filename = format!("output_page_{}.svg", i + 1);
-                let filepath = output_dir.join(&filename);
-                fs::write(&filepath, &artifact.bytes)?;
-                println!("  → Saved SVG page {}: {} ({} bytes)", i + 1, filepath.display(), artifact.bytes.len());
-            }
-        }
-        Err(e) => {
-            println!("✗ SVG compilation failed: {}", e);
-        }
+    // Panic on SVG render errors as well so we can inspect a backtrace
+    let artifacts = backend.render(markdown, &svg_options).unwrap();
+    println!("✓ Successfully compiled {} SVG page(s)", artifacts.len());
+
+    for (i, artifact) in artifacts.iter().enumerate() {
+        let filename = format!("output_page_{}.svg", i + 1);
+        let filepath = output_dir.join(&filename);
+        fs::write(&filepath, &artifact.bytes)?;
+        println!("  → Saved SVG page {}: {} ({} bytes)", i + 1, filepath.display(), artifact.bytes.len());
     }
     
     println!("\n🎉 Example completed successfully!");

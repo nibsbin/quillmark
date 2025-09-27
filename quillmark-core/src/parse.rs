@@ -3,12 +3,12 @@ use std::collections::HashMap;
 use std::error::Error;
 
 /// Reserved field name for markdown body content
-pub const BODY_FIELD: &str = "BODY";
+pub const BODY_FIELD: &str = "body";
 
 /// Parsed markdown document with frontmatter fields and body
 #[derive(Debug, Clone, PartialEq)]
 pub struct ParsedDocument {
-    /// Dictionary containing frontmatter fields and the BODY field
+    /// Dictionary containing frontmatter fields and the body field
     pub fields: HashMap<String, serde_yaml::Value>,
 }
 
@@ -157,7 +157,7 @@ This is the body."#;
         let result = decompose(markdown).unwrap();
         
         assert_eq!(result.body(), Some("# Hello World\n\nThis is the body."));
-        assert_eq!(result.fields().len(), 1); // Only BODY field
+        assert_eq!(result.fields().len(), 1); // Only body field
     }
 
     #[test]
@@ -202,6 +202,6 @@ author: John Doe
         assert_eq!(doc.get_field("title").and_then(|v| v.as_str()), Some("Test"));
         assert_eq!(doc.get_field("count").and_then(|v| v.as_i64()), Some(42));
         assert!(doc.get_field("nonexistent").is_none());
-        assert_eq!(doc.fields().len(), 3); // title, count, BODY
+        assert_eq!(doc.fields().len(), 3); // title, count, body
     }
 }

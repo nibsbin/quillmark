@@ -164,17 +164,17 @@ impl Backend for TypstBackend {
         
         // Create Glue instance with the template and register filters
         let mut glue = Glue::new(template_content);
-        glue.register_filter("str", StringFilter);
-        glue.register_filter("array", ArrayFilter);
-        glue.register_filter("int", IntFilter);
-        glue.register_filter("bool", BoolFilter);
-        glue.register_filter("datetime", DateTimeFilter);
-        glue.register_filter("dict", DictFilter);
-        glue.register_filter("markup", MarkupFilter);
+        glue.register_filter("String", StringFilter);
+        glue.register_filter("Array", ArrayFilter); // alias expected by some templates
+        glue.register_filter("Int", IntFilter);
+        glue.register_filter("Bool", BoolFilter);
+        glue.register_filter("Date", DateTimeFilter); // alias for date filter used in templates
+        glue.register_filter("Dict", DictFilter);
+        glue.register_filter("Body", BodyFilter); // alias commonly used for body content
         
         // Render the template with the parsed document context
         let typst_content = glue.compose(parsed_doc.fields().clone())
-            .map_err(|e| RenderError::Other(format!("Template rendering failed: {}", e).into()))?;
+            .map_err(|e| RenderError::Other(Box::new(e)))?;
         
         let format = opts.format.unwrap_or(OutputFormat::Pdf);
         
@@ -296,8 +296,8 @@ This is a test document with markdown content: $content$
 
     #[test]
     fn test_backend_render_no_quills() {
-        let backend = TypstBackend::default();
-        let options = Options {
+        let _backend = TypstBackend::default();
+        let _options = Options {
             backend: Some("typst".to_string()),
             format: Some(OutputFormat::Pdf),
         };

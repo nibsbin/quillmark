@@ -5,14 +5,14 @@ use quillmark_core::{templating::Glue, parse::decompose};
 fn test_integration_template_rendering() {
     // Simulate parsing markdown with frontmatter (like what a backend would get)
     let markdown = r#"---
-letterhead-title: "DEPARTMENT OF THE AIR FORCE"
-letterhead-caption:
+letterhead_title: "DEPARTMENT OF THE AIR FORCE"
+letterhead_caption:
   - "HEADQUARTERS UNITED STATES AIR FORCE"  
   - "WASHINGTON, DC 20330-1000"
 date: "1 January 2024"
-memo-for:
+memo_for:
   - "ALL PERSONNEL"
-memo-from:
+memo_from:
   - "COMMANDER"
 subject: "New Policies and Procedures"
 ---
@@ -47,7 +47,7 @@ Please review these changes carefully and ensure compliance."#;
   // Subject line
   subject: {{ subject }},
 
-  {{ BODY }}
+  {{ body }}
 )
 "#;
     

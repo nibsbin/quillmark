@@ -1,15 +1,16 @@
 use std::collections::HashMap;
 use tera::{Tera, Context, Filter};
 use serde_yaml;
+use std::error::Error as StdError;
 
 /// Error types for template rendering
 #[derive(thiserror::Error, Debug)]
 pub enum TemplateError {
-    #[error("Template rendering failed: {0}")]
+    #[error("{0}")]
     RenderError(#[from] tera::Error),
-    #[error("Invalid template content: {0}")]
-    InvalidTemplate(String),
-    #[error("Filter error: {0}")]
+    #[error("{0}")]
+    InvalidTemplate(String, #[source] Box<dyn StdError + Send + Sync>),
+    #[error("{0}")]
     FilterError(String),
 }
 
@@ -39,18 +40,28 @@ impl Glue {
     pub fn compose(&mut self, context: HashMap<String, serde_yaml::Value>) -> Result<String, TemplateError> {
         let mut tera_context = Context::new();
         
-        // Convert data to tera context, normalizing field names
+        // Convert data to tera context.
+        // Insert keys into the tera context exactly as provided. The project
+
         for (key, value) in context {
-            // Replace dashes with underscores for tera compatibility  
-            let normalized_key = key.replace("-", "_");
-            tera_context.insert(&normalized_key, &value);
-            // Also insert the original key for backward compatibility
             tera_context.insert(&key, &value);
         }
-        
-        // Render the template
-        self.tera.render_str(&self.template, &tera_context)
-            .map_err(TemplateError::RenderError)
+
+        match self.tera.render_str(&self.template, &tera_context) {
+            Ok(s) => Ok(s),
+            Err(tera_err) => {
+                // Keep diagnostics minimal: show the most specific source error
+                let mut root = tera_err.to_string();
+                let mut src = tera_err.source();
+                while let Some(e) = src {
+                    root = e.to_string();
+                    src = e.source();
+                }
+
+                let msg = format!("Template rendering error: {}", root);
+                Err(TemplateError::InvalidTemplate(msg, Box::new(tera_err)))
+            }
+        }
     }
 }
 
@@ -70,10 +81,10 @@ mod tests {
     
     #[test]
     fn test_compose_simple_template() {
-        let mut glue = Glue::new("Hello {{ name }}! Body: {{ BODY }}".to_string());
+        let mut glue = Glue::new("Hello {{ name }}! Body: {{ body }}".to_string());
         let mut context = HashMap::new();
         context.insert("name".to_string(), serde_yaml::Value::String("World".to_string()));
-        context.insert("BODY".to_string(), serde_yaml::Value::String("Hello content".to_string()));
+        context.insert("body".to_string(), serde_yaml::Value::String("Hello content".to_string()));
         
         let result = glue.compose(context).unwrap();
         assert!(result.contains("Hello World!"));
@@ -84,10 +95,22 @@ mod tests {
     fn test_field_with_dash() {
         let mut glue = Glue::new("Field: {{ letterhead_title }}".to_string());
         let mut context = HashMap::new();
-        context.insert("letterhead-title".to_string(), serde_yaml::Value::String("TEST VALUE".to_string()));
-        context.insert("BODY".to_string(), serde_yaml::Value::String("body".to_string()));
+        context.insert("letterhead_title".to_string(), serde_yaml::Value::String("TEST VALUE".to_string()));
+        context.insert("body".to_string(), serde_yaml::Value::String("body".to_string()));
         
         let result = glue.compose(context).unwrap();
         assert!(result.contains("TEST VALUE"));
+    }
+
+    #[test]
+    fn test_compose_with_dash_in_template() {
+        // Templates must reference the exact key names provided by the context.
+        let mut glue = Glue::new("Field: {{ letterhead_title }}".to_string());
+        let mut context = HashMap::new();
+        context.insert("letterhead_title".to_string(), serde_yaml::Value::String("DASHED".to_string()));
+        context.insert("body".to_string(), serde_yaml::Value::String("body".to_string()));
+
+        let result = glue.compose(context).unwrap();
+        assert!(result.contains("DASHED"));
     }
 }
