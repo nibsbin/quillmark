@@ -16,13 +16,14 @@ pub enum TemplateError {
 /// Glue class for template rendering - provides interface for backends to interact with templates
 pub struct Glue {
     tera: Tera,
+    template: String,
 }
 
 impl Glue {
-    /// Create a new Glue instance
-    pub fn new() -> Self {
+    /// Create a new Glue instance with a template string
+    pub fn new(template: String) -> Self {
         let tera = Tera::default();
-        Self { tera }
+        Self { tera, template }
     }
     
     /// Register a custom filter with the template engine
@@ -35,7 +36,7 @@ impl Glue {
     
     
     /// Compose template with context from markdown decomposition
-    pub fn compose(&mut self, template: &str, context: HashMap<String, serde_yaml::Value>) -> Result<String, TemplateError> {
+    pub fn compose(&mut self, context: HashMap<String, serde_yaml::Value>) -> Result<String, TemplateError> {
         let mut tera_context = Context::new();
         
         // Convert data to tera context, normalizing field names
@@ -48,16 +49,12 @@ impl Glue {
         }
         
         // Render the template
-        self.tera.render_str(template, &tera_context)
+        self.tera.render_str(&self.template, &tera_context)
             .map_err(TemplateError::RenderError)
     }
 }
 
-impl Default for Glue {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+
 
 #[cfg(test)]
 mod tests {
@@ -66,41 +63,31 @@ mod tests {
     
     #[test]
     fn test_glue_creation() {
-        let _glue = Glue::new();
-        // Just verify it doesn't panic
-        assert!(true);
-    }
-    
-    #[test]
-    fn test_glue_default() {
-        let _glue = Glue::default();
+        let _glue = Glue::new("Hello {{ name }}".to_string());
         // Just verify it doesn't panic
         assert!(true);
     }
     
     #[test]
     fn test_compose_simple_template() {
-        let mut glue = Glue::new();
+        let mut glue = Glue::new("Hello {{ name }}! Body: {{ BODY }}".to_string());
         let mut context = HashMap::new();
         context.insert("name".to_string(), serde_yaml::Value::String("World".to_string()));
         context.insert("BODY".to_string(), serde_yaml::Value::String("Hello content".to_string()));
         
-        let template = "Hello {{ name }}! Body: {{ BODY }}";
-        
-        let result = glue.compose(template, context).unwrap();
+        let result = glue.compose(context).unwrap();
         assert!(result.contains("Hello World!"));
         assert!(result.contains("Body: Hello content"));
     }
     
     #[test]
     fn test_field_with_dash() {
-        let mut glue = Glue::new();
+        let mut glue = Glue::new("Field: {{ letterhead_title }}".to_string());
         let mut context = HashMap::new();
         context.insert("letterhead-title".to_string(), serde_yaml::Value::String("TEST VALUE".to_string()));
         context.insert("BODY".to_string(), serde_yaml::Value::String("body".to_string()));
         
-        let template = r#"Field: {{ letterhead_title }}"#;
-        let result = glue.compose(template, context).unwrap();
+        let result = glue.compose(context).unwrap();
         assert!(result.contains("TEST VALUE"));
     }
 }

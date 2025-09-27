@@ -3,9 +3,6 @@ use quillmark_core::{templating::Glue, parse::decompose};
 
 #[test]
 fn test_integration_template_rendering() {
-    // Create a glue instance
-    let mut glue = Glue::new();
-    
     // Simulate parsing markdown with frontmatter (like what a backend would get)
     let markdown = r#"---
 letterhead-title: "DEPARTMENT OF THE AIR FORCE"
@@ -54,8 +51,11 @@ Please review these changes carefully and ensure compliance."#;
 )
 "#;
     
+    // Create a glue instance with the template
+    let mut glue = Glue::new(template.to_string());
+    
     // Render the template using compose method with the parsed document fields
-    let result = glue.compose(template, doc.fields().clone()).expect("Failed to render template");
+    let result = glue.compose(doc.fields().clone()).expect("Failed to render template");
     
     println!("=== Rendered Typst Template ===");
     println!("{}", result);

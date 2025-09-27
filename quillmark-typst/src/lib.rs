@@ -162,8 +162,8 @@ impl Backend for TypstBackend {
         let template_content = fs::read_to_string(quill.main_path())
             .map_err(|e| RenderError::Other(format!("Failed to read template file: {}", e).into()))?;
         
-        // Create Glue instance and register filters
-        let mut glue = Glue::new();
+        // Create Glue instance with the template and register filters
+        let mut glue = Glue::new(template_content);
         glue.register_filter("str", StringFilter);
         glue.register_filter("array", ArrayFilter);
         glue.register_filter("int", IntFilter);
@@ -173,7 +173,7 @@ impl Backend for TypstBackend {
         glue.register_filter("markup", MarkupFilter);
         
         // Render the template with the parsed document context
-        let typst_content = glue.compose(&template_content, parsed_doc.fields().clone())
+        let typst_content = glue.compose(parsed_doc.fields().clone())
             .map_err(|e| RenderError::Other(format!("Template rendering failed: {}", e).into()))?;
         
         let format = opts.format.unwrap_or(OutputFormat::Pdf);
