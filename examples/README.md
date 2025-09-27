@@ -10,19 +10,19 @@ This directory contains an example demonstrating the markdown-to-Typst conversio
 
 ## Running the Example
 
-### Using the demo binary
+### Using the demo example
 
 From the `quillmark-typst` directory:
 
 ```bash
 # Use default files (sample.md -> sample_output.typ)
-cargo run --bin demo
+cargo run --example demo
 
 # Specify input file (output will be input filename with .typ extension)
-cargo run --bin demo ../examples/sample.md
+cargo run --example demo -- ../examples/sample.md
 
 # Specify both input and output files
-cargo run --bin demo ../examples/sample.md ../examples/custom_output.typ
+cargo run --example demo -- ../examples/sample.md ../examples/custom_output.typ
 ```
 
 ### Testing the conversion interactively

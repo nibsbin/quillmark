@@ -6,9 +6,9 @@ description = "Typst backend for quillmark using pulldown-cmark and Typst"
 license = "MIT"
 repository = "https://github.com/nibsbin/quillmark"
 
-[[bin]]
+[[example]]
 name = "demo"
-path = "src/bin/demo.rs"
+path = "examples/demo.rs"
 
 [dependencies]
 quillmark-core = { path = "../quillmark-core" }
