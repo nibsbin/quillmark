@@ -1,5 +1,8 @@
 use quillmark_core::{Artifact, Backend, Options, OutputFormat, RenderError};
 
+mod convert;
+pub use convert::mark_to_typst;
+
 /// Typst backend implementation using puldown-cmark and Typst
 pub struct TypstBackend;
 
@@ -14,20 +17,13 @@ impl Backend for TypstBackend {
     }
 
     fn render(&self, markdown: &str, _opts: &Options) -> Result<Vec<Artifact>, RenderError> {
-        // This is a skeleton implementation
-        // In a real implementation, this would:
-        // 1. Use pulldown-cmark to convert markdown to Typst format
-        // 2. Use Typst to compile to the requested output format
-        // 3. Return the compiled artifacts
-
-        // For now, return a mock artifact
-        let mock_content = format!(
-            "Mock Typst output for: {}",
-            markdown.lines().next().unwrap_or("empty")
-        );
-
+        // Convert markdown to Typst using our conversion logic
+        let typst_content = mark_to_typst(markdown);
+        
+        // For now, return the Typst content as bytes
+        // In a real implementation, this would compile with Typst to PDF/SVG
         Ok(vec![Artifact {
-            bytes: mock_content.into_bytes(),
+            bytes: typst_content.into_bytes(),
             output_format: OutputFormat::Pdf,
         }])
     }
@@ -66,8 +62,8 @@ mod tests {
             backend: Some("typst".to_string()),
             format: Some(OutputFormat::Pdf),
         };
-
-        let result = backend.render("# Hello World", &options);
+        
+        let result = backend.render("This is *emphasis* and **strong** text.", &options);
         assert!(result.is_ok());
 
         let artifacts = result.unwrap();
@@ -75,6 +71,7 @@ mod tests {
         assert_eq!(artifacts[0].output_format, OutputFormat::Pdf);
 
         let content = String::from_utf8(artifacts[0].bytes.clone()).unwrap();
-        assert!(content.contains("Hello World"));
+        assert!(content.contains("_emphasis_"));
+        assert!(content.contains("*strong*"));
     }
 }
