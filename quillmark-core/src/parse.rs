@@ -51,7 +51,7 @@ impl ParsedDocument {
 /// and returns a ParsedDocument containing both as a dictionary.
 /// YAML frontmatter fields are mapped to dictionary fields, and the markdown body
 /// is stored under the reserved BODY field.
-pub fn parameterize(markdown: &str) -> Result<ParsedDocument, Box<dyn Error + Send + Sync>> {
+pub fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn Error + Send + Sync>> {
     // Check if the document starts with YAML frontmatter (---\n)
     if markdown.starts_with("---\n") || markdown.starts_with("---\r\n") {
         let lines: Vec<&str> = markdown.lines().collect();
@@ -110,9 +110,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parameterize_no_frontmatter() {
+    fn test_decompose_no_frontmatter() {
         let markdown = "# Hello World\n\nThis is a test.";
-        let result = parameterize(markdown).unwrap();
+        let result = decompose(markdown).unwrap();
         
         assert_eq!(result.body(), Some(markdown));
         assert_eq!(result.fields().len(), 1);
@@ -120,7 +120,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parameterize_with_frontmatter() {
+    fn test_decompose_with_frontmatter() {
         let markdown = r#"---
 title: Test Document
 author: John Doe
@@ -133,7 +133,7 @@ tags:
 
 This is the body content."#;
         
-        let result = parameterize(markdown).unwrap();
+        let result = decompose(markdown).unwrap();
         
         assert_eq!(result.body(), Some("# Hello World\n\nThis is the body content."));
         assert_eq!(result.get_field("title").and_then(|v| v.as_str()), Some("Test Document"));
@@ -146,7 +146,7 @@ This is the body content."#;
     }
 
     #[test]
-    fn test_parameterize_empty_frontmatter() {
+    fn test_decompose_empty_frontmatter() {
         let markdown = r#"---
 ---
 
@@ -154,21 +154,21 @@ This is the body content."#;
 
 This is the body."#;
         
-        let result = parameterize(markdown).unwrap();
+        let result = decompose(markdown).unwrap();
         
         assert_eq!(result.body(), Some("# Hello World\n\nThis is the body."));
         assert_eq!(result.fields().len(), 1); // Only BODY field
     }
 
     #[test]
-    fn test_parameterize_invalid_frontmatter() {
+    fn test_decompose_invalid_frontmatter() {
         let markdown = r#"---
 invalid: yaml: content: [
 ---
 
 # Hello World"#;
         
-        let result = parameterize(markdown).unwrap();
+        let result = decompose(markdown).unwrap();
         
         // Should fallback to treating entire content as body when YAML is invalid
         assert!(result.body().unwrap().contains("---"));
@@ -176,14 +176,14 @@ invalid: yaml: content: [
     }
 
     #[test]
-    fn test_parameterize_incomplete_frontmatter() {
+    fn test_decompose_incomplete_frontmatter() {
         let markdown = r#"---
 title: Test Document
 author: John Doe
 
 # Hello World"#;
         
-        let result = parameterize(markdown).unwrap();
+        let result = decompose(markdown).unwrap();
         
         // No closing ---, should treat entire content as body
         assert!(result.body().unwrap().contains("---"));

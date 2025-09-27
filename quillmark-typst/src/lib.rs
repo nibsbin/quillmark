@@ -1,4 +1,4 @@
-use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact, parameterize};
+use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact, decompose};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
@@ -152,9 +152,9 @@ impl Backend for TypstBackend {
         // Use the first available quill for now
         let quill = self.quills.values().next().unwrap();
         
-        // Parameterize markdown into dictionary with frontmatter and body
-        let parsed_doc = parameterize(markdown)
-            .map_err(|e| RenderError::Other(format!("Failed to parameterize markdown: {}", e).into()))?;
+        // decompose markdown into dictionary with frontmatter and body
+        let parsed_doc = decompose(markdown)
+            .map_err(|e| RenderError::Other(format!("Failed to decompose markdown: {}", e).into()))?;
         
         // Extract the BODY field and convert to Typst
         let body = parsed_doc.body().unwrap_or("");

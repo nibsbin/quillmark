@@ -1,4 +1,4 @@
-use quillmark_core::{parameterize, test_context};
+use quillmark_core::{decompose, test_context};
 use quillmark_typst::mark_to_typst;
 use std::fs;
 use std::env;
@@ -62,7 +62,7 @@ fn main() {
     println!("\n=== Converting to Typst ===");
     
     // Parse the markdown to separate frontmatter from body
-    let parsed_doc = match parameterize(&markdown_content) {
+    let parsed_doc = match decompose(&markdown_content) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("Error parsing markdown: {}", err);

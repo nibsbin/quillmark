@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 // Re-export parsing functionality
 pub mod parse;
-pub use parse::{parameterize, ParsedDocument, BODY_FIELD};
+pub use parse::{decompose, ParsedDocument, BODY_FIELD};
 
 /// Output formats supported by backends
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
