@@ -102,7 +102,7 @@ impl QuillWorld {
         let processed_content = process_main_content(&main_content, typst_content)?;
         
         // Create main source
-        let main_id = FileId::new(None, VirtualPath::new("map.typ"));
+        let main_id = FileId::new(None, VirtualPath::new("glue.typ"));
         let source = Source::new(main_id, processed_content);
         
         Ok(Self {

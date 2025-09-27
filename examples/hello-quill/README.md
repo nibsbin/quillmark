@@ -6,14 +6,14 @@ This directory contains a minimal quill template that demonstrates the QuillMark
 
 ```
 hello-quill/
-├── map.typ        # Main Typst template file
+├── glue.typ        # Main Typst template file
 ├── packages/       # Directory for Typst packages (empty in this example)
 └── assets/         # Directory for assets like fonts and images (empty in this example)
 ```
 
-## map.typ
+## glue.typ
 
-The `map.typ` file contains a basic Typst template with:
+The `glue.typ` file contains a basic Typst template with:
 - Page setup (8.5" x 11", 1" margins)
 - Font configuration (Times New Roman, 12pt)
 - A content placeholder (`$content$`) where converted markdown will be inserted
@@ -36,7 +36,7 @@ This will:
 
 ## Modifying the Template
 
-You can edit `map.typ` to customize:
+You can edit `glue.typ` to customize:
 - Page layout and margins
 - Typography and fonts
 - Document structure

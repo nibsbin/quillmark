@@ -34,7 +34,7 @@ Please review these changes carefully and ensure compliance."#;
     
     let doc = decompose(markdown).expect("Failed to parse markdown");
     
-    // Template similar to the real map.typ from examples/hello-quill/map.typ
+    // Template similar to the real glue.typ from examples/hello-quill/glue.typ
     let template = r#"#import "@preview/tonguetoquill-usaf-memo:0.1.1": official-memorandum
 
 #show:official-memorandum.with(
@@ -50,7 +50,7 @@ Please review these changes carefully and ensure compliance."#;
   // Subject line
   subject: {{ subject | String }},
 
-  {{ BODY | Markup }}
+  {{ BODY | Body }}
 )
 "#;
     

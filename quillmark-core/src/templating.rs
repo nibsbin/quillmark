@@ -33,7 +33,7 @@ impl TemplateEngine {
         tera.register_filter("Date", date_filter);
         tera.register_filter("DateTime", date_filter); // Alias for Date
         tera.register_filter("Dict", dict_filter);
-        tera.register_filter("Markup", markup_filter);
+        tera.register_filter("Body", body_filter);
         
         Self { tera }
     }
@@ -163,8 +163,8 @@ fn dict_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Va
     }
 }
 
-fn markup_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
-    // This filter is for markup content - backends will customize this
+fn body_filter(value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+    // This filter is for body content - backends will customize this
     // For now, just pass through as string
     string_filter(value, _args)
 }
@@ -212,7 +212,7 @@ mod tests {
         fields.insert("BODY".to_string(), serde_yaml::Value::String("Body content".to_string()));
         
         let doc = ParsedDocument::with_frontmatter(fields, "Body content".to_string());
-        let template = "{{ title | String }} - {{ count | Int }} - {{ BODY | Markup }}";
+        let template = "{{ title | String }} - {{ count | Int }} - {{ BODY | Body }}";
         
         let result = engine.render_string(template, &doc).unwrap();
         assert!(result.contains("Test Title"));
@@ -281,7 +281,7 @@ mod tests {
     fn test_template_with_typst_like_syntax() {
         let engine = TemplateEngine::new();
         
-        // Create test data similar to the map.typ example
+        // Create test data similar to the glue.typ example
         let mut fields = HashMap::new();
         fields.insert("letterhead-title".to_string(), serde_yaml::Value::String("DEPARTMENT OF THE AIR FORCE".to_string()));
         
@@ -298,11 +298,11 @@ mod tests {
         let body_content = "This is the main content of the memorandum.\n\nIt contains multiple paragraphs.";
         let doc = ParsedDocument::with_frontmatter(fields, body_content.to_string());
         
-        // Test template similar to map.typ format, using normalized field names (underscores)
+        // Test template similar to glue.typ format, using normalized field names (underscores)
         let template = r#"#show:official-memorandum.with(
   letterhead-title: {{ letterhead_title | String }},
   subject: {{ subject | String }},
-  {{ BODY | Markup }}
+  {{ BODY | Body }}
 )"#;
         
         let result = engine.render_string(template, &doc).unwrap();

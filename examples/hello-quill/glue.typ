@@ -32,5 +32,5 @@
   // Signature block
   signature-block: {{ signature-block | List }},
 
-  {{BODY | Markup}}
+  {{BODY | Body }}
 )
