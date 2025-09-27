@@ -1,4 +1,4 @@
-use quillmark::{Backend, OutputFormat, Options, RenderError, Artifact};
+use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact};
 
 /// Typst backend implementation using puldown-cmark and Typst
 pub struct TypstBackend;
@@ -40,7 +40,7 @@ impl Default for TypstBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quillmark::OutputFormat;
+    use quillmark_core::OutputFormat;
 
     #[test]
     fn test_typst_backend_id() {

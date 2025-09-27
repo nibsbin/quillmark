@@ -8,7 +8,8 @@ QuillMark provides a trait-based architecture for rendering markdown to various 
 
 ## Crates
 
-- **`quillmark`**: The core library that defines the traits and common types
+- **`quillmark-core`**: Core types and traits shared between all components
+- **`quillmark`**: The main library that provides the high-level API and re-exports core types
 - **`quillmark-typst`**: A backend implementation using `pulldown-cmark` and Typst for PDF and SVG generation
 
 ## Usage
@@ -36,7 +37,7 @@ let artifacts = render("# Hello World", &options)?;
 
 ## Architecture
 
-The library is built around the `Backend` trait:
+The library is built around the `Backend` trait defined in `quillmark-core`:
 
 ```rust
 pub trait Backend: Send + Sync {
@@ -45,6 +46,11 @@ pub trait Backend: Send + Sync {
     fn render(&self, markdown: &str, opts: &Options) -> Result<Vec<Artifact>, RenderError>;
 }
 ```
+
+The crate structure avoids cyclical dependencies:
+- `quillmark-core` contains shared types and traits
+- `quillmark` depends on `quillmark-core` and provides the main API
+- Backend crates like `quillmark-typst` depend only on `quillmark-core`
 
 Backends can produce multiple artifacts (e.g., multi-page documents) in various formats.
 
