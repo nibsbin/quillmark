@@ -1,4 +1,5 @@
 use quillmark_typst::mark_to_typst;
+use quillmark_core::test_context;
 use std::fs;
 use std::env;
 use std::path::Path;
@@ -6,32 +7,46 @@ use std::path::Path;
 fn main() {
     let args: Vec<String> = env::args().collect();
     
-    // Create out directory if it doesn't exist
-    if let Err(err) = fs::create_dir_all("out") {
-        eprintln!("Error creating out directory: {}", err);
-        std::process::exit(1);
-    }
+    // Get the workspace examples directory
+    let examples_dir = match test_context::examples_dir() {
+        Ok(dir) => dir,
+        Err(err) => {
+            eprintln!("Error finding examples directory: {}", err);
+            std::process::exit(1);
+        }
+    };
+    
+    // Create output directory within examples
+    let output_dir = match test_context::create_output_dir("converted") {
+        Ok(dir) => dir,
+        Err(err) => {
+            eprintln!("Error creating output directory: {}", err);
+            std::process::exit(1);
+        }
+    };
     
     let (input_file, output_file) = if args.len() >= 2 {
         let input = &args[1];
         let output = if args.len() >= 3 {
-            // Put custom output file in out/ directory
+            // Put custom output file in examples/converted/ directory
             let output_path = Path::new(&args[2]);
             let filename = output_path.file_name().unwrap_or(std::ffi::OsStr::new("output.typ"));
-            format!("out/{}", filename.to_string_lossy())
+            output_dir.join(filename)
         } else {
-            // Generate output filename by changing extension and put in out/
+            // Generate output filename by changing extension and put in examples/converted/
             let path = Path::new(input);
             let stem = path.file_stem().unwrap_or(std::ffi::OsStr::new("output"));
-            format!("out/{}.typ", stem.to_string_lossy())
+            output_dir.join(format!("{}.typ", stem.to_string_lossy()))
         };
         (input.clone(), output)
     } else {
         // Use the example file if no arguments provided
-        ("../examples/sample.md".to_string(), "out/sample_output.typ".to_string())
+        let input_file = examples_dir.join("sample.md");
+        let output_file = output_dir.join("sample_output.typ");
+        (input_file.to_string_lossy().to_string(), output_file)
     };
     
-    println!("Converting {} to {}", input_file, output_file);
+    println!("Converting {} to {}", input_file, output_file.display());
     
     let markdown_content = match fs::read_to_string(&input_file) {
         Ok(content) => content,
@@ -51,11 +66,11 @@ fn main() {
     
     // Write the output to file
     if let Err(err) = fs::write(&output_file, &typst_output) {
-        eprintln!("Error writing file '{}': {}", output_file, err);
+        eprintln!("Error writing file '{}': {}", output_file.display(), err);
         std::process::exit(1);
     }
     
     println!("\n=== Conversion Complete ===");
-    println!("Output written to: {}", output_file);
+    println!("Output written to: {}", output_file.display());
     println!("\nYou can now edit '{}' and run this tool again to see the updated .typ file.", input_file);
 }

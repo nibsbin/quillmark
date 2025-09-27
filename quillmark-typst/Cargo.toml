@@ -13,5 +13,19 @@ path = "examples/convert_demo.rs"
 [dependencies]
 quillmark-core = { path = "../quillmark-core" }
 thiserror = { workspace = true }
+typst = "0.13.1"
+typst-svg = "0.13.1"
+typst-pdf = "0.13.1"
+comemo = "0.4"
+chrono = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.9"
 pulldown-cmark = "0.13.0"
-# typst = { version = "0.13.1" }
+
+
+[dev-dependencies]
+tempfile = "3.0"
+
+[[example]]
+name = "hello-quill"
+path = "../examples/hello-quill-example.rs"
