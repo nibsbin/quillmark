@@ -1,7 +1,7 @@
 use pulldown_cmark::{Parser, Event, Tag, TagEnd};
 
 /// Escapes text for safe use in Typst
-fn escape_typst(s: &str) -> String {
+fn escape_markup(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('*', "\\*")
         .replace('_', "\\_")
@@ -89,7 +89,7 @@ where
                     }
                     Tag::Link { dest_url, title: _, .. } => {
                         output.push_str("#link(\"");
-                        output.push_str(&escape_typst(&dest_url));
+                        output.push_str(&escape_markup(&dest_url));
                         output.push_str("\")[");
                         end_newline = false;
                     }
@@ -143,7 +143,7 @@ where
                 }
             }
             Event::Text(text) => {
-                let escaped = escape_typst(&text);
+                let escaped = escape_markup(&text);
                 output.push_str(&escaped);
                 end_newline = escaped.ends_with('\n');
             }
@@ -190,7 +190,7 @@ mod tests {
     fn test_escape_typst() {
         let input = "Hello *world* with #hash and $math$";
         let expected = "Hello \\*world\\* with \\#hash and \\$math\\$";
-        assert_eq!(escape_typst(input), expected);
+        assert_eq!(escape_markup(input), expected);
     }
 
     #[test]
