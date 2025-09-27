@@ -15,7 +15,7 @@ pub struct Quill {
     pub path: PathBuf,
     /// Name of the quill template
     pub name: String,
-    /// Main Typst file (usually "main.typ")
+    /// Main Typst file (usually "map.typ")
     pub main_file: String,
 }
 
@@ -28,11 +28,11 @@ impl Quill {
             .to_string_lossy()
             .to_string();
         
-        // Check if main.typ exists
-        let main_file = "main.typ".to_string();
+        // Check if map.typ exists
+        let main_file = "map.typ".to_string();
         let main_path = path.join(&main_file);
         if !main_path.exists() {
-            return Err(format!("main.typ not found in quill: {}", path.display()).into());
+            return Err(format!("map.typ not found in quill: {}", path.display()).into());
         }
 
         Ok(Quill {
@@ -206,9 +206,9 @@ mod tests {
         fs::create_dir_all(quill_path.join("packages"))?;
         fs::create_dir_all(quill_path.join("assets"))?;
         
-        // Create a simple main.typ
+        // Create a simple map.typ
         fs::write(
-            quill_path.join("main.typ"),
+            quill_path.join("map.typ"),
             r#"#set page(width: 8.5in, height: 11in, margin: 1in)
 #set text(font: "Times New Roman", size: 12pt)
 
@@ -232,7 +232,7 @@ This is a test document with markdown content: $content$
         
         let quill = Quill::from_path(&quill_path)?;
         assert_eq!(quill.name, "test-quill");
-        assert_eq!(quill.main_file, "main.typ");
+        assert_eq!(quill.main_file, "map.typ");
         assert!(quill.main_path().exists());
         
         quill.validate()?;
@@ -244,7 +244,7 @@ This is a test document with markdown content: $content$
         let (_temp, quill_path) = create_test_quill()?;
         let quill = Quill::from_path(&quill_path)?;
         
-        assert!(quill.main_path().ends_with("main.typ"));
+        assert!(quill.main_path().ends_with("map.typ"));
         assert!(quill.packages_path().ends_with("packages"));
         assert!(quill.assets_path().ends_with("assets"));
         
