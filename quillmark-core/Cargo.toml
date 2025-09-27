@@ -1,11 +1,10 @@
 [package]
-name = "quillmark"
+name = "quillmark-core"
 version = "0.1.0"
 edition = "2021"
-description = "A flexible markdown rendering library with pluggable backends"
+description = "Core types and traits for the quillmark markdown rendering library"
 license = "MIT"
 repository = "https://github.com/nibsbin/quillmark"
 
 [dependencies]
-quillmark-core = { path = "../quillmark-core" }
 thiserror = { workspace = true }

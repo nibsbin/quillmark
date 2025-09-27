@@ -7,6 +7,6 @@ license = "MIT"
 repository = "https://github.com/nibsbin/quillmark"
 
 [dependencies]
-quillmark = { path = "../quillmark" }
+quillmark-core = { path = "../quillmark-core" }
 thiserror = { workspace = true }
 # typst = { version = "0.13.1" }

@@ -15,6 +15,14 @@ dependencies = [
 name = "quillmark"
 version = "0.1.0"
 dependencies = [
+ "quillmark-core",
+ "thiserror",
+]
+
+[[package]]
+name = "quillmark-core"
+version = "0.1.0"
+dependencies = [
  "thiserror",
 ]
 
@@ -22,7 +30,7 @@ dependencies = [
 name = "quillmark-typst"
 version = "0.1.0"
 dependencies = [
- "quillmark",
+ "quillmark-core",
  "thiserror",
 ]
 
