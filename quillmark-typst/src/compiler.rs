@@ -342,11 +342,136 @@ fn parse_package_toml(content: &str) -> Result<PackageInfo, Box<dyn std::error::
 
 /// Process the main content by replacing placeholders with markdown content
 fn process_main_content(main_content: &str, markdown: &str) -> Result<String, Box<dyn std::error::Error>> {
-    // Simple placeholder replacement - a more sophisticated implementation
-    // might use a proper templating system or parse the Typst content
-    let processed = main_content.replace("$content$", markdown);
+    // Simple markdown to Typst conversion
+    // In a real implementation, this would use pulldown-cmark or similar
+    let typst_content = markdown_to_typst_simple(markdown)?;
+    
+    // Replace the content placeholder
+    let processed = main_content.replace("$content$", &typst_content);
     
     Ok(processed)
+}
+
+/// Simple markdown to Typst conversion
+/// This is a basic implementation - a full implementation would use pulldown-cmark
+fn markdown_to_typst_simple(markdown: &str) -> Result<String, Box<dyn std::error::Error>> {
+    let mut result = String::new();
+    let mut in_code_block = false;
+    let mut code_lang = String::new();
+    
+    for line in markdown.lines() {
+        if line.starts_with("```") {
+            if in_code_block {
+                // End code block
+                result.push_str("```\n");
+                in_code_block = false;
+                code_lang.clear();
+            } else {
+                // Start code block
+                let lang = line.strip_prefix("```").unwrap_or("").trim();
+                if !lang.is_empty() {
+                    result.push_str(&format!("```{}\n", lang));
+                } else {
+                    result.push_str("```\n");
+                }
+                in_code_block = true;
+            }
+        } else if in_code_block {
+            // Inside code block - pass through as-is
+            result.push_str(line);
+            result.push('\n');
+        } else {
+            // Regular markdown processing
+            let converted = convert_markdown_line(line);
+            result.push_str(&converted);
+            result.push('\n');
+        }
+    }
+    
+    Ok(result)
+}
+
+/// Convert a single markdown line to Typst
+fn convert_markdown_line(line: &str) -> String {
+    let line = line.trim();
+    
+    if line.is_empty() {
+        return String::new();
+    }
+    
+    // Headers
+    if let Some(stripped) = line.strip_prefix("#### ") {
+        return format!("==== {}", stripped);
+    }
+    if let Some(stripped) = line.strip_prefix("### ") {
+        return format!("=== {}", stripped);
+    }
+    if let Some(stripped) = line.strip_prefix("## ") {
+        return format!("== {}", stripped);
+    }
+    if let Some(stripped) = line.strip_prefix("# ") {
+        return format!("= {}", stripped);
+    }
+    
+    // Blockquotes
+    if let Some(stripped) = line.strip_prefix("> ") {
+        return format!("#quote[{}]", convert_inline_markdown(stripped));
+    }
+    
+    // Lists
+    if let Some(stripped) = line.strip_prefix("- ") {
+        return format!("- {}", convert_inline_markdown(stripped));
+    }
+    if let Some(stripped) = line.strip_prefix("* ") {
+        return format!("- {}", convert_inline_markdown(stripped));
+    }
+    
+    // Regular paragraph
+    convert_inline_markdown(line)
+}
+
+/// Convert inline markdown elements
+fn convert_inline_markdown(text: &str) -> String {
+    let mut result = text.to_string();
+    
+    // Bold: **text** -> *text*
+    while let Some(start) = result.find("**") {
+        if let Some(end) = result[start + 2..].find("**") {
+            let end = start + 2 + end;
+            let bold_text = &result[start + 2..end];
+            result.replace_range(start..end + 2, &format!("*{}*", bold_text));
+        } else {
+            break;
+        }
+    }
+    
+    // Italic: *text* -> _text_
+    let mut chars: Vec<char> = result.chars().collect();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '*' {
+            // Find the closing *
+            let mut j = i + 1;
+            while j < chars.len() && chars[j] != '*' {
+                j += 1;
+            }
+            if j < chars.len() {
+                // Replace * with _
+                chars[i] = '_';
+                chars[j] = '_';
+                i = j + 1;
+            } else {
+                i += 1;
+            }
+        } else {
+            i += 1;
+        }
+    }
+    result = chars.into_iter().collect();
+    
+    // Inline code: `code` -> `code` (stays the same)
+    
+    result
 }
 
 /// Try to find a system font (placeholder - in a real implementation this would

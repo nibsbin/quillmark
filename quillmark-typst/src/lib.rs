@@ -285,4 +285,54 @@ This is a test document with markdown content: $content$
             panic!("Expected RenderError::Other");
         }
     }
+
+    #[test]
+    fn test_end_to_end_compilation() -> Result<(), Box<dyn std::error::Error>> {
+        let (_temp, quill_path) = create_test_quill()?;
+        
+        // Test with actual backend
+        let backend = TypstBackend::with_quill(&quill_path)?;
+        
+        let markdown = r#"# Test Document
+
+This is a **test** document with:
+
+- List items
+- More items
+
+## Subsection
+
+Some _italic_ text and `code`.
+
+> A blockquote to test formatting.
+"#;
+
+        // Test PDF compilation
+        let pdf_options = Options {
+            backend: Some("typst".to_string()),
+            format: Some(OutputFormat::Pdf),
+        };
+        
+        let pdf_result = backend.render(markdown, &pdf_options)?;
+        assert_eq!(pdf_result.len(), 1);
+        assert_eq!(pdf_result[0].output_format, OutputFormat::Pdf);
+        assert!(!pdf_result[0].bytes.is_empty());
+        
+        // Test SVG compilation
+        let svg_options = Options {
+            backend: Some("typst".to_string()),
+            format: Some(OutputFormat::Svg),
+        };
+        
+        let svg_result = backend.render(markdown, &svg_options)?;
+        assert!(!svg_result.is_empty());
+        assert_eq!(svg_result[0].output_format, OutputFormat::Svg);
+        assert!(!svg_result[0].bytes.is_empty());
+        
+        // Verify SVG content is actually SVG
+        let svg_content = String::from_utf8(svg_result[0].bytes.clone())?;
+        assert!(svg_content.contains("<svg"), "Should contain SVG tags");
+        
+        Ok(())
+    }
 }
