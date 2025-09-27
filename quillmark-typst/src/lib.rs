@@ -1,6 +1,6 @@
 use quillmark::{Backend, OutputFormat, Options, RenderError, Artifact};
 
-/// Typst backend implementation using Pandoc and Typst
+/// Typst backend implementation using puldown-cmark and Typst
 pub struct TypstBackend;
 
 impl Backend for TypstBackend {
@@ -16,7 +16,7 @@ impl Backend for TypstBackend {
     fn render(&self, markdown: &str, _opts: &Options) -> Result<Vec<Artifact>, RenderError> {
         // This is a skeleton implementation
         // In a real implementation, this would:
-        // 1. Use Pandoc to convert markdown to Typst format
+        // 1. Use pulldown-cmark to convert markdown to Typst format
         // 2. Use Typst to compile to the requested output format
         // 3. Return the compiled artifacts
         

@@ -9,7 +9,7 @@ QuillMark provides a trait-based architecture for rendering markdown to various 
 ## Crates
 
 - **`quillmark`**: The core library that defines the traits and common types
-- **`quillmark-typst`**: A backend implementation using Pandoc and Typst for PDF and SVG generation
+- **`quillmark-typst`**: A backend implementation using `pulldown-cmark` and Typst for PDF and SVG generation
 
 ## Usage
 
