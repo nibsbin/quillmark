@@ -6,7 +6,12 @@ description = "Typst backend for quillmark using pulldown-cmark and Typst"
 license = "MIT"
 repository = "https://github.com/nibsbin/quillmark"
 
+[[bin]]
+name = "demo"
+path = "src/bin/demo.rs"
+
 [dependencies]
 quillmark-core = { path = "../quillmark-core" }
 thiserror = { workspace = true }
+pulldown-cmark = "0.13.0"
 # typst = { version = "0.13.1" }
