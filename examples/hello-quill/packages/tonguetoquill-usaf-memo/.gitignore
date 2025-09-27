@@ -1,0 +1,9 @@
+dev_assets/
+**fonts/
+.github/
+pdfs/
+tests/
+build.sh
+template/
+README.md
+.gitignore~*

@@ -1,5 +1,5 @@
 #set page(width: 8.5in, height: 11in, margin: 1in)
-#set text(font: "Times New Roman", size: 12pt)
+#set text(font: "NimbusRomNo9L", size: 12pt)
 
 #align(center)[
   #text(size: 16pt, weight: "bold")[Hello Quill Template]
@@ -7,7 +7,6 @@
 
 #v(1em)
 
-$content$
 
 #v(2em)
 
