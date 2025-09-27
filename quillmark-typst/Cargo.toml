@@ -27,5 +27,5 @@ pulldown-cmark = "0.13.0"
 tempfile = "3.0"
 
 [[example]]
-name = "hello-quill-example"
+name = "hello-quill"
 path = "../examples/hello-quill-example.rs"

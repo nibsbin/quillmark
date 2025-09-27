@@ -1,17 +1,12 @@
-<<<<<<< HEAD
 use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
 use serde::Deserialize;
-=======
-use quillmark_core::{Artifact, Backend, Options, OutputFormat, RenderError};
-
-mod convert;
 pub use convert::mark_to_typst;
->>>>>>> origin/main
 
 mod compiler;
+mod convert;
 
 /// Configuration for a quill template
 #[derive(Debug, Clone, Deserialize)]
@@ -145,7 +140,6 @@ impl Backend for TypstBackend {
         &[OutputFormat::Pdf, OutputFormat::Svg]
     }
 
-<<<<<<< HEAD
     fn render(&self, markdown: &str, opts: &Options) -> Result<Vec<Artifact>, RenderError> {
         // For now, we'll use a simple approach where we expect a quill to be registered
         // In a more sophisticated implementation, this could be specified in opts
@@ -190,18 +184,6 @@ impl Backend for TypstBackend {
                 })
             }
         }
-=======
-    fn render(&self, markdown: &str, _opts: &Options) -> Result<Vec<Artifact>, RenderError> {
-        // Convert markdown to Typst using our conversion logic
-        let typst_content = mark_to_typst(markdown);
-        
-        // For now, return the Typst content as bytes
-        // In a real implementation, this would compile with Typst to PDF/SVG
-        Ok(vec![Artifact {
-            bytes: typst_content.into_bytes(),
-            output_format: OutputFormat::Pdf,
-        }])
->>>>>>> origin/main
     }
 }
 
@@ -299,77 +281,5 @@ This is a test document with markdown content: $content$
             backend: Some("typst".to_string()),
             format: Some(OutputFormat::Pdf),
         };
-        
-<<<<<<< HEAD
-        let result = backend.render("# Hello World", &options);
-        assert!(result.is_err());
-        
-        if let Err(RenderError::Other(e)) = result {
-            assert!(e.to_string().contains("No quill templates registered"));
-        } else {
-            panic!("Expected RenderError::Other");
-        }
-    }
-
-    #[test]
-    fn test_end_to_end_compilation() -> Result<(), Box<dyn std::error::Error>> {
-        let (_temp, quill_path) = create_test_quill()?;
-        
-        // Test with actual backend
-        let backend = TypstBackend::with_quill(&quill_path)?;
-        
-        let typst_content = r#"= Test Document
-
-This is a _test_ document with:
-
-- List items
-- More items
-
-== Subsection
-
-Some _italic_ text and `code`.
-
-#quote[A blockquote to test formatting.]
-"#;
-
-        // Test PDF compilation
-        let pdf_options = Options {
-            backend: Some("typst".to_string()),
-            format: Some(OutputFormat::Pdf),
-        };
-        
-        let pdf_result = backend.render(typst_content, &pdf_options)?;
-        assert_eq!(pdf_result.len(), 1);
-        assert_eq!(pdf_result[0].output_format, OutputFormat::Pdf);
-        assert!(!pdf_result[0].bytes.is_empty());
-        
-        // Test SVG compilation
-        let svg_options = Options {
-            backend: Some("typst".to_string()),
-            format: Some(OutputFormat::Svg),
-        };
-        
-        let svg_result = backend.render(typst_content, &svg_options)?;
-        assert!(!svg_result.is_empty());
-        assert_eq!(svg_result[0].output_format, OutputFormat::Svg);
-        assert!(!svg_result[0].bytes.is_empty());
-        
-        // Verify SVG content is actually SVG
-        let svg_content = String::from_utf8(svg_result[0].bytes.clone())?;
-        assert!(svg_content.contains("<svg"), "Should contain SVG tags");
-        
-        Ok(())
-=======
-        let result = backend.render("This is *emphasis* and **strong** text.", &options);
-        assert!(result.is_ok());
-
-        let artifacts = result.unwrap();
-        assert_eq!(artifacts.len(), 1);
-        assert_eq!(artifacts[0].output_format, OutputFormat::Pdf);
-
-        let content = String::from_utf8(artifacts[0].bytes.clone()).unwrap();
-        assert!(content.contains("_emphasis_"));
-        assert!(content.contains("*strong*"));
->>>>>>> origin/main
     }
 }
