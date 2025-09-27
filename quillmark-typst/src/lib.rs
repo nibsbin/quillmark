@@ -152,15 +152,14 @@ impl Backend for TypstBackend {
         // Use the first available quill for now
         let quill = self.quills.values().next().unwrap();
         
-        // TODO: Transpilation from markdown to Typst will be handled by a separate module
-        // For now, pass the markdown as-is (this will only work if the input is already valid Typst)
-        let typst_content = markdown;
+        // Convert markdown to Typst using the conversion logic
+        let typst_content = mark_to_typst(markdown);
         
         let format = opts.format.unwrap_or(OutputFormat::Pdf);
         
         match format {
             OutputFormat::Pdf => {
-                let pdf_bytes = compiler::compile_to_pdf(quill, typst_content)
+                let pdf_bytes = compiler::compile_to_pdf(quill, &typst_content)
                     .map_err(|e| RenderError::Other(format!("PDF compilation failed: {}", e).into()))?;
                 
                 Ok(vec![Artifact {
@@ -169,7 +168,7 @@ impl Backend for TypstBackend {
                 }])
             }
             OutputFormat::Svg => {
-                let svg_pages = compiler::compile_to_svg(quill, typst_content)
+                let svg_pages = compiler::compile_to_svg(quill, &typst_content)
                     .map_err(|e| RenderError::Other(format!("SVG compilation failed: {}", e).into()))?;
                 
                 Ok(svg_pages.into_iter().map(|bytes| Artifact {

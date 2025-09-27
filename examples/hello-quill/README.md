@@ -16,7 +16,7 @@ hello-quill/
 The `main.typ` file contains a basic Typst template with:
 - Page setup (8.5" x 11", 1" margins)
 - Font configuration (Times New Roman, 12pt)
-- A content placeholder (`$content$`) where Typst content will be inserted
+- A content placeholder (`$content$`) where converted markdown will be inserted
 - Basic styling and layout
 
 ## Testing the Example
@@ -30,7 +30,7 @@ cargo run --package quillmark-typst --example hello-quill-example
 
 This will:
 1. Load the hello-quill template
-2. Process sample Typst content (not markdown)
+2. Process sample markdown content and convert it to Typst
 3. Compile to both PDF and SVG formats
 4. Save the output files for inspection
 
@@ -46,16 +46,24 @@ After making changes, run the example again to see the updated output.
 
 ## Content Format
 
-**Important**: The quillmark-typst backend expects valid Typst content, not markdown. The example provides Typst syntax directly:
+The backend now accepts markdown input and automatically converts it to Typst using the integrated conversion logic:
 
-```typst
-= Heading
-_italic text_
-*bold text*
-#quote[blockquote]
+```markdown
+# Heading
+**bold text**
+*italic text*
+- List items
+[Links](https://example.com)
+> Blockquotes
 ```
 
-Markdown-to-Typst conversion will be handled by a separate module in the future.
+The conversion logic handles:
+- Headers (# → =, ## → ==, etc.)
+- Bold and italic text
+- Lists (bullet and numbered)
+- Links
+- Inline code
+- Strikethrough text
 
 ## Adding Assets
 
@@ -71,4 +79,4 @@ To include Typst packages:
 2. Each package should have its own subdirectory with a `typst.toml` manifest
 3. Import packages in your template using `#import "package-name"`
 
-This demonstrates the power of dynamic quill loading - templates are loaded at runtime, making it easy to create reusable document templates that can be shared and modified without recompiling the application.
+This demonstrates the complete markdown-to-PDF/SVG pipeline with dynamic quill loading.
