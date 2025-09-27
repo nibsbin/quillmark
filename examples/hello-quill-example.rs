@@ -1,19 +1,26 @@
 use std::fs;
 use quillmark_typst::{TypstBackend, Quill};
-use quillmark_core::Backend;
+use quillmark_core::{Backend, test_context};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("QuillMark Typst Backend Example");
     
+    // Use the test context helper to find the examples directory
+    let examples_dir = test_context::examples_dir().map_err(|e| -> Box<dyn std::error::Error> { e })?;
+    println!("Examples directory: {}", examples_dir.display());
+    
     // Create quill from the hello-quill example
-    let quill_path = "examples/hello-quill";
-    let quill = Quill::from_path(quill_path)?;
-    let backend = TypstBackend::with_quill(quill_path)?;
+    let quill_path = examples_dir.join("hello-quill");
+    let quill = Quill::from_path(&quill_path)?;
+    let backend = TypstBackend::with_quill(&quill_path)?;
     
     println!("Loaded quill: {}", quill.name);
     println!("Main file: {}", quill.main_path().display());
     println!("Packages: {}", quill.packages_path().display());
     println!("Assets: {}", quill.assets_path().display());
+    
+    // Create output directory within examples
+    let output_dir = test_context::create_output_dir("output").map_err(|e| -> Box<dyn std::error::Error> { e })?;
     
     // Sample markdown content
     let markdown = r#"# Welcome to QuillMark
@@ -49,14 +56,16 @@ let backend = TypstBackend::with_quill("hello-quill")?;
             for (i, artifact) in artifacts.iter().enumerate() {
                 match artifact.output_format {
                     quillmark_core::OutputFormat::Pdf => {
-                        let filename = format!("output{}.pdf", if i == 0 { "".to_string() } else { format!("_{}", i) });
-                        fs::write(&filename, &artifact.bytes)?;
-                        println!("  → Saved PDF: {} ({} bytes)", filename, artifact.bytes.len());
+                        let filename = if i == 0 { "output.pdf".to_string() } else { format!("output_{}.pdf", i) };
+                        let filepath = output_dir.join(&filename);
+                        fs::write(&filepath, &artifact.bytes)?;
+                        println!("  → Saved PDF: {} ({} bytes)", filepath.display(), artifact.bytes.len());
                     }
                     quillmark_core::OutputFormat::Svg => {
-                        let filename = format!("output{}.svg", if i == 0 { "".to_string() } else { format!("_{}", i) });
-                        fs::write(&filename, &artifact.bytes)?;
-                        println!("  → Saved SVG: {} ({} bytes)", filename, artifact.bytes.len());
+                        let filename = if i == 0 { "output.svg".to_string() } else { format!("output_{}.svg", i) };
+                        let filepath = output_dir.join(&filename);
+                        fs::write(&filepath, &artifact.bytes)?;
+                        println!("  → Saved SVG: {} ({} bytes)", filepath.display(), artifact.bytes.len());
                     }
                     quillmark_core::OutputFormat::Txt => {
                         println!("  → Text format not supported by Typst backend");
@@ -83,8 +92,9 @@ let backend = TypstBackend::with_quill("hello-quill")?;
             
             for (i, artifact) in artifacts.iter().enumerate() {
                 let filename = format!("output_page_{}.svg", i + 1);
-                fs::write(&filename, &artifact.bytes)?;
-                println!("  → Saved SVG page {}: {} ({} bytes)", i + 1, filename, artifact.bytes.len());
+                let filepath = output_dir.join(&filename);
+                fs::write(&filepath, &artifact.bytes)?;
+                println!("  → Saved SVG page {}: {} ({} bytes)", i + 1, filepath.display(), artifact.bytes.len());
             }
         }
         Err(e) => {
@@ -93,7 +103,7 @@ let backend = TypstBackend::with_quill("hello-quill")?;
     }
     
     println!("\n🎉 Example completed successfully!");
-    println!("Check the generated PDF and SVG files to see the results.");
+    println!("Check the generated files in: {}", output_dir.display());
     
     Ok(())
 }
