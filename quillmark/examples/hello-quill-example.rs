@@ -10,14 +10,52 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let examples_dir = test_context::examples_dir().map_err(|e| -> Box<dyn std::error::Error> { e })?;
     println!("Examples directory: {}", examples_dir.display());
     
+    // Check if hello-quill exists, if not look at workspace level
+    let quill_path = if examples_dir.join("hello-quill").exists() {
+        examples_dir.join("hello-quill")
+    } else {
+        // Try workspace level - go up two levels from quillmark/examples to workspace root, then examples
+        examples_dir.parent()
+            .ok_or("Could not find parent directory")?
+            .parent()
+            .ok_or("Could not find grandparent directory")?
+            .join("examples")
+            .join("hello-quill")
+    };
+    
+    println!("Looking for quill at: {}", quill_path.display());
+    if !quill_path.exists() {
+        return Err(format!("Quill path does not exist: {}", quill_path.display()).into());
+    }
+    
     // Register the Typst backend
     register_backend(Box::new(TypstBackend::new()));
     
     // Create output directory within examples
     let output_dir = test_context::create_output_dir("output").map_err(|e| -> Box<dyn std::error::Error> { e })?;
     
-    // Sample markdown content
-    let markdown = r#"# Welcome to QuillMark
+    // Sample markdown content with complete frontmatter
+    let markdown = r#"---
+letterhead_title: "DEPARTMENT OF THE AIR FORCE"
+letterhead_caption:
+  - "HEADQUARTERS UNITED STATES AIR FORCE"  
+  - "WASHINGTON, DC 20330-1000"
+date: "1 January 2024"
+memo_for:
+  - "ALL PERSONNEL"
+memo_from:
+  - "COMMANDER"
+subject: "Test Subject from QuillMark"
+references: []
+cc: []
+distribution: []
+attachments: []
+signature_block:
+  - "JOHN DOE, Colonel, USAF"
+  - "Commander"
+---
+
+# Welcome to QuillMark
 
 This is a **sample document** written in markdown that will be compiled using the Typst backend.
 
@@ -26,6 +64,7 @@ This is a **sample document** written in markdown that will be compiled using th
 - Markdown to Typst compilation
 - Dynamic template loading  
 - PDF and SVG output support
+- Backend registration system
 
 ## Code Example
 
@@ -38,8 +77,7 @@ register_backend(Box::new(backend));
 
     println!("\nCompiling markdown to PDF...");
     
-    // Get path to quill template
-    let quill_path = examples_dir.join("hello-quill");
+    // Get path to quill template - should be at workspace level
     
     // Test compilation
     let options = Options {

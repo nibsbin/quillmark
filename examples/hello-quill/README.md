@@ -1,0 +1,82 @@
+# Hello Quill Example
+
+This directory contains a minimal quill template that demonstrates the QuillMark Typst backend functionality.
+
+## Structure
+
+```
+hello-quill/
+├── glue.typ        # Main Typst template file
+├── packages/       # Directory for Typst packages (empty in this example)
+└── assets/         # Directory for assets like fonts and images (empty in this example)
+```
+
+## glue.typ
+
+The `glue.typ` file contains a basic Typst template with:
+- Page setup (8.5" x 11", 1" margins)
+- Font configuration (Times New Roman, 12pt)
+- A content placeholder (`$content$`) where converted markdown will be inserted
+- Basic styling and layout
+
+## Testing the Example
+
+To test this quill template:
+
+```bash
+# Run the example from the project root
+cargo run --package quillmark-typst --example hello-quill-example
+```
+
+This will:
+1. Load the hello-quill template
+2. Process sample markdown content and convert it to Typst
+3. Compile to both PDF and SVG formats
+4. Save the output files for inspection
+
+## Modifying the Template
+
+You can edit `glue.typ` to customize:
+- Page layout and margins
+- Typography and fonts
+- Document structure
+- Content layout around the `$content$` placeholder
+
+After making changes, run the example again to see the updated output.
+
+## Content Format
+
+The backend now accepts markdown input and automatically converts it to Typst using the integrated conversion logic:
+
+```markdown
+# Heading
+**bold text**
+*italic text*
+- List items
+[Links](https://example.com)
+> Blockquotes
+```
+
+The conversion logic handles:
+- Headers (# → =, ## → ==, etc.)
+- Bold and italic text
+- Lists (bullet and numbered)
+- Links
+- Inline code
+- Strikethrough text
+
+## Adding Assets
+
+To add fonts or images:
+1. Place font files (.ttf, .otf) in the `assets/` directory
+2. Reference them in your template using `#set text(font: "Your Font Name")`
+3. Place images in `assets/` and reference them with `#image("assets/filename.ext")`
+
+## Adding Packages
+
+To include Typst packages:
+1. Place package directories in the `packages/` folder
+2. Each package should have its own subdirectory with a `typst.toml` manifest
+3. Import packages in your template using `#import "package-name"`
+
+This demonstrates the complete markdown-to-PDF/SVG pipeline with dynamic quill loading.
