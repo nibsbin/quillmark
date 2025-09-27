@@ -15,26 +15,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Packages: {}", quill.packages_path().display());
     println!("Assets: {}", quill.assets_path().display());
     
-    // Sample markdown content
-    let markdown = r#"# Welcome to QuillMark
+    // Sample Typst content (instead of markdown)
+    let typst_content = r#"= Welcome to QuillMark
 
-This is a **sample document** written in markdown that will be compiled using the Typst backend.
+This is a _sample document_ written in Typst that will be compiled using the Typst backend.
 
-## Features
+== Features
 
-- Markdown to Typst compilation
+- Typst compilation from quill templates
 - Dynamic template loading
 - PDF and SVG output support
 
-## Code Example
+== Code Example
 
 ```rust
 let backend = TypstBackend::with_quill("hello-quill")?;
 ```
 
-> This demonstrates how easy it is to create beautiful documents with QuillMark!"#;
+#quote[This demonstrates how easy it is to create beautiful documents with QuillMark!]"#;
 
-    println!("\nCompiling markdown to PDF...");
+    println!("\nCompiling Typst content to PDF...");
     
     // Test compilation
     let options = quillmark_core::Options {
@@ -42,7 +42,7 @@ let backend = TypstBackend::with_quill("hello-quill")?;
         format: Some(quillmark_core::OutputFormat::Pdf),
     };
     
-    match backend.render(markdown, &options) {
+    match backend.render(typst_content, &options) {
         Ok(artifacts) => {
             println!("✓ Successfully compiled {} artifact(s)", artifacts.len());
             
@@ -71,13 +71,13 @@ let backend = TypstBackend::with_quill("hello-quill")?;
     }
     
     // Test SVG compilation
-    println!("\nCompiling markdown to SVG...");
+    println!("\nCompiling Typst content to SVG...");
     let svg_options = quillmark_core::Options {
         backend: Some("typst".to_string()),
         format: Some(quillmark_core::OutputFormat::Svg),
     };
     
-    match backend.render(markdown, &svg_options) {
+    match backend.render(typst_content, &svg_options) {
         Ok(artifacts) => {
             println!("✓ Successfully compiled {} SVG page(s)", artifacts.len());
             

@@ -16,7 +16,7 @@ hello-quill/
 The `main.typ` file contains a basic Typst template with:
 - Page setup (8.5" x 11", 1" margins)
 - Font configuration (Times New Roman, 12pt)
-- A content placeholder (`$content$`) where markdown will be inserted
+- A content placeholder (`$content$`) where Typst content will be inserted
 - Basic styling and layout
 
 ## Testing the Example
@@ -30,7 +30,7 @@ cargo run --package quillmark-typst --example hello-quill-example
 
 This will:
 1. Load the hello-quill template
-2. Process sample markdown content
+2. Process sample Typst content (not markdown)
 3. Compile to both PDF and SVG formats
 4. Save the output files for inspection
 
@@ -43,6 +43,19 @@ You can edit `main.typ` to customize:
 - Content layout around the `$content$` placeholder
 
 After making changes, run the example again to see the updated output.
+
+## Content Format
+
+**Important**: The quillmark-typst backend expects valid Typst content, not markdown. The example provides Typst syntax directly:
+
+```typst
+= Heading
+_italic text_
+*bold text*
+#quote[blockquote]
+```
+
+Markdown-to-Typst conversion will be handled by a separate module in the future.
 
 ## Adding Assets
 

@@ -150,11 +150,15 @@ impl Backend for TypstBackend {
         // Use the first available quill for now
         let quill = self.quills.values().next().unwrap();
         
+        // TODO: Transpilation from markdown to Typst will be handled by a separate module
+        // For now, pass the markdown as-is (this will only work if the input is already valid Typst)
+        let typst_content = markdown;
+        
         let format = opts.format.unwrap_or(OutputFormat::Pdf);
         
         match format {
             OutputFormat::Pdf => {
-                let pdf_bytes = compiler::compile_to_pdf(quill, markdown)
+                let pdf_bytes = compiler::compile_to_pdf(quill, typst_content)
                     .map_err(|e| RenderError::Other(format!("PDF compilation failed: {}", e).into()))?;
                 
                 Ok(vec![Artifact {
@@ -163,7 +167,7 @@ impl Backend for TypstBackend {
                 }])
             }
             OutputFormat::Svg => {
-                let svg_pages = compiler::compile_to_svg(quill, markdown)
+                let svg_pages = compiler::compile_to_svg(quill, typst_content)
                     .map_err(|e| RenderError::Other(format!("SVG compilation failed: {}", e).into()))?;
                 
                 Ok(svg_pages.into_iter().map(|bytes| Artifact {
@@ -293,18 +297,18 @@ This is a test document with markdown content: $content$
         // Test with actual backend
         let backend = TypstBackend::with_quill(&quill_path)?;
         
-        let markdown = r#"# Test Document
+        let typst_content = r#"= Test Document
 
-This is a **test** document with:
+This is a _test_ document with:
 
 - List items
 - More items
 
-## Subsection
+== Subsection
 
 Some _italic_ text and `code`.
 
-> A blockquote to test formatting.
+#quote[A blockquote to test formatting.]
 "#;
 
         // Test PDF compilation
@@ -313,7 +317,7 @@ Some _italic_ text and `code`.
             format: Some(OutputFormat::Pdf),
         };
         
-        let pdf_result = backend.render(markdown, &pdf_options)?;
+        let pdf_result = backend.render(typst_content, &pdf_options)?;
         assert_eq!(pdf_result.len(), 1);
         assert_eq!(pdf_result[0].output_format, OutputFormat::Pdf);
         assert!(!pdf_result[0].bytes.is_empty());
@@ -324,7 +328,7 @@ Some _italic_ text and `code`.
             format: Some(OutputFormat::Svg),
         };
         
-        let svg_result = backend.render(markdown, &svg_options)?;
+        let svg_result = backend.render(typst_content, &svg_options)?;
         assert!(!svg_result.is_empty());
         assert_eq!(svg_result[0].output_format, OutputFormat::Svg);
         assert!(!svg_result[0].bytes.is_empty());
