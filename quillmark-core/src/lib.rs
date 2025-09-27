@@ -3,11 +3,7 @@ use std::path::PathBuf;
 
 // Re-export parsing functionality
 pub mod parse;
-pub use parse::{parse_markdown, ParsedDocument, BODY_FIELD};
-
-// Re-export typst conversion functionality
-pub mod typst;
-pub use typst::markdown_to_typst;
+pub use parse::{parameterize, ParsedDocument, BODY_FIELD};
 
 /// Output formats supported by backends
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

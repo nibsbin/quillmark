@@ -1,4 +1,3 @@
-use pulldown_cmark::{Parser, Event, Options as MarkdownOptions};
 use serde_yaml;
 use std::collections::HashMap;
 use std::error::Error;
@@ -52,7 +51,7 @@ impl ParsedDocument {
 /// and returns a ParsedDocument containing both as a dictionary.
 /// YAML frontmatter fields are mapped to dictionary fields, and the markdown body
 /// is stored under the reserved BODY field.
-pub fn parse_markdown(markdown: &str) -> Result<ParsedDocument, Box<dyn Error + Send + Sync>> {
+pub fn parameterize(markdown: &str) -> Result<ParsedDocument, Box<dyn Error + Send + Sync>> {
     // Check if the document starts with YAML frontmatter (---\n)
     if markdown.starts_with("---\n") || markdown.starts_with("---\r\n") {
         let lines: Vec<&str> = markdown.lines().collect();
@@ -104,23 +103,16 @@ pub fn parse_markdown(markdown: &str) -> Result<ParsedDocument, Box<dyn Error + 
     }
 }
 
-/// Convert markdown to pulldown-cmark events
-/// This is a utility function that backends can use to process the markdown body
-pub fn markdown_to_events(markdown: &str) -> impl Iterator<Item = Event<'_>> {
-    let mut options = MarkdownOptions::empty();
-    options.insert(MarkdownOptions::ENABLE_STRIKETHROUGH);
-    
-    Parser::new_ext(markdown, options)
-}
+
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_markdown_no_frontmatter() {
+    fn test_parameterize_no_frontmatter() {
         let markdown = "# Hello World\n\nThis is a test.";
-        let result = parse_markdown(markdown).unwrap();
+        let result = parameterize(markdown).unwrap();
         
         assert_eq!(result.body(), Some(markdown));
         assert_eq!(result.fields().len(), 1);
@@ -128,7 +120,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_markdown_with_frontmatter() {
+    fn test_parameterize_with_frontmatter() {
         let markdown = r#"---
 title: Test Document
 author: John Doe
@@ -141,7 +133,7 @@ tags:
 
 This is the body content."#;
         
-        let result = parse_markdown(markdown).unwrap();
+        let result = parameterize(markdown).unwrap();
         
         assert_eq!(result.body(), Some("# Hello World\n\nThis is the body content."));
         assert_eq!(result.get_field("title").and_then(|v| v.as_str()), Some("Test Document"));
@@ -154,7 +146,7 @@ This is the body content."#;
     }
 
     #[test]
-    fn test_parse_markdown_empty_frontmatter() {
+    fn test_parameterize_empty_frontmatter() {
         let markdown = r#"---
 ---
 
@@ -162,21 +154,21 @@ This is the body content."#;
 
 This is the body."#;
         
-        let result = parse_markdown(markdown).unwrap();
+        let result = parameterize(markdown).unwrap();
         
         assert_eq!(result.body(), Some("# Hello World\n\nThis is the body."));
         assert_eq!(result.fields().len(), 1); // Only BODY field
     }
 
     #[test]
-    fn test_parse_markdown_invalid_frontmatter() {
+    fn test_parameterize_invalid_frontmatter() {
         let markdown = r#"---
 invalid: yaml: content: [
 ---
 
 # Hello World"#;
         
-        let result = parse_markdown(markdown).unwrap();
+        let result = parameterize(markdown).unwrap();
         
         // Should fallback to treating entire content as body when YAML is invalid
         assert!(result.body().unwrap().contains("---"));
@@ -184,14 +176,14 @@ invalid: yaml: content: [
     }
 
     #[test]
-    fn test_parse_markdown_incomplete_frontmatter() {
+    fn test_parameterize_incomplete_frontmatter() {
         let markdown = r#"---
 title: Test Document
 author: John Doe
 
 # Hello World"#;
         
-        let result = parse_markdown(markdown).unwrap();
+        let result = parameterize(markdown).unwrap();
         
         // No closing ---, should treat entire content as body
         assert!(result.body().unwrap().contains("---"));

@@ -1,5 +1,4 @@
-use pulldown_cmark::{Event, Tag, TagEnd};
-use crate::parse::markdown_to_events;
+use pulldown_cmark::{Parser, Event, Tag, TagEnd};
 
 /// Escapes text for safe use in Typst
 fn escape_typst(s: &str) -> String {
@@ -172,11 +171,14 @@ where
 }
 
 /// Converts markdown to Typst markup
-pub fn markdown_to_typst(markdown: &str) -> String {
-    let events = markdown_to_events(markdown);
+pub fn mark_to_typst(markdown: &str) -> String {
+    let mut options = pulldown_cmark::Options::empty();
+    options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
+    
+    let parser = Parser::new_ext(markdown, options);
     let mut typst_output = String::new();
     
-    push_typst(&mut typst_output, events);
+    push_typst(&mut typst_output, parser);
     typst_output
 }
 
@@ -192,33 +194,33 @@ mod tests {
     }
 
     #[test]
-    fn test_markdown_to_typst_basic() {
+    fn test_mark_to_typst_basic() {
         let markdown = "This is **bold** and *italic* text.";
-        let typst = markdown_to_typst(markdown);
+        let typst = mark_to_typst(markdown);
         assert!(typst.contains("*bold*"));
         assert!(typst.contains("_italic_"));
     }
 
     #[test]
-    fn test_markdown_to_typst_lists() {
+    fn test_mark_to_typst_lists() {
         let markdown = "- First item\n- Second item\n  - Nested item";
-        let typst = markdown_to_typst(markdown);
+        let typst = mark_to_typst(markdown);
         assert!(typst.contains("+ First item"));
         assert!(typst.contains("+ Second item"));
         assert!(typst.contains("  + Nested item"));
     }
 
     #[test]
-    fn test_markdown_to_typst_links() {
+    fn test_mark_to_typst_links() {
         let markdown = "[Rust](https://rust-lang.org)";
-        let typst = markdown_to_typst(markdown);
+        let typst = mark_to_typst(markdown);
         assert!(typst.contains("#link(\"https://rust-lang.org\")[Rust]"));
     }
 
     #[test]
-    fn test_markdown_to_typst_strikethrough() {
+    fn test_mark_to_typst_strikethrough() {
         let markdown = "This has ~~strikethrough~~ text.";
-        let typst = markdown_to_typst(markdown);
+        let typst = mark_to_typst(markdown);
         assert!(typst.contains("#strike[strikethrough]"));
     }
 }

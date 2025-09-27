@@ -1482,7 +1482,6 @@ dependencies = [
 name = "quillmark-core"
 version = "0.1.0"
 dependencies = [
- "pulldown-cmark",
  "serde",
  "serde_yaml",
  "thiserror 1.0.69",
@@ -1494,6 +1493,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "comemo",
+ "pulldown-cmark",
  "quillmark-core",
  "serde",
  "tempfile",

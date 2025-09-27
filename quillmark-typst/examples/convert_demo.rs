@@ -1,4 +1,5 @@
-use quillmark_core::{markdown_to_typst, parse_markdown, test_context};
+use quillmark_core::{parameterize, test_context};
+use quillmark_typst::mark_to_typst;
 use std::fs;
 use std::env;
 use std::path::Path;
@@ -61,7 +62,7 @@ fn main() {
     println!("\n=== Converting to Typst ===");
     
     // Parse the markdown to separate frontmatter from body
-    let parsed_doc = match parse_markdown(&markdown_content) {
+    let parsed_doc = match parameterize(&markdown_content) {
         Ok(doc) => doc,
         Err(err) => {
             eprintln!("Error parsing markdown: {}", err);
@@ -86,7 +87,7 @@ fn main() {
     
     // Convert only the body to Typst
     let body = parsed_doc.body().unwrap_or("");
-    let typst_output = markdown_to_typst(body);
+    let typst_output = mark_to_typst(body);
     
     println!("{}", typst_output);
     

@@ -1,10 +1,12 @@
-use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact, parse_markdown, markdown_to_typst};
+use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact, parameterize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
 use serde::Deserialize;
+pub use convert::mark_to_typst;
 
 mod compiler;
+mod convert;
 
 /// Configuration for a quill template
 #[derive(Debug, Clone, Deserialize)]
@@ -150,13 +152,13 @@ impl Backend for TypstBackend {
         // Use the first available quill for now
         let quill = self.quills.values().next().unwrap();
         
-        // Parse markdown into dictionary with frontmatter and body
-        let parsed_doc = parse_markdown(markdown)
-            .map_err(|e| RenderError::Other(format!("Failed to parse markdown: {}", e).into()))?;
+        // Parameterize markdown into dictionary with frontmatter and body
+        let parsed_doc = parameterize(markdown)
+            .map_err(|e| RenderError::Other(format!("Failed to parameterize markdown: {}", e).into()))?;
         
         // Extract the BODY field and convert to Typst
         let body = parsed_doc.body().unwrap_or("");
-        let typst_content = markdown_to_typst(body);
+        let typst_content = mark_to_typst(body);
         
         let format = opts.format.unwrap_or(OutputFormat::Pdf);
         
