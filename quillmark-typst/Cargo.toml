@@ -9,4 +9,13 @@ repository = "https://github.com/nibsbin/quillmark"
 [dependencies]
 quillmark-core = { path = "../quillmark-core" }
 thiserror = { workspace = true }
-# typst = { version = "0.13.1" }
+typst = "0.13.1"
+typst-svg = "0.13.1"
+typst-pdf = "0.13.1"
+comemo = "0.4"
+chrono = "0.4"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.9"
+
+[dev-dependencies]
+tempfile = "3.0"
