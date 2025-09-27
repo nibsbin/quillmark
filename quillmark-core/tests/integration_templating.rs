@@ -1,10 +1,10 @@
 //! Integration test demonstrating templating with realistic frontmatter
-use quillmark_core::{templating::TemplateEngine, parse::decompose};
+use quillmark_core::{templating::Glue, parse::decompose};
 
 #[test]
 fn test_integration_template_rendering() {
-    // Create a template engine
-    let engine = TemplateEngine::new();
+    // Create a glue instance
+    let mut glue = Glue::new();
     
     // Simulate parsing markdown with frontmatter (like what a backend would get)
     let markdown = r#"---
@@ -34,28 +34,28 @@ Please review these changes carefully and ensure compliance."#;
     
     let doc = decompose(markdown).expect("Failed to parse markdown");
     
-    // Template similar to the real glue.typ from examples/hello-quill/glue.typ
+    // Template without filters since those will be implemented in quillmark-typst
     let template = r#"#import "@preview/tonguetoquill-usaf-memo:0.1.1": official-memorandum
 
 #show:official-memorandum.with(
   // Letterhead configuration  
-  letterhead-title: {{ letterhead_title | String }},
-  letterhead-caption: {{ letterhead_caption | List }},
+  letterhead-title: {{ letterhead_title }},
+  letterhead-caption: {{ letterhead_caption }},
   
   // Frontmatter
-  date: {{ date | Date }}, 
-  memo-for: {{ memo_for | List }},
-  memo-from: {{ memo_from | List }},
+  date: {{ date }}, 
+  memo-for: {{ memo_for }},
+  memo-from: {{ memo_from }},
   
   // Subject line
-  subject: {{ subject | String }},
+  subject: {{ subject }},
 
-  {{ BODY | Body }}
+  {{ BODY }}
 )
 "#;
     
-    // Render the template
-    let result = engine.render_string(template, &doc).expect("Failed to render template");
+    // Render the template using compose method with the parsed document fields
+    let result = glue.compose(template, doc.fields().clone()).expect("Failed to render template");
     
     println!("=== Rendered Typst Template ===");
     println!("{}", result);

@@ -7,7 +7,7 @@ pub use parse::{decompose, ParsedDocument, BODY_FIELD};
 
 // Re-export templating functionality
 pub mod templating;
-pub use templating::{TemplateEngine, TemplateError};
+pub use templating::{Glue, TemplateError};
 
 /// Output formats supported by backends
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

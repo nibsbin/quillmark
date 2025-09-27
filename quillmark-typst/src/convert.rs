@@ -1,7 +1,7 @@
 use pulldown_cmark::{Parser, Event, Tag, TagEnd};
 
 /// Escapes text for safe use in Typst
-fn escape_markup(s: &str) -> String {
+pub fn escape_markup(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('*', "\\*")
         .replace('_', "\\_")
@@ -187,7 +187,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_escape_typst() {
+    fn test_escape_markup() {
         let input = "Hello *world* with #hash and $math$";
         let expected = "Hello \\*world\\* with \\#hash and \\$math\\$";
         assert_eq!(escape_markup(input), expected);

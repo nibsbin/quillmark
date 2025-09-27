@@ -1,12 +1,14 @@
-use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact};
+use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact, parse::decompose, templating::Glue};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
 use serde::Deserialize;
 pub use convert::mark_to_typst;
+use filters::*;
 
 mod compiler;
 mod convert;
+mod filters;
 
 /// Configuration for a quill template
 #[derive(Debug, Clone, Deserialize)]
@@ -152,8 +154,27 @@ impl Backend for TypstBackend {
         // Use the first available quill for now
         let quill = self.quills.values().next().unwrap();
         
-        // Convert markdown to Typst using the conversion logic
-        let typst_content = mark_to_typst(markdown);
+        // Parse markdown to extract frontmatter and body
+        let parsed_doc = decompose(markdown)
+            .map_err(|e| RenderError::Other(format!("Failed to parse markdown: {}", e).into()))?;
+        
+        // Read the template file
+        let template_content = fs::read_to_string(quill.main_path())
+            .map_err(|e| RenderError::Other(format!("Failed to read template file: {}", e).into()))?;
+        
+        // Create Glue instance and register filters
+        let mut glue = Glue::new();
+        glue.register_filter("str", StringFilter);
+        glue.register_filter("array", ArrayFilter);
+        glue.register_filter("int", IntFilter);
+        glue.register_filter("bool", BoolFilter);
+        glue.register_filter("datetime", DateTimeFilter);
+        glue.register_filter("dict", DictFilter);
+        glue.register_filter("markup", MarkupFilter);
+        
+        // Render the template with the parsed document context
+        let typst_content = glue.compose(&template_content, parsed_doc.fields().clone())
+            .map_err(|e| RenderError::Other(format!("Template rendering failed: {}", e).into()))?;
         
         let format = opts.format.unwrap_or(OutputFormat::Pdf);
         
