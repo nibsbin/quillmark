@@ -1,6 +1,7 @@
 use std::fs;
-use quillmark_typst::{TypstBackend, Quill};
-use quillmark_core::{Backend, test_context};
+use quillmark_typst::TypstBackend;
+use quillmark_core::test_context;
+use quillmark::{register_backend, render, Options};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("QuillMark Typst Backend Example");
@@ -9,15 +10,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let examples_dir = test_context::examples_dir().map_err(|e| -> Box<dyn std::error::Error> { e })?;
     println!("Examples directory: {}", examples_dir.display());
     
-    // Create quill from the hello-quill example
-    let quill_path = examples_dir.join("hello-quill");
-    let quill = Quill::from_path(&quill_path)?;
-    let backend = TypstBackend::with_quill(&quill_path)?;
-    
-    println!("Loaded quill: {}", quill.name);
-    println!("Main file: {}", quill.main_path().display());
-    println!("Packages: {}", quill.packages_path().display());
-    println!("Assets: {}", quill.assets_path().display());
+    // Register the Typst backend
+    register_backend(Box::new(TypstBackend::new()));
     
     // Create output directory within examples
     let output_dir = test_context::create_output_dir("output").map_err(|e| -> Box<dyn std::error::Error> { e })?;
@@ -36,20 +30,25 @@ This is a **sample document** written in markdown that will be compiled using th
 ## Code Example
 
 ```rust
-let backend = TypstBackend::with_quill("hello-quill")?;
+let backend = TypstBackend::new();
+register_backend(Box::new(backend));
 ```
 
 > This demonstrates how easy it is to create beautiful documents with QuillMark!"#;
 
     println!("\nCompiling markdown to PDF...");
     
+    // Get path to quill template
+    let quill_path = examples_dir.join("hello-quill");
+    
     // Test compilation
-    let options = quillmark_core::Options {
+    let options = Options {
         backend: Some("typst".to_string()),
         format: Some(quillmark_core::OutputFormat::Pdf),
+        quill_path: Some(quill_path.clone()),
     };
     
-    let artifacts = backend.render(markdown, &options).unwrap();
+    let artifacts = render(markdown, &options).unwrap();
     println!("✓ Successfully compiled {} artifact(s)", artifacts.len());
 
     for (i, artifact) in artifacts.iter().enumerate() {
@@ -74,13 +73,14 @@ let backend = TypstBackend::with_quill("hello-quill")?;
     
     // Test SVG compilation
     println!("\nCompiling markdown to SVG...");
-    let svg_options = quillmark_core::Options {
+    let svg_options = Options {
         backend: Some("typst".to_string()),
         format: Some(quillmark_core::OutputFormat::Svg),
+        quill_path: Some(quill_path),
     };
     
     // Panic on SVG render errors as well so we can inspect a backtrace
-    let artifacts = backend.render(markdown, &svg_options).unwrap();
+    let artifacts = render(markdown, &svg_options).unwrap();
     println!("✓ Successfully compiled {} SVG page(s)", artifacts.len());
 
     for (i, artifact) in artifacts.iter().enumerate() {

@@ -9,3 +9,9 @@ repository = "https://github.com/nibsbin/quillmark"
 [dependencies]
 quillmark-core = { path = "../quillmark-core" }
 thiserror = { workspace = true }
+serde_yaml = "0.9"
+
+[dev-dependencies]
+tera = "1.20.0"
+tempfile = "3.0"
+quillmark-typst = { path = "../quillmark-typst" }

@@ -1,7 +1,18 @@
-use quillmark_core::{Artifact, Backend, Options, OutputFormat, RenderError};
+use quillmark_core::{Artifact, Backend, Options, OutputFormat, RenderError, QuillData, Glue};
+use tera::{Value, Filter};
+use std::collections::HashMap;
 
 /// Mock backend for testing purposes
 pub struct MockBackend;
+
+/// Mock filter that just echoes the input
+struct MockFilter;
+
+impl Filter for MockFilter {
+    fn filter(&self, value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
+        Ok(value.clone())
+    }
+}
 
 impl Backend for MockBackend {
     fn id(&self) -> &'static str {
@@ -13,7 +24,15 @@ impl Backend for MockBackend {
         &[OutputFormat::Txt, OutputFormat::Svg, OutputFormat::Pdf]
     }
 
-    fn render(&self, markdown: &str, opts: &Options) -> Result<Vec<Artifact>, RenderError> {
+    fn glue_type(&self) -> &'static str {
+        ".txt"
+    }
+
+    fn register_filters(&self, glue: &mut Glue) {
+        glue.register_filter("mock", MockFilter);
+    }
+
+    fn compile(&self, glue_content: &str, _quill_data: &QuillData, opts: &Options) -> Result<Vec<Artifact>, RenderError> {
         let format = opts.format.unwrap_or(OutputFormat::Txt);
 
         // Check if the requested format is supported
@@ -27,15 +46,15 @@ impl Backend for MockBackend {
         let mock_content = match format {
             OutputFormat::Txt => format!(
                 "Mock text output for: {}",
-                markdown.lines().next().unwrap_or("empty")
+                glue_content.lines().next().unwrap_or("empty")
             ),
             OutputFormat::Svg => format!(
                 "<svg><text>Mock SVG output for: {}</text></svg>",
-                markdown.lines().next().unwrap_or("empty")
+                glue_content.lines().next().unwrap_or("empty")
             ),
             OutputFormat::Pdf => format!(
                 "Mock PDF output for: {}",
-                markdown.lines().next().unwrap_or("empty")
+                glue_content.lines().next().unwrap_or("empty")
             ),
         };
 

@@ -1,5 +1,6 @@
 use std::error::Error;
 use std::path::PathBuf;
+use std::collections::HashMap;
 
 // Re-export parsing functionality
 pub mod parse;
@@ -28,6 +29,7 @@ pub struct Artifact {
 pub struct Options {
     pub backend: Option<String>, // Backend identifier, not the trait object itself
     pub format: Option<OutputFormat>,
+    pub quill_path: Option<PathBuf>, // Path to quill template to use
 }
 
 /// Result type for rendering operations
@@ -49,6 +51,37 @@ pub enum RenderError {
     Other(#[from] Box<dyn Error + Send + Sync>),
 }
 
+/// A quill template containing the template content and metadata
+#[derive(Debug, Clone)]
+pub struct QuillData {
+    /// The template content 
+    pub template_content: String,
+    /// Quill-specific data that backends might need
+    pub metadata: HashMap<String, serde_yaml::Value>,
+    /// Base path for resolving relative paths
+    pub base_path: PathBuf,
+}
+
+impl QuillData {
+    /// Create new QuillData with just template content
+    pub fn new(template_content: String, base_path: PathBuf) -> Self {
+        Self {
+            template_content,
+            metadata: HashMap::new(),
+            base_path,
+        }
+    }
+    
+    /// Create QuillData with metadata
+    pub fn with_metadata(template_content: String, base_path: PathBuf, metadata: HashMap<String, serde_yaml::Value>) -> Self {
+        Self {
+            template_content,
+            metadata,
+            base_path,
+        }
+    }
+}
+
 /// Trait for markdown rendering backends
 pub trait Backend: Send + Sync {
     /// Stable identifier (e.g., "typst", "latex", "mock")
@@ -57,8 +90,14 @@ pub trait Backend: Send + Sync {
     /// Formats this backend supports in *this* build.
     fn supported_formats(&self) -> &'static [OutputFormat];
 
-    /// Render markdown into one or more artifacts (pages, files, etc.)
-    fn render(&self, markdown: &str, opts: &Options) -> Result<Vec<Artifact>, RenderError>;
+    /// File extension for the document type this backend processes (e.g., ".typ", ".tex")
+    fn glue_type(&self) -> &'static str;
+
+    /// Register filters with the given Glue instance
+    fn register_filters(&self, glue: &mut Glue);
+
+    /// Compile the rendered glue content into final artifacts
+    fn compile(&self, glue_content: &str, quill_data: &QuillData, opts: &Options) -> Result<Vec<Artifact>, RenderError>;
 }
 
 

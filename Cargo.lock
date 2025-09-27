@@ -1690,6 +1690,10 @@ name = "quillmark"
 version = "0.1.0"
 dependencies = [
  "quillmark-core",
+ "quillmark-typst",
+ "serde_yaml",
+ "tempfile",
+ "tera",
  "thiserror 1.0.69",
 ]
 
