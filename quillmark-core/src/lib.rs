@@ -30,7 +30,10 @@ pub enum RenderError {
     #[error("{0:?} backend is not built in this binary")]
     UnsupportedBackend(String),
     #[error("{format:?} not supported by {backend:?}")]
-    FormatNotSupported { backend: String, format: OutputFormat },
+    FormatNotSupported {
+        backend: String,
+        format: OutputFormat,
+    },
     #[error("multiple backends can produce {0:?}; specify one explicitly")]
     AmbiguousBackend(OutputFormat),
     #[error(transparent)]
