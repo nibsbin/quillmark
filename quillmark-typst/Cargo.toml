@@ -1,0 +1,14 @@
+[package]
+name = "quillmark-typst"
+version = "0.1.0"
+edition = "2021"
+description = "Typst backend for quillmark using Pandoc and Typst"
+license = "MIT"
+repository = "https://github.com/nibsbin/quillmark"
+
+[dependencies]
+quillmark = { path = "../quillmark" }
+thiserror = { workspace = true }
+# These would be real dependencies in a complete implementation:
+# pandoc = { version = "0.8", optional = true }
+# typst = { version = "0.10", optional = true }

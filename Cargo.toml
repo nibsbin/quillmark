@@ -1,0 +1,9 @@
+[workspace]
+members = [
+    "quillmark",
+    "quillmark-typst"
+]
+resolver = "2"
+
+[workspace.dependencies]
+thiserror = "1.0"
