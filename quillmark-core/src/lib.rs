@@ -1,6 +1,10 @@
 use std::error::Error;
 use std::path::PathBuf;
 
+// Re-export parsing functionality
+pub mod parse;
+pub use parse::{decompose, ParsedDocument, BODY_FIELD};
+
 /// Output formats supported by backends
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OutputFormat {

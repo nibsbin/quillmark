@@ -1,4 +1,4 @@
-use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact};
+use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact, decompose};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
@@ -152,8 +152,13 @@ impl Backend for TypstBackend {
         // Use the first available quill for now
         let quill = self.quills.values().next().unwrap();
         
-        // Convert markdown to Typst using the conversion logic
-        let typst_content = mark_to_typst(markdown);
+        // decompose markdown into dictionary with frontmatter and body
+        let parsed_doc = decompose(markdown)
+            .map_err(|e| RenderError::Other(format!("Failed to decompose markdown: {}", e).into()))?;
+        
+        // Extract the BODY field and convert to Typst
+        let body = parsed_doc.body().unwrap_or("");
+        let typst_content = mark_to_typst(body);
         
         let format = opts.format.unwrap_or(OutputFormat::Pdf);
         
@@ -280,5 +285,68 @@ This is a test document with markdown content: $content$
             backend: Some("typst".to_string()),
             format: Some(OutputFormat::Pdf),
         };
+        
+        let result = backend.render("# Test", &options);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            RenderError::Other(e) => {
+                assert!(e.to_string().contains("No quill templates registered"));
+            }
+            _ => panic!("Expected Other error"),
+        }
+    }
+
+    #[test] 
+    fn test_backend_render_with_frontmatter() -> Result<(), Box<dyn std::error::Error>> {
+        let (_temp, quill_path) = create_test_quill()?;
+        let backend = TypstBackend::with_quill(&quill_path)?;
+        
+        let markdown_with_frontmatter = r#"---
+title: Test Document
+author: John Doe
+---
+
+# Hello World
+
+This is a **test** document."#;
+        
+        let options = Options {
+            backend: Some("typst".to_string()),
+            format: Some(OutputFormat::Pdf),
+        };
+        
+        // This should work - parsing the frontmatter and converting the body
+        let result = backend.render(markdown_with_frontmatter, &options);
+        assert!(result.is_ok());
+        
+        let artifacts = result.unwrap();
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].output_format, OutputFormat::Pdf);
+        assert!(!artifacts[0].bytes.is_empty());
+        
+        Ok(())
+    }
+
+    #[test] 
+    fn test_backend_render_body_only() -> Result<(), Box<dyn std::error::Error>> {
+        let (_temp, quill_path) = create_test_quill()?;
+        let backend = TypstBackend::with_quill(&quill_path)?;
+        
+        let markdown_no_frontmatter = "# Hello World\n\nThis is a **test** document.";
+        
+        let options = Options {
+            backend: Some("typst".to_string()),
+            format: Some(OutputFormat::Pdf),
+        };
+        
+        let result = backend.render(markdown_no_frontmatter, &options);
+        assert!(result.is_ok());
+        
+        let artifacts = result.unwrap();
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0].output_format, OutputFormat::Pdf);
+        assert!(!artifacts[0].bytes.is_empty());
+        
+        Ok(())
     }
 }
