@@ -6,20 +6,29 @@ use std::path::Path;
 fn main() {
     let args: Vec<String> = env::args().collect();
     
+    // Create out directory if it doesn't exist
+    if let Err(err) = fs::create_dir_all("out") {
+        eprintln!("Error creating out directory: {}", err);
+        std::process::exit(1);
+    }
+    
     let (input_file, output_file) = if args.len() >= 2 {
         let input = &args[1];
         let output = if args.len() >= 3 {
-            args[2].clone()
+            // Put custom output file in out/ directory
+            let output_path = Path::new(&args[2]);
+            let filename = output_path.file_name().unwrap_or(std::ffi::OsStr::new("output.typ"));
+            format!("out/{}", filename.to_string_lossy())
         } else {
-            // Generate output filename by changing extension
+            // Generate output filename by changing extension and put in out/
             let path = Path::new(input);
             let stem = path.file_stem().unwrap_or(std::ffi::OsStr::new("output"));
-            format!("{}.typ", stem.to_string_lossy())
+            format!("out/{}.typ", stem.to_string_lossy())
         };
         (input.clone(), output)
     } else {
         // Use the example file if no arguments provided
-        ("../examples/sample.md".to_string(), "sample_output.typ".to_string())
+        ("../examples/sample.md".to_string(), "out/sample_output.typ".to_string())
     };
     
     println!("Converting {} to {}", input_file, output_file);

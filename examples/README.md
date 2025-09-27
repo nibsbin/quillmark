@@ -15,15 +15,17 @@ This directory contains an example demonstrating the markdown-to-Typst conversio
 From the `quillmark-typst` directory:
 
 ```bash
-# Use default files (sample.md -> sample_output.typ)
+# Use default files (sample.md -> out/sample_output.typ)
 cargo run --example demo
 
-# Specify input file (output will be input filename with .typ extension)
+# Specify input file (output will be out/input_filename.typ)
 cargo run --example demo -- ../examples/sample.md
 
-# Specify both input and output files
-cargo run --example demo -- ../examples/sample.md ../examples/custom_output.typ
+# Specify both input and output files (output will be in out/ directory)
+cargo run --example demo -- ../examples/sample.md custom_output.typ
 ```
+
+All output files are automatically placed in the `out/` directory.
 
 ### Testing the conversion interactively
 
