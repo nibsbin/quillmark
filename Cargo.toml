@@ -2,12 +2,11 @@
 members = [
     "quillmark-core",
     "quillmark",
-    "quillmark-typst"
+    "quillmark-typst",
+    "quillmark-fixtures"
 ]
 resolver = "2"
 
 [workspace.dependencies]
 thiserror = "1.0"
-
-[workspace.examples]
-hello-quill = { path = "examples/hello-quill" }
+quillmark-fixtures = { path = "quillmark-fixtures" }
