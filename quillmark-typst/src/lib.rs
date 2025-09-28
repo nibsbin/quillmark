@@ -164,10 +164,7 @@ impl Backend for TypstBackend {
             .unwrap_or("default")
             .to_string();
         
-        let main_file = quill_data.metadata.get("main_file")
-            .and_then(|v| v.as_str())
-            .unwrap_or("glue.typ")
-            .to_string();
+        let main_file = glue_content.to_string();
 
         let quill = Quill {
             path: quill_data.base_path.clone(),

@@ -1,6 +1,6 @@
 use pulldown_cmark::{Parser, Event, Tag, TagEnd};
 
-/// Escapes text for safe use in Typst
+/// Escapes text for safe use in Typst evals
 pub fn escape_markup(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('*', "\\*")
@@ -13,6 +13,26 @@ pub fn escape_markup(s: &str) -> String {
         .replace('<', "\\<")
         .replace('>', "\\>")
         .replace('@', "\\@")
+}
+
+pub fn escape_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"'  => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            // Escape other ASCII controls with \u{..}
+            c if c.is_control() => {
+                use std::fmt::Write as _;
+                let _ = write!(out, "\\u{{{:x}}}", c as u32);
+            }
+            c => out.push(c),
+        }
+    }
+    out
 }
 
 #[derive(Debug, Clone)]

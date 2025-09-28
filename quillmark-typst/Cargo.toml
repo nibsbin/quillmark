@@ -24,6 +24,7 @@ serde_yaml = "0.9"
 toml = "0.9"
 tera = "1.20.0"
 pulldown-cmark = "0.13.0"
+anyhow = "1.0.100"
 
 
 [dev-dependencies]

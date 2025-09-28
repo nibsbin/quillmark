@@ -30,9 +30,11 @@ pub fn render(markdown: &str, config: &RenderConfig) -> RenderResult {
     // Register filters from the backend
     backend.register_filters(&mut glue);
     
-    // Render the template with the parsed document context
+    // Render the template with the parsed docucomposement context
     let glue_content = glue.compose(parsed_doc.fields().clone())
         .map_err(|e| RenderError::Other(Box::new(e)))?;
+
+    println!("Glue content: {}", glue_content);
     
     // Call the backend to compile the final artifacts
     backend.compile(&glue_content, &quill_data, config)

@@ -14,7 +14,9 @@ use crate::Quill;
 
 /// Compile a quill template with Typst content to PDF
 pub fn compile_to_pdf(quill: &Quill, typst_content: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    println!("Using quill: {}", quill.name);
     let world = QuillWorld::new(quill, typst_content)?;
+    println!("World initialized with {} sources and {} binaries", world.sources.len(), world.binaries.len());
     let document = compile_document(&world)?;
     
     let pdf = typst_pdf::pdf(&document, &PdfOptions::default())

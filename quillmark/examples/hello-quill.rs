@@ -26,13 +26,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Markdown path: {}", markdown_path.display());
     let mark_content = std::fs::read_to_string(&markdown_path)
         .map_err(|e| format!("Failed to read markdown file: {}", e))?;
+
     let config = RenderConfig {
         backend: Box::new(backend),
         output_format: Some(quillmark_core::OutputFormat::Pdf),
         quill_path: quill_path
     };
-
-
 
     render(&mark_content, &config)?;
 
