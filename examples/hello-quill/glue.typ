@@ -3,7 +3,7 @@
 // Generate the official memorandum with validated and processed input
 #show:official-memorandum.with(
   // Letterhead configuration
-  letterhead-title: {{ letterhead_title | default| String }},
+  letterhead-title: {{ letterhead_title | String }},
   letterhead-caption: {{ letterhead_caption | Array }},
   letterhead-seal: image("assets/dod_seal.gif"),
 
@@ -32,5 +32,5 @@
   // Signature block
   signature-block: {{ signature_block | Array }},
 
-  {{body | Body }}
+  {{ body | Body }}
 )

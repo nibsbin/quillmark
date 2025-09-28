@@ -1,4 +1,4 @@
-use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact, parse::decompose, templating::Glue};
+use quillmark_core::{Backend, OutputFormat, RenderConfig, RenderError, Artifact, QuillData, Glue};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
@@ -142,45 +142,44 @@ impl Backend for TypstBackend {
         &[OutputFormat::Pdf, OutputFormat::Svg]
     }
 
-    fn render(&self, markdown: &str, opts: &Options) -> Result<Vec<Artifact>, RenderError> {
-        // For now, we'll use a simple approach where we expect a quill to be registered
-        // In a more sophisticated implementation, this could be specified in opts
-        if self.quills.is_empty() {
-            return Err(RenderError::Other(
-                "No quill templates registered. Use TypstBackend::with_quill() or register_quill()".to_string().into()
-            ));
-        }
+    fn glue_type(&self) -> &'static str {
+        ".typ"
+    }
 
-        // Use the first available quill for now
-        let quill = self.quills.values().next().unwrap();
+    fn register_filters(&self, glue: &mut Glue) {
+        glue.register_filter("String", string_filter);
+        glue.register_filter("Array", array_filter);
+        glue.register_filter("Int", int_filter);
+        glue.register_filter("Bool", bool_filter);
+        glue.register_filter("Date", datetime_filter);
+        glue.register_filter("Dict", dict_filter);
+        glue.register_filter("Body", body_filter);
+    }
+
+    fn compile(&self, glue_content: &str, quill_data: &QuillData, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError> {
+        // Convert QuillData back to the Quill format that the compiler expects
+        // For now, we'll create a basic Quill structure from the metadata
+        let quill_name = quill_data.metadata.get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("default")
+            .to_string();
         
-        // Parse markdown to extract frontmatter and body
-        let parsed_doc = decompose(markdown)
-            .map_err(|e| RenderError::Other(format!("Failed to parse markdown: {}", e).into()))?;
-        
-        // Read the template file
-        let template_content = fs::read_to_string(quill.main_path())
-            .map_err(|e| RenderError::Other(format!("Failed to read template file: {}", e).into()))?;
-        
-        // Create Glue instance with the template and register filters
-        let mut glue = Glue::new(template_content);
-        glue.register_filter("String", StringFilter);
-        glue.register_filter("Array", ArrayFilter); // alias expected by some templates
-        glue.register_filter("Int", IntFilter);
-        glue.register_filter("Bool", BoolFilter);
-        glue.register_filter("Date", DateTimeFilter); // alias for date filter used in templates
-        glue.register_filter("Dict", DictFilter);
-        glue.register_filter("Body", BodyFilter); // alias commonly used for body content
-        
-        // Render the template with the parsed document context
-        let typst_content = glue.compose(parsed_doc.fields().clone())
-            .map_err(|e| RenderError::Other(Box::new(e)))?;
-        
-        let format = opts.format.unwrap_or(OutputFormat::Pdf);
+        let main_file = quill_data.metadata.get("main_file")
+            .and_then(|v| v.as_str())
+            .unwrap_or("glue.typ")
+            .to_string();
+
+        let quill = Quill {
+            path: quill_data.base_path.clone(),
+            name: quill_name,
+            main_file,
+        };
+
+        let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
         
         match format {
             OutputFormat::Pdf => {
-                let pdf_bytes = compiler::compile_to_pdf(quill, &typst_content)
+                let pdf_bytes = compiler::compile_to_pdf(&quill, glue_content)
                     .map_err(|e| RenderError::Other(format!("PDF compilation failed: {}", e).into()))?;
                 
                 Ok(vec![Artifact {
@@ -189,7 +188,7 @@ impl Backend for TypstBackend {
                 }])
             }
             OutputFormat::Svg => {
-                let svg_pages = compiler::compile_to_svg(quill, &typst_content)
+                let svg_pages = compiler::compile_to_svg(&quill, glue_content)
                     .map_err(|e| RenderError::Other(format!("SVG compilation failed: {}", e).into()))?;
                 
                 Ok(svg_pages.into_iter().map(|bytes| Artifact {
@@ -294,12 +293,4 @@ This is a test document with markdown content: $content$
         Ok(())
     }
 
-    #[test]
-    fn test_backend_render_no_quills() {
-        let _backend = TypstBackend::default();
-        let _options = Options {
-            backend: Some("typst".to_string()),
-            format: Some(OutputFormat::Pdf),
-        };
-    }
 }

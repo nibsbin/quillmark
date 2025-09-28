@@ -28,7 +28,3 @@ pulldown-cmark = "0.13.0"
 
 [dev-dependencies]
 tempfile = "3.0"
-
-[[example]]
-name = "hello-quill"
-path = "../examples/hello-quill-example.rs"

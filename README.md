@@ -22,17 +22,21 @@ quillmark = "0.1"
 quillmark-typst = "0.1"  # Optional: for Typst backend support
 ```
 
-Basic usage:
+Basic usage (backends are passed directly in the render configuration):
 
 ```rust
-use quillmark::{render, Options, OutputFormat};
+use quillmark::{render, RenderConfig};
+use quillmark_typst::TypstBackend;
+use quillmark_core::OutputFormat;
 
-let options = Options {
-    backend: Some("typst".to_string()),
-    format: Some(OutputFormat::Pdf),
+let backend = TypstBackend::new();
+let config = RenderConfig {
+    backend: Box::new(backend),
+    output_format: Some(OutputFormat::Pdf),
+    quill_path: None, // or Some(path) to a quill template directory
 };
 
-let artifacts = render("# Hello World", &options)?;
+let artifacts = render("# Hello World", &config)?;
 ```
 
 ## Architecture
@@ -53,6 +57,8 @@ The crate structure avoids cyclical dependencies:
 - Backend crates like `quillmark-typst` depend only on `quillmark-core`
 
 Backends can produce multiple artifacts (e.g., multi-page documents) in various formats.
+
+Note: The previous global backend registration API (a global registry and `register_backend`) has been removed. Backends are now supplied directly in `RenderConfig`, which makes backend selection explicit and avoids global mutable state.
 
 ## Development
 
