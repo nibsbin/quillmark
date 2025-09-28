@@ -1,0 +1,6 @@
+[Quill]
+name = "hello-quill"
+version = "0.1.0"
+description = "A simple hello world quill template demonstrating basic typography and layout features"
+author = "QuillMark Team"
+tags = ["example", "hello-world", "typography"]
