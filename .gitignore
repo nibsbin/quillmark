@@ -29,3 +29,4 @@ output*.svg
 **/out/
 examples/output/
 examples/converted/
+**/.DS_Store
