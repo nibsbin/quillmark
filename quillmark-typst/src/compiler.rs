@@ -48,6 +48,22 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, Box<dyn std::er
 }
 
 /// Typst World implementation for dynamic quill loading
+/// 
+/// This implementation provides efficient dynamic package loading for the Quill system.
+/// Key improvements over previous hardcoded solutions:
+/// 
+/// - **Dynamic Package Discovery**: Automatically discovers packages in the quill's packages directory
+/// - **Proper Virtual Path Handling**: Maintains directory structure in virtual file system (e.g., src/lib.typ)
+/// - **Entrypoint Support**: Reads typst.toml files to respect package entrypoint configurations
+/// - **Namespace Handling**: Supports @preview and custom namespaces for package imports
+/// - **Asset Management**: Correctly loads assets with proper virtual paths (e.g., assets/image.gif)
+/// - **Error Handling**: Provides clear error messages for missing packages or files
+/// 
+/// Usage: 
+/// - Place packages in `{quill}/packages/{package-name}/` directories  
+/// - Each package should have a `typst.toml` with package metadata including entrypoint
+/// - Assets go in `{quill}/assets/` and are accessible as `assets/filename`
+/// - Package files maintain their directory structure in the virtual file system
 pub struct QuillWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
@@ -190,6 +206,14 @@ impl QuillWorld {
     }
     
     /// Efficiently load packages from a directory with better error handling
+    /// 
+    /// This method replaces the previous hardcoded package loading approach with a dynamic
+    /// system that:
+    /// - Scans package directories for typst.toml files
+    /// - Respects package entrypoints and metadata  
+    /// - Preserves directory structure in virtual paths
+    /// - Handles multiple namespaces (@preview, @local, etc.)
+    /// - Provides clear error reporting for debugging
     fn load_packages_recursive(
         dir: &Path,
         sources: &mut HashMap<FileId, Source>,
@@ -431,4 +455,104 @@ fn parse_package_toml(content: &str) -> Result<PackageInfo, Box<dyn std::error::
         version,
         entrypoint,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    fn test_parse_package_toml() {
+        let toml_content = r#"
+[package]
+name = "test-package"
+version = "1.0.0"
+namespace = "preview"
+entrypoint = "src/lib.typ"
+"#;
+        
+        let package_info = parse_package_toml(toml_content).unwrap();
+        assert_eq!(package_info.name, "test-package");
+        assert_eq!(package_info.version, "1.0.0");
+        assert_eq!(package_info.namespace, "preview");
+        assert_eq!(package_info.entrypoint, "src/lib.typ");
+    }
+
+    #[test]
+    fn test_parse_package_toml_defaults() {
+        let toml_content = r#"
+[package]
+name = "minimal-package"
+"#;
+        
+        let package_info = parse_package_toml(toml_content).unwrap();
+        assert_eq!(package_info.name, "minimal-package");
+        assert_eq!(package_info.version, "0.1.0");
+        assert_eq!(package_info.namespace, "preview");
+        assert_eq!(package_info.entrypoint, "lib.typ");
+    }
+
+    #[test]
+    fn test_package_loading_with_virtual_paths() {
+        // This test verifies that the improved package loading correctly handles
+        // virtual paths and directory structures
+        let temp_dir = TempDir::new().unwrap();
+        let package_dir = temp_dir.path().join("test-package");
+        let src_dir = package_dir.join("src");
+        
+        fs::create_dir_all(&src_dir).unwrap();
+        
+        // Create typst.toml
+        fs::write(
+            package_dir.join("typst.toml"),
+            r#"
+[package]
+name = "test-package"
+version = "1.0.0" 
+entrypoint = "src/lib.typ"
+"#
+        ).unwrap();
+        
+        // Create package files with directory structure
+        fs::write(src_dir.join("lib.typ"), "#import \"utils.typ\": *\n\n// Main package file").unwrap();
+        fs::write(src_dir.join("utils.typ"), "// Utility functions").unwrap();
+        
+        let mut sources = HashMap::new();
+        let mut binaries = HashMap::new();
+        
+        // Test the package loading
+        let result = QuillWorld::load_packages_recursive(&temp_dir.path(), &mut sources, &mut binaries);
+        assert!(result.is_ok(), "Package loading should succeed");
+        
+        // Verify that files are loaded with correct virtual paths
+        let expected_lib_path = VirtualPath::new("src/lib.typ");
+        let expected_utils_path = VirtualPath::new("src/utils.typ");
+        
+        let lib_id = FileId::new(
+            Some(PackageSpec {
+                namespace: "preview".into(),
+                name: "test-package".into(),
+                version: "1.0.0".parse().unwrap(),
+            }),
+            expected_lib_path
+        );
+        
+        let utils_id = FileId::new(
+            Some(PackageSpec {
+                namespace: "preview".into(),
+                name: "test-package".into(),
+                version: "1.0.0".parse().unwrap(),
+            }),
+            expected_utils_path
+        );
+        
+        assert!(sources.contains_key(&lib_id), "lib.typ should be loaded at src/lib.typ");
+        assert!(sources.contains_key(&utils_id), "utils.typ should be loaded at src/utils.typ");
+        
+        // Verify content is loaded correctly
+        assert!(sources[&lib_id].text().contains("Main package file"));
+        assert!(sources[&utils_id].text().contains("Utility functions"));
+    }
 }
