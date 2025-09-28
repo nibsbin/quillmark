@@ -84,27 +84,6 @@ impl Quill {
         }
     }
     
-    /// Create Quill with metadata
-    pub fn with_metadata(template_content: String, base_path: PathBuf, metadata: HashMap<String, serde_yaml::Value>) -> Self {
-        let name = base_path.file_name()
-            .unwrap_or_else(|| std::ffi::OsStr::new("unknown"))
-            .to_string_lossy()
-            .to_string();
-        
-        let main_file = metadata.get("glue_file")
-            .and_then(|v| v.as_str())
-            .unwrap_or("glue.typ")
-            .to_string();
-            
-        Self {
-            template_content,
-            metadata,
-            base_path,
-            name,
-            main_file,
-        }
-    }
-    
     /// Create a Quill from a directory path
     pub fn from_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let path = path.as_ref().to_path_buf();
