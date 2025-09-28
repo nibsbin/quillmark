@@ -255,6 +255,8 @@ pub fn body_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Valu
         other => other.to_string(),
     };
     let markup = mark_to_typst(&content);
+    eprintln!("DEBUG: body_filter markup before escape: {}", markup);
     let injector = format!("eval(\"{}\", mode: \"markup\")", escape_string(&markup));
+    eprintln!("DEBUG: body_filter final injector: {}", injector);
     Ok(Value::from(injector))
 }

@@ -31,6 +31,6 @@
   
   // Signature block
   signature-block: {{ signature_block | Array }},
-
-  {{ body | Body }}
 )
+
+{{ body | Body }}

@@ -162,12 +162,34 @@ impl QuillWorld {
             let name = entry.file_name().to_string_lossy().to_string();
             
             if path.is_file() {
-                let virtual_path = base_path.join(&name);
+                let virtual_path = if base_path.as_rootless_path().as_os_str().is_empty() {
+                    VirtualPath::new(&name)
+                } else {
+                    // Create path by combining base_path and name manually
+                    let base_str = base_path.as_rootless_path().to_string_lossy();
+                    let combined_path = if base_str.is_empty() {
+                        name.clone()
+                    } else {
+                        format!("{}/{}", base_str, name)
+                    };
+                    VirtualPath::new(&combined_path)
+                };
                 let file_id = FileId::new(None, virtual_path);
                 let data = fs::read(&path)?;
                 binaries.insert(file_id, Bytes::new(data));
             } else if path.is_dir() {
-                let sub_path = base_path.join(&name);
+                let sub_path = if base_path.as_rootless_path().as_os_str().is_empty() {
+                    VirtualPath::new(&name)
+                } else {
+                    // Create path by combining base_path and name manually
+                    let base_str = base_path.as_rootless_path().to_string_lossy();
+                    let combined_path = if base_str.is_empty() {
+                        name.clone()
+                    } else {
+                        format!("{}/{}", base_str, name)
+                    };
+                    VirtualPath::new(&combined_path)
+                };
                 Self::load_assets_recursive(&path, binaries, &sub_path)?;
             }
         }
@@ -198,8 +220,8 @@ impl QuillWorld {
                     let toml_content = fs::read_to_string(&toml_path)?;
                     if let Ok(package_info) = parse_package_toml(&toml_content) {
                         let spec = PackageSpec {
-                            namespace: package_info.namespace.into(),
-                            name: package_info.name.into(),
+                            namespace: package_info.namespace.clone().into(),
+                            name: package_info.name.clone().into(),
                             version: package_info.version.parse()
                                 .map_err(|_| "Invalid version format")?,
                         };
@@ -231,6 +253,7 @@ impl QuillWorld {
         binaries: &mut HashMap<FileId, Bytes>,
         package_spec: Option<PackageSpec>,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // Start with empty base path so directory structure is preserved
         Self::load_package_files_recursive(dir, sources, binaries, package_spec, &VirtualPath::new(""))?;
         Ok(())
     }
@@ -252,7 +275,14 @@ impl QuillWorld {
                 let virtual_path = if base_path.as_rootless_path().as_os_str().is_empty() {
                     VirtualPath::new(&name)
                 } else {
-                    base_path.join(&name)
+                    // Create path by combining base_path and name manually
+                    let base_str = base_path.as_rootless_path().to_string_lossy();
+                    let combined_path = if base_str.is_empty() {
+                        name.clone()
+                    } else {
+                        format!("{}/{}", base_str, name)
+                    };
+                    VirtualPath::new(&combined_path)
                 };
                 
                 let file_id = FileId::new(package_spec.clone(), virtual_path);
@@ -268,7 +298,14 @@ impl QuillWorld {
                 let sub_path = if base_path.as_rootless_path().as_os_str().is_empty() {
                     VirtualPath::new(&name)
                 } else {
-                    base_path.join(&name)
+                    // Create path by combining base_path and name manually
+                    let base_str = base_path.as_rootless_path().to_string_lossy();
+                    let combined_path = if base_str.is_empty() {
+                        name.clone()
+                    } else {
+                        format!("{}/{}", base_str, name)
+                    };
+                    VirtualPath::new(&combined_path)
                 };
                 Self::load_package_files_recursive(&path, sources, binaries, package_spec.clone(), &sub_path)?;
             }

@@ -36,6 +36,10 @@ pub fn render(markdown: &str, config: &RenderConfig) -> RenderResult {
 
     println!("Glue content: {}", glue_content);
     
+    // Write glue content to a file for debugging
+    std::fs::write("/tmp/glue_debug.typ", &glue_content)
+        .map_err(|e| RenderError::Other(format!("Failed to write debug file: {}", e).into()))?;
+    
     // Call the backend to compile the final artifacts
     backend.compile(&glue_content, &quill_data, config)
 }
