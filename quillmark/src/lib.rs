@@ -57,17 +57,17 @@ fn load_quill_from_path<P: AsRef<Path>>(path: P, glue_type: &str) -> Result<Quil
     }
 
     // Determine main template file - look for "glue" + glue_type
-    let main_file_name = format!("glue{}", glue_type);
-    let main_file_path = path.join(&main_file_name);
+    let glue_file_name = format!("glue{}", glue_type);
+    let glue_file_path = path.join(&glue_file_name);
     
-    if !main_file_path.exists() {
+    if !glue_file_path.exists() {
         return Err(RenderError::Other(
-            format!("Main template file not found: {}", main_file_path.display()).into(),
+            format!("Main template file not found: {}", glue_file_path.display()).into(),
         ));
     }
 
     // Read template content
-    let template_content = fs::read_to_string(&main_file_path)
+    let template_content = fs::read_to_string(&glue_file_path)
         .map_err(|e| RenderError::Other(format!("Failed to read template file: {}", e).into()))?;
 
     // Create quill data
@@ -85,8 +85,8 @@ fn load_quill_from_path<P: AsRef<Path>>(path: P, glue_type: &str) -> Result<Quil
     );
     
     metadata.insert(
-        "main_file".to_string(),
-        serde_yaml::Value::String(main_file_name),
+        "glue_file".to_string(),
+        serde_yaml::Value::String(glue_file_name),
     );
 
     Ok(QuillData::with_metadata(

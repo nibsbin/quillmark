@@ -23,19 +23,15 @@ pub struct Quill {
 
 impl Quill {
     /// Create a new Quill from a template directory
-    pub fn from_path<P: AsRef<Path>>(path: P) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn from_path<P: AsRef<Path>>(path: P, main_content: String) -> Result<Self, Box<dyn std::error::Error>> {
         let path = path.as_ref();
         let name = path.file_name()
             .ok_or("Invalid quill path")?
             .to_string_lossy()
             .to_string();
+
+        let main_file = "main.typ".to_string(); // Default main file name
         
-        // Check if glue.typ exists
-        let main_file = "glue.typ".to_string();
-        let main_path = path.join(&main_file);
-        if !main_path.exists() {
-            return Err(format!("glue.typ not found in quill: {}", path.display()).into());
-        }
 
         Ok(Quill {
             path: path.to_path_buf(),
@@ -249,7 +245,7 @@ This is a test document with markdown content: $content$
         
         let quill = Quill::from_path(&quill_path)?;
         assert_eq!(quill.name, "test-quill");
-        assert_eq!(quill.main_file, "glue.typ");
+        assert_eq!(quill.main_file, "main.typ");
         assert!(quill.main_path().exists());
         
         quill.validate()?;

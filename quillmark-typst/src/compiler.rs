@@ -77,20 +77,8 @@ impl QuillWorld {
             }
         }
         
-        // If no fonts were found in the quill, use system fonts
         if fonts.is_empty() {
-            // Add some basic font fallbacks - in a real implementation, 
-            // you might want to embed some default fonts
-            for family in &["Linux Libertine", "Times New Roman", "Arial"] {
-                if let Some(font_data) = find_system_font(family) {
-                    let font_bytes = Bytes::new(font_data);
-                    for font in Font::iter(font_bytes) {
-                        book.push(font.info().clone());
-                        fonts.push(font);
-                    }
-                    break;
-                }
-            }
+            return Err("No fonts found in quill assets".into());
         }
         
         // Load assets from the quill
@@ -98,14 +86,10 @@ impl QuillWorld {
         
         // Load packages from the quill
         Self::load_packages_recursive(&quill.packages_path(), &mut sources, &mut binaries)?;
-        
-        // Read and process the main Typst file
-        let main_content = fs::read_to_string(quill.main_path())?;
-        let processed_content = process_main_content(&main_content, typst_content)?;
-        
+                
         // Create main source
-        let main_id = FileId::new(None, VirtualPath::new("glue.typ"));
-        let source = Source::new(main_id, processed_content);
+        let main_id = FileId::new(None, VirtualPath::new("main.typ"));
+        let source = Source::new(main_id, typst_content.to_string());
         
         Ok(Self {
             library: LazyHash::new(Library::default()),
@@ -340,22 +324,4 @@ fn parse_package_toml(content: &str) -> Result<PackageInfo, Box<dyn std::error::
         name,
         version,
     })
-}
-
-/// Process the main content by replacing placeholders with Typst content
-fn process_main_content(main_content: &str, typst_content: &str) -> Result<String, Box<dyn std::error::Error>> {
-    // Replace the content placeholder with valid Typst content
-    let processed = main_content.replace("$content$", typst_content);
-    
-    Ok(processed)
-}
-
-/// Try to find a system font (placeholder - in a real implementation this would
-/// use proper font discovery)
-fn find_system_font(_family: &str) -> Option<Vec<u8>> {
-    // This is a placeholder - in a real implementation you would:
-    // 1. Use fontconfig on Linux
-    // 2. Use system font directories on macOS/Windows
-    // 3. Or embed some default fonts
-    None
 }
