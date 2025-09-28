@@ -86,6 +86,12 @@ impl QuillWorld {
         
         // Load packages from the quill
         Self::load_packages_recursive(&quill.packages_path(), &mut sources, &mut binaries)?;
+        
+        // Debug: Print loaded sources
+        println!("Loaded sources:");
+        for (file_id, source) in &sources {
+            println!("  {:?}: {} bytes", file_id, source.text().len());
+        }
                 
         // Create main source
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));
@@ -175,15 +181,18 @@ impl QuillWorld {
         Ok(())
     }
     
-    /// Recursively load packages from a directory
+    /// Efficiently load packages from a directory with better error handling
     fn load_packages_recursive(
         dir: &Path,
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
     ) -> Result<(), Box<dyn std::error::Error>> {
         if !dir.exists() {
+            println!("Package directory does not exist: {}", dir.display());
             return Ok(());
         }
+        
+        println!("Loading packages from: {}", dir.display());
         
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
@@ -191,24 +200,35 @@ impl QuillWorld {
             
             if path.is_dir() {
                 let package_name = entry.file_name().to_string_lossy().to_string();
+                println!("Processing package directory: {}", package_name);
                 
                 // Look for a typst.toml to determine package info
                 let toml_path = path.join("typst.toml");
                 if toml_path.exists() {
                     let toml_content = fs::read_to_string(&toml_path)?;
-                    if let Ok(package_info) = parse_package_toml(&toml_content) {
-                        let spec = PackageSpec {
-                            namespace: package_info.namespace.into(),
-                            name: package_info.name.into(),
-                            version: package_info.version.parse()
-                                .map_err(|_| "Invalid version format")?,
-                        };
-                        
-                        // Load the package files
-                        Self::load_package_files(&path, sources, binaries, Some(spec))?;
+                    match parse_package_toml(&toml_content) {
+                        Ok(package_info) => {
+                            let spec = PackageSpec {
+                                namespace: package_info.namespace.clone().into(),
+                                name: package_info.name.clone().into(),
+                                version: package_info.version.parse()
+                                    .map_err(|_| format!("Invalid version format: {}", package_info.version))?,
+                            };
+                            
+                            println!("Loading package: {}:{} (namespace: {})", 
+                                package_info.name, package_info.version, package_info.namespace);
+                            
+                            // Load the package files with entrypoint awareness
+                            Self::load_package_files_with_entrypoint(&path, sources, binaries, spec, &package_info.entrypoint)?;
+                        }
+                        Err(e) => {
+                            println!("Warning: Failed to parse typst.toml for {}: {}", package_name, e);
+                            // Continue with other packages
+                        }
                     }
                 } else {
-                    // Load as a simple package directory
+                    // Load as a simple package directory without typst.toml
+                    println!("No typst.toml found for {}, loading as local package", package_name);
                     let spec = PackageSpec {
                         namespace: "local".into(),
                         name: package_name.into(),
@@ -219,6 +239,30 @@ impl QuillWorld {
                     Self::load_package_files(&path, sources, binaries, Some(spec))?;
                 }
             }
+        }
+        
+        Ok(())
+    }
+    
+    /// Load files from a package directory with entrypoint support
+    fn load_package_files_with_entrypoint(
+        dir: &Path,
+        sources: &mut HashMap<FileId, Source>,
+        binaries: &mut HashMap<FileId, Bytes>,
+        package_spec: PackageSpec,
+        entrypoint: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Load all files recursively to ensure consistent directory structure
+        Self::load_package_files_recursive(dir, sources, binaries, Some(package_spec.clone()), &VirtualPath::new(""))?;
+        
+        // Verify the entrypoint was loaded correctly
+        let expected_entrypoint_path = VirtualPath::new(entrypoint);
+        let entrypoint_file_id = FileId::new(Some(package_spec), expected_entrypoint_path);
+        
+        if sources.contains_key(&entrypoint_file_id) {
+            println!("Entrypoint {} loaded correctly as part of package files", entrypoint);
+        } else {
+            println!("Warning: Entrypoint {} not found after recursive loading", entrypoint);
         }
         
         Ok(())
@@ -243,6 +287,8 @@ impl QuillWorld {
         package_spec: Option<PackageSpec>,
         base_path: &VirtualPath,
     ) -> Result<(), Box<dyn std::error::Error>> {
+        println!("Loading files from dir: {}, base_path: {:?}", dir.display(), base_path.as_rootless_path());
+        
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
@@ -252,8 +298,13 @@ impl QuillWorld {
                 let virtual_path = if base_path.as_rootless_path().as_os_str().is_empty() {
                     VirtualPath::new(&name)
                 } else {
-                    base_path.join(&name)
+                    // Manually construct the path to ensure it works correctly
+                    let base_str = base_path.as_rootless_path().to_string_lossy();
+                    let full_path = format!("{}/{}", base_str, name);
+                    VirtualPath::new(&full_path)
                 };
+                
+                println!("  File: {} -> virtual path: {:?}", name, virtual_path.as_rootless_path());
                 
                 let file_id = FileId::new(package_spec.clone(), virtual_path);
                 
@@ -270,6 +321,7 @@ impl QuillWorld {
                 } else {
                     base_path.join(&name)
                 };
+                println!("  Dir: {} -> sub_path: {:?}", name, sub_path.as_rootless_path());
                 Self::load_package_files_recursive(&path, sources, binaries, package_spec.clone(), &sub_path)?;
             }
         }
@@ -334,39 +386,46 @@ impl World for QuillWorld {
     }
 }
 
-/// Simple package info structure
-#[derive(Debug)]
+/// Simplified package info structure with entrypoint support
+#[derive(Debug, Clone)]
 struct PackageInfo {
     namespace: String,
     name: String,
     version: String,
+    entrypoint: String,
 }
 
-/// Parse a basic typst.toml for package information
+/// Parse a typst.toml for package information with better error handling
 fn parse_package_toml(content: &str) -> Result<PackageInfo, Box<dyn std::error::Error>> {
     let value: toml::Value = toml::from_str(content)?;
     
-    let namespace = value.get("package")
-        .and_then(|p| p.get("namespace"))
+    let package_section = value.get("package")
+        .ok_or("Missing [package] section in typst.toml")?;
+        
+    let namespace = package_section.get("namespace")
         .and_then(|v| v.as_str())
         .unwrap_or("preview")
         .to_string();
         
-    let name = value.get("package")
-        .and_then(|p| p.get("name"))
+    let name = package_section.get("name")
         .and_then(|v| v.as_str())
-        .ok_or("Package name is required")?
+        .ok_or("Package name is required in typst.toml")?
         .to_string();
         
-    let version = value.get("package")
-        .and_then(|p| p.get("version"))
+    let version = package_section.get("version")
         .and_then(|v| v.as_str())
         .unwrap_or("0.1.0")
+        .to_string();
+        
+    let entrypoint = package_section.get("entrypoint")
+        .and_then(|v| v.as_str())
+        .unwrap_or("lib.typ")
         .to_string();
     
     Ok(PackageInfo {
         namespace,
         name,
         version,
+        entrypoint,
     })
 }
