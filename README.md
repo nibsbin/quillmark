@@ -60,6 +60,46 @@ Backends can produce multiple artifacts (e.g., multi-page documents) in various 
 
 Note: The previous global backend registration API (a global registry and `register_backend`) has been removed. Backends are now supplied directly in `RenderConfig`, which makes backend selection explicit and avoids global mutable state.
 
+## Package Management (Typst Backend)
+
+The `quillmark-typst` backend features a simplified, efficient dynamic package loading system that replaces previous hardcoded approaches:
+
+### Key Features
+
+- **Dynamic Discovery**: Automatically discovers packages in `{quill}/packages/` directories
+- **Proper Path Handling**: Maintains directory structure (e.g., `src/lib.typ` imports work correctly)
+- **Entrypoint Support**: Reads `typst.toml` files to respect package entrypoint configurations
+- **Namespace Support**: Handles `@preview`, `@local`, and custom namespaces
+- **Asset Management**: Loads assets from `{quill}/assets/` with correct virtual paths
+
+### Package Structure
+
+```
+hello-quill/
+├── packages/
+│   └── tonguetoquill-usaf-memo/
+│       ├── typst.toml          # Package metadata
+│       └── src/
+│           ├── lib.typ         # Main entrypoint
+│           └── utils.typ       # Supporting files
+├── assets/
+│   ├── fonts/
+│   └── dod_seal.gif           # Accessible as "assets/dod_seal.gif"
+└── glue.typ                   # Template file
+```
+
+### Usage in Templates
+
+```typst
+#import "@preview/tonguetoquill-usaf-memo:0.1.1": official-memorandum
+#show:official-memorandum.with(
+  letterhead-seal: image("assets/dod_seal.gif"),
+  // ... other parameters
+)
+```
+
+The system automatically resolves package imports and asset references without manual configuration.
+
 ## Development
 
 To build and test all crates:

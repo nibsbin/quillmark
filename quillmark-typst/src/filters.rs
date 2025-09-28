@@ -2,6 +2,7 @@
 //! Implement filters against the core crate's stable filter ABI (no minijinja deps here).
 
 use serde_json::{self, Value as Json};
+use toml::{self, value::Datetime as TomlDatetime, Value as TomlValue};
 
 use quillmark_core::templating::filter_api::{State, Value, Kwargs, Error, ErrorKind};
 
@@ -208,9 +209,32 @@ pub fn datetime_filter(_state: &State, value: Value, kwargs: Kwargs) -> Result<V
     let mut jv = v_to_json(&value);
     if jv.is_null() {
         if let Some(defj) = kwargs_default(&kwargs)? { jv = defj; }
-        else { jv = Json::String("01/01/2024".to_string()); }
+        else { jv = Json::String("2024-01-01".to_string()); }
     }
-    Ok(Value::from(escape_string(&json_to_string_lossy(&jv))))
+    let raw = json_to_string_lossy(&jv).trim().to_string();
+
+    // Strict: only accept valid TOML datetimes. Do not attempt to guess
+    // or normalize other formats. Return a clear error if parsing fails.
+    let dt = raw.parse::<TomlDatetime>().map_err(|_| {
+        Error::new(
+            ErrorKind::InvalidOperation,
+            format!("Value is not a valid TOML datetime (ISO date or RFC3339 expected): got {:?}", raw),
+        )
+    })?;
+
+    let mut table = toml::map::Map::new();
+    table.insert("date".to_string(), TomlValue::Datetime(dt));
+    let doc = TomlValue::Table(table);
+
+    let serialized = toml::to_string(&doc).map_err(|e| {
+        Error::new(
+            ErrorKind::BadSerialization,
+            format!("Failed to serialize TOML date: {e}"),
+        )
+    })?;
+
+    let injector = format!("toml(bytes(\"{}\")).date", escape_string(&serialized));
+    Ok(Value::from(injector))
 }
 
 pub fn dict_filter(_state: &State, value: Value, kwargs: Kwargs) -> Result<Value, Error> {
