@@ -30,9 +30,7 @@ impl Backend for TypstBackend {
 
     fn register_filters(&self, glue: &mut Glue) {
         glue.register_filter("String", string_filter);
-        glue.register_filter("Array", array_filter);
-        glue.register_filter("Int", int_filter);
-        glue.register_filter("Bool", bool_filter);
+        glue.register_filter("Lines", lines_filter);
         glue.register_filter("Date", datetime_filter);
         glue.register_filter("Dict", dict_filter);
         glue.register_filter("Body", body_filter);
