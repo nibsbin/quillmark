@@ -12,12 +12,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Find workspace examples directory 
     let examples_dir = test_context::examples_dir()
         .map_err(|e| -> Box<dyn std::error::Error> { e })?;
-    let quill_path = examples_dir.parent()
-        .ok_or("Could not find parent directory")?
-        .parent()
-        .ok_or("Could not find grandparent directory")?
-        .join("examples")
-        .join("simple-quill");
+    let quill_path = examples_dir.join("simple-quill");
     
     println!("Using quill at: {}", quill_path.display());
     
