@@ -25,7 +25,7 @@ To test this quill template:
 
 ```bash
 # Run the example from the project root
-cargo run --package quillmark-typst --example hello-quill-example
+cargo run --package quillmark-typst --example hello-quill
 ```
 
 This will:

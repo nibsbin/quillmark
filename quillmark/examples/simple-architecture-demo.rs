@@ -1,13 +1,13 @@
 use quillmark_typst::TypstBackend;
-use quillmark::{register_backend, render, Options};
+use quillmark::{render, RenderConfig};
 use quillmark_core::{OutputFormat, test_context};
 use std::fs;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Simple QuillMark Example");
     
-    // Register the Typst backend
-    register_backend(Box::new(TypstBackend::new()));
+    // Create the Typst backend
+    let backend = TypstBackend::new();
     
     // Find workspace examples directory 
     let examples_dir = test_context::examples_dir()
@@ -57,10 +57,10 @@ All orchestration logic has been moved to the `quillmark` crate:
 
 This demonstrates the successful implementation of the requested architecture changes!"#;
 
-    let options = Options {
-        backend: Some("typst".to_string()),
-        format: Some(OutputFormat::Pdf),
-        quill_path: Some(quill_path),
+    let options = RenderConfig {
+        backend: Box::new(backend),
+        output_format: Some(OutputFormat::Pdf),
+        quill_path: quill_path,
     };
     
     println!("Rendering with new architecture...");
@@ -75,8 +75,6 @@ This demonstrates the successful implementation of the requested architecture ch
     let output_path = output_dir.join("architecture_demo.pdf");
     fs::write(&output_path, &artifacts[0].bytes)?;
     println!("  Saved to: {}", output_path.display());
-    
-    println!("\n🎉 Architecture restructuring successful!");
-    
+        
     Ok(())
 }

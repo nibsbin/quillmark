@@ -1,17 +1,14 @@
-use quillmark_core::{Artifact, Backend, Options, OutputFormat, RenderError, QuillData, Glue};
-use tera::{Value, Filter};
-use std::collections::HashMap;
+use quillmark_core::{Artifact, Backend, RenderConfig, OutputFormat, RenderError, QuillData, Glue};
+
+// use minijinja-compatible filter API types
+use quillmark_core::templating::filter_api::{State, Value as MjValue, Kwargs, Error as MjError};
 
 /// Mock backend for testing purposes
 pub struct MockBackend;
 
-/// Mock filter that just echoes the input
-struct MockFilter;
-
-impl Filter for MockFilter {
-    fn filter(&self, value: &Value, _args: &HashMap<String, Value>) -> tera::Result<Value> {
-        Ok(value.clone())
-    }
+/// Mock filter that just echoes the input (MiniJinja-compatible)
+fn mock_filter(_state: &State, value: MjValue, _kwargs: Kwargs) -> Result<MjValue, MjError> {
+    Ok(value)
 }
 
 impl Backend for MockBackend {
@@ -29,11 +26,12 @@ impl Backend for MockBackend {
     }
 
     fn register_filters(&self, glue: &mut Glue) {
-        glue.register_filter("mock", MockFilter);
+        // register the minijinja-style filter function
+        glue.register_filter("mock", mock_filter);
     }
 
-    fn compile(&self, glue_content: &str, _quill_data: &QuillData, opts: &Options) -> Result<Vec<Artifact>, RenderError> {
-        let format = opts.format.unwrap_or(OutputFormat::Txt);
+    fn compile(&self, glue_content: &str, _quill_data: &QuillData, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError> {
+        let format = opts.output_format.unwrap_or(OutputFormat::Txt);
 
         // Check if the requested format is supported
         if !self.supported_formats().contains(&format) {
@@ -64,3 +62,4 @@ impl Backend for MockBackend {
         }])
     }
 }
+

@@ -1,8 +1,8 @@
 mod common;
 
 use common::MockBackend;
-use quillmark_core::{Backend, Options, OutputFormat};
-use quillmark::{register_backend, render};
+use quillmark_core::{Backend, RenderConfig, OutputFormat};
+use quillmark::render;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use std::fs;
@@ -46,12 +46,10 @@ fn test_mock_backend_render_txt() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let quill_path = create_mock_quill_template(&temp_dir);
     
-    register_backend(Box::new(MockBackend));
-    
-    let options = Options {
-        backend: Some("mock".to_string()),
-        format: Some(OutputFormat::Txt),
-        quill_path: Some(quill_path),
+    let options = RenderConfig {
+        backend: Box::new(MockBackend),
+        output_format: Some(OutputFormat::Txt),
+        quill_path: quill_path,
     };
 
     let result = render("# Hello World", &options);
@@ -71,12 +69,10 @@ fn test_mock_backend_render_svg() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let quill_path = create_mock_quill_template(&temp_dir);
     
-    register_backend(Box::new(MockBackend));
-    
-    let options = Options {
-        backend: Some("mock".to_string()),
-        format: Some(OutputFormat::Svg),
-        quill_path: Some(quill_path),
+    let options = RenderConfig {
+        backend: Box::new(MockBackend),
+        output_format: Some(OutputFormat::Svg),
+        quill_path: quill_path,
     };
 
     let result = render("# Hello World", &options);
@@ -97,12 +93,10 @@ fn test_mock_backend_render_pdf() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let quill_path = create_mock_quill_template(&temp_dir);
     
-    register_backend(Box::new(MockBackend));
-    
-    let options = Options {
-        backend: Some("mock".to_string()),
-        format: Some(OutputFormat::Pdf),
-        quill_path: Some(quill_path),
+    let options = RenderConfig {
+        backend: Box::new(MockBackend),
+        output_format: Some(OutputFormat::Pdf),
+        quill_path: quill_path,
     };
 
     let result = render("# Hello World", &options);
@@ -122,12 +116,10 @@ fn test_mock_backend_render_default_format() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let quill_path = create_mock_quill_template(&temp_dir);
     
-    register_backend(Box::new(MockBackend));
-    
-    let options = Options {
-        backend: Some("mock".to_string()),
-        format: None, // Should default to Txt
-        quill_path: Some(quill_path),
+    let options = RenderConfig {
+        backend: Box::new(MockBackend),
+        output_format: None, // Should default to Txt
+        quill_path: quill_path,
     };
 
     let result = render("# Hello World", &options);
@@ -147,12 +139,10 @@ fn test_mock_backend_render_empty_markdown() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let quill_path = create_mock_quill_template(&temp_dir);
     
-    register_backend(Box::new(MockBackend));
-    
-    let options = Options {
-        backend: Some("mock".to_string()),
-        format: Some(OutputFormat::Txt),
-        quill_path: Some(quill_path),
+    let options = RenderConfig {
+        backend: Box::new(MockBackend),
+        output_format: Some(OutputFormat::Txt),
+        quill_path: quill_path,
     };
 
     let result = render("", &options);

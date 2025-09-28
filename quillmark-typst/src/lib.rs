@@ -1,4 +1,4 @@
-use quillmark_core::{Backend, OutputFormat, Options, RenderError, Artifact, QuillData, Glue};
+use quillmark_core::{Backend, OutputFormat, RenderConfig, RenderError, Artifact, QuillData, Glue};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::fs;
@@ -147,16 +147,16 @@ impl Backend for TypstBackend {
     }
 
     fn register_filters(&self, glue: &mut Glue) {
-        glue.register_filter("String", StringFilter);
-        glue.register_filter("Array", ArrayFilter); // alias expected by some templates
-        glue.register_filter("Int", IntFilter);
-        glue.register_filter("Bool", BoolFilter);
-        glue.register_filter("Date", DateTimeFilter); // alias for date filter used in templates
-        glue.register_filter("Dict", DictFilter);
-        glue.register_filter("Body", BodyFilter); // alias commonly used for body content
+        glue.register_filter("String", string_filter);
+        glue.register_filter("Array", array_filter);
+        glue.register_filter("Int", int_filter);
+        glue.register_filter("Bool", bool_filter);
+        glue.register_filter("Date", datetime_filter);
+        glue.register_filter("Dict", dict_filter);
+        glue.register_filter("Body", body_filter);
     }
 
-    fn compile(&self, glue_content: &str, quill_data: &QuillData, opts: &Options) -> Result<Vec<Artifact>, RenderError> {
+    fn compile(&self, glue_content: &str, quill_data: &QuillData, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError> {
         // Convert QuillData back to the Quill format that the compiler expects
         // For now, we'll create a basic Quill structure from the metadata
         let quill_name = quill_data.metadata.get("name")
@@ -175,7 +175,7 @@ impl Backend for TypstBackend {
             main_file,
         };
 
-        let format = opts.format.unwrap_or(OutputFormat::Pdf);
+        let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
         
         match format {
             OutputFormat::Pdf => {
@@ -293,13 +293,4 @@ This is a test document with markdown content: $content$
         Ok(())
     }
 
-    #[test]
-    fn test_backend_render_no_quills() {
-        let _backend = TypstBackend::default();
-        let _options = Options {
-            backend: Some("typst".to_string()),
-            format: Some(OutputFormat::Pdf),
-            quill_path: None,
-        };
-    }
 }

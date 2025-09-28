@@ -26,10 +26,11 @@ pub struct Artifact {
 }
 
 /// Rendering options
-pub struct Options {
-    pub backend: Option<String>, // Backend identifier, not the trait object itself
-    pub format: Option<OutputFormat>,
-    pub quill_path: Option<PathBuf>, // Path to quill template to use
+pub struct RenderConfig {
+    /// The backend to use for rendering. Backends implement the `Backend` trait.
+    pub backend: Box<dyn Backend>,
+    pub output_format: Option<OutputFormat>,
+    pub quill_path: PathBuf, // Path to quill template to use
 }
 
 /// Result type for rendering operations
@@ -97,7 +98,7 @@ pub trait Backend: Send + Sync {
     fn register_filters(&self, glue: &mut Glue);
 
     /// Compile the rendered glue content into final artifacts
-    fn compile(&self, glue_content: &str, quill_data: &QuillData, opts: &Options) -> Result<Vec<Artifact>, RenderError>;
+    fn compile(&self, glue_content: &str, quill_data: &QuillData, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError>;
 }
 
 
