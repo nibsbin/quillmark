@@ -1,8 +1,4 @@
 use quillmark_core::{Backend, OutputFormat, RenderConfig, RenderError, Artifact, QuillData, Glue};
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::fs;
-use serde::Deserialize;
 pub use convert::mark_to_typst;
 use filters::*;
 
@@ -10,123 +6,7 @@ mod compiler;
 mod convert;
 mod filters;
 
-/// Configuration for a quill template
-#[derive(Debug, Clone, Deserialize)]
-pub struct Quill {
-    /// Path to the quill template directory
-    pub path: PathBuf,
-    /// Name of the quill template
-    pub name: String,
-    /// Main Typst file (usually "glue.typ")
-    pub main_file: String,
-}
-
-impl Quill {
-    /// Create a new Quill from a template directory
-    pub fn from_path<P: AsRef<Path>>(path: P, main_content: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let path = path.as_ref();
-        let name = path.file_name()
-            .ok_or("Invalid quill path")?
-            .to_string_lossy()
-            .to_string();
-
-        let main_file = "main.typ".to_string(); // Default main file name
-        
-
-        Ok(Quill {
-            path: path.to_path_buf(),
-            name,
-            main_file,
-        })
-    }
-
-    /// Get the path to the main Typst file
-    pub fn main_path(&self) -> PathBuf {
-        self.path.join(&self.main_file)
-    }
-
-    /// Get the path to the packages directory
-    pub fn packages_path(&self) -> PathBuf {
-        self.path.join("packages")
-    }
-
-    /// Get the path to the assets directory
-    pub fn assets_path(&self) -> PathBuf {
-        self.path.join("assets")
-    }
-
-    /// Check if the quill template is valid
-    pub fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
-        if !self.path.exists() {
-            return Err(format!("Quill directory does not exist: {}", self.path.display()).into());
-        }
-
-        if !self.main_path().exists() {
-            return Err(format!("Main file does not exist: {}", self.main_path().display()).into());
-        }
-
-        Ok(())
-    }
-
-    /// Load all fonts from the quill's assets directory
-    pub fn load_fonts(&self) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
-        let assets_path = self.assets_path();
-        let mut fonts = Vec::new();
-
-        if assets_path.exists() {
-            for entry in fs::read_dir(&assets_path)? {
-                let entry = entry?;
-                let path = entry.path();
-                
-                if path.is_file() {
-                    if let Some(ext) = path.extension() {
-                        if matches!(ext.to_str(), Some("ttf") | Some("otf")) {
-                            let font_data = fs::read(&path)?;
-                            fonts.push(font_data);
-                        }
-                    }
-                }
-            }
-        }
-
-        Ok(fonts)
-    }
-}
-
-/// Typst backend implementation using Typst with dynamic quill loading
-pub struct TypstBackend {
-    /// Available quill templates
-    quills: HashMap<String, Quill>,
-}
-
-impl TypstBackend {
-    /// Create a new TypstBackend
-    pub fn new() -> Self {
-        Self {
-            quills: HashMap::new(),
-        }
-    }
-
-    /// Register a quill template
-    pub fn register_quill(&mut self, quill: Quill) -> Result<(), Box<dyn std::error::Error>> {
-        quill.validate()?;
-        self.quills.insert(quill.name.clone(), quill);
-        Ok(())
-    }
-
-    /// Get a registered quill by name
-    pub fn get_quill(&self, name: &str) -> Option<&Quill> {
-        self.quills.get(name)
-    }
-
-    /// Create a TypstBackend with a specific quill loaded
-    pub fn with_quill<P: AsRef<Path>>(quill_path: P) -> Result<Self, Box<dyn std::error::Error>> {
-        let mut backend = Self::new();
-        let quill = Quill::from_path(quill_path)?;
-        backend.register_quill(quill)?;
-        Ok(backend)
-    }
-}
+pub struct TypstBackend {}
 
 impl Backend for TypstBackend {
     fn id(&self) -> &'static str {
@@ -152,7 +32,7 @@ impl Backend for TypstBackend {
         glue.register_filter("Body", body_filter);
     }
 
-    fn compile(&self, glue_content: &str, quill_data: &QuillData, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError> {
+    fn compile(&self, glued_content: &str, quill_data: &QuillData, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError> {
         // Convert QuillData back to the Quill format that the compiler expects
         // For now, we'll create a basic Quill structure from the metadata
         let quill_name = quill_data.metadata.get("name")
@@ -160,19 +40,13 @@ impl Backend for TypstBackend {
             .unwrap_or("default")
             .to_string();
         
-        let main_file = glue_content.to_string();
-
-        let quill = Quill {
-            path: quill_data.base_path.clone(),
-            name: quill_name,
-            main_file,
-        };
+        let main_file = glued_content.to_string();
 
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
         
         match format {
             OutputFormat::Pdf => {
-                let pdf_bytes = compiler::compile_to_pdf(&quill, glue_content)
+                let pdf_bytes = compiler::compile_to_pdf(&quill, glued_content)
                     .map_err(|e| RenderError::Other(format!("PDF compilation failed: {}", e).into()))?;
                 
                 Ok(vec![Artifact {
@@ -181,7 +55,7 @@ impl Backend for TypstBackend {
                 }])
             }
             OutputFormat::Svg => {
-                let svg_pages = compiler::compile_to_svg(&quill, glue_content)
+                let svg_pages = compiler::compile_to_svg(&quill, glued_content)
                     .map_err(|e| RenderError::Other(format!("SVG compilation failed: {}", e).into()))?;
                 
                 Ok(svg_pages.into_iter().map(|bytes| Artifact {
