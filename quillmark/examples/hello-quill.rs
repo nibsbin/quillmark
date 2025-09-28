@@ -33,7 +33,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         quill_path: quill_path
     };
 
-    render(&mark_content, &config)?;
+    let pdf_output = render(&mark_content, &config)?;
+
+    // Write output PDF
+    let output_pdf_path = output_dir.join("hello-quill.pdf"); 
+    std::fs::write(&output_pdf_path, pdf_output[0].bytes.clone())
+        .map_err(|e| format!("Failed to write output PDF: {}", e))?;  
+
+    // Output will be in output/hello-quill.pdf
+    println!("Rendered output to {}/hello-quill.pdf", output_dir.display());
+
 
     Ok(())
 }
