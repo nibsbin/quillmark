@@ -91,6 +91,24 @@ mod tests {
         fs::create_dir_all(quill_path.join("packages"))?;
         fs::create_dir_all(quill_path.join("assets"))?;
         
+        // Copy some fonts from the hello-quill example for testing
+        let hello_quill_assets = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../examples/hello-quill/assets");
+        if hello_quill_assets.exists() {
+            for entry in fs::read_dir(&hello_quill_assets)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(ext) = path.extension() {
+                        if matches!(ext.to_string_lossy().to_lowercase().as_str(), "ttf" | "otf") {
+                            let dest = quill_path.join("assets").join(entry.file_name());
+                            fs::copy(&path, &dest)?;
+                        }
+                    }
+                }
+            }
+        }
+        
         // Create a simple glue.typ
         fs::write(
             quill_path.join("glue.typ"),
@@ -145,6 +163,81 @@ This is a test document with markdown content: $content$
         assert!(formats.contains(&OutputFormat::Pdf));
         assert!(formats.contains(&OutputFormat::Svg));
         assert!(!formats.contains(&OutputFormat::Txt));
+    }
+
+    #[test]
+    fn test_improved_error_visibility() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let (_temp, quill_path) = create_test_quill()?;
+        let quill = Quill::from_path(&quill_path)?;
+        
+        // Create invalid glue.typ that will cause a compilation error
+        fs::write(
+            quill_path.join("glue.typ"),
+            r#"#set page(width: 8.5in, height: 11in, margin: 1in)
+#set text(font: "Times New Roman", size: 12pt)
+
+= Test Error
+
+// This will cause an "unexpected argument" error
+#text("arg1", "arg2")
+"#,
+        )?;
+        
+        let invalid_typst_content = r#"
+// This will cause an "unexpected argument" error
+#text("arg1", "arg2")
+"#;
+        
+        // Test that the error contains improved visibility information
+        match crate::compiler::compile_to_pdf(&quill, invalid_typst_content) {
+            Ok(_) => panic!("Expected compilation to fail"),
+            Err(e) => {
+                let error_str = format!("{}", e);
+                
+                // Check that the error contains the improved formatting
+                assert!(error_str.contains("unexpected argument"), 
+                    "Error should contain the specific error message, got: {}", error_str);
+                assert!(error_str.contains("Location:"), 
+                    "Error should contain location information, got: {}", error_str);
+                assert!(error_str.contains("line"), 
+                    "Error should contain line number, got: {}", error_str);
+                assert!(error_str.contains("main.typ"), 
+                    "Error should contain file name, got: {}", error_str);
+                assert!(error_str.contains("#text(\"arg1\", \"arg2\")"), 
+                    "Error should contain the offending code line, got: {}", error_str);
+            }
+        }
+        
+        Ok(())
+    }
+
+    #[test]
+    fn test_svg_error_visibility() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let (_temp, quill_path) = create_test_quill()?;
+        let quill = Quill::from_path(&quill_path)?;
+        
+        let invalid_typst_content = r#"
+// This will cause an "unknown variable" error
+#invalid_function()
+"#;
+        
+        // Test that SVG compilation also gets improved error handling
+        match crate::compiler::compile_to_svg(&quill, invalid_typst_content) {
+            Ok(_) => panic!("Expected compilation to fail"),
+            Err(e) => {
+                let error_str = format!("{}", e);
+                
+                // Check that SVG errors also have improved visibility
+                assert!(error_str.contains("unknown variable: invalid_function"), 
+                    "Error should contain the specific error message, got: {}", error_str);
+                assert!(error_str.contains("Location:"), 
+                    "Error should contain location information, got: {}", error_str);
+                assert!(error_str.contains("line"), 
+                    "Error should contain line number, got: {}", error_str);
+            }
+        }
+        
+        Ok(())
     }
 
 }
