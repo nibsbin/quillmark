@@ -40,7 +40,6 @@
   
   // Signature block
   signature-block: {{ signature_block | Lines(default=["signature_block"]) }},
-
-  // {{ body | Body }}
 )
 
+#{{ body | Body }}
