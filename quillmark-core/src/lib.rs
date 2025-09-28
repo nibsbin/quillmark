@@ -63,8 +63,8 @@ pub struct Quill {
     pub base_path: PathBuf,
     /// Name of the quill (derived from directory name)
     pub name: String,
-    /// Main template file name
-    pub main_file: String,
+    /// Glue template file name
+    pub glue_file: String,
 }
 
 impl Quill {
@@ -80,7 +80,7 @@ impl Quill {
             metadata: HashMap::new(),
             base_path,
             name,
-            main_file: "glue.typ".to_string(),
+            glue_file: "glue.typ".to_string(),
         }
     }
     
@@ -91,7 +91,7 @@ impl Quill {
             .to_string_lossy()
             .to_string();
         
-        let main_file = metadata.get("glue_file")
+        let glue_file = metadata.get("glue_file")
             .and_then(|v| v.as_str())
             .unwrap_or("glue.typ")
             .to_string();
@@ -101,7 +101,7 @@ impl Quill {
             metadata,
             base_path,
             name,
-            main_file,
+            glue_file,
         }
     }
     
@@ -118,14 +118,14 @@ impl Quill {
             .to_string_lossy()
             .to_string();
         
-        // Look for glue.typ file (default template file)
-        let main_path = path.join("glue.typ");
-        if !main_path.exists() {
-            return Err(format!("Main template file not found: {}", main_path.display()).into());
+        // Look for glue.typ file (default glue template file)
+        let glue_path = path.join("glue.typ");
+        if !glue_path.exists() {
+            return Err(format!("Glue template file not found: {}", glue_path.display()).into());
         }
         
-        let template_content = std::fs::read_to_string(&main_path)
-            .map_err(|e| format!("Failed to read template file: {}", e))?;
+        let template_content = std::fs::read_to_string(&glue_path)
+            .map_err(|e| format!("Failed to read glue template file: {}", e))?;
         
         let mut metadata = HashMap::new();
         metadata.insert("name".to_string(), serde_yaml::Value::String(name.clone()));
@@ -136,13 +136,13 @@ impl Quill {
             metadata,
             base_path: path,
             name,
-            main_file: "glue.typ".to_string(),
+            glue_file: "glue.typ".to_string(),
         })
     }
     
-    /// Get the main template file path
-    pub fn main_path(&self) -> PathBuf {
-        self.base_path.join(&self.main_file)
+    /// Get the glue template file path
+    pub fn glue_path(&self) -> PathBuf {
+        self.base_path.join(&self.glue_file)
     }
     
     /// Get the assets directory path
@@ -157,8 +157,8 @@ impl Quill {
     
     /// Validate that the quill has all necessary components
     pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
-        if !self.main_path().exists() {
-            return Err(format!("Main template file does not exist: {}", self.main_path().display()).into());
+        if !self.glue_path().exists() {
+            return Err(format!("Glue template file does not exist: {}", self.glue_path().display()).into());
         }
         
         // Assets and packages directories are optional

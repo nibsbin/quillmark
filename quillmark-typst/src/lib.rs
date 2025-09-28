@@ -117,8 +117,8 @@ This is a test document with markdown content: $content$
         
         let quill = Quill::from_path(&quill_path)?;
         assert_eq!(quill.name, "test-quill");
-        assert_eq!(quill.main_file, "glue.typ");
-        assert!(quill.main_path().exists());
+        assert_eq!(quill.glue_file, "glue.typ");
+        assert!(quill.glue_path().exists());
         
         quill.validate()?;
         Ok(())
@@ -129,7 +129,7 @@ This is a test document with markdown content: $content$
         let (_temp, quill_path) = create_test_quill()?;
         let quill = Quill::from_path(&quill_path)?;
         
-        assert!(quill.main_path().ends_with("glue.typ"));
+        assert!(quill.glue_path().ends_with("glue.typ"));
         assert!(quill.packages_path().ends_with("packages"));
         assert!(quill.assets_path().ends_with("assets"));
         
