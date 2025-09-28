@@ -1,4 +1,4 @@
-use quillmark_core::{Backend, OutputFormat, RenderConfig, RenderError, Artifact, QuillData, Glue};
+use quillmark_core::{Backend, OutputFormat, RenderConfig, RenderError, Artifact, Quill, Glue};
 pub use convert::mark_to_typst;
 use filters::*;
 
@@ -7,6 +7,12 @@ mod convert;
 mod filters;
 
 pub struct TypstBackend {}
+
+impl TypstBackend {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 impl Backend for TypstBackend {
     fn id(&self) -> &'static str {
@@ -32,21 +38,12 @@ impl Backend for TypstBackend {
         glue.register_filter("Body", body_filter);
     }
 
-    fn compile(&self, glued_content: &str, quill_data: &QuillData, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError> {
-        // Convert QuillData back to the Quill format that the compiler expects
-        // For now, we'll create a basic Quill structure from the metadata
-        let quill_name = quill_data.metadata.get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("default")
-            .to_string();
-        
-        let main_file = glued_content.to_string();
-
+    fn compile(&self, glued_content: &str, quill: &Quill, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
         
         match format {
             OutputFormat::Pdf => {
-                let pdf_bytes = compiler::compile_to_pdf(&quill, glued_content)
+                let pdf_bytes = compiler::compile_to_pdf(quill, glued_content)
                     .map_err(|e| RenderError::Other(format!("PDF compilation failed: {}", e).into()))?;
                 
                 Ok(vec![Artifact {
@@ -55,7 +52,7 @@ impl Backend for TypstBackend {
                 }])
             }
             OutputFormat::Svg => {
-                let svg_pages = compiler::compile_to_svg(&quill, glued_content)
+                let svg_pages = compiler::compile_to_svg(quill, glued_content)
                     .map_err(|e| RenderError::Other(format!("SVG compilation failed: {}", e).into()))?;
                 
                 Ok(svg_pages.into_iter().map(|bytes| Artifact {
@@ -83,9 +80,10 @@ impl Default for TypstBackend {
 mod tests {
     use super::*;
     use std::fs;
+    use std::path::PathBuf;
     use tempfile::TempDir;
 
-    fn create_test_quill() -> Result<(TempDir, PathBuf), Box<dyn std::error::Error>> {
+    fn create_test_quill() -> Result<(TempDir, PathBuf), Box<dyn std::error::Error + Send + Sync>> {
         let temp_dir = TempDir::new()?;
         let quill_path = temp_dir.path().join("test-quill");
         
@@ -114,12 +112,12 @@ This is a test document with markdown content: $content$
     }
 
     #[test]
-    fn test_quill_creation() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_quill_creation() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let (_temp, quill_path) = create_test_quill()?;
         
         let quill = Quill::from_path(&quill_path)?;
         assert_eq!(quill.name, "test-quill");
-        assert_eq!(quill.main_file, "main.typ");
+        assert_eq!(quill.main_file, "glue.typ");
         assert!(quill.main_path().exists());
         
         quill.validate()?;
@@ -127,7 +125,7 @@ This is a test document with markdown content: $content$
     }
 
     #[test]
-    fn test_quill_paths() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_quill_paths() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let (_temp, quill_path) = create_test_quill()?;
         let quill = Quill::from_path(&quill_path)?;
         
@@ -147,17 +145,6 @@ This is a test document with markdown content: $content$
         assert!(formats.contains(&OutputFormat::Pdf));
         assert!(formats.contains(&OutputFormat::Svg));
         assert!(!formats.contains(&OutputFormat::Txt));
-    }
-
-    #[test] 
-    fn test_typst_backend_with_quill() -> Result<(), Box<dyn std::error::Error>> {
-        let (_temp, quill_path) = create_test_quill()?;
-        
-        let backend = TypstBackend::with_quill(&quill_path)?;
-        assert_eq!(backend.quills.len(), 1);
-        assert!(backend.get_quill("test-quill").is_some());
-        
-        Ok(())
     }
 
 }
