@@ -86,12 +86,6 @@ impl QuillWorld {
         
         // Load packages from the quill
         Self::load_packages_recursive(&quill.packages_path(), &mut sources, &mut binaries)?;
-        
-        // Debug: Print loaded sources
-        println!("Loaded sources:");
-        for (file_id, source) in &sources {
-            println!("  {:?}: {} bytes", file_id, source.text().len());
-        }
                 
         // Create main source
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));
@@ -168,12 +162,26 @@ impl QuillWorld {
             let name = entry.file_name().to_string_lossy().to_string();
             
             if path.is_file() {
-                let virtual_path = base_path.join(&name);
+                // Use the same manual path construction as package loading
+                let virtual_path = if base_path.as_rootless_path().as_os_str().is_empty() {
+                    VirtualPath::new(&name)
+                } else {
+                    let base_str = base_path.as_rootless_path().to_string_lossy();
+                    let full_path = format!("{}/{}", base_str, name);
+                    VirtualPath::new(&full_path)
+                };
                 let file_id = FileId::new(None, virtual_path);
                 let data = fs::read(&path)?;
                 binaries.insert(file_id, Bytes::new(data));
             } else if path.is_dir() {
-                let sub_path = base_path.join(&name);
+                // Use the same manual path construction for subdirectories
+                let sub_path = if base_path.as_rootless_path().as_os_str().is_empty() {
+                    VirtualPath::new(&name)
+                } else {
+                    let base_str = base_path.as_rootless_path().to_string_lossy();
+                    let full_path = format!("{}/{}", base_str, name);
+                    VirtualPath::new(&full_path)
+                };
                 Self::load_assets_recursive(&path, binaries, &sub_path)?;
             }
         }
@@ -257,10 +265,10 @@ impl QuillWorld {
         
         // Verify the entrypoint was loaded correctly
         let expected_entrypoint_path = VirtualPath::new(entrypoint);
-        let entrypoint_file_id = FileId::new(Some(package_spec), expected_entrypoint_path);
+        let entrypoint_file_id = FileId::new(Some(package_spec.clone()), expected_entrypoint_path);
         
         if sources.contains_key(&entrypoint_file_id) {
-            println!("Entrypoint {} loaded correctly as part of package files", entrypoint);
+            println!("Package {} loaded successfully with {} sources", package_spec.name, sources.len());
         } else {
             println!("Warning: Entrypoint {} not found after recursive loading", entrypoint);
         }
@@ -287,8 +295,6 @@ impl QuillWorld {
         package_spec: Option<PackageSpec>,
         base_path: &VirtualPath,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        println!("Loading files from dir: {}, base_path: {:?}", dir.display(), base_path.as_rootless_path());
-        
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
@@ -303,8 +309,6 @@ impl QuillWorld {
                     let full_path = format!("{}/{}", base_str, name);
                     VirtualPath::new(&full_path)
                 };
-                
-                println!("  File: {} -> virtual path: {:?}", name, virtual_path.as_rootless_path());
                 
                 let file_id = FileId::new(package_spec.clone(), virtual_path);
                 
@@ -321,7 +325,6 @@ impl QuillWorld {
                 } else {
                     base_path.join(&name)
                 };
-                println!("  Dir: {} -> sub_path: {:?}", name, sub_path.as_rootless_path());
                 Self::load_package_files_recursive(&path, sources, binaries, package_spec.clone(), &sub_path)?;
             }
         }
