@@ -1,5 +1,5 @@
 // Re-export all types from quillmark-core for backward compatibility
-pub use quillmark_core::{Artifact, Backend, RenderConfig, OutputFormat, RenderError, RenderResult, QuillData, Glue};
+pub use quillmark_core::{Artifact, Backend, RenderConfig, OutputFormat, RenderError, RenderResult, Quill, Glue};
 use std::collections::HashMap;
 use std::path::Path;
 use std::fs;
@@ -41,12 +41,12 @@ pub fn render(markdown: &str, config: &RenderConfig) -> RenderResult {
 }
 
 /// Load quill template data
-fn load_quill_data(options: &RenderConfig, glue_type: &str) -> Result<QuillData, RenderError> {
+fn load_quill_data(options: &RenderConfig, glue_type: &str) -> Result<Quill, RenderError> {
     load_quill_from_path(&options.quill_path, glue_type)
 }
 
 /// Load quill data from a path
-fn load_quill_from_path<P: AsRef<Path>>(path: P, glue_type: &str) -> Result<QuillData, RenderError> {
+fn load_quill_from_path<P: AsRef<Path>>(path: P, glue_type: &str) -> Result<Quill, RenderError> {
     let path = path.as_ref();
     
     // Check if path exists
@@ -89,7 +89,7 @@ fn load_quill_from_path<P: AsRef<Path>>(path: P, glue_type: &str) -> Result<Quil
         serde_yaml::Value::String(glue_file_name),
     );
 
-    Ok(QuillData::with_metadata(
+    Ok(Quill::with_metadata(
         template_content,
         path.to_path_buf(),
         metadata,

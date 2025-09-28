@@ -52,34 +52,117 @@ pub enum RenderError {
     Other(#[from] Box<dyn Error + Send + Sync>),
 }
 
-/// A quill template containing the template content and metadata
+/// A quill template containing the template content and metadata with file management capabilities
 #[derive(Debug, Clone)]
-pub struct QuillData {
+pub struct Quill {
     /// The template content 
     pub template_content: String,
     /// Quill-specific data that backends might need
     pub metadata: HashMap<String, serde_yaml::Value>,
     /// Base path for resolving relative paths
     pub base_path: PathBuf,
+    /// Name of the quill (derived from directory name)
+    pub name: String,
+    /// Glue template file name
+    pub glue_file: String,
 }
 
-impl QuillData {
-    /// Create new QuillData with just template content
+impl Quill {
+    /// Create new Quill with just template content
     pub fn new(template_content: String, base_path: PathBuf) -> Self {
+        let name = base_path.file_name()
+            .unwrap_or_else(|| std::ffi::OsStr::new("unknown"))
+            .to_string_lossy()
+            .to_string();
+        
         Self {
             template_content,
             metadata: HashMap::new(),
             base_path,
+            name,
+            glue_file: "glue.typ".to_string(),
         }
     }
     
-    /// Create QuillData with metadata
+    /// Create Quill with metadata
     pub fn with_metadata(template_content: String, base_path: PathBuf, metadata: HashMap<String, serde_yaml::Value>) -> Self {
+        let name = base_path.file_name()
+            .unwrap_or_else(|| std::ffi::OsStr::new("unknown"))
+            .to_string_lossy()
+            .to_string();
+        
+        let glue_file = metadata.get("glue_file")
+            .and_then(|v| v.as_str())
+            .unwrap_or("glue.typ")
+            .to_string();
+            
         Self {
             template_content,
             metadata,
             base_path,
+            name,
+            glue_file,
         }
+    }
+    
+    /// Create a Quill from a directory path
+    pub fn from_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Box<dyn Error + Send + Sync>> {
+        let path = path.as_ref().to_path_buf();
+        
+        if !path.exists() {
+            return Err(format!("Quill path does not exist: {}", path.display()).into());
+        }
+        
+        let name = path.file_name()
+            .unwrap_or_else(|| std::ffi::OsStr::new("unknown"))
+            .to_string_lossy()
+            .to_string();
+        
+        // Look for glue.typ file (default glue template file)
+        let glue_path = path.join("glue.typ");
+        if !glue_path.exists() {
+            return Err(format!("Glue template file not found: {}", glue_path.display()).into());
+        }
+        
+        let template_content = std::fs::read_to_string(&glue_path)
+            .map_err(|e| format!("Failed to read glue template file: {}", e))?;
+        
+        let mut metadata = HashMap::new();
+        metadata.insert("name".to_string(), serde_yaml::Value::String(name.clone()));
+        metadata.insert("glue_file".to_string(), serde_yaml::Value::String("glue.typ".to_string()));
+        
+        Ok(Self {
+            template_content,
+            metadata,
+            base_path: path,
+            name,
+            glue_file: "glue.typ".to_string(),
+        })
+    }
+    
+    /// Get the glue template file path
+    pub fn glue_path(&self) -> PathBuf {
+        self.base_path.join(&self.glue_file)
+    }
+    
+    /// Get the assets directory path
+    pub fn assets_path(&self) -> PathBuf {
+        self.base_path.join("assets")
+    }
+    
+    /// Get the packages directory path
+    pub fn packages_path(&self) -> PathBuf {
+        self.base_path.join("packages")
+    }
+    
+    /// Validate that the quill has all necessary components
+    pub fn validate(&self) -> Result<(), Box<dyn Error + Send + Sync>> {
+        if !self.glue_path().exists() {
+            return Err(format!("Glue template file does not exist: {}", self.glue_path().display()).into());
+        }
+        
+        // Assets and packages directories are optional
+        Ok(())
     }
 }
 
@@ -98,7 +181,7 @@ pub trait Backend: Send + Sync {
     fn register_filters(&self, glue: &mut Glue);
 
     /// Compile the rendered glue content into final artifacts
-    fn compile(&self, glue_content: &str, quill_data: &QuillData, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError>;
+    fn compile(&self, glue_content: &str, quill: &Quill, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError>;
 }
 
 

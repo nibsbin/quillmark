@@ -10,7 +10,7 @@ use typst::{Library, World};
 use typst::layout::PagedDocument;
 use typst_pdf::PdfOptions;
 
-use crate::Quill;
+use quillmark_core::Quill;
 
 /// Compile a quill template with Typst content to PDF
 pub fn compile_to_pdf(quill: &Quill, typst_content: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
@@ -63,12 +63,12 @@ impl QuillWorld {
         let mut sources = HashMap::new();
         let mut binaries = HashMap::new();
         
-        // Load fonts
+        // Load fonts - handled by compiler now, not by Quill
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
         
         // Load fonts from the quill's assets directory
-        let font_data_list = quill.load_fonts()?;
+        let font_data_list = Self::load_fonts_from_assets(&quill.assets_path())?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
             for font in Font::iter(font_bytes) {
@@ -99,6 +99,51 @@ impl QuillWorld {
             sources,
             binaries,
         })
+    }
+    
+    /// Load fonts from the assets directory - compiler-specific logic
+    fn load_fonts_from_assets(assets_path: &Path) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
+        let fonts_dir = assets_path.join("fonts");
+        let mut font_data = Vec::new();
+        
+        if !fonts_dir.exists() {
+            // Look for any font files in the assets directory
+            if assets_path.exists() {
+                for entry in fs::read_dir(assets_path)? {
+                    let entry = entry?;
+                    let path = entry.path();
+                    if path.is_file() {
+                        if let Some(ext) = path.extension() {
+                            if matches!(ext.to_string_lossy().to_lowercase().as_str(), "ttf" | "otf" | "woff" | "woff2") {
+                                font_data.push(fs::read(&path)?);
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // If no fonts found in assets, provide system fonts or default fonts
+            if font_data.is_empty() {
+                // For now, we'll let typst handle system fonts
+                // This might require additional handling based on the system
+                return Err("No fonts found in quill assets directory and no system fonts configured".into());
+            }
+        } else {
+            // Load fonts from fonts subdirectory
+            for entry in fs::read_dir(&fonts_dir)? {
+                let entry = entry?;
+                let path = entry.path();
+                if path.is_file() {
+                    if let Some(ext) = path.extension() {
+                        if matches!(ext.to_string_lossy().to_lowercase().as_str(), "ttf" | "otf" | "woff" | "woff2") {
+                            font_data.push(fs::read(&path)?);
+                        }
+                    }
+                }
+            }
+        }
+        
+        Ok(font_data)
     }
     
     /// Recursively load assets from a directory
