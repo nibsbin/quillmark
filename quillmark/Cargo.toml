@@ -11,3 +11,8 @@ serde = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+quillmark-typst = { path = "../quillmark-typst" }
+quillmark-fixtures = { path = "../quillmark-fixtures" }

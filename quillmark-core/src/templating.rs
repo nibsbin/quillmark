@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::error::Error as StdError;
-use std::sync::Arc;
 
 use minijinja::{Environment, Error as MjError};
 use serde_yaml;
@@ -26,14 +25,13 @@ pub mod filter_api {
     impl<T> DynFilter for T where T: Send + Sync + 'static {}
 }
 
-/// Type for filter functions
-type FilterFunc = Arc<dyn Fn(&filter_api::State, filter_api::Value, filter_api::Kwargs) 
-    -> Result<filter_api::Value, MjError> + Send + Sync + 'static>;
+/// Type for filter functions that can be called via function pointers
+type FilterFn = fn(&filter_api::State, filter_api::Value, filter_api::Kwargs) -> Result<filter_api::Value, MjError>;
 
 /// Glue class for template rendering - provides interface for backends to interact with templates
 pub struct Glue {
     template: String,
-    filters: HashMap<String, FilterFunc>,
+    filters: HashMap<String, FilterFn>,
 }
 
 impl Glue {
@@ -46,18 +44,8 @@ impl Glue {
     }
 
     /// Register a filter with the template environment
-    /// For now this is a placeholder - filters will be implemented later
-    pub fn register_filter<F>(&mut self, name: &str, _func: F)
-    where
-        F: 'static
-            + Send
-            + Sync
-            + Fn(&filter_api::State, filter_api::Value, filter_api::Kwargs)
-                -> Result<filter_api::Value, MjError>,
-    {
-        // Store filter name for later implementation
-        // For now, we'll just keep track that it was registered
-        self.filters.insert(name.to_string(), Arc::new(|_,_,_| Ok(filter_api::Value::from(""))));
+    pub fn register_filter(&mut self, name: &str, func: FilterFn) {
+        self.filters.insert(name.to_string(), func);
     }
 
     /// Compose template with context from markdown decomposition
@@ -71,7 +59,11 @@ impl Glue {
         // Create a new environment for this render
         let mut env = Environment::new();
         
-        // TODO: Register filters properly - for now skip to get basic structure working
+        // Register all filters
+        for (name, filter_fn) in &self.filters {
+            let filter_fn = *filter_fn; // Copy the function pointer
+            env.add_filter(name, filter_fn);
+        }
         
         env.add_template("main", &self.template)
             .map_err(|e| TemplateError::InvalidTemplate("Failed to add template".to_string(), Box::new(e)))?;
