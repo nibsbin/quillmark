@@ -20,13 +20,13 @@ fn main() {
     ).expect("Failed to create engine");
 
     //render
-    let result = engine.render_with_format(&markdown, Some(OutputFormat::Svg)).expect("Failed to render");
+    let result = engine.render_with_format(&markdown, Some(OutputFormat::Pdf)).expect("Failed to render");
     let content = result.artifacts[0].bytes.clone();
 
     //print content
     println!("Generated {} bytes", content.len());
 
     // save result
-    write_example_output("usaf-memo-output.svg", &content).unwrap();
+    write_example_output("usaf-memo-output.pdf", &content).unwrap();
 
 }
