@@ -1,108 +1,103 @@
-// Re-export all types from quillmark-core for backward compatibility
-pub use quillmark_core::{Artifact, Backend, RenderConfig, OutputFormat, RenderError, RenderResult, Quill, Glue};
-use std::collections::HashMap;
-use std::path::Path;
-use std::fs;
+use std::path::PathBuf;
 
-/// Render markdown using the specified options
-///
-/// This function orchestrates the rendering process:
-/// 1. Selects appropriate backend
-/// 2. Loads quill template if specified
-/// 3. Parses markdown and extracts frontmatter
-/// 4. Creates template glue and registers backend filters
-/// 5. Renders template to produce glue content
-/// 6. Calls backend to compile final artifacts
-pub fn render(markdown: &str, config: &RenderConfig) -> RenderResult {
-    // Backend is provided directly in RenderConfig
-    let backend = &config.backend;
-    
-    // Load quill data
-    let quill_data = load_quill_data(config, backend.glue_type())?;
-    
-    // Parse markdown to extract frontmatter and body
-    let parsed_doc = quillmark_core::decompose(markdown)
-        .map_err(|e| RenderError::Other(format!("Failed to parse markdown: {}", e).into()))?;
-    
-    // Create Glue instance with the template and register backend filters
-    let mut glue = Glue::new(quill_data.template_content.clone());
-    
-    // Register filters from the backend
-    backend.register_filters(&mut glue);
-    
-    // Render the template with the parsed docucomposement context
-    let glue_content = glue.compose(parsed_doc.fields().clone())
-        .map_err(|e| RenderError::Other(Box::new(e)))?;
+// Re-export all core types for backward compatibility
+pub use quillmark_core::{
+    Artifact, Backend, OutputFormat, Quill, 
+    RenderError, RenderResult, Diagnostic, Severity, Location,
+    decompose, ParsedDocument, BODY_FIELD, Glue, TemplateError
+};
 
-    println!("Glue content: {}", glue_content);
-    
-    // Call the backend to compile the final artifacts
-    backend.compile(&glue_content, &quill_data, config)
+use quillmark_core::{RenderOptions};
+
+/// The main sealed engine API
+pub struct QuillEngine {
+    backend: Box<dyn Backend>,
+    quill: Quill,
 }
 
-/// Load quill template data
-fn load_quill_data(options: &RenderConfig, glue_type: &str) -> Result<Quill, RenderError> {
-    load_quill_from_path(&options.quill_path, glue_type)
-}
+impl QuillEngine {
+    /// Create a new QuillEngine with the specified backend and quill template
+    pub fn new(backend: Box<dyn Backend>, quill_path: PathBuf) -> Result<Self, RenderError> {
+        // Load the quill template
+        let quill = Quill::from_path(&quill_path)
+            .map_err(|e| RenderError::EngineCreation { 
+                diag: quillmark_core::error::Diagnostic::new(
+                    quillmark_core::error::Severity::Error,
+                    format!("Failed to load quill from {:?}: {}", quill_path, e)
+                ),
+                source: Some(anyhow::anyhow!(e))
+            })?;
 
-/// Load quill data from a path
-fn load_quill_from_path<P: AsRef<Path>>(path: P, glue_type: &str) -> Result<Quill, RenderError> {
-    let path = path.as_ref();
-    
-    // Check if path exists
-    if !path.exists() {
-        return Err(RenderError::Other(
-            format!("Quill path does not exist: {}", path.display()).into(),
-        ));
+        // Validate the quill
+        quill.validate()
+            .map_err(|e| RenderError::EngineCreation { 
+                diag: quillmark_core::error::Diagnostic::new(
+                    quillmark_core::error::Severity::Error,
+                    format!("Quill validation failed: {}", e)
+                ),
+                source: Some(anyhow::anyhow!(e))
+            })?;
+
+        Ok(Self { backend, quill })
     }
 
-    // Determine main template file - look for "glue" + glue_type
-    let glue_file_name = format!("glue{}", glue_type);
-    let glue_file_path = path.join(&glue_file_name);
-    
-    if !glue_file_path.exists() {
-        return Err(RenderError::Other(
-            format!("Main template file not found: {}", glue_file_path.display()).into(),
-        ));
+    /// Render markdown to a specific output format
+    pub fn render(&self, markdown: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError> {
+        let glue_output = self.process_glue(markdown)?;
+        let rendered = self.render_content(&glue_output, format)?;
+        Ok(rendered)
     }
 
-    // Read template content
-    let template_content = fs::read_to_string(&glue_file_path)
-        .map_err(|e| RenderError::Other(format!("Failed to read template file: {}", e).into()))?;
+    /// Render pre-processed glue content to a specific output format
+    pub fn render_content(&self, content: &str, mut format: Option<OutputFormat>) -> Result<RenderResult, RenderError> {
+        // Compile using backend
+        if !format.is_some() {
+            // Default to first supported format if none specified
+            let supported = self.backend.supported_formats();
+            if !supported.is_empty() {
+                println!("Defaulting to output format: {:?}", supported[0]);
+                format = Some(supported[0]);
+            }
+        }
+        // Compile using backend
+        let render_opts = RenderOptions {
+            output_format: format,
+        };
 
-    // Create quill data
-    let mut metadata = HashMap::new();
+        let artifacts = self.backend.compile(content, &self.quill, &render_opts)?;
+        Ok(RenderResult::new(artifacts))
+    }
+
+    pub fn process_glue(&self, markdown: &str) -> Result<String, RenderError> {
+        let parsed_doc = decompose(markdown)
+            .map_err(|e| RenderError::InvalidFrontmatter {
+                diag: quillmark_core::error::Diagnostic::new(
+                    quillmark_core::error::Severity::Error,
+                    format!("Failed to parse markdown: {}", e)
+                ),
+                source: Some(anyhow::anyhow!(e))
+            })?;
+
+        let mut glue = Glue::new(self.quill.glue_template.clone());
+        self.backend.register_filters(&mut glue);
+        let glue_output = glue.compose(parsed_doc.fields().clone())
+            .map_err(|e| RenderError::from(e))?;
+        Ok(glue_output)
+    }
     
-    // Add basic metadata
-    metadata.insert(
-        "name".to_string(),
-        serde_yaml::Value::String(
-            path.file_name()
-                .unwrap_or_else(|| std::ffi::OsStr::new("unknown"))
-                .to_string_lossy()
-                .to_string()
-        ),
-    );
-    
-    metadata.insert(
-        "glue_file".to_string(),
-        serde_yaml::Value::String(glue_file_name),
-    );
 
-    Ok(Quill::with_metadata(
-        template_content,
-        path.to_path_buf(),
-        metadata,
-    ))
-}
+    /// Get the backend ID
+    pub fn backend_id(&self) -> &str {
+        self.backend.id()
+    }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+    /// Get supported output formats
+    pub fn supported_formats(&self) -> &'static [OutputFormat] {
+        self.backend.supported_formats()
+    }
 
-    #[test]
-    fn test_output_format_equality() {
-        assert_eq!(OutputFormat::Pdf, OutputFormat::Pdf);
-        assert_ne!(OutputFormat::Pdf, OutputFormat::Svg);
+    /// Get the quill name
+    pub fn quill_name(&self) -> &str {
+        &self.quill.name
     }
 }

@@ -2,17 +2,17 @@
 name = "quillmark"
 version = "0.1.0"
 edition = "2021"
-description = "A flexible markdown rendering library with pluggable backends"
+description = "QuillMark sealed engine API"
 license = "MIT"
-repository = "https://github.com/nibsbin/quillmark"
 
 [dependencies]
 quillmark-core = { path = "../quillmark-core" }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
 thiserror = { workspace = true }
-serde_yaml = "0.9"
+anyhow = { workspace = true }
 
 [dev-dependencies]
-tera = "1.20.0"
-tempfile = "3.0"
+tempfile = { workspace = true }
 quillmark-typst = { path = "../quillmark-typst" }
-quillmark-fixtures = { workspace = true }
+quillmark-fixtures = { path = "../quillmark-fixtures" }

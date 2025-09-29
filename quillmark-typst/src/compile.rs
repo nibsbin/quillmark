@@ -12,10 +12,12 @@ use typst_pdf::PdfOptions;
 
 use quillmark_core::Quill;
 
+const DEFAULT_FONT: &[u8] = include_bytes!("../assets/NimbusRomNo9L-Reg.otf");
+
 /// Compile a quill template with Typst content to PDF
-pub fn compile_to_pdf(quill: &Quill, typst_content: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+pub fn compile_to_pdf(quill: &Quill, glued_content: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     println!("Using quill: {}", quill.name);
-    let world = QuillWorld::new(quill, typst_content)?;
+    let world = QuillWorld::new(quill, glued_content)?;
     println!("World initialized with {} sources and {} binaries", world.sources.len(), world.binaries.len());
     let document = compile_document(&world)?;
     
@@ -26,8 +28,8 @@ pub fn compile_to_pdf(quill: &Quill, typst_content: &str) -> Result<Vec<u8>, Box
 }
 
 /// Compile a quill template with Typst content to SVG pages
-pub fn compile_to_svg(quill: &Quill, typst_content: &str) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
-    let world = QuillWorld::new(quill, typst_content)?;
+pub fn compile_to_svg(quill: &Quill, glued_content: &str) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
+    let world = QuillWorld::new(quill, glued_content)?;
     let document = compile_document(&world)?;
     
     let mut pages = Vec::new();
@@ -155,13 +157,16 @@ pub struct QuillWorld {
 
 impl QuillWorld {
     /// Create a new QuillWorld from a quill template and Typst content
-    pub fn new(quill: &Quill, typst_content: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(quill: &Quill, main: &str) -> Result<Self, Box<dyn std::error::Error>> {
         let mut sources = HashMap::new();
         let mut binaries = HashMap::new();
         
         // Load fonts - handled by compiler now, not by Quill
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
+        // Add default font
+        fonts.push(Font::new(Bytes::new(DEFAULT_FONT), 0).ok_or("Failed to load default font")?);
+        book.push(fonts[0].info().clone());
         
         // Load fonts from the quill's assets directory
         let font_data_list = Self::load_fonts_from_assets(&quill.assets_path())?;
@@ -185,7 +190,7 @@ impl QuillWorld {
                 
         // Create main source
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));
-        let source = Source::new(main_id, typst_content.to_string());
+        let source = Source::new(main_id, main.to_string());
         
         Ok(Self {
             library: LazyHash::new(Library::default()),
@@ -216,13 +221,6 @@ impl QuillWorld {
                         }
                     }
                 }
-            }
-            
-            // If no fonts found in assets, provide system fonts or default fonts
-            if font_data.is_empty() {
-                // For now, we'll let typst handle system fonts
-                // This might require additional handling based on the system
-                return Err("No fonts found in quill assets directory and no system fonts configured".into());
             }
         } else {
             // Load fonts from fonts subdirectory
@@ -473,23 +471,18 @@ impl World for QuillWorld {
     }
 
     fn today(&self, offset: Option<i64>) -> Option<Datetime> {
-        use chrono::{Datelike, TimeZone};
-        
-        if let Ok(now) = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH) {
-            let timestamp = now.as_secs() as i64;
-            let adjusted = timestamp + offset.unwrap_or(0) * 3600;
-            
-            if let Some(utc) = chrono::Utc.timestamp_opt(adjusted, 0).single() {
-                return Datetime::from_ymd(
-                    utc.year(),
-                    utc.month() as u8,
-                    utc.day() as u8,
-                );
-            }
-        }
-        
-        // Fallback date
-        Datetime::from_ymd(2024, 1, 1)
+        use time::{OffsetDateTime, Duration};
+
+        // Get current UTC time and apply optional hour offset
+        let now = OffsetDateTime::now_utc();
+        let adjusted = if let Some(hours) = offset {
+            now + Duration::hours(hours)
+        } else {
+            now
+        };
+
+        let date = adjusted.date();
+        Datetime::from_ymd(date.year(), date.month() as u8, date.day() as u8)
     }
 }
 

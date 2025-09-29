@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::collections::HashMap;
 use std::error::Error as StdError;
 
@@ -26,35 +25,27 @@ pub mod filter_api {
     impl<T> DynFilter for T where T: Send + Sync + 'static {}
 }
 
+/// Type for filter functions that can be called via function pointers
+type FilterFn = fn(&filter_api::State, filter_api::Value, filter_api::Kwargs) -> Result<filter_api::Value, MjError>;
+
 /// Glue class for template rendering - provides interface for backends to interact with templates
 pub struct Glue {
-    env: Environment<'static>,
     template: String,
+    filters: HashMap<String, FilterFn>,
 }
 
 impl Glue {
     /// Create a new Glue instance with a template string
     pub fn new(template: String) -> Self {
-        let env = Environment::new();
-        Self { env, template }
+        Self { 
+            template,
+            filters: HashMap::new(),
+        }
     }
 
-    /// Register a MiniJinja-compatible filter function or closure.
-    ///
-    /// External crates should import `filter_api::{State, Value, Kwargs, Error}` and implement:
-    /// `fn MyFilter(_s: &State, v: Value, k: Kwargs) -> Result<Value, Error>`
-    /// and then call `glue.register_filter("My", MyFilter)`.
-    ///
-    /// Accepts either `&'static str` or `String` (owned) for the filter name.
-    pub fn register_filter<N, F>(&mut self, name: N, filter: F)
-    where
-        N: Into<Cow<'static, str>>,
-        // This bound matches what minijinja requires for add_filter (Fn(&State, Value, Kwargs) -> Result<Value, Error>)
-        F: filter_api::DynFilter
-            + Fn(&filter_api::State, filter_api::Value, filter_api::Kwargs)
-                -> Result<filter_api::Value, MjError>,
-    {
-        self.env.add_filter(name, filter);
+    /// Register a filter with the template environment
+    pub fn register_filter(&mut self, name: &str, func: FilterFn) {
+        self.filters.insert(name.to_string(), func);
     }
 
     /// Compose template with context from markdown decomposition
@@ -62,21 +53,87 @@ impl Glue {
         &mut self,
         context: HashMap<String, serde_yaml::Value>,
     ) -> Result<String, TemplateError> {
-        match self.env.render_named_str("inline", &self.template, &context) {
-            Ok(s) => Ok(s),
-            Err(err) => {
-                // Keep diagnostics minimal: show the most specific source error
-                let mut root = err.to_string();
-                let mut src = err.source();
-                while let Some(e) = src {
-                    root = e.to_string();
-                    src = e.source();
-                }
-                let msg = format!("Template rendering error: {}", root);
-                Err(TemplateError::InvalidTemplate(msg, Box::new(err)))
+        // Convert YAML values to MiniJinja values
+        let context = convert_yaml_to_minijinja(context)?;
+        
+        // Create a new environment for this render
+        let mut env = Environment::new();
+        
+        // Register all filters
+        for (name, filter_fn) in &self.filters {
+            let filter_fn = *filter_fn; // Copy the function pointer
+            env.add_filter(name, filter_fn);
+        }
+        
+        env.add_template("main", &self.template)
+            .map_err(|e| TemplateError::InvalidTemplate("Failed to add template".to_string(), Box::new(e)))?;
+        
+        // Render the template
+        let tmpl = env.get_template("main")
+            .map_err(|e| TemplateError::InvalidTemplate("Failed to get template".to_string(), Box::new(e)))?;
+        
+        let result = tmpl.render(&context)?;
+        Ok(result)
+    }
+}
+
+/// Convert YAML values to MiniJinja values
+fn convert_yaml_to_minijinja(yaml: HashMap<String, serde_yaml::Value>) -> Result<HashMap<String, minijinja::value::Value>, TemplateError> {
+    let mut result = HashMap::new();
+    
+    for (key, value) in yaml {
+        let minijinja_value = yaml_to_minijinja_value(value)?;
+        result.insert(key, minijinja_value);
+    }
+    
+    Ok(result)
+}
+
+/// Convert a single YAML value to a MiniJinja value
+fn yaml_to_minijinja_value(value: serde_yaml::Value) -> Result<minijinja::value::Value, TemplateError> {
+    use serde_yaml::Value as YamlValue;
+    use minijinja::value::Value as MjValue;
+    
+    let result = match value {
+        YamlValue::Null => MjValue::from(()),
+        YamlValue::Bool(b) => MjValue::from(b),
+        YamlValue::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                MjValue::from(i)
+            } else if let Some(u) = n.as_u64() {
+                MjValue::from(u)
+            } else if let Some(f) = n.as_f64() {
+                MjValue::from(f)
+            } else {
+                return Err(TemplateError::FilterError("Invalid number in YAML".to_string()));
             }
         }
-    }
+        YamlValue::String(s) => MjValue::from(s),
+        YamlValue::Sequence(seq) => {
+            let mut vec = Vec::new();
+            for item in seq {
+                vec.push(yaml_to_minijinja_value(item)?);
+            }
+            MjValue::from(vec)
+        }
+        YamlValue::Mapping(map) => {
+            let mut obj = std::collections::BTreeMap::new();
+            for (k, v) in map {
+                let key = match k {
+                    YamlValue::String(s) => s,
+                    _ => return Err(TemplateError::FilterError("Non-string key in YAML mapping".to_string())),
+                };
+                obj.insert(key, yaml_to_minijinja_value(v)?);
+            }
+            MjValue::from_object(obj)
+        }
+        YamlValue::Tagged(tagged) => {
+            // For tagged values, just use the value part
+            yaml_to_minijinja_value(tagged.value)?
+        }
+    };
+    
+    Ok(result)
 }
 
 #[cfg(test)]

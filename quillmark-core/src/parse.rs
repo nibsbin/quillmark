@@ -1,207 +1,148 @@
-use serde_yaml;
 use std::collections::HashMap;
-use std::error::Error;
 
-/// Reserved field name for markdown body content
+/// The field name used to store the document body
 pub const BODY_FIELD: &str = "body";
 
-/// Parsed markdown document with frontmatter fields and body
-#[derive(Debug, Clone, PartialEq)]
+/// A parsed markdown document with frontmatter
+#[derive(Debug, Clone)]
 pub struct ParsedDocument {
-    /// Dictionary containing frontmatter fields and the body field
-    pub fields: HashMap<String, serde_yaml::Value>,
+    fields: HashMap<String, serde_yaml::Value>,
 }
 
 impl ParsedDocument {
-    /// Create a new ParsedDocument with just the body content
-    pub fn new(body: String) -> Self {
-        let mut fields = HashMap::new();
-        fields.insert(BODY_FIELD.to_string(), serde_yaml::Value::String(body));
+    /// Create a new ParsedDocument with the given fields
+    pub fn new(fields: HashMap<String, serde_yaml::Value>) -> Self {
         Self { fields }
     }
 
-    /// Create a new ParsedDocument with frontmatter and body content
-    pub fn with_frontmatter(frontmatter: HashMap<String, serde_yaml::Value>, body: String) -> Self {
-        let mut fields = frontmatter;
-        fields.insert(BODY_FIELD.to_string(), serde_yaml::Value::String(body));
-        Self { fields }
-    }
-
-    /// Get the markdown body content
+    /// Get the document body
     pub fn body(&self) -> Option<&str> {
-        self.fields
-            .get(BODY_FIELD)
+        self.fields.get(BODY_FIELD)
             .and_then(|v| v.as_str())
     }
 
-    /// Get a frontmatter field value
-    pub fn get_field(&self, key: &str) -> Option<&serde_yaml::Value> {
-        self.fields.get(key)
+    /// Get a specific field
+    pub fn get_field(&self, name: &str) -> Option<&serde_yaml::Value> {
+        self.fields.get(name)
     }
 
-    /// Get all fields as a reference to the internal HashMap
+    /// Get all fields (including body)
     pub fn fields(&self) -> &HashMap<String, serde_yaml::Value> {
         &self.fields
     }
 }
 
-/// Parse markdown content, handling YAML frontmatter if present
-/// 
-/// This function separates YAML frontmatter (if present) from the markdown body,
-/// and returns a ParsedDocument containing both as a dictionary.
-/// YAML frontmatter fields are mapped to dictionary fields, and the markdown body
-/// is stored under the reserved BODY field.
-pub fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn Error + Send + Sync>> {
-    // Check if the document starts with YAML frontmatter (---\n)
-    if markdown.starts_with("---\n") || markdown.starts_with("---\r\n") {
-        let lines: Vec<&str> = markdown.lines().collect();
-        if lines.is_empty() {
-            return Ok(ParsedDocument::new(markdown.to_string()));
-        }
-
-        // Find the end of frontmatter (second ---)
-        let mut end_idx = None;
-        for (i, line) in lines.iter().enumerate().skip(1) {
-            if line.trim() == "---" {
-                end_idx = Some(i);
-                break;
-            }
-        }
-
-        if let Some(end_idx) = end_idx {
-            // Extract frontmatter (excluding the --- delimiters)
-            let frontmatter_lines = &lines[1..end_idx];
-            let frontmatter_str = frontmatter_lines.join("\n");
+/// Decompose markdown into frontmatter fields and body
+pub fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error + Send + Sync>> {
+    let mut fields = HashMap::new();
+    
+    // Check if we have frontmatter
+    if markdown.starts_with("---\n") {
+        // Find the end of frontmatter
+        let rest = &markdown[4..];
+        if let Some(end_pos) = rest.find("\n---\n") {
+            let frontmatter = &rest[..end_pos];
+            let body = &rest[end_pos + 5..]; // Skip past the closing ---\n
             
-            // Extract body (everything after the closing ---)
-            let body_lines = &lines[end_idx + 1..];
-            let body = body_lines.join("\n").trim_start().to_string();
-
             // Parse YAML frontmatter
-            if frontmatter_str.trim().is_empty() {
-                // Empty frontmatter, just return the body
-                return Ok(ParsedDocument::new(body));
-            }
-
-            match serde_yaml::from_str::<HashMap<String, serde_yaml::Value>>(&frontmatter_str) {
-                Ok(frontmatter_map) => {
-                    Ok(ParsedDocument::with_frontmatter(frontmatter_map, body))
-                }
-                Err(e) => {
-                    // If frontmatter parsing fails, treat the entire content as body
-                    eprintln!("Warning: Failed to parse YAML frontmatter: {}", e);
-                    Ok(ParsedDocument::new(markdown.to_string()))
-                }
-            }
+            let yaml_fields: HashMap<String, serde_yaml::Value> = serde_yaml::from_str(frontmatter)
+                .map_err(|e| format!("Invalid YAML frontmatter: {}", e))?;
+            
+            fields.extend(yaml_fields);
+            fields.insert(BODY_FIELD.to_string(), serde_yaml::Value::String(body.to_string()));
         } else {
-            // No closing ---, treat entire content as body
-            Ok(ParsedDocument::new(markdown.to_string()))
+            return Err("Frontmatter started but not closed with ---".into());
         }
     } else {
         // No frontmatter, entire content is body
-        Ok(ParsedDocument::new(markdown.to_string()))
+        fields.insert(BODY_FIELD.to_string(), serde_yaml::Value::String(markdown.to_string()));
     }
+
+    Ok(ParsedDocument::new(fields))
 }
-
-
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_decompose_no_frontmatter() {
+    fn test_no_frontmatter() {
         let markdown = "# Hello World\n\nThis is a test.";
-        let result = decompose(markdown).unwrap();
+        let doc = decompose(markdown).unwrap();
         
-        assert_eq!(result.body(), Some(markdown));
-        assert_eq!(result.fields().len(), 1);
-        assert!(result.fields().contains_key(BODY_FIELD));
+        assert_eq!(doc.body(), Some(markdown));
+        assert_eq!(doc.fields().len(), 1);
     }
 
     #[test]
-    fn test_decompose_with_frontmatter() {
+    fn test_with_frontmatter() {
         let markdown = r#"---
 title: Test Document
-author: John Doe
-tags:
-  - test
-  - markdown
----
-
-# Hello World
-
-This is the body content."#;
-        
-        let result = decompose(markdown).unwrap();
-        
-        assert_eq!(result.body(), Some("# Hello World\n\nThis is the body content."));
-        assert_eq!(result.get_field("title").and_then(|v| v.as_str()), Some("Test Document"));
-        assert_eq!(result.get_field("author").and_then(|v| v.as_str()), Some("John Doe"));
-        
-        // Check tags array
-        let tags = result.get_field("tags").and_then(|v| v.as_sequence());
-        assert!(tags.is_some());
-        assert_eq!(tags.unwrap().len(), 2);
-    }
-
-    #[test]
-    fn test_decompose_empty_frontmatter() {
-        let markdown = r#"---
+author: Test Author
 ---
 
 # Hello World
 
 This is the body."#;
         
-        let result = decompose(markdown).unwrap();
+        let doc = decompose(markdown).unwrap();
         
-        assert_eq!(result.body(), Some("# Hello World\n\nThis is the body."));
-        assert_eq!(result.fields().len(), 1); // Only body field
+        assert_eq!(doc.body(), Some("\n# Hello World\n\nThis is the body."));
+        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test Document");
+        assert_eq!(doc.get_field("author").unwrap().as_str().unwrap(), "Test Author");
+        assert_eq!(doc.fields().len(), 3); // title, author, body
     }
 
     #[test]
-    fn test_decompose_invalid_frontmatter() {
+    fn test_complex_yaml_frontmatter() {
         let markdown = r#"---
-invalid: yaml: content: [
+title: Complex Document
+tags:
+  - test
+  - yaml
+metadata:
+  version: 1.0
+  nested:
+    field: value
 ---
 
-# Hello World"#;
+Content here."#;
         
-        let result = decompose(markdown).unwrap();
+        let doc = decompose(markdown).unwrap();
         
-        // Should fallback to treating entire content as body when YAML is invalid
-        assert!(result.body().unwrap().contains("---"));
-        assert!(result.body().unwrap().contains("# Hello World"));
+        assert_eq!(doc.body(), Some("\nContent here."));
+        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Complex Document");
+        
+        let tags = doc.get_field("tags").unwrap().as_sequence().unwrap();
+        assert_eq!(tags.len(), 2);
+        assert_eq!(tags[0].as_str().unwrap(), "test");
+        assert_eq!(tags[1].as_str().unwrap(), "yaml");
     }
 
     #[test]
-    fn test_decompose_incomplete_frontmatter() {
+    fn test_invalid_yaml() {
         let markdown = r#"---
-title: Test Document
-author: John Doe
+title: [invalid yaml
+author: missing close bracket
+---
 
-# Hello World"#;
+Content here."#;
         
-        let result = decompose(markdown).unwrap();
-        
-        // No closing ---, should treat entire content as body
-        assert!(result.body().unwrap().contains("---"));
-        assert!(result.body().unwrap().contains("title: Test Document"));
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid YAML frontmatter"));
     }
 
     #[test]
-    fn test_parsed_document_methods() {
-        let mut fields = HashMap::new();
-        fields.insert("title".to_string(), serde_yaml::Value::String("Test".to_string()));
-        fields.insert("count".to_string(), serde_yaml::Value::Number(serde_yaml::Number::from(42)));
+    fn test_unclosed_frontmatter() {
+        let markdown = r#"---
+title: Test
+author: Test Author
+
+Content without closing ---"#;
         
-        let doc = ParsedDocument::with_frontmatter(fields, "Body content".to_string());
-        
-        assert_eq!(doc.body(), Some("Body content"));
-        assert_eq!(doc.get_field("title").and_then(|v| v.as_str()), Some("Test"));
-        assert_eq!(doc.get_field("count").and_then(|v| v.as_i64()), Some(42));
-        assert!(doc.get_field("nonexistent").is_none());
-        assert_eq!(doc.fields().len(), 3); // title, count, body
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not closed"));
     }
 }

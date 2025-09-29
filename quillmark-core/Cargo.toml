@@ -2,18 +2,17 @@
 name = "quillmark-core"
 version = "0.1.0"
 edition = "2021"
-description = "Core types and traits for the quillmark markdown rendering library"
+description = "Core types and functionality for QuillMark"
 license = "MIT"
-repository = "https://github.com/nibsbin/quillmark"
 
 [dependencies]
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
 thiserror = { workspace = true }
-serde = { version = "1.0", features = ["derive"] }
-serde_yaml = "0.9"
-serde_json = "1.0.145"
-toml = "0.9"
-tera = "1.20.0"
-minijinja = "2.12.0"
+anyhow = { workspace = true }
+minijinja = { workspace = true }
 
 [dev-dependencies]
-quillmark-fixtures = { workspace = true }
+tempfile = { workspace = true }
