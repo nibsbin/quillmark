@@ -1705,6 +1705,7 @@ name = "quillmark"
 version = "0.1.0"
 dependencies = [
  "quillmark-core",
+ "quillmark-fixtures",
  "quillmark-typst",
  "serde_yaml",
  "tempfile",
@@ -1717,10 +1718,19 @@ name = "quillmark-core"
 version = "0.1.0"
 dependencies = [
  "minijinja",
+ "quillmark-fixtures",
  "serde",
  "serde_json",
  "serde_yaml",
  "tera",
+ "thiserror 1.0.69",
+ "toml 0.9.7",
+]
+
+[[package]]
+name = "quillmark-fixtures"
+version = "0.1.0"
+dependencies = [
  "thiserror 1.0.69",
 ]
 
@@ -1733,6 +1743,7 @@ dependencies = [
  "comemo",
  "pulldown-cmark",
  "quillmark-core",
+ "quillmark-fixtures",
  "serde",
  "serde_json",
  "serde_yaml",
