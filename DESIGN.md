@@ -1,4 +1,8 @@
-# QuillMark Architecture Design Document
+# QuillMark – Unified Architecture Design
+
+> This document merges **“QuillMark Architecture Design Document”** and **“QuillMark Improved Architecture Design Document”** into a single, authoritative DESIGN.md. Where the two differed, this doc reconciles them and notes compatibility.
+
+---
 
 ## Table of Contents
 
@@ -14,166 +18,142 @@
 10. [Error Handling Patterns](#error-handling-patterns)
 11. [Extension Points](#extension-points)
 12. [Key Design Decisions](#key-design-decisions)
+13. [Migration & Compatibility](#migration--compatibility)
+
+---
 
 ## System Overview
 
-QuillMark is a flexible, trait-based markdown rendering library designed to support multiple output backends through a clean abstraction layer. The system transforms markdown documents with YAML frontmatter into various output formats (PDF, SVG, TXT) using pluggable backend implementations.
+QuillMark is a flexible, **template-first** Markdown rendering system that converts Markdown with YAML frontmatter into output artifacts (PDF, SVG, TXT, etc.). The architecture is built around a **sealed engine API** for day‑to‑day use, backed by trait-based extensibility for backends.
 
-The system operates through clear separation of concerns:
-- **Parsing**: Decomposes markdown into structured fields and body content
-- **Templating**: Merges parsed data with quill templates using filters
-- **Backend Processing**: Compiles template output into final artifacts
-- **Asset Management**: Handles fonts, images, and package dependencies
+High-level data flow:
+
+* **Parsing** → YAML frontmatter + body extraction
+* **Templating** → MiniJinja-based "Glue" composition with backend-registered filters
+* **Backend Processing** → Compile composed glue to final artifacts
+* **Assets/Packages** → Fonts, images, and backend packages resolved dynamically
+
+---
 
 ## Core Design Principles
 
-### 1. **Explicit Backend Selection**
-Backends are provided directly in `RenderConfig` rather than through global registration, making backend selection explicit and avoiding global mutable state.
+1. **Sealed Engine, Explicit Backend**
+   A single entry point (`QuillEngine`) encapsulates orchestration. Backend choice is **explicit** at engine construction.
+2. **Trait-Based Extensibility**
+   New output formats implement the `Backend` trait (thread-safe, zero global state).
+3. **Template-First**
+   Quill templates fully control structure and styling; Markdown provides content via filters.
+4. **YAML-First Frontmatter**
+   YAML is the single supported frontmatter format presented to templates. Backends may inject/convert to their native preferences (e.g., TOML for Typst) via filters.
+5. **Zero-Copy Where Practical**
+   Minimize allocations; prefer references and `Cow<'static, str>` in hot paths.
+6. **Error Transparency**
+   Preserve context (sources, spans) and provide actionable diagnostics.
+7. **Dynamic Resource Loading**
+   Discover templates, assets, fonts, and packages at runtime; no hardcoded deps.
+8. **Zero-Config Defaults**
+   Standard directory conventions let basic projects work without configuration.
 
-### 2. **Trait-Based Extensibility** 
-The `Backend` trait provides a clean interface for implementing new output formats while maintaining type safety and consistent behavior.
-
-### 3. **Template-Driven Approach**
-Quill templates define the structure and styling of documents, with markdown content injected through a powerful filter system.
-
-### 4. **Zero-Copy Where Possible**
-String processing and template rendering minimize allocations through careful use of references and `Cow<'static, str>` types.
-
-### 5. **Error Transparency**
-Error handling preserves context and provides actionable diagnostic information, especially for template and compilation errors.
-
-### 6. **Dynamic Resource Loading**
-Package and asset management supports dynamic discovery and loading without hardcoded dependencies.
+---
 
 ## Crate Structure and Responsibilities
 
-### `quillmark-core`
-**Core abstractions and shared functionality**
+### `quillmark-core` (foundations)
 
-**Responsibilities:**
-- Defines fundamental types (`Backend`, `Artifact`, `RenderConfig`, `OutputFormat`)
-- Provides markdown parsing and frontmatter extraction (`decompose`, `ParsedDocument`)
-- Implements template engine abstraction (`Glue`, filter system)
-- Quill template management (`Quill` structure with `quill.toml` support)
-- Error type definitions (`RenderError`, `TemplateError`)
-- TOML to YAML value conversion utilities
+* Types: `Backend`, `Artifact`, `OutputFormat`
+* Parsing: `decompose`, `ParsedDocument`
+* Templating: `Glue` + stable `filter_api`
+* Template model: `Quill` (+ `quill.toml`)
+* Errors: `RenderError`, `TemplateError`
+* Utilities: TOML⇄YAML conversion helpers (for backend filters)
 
-**Key Design Decision**: No external backend dependencies - maintains clean separation allowing backend crates to depend only on core without circular dependencies.
+**Design Note:** No external backend deps; backends depend on core → no cycles.
 
-### `quillmark`
-**Main API and orchestration layer**
+### `quillmark` (sealed engine)
 
-**Responsibilities:**
-- Provides primary `render()` function that orchestrates the entire pipeline
-- Handles quill template loading from filesystem paths
-- Coordinates between parsing, templating, and backend compilation
-- Manages configuration validation and error propagation
+* Sealed primary API: `QuillEngine`
+* Orchestration (parse → compose → compile)
+* Validation and error propagation
+* *Compatibility shim:* legacy `render(markdown, RenderConfig)` calls through the engine (see [Migration](#migration--compatibility)).
 
-**Key Design Decision**: Thin orchestration layer that delegates specialized work to appropriate components while providing a unified API.
+### `quillmark-typst` (Typst backend)
 
-### `quillmark-typst`
-**Typst backend implementation**
+* Implements `Backend` for PDF/SVG
+* Markdown→Typst conversion (`mark_to_typst`)
+* Filters: `String`, `Lines`, `Date`, `Dict`, `Body`, and YAML→TOML injector
+* Compilation environment (`QuillWorld`)
+* Dynamic package loading (`typst.toml`), font & asset resolution
+* Rich error formatting with source locations
 
-**Responsibilities:**
-- Implements `Backend` trait for Typst output (PDF, SVG)
-- Provides markdown-to-Typst conversion (`mark_to_typst`)
-- Implements Typst-specific filters (String, Lines, Date, Dict, Body)
-- Manages Typst compilation environment (`QuillWorld`)
-- Dynamic package loading with `typst.toml` support
-- Font and asset management for Typst documents
-- Error formatting with source location information
+### `quillmark-fixtures` (dev/test utilities)
 
-**Key Design Decision**: Self-contained implementation with sophisticated package management system that replaces previous hardcoded approaches.
+* Centralized resources under `resources/`
+* `resource_path()`, `example_output_dir()`, `write_example_output()`
+* Workspace discovery and standardized example outputs
 
-### `quillmark-fixtures`
-**Test fixtures and resource management (dev-only)**
-
-**Responsibilities:**
-- Centralized example and test resource management
-- Standardized resource path resolution (`resource_path()`)
-- Example output directory management (`example_output_dir()`)
-- Workspace root discovery utilities
-- Fixture error handling and diagnostics
-
-**Key Design Decision**: Separates test resources from production code while providing standardized utilities for resource access and output management across examples and tests.
+---
 
 ## Core Interfaces and Structures
 
-### Backend Trait
+### QuillEngine (primary high-level API)
+
+```rust
+pub struct QuillEngine {
+    backend: Box<dyn Backend>,
+    quill: Quill,
+}
+
+impl QuillEngine {
+    pub fn new(backend: Box<dyn Backend>, quill_path: PathBuf) -> Result<Self, RenderError>;
+    pub fn render(&self, markdown: &str) -> RenderResult;
+    pub fn render_with_format(&self, markdown: &str, format: OutputFormat) -> RenderResult;
+    pub fn backend_id(&self) -> &str;
+    pub fn supported_formats(&self) -> &'static [OutputFormat];
+    pub fn quill_name(&self) -> &str;
+}
+```
+
+### Backend Trait (stable)
+
 ```rust
 pub trait Backend: Send + Sync {
-    /// Stable identifier (e.g., "typst", "latex", "mock")
-    fn id(&self) -> &'static str;
-    
-    /// Formats this backend supports in *this* build
+    fn id(&self) -> &'static str;                       // e.g., "typst", "latex"
     fn supported_formats(&self) -> &'static [OutputFormat];
-    
-    /// File extension for the document type this backend processes
-    fn glue_type(&self) -> &'static str;
-    
-    /// Register filters with the given Glue instance
+    fn glue_type(&self) -> &'static str;                // file extension, e.g., ".typ"
     fn register_filters(&self, glue: &mut Glue);
-    
-    /// Compile the rendered glue content into final artifacts
-    fn compile(&self, glue_content: &str, quill: &Quill, opts: &RenderConfig) 
+    fn compile(&self, glue_content: &str, quill: &Quill, opts: &RenderOptions)
         -> Result<Vec<Artifact>, RenderError>;
 }
 ```
 
-**Design Notes:**
-- Thread-safe (`Send + Sync`) for concurrent rendering
-- Multiple artifact support for multi-page documents
-- Backend-specific filter registration enables specialized template functions
-- Glue type determines template file extension (`.typ`, `.tex`, etc.)
+> **Note:** `RenderOptions` is internal to engine orchestration; public callers use the engine methods. Legacy `RenderConfig` maps to `RenderOptions` (see [Migration](#migration--compatibility)).
 
-### Quill Template Structure
+### Quill (template bundle)
+
 ```rust
 pub struct Quill {
-    /// The template content 
     pub template_content: String,
-    /// Quill-specific data that backends might need
     pub metadata: HashMap<String, serde_yaml::Value>,
-    /// Base path for resolving relative paths
     pub base_path: PathBuf,
-    /// Name of the quill (derived from directory name or quill.toml)
     pub name: String,
-    /// Glue template file name (configurable via quill.toml)
     pub glue_file: String,
 }
 ```
 
-**Key Methods:**
-- `glue_path()`, `assets_path()`, `packages_path()`: Directory navigation
-- `validate()`: Ensures template integrity
-- `from_path()`: Factory for filesystem-based quills with `quill.toml` support
-- `toml_to_yaml_value()`: Internal utility for TOML to YAML conversion
-
-**Design Notes:**
-- Self-contained template representation with structured metadata
-- `quill.toml` support for template metadata (name, version, description, author, tags)
-- Configurable glue file name through `glue_file` field in `quill.toml`
-- Flexible asset and package directory structure
-- Backend-agnostic design supports multiple template formats
+**Key methods:** `from_path()`, `validate()`, `glue_path()`, `assets_path()`, `packages_path()`, `toml_to_yaml_value()`.
 
 ### ParsedDocument
+
 ```rust
 pub struct ParsedDocument {
-    /// Dictionary containing frontmatter fields and the body field
     pub fields: HashMap<String, serde_yaml::Value>,
 }
 ```
 
-**Key Methods:**
-- `body()`: Access to markdown body content (stored under `BODY_FIELD`)
-- `get_field()`: Access to specific frontmatter fields
-- `fields()`: Complete field map for template context
+**Helpers:** `body()`, `get_field()`, `fields()`; body is stored under reserved `BODY_FIELD`.
 
-**Design Notes:**
-- Unified representation of frontmatter and body content
-- YAML-based frontmatter with flexible value types
-- Reserved `BODY_FIELD` constant for body content access
+### Glue (MiniJinja wrapper with stable filter API)
 
-### Glue Template Engine
 ```rust
 pub struct Glue {
     env: Environment<'static>,
@@ -181,609 +161,241 @@ pub struct Glue {
 }
 ```
 
-**Key Methods:**
-- `new()`: Create from template string
-- `register_filter()`: Add backend-specific filters
-- `compose()`: Render template with context data
+**Methods:** `new()`, `register_filter()`, `compose(context)`.
 
-**Filter API:**
-- Thread-safe filter functions: `Fn(&State, Value, Kwargs) -> Result<Value, Error>`
-- Stable ABI through `filter_api` module - external crates don't need minijinja dependency
-- Type-safe parameter passing with validation
-
-### Artifact and Configuration
-```rust
-pub struct Artifact {
-    pub bytes: Vec<u8>,
-    pub output_format: OutputFormat,
-}
-
-pub struct RenderConfig {
-    pub backend: Box<dyn Backend>,
-    pub output_format: Option<OutputFormat>,
-    pub quill_path: PathBuf,
-}
-```
-
-**Design Notes:**
-- Binary artifact representation supports any output format
-- Configuration bundles backend with options for atomic operation
-- Optional format specification allows backend to choose default
-
-## End-to-End Orchestration Workflow
-
-The `render()` function orchestrates the complete transformation pipeline:
-
-### 1. **Configuration Validation**
-```rust
-pub fn render(markdown: &str, config: &RenderConfig) -> RenderResult {
-    let backend = &config.backend;
-    // Backend is provided directly in RenderConfig
-```
-
-### 2. **Quill Template Loading**
-```rust
-    let quill_data = load_quill_data(config, backend.glue_type())?;
-    // Loads template based on backend's glue_type (.typ, .tex, etc.)
-```
-
-**Template Discovery Process:**
-- Locate quill directory and attempt to read `quill.toml` for metadata
-- Parse TOML metadata including name, version, description, author, tags, glue_file
-- Convert TOML values to YAML format for template context
-- Determine template file name (from `glue_file` in quill.toml or default `glue{backend.glue_type()}`)
-- Load template content and extract metadata
-- Validate template structure and required files
-
-### 3. **Markdown Parsing and Decomposition**
-```rust
-    let parsed_doc = quillmark_core::decompose(markdown)
-        .map_err(|e| RenderError::Other(format!("Failed to parse markdown: {}", e).into()))?;
-```
-
-**Parsing Process:**
-- Detect and extract YAML frontmatter (delimited by `---`)
-- Parse YAML into structured values (`serde_yaml::Value`)
-- Store body content under reserved `BODY_FIELD` key
-- Handle parsing errors gracefully (fallback to treating entire content as body)
-
-### 4. **Template Engine Setup**
-```rust
-    let mut glue = Glue::new(quill_data.template_content.clone());
-    backend.register_filters(&mut glue);
-```
-
-**Filter Registration:**
-- Each backend registers its specialized filters
-- Filters handle type conversion and format-specific transformations
-- Thread-safe registration through stable API
-
-### 5. **Template Rendering**
-```rust
-    let glue_content = glue.compose(parsed_doc.fields().clone())
-        .map_err(|e| RenderError::Other(Box::new(e)))?;
-```
-
-**Composition Process:**
-- Merge frontmatter fields with template variables
-- Apply filters to transform data for target format
-- Generate intermediate template content (e.g., Typst source)
-
-### 6. **Backend Compilation**
-```rust
-    backend.compile(&glue_content, &quill_data, config)
-```
-
-**Compilation Process:**
-- Backend-specific processing of template output
-- Asset and package resolution
-- Final artifact generation (PDF, SVG, etc.)
-
-## Template System Design
-
-### Template Engine Architecture
-
-The template system is built on MiniJinja with a stable filter API that allows backend crates to avoid direct MiniJinja dependencies:
+**Filter ABI (stable surface):**
 
 ```rust
 pub mod filter_api {
     pub use minijinja::{Error, ErrorKind, State};
     pub use minijinja::value::{Kwargs, Value};
-    
     pub trait DynFilter: Send + Sync + 'static {}
     impl<T> DynFilter for T where T: Send + Sync + 'static {}
 }
 ```
 
-### Filter System Design
+### Artifact & Output Format
 
-Filters provide the bridge between parsed markdown data and backend-specific template formats:
+```rust
+pub struct Artifact { pub bytes: Vec<u8>, pub output_format: OutputFormat }
+```
 
-#### **String Filter**
-- Handles string escaping for safe template injection
-- Supports default values through `kwargs["default"]`
-- Special handling for `"none"` sentinel value (outputs unquoted `none`)
+---
 
-#### **Lines Filter** 
-- Converts arrays to JSON strings for multi-line data
-- Escaped for safe embedding in template source
-- Used for lists like recipients, references, etc.
+## End-to-End Orchestration Workflow
 
-#### **Date Filter**
-- Strict TOML datetime parsing for consistent date handling
-- Generates TOML-wrapped date objects for template use
-- Error reporting for invalid date formats
+**Public usage:**
 
-#### **Dict Filter**
-- JSON serialization of object data
-- Type validation ensures input is object/dictionary
-- Escaped JSON string output for template embedding
+```rust
+let engine = QuillEngine::new(Box::new(TypstBackend::default()), quill_path)?;
+let artifacts = engine.render(markdown)?;                // or render_with_format(...)
+```
 
-#### **Body Filter**
-- Converts markdown body to target format (e.g., Typst markup)
-- Uses format-specific conversion (`mark_to_typst`)
-- Generates `eval()` statements for dynamic content injection
+**Internal steps (encapsulated):**
 
-### Template Variable Injection
+1. **Load Quill**: `Quill::from_path(quill_path)` → validate; pick glue file by backend `glue_type()` or `quill.toml` override.
+2. **Parse Markdown**: `decompose(markdown)` → YAML frontmatter + body.
+3. **Setup Glue**: `Glue::new(quill.template_content)`; backend `register_filters(&mut glue)`.
+4. **Compose**: `glue.compose(parsed.fields().clone())` → backend-specific glue source.
+5. **Compile**: `backend.compile(&glue_src, &quill, &opts)` → `Vec<Artifact>` (PDF/SVG/TXT…).
 
-Template variables use double-brace syntax with filter application:
+---
+
+## Template System Design
+
+* Engine uses **MiniJinja** with a **stable filter API** so backends do not directly depend on MiniJinja.
+* Backend-provided filters bridge YAML values → backend-native constructs.
+
+**Common Filters**
+
+* **String**: escape/quote; `default=` kwarg; special handling for `none` sentinel
+* **Lines**: string array for multi-line embedding
+* **Date**: strict date parsing; produces TOML-like object when needed
+* **Dict**: objects → JSON string; type validation
+* **Body**: Markdown body → backend markup (e.g., Typst) and inject with `eval()` as needed
+* **Toml** *(Typst-only convenience)*: YAML → TOML string injection for `toml()` usage
+
+**Template usage example (Typst glue):**
+
 ```typst
-// Basic string injection
-{{ title | String(default="Untitled Document") }}
-
-// Array/list injection  
+{{ title | String(default="Untitled") }}
 {{ recipients | Lines }}
-
-// Date injection
 {{ date | Date }}
-
-// Markdown body injection
+{{ frontmatter | Toml }}          // optional: for Typst-native toml(...)
 {{ body | Body }}
 ```
 
+---
+
 ## Parsing and Document Decomposition
 
-### YAML Frontmatter Processing
+* **Frontmatter:** YAML delimited by `---` … `---` at the top of the document.
+* **Process:**
 
-The `decompose()` function handles markdown documents with optional YAML frontmatter:
+  1. Detect frontmatter block; parse to `HashMap<String, serde_yaml::Value>`
+  2. Store the remainder as body under `BODY_FIELD`
+  3. Preserve original content on failures; errors are reported but non-fatal
+* **Policy:** YAML-only input; no TOML frontmatter. Backends can convert via filters.
 
-#### **Detection Logic**
-```rust
-if markdown.starts_with("---\n") || markdown.starts_with("---\r\n") {
-    // Process frontmatter
-}
-```
+**Error posture:** graceful degradation (invalid frontmatter → treat as body; log/return warnings).
 
-#### **Extraction Process**
-1. **Delimiter Scanning**: Find closing `---` marker
-2. **Content Separation**: Split frontmatter from body content  
-3. **YAML Parsing**: Parse frontmatter into `HashMap<String, serde_yaml::Value>`
-4. **Body Storage**: Store body content under `BODY_FIELD` key
-5. **Error Handling**: Fall back to treating entire content as body on parse errors
-
-#### **ParsedDocument Structure**
-- Unified field map containing both frontmatter and body
-- Type-safe access methods for common operations
-- Flexible value types supporting strings, numbers, arrays, objects
-
-### Error Handling in Parsing
-
-- **Graceful Degradation**: Invalid YAML frontmatter doesn't prevent processing
-- **Warning Output**: Parse errors logged but don't halt pipeline  
-- **Content Preservation**: Original content always accessible even with parse failures
+---
 
 ## Backend Architecture
 
-### Typst Backend Implementation
+### Typst Backend
 
-The Typst backend demonstrates the full power of the backend architecture:
+* **Formats:** PDF, multi-page SVG (validated at runtime against build features)
+* **Markdown→Typst:** `mark_to_typst()` supports emphasis, links, lists, code, breaks; escapes Typst-reserved chars (`* _ ` # [ ] $ < > @`).
+* **Filters:** robust escaping, JSON/TOML embedding, date handling, markup `eval()` generation.
+* **Compilation (`QuillWorld`):** implements Typst `World` for:
 
-#### **Format Support**
-- **PDF Generation**: Using `typst-pdf` crate with configurable options
-- **SVG Generation**: Multi-page SVG output using `typst-svg`
-- **Format Validation**: Runtime checks for supported format requests
+  * *Dynamic Packages:* load from `packages/` with `typst.toml` (namespace, version, entrypoint)
+  * *Assets:* fonts/images under `assets/` with stable virtual paths
+  * *Errors:* line/column mapping, multi-error reporting with source context
 
-#### **Markdown to Typst Conversion**
-The `mark_to_typst()` function converts markdown to Typst markup:
+---
 
-**Supported Elements:**
-- **Text Formatting**: Bold (`*bold*`), italic (`_italic_`), strikethrough (`#strike[text]`)
-- **Links**: `#link("url")[text]` format
-- **Lists**: Bullet (`+`) and numbered (`1.`) with proper nesting
-- **Code**: Inline code with backtick preservation
-- **Line Breaks**: Soft breaks (space) and hard breaks (newline)
+## Package Management and Asset Handling
 
-**Character Escaping:**
-- Typst-specific characters escaped: `* _ ` # [ ] $ < > @`
-- String content properly quoted and escaped for safe injection
+**Quill template layout (opinionated):**
 
-#### **Filter Implementation**
-Typst-specific filters handle data transformation:
-
-- **String Escaping**: Safe injection into Typst source with quote wrapping
-- **JSON Embedding**: Arrays and objects serialized and escaped for `json()` function
-- **Date Handling**: TOML datetime format for Typst's `toml()` function  
-- **Markup Generation**: Markdown-to-Typst conversion with `eval()` mode
-
-### QuillWorld: Typst Compilation Environment
-
-The `QuillWorld` struct implements Typst's `World` trait for resource management:
-
-#### **Dynamic Package Loading**
-- **Automatic Discovery**: Scans `packages/` directory for package folders
-- **typst.toml Support**: Reads package metadata, namespace, version, entrypoint
-- **Virtual Path Management**: Preserves directory structure in Typst's virtual filesystem
-- **Namespace Handling**: Supports `@preview`, `@local`, and custom namespaces
-
-#### **Asset Management** 
-- **Font Loading**: Automatic font discovery in `assets/` directory
-- **Binary Assets**: Images, data files loaded with proper virtual paths
-- **Recursive Directory Support**: Maintains folder structure for organized assets
-
-#### **Error Handling Improvements**
-- **Source Location**: Line and column information for compilation errors
-- **Context Preservation**: Original source code shown with error messages
-- **Multi-Error Reporting**: All compilation errors presented with clear formatting
-
-## Resource Management and Fixtures
-
-### Centralized Resource Management
-
-The `quillmark-fixtures` crate provides centralized management of test resources and examples:
-
-#### **Resource Path Resolution**
-```rust
-use quillmark_fixtures::resource_path;
-
-// Get path to any resource in quillmark-fixtures/resources/
-let sample_md = resource_path("sample.md")?;
-let hello_quill = resource_path("hello-quill")?;
-```
-
-#### **Standardized Output Directories**
-```rust
-use quillmark_fixtures::{example_output_dir, write_example_output};
-
-// Create standardized output directory under target/examples/
-let output_dir = example_output_dir("hello-quill")?;
-
-// Write output directly to standardized location
-let pdf_path = write_example_output("hello-quill", "output.pdf", pdf_bytes)?;
-```
-
-#### **Workspace Integration**
-- Automatic workspace root detection through `Cargo.toml` scanning
-- `CARGO_TARGET_DIR` support for custom build directories
-- Consistent output organization under `target/examples/<name>/`
-
-### Resource Organization
-
-#### **Fixture Directory Structure**
-```
-quillmark-fixtures/
-├── Cargo.toml
-├── README.md
-├── src/lib.rs         # Resource management utilities
-└── resources/         # All example resources
-    ├── sample.md       # Standalone markdown files
-    ├── hello-quill/    # Complete quill template
-    │   ├── quill.toml
-    │   ├── glue.typ
-    │   ├── assets/
-    │   └── packages/
-    └── simple-quill/   # Minimal quill template
-        ├── quill.toml
-        ├── glue.typ
-        └── assets/
-```
-
-#### **Benefits of Centralized Resources**
-- **Consistency**: All examples use the same resource discovery mechanism
-- **Maintainability**: Single location for test data and example templates
-- **Development**: Clear separation between production and development resources
-- **Testing**: Simplified test resource access with error handling
-
-### Quill Directory Structure
 ```
 quill-template/
-├── quill.toml         # Template metadata (optional)
-├── glue.typ           # Main template file (name configurable via quill.toml)
-├── packages/          # Typst packages
-│   ├── package1/
-│   │   ├── typst.toml # Package metadata
-│   │   ├── src/
-│   │   │   └── lib.typ # Package entry point
-│   │   └── ...
-│   └── package2/
-└── assets/            # Static assets
-    ├── fonts/         # Font files
-    ├── images/        # Images  
-    └── ...
+├─ quill.toml              # metadata; can override glue file name
+├─ glue.<ext>              # e.g., glue.typ
+├─ packages/               # backend packages
+│  └─ <pkg>/typst.toml …
+└─ assets/                 # fonts/, images/, data/
 ```
 
-### Quill Template Metadata (`quill.toml`)
+**Package loading (algorithm):**
 
-Quill templates can include metadata through an optional `quill.toml` file:
+1. Scan `packages/` recursively
+2. Parse `typst.toml` metadata
+3. Build virtual paths; register namespace (`@preview`, `@local`, custom)
+4. Resolve entrypoints; load all package files preserving structure
 
-```toml
-[Quill]
-name = "hello-quill"
-version = "0.1.0"
-description = "A simple hello world quill template demonstrating basic typography and layout features"
-author = "QuillMark Team"
-tags = ["example", "hello-world", "typography"]
-glue_file = "glue.typ"  # Optional: specify custom template file name
-```
+**Assets:**
 
-**Metadata Fields:**
-- `name`: Template identifier (defaults to directory name)
-- `version`: Template version for compatibility tracking
-- `description`: Human-readable template description
-- `author`: Template author/maintainer
-- `tags`: Array of descriptive tags for categorization
-- `glue_file`: Custom name for main template file (defaults to "glue.typ")
+* Fonts: `.ttf`, `.otf`, `.woff`, `.woff2`
+* Binary assets: images/data as bytes
+* Recursive discovery; prefix-preserving virtual paths
 
-**TOML to YAML Conversion:**
-The system automatically converts TOML values to YAML format for template context:
-- Strings, numbers, booleans convert directly
-- Arrays become YAML sequences
-- Tables become YAML mappings
-- Datetime values preserved as strings
-
-### Package Loading Algorithm
-
-1. **Directory Scanning**: Recursively scan `packages/` directory
-2. **Metadata Parsing**: Read `typst.toml` for package configuration
-3. **Virtual Path Construction**: Map filesystem paths to Typst virtual paths
-4. **Entrypoint Resolution**: Locate main package file based on metadata
-5. **Namespace Registration**: Register package with appropriate namespace
-6. **File Loading**: Load all package files while preserving directory structure
-
-### Asset Loading Strategy
-
-- **Font Discovery**: Support `.ttf`, `.otf`, `.woff`, `.woff2` formats
-- **Binary Assets**: Load images and data files as `Bytes`
-- **Virtual Path Mapping**: Maintain `assets/` prefix in virtual filesystem
-- **Recursive Loading**: Support nested directory structures
-- **Format Detection**: Automatic file type detection based on extensions
-
-### Error Handling in Resource Loading
-
-- **Missing Package Errors**: Clear messaging for package not found
-- **Parse Errors**: Helpful messages for malformed `typst.toml` files  
-- **Font Loading Failures**: Graceful handling of corrupt font files
-- **Asset Loading**: Continue processing even if some assets fail to load
+---
 
 ## Error Handling Patterns
 
-### Error Type Hierarchy
+### RenderError (engine/backends)
 
 ```rust
 #[derive(thiserror::Error, Debug)]
 pub enum RenderError {
-    #[error("{0:?} backend is not built in this binary")]
-    UnsupportedBackend(String),
-    
+    #[error("Engine creation failed: {0}")] EngineCreation(String),
+    #[error("Invalid YAML frontmatter: {0}")] InvalidFrontmatter(String),
+    #[error("Quill template error: {0}")] QuillError(String),
+    #[error("Backend compilation failed: {0}")] CompilationError(String),
     #[error("{format:?} not supported by {backend:?}")]
     FormatNotSupported { backend: String, format: OutputFormat },
-    
-    #[error("multiple backends can produce {0:?}; specify one explicitly")]
-    AmbiguousBackend(OutputFormat),
-    
-    #[error(transparent)]
-    Other(#[from] Box<dyn Error + Send + Sync>),
+    #[error("{0:?} backend is not built in this binary")] UnsupportedBackend(String),
+    #[error(transparent)] Other(#[from] Box<dyn std::error::Error + Send + Sync>),
 }
 ```
 
-### Template Error Handling
+### TemplateError (templating)
 
 ```rust
 #[derive(thiserror::Error, Debug)]
 pub enum TemplateError {
-    #[error("{0}")]
-    RenderError(#[from] minijinja::Error),
-    
-    #[error("{0}")]
-    InvalidTemplate(String, #[source] Box<dyn StdError + Send + Sync>),
-    
-    #[error("{0}")]
-    FilterError(String),
+    #[error("{0}")] RenderError(#[from] minijinja::Error),
+    #[error("{0}")] InvalidTemplate(String, #[source] Box<dyn std::error::Error + Send + Sync>),
+    #[error("{0}")] FilterError(String),
 }
 ```
 
-### Error Context Preservation
+**Error context:**
 
-- **Source Chaining**: `#[source]` attributes preserve error causality
-- **Location Information**: Line/column data for template and compilation errors
-- **Diagnostic Formatting**: Human-readable error messages with context
-- **Graceful Degradation**: Partial functionality when some components fail
+* Source chaining with `#[source]`
+* Location enrichment for template/compile errors
+* Human-friendly formatting; partial outputs when safe
 
-### Backend Error Handling
-
-- **Compilation Errors**: Detailed Typst error messages with source location
-- **Resource Errors**: Clear messages for missing fonts, packages, assets
-- **Format Errors**: Validation of backend format support before processing
-- **Recovery Strategies**: Fallback behaviors when possible
+---
 
 ## Extension Points
 
-### Adding New Backends
+### New Backends
 
-To implement a new backend:
+1. Implement `Backend` (formats, `glue_type`, filters, `compile`).
+2. Handle assets/packages as needed; provide conversions/filters.
+3. Ship as separate crate (depends on `quillmark-core`).
 
-1. **Implement Backend Trait**:
+**Skeleton:**
+
 ```rust
 pub struct MyBackend;
-
 impl Backend for MyBackend {
     fn id(&self) -> &'static str { "my-backend" }
     fn supported_formats(&self) -> &'static [OutputFormat] { &[OutputFormat::Pdf] }
     fn glue_type(&self) -> &'static str { ".my" }
-    fn register_filters(&self, glue: &mut Glue) { /* Register filters */ }
-    fn compile(&self, content: &str, quill: &Quill, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError> { /* Implementation */ }
+    fn register_filters(&self, glue: &mut Glue) { /* ... */ }
+    fn compile(&self, content: &str, quill: &Quill, opts: &RenderOptions)
+        -> Result<Vec<Artifact>, RenderError> { /* ... */ }
 }
 ```
-
-2. **Implement Format-Specific Filters**: Create filters that transform data for your backend's template format
-
-3. **Handle Compilation**: Process template output into final artifacts
-
-4. **Resource Management**: Implement any backend-specific asset or package loading
 
 ### Custom Filters
 
-Backends can register custom filters:
-
-```rust
-use quillmark_core::templating::filter_api::{State, Value, Kwargs, Error};
-
-fn my_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
-    // Transform value for backend-specific needs
-    Ok(Value::from(transformed_content))
-}
-
-impl Backend for MyBackend {
-    fn register_filters(&self, glue: &mut Glue) {
-        glue.register_filter("my_filter", my_filter);
-    }
-}
-```
+* Register via `glue.register_filter(name, func)` using stable `filter_api`.
+* Example: YAML→backend-native structure converter.
 
 ### Template Extensions
 
-- **Custom Template Syntax**: Backends can define their own template languages
-- **Specialized Filters**: Domain-specific data transformations
-- **Asset Processing**: Backend-specific asset handling and optimization
-- **Output Customization**: Multiple artifact generation from single template
-
-## Key Design Decisions
-
-### 1. **Explicit Backend Provisioning vs. Global Registry**
-
-**Decision**: Backends provided directly in `RenderConfig`
-
-**Rationale**:
-- Eliminates global mutable state
-- Makes backend selection explicit and deterministic  
-- Improves testability and concurrent safety
-- Avoids hidden dependencies and initialization order issues
-
-**Trade-offs**:
-- Slightly more verbose API
-- Backend instances must be managed by calling code
-
-### 2. **Template-First Architecture**
-
-**Decision**: Quill templates define document structure, markdown provides content
-
-**Rationale**:
-- Separates content from presentation 
-- Enables sophisticated document formatting and layout
-- Supports backend-specific template features
-- Allows template reuse across different content
-
-**Trade-offs**:
-- Requires template creation for complex documents
-- Learning curve for template syntax
-
-### 3. **Dynamic Package Loading**
-
-**Decision**: Runtime package discovery vs. compile-time linking
-
-**Rationale**:
-- Flexibility for user-provided packages
-- No need to rebuild for new packages
-- Supports multiple package versions
-- Cleaner separation of core from packages
-
-**Trade-offs**:
-- Runtime overhead for package discovery
-- More complex error handling
-- Potential for version conflicts
-
-### 4. **Filter-Based Data Transformation**
-
-**Decision**: Backend-specific filters vs. universal data format
-
-**Rationale**:
-- Allows format-specific optimizations
-- Enables rich data type support
-- Maintains type safety through template system
-- Supports domain-specific transformations
-
-**Trade-offs**:
-- Backends must implement their own filters
-- Potential for inconsistent data handling
-
-### 5. **Unified Error Hierarchy**
-
-**Decision**: Single error type with transparent wrapping vs. error enums per component
-
-**Rationale**:
-- Simplified error handling for users
-- Context preservation through error chaining
-- Flexibility for new error types
-- Consistent error reporting across backends
-
-**Trade-offs**:
-- Less specific error matching capability
-- Potential for large error type variants
-
-### 6. **Thread-Safe Design**
-
-**Decision**: `Send + Sync` requirements throughout
-
-**Rationale**:
-- Enables concurrent document processing
-- Future-proofs for parallel rendering
-- Supports multi-threaded server environments
-- Clean architecture with immutable data where possible
-
-**Trade-offs**:
-- More restrictive trait bounds
-- Additional complexity for shared resources
-
-### 7. **Enhanced Quill Metadata System**
-
-**Decision**: `quill.toml` support for structured template metadata
-
-**Rationale**:
-- Provides structured metadata for template identification and versioning
-- Enables configurable glue file names for flexibility
-- Supports rich metadata (description, author, tags) for template management
-- TOML format familiar to Rust developers and integrates well with toolchain
-
-**Trade-offs**:
-- Additional parsing complexity for optional feature
-- Need for TOML to YAML value conversion
-- Potential for metadata inconsistencies if not maintained
-
-### 8. **Centralized Fixture Management**
-
-**Decision**: Separate `quillmark-fixtures` crate for test resources
-
-**Rationale**:
-- Separates development/test resources from production code
-- Provides standardized resource discovery and output management
-- Enables consistent example organization and maintenance
-- Reduces duplication of test utilities across crates
-
-**Trade-offs**:
-- Additional crate complexity for development workflow
-- Potential for resource organization overhead
-- Need to maintain backward compatibility for deprecated functions
+* Backend-specific syntax and asset workflows are allowed behind filters/compile.
+* Multiple artifacts per render supported (e.g., multi-page SVGs).
 
 ---
 
-This design document captures the current architecture of QuillMark as a flexible, extensible markdown rendering system. The separation of concerns between parsing, templating, and backend processing provides clean abstraction boundaries while supporting sophisticated document generation workflows.
+## Key Design Decisions
 
-## Recent Architectural Updates
+1. **Sealed Engine w/ Explicit Backend**
+   Simplifies usage; avoids global registries; deterministic selection.
+2. **Template-First, YAML-Only Frontmatter**
+   Reduces parsing complexity; backends may inject TOML/etc. via filters.
+3. **Dynamic Package Loading**
+   Runtime discovery enables user-provided packages and versions.
+4. **Filter-Based Data Transformation**
+   Backend-optimized transforms while keeping a stable templating ABI.
+5. **Unified Error Hierarchy**
+   Consistent, contextual errors across engine, templating, and backends.
+6. **Thread-Safe Design**
+   `Send + Sync` across core traits enables concurrent rendering.
+7. **Centralized Fixtures**
+   Dev resources isolated; standardized example outputs.
 
-### Quill Template Metadata System
-The introduction of `quill.toml` support enhances template management by providing structured metadata including versioning, descriptions, and configurable template file names.
+---
 
-### Centralized Resource Management  
-The new `quillmark-fixtures` crate centralizes all test resources and examples, providing standardized utilities for resource discovery and output management. This improves development workflow consistency and reduces code duplication across the workspace.
+## Migration & Compatibility
 
-### Enhanced Template Loading
-The template loading process now supports both legacy directory-based naming and modern TOML-configured templates, with automatic metadata extraction and TOML-to-YAML value conversion for seamless template integration.
+### For Users
+
+* **Preferred:**
+
+  ```rust
+  let engine = QuillEngine::new(Box::new(TypstBackend::default()), quill_path)?;
+  let artifacts = engine.render(markdown)?;
+  ```
+* **Legacy compatibility:** `render(markdown, RenderConfig)` is maintained as a thin shim that internally constructs `QuillEngine` (mapping `RenderConfig` → internal `RenderOptions`) and calls `render_with_format` as needed.
+* Ensure frontmatter is **YAML**; templates should follow the opinionated directory structure.
+
+### For Backend Authors
+
+* The `Backend` trait is unchanged and remains thread-safe.
+* Implement format-specific filters; provide YAML→native conversions when beneficial.
+* Package/asset loading lives within your backend crate; depend only on `quillmark-core`.
+
+### Benefits of the Unified Model
+
+* Smaller public surface; clearer mental model
+* Deterministic backend selection without global state
+* Stronger error narratives and easier debugging
+* Future-proof for internal optimizations without API breakage
