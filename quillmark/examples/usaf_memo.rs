@@ -24,9 +24,9 @@ fn main() {
     write_example_output("usaf-memo-glue.typ", glued.as_bytes()).unwrap();
 
     println!("Processed glue content preview: \n\n{}...\n", &glued[..std::cmp::min(500, glued.len())]);
-    
-    //render
-    let rendered = engine.render_content(&glued, Some(OutputFormat::Pdf)).expect("Failed to render");
+     
+    //render end to end
+    let rendered = engine.render(&markdown, Some(OutputFormat::Pdf)).expect("Failed to render");
     println!("Generated {} bytes", rendered.artifacts[0].bytes.len());
     write_example_output("usaf-memo-output.pdf", &rendered.artifacts[0].bytes).unwrap();
 
