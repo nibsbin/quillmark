@@ -177,9 +177,8 @@ pub mod filter_api {
 #### Implementation Hints
 
 ##### Glue Template Processing
-* **MiniJinja setup**: Create `Environment` with custom delimiters if needed
+* **MiniJinja setup**: Create `Environment` 
 * **Template compilation**: Parse template string once, reuse for multiple `compose()` calls  
-* **Context merging**: Merge frontmatter fields with any additional context
 * **Error propagation**: Convert MiniJinja errors to `TemplateError` with source context
 
 ##### Filter Registration Best Practices
@@ -219,7 +218,6 @@ let artifacts = engine.render(markdown)?;                // or render_with_forma
 * **Backend validation**: Check `backend.id()` matches expected backend type
 * **Quill loading**: Use `Quill::from_path()` with proper error context 
 * **Glue file selection**: Priority: `quill.toml` override → `backend.glue_type()` extension
-* **Early validation**: Verify required files exist before proceeding
 
 #### Orchestration Error Handling
 * **Step isolation**: Each step should handle its own errors and provide context
