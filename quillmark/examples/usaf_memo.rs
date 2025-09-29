@@ -7,7 +7,7 @@ fn main() {
 
 
     // Load the sample markdown
-    let markdown = std::fs::read_to_string(resource_path("usaf-memo.md")).unwrap();
+    let markdown = std::fs::read_to_string(resource_path("usaf_memo.md")).unwrap();
 
     //load quill
     let quill_path = resource_path("usaf-memo");
