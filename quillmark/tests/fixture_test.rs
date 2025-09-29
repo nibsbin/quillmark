@@ -5,8 +5,8 @@ use quillmark_fixtures::resource_path;
 
 #[test]
 fn test_with_existing_fixture() {
-    // Use the existing hello-quill fixture
-    let quill_path = resource_path("hello-quill");
+    // Use the existing usaf-memo fixture
+    let quill_path = resource_path("usaf-memo");
     println!("Testing with fixture at: {:?}", quill_path);
     
     // Load the sample frontmatter demo markdown
