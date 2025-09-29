@@ -1,5 +1,5 @@
 use std::fs;
-use quillmark::{QuillEngine, OutputFormat};
+use quillmark::{Workflow, OutputFormat};
 use quillmark_typst::TypstBackend;
 use quillmark_fixtures::resource_path;
 
@@ -16,7 +16,7 @@ fn test_with_existing_fixture() {
     
     // Create engine
     let backend = Box::new(TypstBackend::default());
-    let engine = QuillEngine::new(backend, quill_path).expect("Failed to create engine");
+    let engine = Workflow::new(backend, quill_path).expect("Failed to create engine");
     
     println!("Created engine for quill: {}", engine.quill_name());
     

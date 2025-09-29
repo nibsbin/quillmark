@@ -10,13 +10,13 @@ pub use quillmark_core::{
 use quillmark_core::{RenderOptions};
 
 /// The main sealed engine API
-pub struct QuillEngine {
+pub struct Workflow {
     backend: Box<dyn Backend>,
     quill: Quill,
 }
 
-impl QuillEngine {
-    /// Create a new QuillEngine with the specified backend and quill template
+impl Workflow {
+    /// Create a new Workflow with the specified backend and quill template
     pub fn new(backend: Box<dyn Backend>, quill_path: PathBuf) -> Result<Self, RenderError> {
         // Load the quill template
         let quill = Quill::from_path(&quill_path)
