@@ -100,25 +100,3 @@ impl QuillEngine {
         &self.quill.name
     }
 }
-
-/// Legacy compatibility - render markdown using configuration
-/// This is a compatibility shim that creates a temporary engine
-pub fn render(markdown: &str, config: LegacyRenderConfig) -> Result<Vec<Artifact>, RenderError> {
-    let engine = QuillEngine::new(config.backend, config.quill_path)?;
-    let format = config.output_format;
-    let result = engine.render_with_format(markdown, format)?;
-    Ok(result.artifacts)
-}
-
-/// Legacy rendering configuration for backward compatibility
-pub struct LegacyRenderConfig {
-    /// The backend to use for rendering
-    pub backend: Box<dyn Backend>,
-    /// Output format override
-    pub output_format: Option<OutputFormat>,
-    /// Path to quill template to use
-    pub quill_path: PathBuf,
-}
-
-/// Convenience alias
-pub type RenderConfig = LegacyRenderConfig;
