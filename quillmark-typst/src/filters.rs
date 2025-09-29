@@ -41,7 +41,8 @@ fn err(kind: ErrorKind, msg: impl Into<String>) -> Error {
 
 // ---------- filters ----------
 
-pub fn string_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
+pub fn string_filter(_state: &State, mut value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
+    value = apply_default(value, &_kwargs)?;
     let s = value.to_string();
     let json_str = json::to_string(&s)
         .map_err(|e| err(ErrorKind::BadSerialization, format!("Failed to serialize JSON string: {e}")))?;
