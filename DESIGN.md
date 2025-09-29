@@ -41,6 +41,18 @@ QuillMark is a flexible, trait-based markdown rendering library designed to supp
                        │   Implementation │
                        │   (Typst/etc.)   │
                        └──────────────────┘
+
+Resource Management Layer:
+┌─────────────────────────────────────────────────────────┐
+│                quillmark-fixtures                       │
+│  ┌───────────────┐  ┌─────────────────────────────────┐ │
+│  │ Resource Path │  │     Example Templates           │ │
+│  │ Resolution    │  │  ┌─────────────┐ ┌─────────────┐ │ │
+│  │               │  │  │ hello-quill │ │simple-quill │ │ │
+│  │               │  │  │+ quill.toml │ │+ quill.toml │ │ │
+│  └───────────────┘  │  └─────────────┘ └─────────────┘ │ │
+│                     └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
 ```
 
 The system operates through clear separation of concerns:
@@ -78,9 +90,9 @@ Package and asset management supports dynamic discovery and loading without hard
 - Defines fundamental types (`Backend`, `Artifact`, `RenderConfig`, `OutputFormat`)
 - Provides markdown parsing and frontmatter extraction (`decompose`, `ParsedDocument`)
 - Implements template engine abstraction (`Glue`, filter system)
-- Quill template management (`Quill` structure)
+- Quill template management (`Quill` structure with `quill.toml` support)
 - Error type definitions (`RenderError`, `TemplateError`)
-- Test utilities and context helpers
+- TOML to YAML value conversion utilities
 
 **Key Design Decision**: No external backend dependencies - maintains clean separation allowing backend crates to depend only on core without circular dependencies.
 
@@ -109,6 +121,19 @@ Package and asset management supports dynamic discovery and loading without hard
 - Error formatting with source location information
 
 **Key Design Decision**: Self-contained implementation with sophisticated package management system that replaces previous hardcoded approaches.
+
+### `quillmark-fixtures`
+**Test fixtures and resource management (dev-only)**
+
+**Responsibilities:**
+- Centralized example and test resource management
+- Standardized resource path resolution (`resource_path()`)
+- Example output directory management (`example_output_dir()`)
+- Workspace root discovery utilities
+- Backward compatibility for deprecated path functions
+- Fixture error handling and diagnostics
+
+**Key Design Decision**: Separates test resources from production code while providing standardized utilities for resource access and output management across examples and tests.
 
 ## Core Interfaces and Structures
 
@@ -148,9 +173,9 @@ pub struct Quill {
     pub metadata: HashMap<String, serde_yaml::Value>,
     /// Base path for resolving relative paths
     pub base_path: PathBuf,
-    /// Name of the quill (derived from directory name)
+    /// Name of the quill (derived from directory name or quill.toml)
     pub name: String,
-    /// Glue template file name
+    /// Glue template file name (configurable via quill.toml)
     pub glue_file: String,
 }
 ```
@@ -158,10 +183,13 @@ pub struct Quill {
 **Key Methods:**
 - `glue_path()`, `assets_path()`, `packages_path()`: Directory navigation
 - `validate()`: Ensures template integrity
-- `from_path()`: Factory for filesystem-based quills
+- `from_path()`: Factory for filesystem-based quills with `quill.toml` support
+- `toml_to_yaml_value()`: Internal utility for TOML to YAML conversion
 
 **Design Notes:**
-- Self-contained template representation with metadata
+- Self-contained template representation with structured metadata
+- `quill.toml` support for template metadata (name, version, description, author, tags)
+- Configurable glue file name through `glue_file` field in `quill.toml`
 - Flexible asset and package directory structure
 - Backend-agnostic design supports multiple template formats
 
@@ -238,7 +266,10 @@ pub fn render(markdown: &str, config: &RenderConfig) -> RenderResult {
 ```
 
 **Template Discovery Process:**
-- Locate `glue{backend.glue_type()}` file in quill directory
+- Locate quill directory and attempt to read `quill.toml` for metadata
+- Parse TOML metadata including name, version, description, author, tags, glue_file
+- Convert TOML values to YAML format for template context
+- Determine template file name (from `glue_file` in quill.toml or default `glue{backend.glue_type()}`)
 - Load template content and extract metadata
 - Validate template structure and required files
 
@@ -432,12 +463,69 @@ The `QuillWorld` struct implements Typst's `World` trait for resource management
 - **Context Preservation**: Original source code shown with error messages
 - **Multi-Error Reporting**: All compilation errors presented with clear formatting
 
-## Package Management and Asset Handling
+## Resource Management and Fixtures
+
+### Centralized Resource Management
+
+The `quillmark-fixtures` crate provides centralized management of test resources and examples:
+
+#### **Resource Path Resolution**
+```rust
+use quillmark_fixtures::resource_path;
+
+// Get path to any resource in quillmark-fixtures/resources/
+let sample_md = resource_path("sample.md")?;
+let hello_quill = resource_path("hello-quill")?;
+```
+
+#### **Standardized Output Directories**
+```rust
+use quillmark_fixtures::{example_output_dir, write_example_output};
+
+// Create standardized output directory under target/examples/
+let output_dir = example_output_dir("hello-quill")?;
+
+// Write output directly to standardized location
+let pdf_path = write_example_output("hello-quill", "output.pdf", pdf_bytes)?;
+```
+
+#### **Workspace Integration**
+- Automatic workspace root detection through `Cargo.toml` scanning
+- `CARGO_TARGET_DIR` support for custom build directories
+- Consistent output organization under `target/examples/<name>/`
+
+### Resource Organization
+
+#### **Fixture Directory Structure**
+```
+quillmark-fixtures/
+├── Cargo.toml
+├── README.md
+├── src/lib.rs         # Resource management utilities
+└── resources/         # All example resources
+    ├── sample.md       # Standalone markdown files
+    ├── hello-quill/    # Complete quill template
+    │   ├── quill.toml
+    │   ├── glue.typ
+    │   ├── assets/
+    │   └── packages/
+    └── simple-quill/   # Minimal quill template
+        ├── quill.toml
+        ├── glue.typ
+        └── assets/
+```
+
+#### **Benefits of Centralized Resources**
+- **Consistency**: All examples use the same resource discovery mechanism
+- **Maintainability**: Single location for test data and example templates
+- **Development**: Clear separation between production and development resources
+- **Testing**: Simplified test resource access with error handling
 
 ### Quill Directory Structure
 ```
 quill-template/
-├── glue.typ           # Main template file  
+├── quill.toml         # Template metadata (optional)
+├── glue.typ           # Main template file (name configurable via quill.toml)
 ├── packages/          # Typst packages
 │   ├── package1/
 │   │   ├── typst.toml # Package metadata
@@ -450,6 +538,35 @@ quill-template/
     ├── images/        # Images  
     └── ...
 ```
+
+### Quill Template Metadata (`quill.toml`)
+
+Quill templates can include metadata through an optional `quill.toml` file:
+
+```toml
+[Quill]
+name = "hello-quill"
+version = "0.1.0"
+description = "A simple hello world quill template demonstrating basic typography and layout features"
+author = "QuillMark Team"
+tags = ["example", "hello-world", "typography"]
+glue_file = "glue.typ"  # Optional: specify custom template file name
+```
+
+**Metadata Fields:**
+- `name`: Template identifier (defaults to directory name)
+- `version`: Template version for compatibility tracking
+- `description`: Human-readable template description
+- `author`: Template author/maintainer
+- `tags`: Array of descriptive tags for categorization
+- `glue_file`: Custom name for main template file (defaults to "glue.typ")
+
+**TOML to YAML Conversion:**
+The system automatically converts TOML values to YAML format for template context:
+- Strings, numbers, booleans convert directly
+- Arrays become YAML sequences
+- Tables become YAML mappings
+- Datetime values preserved as strings
 
 ### Package Loading Algorithm
 
@@ -664,6 +781,47 @@ impl Backend for MyBackend {
 - More restrictive trait bounds
 - Additional complexity for shared resources
 
+### 7. **Enhanced Quill Metadata System**
+
+**Decision**: `quill.toml` support for structured template metadata
+
+**Rationale**:
+- Provides structured metadata for template identification and versioning
+- Enables configurable glue file names for flexibility
+- Supports rich metadata (description, author, tags) for template management
+- TOML format familiar to Rust developers and integrates well with toolchain
+
+**Trade-offs**:
+- Additional parsing complexity for optional feature
+- Need for TOML to YAML value conversion
+- Potential for metadata inconsistencies if not maintained
+
+### 8. **Centralized Fixture Management**
+
+**Decision**: Separate `quillmark-fixtures` crate for test resources
+
+**Rationale**:
+- Separates development/test resources from production code
+- Provides standardized resource discovery and output management
+- Enables consistent example organization and maintenance
+- Reduces duplication of test utilities across crates
+
+**Trade-offs**:
+- Additional crate complexity for development workflow
+- Potential for resource organization overhead
+- Need to maintain backward compatibility for deprecated functions
+
 ---
 
 This design document captures the current architecture of QuillMark as a flexible, extensible markdown rendering system. The separation of concerns between parsing, templating, and backend processing provides clean abstraction boundaries while supporting sophisticated document generation workflows.
+
+## Recent Architectural Updates
+
+### Quill Template Metadata System
+The introduction of `quill.toml` support enhances template management by providing structured metadata including versioning, descriptions, and configurable template file names. This enables better template organization and discovery while maintaining backward compatibility.
+
+### Centralized Resource Management  
+The new `quillmark-fixtures` crate centralizes all test resources and examples, providing standardized utilities for resource discovery and output management. This improves development workflow consistency and reduces code duplication across the workspace.
+
+### Enhanced Template Loading
+The template loading process now supports both legacy directory-based naming and modern TOML-configured templates, with automatic metadata extraction and TOML-to-YAML value conversion for seamless template integration.
