@@ -31,4 +31,4 @@ examples/output/
 examples/converted/
 **/.DS_Store
 
-quillmark-fixtures/examples/output/**
+quillmark-fixtures/output/**
