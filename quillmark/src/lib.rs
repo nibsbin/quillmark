@@ -41,14 +41,14 @@ impl QuillEngine {
         Ok(Self { backend, quill })
     }
 
-    /// Render markdown using the engine's backend and quill template
+    /// Render markdown to a specific output format
     pub fn render(&self, markdown: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError> {
         let glue_output = self.process_glue(markdown)?;
         let rendered = self.render_content(&glue_output, format)?;
         Ok(rendered)
     }
 
-    /// Render pre-processed glue content with a specific output format
+    /// Render pre-processed glue content to a specific output format
     pub fn render_content(&self, content: &str, mut format: Option<OutputFormat>) -> Result<RenderResult, RenderError> {
         // Compile using backend
         if !format.is_some() {
