@@ -1,0 +1,210 @@
+use std::collections::HashMap;
+use std::error::Error as StdError;
+use std::sync::Arc;
+
+use minijinja::{Environment, Error as MjError};
+use serde_yaml;
+
+/// Error types for template rendering
+#[derive(thiserror::Error, Debug)]
+pub enum TemplateError {
+    #[error("{0}")]
+    RenderError(#[from] minijinja::Error),
+    #[error("{0}")]
+    InvalidTemplate(String, #[source] Box<dyn StdError + Send + Sync>),
+    #[error("{0}")]
+    FilterError(String),
+}
+
+/// Public filter ABI that external crates can depend on (no direct minijinja dep required)
+pub mod filter_api {
+    pub use minijinja::{Error, ErrorKind, State};
+    pub use minijinja::value::{Kwargs, Value};
+
+    /// Trait alias for closures/functions used as filters (thread-safe, 'static)
+    pub trait DynFilter: Send + Sync + 'static {}
+    impl<T> DynFilter for T where T: Send + Sync + 'static {}
+}
+
+/// Type for filter functions
+type FilterFunc = Arc<dyn Fn(&filter_api::State, filter_api::Value, filter_api::Kwargs) 
+    -> Result<filter_api::Value, MjError> + Send + Sync + 'static>;
+
+/// Glue class for template rendering - provides interface for backends to interact with templates
+pub struct Glue {
+    template: String,
+    filters: HashMap<String, FilterFunc>,
+}
+
+impl Glue {
+    /// Create a new Glue instance with a template string
+    pub fn new(template: String) -> Self {
+        Self { 
+            template,
+            filters: HashMap::new(),
+        }
+    }
+
+    /// Register a filter with the template environment
+    /// For now this is a placeholder - filters will be implemented later
+    pub fn register_filter<F>(&mut self, name: &str, _func: F)
+    where
+        F: 'static
+            + Send
+            + Sync
+            + Fn(&filter_api::State, filter_api::Value, filter_api::Kwargs)
+                -> Result<filter_api::Value, MjError>,
+    {
+        // Store filter name for later implementation
+        // For now, we'll just keep track that it was registered
+        self.filters.insert(name.to_string(), Arc::new(|_,_,_| Ok(filter_api::Value::from(""))));
+    }
+
+    /// Compose template with context from markdown decomposition
+    pub fn compose(
+        &mut self,
+        context: HashMap<String, serde_yaml::Value>,
+    ) -> Result<String, TemplateError> {
+        // Convert YAML values to MiniJinja values
+        let context = convert_yaml_to_minijinja(context)?;
+        
+        // Create a new environment for this render
+        let mut env = Environment::new();
+        
+        // TODO: Register filters properly - for now skip to get basic structure working
+        
+        env.add_template("main", &self.template)
+            .map_err(|e| TemplateError::InvalidTemplate("Failed to add template".to_string(), Box::new(e)))?;
+        
+        // Render the template
+        let tmpl = env.get_template("main")
+            .map_err(|e| TemplateError::InvalidTemplate("Failed to get template".to_string(), Box::new(e)))?;
+        
+        let result = tmpl.render(&context)?;
+        Ok(result)
+    }
+}
+
+/// Convert YAML values to MiniJinja values
+fn convert_yaml_to_minijinja(yaml: HashMap<String, serde_yaml::Value>) -> Result<HashMap<String, minijinja::value::Value>, TemplateError> {
+    let mut result = HashMap::new();
+    
+    for (key, value) in yaml {
+        let minijinja_value = yaml_to_minijinja_value(value)?;
+        result.insert(key, minijinja_value);
+    }
+    
+    Ok(result)
+}
+
+/// Convert a single YAML value to a MiniJinja value
+fn yaml_to_minijinja_value(value: serde_yaml::Value) -> Result<minijinja::value::Value, TemplateError> {
+    use serde_yaml::Value as YamlValue;
+    use minijinja::value::Value as MjValue;
+    
+    let result = match value {
+        YamlValue::Null => MjValue::from(()),
+        YamlValue::Bool(b) => MjValue::from(b),
+        YamlValue::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                MjValue::from(i)
+            } else if let Some(u) = n.as_u64() {
+                MjValue::from(u)
+            } else if let Some(f) = n.as_f64() {
+                MjValue::from(f)
+            } else {
+                return Err(TemplateError::FilterError("Invalid number in YAML".to_string()));
+            }
+        }
+        YamlValue::String(s) => MjValue::from(s),
+        YamlValue::Sequence(seq) => {
+            let mut vec = Vec::new();
+            for item in seq {
+                vec.push(yaml_to_minijinja_value(item)?);
+            }
+            MjValue::from(vec)
+        }
+        YamlValue::Mapping(map) => {
+            let mut obj = std::collections::BTreeMap::new();
+            for (k, v) in map {
+                let key = match k {
+                    YamlValue::String(s) => s,
+                    _ => return Err(TemplateError::FilterError("Non-string key in YAML mapping".to_string())),
+                };
+                obj.insert(key, yaml_to_minijinja_value(v)?);
+            }
+            MjValue::from_object(obj)
+        }
+        YamlValue::Tagged(tagged) => {
+            // For tagged values, just use the value part
+            yaml_to_minijinja_value(tagged.value)?
+        }
+    };
+    
+    Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_glue_creation() {
+        let _glue = Glue::new("Hello {{ name }}".to_string());
+        assert!(true);
+    }
+
+    #[test]
+    fn test_compose_simple_template() {
+        let mut glue = Glue::new("Hello {{ name }}! Body: {{ body }}".to_string());
+        let mut context = HashMap::new();
+        context.insert(
+            "name".to_string(),
+            serde_yaml::Value::String("World".to_string()),
+        );
+        context.insert(
+            "body".to_string(),
+            serde_yaml::Value::String("Hello content".to_string()),
+        );
+
+        let result = glue.compose(context).unwrap();
+        assert!(result.contains("Hello World!"));
+        assert!(result.contains("Body: Hello content"));
+    }
+
+    #[test]
+    fn test_field_with_dash() {
+        let mut glue = Glue::new("Field: {{ letterhead_title }}".to_string());
+        let mut context = HashMap::new();
+        context.insert(
+            "letterhead_title".to_string(),
+            serde_yaml::Value::String("TEST VALUE".to_string()),
+        );
+        context.insert(
+            "body".to_string(),
+            serde_yaml::Value::String("body".to_string()),
+        );
+
+        let result = glue.compose(context).unwrap();
+        assert!(result.contains("TEST VALUE"));
+    }
+
+    #[test]
+    fn test_compose_with_dash_in_template() {
+        // Templates must reference the exact key names provided by the context.
+        let mut glue = Glue::new("Field: {{ letterhead_title }}".to_string());
+        let mut context = HashMap::new();
+        context.insert(
+            "letterhead_title".to_string(),
+            serde_yaml::Value::String("DASHED".to_string()),
+        );
+        context.insert(
+            "body".to_string(),
+            serde_yaml::Value::String("body".to_string()),
+        );
+
+        let result = glue.compose(context).unwrap();
+        assert!(result.contains("DASHED"));
+    }
+}

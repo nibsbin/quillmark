@@ -1,0 +1,13 @@
+[package]
+name = "quillmark"
+version = "0.1.0"
+edition = "2021"
+description = "QuillMark sealed engine API"
+license = "MIT"
+
+[dependencies]
+quillmark-core = { path = "../quillmark-core" }
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
