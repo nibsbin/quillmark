@@ -64,7 +64,6 @@ Package and asset management supports dynamic discovery and loading without hard
 **Main API and orchestration layer**
 
 **Responsibilities:**
-- Re-exports all core types for backward compatibility
 - Provides primary `render()` function that orchestrates the entire pipeline
 - Handles quill template loading from filesystem paths
 - Coordinates between parsing, templating, and backend compilation
@@ -94,7 +93,6 @@ Package and asset management supports dynamic discovery and loading without hard
 - Standardized resource path resolution (`resource_path()`)
 - Example output directory management (`example_output_dir()`)
 - Workspace root discovery utilities
-- Backward compatibility for deprecated path functions
 - Fixture error handling and diagnostics
 
 **Key Design Decision**: Separates test resources from production code while providing standardized utilities for resource access and output management across examples and tests.
@@ -782,7 +780,7 @@ This design document captures the current architecture of QuillMark as a flexibl
 ## Recent Architectural Updates
 
 ### Quill Template Metadata System
-The introduction of `quill.toml` support enhances template management by providing structured metadata including versioning, descriptions, and configurable template file names. This enables better template organization and discovery while maintaining backward compatibility.
+The introduction of `quill.toml` support enhances template management by providing structured metadata including versioning, descriptions, and configurable template file names.
 
 ### Centralized Resource Management  
 The new `quillmark-fixtures` crate centralizes all test resources and examples, providing standardized utilities for resource discovery and output management. This improves development workflow consistency and reduces code duplication across the workspace.
