@@ -151,14 +151,24 @@ impl QuillEngine {
 /// 
 /// # Deprecation Notice
 /// This function will be removed in a future version. Migrate to the new QuillEngine API:
-/// ```rust
+/// ```no_run
 /// // Old way (deprecated)
-/// let config = RenderConfig { backend, output_format: None, quill_path };
-/// let result = render(markdown, &config)?;
-/// 
-/// // New way (recommended)
+/// # use quillmark::{QuillEngine, OutputFormat};
+/// # use std::path::PathBuf;
+/// # let markdown = "# Hello";
+/// # let backend = Box::new(MockBackend); // Placeholder
+/// # let quill_path = PathBuf::from("/path/to/quill");
 /// let engine = QuillEngine::new(backend, quill_path)?;
 /// let result = engine.render(markdown)?;
+/// # struct MockBackend;
+/// # impl quillmark::Backend for MockBackend {
+/// #     fn id(&self) -> &'static str { "mock" }
+/// #     fn supported_formats(&self) -> &'static [OutputFormat] { &[OutputFormat::Txt] }
+/// #     fn glue_type(&self) -> &'static str { ".txt" }
+/// #     fn register_filters(&self, _glue: &mut quillmark::Glue) {}
+/// #     fn compile(&self, _content: &str, _quill: &quillmark::Quill, _opts: &quillmark::RenderOptions) -> Result<Vec<quillmark::Artifact>, quillmark::RenderError> { Ok(vec![]) }
+/// # }
+/// # Ok::<(), Box<dyn std::error::Error>>(())
 /// ```
 #[deprecated(since = "0.2.0", note = "Use QuillEngine::new() and engine.render() instead")]
 pub fn render(markdown: &str, config: &LegacyRenderConfig) -> RenderResult {

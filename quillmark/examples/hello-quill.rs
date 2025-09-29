@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use quillmark_typst::TypstBackend;
-use quillmark::{render, RenderConfig};
+use quillmark::{QuillEngine, OutputFormat};
 use quillmark_fixtures::{resource_path, write_example_output};
 
 
@@ -22,13 +22,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mark_content = std::fs::read_to_string(&markdown_path)
         .map_err(|e| format!("Failed to read markdown file: {}", e))?;
 
-    let config = RenderConfig {
-        backend: Box::new(backend),
-        output_format: Some(quillmark_core::OutputFormat::Pdf),
-        quill_path: quill_path
-    };
+    // Create QuillEngine with the backend and quill template
+    let engine = QuillEngine::new(Box::new(backend), quill_path)?;
 
-    let pdf_output = render(&mark_content, &config)?;
+    // Render to PDF using the new API
+    let pdf_output = engine.render_with_format(&mark_content, Some(OutputFormat::Pdf))?;
 
     // Write output PDF using fixtures utility
     let output_path = write_example_output("hello-quill", "hello-quill.pdf", &pdf_output[0].bytes)?;

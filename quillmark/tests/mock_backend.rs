@@ -1,8 +1,8 @@
 mod common;
 
 use common::MockBackend;
-use quillmark_core::{Backend, RenderConfig, OutputFormat};
-use quillmark::render;
+use quillmark::{QuillEngine, OutputFormat};
+use quillmark_core::Backend; // Import Backend trait so we can use trait methods
 use std::path::PathBuf;
 use tempfile::TempDir;
 use std::fs;
@@ -11,6 +11,13 @@ use std::fs;
 fn create_mock_quill_template(temp_dir: &TempDir) -> PathBuf {
     let quill_path = temp_dir.path().join("mock_quill");
     fs::create_dir_all(&quill_path).expect("Failed to create quill directory");
+    
+    // Create quill.toml to specify the correct glue file
+    let toml_content = r#"[Quill]
+name = "mock-quill"
+glue_file = "glue.txt"
+"#;
+    fs::write(quill_path.join("quill.toml"), toml_content).expect("Failed to write quill.toml");
     
     let template_content = "{{ body }}";
     let template_file = quill_path.join("glue.txt");
@@ -46,13 +53,9 @@ fn test_mock_backend_render_txt() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let quill_path = create_mock_quill_template(&temp_dir);
     
-    let options = RenderConfig {
-        backend: Box::new(MockBackend),
-        output_format: Some(OutputFormat::Txt),
-        quill_path: quill_path,
-    };
+    let engine = QuillEngine::new(Box::new(MockBackend), quill_path).expect("Failed to create engine");
 
-    let result = render("# Hello World", &options);
+    let result = engine.render_with_format("# Hello World", Some(OutputFormat::Txt));
     assert!(result.is_ok());
 
     let artifacts = result.unwrap();
@@ -69,13 +72,9 @@ fn test_mock_backend_render_svg() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let quill_path = create_mock_quill_template(&temp_dir);
     
-    let options = RenderConfig {
-        backend: Box::new(MockBackend),
-        output_format: Some(OutputFormat::Svg),
-        quill_path: quill_path,
-    };
+    let engine = QuillEngine::new(Box::new(MockBackend), quill_path).expect("Failed to create engine");
 
-    let result = render("# Hello World", &options);
+    let result = engine.render_with_format("# Hello World", Some(OutputFormat::Svg));
     assert!(result.is_ok());
 
     let artifacts = result.unwrap();
@@ -93,13 +92,9 @@ fn test_mock_backend_render_pdf() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let quill_path = create_mock_quill_template(&temp_dir);
     
-    let options = RenderConfig {
-        backend: Box::new(MockBackend),
-        output_format: Some(OutputFormat::Pdf),
-        quill_path: quill_path,
-    };
+    let engine = QuillEngine::new(Box::new(MockBackend), quill_path).expect("Failed to create engine");
 
-    let result = render("# Hello World", &options);
+    let result = engine.render_with_format("# Hello World", Some(OutputFormat::Pdf));
     assert!(result.is_ok());
 
     let artifacts = result.unwrap();
@@ -116,13 +111,9 @@ fn test_mock_backend_render_default_format() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let quill_path = create_mock_quill_template(&temp_dir);
     
-    let options = RenderConfig {
-        backend: Box::new(MockBackend),
-        output_format: None, // Should default to Txt
-        quill_path: quill_path,
-    };
+    let engine = QuillEngine::new(Box::new(MockBackend), quill_path).expect("Failed to create engine");
 
-    let result = render("# Hello World", &options);
+    let result = engine.render("# Hello World"); // No format specified, should default to Txt
     assert!(result.is_ok());
 
     let artifacts = result.unwrap();
@@ -139,13 +130,9 @@ fn test_mock_backend_render_empty_markdown() {
     let temp_dir = TempDir::new().expect("Failed to create temp directory");
     let quill_path = create_mock_quill_template(&temp_dir);
     
-    let options = RenderConfig {
-        backend: Box::new(MockBackend),
-        output_format: Some(OutputFormat::Txt),
-        quill_path: quill_path,
-    };
+    let engine = QuillEngine::new(Box::new(MockBackend), quill_path).expect("Failed to create engine");
 
-    let result = render("", &options);
+    let result = engine.render_with_format("", Some(OutputFormat::Txt));
     assert!(result.is_ok());
 
     let artifacts = result.unwrap();
@@ -154,4 +141,18 @@ fn test_mock_backend_render_empty_markdown() {
     let content = String::from_utf8(artifacts[0].bytes.clone()).unwrap();
     assert!(content.contains("empty"));
     assert!(content.contains("Mock text output"));
+}
+
+#[test]
+fn test_quill_engine_properties() {
+    let temp_dir = TempDir::new().expect("Failed to create temp directory");
+    let quill_path = create_mock_quill_template(&temp_dir);
+    
+    let engine = QuillEngine::new(Box::new(MockBackend), quill_path).expect("Failed to create engine");
+
+    // Test engine properties
+    assert_eq!(engine.backend_id(), "mock");
+    assert_eq!(engine.quill_name(), "mock-quill");
+    assert_eq!(engine.glue_type(), ".txt");
+    assert_eq!(engine.supported_formats(), &[OutputFormat::Txt, OutputFormat::Svg, OutputFormat::Pdf]);
 }
