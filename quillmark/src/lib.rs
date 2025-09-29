@@ -68,6 +68,8 @@ impl QuillEngine {
         let glue_content = glue.compose(parsed_doc.fields().clone())
             .map_err(|e| RenderError::from(e))?;
 
+        println!("Composed content: {}", glue_content); // Debug print of the composed content
+
         // Step 5: Compile using backend
         let render_opts = RenderOptions {
             output_format: format,

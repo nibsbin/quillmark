@@ -1,0 +1,159 @@
+use quillmark_core::templating::filter_api::{State, Value, Kwargs, Error, ErrorKind};
+use crate::convert::{escape_string, mark_to_typst};
+use serde_json as json;
+use toml;
+use std::collections::BTreeMap;
+use time::{OffsetDateTime, Date};                     // <-- add Date
+use time::format_description::well_known::Iso8601;    // <-- add Iso8601
+
+// ---------- small helpers ----------
+
+fn apply_default(mut v: Value, kwargs: &Kwargs) -> Result<Value, Error> {
+    if v.is_undefined() {
+        if let Some(def) = kwargs.get("default")? {
+            v = def;
+        }
+    }
+    Ok(v)
+}
+
+fn inject_json(bytes: &str) -> String {
+    format!("json(bytes(\"{}\"))", escape_string(bytes))
+}
+
+// Returns a String injector; panics if TOML serialization fails.
+// (If you prefer no panic, change return type to Result<String, Error> and propagate.)
+fn inject_toml(val: toml::Value) -> String {
+    let mut doc = BTreeMap::new();
+    doc.insert("value".to_string(), val);
+
+    // Serialize document and trim trailing newline
+    let mut s = toml::to_string(&doc).expect("TOML serialize failed");
+    if s.ends_with('\n') { s.pop(); }
+
+    // Keep the ".value" suffix as requested
+    format!("toml(bytes(\"{}\")).value", escape_string(&s))
+}
+
+fn err(kind: ErrorKind, msg: impl Into<String>) -> Error {
+    Error::new(kind, msg.into())
+}
+
+// ---------- filters ----------
+
+pub fn string_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
+    let s = value.to_string();
+    let json_str = json::to_string(&s)
+        .map_err(|e| err(ErrorKind::BadSerialization, format!("Failed to serialize JSON string: {e}")))?;
+    Ok(Value::from_safe_string(inject_json(&json_str)))
+}
+
+pub fn lines_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<Value, Error> {
+    value = apply_default(value, &kwargs)?;
+
+    let jv = json::to_value(&value).map_err(|e| err(
+        ErrorKind::InvalidOperation,
+        format!("Value cannot be converted to JSON: {e} (source: {:?})", value)
+    ))?;
+
+    let arr = jv.as_array().ok_or_else(|| err(
+        ErrorKind::InvalidOperation,
+        format!("Value is not an array of strings: got {}", jv)
+    ))?;
+
+    let mut items = Vec::with_capacity(arr.len());
+    for el in arr {
+        let s = el.as_str().ok_or_else(|| err(
+            ErrorKind::InvalidOperation,
+            format!("Element is not a string: got {}", el)
+        ))?;
+        items.push(s.to_owned());
+    }
+
+    let json_str = json::to_string(&items)
+        .map_err(|e| err(ErrorKind::BadSerialization, format!("Failed to serialize JSON array: {e}")))?;
+    Ok(Value::from_safe_string(inject_json(&json_str)))
+}
+
+pub fn date_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<Value, Error> {
+    // 1) if undefined, use default
+    if value.is_undefined() {
+        if let Some(def) = kwargs.get("default")? {
+            value = def;
+        }
+    }
+
+    // 2) if still undefined, use today's date (UTC) as "YYYY-MM-DD"
+    let s = if value.is_undefined() {
+        OffsetDateTime::now_utc().date().to_string()
+    } else {
+        value.to_string()
+    };
+
+    // Validate strict ISO 8601 date (YYYY-MM-DD)
+    let d = Date::parse(&s, &Iso8601::DEFAULT).map_err(|_| {
+        Error::new(
+            ErrorKind::InvalidOperation,
+            format!("Not ISO date (YYYY-MM-DD): {s}"),
+        )
+    })?;
+
+    // 3) Build toml::Value::Datetime directly
+    let tval = toml::Value::Datetime(toml::value::Datetime {
+        date: Some(toml::value::Date {
+            year: d.year() as u16,
+            month: d.month() as u8,
+            day: d.day(),
+        }),
+        time: None,
+        offset: None,
+    });
+
+    // 4) Inject as TOML doc (with trailing ".value" in the payload)
+    Ok(Value::from_safe_string(inject_toml(tval)))
+}
+
+pub fn dict_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<Value, Error> {
+    value = apply_default(value, &kwargs)?;
+
+    let jv = json::to_value(&value).map_err(|e| err(
+        ErrorKind::InvalidOperation,
+        format!("Value cannot be converted to JSON: {e} (source: {:?})", value)
+    ))?;
+    let obj = jv.as_object().ok_or_else(|| err(
+        ErrorKind::InvalidOperation,
+        format!("Value is not a dict<string,string>: got {}", jv)
+    ))?;
+
+    let mut map = BTreeMap::<String, String>::new();
+    for (k, v) in obj {
+        let s = v.as_str().ok_or_else(|| err(
+            ErrorKind::InvalidOperation,
+            format!("Dict value for key '{}' is not a string: {}", k, v)
+        ))?;
+        map.insert(k.clone(), s.to_owned());
+    }
+
+    let json_str = json::to_string(&map)
+        .map_err(|e| err(ErrorKind::BadSerialization, format!("Failed to serialize JSON object: {e}")))?;
+    Ok(Value::from_safe_string(inject_json(&json_str)))
+}
+
+pub fn body_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
+    let jv = json::to_value(&value).map_err(|e| err(
+        ErrorKind::InvalidOperation,
+        format!("Value cannot be converted to JSON: {e} (source: {:?})", value)
+    ))?;
+
+    let content = match jv {
+        json::Value::Null => String::new(),
+        json::Value::String(s) => s,
+        other => other.to_string(),
+    };
+
+    let markup = mark_to_typst(&content);
+    Ok(Value::from_safe_string(format!(
+        "eval(\"{}\", mode: \"markup\")",
+        escape_string(&markup)
+    )))
+}

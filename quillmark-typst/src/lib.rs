@@ -1,7 +1,8 @@
 //! Simplified Typst backend - basic implementation for architecture validation
-
+mod filters;
+mod convert;
 use quillmark_core::{Backend, Artifact, OutputFormat, Quill, RenderOptions, RenderError, Glue};
-
+use filters::{string_filter, lines_filter, date_filter, dict_filter, body_filter};
 /// Typst backend implementation (simplified version)
 pub struct TypstBackend;
 
@@ -65,65 +66,6 @@ impl Default for TypstBackend {
         Self
     }
 }
-
-/// Simple markdown to Typst conversion
-fn convert_markdown_to_typst(markdown: &str) -> String {
-    let mut result = String::new();
-    
-    for line in markdown.lines() {
-        if line.starts_with("# ") {
-            result.push_str(&format!("= {}\n", &line[2..]));
-        } else if line.starts_with("## ") {
-            result.push_str(&format!("== {}\n", &line[3..]));
-        } else if line.starts_with("### ") {
-            result.push_str(&format!("=== {}\n", &line[4..]));
-        } else if line.starts_with("- ") || line.starts_with("* ") {
-            result.push_str(&format!("- {}\n", &line[2..]));
-        } else if line.trim().is_empty() {
-            result.push('\n');
-        } else {
-            // Convert basic inline formatting
-            let converted = line
-                .replace("**", "*") // Bold
-                .replace("*", "_")  // Italic (after bold conversion)
-                .replace("__", "*") // Bold alternative
-                .replace("`", "`"); // Code (stays the same)
-            result.push_str(&converted);
-            result.push('\n');
-        }
-    }
-    
-    result
-}
-
-/// Typst-specific filter functions
-use quillmark_core::templating::filter_api::{State, Value, Kwargs, Error};
-
-fn string_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
-    let s = value.to_string();
-    Ok(Value::from(format!("\"{}\"", s.replace('"', "\\\""))))
-}
-
-fn lines_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
-    let s = value.to_string();
-    Ok(Value::from(format!("(\"{}\")", s.replace('"', "\\\""))))
-}
-
-fn date_filter(_state: &State, _value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
-    Ok(Value::from("datetime.today()".to_string()))
-}
-
-fn dict_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
-    let s = value.to_string();
-    Ok(Value::from(format!("({})", s)))
-}
-
-fn body_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
-    let s = value.to_string();
-    let converted = convert_markdown_to_typst(&s);
-    Ok(Value::from(converted))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -135,18 +77,6 @@ mod tests {
         assert_eq!(backend.glue_type(), ".typ");
         assert!(backend.supported_formats().contains(&OutputFormat::Pdf));
         assert!(backend.supported_formats().contains(&OutputFormat::Svg));
-    }
-
-    #[test]
-    fn test_markdown_conversion() {
-        let markdown = "# Header\n\nSome *italic* text and **bold** text.\n\n- Item 1\n- Item 2";
-        let converted = convert_markdown_to_typst(markdown);
-        println!("Converted: {}", converted); // Debug output
-        assert!(converted.contains("= Header"));
-        assert!(converted.contains("_italic_"));
-        // The bold conversion is not working as expected, let's just check it's present
-        assert!(converted.contains("bold"));
-        assert!(converted.contains("- Item 1"));
     }
 }
 
