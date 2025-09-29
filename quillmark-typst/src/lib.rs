@@ -45,7 +45,6 @@ impl Backend for TypstBackend {
         }
 
         println!("Typst backend compiling for quill: {}", quill.name);
-        println!("Glue content preview: {}", &glued_content[..std::cmp::min(100, glued_content.len())]);
         
         match format {
             OutputFormat::Pdf => {

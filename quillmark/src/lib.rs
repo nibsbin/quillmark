@@ -47,7 +47,7 @@ impl QuillEngine {
     }
 
     /// Render markdown with a specific output format
-    pub fn render_with_format(&self, markdown: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError> {
+    pub fn render_with_format(&self, markdown: &str, mut format: Option<OutputFormat>) -> Result<RenderResult, RenderError> {
         // Step 1: Parse markdown into frontmatter and body
         let parsed_doc = decompose(markdown)
             .map_err(|e| RenderError::InvalidFrontmatter {
@@ -68,9 +68,15 @@ impl QuillEngine {
         let glue_content = glue.compose(parsed_doc.fields().clone())
             .map_err(|e| RenderError::from(e))?;
 
-        println!("Composed content: {}", glue_content); // Debug print of the composed content
-
         // Step 5: Compile using backend
+        if !format.is_some() {
+            // Default to first supported format if none specified
+            let supported = self.backend.supported_formats();
+            if !supported.is_empty() {
+                println!("Defaulting to output format: {:?}", supported[0]);
+                format = Some(supported[0]);
+            }
+        }
         let render_opts = RenderOptions {
             output_format: format,
         };
