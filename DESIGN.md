@@ -1,4 +1,4 @@
-# QuillMark – Unified Architecture Design
+# Quillmark Architecture
 
 > This document merges **“QuillMark Architecture Design Document”** and **“QuillMark Improved Architecture Design Document”** into a single, authoritative DESIGN.md. Where the two differed, this doc reconciles them and notes compatibility.
 
@@ -64,7 +64,7 @@ High-level data flow:
 * Parsing: `decompose`, `ParsedDocument`
 * Templating: `Glue` + stable `filter_api`
 * Template model: `Quill` (+ `quill.toml`)
-* Errors: `RenderError`, `TemplateError`
+* **Errors & Diagnostics:** `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
 * Utilities: TOML⇄YAML conversion helpers (for backend filters)
 
 **Design Note:** No external backend deps; backends depend on core → no cycles.
@@ -73,7 +73,7 @@ High-level data flow:
 
 * Sealed primary API: `QuillEngine`
 * Orchestration (parse → compose → compile)
-* Validation and error propagation
+* Validation and **structured error propagation**
 * *Compatibility shim:* legacy `render(markdown, RenderConfig)` calls through the engine (see [Migration](#migration--compatibility)).
 
 ### `quillmark-typst` (Typst backend)
@@ -83,7 +83,7 @@ High-level data flow:
 * Filters: `String`, `Lines`, `Date`, `Dict`, `Body`, and YAML→TOML injector
 * Compilation environment (`QuillWorld`)
 * Dynamic package loading (`typst.toml`), font & asset resolution
-* Rich error formatting with source locations
+* **Structured diagnostics** with source locations (maps Typst diagnostics → `Diagnostic`)
 
 ### `quillmark-fixtures` (dev/test utilities)
 
@@ -105,8 +105,8 @@ pub struct QuillEngine {
 
 impl QuillEngine {
     pub fn new(backend: Box<dyn Backend>, quill_path: PathBuf) -> Result<Self, RenderError>;
-    pub fn render(&self, markdown: &str) -> RenderResult;
-    pub fn render_with_format(&self, markdown: &str, format: OutputFormat) -> RenderResult;
+    pub fn render(&self, markdown: &str) -> Result<RenderResult, RenderError>;
+    pub fn render_with_format(&self, markdown: &str, format: OutputFormat) -> Result<RenderResult, RenderError>;
     pub fn backend_id(&self) -> &str;
     pub fn supported_formats(&self) -> &'static [OutputFormat];
     pub fn quill_name(&self) -> &str;
@@ -177,20 +177,28 @@ pub mod filter_api {
 #### Implementation Hints
 
 ##### Glue Template Processing
-* **MiniJinja setup**: Create `Environment` 
-* **Template compilation**: Parse template string once, reuse for multiple `compose()` calls  
+
+* **MiniJinja setup**: Create `Environment`
+* **Template compilation**: Parse template string once, reuse for multiple `compose()` calls
 * **Error propagation**: Convert MiniJinja errors to `TemplateError` with source context
 
 ##### Filter Registration Best Practices
+
 * **Type safety**: Use `filter_api` types only - don't leak MiniJinja internals
 * **Error handling**: Return `filter_api::Error` with appropriate `ErrorKind`
 * **Documentation**: Each filter should handle null/missing values gracefully
-* **Performance**: Consider caching expensive conversions within filter implementations
 
 ### Artifact & Output Format
 
 ```rust
 pub struct Artifact { pub bytes: Vec<u8>, pub output_format: OutputFormat }
+```
+
+```rust
+pub struct RenderResult {
+    pub artifacts: Vec<Artifact>,
+    pub warnings: Vec<Diagnostic>,
+}
 ```
 
 ---
@@ -201,7 +209,8 @@ pub struct Artifact { pub bytes: Vec<u8>, pub output_format: OutputFormat }
 
 ```rust
 let engine = QuillEngine::new(Box::new(TypstBackend::default()), quill_path)?;
-let artifacts = engine.render(markdown)?;                // or render_with_format(...)
+let result = engine.render(markdown)?;                // or render_with_format(...)
+for a in result.artifacts { /* write bytes */ }
 ```
 
 **Internal steps (encapsulated):**
@@ -215,27 +224,30 @@ let artifacts = engine.render(markdown)?;                // or render_with_forma
 ### Implementation Hints
 
 #### Engine Construction (`QuillEngine::new`)
+
 * **Backend validation**: Check `backend.id()` matches expected backend type
-* **Quill loading**: Use `Quill::from_path()` with proper error context 
+* **Quill loading**: Use `Quill::from_path()` with proper error context
 * **Glue file selection**: Priority: `quill.toml` override → `backend.glue_type()` extension
 
 #### Orchestration Error Handling
+
 * **Step isolation**: Each step should handle its own errors and provide context
 * **Rollback strategy**: No partial state - either complete success or clean failure
 * **Context preservation**: Chain errors with source information through each step
 
-#### Performance Considerations  
-* **Template caching**: Reuse parsed Glue templates when possible
+#### Performance Considerations
+
 * **Asset preloading**: Load fonts/assets once per engine instance
 * **Memory management**: Use references where possible, avoid unnecessary clones
 
 #### Workflow State Management
+
 ```rust
 // Typical orchestration pattern:
 let quill = Quill::from_path(quill_path)?;              // Step 1
 let parsed = decompose(markdown)?;                      // Step 2  
 let mut glue = Glue::new(&quill.template_content)?;     // Step 3a
-backend.register_filters(&mut glue);                   // Step 3b
+backend.register_filters(&mut glue);                    // Step 3b
 let glue_source = glue.compose(parsed.fields().clone())?; // Step 4
 let artifacts = backend.compile(&glue_source, &quill, &opts)?; // Step 5
 ```
@@ -269,40 +281,47 @@ let artifacts = backend.compile(&glue_source, &quill, &opts)?; // Step 5
 ### Implementation Hints
 
 #### Filter API Stability Pattern
+
 * **Abstraction layer**: Core exposes `filter_api` module re-exporting MiniJinja types
-* **Backend isolation**: Backends import only `quillmark_core::templating::filter_api` 
+* **Backend isolation**: Backends import only `quillmark_core::templating::filter_api`
 * **Key types**:
+
   ```rust
   use quillmark_core::templating::filter_api::{State, Value, Kwargs, Error, ErrorKind};
-  
+
   pub fn my_filter(_state: &State, value: Value, kwargs: Kwargs) -> Result<Value, Error>
   ```
 
 #### Filter Implementation Patterns
 
 ##### String Filter (`string_filter`)
+
 * **Default handling**: Check `kwargs_default()` for `default=` parameter
 * **Null coercion**: `value.is_null() || (string && empty)` → use default or `""`
 * **Sentinel values**: `"none"` string → return `none_value()` (unquoted Typst literal)
 * **Escaping**: Use `escape_string()` for quotes, newlines, control chars
 * **Output format**: Return quoted string `"escaped_content"`
 
-##### Lines Filter (`lines_filter`) 
+##### Lines Filter (`lines_filter`)
+
 * **Input validation**: Must be array, error if not
 * **Element conversion**: Convert each array element to string via `json_to_string_lossy()`
 * **JSON output**: Return compact JSON array of strings for template embedding
 
 ##### Dict Filter (`dict_filter`)
-* **YAML→JSON**: Convert `serde_yaml::Value` to `serde_json::Value` 
+
+* **YAML→JSON**: Convert `serde_yaml::Value` to `serde_json::Value`
 * **Typst embedding**: Wrap in `json(bytes("..."))` for Typst evaluation
 * **Escaping**: Use `escape_string()` on serialized JSON
 
 ##### Body Filter (`body_filter`)
+
 * **Markdown conversion**: Apply `mark_to_typst()` to body content
 * **Eval wrapping**: Return `eval("typst_markup")` for safe template injection
 * **Content type**: Treats input as markdown string, outputs Typst markup
 
 #### Value Conversion Helpers
+
 ```rust
 // JSON ↔ MiniJinja Value bridge functions
 fn v_to_json(v: &Value) -> Json;          // MiniJinja → serde_json
@@ -327,13 +346,15 @@ fn kwargs_default(kwargs: &Kwargs) -> Result<Option<Json>, Error>; // Extract de
 ### Implementation Hints
 
 #### Frontmatter Detection (`decompose` function)
+
 * **Line ending gotcha**: Check both `"---\n"` and `"---\r\n"` for Windows compatibility
 * **End marker search**: Skip first line (opening `---`), find closing `---` with `line.trim() == "---"`
 * **Body extraction**: Join lines after closing `---` with `trim_start()` to remove leading whitespace
 * **Edge cases to handle**:
-  - Empty frontmatter between `---` markers → return just body
-  - Missing closing `---` → treat entire content as body
-  - YAML parsing failure → graceful degradation, log warning, return entire content as body
+
+  * Empty frontmatter between `---` markers → return just body
+  * Missing closing `---` → treat entire content as body
+  * YAML parsing failure → graceful degradation, log warning, return entire content as body
 
 ```rust
 // Key implementation pattern:
@@ -347,6 +368,7 @@ if markdown.starts_with("---\n") || markdown.starts_with("---\r\n") {
 ```
 
 #### ParsedDocument Structure
+
 * **Fields storage**: Single `HashMap<String, serde_yaml::Value>` for both frontmatter and body
 * **Body access**: Special field `BODY_FIELD = "body"` - use constants to avoid typos
 * **YAML value types**: Support strings, numbers, arrays, objects via `serde_yaml::Value`
@@ -369,8 +391,10 @@ if markdown.starts_with("---\n") || markdown.starts_with("---\r\n") {
 #### Implementation Hints
 
 ##### Markdown to Typst Conversion (`mark_to_typst`)
+
 * **Event-based parsing**: Use `pulldown_cmark::Parser` with `Options::ENABLE_STRIKETHROUGH`
 * **Character escaping critical**: Typst has many reserved chars that must be escaped in text content:
+
   ```rust
   // Essential escapes for `escape_markup()`:
   s.replace('\\', "\\\\")  // Backslash first!
@@ -383,6 +407,7 @@ if markdown.starts_with("---\n") || markdown.starts_with("---\r\n") {
   ```
 * **List handling gotcha**: Typst uses `+` for unordered lists, `-` for bullet points in text → convert markdown `-` to Typst `+`
 * **Event processing pattern**:
+
   ```rust
   match event {
       Event::Start(Tag::Strong) => output.push_str("*"),
@@ -395,14 +420,18 @@ if markdown.starts_with("---\n") || markdown.starts_with("---\r\n") {
   ```
 
 ##### QuillWorld Implementation (Typst World trait)
-* **FileId construction**: Use `FileId::new(Option<PackageSpec>, VirtualPath)` 
-  - `None` for main documents and assets
-  - `Some(package_spec)` for package files
+
+* **FileId construction**: Use `FileId::new(Option<PackageSpec>, VirtualPath)`
+
+  * `None` for main documents and assets
+  * `Some(package_spec)` for package files
 * **Virtual path gotchas**:
-  - Use `VirtualPath::new(path_str)` - path must be forward-slash separated
-  - Assets: `assets/image.png`, packages: `src/lib.typ` (preserve directory structure)
-  - Manual path construction for subdirs: `format!("{}/{}", base, name)`
+
+  * Use `VirtualPath::new(path_str)` - path must be forward-slash separated
+  * Assets: `assets/image.png`, packages: `src/lib.typ` (preserve directory structure)
+  * Manual path construction for subdirs: `format!("{}/{}", base, name)`
 * **Package discovery flow**:
+
   1. Scan `packages/` directory recursively
   2. Find `typst.toml` files → parse for `namespace`, `name`, `version`, `entrypoint`
   3. Create `PackageSpec` with parsed metadata
@@ -422,15 +451,15 @@ let file_id = FileId::new(Some(spec.clone()), virtual_path);
 ```
 
 ##### Font Loading Strategy
+
 * **Search order**: `assets/fonts/` → `assets/` → system fonts
 * **Supported formats**: `.ttf`, `.otf`, `.woff`, `.woff2`
 * **Error handling**: If no fonts found, provide clear error message - Typst needs fonts for compilation
 * **Loading pattern**: Read font files to `Vec<u8>` and store in `FontBook`
 
-##### Error Formatting (`format_compilation_errors`)  
-* **Multi-error reporting**: Iterate through `Vec<SourceDiagnostic>`, format each with context
-* **Span to line mapping**: Extract line info from `typst::syntax::Span` using source references
-* **Include hints and traces**: `error.hints` and `error.trace` provide debugging context
+##### Error Formatting (backend-internal)
+
+* Convert Typst `SourceDiagnostic` → core `Diagnostic` (see [Error Handling Patterns](#error-handling-patterns)).
 
 ---
 
@@ -463,16 +492,20 @@ quill-template/
 ### Implementation Hints
 
 #### Package Discovery (`load_packages_recursive`)
+
 * **Directory scanning**: Use `std::fs::read_dir()` on `packages/` directory
 * **TOML parsing gotchas**:
-  - Required fields: `[package] name, version, entrypoint` 
-  - Optional: `namespace` (defaults to `"local"`)
-  - Use `toml::from_str()` with proper error handling
+
+  * Required fields: `[package] name, version, entrypoint`
+  * Optional: `namespace` (defaults to `"local"`)
+  * Use `toml::from_str()` with proper error handling
 * **Version parsing**: `semver::Version::parse()` for proper semantic versioning
 * **Namespace handling**: Support `@preview`, `@local`, custom namespaces
 
 #### Virtual Path Management
+
 * **Critical pattern**: Preserve directory structure in virtual file system
+
   ```rust
   // Manual path construction (avoid `join()` for virtual paths):
   let virtual_path = if base_path.as_rootless_path().as_os_str().is_empty() {
@@ -483,27 +516,32 @@ quill-template/
       VirtualPath::new(&full_path)  // Forward slashes required
   };
   ```
-* **FileId creation**: 
-  - Assets: `FileId::new(None, virtual_path)` 
-  - Packages: `FileId::new(Some(package_spec), virtual_path)`
+* **FileId creation**:
+
+  * Assets: `FileId::new(None, virtual_path)`
+  * Packages: `FileId::new(Some(package_spec), virtual_path)`
 
 #### Asset Loading Strategy
+
 * **Recursive traversal**: Use helper function to maintain virtual path hierarchy
 * **File type detection**: Check extensions for fonts vs binary assets
 * **Loading pattern**:
+
   ```rust
   let data = std::fs::read(&physical_path)?;
   let file_id = FileId::new(None, virtual_path);
   binaries.insert(file_id, Bytes::new(data));
   ```
 
-#### Package File Loading  
+#### Package File Loading
+
 * **Entrypoint verification**: After loading all files, verify entrypoint exists
 * **Source vs Binary**: `.typ` files → `sources` HashMap, others → `binaries`
 * **Error recovery**: Log warnings for individual package failures, continue loading others
 * **Debug output**: Print loaded package names and file counts for troubleshooting
 
 #### TOML Metadata Structure (`PackageInfo`)
+
 ```rust
 #[derive(Debug, Clone)]
 struct PackageInfo {
@@ -518,68 +556,168 @@ struct PackageInfo {
 
 ## Error Handling Patterns
 
-### RenderError (engine/backends)
+This project uses a **simple, production‑usable, structured error strategy** that:
+
+* preserves **line/column** and **source file** where available,
+* keeps diagnostics **machine‑readable** and **pretty‑printable**, and
+* avoids stringly‑typed errors.
+
+### Core types (stable surface)
+
+```rust
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+pub enum Severity { Error, Warning, Note }
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Location {
+    pub file: String,   // e.g., "glue.typ", "template.typ", "input.md"
+    pub line: u32,
+    pub col: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Diagnostic {
+    pub severity: Severity,
+    pub code: Option<String>,
+    pub message: String,
+    pub primary: Option<Location>,
+    pub related: Vec<Location>,
+    pub hint: Option<String>,
+}
+```
+
+These types are used **everywhere** (templating, parsing, compilation). `RenderResult.warnings` uses the same `Diagnostic` type.
+
+### Error enums (no premature stringification)
 
 ```rust
 #[derive(thiserror::Error, Debug)]
 pub enum RenderError {
-    #[error("Engine creation failed: {0}")] EngineCreation(String),
-    #[error("Invalid YAML frontmatter: {0}")] InvalidFrontmatter(String),
-    #[error("Quill template error: {0}")] QuillError(String),
-    #[error("Backend compilation failed: {0}")] CompilationError(String),
-    #[error("{format:?} not supported by {backend:?}")]
+    #[error("Engine creation failed")] 
+    EngineCreation { diag: Diagnostic, #[source] source: Option<anyhow::Error> },
+
+    #[error("Invalid YAML frontmatter")] 
+    InvalidFrontmatter { diag: Diagnostic, #[source] source: Option<anyhow::Error> },
+
+    #[error("Template rendering failed")] 
+    TemplateFailed { #[source] source: minijinja::Error, diag: Diagnostic },
+
+    #[error("Backend compilation failed with {0} error(s)")]
+    CompilationFailed(usize, Vec<Diagnostic>),
+
+    #[error("{format:?} not supported by {backend}")]
     FormatNotSupported { backend: String, format: OutputFormat },
-    #[error("{0:?} backend is not built in this binary")] UnsupportedBackend(String),
-    #[error(transparent)] Other(#[from] Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("Unsupported backend: {0}")]
+    UnsupportedBackend(String),
+
+    #[error(transparent)]
+    Internal(#[from] anyhow::Error),
 }
 ```
 
-### TemplateError (templating)
+> **Why this shape?**
+>
+> * Callers can **enumerate** diagnostics and render UI links.
+> * We keep a human message via `Display` but never lose machine data.
+
+### Mapping external errors → `Diagnostic`
+
+**MiniJinja (templating):**
 
 ```rust
-#[derive(thiserror::Error, Debug)]
-pub enum TemplateError {
-    #[error("{0}")] RenderError(#[from] minijinja::Error),
-    #[error("{0}")] InvalidTemplate(String, #[source] Box<dyn std::error::Error + Send + Sync>),
-    #[error("{0}")] FilterError(String),
+impl From<minijinja::Error> for RenderError {
+    fn from(e: minijinja::Error) -> Self {
+        let loc = e
+            .name()
+            .and_then(|name| e.line().zip(e.column()).map(|(l,c)| Location { file: name.to_string(), line: l as u32, col: c as u32 }))
+            .or_else(|| e.line().zip(e.column()).map(|(l,c)| Location { file: "template".into(), line: l as u32, col: c as u32 }));
+        let diag = Diagnostic { severity: Severity::Error, code: Some(format!("minijinja::{:?}", e.kind())), message: e.to_string(), primary: loc, related: vec![], hint: None };
+        RenderError::TemplateFailed { source: e, diag }
+    }
 }
 ```
 
-**Error context:**
+**Typst (backend):** convert each `SourceDiagnostic` into a `Diagnostic`:
 
-* Source chaining with `#[source]`
-* Location enrichment for template/compile errors
-* Human-friendly formatting; partial outputs when safe
+```rust
+fn map_typst(errors: &[SourceDiagnostic], world: &QuillWorld) -> Vec<Diagnostic> {
+    errors.iter().map(|e| {
+        let (file, line, col) = world.resolve_span(&e.span); // backend helper → (String,u32,u32)
+        Diagnostic {
+            severity: Severity::Error,
+            code: e.code.clone(),
+            message: e.message.clone(),
+            primary: Some(Location { file, line, col }),
+            related: e.trace.iter().filter_map(|s| world.resolve_span(s).ok())
+                          .map(|(f,l,c)| Location{file:f,line:l,col:c}).collect(),
+            hint: e.hints.get(0).cloned(),
+        }
+    }).collect()
+}
+```
 
-### Implementation Hints
+Then in `compile`:
 
-#### Error Chaining Strategy
-* **thiserror usage**: Use `#[from]` for automatic conversions, `#[source]` for cause chains
-* **Context preservation**: Box complex errors to avoid large enum variants
-* **Transparent wrapper**: `#[error(transparent)]` for pass-through errors
+```rust
+let diags = map_typst(&errors, &world);
+return Err(RenderError::CompilationFailed(diags.len(), diags));
+```
 
-#### Compilation Error Formatting
-* **Multi-error handling**: Typst compilation returns `Vec<SourceDiagnostic>`
-* **Rich context**: Include line numbers, error severity, hints, and traces
-* **Format pattern**:
-  ```rust
-  for (i, error) in errors.iter().enumerate() {
-      formatted.push_str(&format!("\nError #{}: {}", i + 1, error.message));
-      // Add span/line info, severity, hints, traces
-  }
-  ```
+### Source mapping policy (v1: comment anchors)
 
-#### Graceful Degradation Patterns  
-* **Parse failures**: Invalid YAML → treat as body, log warning
-* **Missing resources**: Missing fonts/assets → clear error message with paths
-* **Package failures**: Individual package errors → warn and continue with others
-* **Template errors**: Provide line/column context from MiniJinja errors
+To relate Typst diagnostics in the generated glue back to the **template** or **Markdown body**, the composer injects lightweight anchors:
 
-#### Error Recovery Best Practices
-* **Early validation**: Check file paths, formats, backend compatibility upfront  
-* **Partial success**: Return what was successfully processed with error context
-* **Debug information**: Include file paths, package names, source locations
-* **User-actionable messages**: Explain what to check/fix, not just what failed
+```typst
+// @origin:template:glue.typ:123
+// @origin:markdown:input.md:45
+```
+
+A small mapper walks upward from the error line to the last `@origin:` comment and rewrites `Diagnostic.primary` accordingly. This is cheap, deterministic, and works without shipping a separate source map.
+
+> Optional v2: emit a `glue.typ.map.json` sidecar for exact mappings.
+
+### Pretty printing & JSON output
+
+Provide a standard formatter for CLI/logging and a JSON mode for tooling:
+
+```rust
+impl Diagnostic {
+    pub fn fmt_pretty(&self) -> String { /* render code frame if available */ }
+}
+
+pub fn print_errors(err: &RenderError) {
+    match err {
+        RenderError::CompilationFailed(_, diags) => {
+            for d in diags { eprintln!("{}", d.fmt_pretty()); }
+        }
+        RenderError::TemplateFailed { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
+        _ => eprintln!("{err}")
+    }
+}
+```
+
+Expose `--json` (or a library method) returning `serde_json::Value` with the full error payload.
+
+### Engine behavior
+
+* The engine **never** collapses errors to strings.
+* `RenderResult.warnings` carries non-fatal diagnostics (e.g., deprecated fields, missing optional assets).
+* For fatal errors, the engine returns `RenderError` with structured diagnostics.
+
+### Operational logging
+
+* Include a `context_id` in `RenderOptions` and attach it in each `Diagnostic` via `code` (e.g., `ctx:abcd1234`).
+* Redact absolute paths in pretty output by default; keep full paths in JSON when `allow_paths=true`.
+* Normalize path separators and line endings across platforms.
+
+### Minimal test matrix
+
+1. Invalid YAML frontmatter (both missing closer and parse error) → `InvalidFrontmatter` with location at `---` line.
+2. MiniJinja syntax error → `TemplateFailed` with template filename + line/col.
+3. Typst markup error in body → `CompilationFailed` with mapped location back to Markdown line via anchors.
+4. Missing font/image/package → `CompilationFailed` with clear `code` and hint.
+5. Concurrent renders → diagnostics are deterministic and contain correct file names.
 
 ---
 
@@ -618,12 +756,14 @@ impl Backend for MyBackend {
 ### Implementation Hints
 
 #### Backend Implementation Checklist
+
 * **Thread safety**: Ensure `Send + Sync` - no global mutable state
 * **Format validation**: Check `OutputFormat` against `supported_formats()` in `compile()`
 * **Resource handling**: Implement asset/package loading appropriate to your backend
-* **Error context**: Return meaningful `RenderError::CompilationError` with context
+* **Error context**: Return meaningful diagnostics via `RenderError`
 
 #### Filter Registration Pattern
+
 ```rust
 fn register_filters(&self, glue: &mut Glue) {
     glue.register_filter("my_filter", my_filter_impl);
@@ -632,19 +772,22 @@ fn register_filters(&self, glue: &mut Glue) {
 }
 ```
 
-#### Compilation Implementation Strategy  
+#### Compilation Implementation Strategy
+
 * **Input parsing**: Parse `glue_content` string (your backend's template format)
-* **Asset resolution**: Use `quill.assets_path()` and `quill.packages_path()` 
+* **Asset resolution**: Use `quill.assets_path()` and `quill.packages_path()`
 * **Multi-format support**: Return different `Artifact` instances based on requested format
-* **Error mapping**: Convert backend errors to `RenderError` with source context
+* **Error mapping**: Convert backend-native errors to `RenderError` with `Diagnostic`
 
 #### Asset Integration Patterns
-* **Font handling**: Load fonts from `quill.assets_path().join("fonts")`  
+
+* **Font handling**: Load fonts from `quill.assets_path().join("fonts")`
 * **Image resources**: Resolve image paths relative to assets directory
 * **Package dependencies**: Scan `quill.packages_path()` for backend-specific packages
 * **Virtual paths**: Maintain consistent path mapping for template references
 
 #### Testing Strategy
+
 * **Unit tests**: Test filter functions independently with various input types
 * **Integration tests**: Test full `compile()` flow with sample quill templates
 * **Error cases**: Verify graceful handling of missing assets, invalid templates
@@ -668,31 +811,3 @@ fn register_filters(&self, glue: &mut Glue) {
    `Send + Sync` across core traits enables concurrent rendering.
 7. **Centralized Fixtures**
    Dev resources isolated; standardized example outputs.
-
----
-
-## Migration & Compatibility
-
-### For Users
-
-* **Preferred:**
-
-  ```rust
-  let engine = QuillEngine::new(Box::new(TypstBackend::default()), quill_path)?;
-  let artifacts = engine.render(markdown)?;
-  ```
-* **Legacy compatibility:** `render(markdown, RenderConfig)` is maintained as a thin shim that internally constructs `QuillEngine` (mapping `RenderConfig` → internal `RenderOptions`) and calls `render_with_format` as needed.
-* Ensure frontmatter is **YAML**; templates should follow the opinionated directory structure.
-
-### For Backend Authors
-
-* The `Backend` trait is unchanged and remains thread-safe.
-* Implement format-specific filters; provide YAML→native conversions when beneficial.
-* Package/asset loading lives within your backend crate; depend only on `quillmark-core`.
-
-### Benefits of the Unified Model
-
-* Smaller public surface; clearer mental model
-* Deterministic backend selection without global state
-* Stronger error narratives and easier debugging
-* Future-proof for internal optimizations without API breakage
