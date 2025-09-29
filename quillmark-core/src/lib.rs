@@ -269,7 +269,18 @@ pub mod test_context {
     /// Find the workspace root examples directory
     /// This helper searches for the examples/ folder starting from the current directory
     /// and walking up the directory tree until it finds a Cargo.toml at workspace level.
+    /// 
+    /// Note: This function is deprecated. Use quillmark_fixtures::resource_path("") instead.
     pub fn examples_dir() -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
+        // Try to delegate to quillmark-fixtures if available (in dev builds)
+        #[cfg(test)]
+        {
+            if let Ok(path) = quillmark_fixtures::resource_path("") {
+                return Ok(path);
+            }
+        }
+        
+        // Fallback to original implementation
         let current_dir = std::env::current_dir()?;
         let mut dir = current_dir.as_path();
         
@@ -306,7 +317,18 @@ pub mod test_context {
     
     /// Create an output directory within the examples folder
     /// This ensures all example outputs are staged within the workspace examples folder
+    /// 
+    /// Note: This function is deprecated. Use quillmark_fixtures::example_output_dir(subdir) instead.
     pub fn create_output_dir(subdir: &str) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
+        // Try to delegate to quillmark-fixtures if available (in dev builds)
+        #[cfg(test)]
+        {
+            if let Ok(path) = quillmark_fixtures::example_output_dir(subdir) {
+                return Ok(path);
+            }
+        }
+        
+        // Fallback to original implementation
         let examples_root = examples_dir()?;
         let output_dir = examples_root.join(subdir);
         std::fs::create_dir_all(&output_dir)?;
@@ -314,7 +336,18 @@ pub mod test_context {
     }
     
     /// Get a path to a file within the examples directory
+    /// 
+    /// Note: This function is deprecated. Use quillmark_fixtures::resource_path(relative_path) instead.
     pub fn examples_path(relative_path: &str) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
+        // Try to delegate to quillmark-fixtures if available (in dev builds)
+        #[cfg(test)]
+        {
+            if let Ok(path) = quillmark_fixtures::resource_path(relative_path) {
+                return Ok(path);
+            }
+        }
+        
+        // Fallback to original implementation
         let examples_root = examples_dir()?;
         Ok(examples_root.join(relative_path))
     }

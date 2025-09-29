@@ -1,4 +1,5 @@
-use quillmark_core::{decompose, test_context};
+use quillmark_core::decompose;
+use quillmark_fixtures::{resource_path, example_output_dir};
 use quillmark_typst::mark_to_typst;
 use std::fs;
 use std::env;
@@ -7,17 +8,8 @@ use std::path::Path;
 fn main() {
     let args: Vec<String> = env::args().collect();
     
-    // Get the workspace examples directory
-    let examples_dir = match test_context::examples_dir() {
-        Ok(dir) => dir,
-        Err(err) => {
-            eprintln!("Error finding examples directory: {}", err);
-            std::process::exit(1);
-        }
-    };
-    
-    // Create output directory within examples
-    let output_dir = match test_context::create_output_dir("converted") {
+    // Get output directory
+    let output_dir = match example_output_dir("converted") {
         Ok(dir) => dir,
         Err(err) => {
             eprintln!("Error creating output directory: {}", err);
@@ -28,20 +20,26 @@ fn main() {
     let (input_file, output_file) = if args.len() >= 2 {
         let input = &args[1];
         let output = if args.len() >= 3 {
-            // Put custom output file in examples/converted/ directory
+            // Put custom output file in target/examples/converted/ directory
             let output_path = Path::new(&args[2]);
             let filename = output_path.file_name().unwrap_or(std::ffi::OsStr::new("output.typ"));
             output_dir.join(filename)
         } else {
-            // Generate output filename by changing extension and put in examples/converted/
+            // Generate output filename by changing extension and put in target/examples/converted/
             let path = Path::new(input);
             let stem = path.file_stem().unwrap_or(std::ffi::OsStr::new("output"));
             output_dir.join(format!("{}.typ", stem.to_string_lossy()))
         };
         (input.clone(), output)
     } else {
-        // Use the example file if no arguments provided
-        let input_file = examples_dir.join("sample.md");
+        // Use the example file from fixtures if no arguments provided
+        let input_file = match resource_path("sample.md") {
+            Ok(path) => path,
+            Err(err) => {
+                eprintln!("Error finding sample.md in fixtures: {}", err);
+                std::process::exit(1);
+            }
+        };
         let output_file = output_dir.join("sample_output.typ");
         (input_file.to_string_lossy().to_string(), output_file)
     };

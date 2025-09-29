@@ -15,3 +15,4 @@ serde_yaml = "0.9"
 tera = "1.20.0"
 tempfile = "3.0"
 quillmark-typst = { path = "../quillmark-typst" }
+quillmark-fixtures = { workspace = true }
