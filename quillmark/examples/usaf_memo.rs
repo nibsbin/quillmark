@@ -20,7 +20,7 @@ fn main() {
     ).expect("Failed to create engine");
 
     //render
-    let result = engine.render_with_format(&markdown, Some(OutputFormat::Pdf)).expect("Failed to render");
+    let result = engine.render(&markdown, Some(OutputFormat::Pdf)).expect("Failed to render");
     let content = result.artifacts[0].bytes.clone();
 
     //print content

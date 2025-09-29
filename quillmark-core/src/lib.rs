@@ -43,7 +43,7 @@ pub struct RenderOptions {
 #[derive(Debug, Clone)]
 pub struct Quill {
     /// The template content 
-    pub template_content: String,
+    pub glue_template: String,
     /// Quill-specific data that backends might need
     pub metadata: HashMap<String, serde_yaml::Value>,
     /// Base path for resolving relative paths
@@ -106,7 +106,7 @@ impl Quill {
             .map_err(|e| format!("Failed to read glue file '{}': {}", glue_file, e))?;
 
         Ok(Quill {
-            template_content,
+            glue_template: template_content,
             metadata,
             base_path: path.to_path_buf(),
             name,

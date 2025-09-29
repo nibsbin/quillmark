@@ -42,13 +42,33 @@ impl QuillEngine {
     }
 
     /// Render markdown using the engine's backend and quill template
-    pub fn render(&self, markdown: &str) -> Result<RenderResult, RenderError> {
-        self.render_with_format(markdown, None)
+    pub fn render(&self, markdown: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError> {
+        let glue_output = self.process_glue(markdown)?;
+        let rendered = self.render_content(&glue_output, format)?;
+        Ok(rendered)
     }
 
-    /// Render markdown with a specific output format
-    pub fn render_with_format(&self, markdown: &str, mut format: Option<OutputFormat>) -> Result<RenderResult, RenderError> {
-        // Step 1: Parse markdown into frontmatter and body
+    /// Render pre-processed glue content with a specific output format
+    pub fn render_content(&self, content: &str, mut format: Option<OutputFormat>) -> Result<RenderResult, RenderError> {
+        // Compile using backend
+        if !format.is_some() {
+            // Default to first supported format if none specified
+            let supported = self.backend.supported_formats();
+            if !supported.is_empty() {
+                println!("Defaulting to output format: {:?}", supported[0]);
+                format = Some(supported[0]);
+            }
+        }
+        // Compile using backend
+        let render_opts = RenderOptions {
+            output_format: format,
+        };
+
+        let artifacts = self.backend.compile(content, &self.quill, &render_opts)?;
+        Ok(RenderResult::new(artifacts))
+    }
+
+    pub fn process_glue(&self, markdown: &str) -> Result<String, RenderError> {
         let parsed_doc = decompose(markdown)
             .map_err(|e| RenderError::InvalidFrontmatter {
                 diag: quillmark_core::error::Diagnostic::new(
@@ -58,32 +78,13 @@ impl QuillEngine {
                 source: Some(anyhow::anyhow!(e))
             })?;
 
-        // Step 2: Setup glue with template content
-        let mut glue = Glue::new(self.quill.template_content.clone());
-
-        // Step 3: Register backend filters
+        let mut glue = Glue::new(self.quill.glue_template.clone());
         self.backend.register_filters(&mut glue);
-
-        // Step 4: Compose template with parsed context
-        let glue_content = glue.compose(parsed_doc.fields().clone())
+        let glue_output = glue.compose(parsed_doc.fields().clone())
             .map_err(|e| RenderError::from(e))?;
-
-        // Step 5: Compile using backend
-        if !format.is_some() {
-            // Default to first supported format if none specified
-            let supported = self.backend.supported_formats();
-            if !supported.is_empty() {
-                println!("Defaulting to output format: {:?}", supported[0]);
-                format = Some(supported[0]);
-            }
-        }
-        let render_opts = RenderOptions {
-            output_format: format,
-        };
-
-        let artifacts = self.backend.compile(&glue_content, &self.quill, &render_opts)?;
-        Ok(RenderResult::new(artifacts))
+        Ok(glue_output)
     }
+    
 
     /// Get the backend ID
     pub fn backend_id(&self) -> &str {

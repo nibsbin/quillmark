@@ -60,7 +60,7 @@ This concludes the test document.
     let engine = QuillEngine::new(backend, quill_path).expect("Failed to create engine");
     
     // Test PDF rendering
-    let pdf_result = engine.render_with_format(markdown, Some(OutputFormat::Pdf))
+    let pdf_result = engine.render(markdown, Some(OutputFormat::Pdf))
         .expect("Failed to render PDF");
     
     assert!(!pdf_result.artifacts.is_empty());
@@ -68,18 +68,12 @@ This concludes the test document.
     assert!(!pdf_result.artifacts[0].bytes.is_empty());
     
     // Test SVG rendering
-    let svg_result = engine.render_with_format(markdown, Some(OutputFormat::Svg))
+    let svg_result = engine.render(markdown, Some(OutputFormat::Svg))
         .expect("Failed to render SVG");
     
     assert!(!svg_result.artifacts.is_empty());
     assert_eq!(svg_result.artifacts[0].output_format, OutputFormat::Svg);
     assert!(!svg_result.artifacts[0].bytes.is_empty());
-    
-    // Test default rendering (should be PDF)
-    let default_result = engine.render(markdown).expect("Failed to render default");
-    
-    assert!(!default_result.artifacts.is_empty());
-    assert_eq!(default_result.artifacts[0].output_format, OutputFormat::Pdf);
     
     println!("Integration test passed! Generated {} PDF bytes and {} SVG bytes",
         pdf_result.artifacts[0].bytes.len(),
@@ -116,7 +110,7 @@ fn test_unsupported_format() {
     let backend = Box::new(TypstBackend::default());
     let engine = QuillEngine::new(backend, quill_path).expect("Failed to create engine");
     
-    let result = engine.render_with_format("# Test", Some(OutputFormat::Txt));
+    let result = engine.render("# Test", Some(OutputFormat::Txt));
     
     match result {
         Err(quillmark::RenderError::FormatNotSupported { backend, format }) => {

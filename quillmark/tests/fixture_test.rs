@@ -21,7 +21,7 @@ fn test_with_existing_fixture() {
     println!("Created engine for quill: {}", engine.quill_name());
     
     // Test rendering
-    let result = engine.render(&markdown).expect("Failed to render");
+    let result = engine.render(&markdown, Some(OutputFormat::Pdf)).expect("Failed to render");
     
     assert!(!result.artifacts.is_empty());
     assert_eq!(result.artifacts[0].output_format, OutputFormat::Pdf);
