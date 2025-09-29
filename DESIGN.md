@@ -19,42 +19,6 @@
 
 QuillMark is a flexible, trait-based markdown rendering library designed to support multiple output backends through a clean abstraction layer. The system transforms markdown documents with YAML frontmatter into various output formats (PDF, SVG, TXT) using pluggable backend implementations.
 
-### High-Level Architecture
-
-```
-┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
-│   Markdown      │    │   Quill          │    │   Output        │
-│   Document      │───▶│   Template       │───▶│   Artifacts     │
-│   + Frontmatter │    │   + Assets       │    │   (PDF/SVG/TXT) │
-└─────────────────┘    └──────────────────┘    └─────────────────┘
-        │                        │                        ▲
-        ▼                        ▼                        │
-┌─────────────────┐    ┌──────────────────┐               │
-│   Parsed        │    │   Template       │               │
-│   Document      │───▶│   Engine         │───────────────┘
-│   (Fields+Body) │    │   (Glue+Filters) │
-└─────────────────┘    └──────────────────┘
-                                │
-                                ▼
-                       ┌──────────────────┐
-                       │   Backend        │
-                       │   Implementation │
-                       │   (Typst/etc.)   │
-                       └──────────────────┘
-
-Resource Management Layer:
-┌─────────────────────────────────────────────────────────┐
-│                quillmark-fixtures                       │
-│  ┌───────────────┐  ┌─────────────────────────────────┐ │
-│  │ Resource Path │  │     Example Templates           │ │
-│  │ Resolution    │  │  ┌─────────────┐ ┌─────────────┐ │ │
-│  │               │  │  │ hello-quill │ │simple-quill │ │ │
-│  │               │  │  │+ quill.toml │ │+ quill.toml │ │ │
-│  └───────────────┘  │  └─────────────┘ └─────────────┘ │ │
-│                     └─────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────┘
-```
-
 The system operates through clear separation of concerns:
 - **Parsing**: Decomposes markdown into structured fields and body content
 - **Templating**: Merges parsed data with quill templates using filters
