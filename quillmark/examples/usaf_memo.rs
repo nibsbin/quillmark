@@ -1,5 +1,5 @@
 use quillmark::QuillEngine;
-use quillmark_fixtures::{write_example_output,resource_path};
+use quillmark_fixtures::{write_example_output,resource_path,example_output_dir};
 use quillmark_typst::TypstBackend;
 use quillmark_core::{OutputFormat};
 
@@ -19,14 +19,18 @@ fn main() {
         quill_path
     ).expect("Failed to create engine");
 
+    // process glue
+    let glued = engine.process_glue(&markdown).expect("Failed to process glue");
+    write_example_output("usaf-memo-glue.typ", glued.as_bytes()).unwrap();
+
+    println!("Processed glue content preview: \n\n{}...\n", &glued[..std::cmp::min(500, glued.len())]);
+    
     //render
-    let result = engine.render(&markdown, Some(OutputFormat::Pdf)).expect("Failed to render");
-    let content = result.artifacts[0].bytes.clone();
+    let rendered = engine.render_content(&glued, Some(OutputFormat::Pdf)).expect("Failed to render");
+    println!("Generated {} bytes", rendered.artifacts[0].bytes.len());
+    write_example_output("usaf-memo-output.pdf", &rendered.artifacts[0].bytes).unwrap();
 
-    //print content
-    println!("Generated {} bytes", content.len());
+    println!("Rendered output bytes: {}", rendered.artifacts[0].bytes.len());
 
-    // save result
-    write_example_output("usaf-memo-output.pdf", &content).unwrap();
-
+    println!("Access files:\n- Glue: {}\n- Output: {}", example_output_dir().join("usaf-memo-glue.typ").display(), example_output_dir().join("usaf-memo-output.pdf").display());
 }
