@@ -9,7 +9,7 @@ pub fn resource_path(name: &str) -> PathBuf {
 /// Get the example output directory path
 pub fn example_output_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    Path::new(manifest_dir).join("examples").join("output")
+    Path::new(manifest_dir).join("output")
 }
 
 /// Write example output to the examples directory
