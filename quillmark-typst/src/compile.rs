@@ -12,6 +12,8 @@ use typst_pdf::PdfOptions;
 
 use quillmark_core::Quill;
 
+const DEFAULT_FONT: &[u8] = include_bytes!("../assets/NimbusRomNo9L-Reg.otf");
+
 /// Compile a quill template with Typst content to PDF
 pub fn compile_to_pdf(quill: &Quill, glued_content: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     println!("Using quill: {}", quill.name);
@@ -162,6 +164,9 @@ impl QuillWorld {
         // Load fonts - handled by compiler now, not by Quill
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
+        // Add default font
+        fonts.push(Font::new(Bytes::new(DEFAULT_FONT), 0).ok_or("Failed to load default font")?);
+        book.push(fonts[0].info().clone());
         
         // Load fonts from the quill's assets directory
         let font_data_list = Self::load_fonts_from_assets(&quill.assets_path())?;
@@ -216,13 +221,6 @@ impl QuillWorld {
                         }
                     }
                 }
-            }
-            
-            // If no fonts found in assets, provide system fonts or default fonts
-            if font_data.is_empty() {
-                // For now, we'll let typst handle system fonts
-                // This might require additional handling based on the system
-                return Err("No fonts found in quill assets directory and no system fonts configured".into());
             }
         } else {
             // Load fonts from fonts subdirectory
