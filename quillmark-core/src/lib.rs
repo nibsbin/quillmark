@@ -25,7 +25,14 @@ pub struct Artifact {
     pub output_format: OutputFormat,
 }
 
-/// Rendering options
+/// Rendering options for backend compilation (new API)
+#[derive(Debug)]
+pub struct RenderOptions {
+    pub output_format: Option<OutputFormat>,
+}
+
+/// Legacy rendering configuration (deprecated)
+#[deprecated(since = "0.2.0", note = "Use QuillEngine instead of direct configuration")]
 pub struct RenderConfig {
     /// The backend to use for rendering. Backends implement the `Backend` trait.
     pub backend: Box<dyn Backend>,
@@ -257,7 +264,7 @@ pub trait Backend: Send + Sync {
     fn register_filters(&self, glue: &mut Glue);
 
     /// Compile the rendered glue content into final artifacts
-    fn compile(&self, glue_content: &str, quill: &Quill, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError>;
+    fn compile(&self, glue_content: &str, quill: &Quill, opts: &RenderOptions) -> Result<Vec<Artifact>, RenderError>;
 }
 
 

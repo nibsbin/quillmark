@@ -1,4 +1,4 @@
-use quillmark_core::{Artifact, Backend, RenderConfig, OutputFormat, RenderError, Quill, Glue};
+use quillmark_core::{Artifact, Backend, RenderOptions, OutputFormat, RenderError, Quill, Glue};
 
 // use minijinja-compatible filter API types
 use quillmark_core::templating::filter_api::{State, Value as MjValue, Kwargs, Error as MjError};
@@ -30,7 +30,7 @@ impl Backend for MockBackend {
         glue.register_filter("mock", mock_filter);
     }
 
-    fn compile(&self, glue_content: &str, _quill: &Quill, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError> {
+    fn compile(&self, glue_content: &str, _quill: &Quill, opts: &RenderOptions) -> Result<Vec<Artifact>, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Txt);
 
         // Check if the requested format is supported

@@ -1,4 +1,4 @@
-use quillmark_core::{Backend, OutputFormat, RenderConfig, RenderError, Artifact, Quill, Glue};
+use quillmark_core::{Backend, OutputFormat, RenderOptions, RenderError, Artifact, Quill, Glue};
 pub use convert::mark_to_typst;
 use filters::*;
 
@@ -36,7 +36,7 @@ impl Backend for TypstBackend {
         glue.register_filter("Body", body_filter);
     }
 
-    fn compile(&self, glued_content: &str, quill: &Quill, opts: &RenderConfig) -> Result<Vec<Artifact>, RenderError> {
+    fn compile(&self, glued_content: &str, quill: &Quill, opts: &RenderOptions) -> Result<Vec<Artifact>, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
         
         match format {
