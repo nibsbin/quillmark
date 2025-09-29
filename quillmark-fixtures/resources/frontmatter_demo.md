@@ -32,7 +32,7 @@ QuillMark now parses **YAML frontmatter** at the beginning of markdown documents
 
 When you process this document with QuillMark:
 
-1. The **frontmatter** is parsed into fields like `title`, `author`, `tags`, etc.
+1. The **frontmatter** is parsed into fields like `title`, `author`, `subject`, etc.
 2. The **body** (this markdown content) is converted to the target format
 3. Backends can access both the frontmatter dictionary and the converted body
 
