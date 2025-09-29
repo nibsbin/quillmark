@@ -1,0 +1,18 @@
+[package]
+name = "quillmark-core"
+version = "0.1.0"
+edition = "2021"
+description = "Core types and functionality for QuillMark"
+license = "MIT"
+
+[dependencies]
+serde = { workspace = true }
+serde_yaml = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+minijinja = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

@@ -1,0 +1,9 @@
+[package]
+name = "quillmark-typst"
+version = "0.1.0"
+edition = "2021"
+description = "Typst backend for QuillMark"
+license = "MIT"
+
+[dependencies]
+quillmark-core = { path = "../quillmark-core" }
