@@ -13,6 +13,7 @@ serde_json.workspace = true
 time = { version = "0.3.44", features = ["formatting", "parsing"] }
 toml.workspace = true
 typst = "0.13.1"
+typst-kit = "0.13.1"
 typst-pdf = "0.13.1"
 typst-svg = "0.13.1"
 

@@ -93,3 +93,12 @@ mod tests {
 
 // Re-export for compatibility
 pub use TypstBackend as backend;
+#[cfg(test)]
+mod typst_kit_test {
+    // Let's check what's available in typst-kit
+    
+    #[test]
+    fn explore_typst_kit() {
+        // Just build to see what's in the API
+    }
+}
