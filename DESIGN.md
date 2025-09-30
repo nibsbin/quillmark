@@ -455,7 +455,10 @@ let file_id = FileId::new(Some(spec.clone()), virtual_path);
 * **Search order**: `assets/fonts/` → `assets/` → system fonts
 * **Supported formats**: `.ttf`, `.otf`, `.woff`, `.woff2`
 * **Error handling**: If no fonts found, provide clear error message - Typst needs fonts for compilation
-* **Loading pattern**: Read font files to `Vec<u8>` and store in `FontBook`
+* **Loading pattern**: 
+  * **Asset fonts**: Read font files to `Vec<u8>` and store eagerly in `FontBook` (unchanged behavior)
+  * **System fonts**: Use `typst-kit::fonts::FontSearcher` for lazy loading via `FontSlot` - fonts are only loaded into memory when actually accessed through the `font()` method
+  * **Memory efficiency**: System fonts are discovered but not pre-loaded, reducing memory footprint
 
 ##### Error Formatting (backend-internal)
 
