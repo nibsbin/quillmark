@@ -3,7 +3,7 @@ name = "quillmark-typst"
 version = "0.1.0"
 edition = "2021"
 description = "Typst backend for QuillMark"
-license = "MIT"
+license = "Apache-2.0"
 
 [dependencies]
 fontdb = "0.21.0"

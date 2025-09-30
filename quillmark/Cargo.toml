@@ -3,7 +3,7 @@ name = "quillmark"
 version = "0.1.0"
 edition = "2021"
 description = "QuillMark sealed engine API"
-license = "MIT"
+license = "Apache-2.0"
 
 [dependencies]
 quillmark-core = { path = "../quillmark-core" }
