@@ -8,6 +8,38 @@ pub use quillmark_core::{
 use quillmark_core::{RenderOptions};
 use std::collections::HashMap;
 
+/// Reference to a Quill, either by name or by borrowed object
+pub enum QuillRef<'a> {
+    /// Reference to a quill by its registered name
+    Name(&'a str),
+    /// Reference to a borrowed Quill object
+    Object(&'a Quill),
+}
+
+impl<'a> From<&'a Quill> for QuillRef<'a> {
+    fn from(quill: &'a Quill) -> Self {
+        QuillRef::Object(quill)
+    }
+}
+
+impl<'a> From<&'a str> for QuillRef<'a> {
+    fn from(name: &'a str) -> Self {
+        QuillRef::Name(name)
+    }
+}
+
+impl<'a> From<&'a String> for QuillRef<'a> {
+    fn from(name: &'a String) -> Self {
+        QuillRef::Name(name.as_str())
+    }
+}
+
+impl<'a> From<&'a std::borrow::Cow<'a, str>> for QuillRef<'a> {
+    fn from(name: &'a std::borrow::Cow<'a, str>) -> Self {
+        QuillRef::Name(name.as_ref())
+    }
+}
+
 /// The main sealed engine API
 pub struct Workflow {
     backend: Box<dyn Backend>,
@@ -100,8 +132,8 @@ impl Workflow {
 /// let quill = Quill::from_path("path/to/quill").unwrap();
 /// engine.register_quill(quill);
 /// 
-/// // Step 3: Get workflow by quill name
-/// let workflow = engine.get_workflow("my-quill").unwrap();
+/// // Step 3: Load workflow by quill name
+/// let workflow = engine.load("my-quill").unwrap();
 /// 
 /// // Step 4: Render markdown
 /// let result = workflow.render("# Hello", Some(OutputFormat::Pdf)).unwrap();
@@ -136,19 +168,46 @@ impl Quillmark {
         self.quills.insert(name, quill);
     }
     
-    /// Get a workflow for a registered quill by name
-    pub fn get_workflow(&self, quill_name: &str) -> Result<Workflow, RenderError> {
-        // Get the quill by name
-        let quill = self.quills.get(quill_name)
-            .ok_or_else(|| RenderError::Other(
-                format!("Quill '{}' not registered", quill_name).into()
-            ))?;
+    /// Load a workflow for a quill
+    /// 
+    /// Accepts either a quill name (as &str, &String, etc.) or a borrowed Quill object.
+    /// 
+    /// # Examples
+    /// 
+    /// ```no_run
+    /// # use quillmark::{Quillmark, Quill};
+    /// # let mut engine = Quillmark::new();
+    /// # let quill = Quill::from_path("path/to/quill").unwrap();
+    /// # engine.register_quill(quill.clone());
+    /// // Load by name
+    /// let workflow = engine.load("my-quill").unwrap();
+    /// 
+    /// // Load by object
+    /// let workflow = engine.load(&quill).unwrap();
+    /// ```
+    pub fn load<'a>(&self, quill_ref: impl Into<QuillRef<'a>>) -> Result<Workflow, RenderError> {
+        let quill_ref = quill_ref.into();
+        
+        // Get the quill reference based on the parameter type
+        let quill = match quill_ref {
+            QuillRef::Name(name) => {
+                // Look up the quill by name
+                self.quills.get(name)
+                    .ok_or_else(|| RenderError::Other(
+                        format!("Quill '{}' not registered", name).into()
+                    ))?
+            }
+            QuillRef::Object(quill) => {
+                // Use the provided quill directly
+                quill
+            }
+        };
         
         // Get backend ID from quill metadata
         let backend_id = quill.metadata.get("backend")
             .and_then(|v| v.as_str())
             .ok_or_else(|| RenderError::Other(
-                format!("Quill '{}' does not specify a backend", quill_name).into()
+                format!("Quill '{}' does not specify a backend", quill.name).into()
             ))?;
         
         // Get the backend by ID
@@ -163,6 +222,14 @@ impl Quillmark {
         let quill_clone = quill.clone();
         
         Workflow::new(backend_clone, quill_clone)
+    }
+    
+    /// Get a workflow for a registered quill by name
+    /// 
+    /// **Deprecated**: Use `load()` instead for more ergonomic API that accepts both names and Quill objects.
+    #[deprecated(since = "0.1.0", note = "Use `load()` instead")]
+    pub fn get_workflow(&self, quill_name: &str) -> Result<Workflow, RenderError> {
+        self.load(quill_name)
     }
     
     /// Helper method to clone a backend (trait object cloning workaround)
