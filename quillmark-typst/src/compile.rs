@@ -160,13 +160,17 @@ impl QuillWorld {
         let mut sources = HashMap::new();
         let mut binaries = HashMap::new();
         
-        // Load fonts from quill's in-memory file system first (assets)
-        let mut book = FontBook::new();
-        let mut fonts = Vec::new();
-        let mut font_slots = Vec::new();
+        // Initialize FontSearcher for system fonts (lazy loading)
+        let searcher_fonts = FontSearcher::new()
+            .include_system_fonts(true)
+            .search();
         
-        // Load fonts from the quill's in-memory assets first - these are loaded eagerly
-        // as they are part of the template and behavior shouldn't change
+        let mut book = searcher_fonts.book;
+        let font_slots = searcher_fonts.fonts;
+        let mut fonts = Vec::new();
+        
+        // Load fonts from the quill's in-memory assets and add to the book
+        // These are loaded eagerly as they are part of the template
         let font_data_list = Self::load_fonts_from_quill(quill)?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
@@ -176,19 +180,9 @@ impl QuillWorld {
             }
         }
         
-        // If no quill fonts found, set up lazy loading for system fonts using typst-kit
-        if fonts.is_empty() {
-            let searcher_fonts = FontSearcher::new()
-                .include_system_fonts(true)
-                .search();
-            
-            book = searcher_fonts.book;
-            font_slots = searcher_fonts.fonts;
-            
-            // Error if no fonts are available at all
-            if font_slots.is_empty() {
-                return Err("No fonts found: neither quill assets nor system fonts are available".into());
-            }
+        // Error if no fonts are available at all
+        if fonts.is_empty() && font_slots.is_empty() {
+            return Err("No fonts found: neither quill assets nor system fonts are available".into());
         }
         
         // Load assets from the quill's in-memory file system
