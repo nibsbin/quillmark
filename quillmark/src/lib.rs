@@ -91,6 +91,7 @@ pub struct QuillEngine {
 impl QuillEngine {
     /// Create a new QuillEngine with auto-registered backends based on enabled features
     pub fn new() -> Self {
+        #[allow(unused_mut)]
         let mut backends: HashMap<String, Box<dyn Backend>> = HashMap::new();
         
         // Auto-register backends based on enabled features
