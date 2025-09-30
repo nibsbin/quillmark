@@ -9,7 +9,7 @@ fn test_quill_automatic_validation_success() {
     let quill_path = temp_dir.path().join("test-quill");
     
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-    fs::write(quill_path.join("quill.toml"), "[Quill]\nname = \"test\"\n").expect("Failed to write quill.toml");
+    fs::write(quill_path.join("Quill.toml"), "[Quill]\nname = \"test\"\n").expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
     
     // This should succeed since glue.typ exists and validation passes
@@ -27,7 +27,7 @@ fn test_quill_automatic_validation_failure() {
     
     // Create quill directory but without the glue file
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-    fs::write(quill_path.join("quill.toml"), "[Quill]\nname = \"test\"\n").expect("Failed to write quill.toml");
+    fs::write(quill_path.join("Quill.toml"), "[Quill]\nname = \"test\"\n").expect("Failed to write Quill.toml");
     // Note: No glue.typ file created
     
     // This should fail during automatic validation
@@ -51,7 +51,7 @@ fn test_quill_automatic_validation_custom_glue_file() {
 name = "test"
 glue_file = "custom-glue.typ"
 "#;
-    fs::write(quill_path.join("quill.toml"), quill_toml).expect("Failed to write quill.toml");
+    fs::write(quill_path.join("Quill.toml"), quill_toml).expect("Failed to write Quill.toml");
     fs::write(quill_path.join("custom-glue.typ"), "Custom template").expect("Failed to write custom glue file");
     
     // This should succeed with custom glue file
@@ -75,7 +75,7 @@ fn test_quill_automatic_validation_custom_glue_file_missing() {
 name = "test"
 glue_file = "missing-glue.typ"
 "#;
-    fs::write(quill_path.join("quill.toml"), quill_toml).expect("Failed to write quill.toml");
+    fs::write(quill_path.join("Quill.toml"), quill_toml).expect("Failed to write Quill.toml");
     // Note: missing-glue.typ is not created
     
     // This should fail during automatic validation
@@ -92,7 +92,7 @@ fn test_workflow_no_longer_validates_manually() {
     let quill_path = temp_dir.path().join("test-quill");
     
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-    fs::write(quill_path.join("quill.toml"), "[Quill]\nname = \"test\"\n").expect("Failed to write quill.toml");
+    fs::write(quill_path.join("Quill.toml"), "[Quill]\nname = \"test\"\n").expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
     
     // Create a valid quill
