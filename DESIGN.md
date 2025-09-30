@@ -71,9 +71,11 @@ High-level data flow:
 
 ### `quillmark` (sealed engine)
 
-* Sealed primary API: `Workflow`
+* High-level API: `Quillmark` engine for managing backends and quills
+* Sealed rendering API: `Workflow`
 * Orchestration (parse → compose → compile)
 * Validation and **structured error propagation**
+* QuillRef for ergonomic quill references
 * *Compatibility shim:* legacy `render(markdown, RenderConfig)` calls through the engine (see [Migration](#migration--compatibility)).
 
 ### `quillmark-typst` (Typst backend)
@@ -95,7 +97,42 @@ High-level data flow:
 
 ## Core Interfaces and Structures
 
-### Workflow (primary high-level API)
+### Quillmark (high-level engine API)
+
+```rust
+pub struct Quillmark {
+    backends: HashMap<String, Box<dyn Backend>>,
+    quills: HashMap<String, Quill>,
+}
+
+impl Quillmark {
+    pub fn new() -> Self;
+    pub fn register_quill(&mut self, quill: Quill);
+    pub fn load<'a>(&self, quill_ref: impl Into<QuillRef<'a>>) -> Result<Workflow, RenderError>;
+    pub fn registered_backends(&self) -> Vec<&str>;
+    pub fn registered_quills(&self) -> Vec<&str>;
+    
+    #[deprecated(since = "0.1.0", note = "Use `load()` instead")]
+    pub fn get_workflow(&self, quill_name: &str) -> Result<Workflow, RenderError>;
+}
+```
+
+**Usage pattern:**
+
+```rust
+// Create engine with auto-registered backends
+let mut engine = Quillmark::new();
+
+// Register quills
+let quill = Quill::from_path("path/to/quill")?;
+engine.register_quill(quill);
+
+// Load workflow by name or object
+let workflow = engine.load("my-quill")?;
+let workflow = engine.load(&quill)?;  // Also accepts Quill reference
+```
+
+### Workflow (render execution API)
 
 ```rust
 pub struct Workflow {
@@ -104,14 +141,26 @@ pub struct Workflow {
 }
 
 impl Workflow {
-    pub fn new(backend: Box<dyn Backend>, quill_path: PathBuf) -> Result<Self, RenderError>;
-    pub fn render(&self, markdown: &str) -> Result<RenderResult, RenderError>;
-    pub fn render_with_format(&self, markdown: &str, format: OutputFormat) -> Result<RenderResult, RenderError>;
+    pub fn new(backend: Box<dyn Backend>, quill: Quill) -> Result<Self, RenderError>;
+    pub fn render(&self, markdown: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError>;
+    pub fn render_content(&self, content: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError>;
+    pub fn process_glue(&self, markdown: &str) -> Result<String, RenderError>;
     pub fn backend_id(&self) -> &str;
     pub fn supported_formats(&self) -> &'static [OutputFormat];
     pub fn quill_name(&self) -> &str;
 }
 ```
+
+### QuillRef (ergonomic quill references)
+
+```rust
+pub enum QuillRef<'a> {
+    Name(&'a str),
+    Object(&'a Quill),
+}
+```
+
+Implements `From` for `&str`, `&String`, `&Quill`, and `&Cow<str>` for ergonomic API usage.
 
 ### Backend Trait (stable)
 
@@ -132,11 +181,12 @@ pub trait Backend: Send + Sync {
 
 ```rust
 pub struct Quill {
-    pub template_content: String,
+    pub glue_template: String,
     pub metadata: HashMap<String, serde_yaml::Value>,
     pub base_path: PathBuf,
     pub name: String,
     pub glue_file: String,
+    pub files: HashMap<PathBuf, FileEntry>,
 }
 ```
 
@@ -205,29 +255,60 @@ pub struct RenderResult {
 
 ## End-to-End Orchestration Workflow
 
-**Public usage:**
+**Public usage (high-level Quillmark API):**
 
 ```rust
-let engine = Workflow::new(Box::new(TypstBackend::default()), quill_path)?;
-let result = engine.render(markdown)?;                // or render_with_format(...)
+// Create engine with auto-registered backends (typst by default)
+let mut engine = Quillmark::new();
+
+// Register quills
+let quill = Quill::from_path("path/to/quill")?;
+engine.register_quill(quill);
+
+// Load workflow and render
+let workflow = engine.load("my-quill")?;
+let result = workflow.render("# Hello", Some(OutputFormat::Pdf))?;
 for a in result.artifacts { /* write bytes */ }
 ```
 
-**Internal steps (encapsulated):**
+**Public usage (direct Workflow API):**
 
-1. **Load Quill**: `Quill::from_path(quill_path)` → validate; pick glue file by backend `glue_type()` or `quill.toml` override.
-2. **Parse Markdown**: `decompose(markdown)` → YAML frontmatter + body.
-3. **Setup Glue**: `Glue::new(quill.template_content)`; backend `register_filters(&mut glue)`.
-4. **Compose**: `glue.compose(parsed.fields().clone())` → backend-specific glue source.
-5. **Compile**: `backend.compile(&glue_src, &quill, &opts)` → `Vec<Artifact>` (PDF/SVG/TXT…).
+```rust
+let backend = Box::new(TypstBackend::default());
+let quill = Quill::from_path("path/to/quill")?;
+let workflow = Workflow::new(backend, quill)?;
+let result = workflow.render(markdown, Some(OutputFormat::Pdf))?;
+```
+
+**Internal steps (encapsulated in Workflow::render):**
+
+1. **Parse Markdown**: `decompose(markdown)` → YAML frontmatter + body.
+2. **Setup Glue**: `Glue::new(quill.glue_template)`; backend `register_filters(&mut glue)`.
+3. **Compose**: `glue.compose(parsed.fields().clone())` → backend-specific glue source.
+4. **Compile**: `backend.compile(&glue_src, &quill, &opts)` → `Vec<Artifact>` (PDF/SVG/TXT…).
 
 ### Implementation Hints
 
-#### Engine Construction (`Workflow::new`)
+#### Quillmark Engine Construction
 
+* **Auto-registration**: Backends are registered based on enabled crate features (e.g., `#[cfg(feature = "typst")]`)
+* **Backend storage**: Use `HashMap<String, Box<dyn Backend>>` keyed by backend ID
+* **Quill storage**: Use `HashMap<String, Quill>` keyed by quill name
+* **Clone workaround**: Trait objects can't clone directly - implement `clone_backend()` helper that matches on backend ID
+
+#### Workflow Construction (`Workflow::new`)
+
+* **Input change**: Now takes `Quill` object directly instead of `PathBuf` - quill loading moved to caller
 * **Backend validation**: Check `backend.id()` matches expected backend type
-* **Quill loading**: Use `Quill::from_path()` with proper error context
-* **Glue file selection**: Priority: `quill.toml` override → `backend.glue_type()` extension
+* **No additional validation**: `Quill::from_path()` already validates, so no need to validate again
+
+#### Load Method Implementation
+
+* **QuillRef pattern**: Accept `impl Into<QuillRef<'a>>` for ergonomic API
+* **Name lookup**: Check `self.quills` HashMap when given a name
+* **Object reference**: Use provided Quill directly when given an object
+* **Backend resolution**: Extract backend ID from `quill.metadata.get("backend")`
+* **Cloning**: Clone both backend and quill for the new Workflow instance
 
 #### Orchestration Error Handling
 
@@ -243,14 +324,19 @@ for a in result.artifacts { /* write bytes */ }
 #### Workflow State Management
 
 ```rust
-// Typical orchestration pattern:
-let quill = Quill::from_path(quill_path)?;              // Step 1
-let parsed = decompose(markdown)?;                      // Step 2  
-let mut glue = Glue::new(&quill.template_content)?;     // Step 3a
-backend.register_filters(&mut glue);                    // Step 3b
-let glue_source = glue.compose(parsed.fields().clone())?; // Step 4
-let artifacts = backend.compile(&glue_source, &quill, &opts)?; // Step 5
+// Typical orchestration pattern (encapsulated in Workflow::render):
+let parsed = decompose(markdown)?;                      // Step 1  
+let mut glue = Glue::new(&quill.glue_template)?;        // Step 2a
+backend.register_filters(&mut glue);                    // Step 2b
+let glue_source = glue.compose(parsed.fields().clone())?; // Step 3
+let artifacts = backend.compile(&glue_source, &quill, &opts)?; // Step 4
 ```
+
+#### Render Method Variants
+
+* **render()**: Full pipeline from markdown to artifacts with optional format
+* **render_content()**: Skip parsing, compile pre-processed glue content
+* **process_glue()**: Extract just the glue composition step (markdown → glue source)
 
 ---
 
