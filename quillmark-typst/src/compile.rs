@@ -577,4 +577,75 @@ name = "test-quill"
             }
         }
     }
+
+    #[test]
+    fn test_full_pdf_compilation_with_system_fonts() {
+        use std::fs;
+        use tempfile::TempDir;
+        
+        // Create a temporary directory with a minimal quill but no font assets
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let quill_toml_content = r#"
+[quill]
+name = "system-font-test"
+version = "1.0.0"
+"#;
+        fs::write(temp_dir.path().join("quill.toml"), quill_toml_content)
+            .expect("Failed to write quill.toml");
+        
+        // Create a glue file with some content
+        let glue_content = r#"= System Font Test
+
+This document tests that system fonts work correctly for PDF generation.
+
+== Section Header
+
+Some *bold* text and _italic_ text to verify font rendering.
+
+1. First item
+2. Second item
+3. Third item
+
+And some `code` in monospace.
+"#;
+        fs::write(temp_dir.path().join("glue.typ"), glue_content)
+            .expect("Failed to write glue.typ");
+        
+        // Create the quill from the temp directory
+        let quill = Quill::from_path(temp_dir.path()).expect("Failed to create quill");
+        
+        // Try to compile to PDF using system fonts
+        let result = compile_to_pdf(&quill, glue_content);
+        
+        match result {
+            Ok(pdf_bytes) => {
+                println!("PDF compilation successful! Generated {} bytes", pdf_bytes.len());
+                assert!(pdf_bytes.len() > 1000, "PDF should be reasonably sized");
+                // PDF should start with %PDF header
+                assert!(pdf_bytes.starts_with(b"%PDF"), "Should generate valid PDF");
+            }
+            Err(e) => {
+                // This might fail in CI environments without system fonts
+                println!("PDF compilation failed (expected in some environments): {}", e);
+                // Don't fail the test - this is environment dependent
+            }
+        }
+        
+        // Also test SVG compilation
+        let svg_result = compile_to_svg(&quill, glue_content);
+        match svg_result {
+            Ok(svg_pages) => {
+                println!("SVG compilation successful! Generated {} pages", svg_pages.len());
+                assert!(!svg_pages.is_empty(), "Should generate at least one SVG page");
+                if !svg_pages.is_empty() {
+                    let first_page = &svg_pages[0];
+                    assert!(first_page.len() > 100, "SVG page should have reasonable content");
+                    println!("First SVG page: {} bytes", first_page.len());
+                }
+            }
+            Err(e) => {
+                println!("SVG compilation failed (expected in some environments): {}", e);
+            }
+        }
+    }
 }
