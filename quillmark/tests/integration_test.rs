@@ -1,7 +1,7 @@
 use std::fs;
 use tempfile::TempDir;
 
-use quillmark::{Workflow, OutputFormat};
+use quillmark::{Workflow, OutputFormat, Quill};
 use quillmark_typst::TypstBackend;
 
 #[test]
@@ -57,7 +57,8 @@ This concludes the test document.
     
     // Create engine and render
     let backend = Box::new(TypstBackend::default());
-    let engine = Workflow::new(backend, quill_path).expect("Failed to create engine");
+    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let engine = Workflow::new(backend, quill).expect("Failed to create engine");
     
     // Test PDF rendering
     let pdf_result = engine.render(markdown, Some(OutputFormat::Pdf))
@@ -90,7 +91,8 @@ fn test_engine_properties() {
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
     
     let backend = Box::new(TypstBackend::default());
-    let engine = Workflow::new(backend, quill_path).expect("Failed to create engine");
+    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let engine = Workflow::new(backend, quill).expect("Failed to create engine");
     
     assert_eq!(engine.backend_id(), "typst");
     assert_eq!(engine.quill_name(), "test-quill");
@@ -108,7 +110,8 @@ fn test_unsupported_format() {
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
     
     let backend = Box::new(TypstBackend::default());
-    let engine = Workflow::new(backend, quill_path).expect("Failed to create engine");
+    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let engine = Workflow::new(backend, quill).expect("Failed to create engine");
     
     let result = engine.render("# Test", Some(OutputFormat::Txt));
     
