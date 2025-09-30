@@ -24,11 +24,11 @@ fn main() {
     
     println!("Registered quills: {:?}", engine.registered_quills());
     
-    // Step 4: Get workflow by quill name and render
+    // Step 4: Load workflow by quill name and render
     
     // Render ice-cream document
     let ice_cream_markdown = std::fs::read_to_string(resource_path("ice_cream.md")).unwrap();
-    let ice_cream_workflow = engine.get_workflow("ice-cream").expect("Failed to get ice-cream workflow");
+    let ice_cream_workflow = engine.load("ice-cream").expect("Failed to load ice-cream workflow");
     
     println!("\nRendering with quill: {}", ice_cream_workflow.quill_name());
     println!("Using backend: {}", ice_cream_workflow.backend_id());
@@ -41,7 +41,7 @@ fn main() {
     
     // Render usaf-memo document
     let usaf_memo_markdown = std::fs::read_to_string(resource_path("usaf_memo.md")).unwrap();
-    let usaf_memo_workflow = engine.get_workflow("usaf-memo").expect("Failed to get usaf-memo workflow");
+    let usaf_memo_workflow = engine.load("usaf-memo").expect("Failed to load usaf-memo workflow");
     
     println!("\nRendering with quill: {}", usaf_memo_workflow.quill_name());
     println!("Using backend: {}", usaf_memo_workflow.backend_id());
