@@ -83,6 +83,29 @@ impl Workflow {
 }
 
 /// High-level engine for orchestrating backends and quills
+/// 
+/// `QuillEngine` manages the registration of backends and quills, and provides
+/// a convenient way to create workflows. Backends are automatically registered
+/// based on enabled crate features.
+/// 
+/// # Example
+/// 
+/// ```no_run
+/// use quillmark::{QuillEngine, Quill, OutputFormat};
+/// 
+/// // Step 1: Create engine with auto-registered backends (typst by default)
+/// let mut engine = QuillEngine::new();
+/// 
+/// // Step 2: Create and register quills
+/// let quill = Quill::from_path("path/to/quill").unwrap();
+/// engine.register_quill(quill);
+/// 
+/// // Step 3: Get workflow by quill name
+/// let workflow = engine.get_workflow("my-quill").unwrap();
+/// 
+/// // Step 4: Render markdown
+/// let result = workflow.render("# Hello", Some(OutputFormat::Pdf)).unwrap();
+/// ```
 pub struct QuillEngine {
     backends: HashMap<String, Box<dyn Backend>>,
     quills: HashMap<String, Quill>,
