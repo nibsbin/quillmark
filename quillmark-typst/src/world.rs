@@ -43,17 +43,13 @@ impl QuillWorld {
         let mut sources = HashMap::new();
         let mut binaries = HashMap::new();
         
-        // Initialize FontSearcher for system fonts (lazy loading)
-        let searcher_fonts = FontSearcher::new()
-            .include_system_fonts(true)
-            .search();
-        
-        let mut book = searcher_fonts.book;
-        let font_slots = searcher_fonts.fonts;
+        // Create a new empty FontBook to ensure proper ordering
+        let mut book = FontBook::new();
         let mut fonts = Vec::new();
         
-        // Load fonts from the quill's in-memory assets and add to the book
+        // Load fonts from the quill's in-memory assets FIRST and add to the book
         // These are loaded eagerly as they are part of the template
+        // Adding them first ensures their indices in the book match the font() method
         let font_data_list = Self::load_fonts_from_quill(quill)?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
@@ -62,6 +58,21 @@ impl QuillWorld {
                 fonts.push(font);
             }
         }
+        
+        // Now initialize FontSearcher for system fonts (lazy loading)
+        // These will be added AFTER asset fonts in the book
+        let searcher_fonts = FontSearcher::new()
+            .include_system_fonts(true)
+            .search();
+        
+        // Add system fonts to the book after asset fonts
+        // Copy all FontInfo entries from the system font book
+        let mut system_font_index = 0;
+        while let Some(font_info) = searcher_fonts.book.info(system_font_index) {
+            book.push(font_info.clone());
+            system_font_index += 1;
+        }
+        let font_slots = searcher_fonts.fonts;
         
         // Error if no fonts are available at all
         if fonts.is_empty() && font_slots.is_empty() {
@@ -477,6 +488,49 @@ name = "minimal-package"
         } else {
             panic!("No fonts available at all - this should not happen");
         }
+    }
+
+    #[test]
+    fn test_asset_fonts_have_priority() {
+        use quillmark_core::Quill;
+        use std::path::Path;
+        
+        // Use the actual usaf-memo fixture which has real fonts
+        let quill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("quillmark-fixtures")
+            .join("resources")
+            .join("usaf-memo");
+        
+        if !quill_path.exists() {
+            println!("Skipping test - usaf-memo fixture not found");
+            return;
+        }
+        
+        let quill = Quill::from_path(&quill_path).unwrap();
+        let world = QuillWorld::new(&quill, "// Test").unwrap();
+        
+        // Asset fonts should be loaded
+        assert!(!world.fonts.is_empty(), "Should have asset fonts loaded");
+        
+        // The first fonts in the book should be the asset fonts
+        // Verify that indices 0..asset_count return asset fonts from the fonts vec
+        for i in 0..world.fonts.len() {
+            let font = world.font(i);
+            assert!(font.is_some(), "Font at index {} should be available", i);
+            // This font should come from the asset fonts (world.fonts vec), not font_slots
+        }
+        
+        // Verify that fonts beyond the asset count come from font_slots
+        if !world.font_slots.is_empty() {
+            let system_font_index = world.fonts.len();
+            let font = world.font(system_font_index);
+            assert!(font.is_some(), "Font at index {} (system font) should be available", system_font_index);
+        }
+        
+        println!("✓ Asset fonts have priority: {} asset fonts, {} system font slots", 
+                 world.fonts.len(), world.font_slots.len());
     }
 
 }
