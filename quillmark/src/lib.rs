@@ -6,6 +6,7 @@ pub use quillmark_core::{
 };
 
 use quillmark_core::{RenderOptions};
+use std::collections::HashMap;
 
 /// The main sealed engine API
 pub struct Workflow {
@@ -78,5 +79,116 @@ impl Workflow {
     /// Get the quill name
     pub fn quill_name(&self) -> &str {
         &self.quill.name
+    }
+}
+
+/// High-level engine for orchestrating backends and quills
+/// 
+/// `Quillmark` manages the registration of backends and quills, and provides
+/// a convenient way to create workflows. Backends are automatically registered
+/// based on enabled crate features.
+/// 
+/// # Example
+/// 
+/// ```no_run
+/// use quillmark::{Quillmark, Quill, OutputFormat};
+/// 
+/// // Step 1: Create engine with auto-registered backends (typst by default)
+/// let mut engine = Quillmark::new();
+/// 
+/// // Step 2: Create and register quills
+/// let quill = Quill::from_path("path/to/quill").unwrap();
+/// engine.register_quill(quill);
+/// 
+/// // Step 3: Get workflow by quill name
+/// let workflow = engine.get_workflow("my-quill").unwrap();
+/// 
+/// // Step 4: Render markdown
+/// let result = workflow.render("# Hello", Some(OutputFormat::Pdf)).unwrap();
+/// ```
+pub struct Quillmark {
+    backends: HashMap<String, Box<dyn Backend>>,
+    quills: HashMap<String, Quill>,
+}
+
+impl Quillmark {
+    /// Create a new Quillmark with auto-registered backends based on enabled features
+    pub fn new() -> Self {
+        #[allow(unused_mut)]
+        let mut backends: HashMap<String, Box<dyn Backend>> = HashMap::new();
+        
+        // Auto-register backends based on enabled features
+        #[cfg(feature = "typst")]
+        {
+            let backend = Box::new(quillmark_typst::TypstBackend::default());
+            backends.insert(backend.id().to_string(), backend);
+        }
+        
+        Self {
+            backends,
+            quills: HashMap::new(),
+        }
+    }
+    
+    /// Register a quill by name
+    pub fn register_quill(&mut self, quill: Quill) {
+        let name = quill.name.clone();
+        self.quills.insert(name, quill);
+    }
+    
+    /// Get a workflow for a registered quill by name
+    pub fn get_workflow(&self, quill_name: &str) -> Result<Workflow, RenderError> {
+        // Get the quill by name
+        let quill = self.quills.get(quill_name)
+            .ok_or_else(|| RenderError::Other(
+                format!("Quill '{}' not registered", quill_name).into()
+            ))?;
+        
+        // Get backend ID from quill metadata
+        let backend_id = quill.metadata.get("backend")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| RenderError::Other(
+                format!("Quill '{}' does not specify a backend", quill_name).into()
+            ))?;
+        
+        // Get the backend by ID
+        let backend = self.backends.get(backend_id)
+            .ok_or_else(|| RenderError::Other(
+                format!("Backend '{}' not registered or not enabled", backend_id).into()
+            ))?;
+        
+        // Clone the backend and quill for the workflow
+        // Note: We need to box clone the backend trait object
+        let backend_clone = self.clone_backend(backend.as_ref());
+        let quill_clone = quill.clone();
+        
+        Workflow::new(backend_clone, quill_clone)
+    }
+    
+    /// Helper method to clone a backend (trait object cloning workaround)
+    fn clone_backend(&self, backend: &dyn Backend) -> Box<dyn Backend> {
+        // For each backend, we need to instantiate a new one
+        // This is a workaround since we can't clone trait objects directly
+        match backend.id() {
+            #[cfg(feature = "typst")]
+            "typst" => Box::new(quillmark_typst::TypstBackend::default()),
+            _ => panic!("Unknown backend: {}", backend.id()),
+        }
+    }
+    
+    /// Get list of registered backend IDs
+    pub fn registered_backends(&self) -> Vec<&str> {
+        self.backends.keys().map(|s| s.as_str()).collect()
+    }
+    
+    /// Get list of registered quill names
+    pub fn registered_quills(&self) -> Vec<&str> {
+        self.quills.keys().map(|s| s.as_str()).collect()
+    }
+}
+
+impl Default for Quillmark {
+    fn default() -> Self {
+        Self::new()
     }
 }
