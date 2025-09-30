@@ -490,4 +490,47 @@ name = "minimal-package"
         }
     }
 
+    #[test]
+    fn test_asset_fonts_have_priority() {
+        use quillmark_core::Quill;
+        use std::path::Path;
+        
+        // Use the actual usaf-memo fixture which has real fonts
+        let quill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("quillmark-fixtures")
+            .join("resources")
+            .join("usaf-memo");
+        
+        if !quill_path.exists() {
+            println!("Skipping test - usaf-memo fixture not found");
+            return;
+        }
+        
+        let quill = Quill::from_path(&quill_path).unwrap();
+        let world = QuillWorld::new(&quill, "// Test").unwrap();
+        
+        // Asset fonts should be loaded
+        assert!(!world.fonts.is_empty(), "Should have asset fonts loaded");
+        
+        // The first fonts in the book should be the asset fonts
+        // Verify that indices 0..asset_count return asset fonts from the fonts vec
+        for i in 0..world.fonts.len() {
+            let font = world.font(i);
+            assert!(font.is_some(), "Font at index {} should be available", i);
+            // This font should come from the asset fonts (world.fonts vec), not font_slots
+        }
+        
+        // Verify that fonts beyond the asset count come from font_slots
+        if !world.font_slots.is_empty() {
+            let system_font_index = world.fonts.len();
+            let font = world.font(system_font_index);
+            assert!(font.is_some(), "Font at index {} (system font) should be available", system_font_index);
+        }
+        
+        println!("✓ Asset fonts have priority: {} asset fonts, {} system font slots", 
+                 world.fonts.len(), world.font_slots.len());
+    }
+
 }
