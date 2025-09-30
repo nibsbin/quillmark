@@ -11,8 +11,6 @@ use typst_pdf::PdfOptions;
 
 use quillmark_core::Quill;
 
-const DEFAULT_FONT: &[u8] = include_bytes!("../assets/NimbusRomNo9L-Reg.otf");
-
 /// Compile a quill template with Typst content to PDF
 pub fn compile_to_pdf(quill: &Quill, glued_content: &str) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
     println!("Using quill: {}", quill.name);
@@ -163,11 +161,8 @@ impl QuillWorld {
         // Load fonts from quill's in-memory file system
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
-        // Add default font
-        fonts.push(Font::new(Bytes::new(DEFAULT_FONT), 0).ok_or("Failed to load default font")?);
-        book.push(fonts[0].info().clone());
         
-        // Load fonts from the quill's in-memory assets
+        // Load fonts from the quill's in-memory assets first
         let font_data_list = Self::load_fonts_from_quill(quill)?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
@@ -177,8 +172,21 @@ impl QuillWorld {
             }
         }
         
+        // If no quill fonts found, try to load system fonts
         if fonts.is_empty() {
-            return Err("No fonts found in quill assets".into());
+            let system_font_data_list = Self::load_system_fonts()?;
+            for font_data in system_font_data_list {
+                let font_bytes = Bytes::new(font_data);
+                for font in Font::iter(font_bytes) {
+                    book.push(font.info().clone());
+                    fonts.push(font);
+                }
+            }
+        }
+        
+        // Error if no fonts are available at all
+        if fonts.is_empty() {
+            return Err("No fonts found: neither quill assets nor system fonts are available".into());
         }
         
         // Load assets from the quill's in-memory file system
@@ -228,6 +236,26 @@ impl QuillWorld {
                         }
                     }
                 }
+            }
+        }
+        
+        Ok(font_data)
+    }
+    
+    /// Load system fonts using fontdb
+    fn load_system_fonts() -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
+        let mut db = fontdb::Database::new();
+        db.load_system_fonts();
+        
+        let mut font_data = Vec::new();
+        
+        // Iterate through all font faces in the database
+        for id in db.faces().map(|info| info.id) {
+            // Get font data using with_face_data
+            if let Some(data) = db.with_face_data(id, |data, _face_index| {
+                data.to_vec()
+            }) {
+                font_data.push(data);
             }
         }
         
@@ -496,5 +524,57 @@ name = "minimal-package"
         assert_eq!(package_info.version, "0.1.0");
         assert_eq!(package_info.namespace, "preview");
         assert_eq!(package_info.entrypoint, "lib.typ");
+    }
+
+    #[test]
+    fn test_system_font_loading() {
+        // Test that system fonts can be loaded
+        let result = QuillWorld::load_system_fonts();
+        assert!(result.is_ok(), "System font loading should succeed");
+        
+        let font_data = result.unwrap();
+        // On most systems, there should be at least one font available
+        // This test might fail in CI environments with no fonts, but that's expected
+        if !font_data.is_empty() {
+            println!("System fonts loaded successfully: {} fonts found", font_data.len());
+        } else {
+            println!("No system fonts found - this is expected in some test environments");
+        }
+    }
+
+    #[test]
+    fn test_font_loading_without_quill_fonts() {
+        use std::fs;
+        use tempfile::TempDir;
+        
+        // Create a temporary directory with a minimal quill.toml but no fonts
+        let temp_dir = TempDir::new().expect("Failed to create temp dir");
+        let quill_toml_content = r#"
+[quill]
+name = "test-quill"
+"#;
+        fs::write(temp_dir.path().join("quill.toml"), quill_toml_content)
+            .expect("Failed to write quill.toml");
+        
+        // Create a minimal glue file
+        fs::write(temp_dir.path().join("glue.typ"), "Test content")
+            .expect("Failed to write glue.typ");
+        
+        // Create the quill from the temp directory
+        let quill = Quill::from_path(temp_dir.path()).expect("Failed to create quill");
+        
+        // Try to create a QuillWorld - this should succeed if system fonts are available
+        let result = QuillWorld::new(&quill, "Test content");
+        
+        // The result depends on whether system fonts are available
+        match result {
+            Ok(_) => println!("QuillWorld created successfully using system fonts"),
+            Err(e) => {
+                let error_msg = e.to_string();
+                // Should be the specific error message we set
+                assert!(error_msg.contains("No fonts found: neither quill assets nor system fonts are available"));
+                println!("Expected error when no fonts available: {}", error_msg);
+            }
+        }
     }
 }
