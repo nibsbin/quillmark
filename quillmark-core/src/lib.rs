@@ -160,37 +160,33 @@ impl Quill {
 
         let mut metadata = HashMap::new();
         let mut glue_file = "glue.typ".to_string(); // default
-        let mut explicit_name: Option<String> = None;
-        let mut backend: Option<String> = None;
+        let mut quill_name = name; // default to directory name
 
-        // First, try to extract top-level fields (new standardized format)
-        let has_top_level_fields = if let toml::Value::Table(root_table) = &quill_toml {
-            root_table.contains_key("name") || root_table.contains_key("backend") || root_table.contains_key("glue")
-        } else {
-            false
-        };
-
+        // Extract standardized top-level fields
         if let toml::Value::Table(root_table) = &quill_toml {
-            // Extract name from top-level (only for new format)
-            if has_top_level_fields {
-                if let Some(name_val) = root_table.get("name").and_then(|v| v.as_str()) {
-                    explicit_name = Some(name_val.to_string());
+            // Extract required fields: name, backend, glue
+            if let Some(name_val) = root_table.get("name").and_then(|v| v.as_str()) {
+                quill_name = name_val.to_string();
+            }
+            
+            if let Some(backend_val) = root_table.get("backend").and_then(|v| v.as_str()) {
+                match Self::toml_to_yaml_value(&toml::Value::String(backend_val.to_string())) {
+                    Ok(yaml_value) => {
+                        metadata.insert("backend".to_string(), yaml_value);
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to convert backend field: {}", e);
+                    }
                 }
             }
             
-            // Extract backend from top-level
-            if let Some(backend_val) = root_table.get("backend").and_then(|v| v.as_str()) {
-                backend = Some(backend_val.to_string());
-            }
-            
-            // Extract glue from top-level (note: 'glue' not 'glue_file')
             if let Some(glue_val) = root_table.get("glue").and_then(|v| v.as_str()) {
                 glue_file = glue_val.to_string();
             }
             
-            // Add other top-level fields to metadata (excluding special fields)
+            // Add other fields to metadata (excluding special fields and version)
             for (key, value) in root_table {
-                if key != "name" && key != "backend" && key != "glue" && !key.starts_with('[') {
+                if key != "name" && key != "backend" && key != "glue" && key != "version" && !key.starts_with('[') {
                     match Self::toml_to_yaml_value(value) {
                         Ok(yaml_value) => {
                             metadata.insert(key.clone(), yaml_value);
@@ -202,58 +198,6 @@ impl Quill {
                 }
             }
         }
-
-        // Fall back to [Quill] section format for backward compatibility
-        if let Some(quill_section) = quill_toml.get("Quill").or_else(|| quill_toml.get("quill")) {
-            // Note: For [Quill] section format, we do NOT override the name with section name
-            // to maintain backward compatibility (name comes from directory)
-            
-            if backend.is_none() {
-                if let Some(backend_val) = quill_section.get("backend").and_then(|v| v.as_str()) {
-                    backend = Some(backend_val.to_string());
-                }
-            }
-            
-            // Extract glue_file if not already set (backward compatibility)
-            if glue_file == "glue.typ" { // only if still default
-                if let Some(gf) = quill_section.get("glue_file").and_then(|v| v.as_str()) {
-                    glue_file = gf.to_string();
-                } else if let Some(gf) = quill_section.get("glue").and_then(|v| v.as_str()) {
-                    glue_file = gf.to_string();
-                }
-            }
-            
-            // Add all fields from quill section to metadata (excluding special fields)
-            if let toml::Value::Table(table) = quill_section {
-                for (key, value) in table {
-                    if key != "name" && key != "backend" && key != "glue_file" && key != "glue" && !metadata.contains_key(key) {
-                        match Self::toml_to_yaml_value(value) {
-                            Ok(yaml_value) => {
-                                metadata.insert(key.clone(), yaml_value);
-                            }
-                            Err(e) => {
-                                eprintln!("Warning: Failed to convert field '{}': {}", key, e);
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Add backend to metadata if present
-        if let Some(backend_str) = backend {
-            match Self::toml_to_yaml_value(&toml::Value::String(backend_str)) {
-                Ok(yaml_value) => {
-                    metadata.insert("backend".to_string(), yaml_value);
-                }
-                Err(e) => {
-                    eprintln!("Warning: Failed to convert backend field: {}", e);
-                }
-            }
-        }
-
-        // Use explicit name if provided, otherwise fall back to directory name  
-        let final_name = explicit_name.unwrap_or(name);
 
         // Read the template content from glue file
         let glue_path = path.join(&glue_file);
@@ -285,7 +229,7 @@ impl Quill {
             glue_template: template_content,
             metadata,
             base_path: path.to_path_buf(),
-            name: final_name,
+            name: quill_name,
             glue_file,
             files,
         })
@@ -534,7 +478,7 @@ node_modules/
         let quill_dir = temp_dir.path();
 
         // Create test files
-        fs::write(quill_dir.join("quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(quill_dir.join("quill.toml"), "name = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
         
         let assets_dir = quill_dir.join("assets");
@@ -573,7 +517,7 @@ node_modules/
         fs::write(quill_dir.join(".quillignore"), "*.tmp\ntarget/\n").unwrap();
         
         // Create test files
-        fs::write(quill_dir.join("quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(quill_dir.join("quill.toml"), "name = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
         fs::write(quill_dir.join("should_ignore.tmp"), "ignored").unwrap();
         
@@ -596,7 +540,7 @@ node_modules/
         let quill_dir = temp_dir.path();
 
         // Create test directory structure
-        fs::write(quill_dir.join("quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(quill_dir.join("quill.toml"), "name = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
         fs::write(quill_dir.join("glue.typ"), "template").unwrap();
         
         let assets_dir = quill_dir.join("assets");
@@ -629,7 +573,6 @@ node_modules/
         let toml_content = r#"name = "my-custom-quill"
 backend = "typst"
 glue = "custom-glue.typ"
-version = "1.0.0"
 description = "Test quill with new format"
 author = "Test Author"
 "#;
@@ -655,87 +598,13 @@ author = "Test Author"
             }
         }
         
-        // Test that other fields are in metadata
-        assert!(quill.metadata.contains_key("version"));
+        // Test that other fields are in metadata (but not version)
         assert!(quill.metadata.contains_key("description"));
         assert!(quill.metadata.contains_key("author"));
+        assert!(!quill.metadata.contains_key("version")); // version should be excluded
         
         // Test that glue template content is loaded correctly
         assert!(quill.glue_template.contains("Custom Template"));
         assert!(quill.glue_template.contains("custom template"));
-    }
-
-    #[test]
-    fn test_backward_compatibility_with_section_format() {
-        let temp_dir = TempDir::new().unwrap();
-        let quill_dir = temp_dir.path();
-
-        // Create test files using old [Quill] section format
-        let toml_content = r#"[Quill]
-name = "old-style-name"
-backend = "typst"
-glue_file = "old-glue.typ"
-version = "0.9.0"
-"#;
-        fs::write(quill_dir.join("quill.toml"), toml_content).unwrap();
-        fs::write(quill_dir.join("old-glue.typ"), "= Old Style Template").unwrap();
-
-        // Load quill
-        let quill = Quill::from_path(quill_dir).unwrap();
-
-        // Test that name comes from directory name (not TOML) for backward compatibility
-        assert_eq!(quill.name, quill_dir.file_name().unwrap().to_str().unwrap());
-        
-        // Test that glue_file is set correctly from old field name
-        assert_eq!(quill.glue_file, "old-glue.typ");
-        
-        // Test that backend is in metadata
-        assert!(quill.metadata.contains_key("backend"));
-        if let Some(backend_val) = quill.metadata.get("backend") {
-            if let Some(backend_str) = backend_val.as_str() {
-                assert_eq!(backend_str, "typst");
-            } else {
-                panic!("Backend value is not a string");
-            }
-        }
-        
-        // Test that version is in metadata
-        assert!(quill.metadata.contains_key("version"));
-    }
-
-    #[test]
-    fn test_mixed_format_preference() {
-        let temp_dir = TempDir::new().unwrap();
-        let quill_dir = temp_dir.path();
-
-        // Create test files with both formats (top-level should take precedence)
-        let toml_content = r#"name = "top-level-name"
-backend = "typst"
-glue = "top-level-glue.typ"
-
-[Quill]
-name = "section-name"
-backend = "latex"
-glue_file = "section-glue.typ"
-"#;
-        fs::write(quill_dir.join("quill.toml"), toml_content).unwrap();
-        fs::write(quill_dir.join("top-level-glue.typ"), "= Top Level Template").unwrap();
-
-        // Load quill
-        let quill = Quill::from_path(quill_dir).unwrap();
-
-        // Test that top-level values take precedence
-        assert_eq!(quill.name, "top-level-name");
-        assert_eq!(quill.glue_file, "top-level-glue.typ");
-        
-        // Test that backend from top-level is used
-        assert!(quill.metadata.contains_key("backend"));
-        if let Some(backend_val) = quill.metadata.get("backend") {
-            if let Some(backend_str) = backend_val.as_str() {
-                assert_eq!(backend_str, "typst");
-            } else {
-                panic!("Backend value is not a string");
-            }
-        }
     }
 }
