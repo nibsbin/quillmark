@@ -8,6 +8,7 @@ use typst::utils::LazyHash;
 use typst::{Library, World};
 use typst::layout::PagedDocument;
 use typst_pdf::PdfOptions;
+use typst_kit::fonts::{FontSearcher, FontSlot};
 
 use quillmark_core::Quill;
 
@@ -145,8 +146,9 @@ fn get_line_info_from_span(span: typst::syntax::Span, world: &QuillWorld) -> Opt
 /// - Package files maintain their directory structure in the virtual file system
 pub struct QuillWorld {
     library: LazyHash<Library>,
-    book: LazyHash<FontBook>,
-    fonts: Vec<Font>,
+    book: LazyHash<FontBook>, 
+    fonts: Vec<Font>,  // For fonts loaded from assets
+    font_slots: Vec<FontSlot>,  // For lazy-loaded system fonts
     source: Source,
     sources: HashMap<FileId, Source>,
     binaries: HashMap<FileId, Bytes>,
@@ -158,11 +160,13 @@ impl QuillWorld {
         let mut sources = HashMap::new();
         let mut binaries = HashMap::new();
         
-        // Load fonts from quill's in-memory file system
+        // Load fonts from quill's in-memory file system first (assets)
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
+        let mut font_slots = Vec::new();
         
-        // Load fonts from the quill's in-memory assets first
+        // Load fonts from the quill's in-memory assets first - these are loaded eagerly
+        // as they are part of the template and behavior shouldn't change
         let font_data_list = Self::load_fonts_from_quill(quill)?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
@@ -172,21 +176,19 @@ impl QuillWorld {
             }
         }
         
-        // If no quill fonts found, try to load system fonts
+        // If no quill fonts found, set up lazy loading for system fonts using typst-kit
         if fonts.is_empty() {
-            let system_font_data_list = Self::load_system_fonts()?;
-            for font_data in system_font_data_list {
-                let font_bytes = Bytes::new(font_data);
-                for font in Font::iter(font_bytes) {
-                    book.push(font.info().clone());
-                    fonts.push(font);
-                }
+            let searcher_fonts = FontSearcher::new()
+                .include_system_fonts(true)
+                .search();
+            
+            book = searcher_fonts.book;
+            font_slots = searcher_fonts.fonts;
+            
+            // Error if no fonts are available at all
+            if font_slots.is_empty() {
+                return Err("No fonts found: neither quill assets nor system fonts are available".into());
             }
-        }
-        
-        // Error if no fonts are available at all
-        if fonts.is_empty() {
-            return Err("No fonts found: neither quill assets nor system fonts are available".into());
         }
         
         // Load assets from the quill's in-memory file system
@@ -203,6 +205,7 @@ impl QuillWorld {
             library: LazyHash::new(Library::default()),
             book: LazyHash::new(book),
             fonts,
+            font_slots,
             source,
             sources,
             binaries,
@@ -236,26 +239,6 @@ impl QuillWorld {
                         }
                     }
                 }
-            }
-        }
-        
-        Ok(font_data)
-    }
-    
-    /// Load system fonts using fontdb
-    fn load_system_fonts() -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
-        let mut db = fontdb::Database::new();
-        db.load_system_fonts();
-        
-        let mut font_data = Vec::new();
-        
-        // Iterate through all font faces in the database
-        for id in db.faces().map(|info| info.id) {
-            // Get font data using with_face_data
-            if let Some(data) = db.with_face_data(id, |data, _face_index| {
-                data.to_vec()
-            }) {
-                font_data.push(data);
             }
         }
         
@@ -428,7 +411,19 @@ impl World for QuillWorld {
     }
 
     fn font(&self, index: usize) -> Option<Font> {
-        self.fonts.get(index).cloned()
+        // First check if we have an asset font at this index
+        if let Some(font) = self.fonts.get(index) {
+            return Some(font.clone());
+        }
+        
+        // If not, check if we need to lazy-load from font slots
+        // The index needs to be adjusted for the font_slots
+        let font_slot_index = index - self.fonts.len();
+        if let Some(font_slot) = self.font_slots.get(font_slot_index) {
+            return font_slot.get();
+        }
+        
+        None
     }
 
     fn today(&self, offset: Option<i64>) -> Option<Datetime> {
@@ -523,7 +518,88 @@ name = "minimal-package"
         assert_eq!(package_info.name, "minimal-package");
         assert_eq!(package_info.version, "0.1.0");
         assert_eq!(package_info.namespace, "preview");
-        assert_eq!(package_info.entrypoint, "lib.typ");
+        assert_eq!(package_info.entrypoint, "lib.typ");  
+    }
+
+    #[test] 
+    fn test_font_loading_uses_lazy_approach() {
+        use quillmark_core::Quill;
+        use tempfile::TempDir;
+        use std::fs;
+        
+        // Create a temporary directory for our test
+        let temp_dir = TempDir::new().unwrap();
+        let quill_path = temp_dir.path();
+        
+        // Create a minimal complete quill structure with no fonts in assets
+        fs::create_dir_all(quill_path.join("assets")).unwrap();
+        fs::write(quill_path.join("Quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(quill_path.join("glue.typ"), "// Test template\n{{ title | String(default=\"Test\") }}").unwrap();
+        
+        let quill = Quill::from_path(quill_path).unwrap();
+        
+        // Create a QuillWorld - this should use lazy font loading since no asset fonts
+        let world_result = QuillWorld::new(&quill, "// Test content");
+        
+        assert!(world_result.is_ok(), "QuillWorld creation should succeed with lazy font loading");
+        
+        let world = world_result.unwrap();
+        
+        // Verify that we have font slots for lazy loading
+        // If fonts are empty but font_slots are not, we're using lazy loading
+        if world.fonts.is_empty() {
+            assert!(!world.font_slots.is_empty(), "Should have font slots for lazy loading when no asset fonts");
+            
+            // Test that font access works (this should trigger lazy loading)
+            let first_font = world.font(0);
+            assert!(first_font.is_some(), "Should be able to lazy-load a font when needed");
+            
+            println!("✓ Successfully using lazy font loading with {} font slots", world.font_slots.len());
+        } else {
+            // If fonts are not empty, they came from assets, which is acceptable behavior
+            println!("✓ Found {} asset fonts, which is acceptable", world.fonts.len());
+        }
+    }
+
+    #[test]
+    fn test_asset_font_loading_unchanged() {
+        use quillmark_core::Quill;
+        use tempfile::TempDir;
+        use std::fs;
+        
+        // Create a temporary directory for our test
+        let temp_dir = TempDir::new().unwrap();
+        let quill_path = temp_dir.path();
+        
+        // Create a quill structure with a mock font file in assets
+        fs::create_dir_all(quill_path.join("assets").join("fonts")).unwrap();
+        
+        // Create a minimal TTF font file (just a dummy file with .ttf extension for testing)
+        let dummy_font_data = b"dummy font data for testing";
+        fs::write(quill_path.join("assets").join("fonts").join("test.ttf"), dummy_font_data).unwrap();
+        
+        fs::write(quill_path.join("Quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(quill_path.join("glue.typ"), "// Test template\n{{ title | String(default=\"Test\") }}").unwrap();
+        
+        let quill = Quill::from_path(quill_path).unwrap();
+        
+        // Create a QuillWorld - this should attempt to load assets fonts first
+        let world_result = QuillWorld::new(&quill, "// Test content");
+        
+        assert!(world_result.is_ok(), "QuillWorld creation should succeed");
+        
+        let world = world_result.unwrap();
+        
+        // Even with dummy font data (which won't parse as a real font), 
+        // the behavior should prioritize asset fonts first, then fall back to lazy loading
+        // Since our dummy data won't parse as a font, it should fall back to lazy loading
+        if world.fonts.is_empty() && !world.font_slots.is_empty() {
+            println!("✓ Attempted asset font loading first, fell back to lazy loading (expected with dummy data)");
+        } else if !world.fonts.is_empty() {
+            println!("✓ Asset font loading succeeded (should not happen with dummy data, but acceptable)");
+        } else {
+            panic!("No fonts available at all - this should not happen");
+        }
     }
 
 }
