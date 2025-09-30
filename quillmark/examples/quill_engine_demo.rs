@@ -1,12 +1,12 @@
-use quillmark::{QuillEngine, Quill};
+use quillmark::{Quillmark, Quill};
 use quillmark_fixtures::{write_example_output, resource_path, example_output_dir};
 use quillmark_core::OutputFormat;
 
 fn main() {
-    // Step 1: Create QuillEngine with auto-registered backends
-    let mut engine = QuillEngine::new();
+    // Step 1: Create Quillmark with auto-registered backends
+    let mut engine = Quillmark::new();
     
-    println!("QuillEngine initialized with backends: {:?}", engine.registered_backends());
+    println!("Quillmark initialized with backends: {:?}", engine.registered_backends());
     
     // Step 2: Create Quill from path
     let ice_cream_quill_path = resource_path("ice-cream");
@@ -15,7 +15,7 @@ fn main() {
     let usaf_memo_quill_path = resource_path("usaf-memo");
     let usaf_memo_quill = Quill::from_path(usaf_memo_quill_path).expect("Failed to load usaf-memo quill");
     
-    // Step 3: Register Quills to QuillEngine
+    // Step 3: Register Quills to Quillmark
     println!("Registering quill: {}", ice_cream_quill.name);
     engine.register_quill(ice_cream_quill);
     

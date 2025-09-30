@@ -1,9 +1,9 @@
-use quillmark::QuillEngine;
+use quillmark::Quillmark;
 
 #[test]
 #[cfg(feature = "typst")]
 fn test_typst_backend_auto_registered() {
-    let engine = QuillEngine::new();
+    let engine = Quillmark::new();
     let backends = engine.registered_backends();
     
     assert!(backends.contains(&"typst"), "Typst backend should be auto-registered when feature is enabled");
@@ -12,7 +12,7 @@ fn test_typst_backend_auto_registered() {
 #[test]
 #[cfg(not(feature = "typst"))]
 fn test_typst_backend_not_registered() {
-    let engine = QuillEngine::new();
+    let engine = Quillmark::new();
     let backends = engine.registered_backends();
     
     assert!(!backends.contains(&"typst"), "Typst backend should not be registered when feature is disabled");

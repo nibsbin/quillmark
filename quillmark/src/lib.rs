@@ -84,17 +84,17 @@ impl Workflow {
 
 /// High-level engine for orchestrating backends and quills
 /// 
-/// `QuillEngine` manages the registration of backends and quills, and provides
+/// `Quillmark` manages the registration of backends and quills, and provides
 /// a convenient way to create workflows. Backends are automatically registered
 /// based on enabled crate features.
 /// 
 /// # Example
 /// 
 /// ```no_run
-/// use quillmark::{QuillEngine, Quill, OutputFormat};
+/// use quillmark::{Quillmark, Quill, OutputFormat};
 /// 
 /// // Step 1: Create engine with auto-registered backends (typst by default)
-/// let mut engine = QuillEngine::new();
+/// let mut engine = Quillmark::new();
 /// 
 /// // Step 2: Create and register quills
 /// let quill = Quill::from_path("path/to/quill").unwrap();
@@ -106,13 +106,13 @@ impl Workflow {
 /// // Step 4: Render markdown
 /// let result = workflow.render("# Hello", Some(OutputFormat::Pdf)).unwrap();
 /// ```
-pub struct QuillEngine {
+pub struct Quillmark {
     backends: HashMap<String, Box<dyn Backend>>,
     quills: HashMap<String, Quill>,
 }
 
-impl QuillEngine {
-    /// Create a new QuillEngine with auto-registered backends based on enabled features
+impl Quillmark {
+    /// Create a new Quillmark with auto-registered backends based on enabled features
     pub fn new() -> Self {
         #[allow(unused_mut)]
         let mut backends: HashMap<String, Box<dyn Backend>> = HashMap::new();
@@ -187,7 +187,7 @@ impl QuillEngine {
     }
 }
 
-impl Default for QuillEngine {
+impl Default for Quillmark {
     fn default() -> Self {
         Self::new()
     }
