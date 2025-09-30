@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::path::Path;
-use std::fs;
 use typst::diag::{FileError, FileResult, Warned, SourceDiagnostic};
 use typst::foundations::{Bytes, Datetime};
 use typst::syntax::{FileId, Source, VirtualPath, package::PackageSpec};
@@ -161,15 +160,15 @@ impl QuillWorld {
         let mut sources = HashMap::new();
         let mut binaries = HashMap::new();
         
-        // Load fonts - handled by compiler now, not by Quill
+        // Load fonts from quill's in-memory file system
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
         // Add default font
         fonts.push(Font::new(Bytes::new(DEFAULT_FONT), 0).ok_or("Failed to load default font")?);
         book.push(fonts[0].info().clone());
         
-        // Load fonts from the quill's assets directory
-        let font_data_list = Self::load_fonts_from_assets(&quill.assets_path())?;
+        // Load fonts from the quill's in-memory assets
+        let font_data_list = Self::load_fonts_from_quill(quill)?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
             for font in Font::iter(font_bytes) {
@@ -182,11 +181,11 @@ impl QuillWorld {
             return Err("No fonts found in quill assets".into());
         }
         
-        // Load assets from the quill
-        Self::load_assets_recursive(&quill.assets_path(), &mut binaries, &VirtualPath::new("assets"))?;
+        // Load assets from the quill's in-memory file system
+        Self::load_assets_from_quill(quill, &mut binaries)?;
         
-        // Load packages from the quill
-        Self::load_packages_recursive(&quill.packages_path(), &mut sources, &mut binaries)?;
+        // Load packages from the quill's in-memory file system
+        Self::load_packages_from_quill(quill, &mut sources, &mut binaries)?;
                 
         // Create main source
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));
@@ -202,35 +201,30 @@ impl QuillWorld {
         })
     }
     
-    /// Load fonts from the assets directory - compiler-specific logic
-    fn load_fonts_from_assets(assets_path: &Path) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
-        let fonts_dir = assets_path.join("fonts");
+    /// Load fonts from the quill's in-memory file system
+    fn load_fonts_from_quill(quill: &Quill) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
         let mut font_data = Vec::new();
         
-        if !fonts_dir.exists() {
-            // Look for any font files in the assets directory
-            if assets_path.exists() {
-                for entry in fs::read_dir(assets_path)? {
-                    let entry = entry?;
-                    let path = entry.path();
-                    if path.is_file() {
-                        if let Some(ext) = path.extension() {
-                            if matches!(ext.to_string_lossy().to_lowercase().as_str(), "ttf" | "otf" | "woff" | "woff2") {
-                                font_data.push(fs::read(&path)?);
-                            }
-                        }
+        // Look for fonts in assets/fonts/ first
+        let fonts_paths = quill.find_files("assets/fonts/*");
+        for font_path in fonts_paths {
+            if let Some(ext) = font_path.extension() {
+                if matches!(ext.to_string_lossy().to_lowercase().as_str(), "ttf" | "otf" | "woff" | "woff2") {
+                    if let Some(contents) = quill.get_file(&font_path) {
+                        font_data.push(contents.to_vec());
                     }
                 }
             }
-        } else {
-            // Load fonts from fonts subdirectory
-            for entry in fs::read_dir(&fonts_dir)? {
-                let entry = entry?;
-                let path = entry.path();
-                if path.is_file() {
-                    if let Some(ext) = path.extension() {
-                        if matches!(ext.to_string_lossy().to_lowercase().as_str(), "ttf" | "otf" | "woff" | "woff2") {
-                            font_data.push(fs::read(&path)?);
+        }
+
+        // If no fonts in fonts subdirectory, look in assets/ root
+        if font_data.is_empty() {
+            let asset_paths = quill.find_files("assets/*");
+            for asset_path in asset_paths {
+                if let Some(ext) = asset_path.extension() {
+                    if matches!(ext.to_string_lossy().to_lowercase().as_str(), "ttf" | "otf" | "woff" | "woff2") {
+                        if let Some(contents) = quill.get_file(&asset_path) {
+                            font_data.push(contents.to_vec());
                         }
                     }
                 }
@@ -240,194 +234,133 @@ impl QuillWorld {
         Ok(font_data)
     }
     
-    /// Recursively load assets from a directory
-    fn load_assets_recursive(
-        dir: &Path,
+    /// Load assets from the quill's in-memory file system
+    fn load_assets_from_quill(
+        quill: &Quill,
         binaries: &mut HashMap<FileId, Bytes>,
-        base_path: &VirtualPath,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        if !dir.exists() {
-            return Ok(());
-        }
+        // Get all files that start with "assets/"
+        let asset_paths = quill.find_files("assets/*");
         
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            let name = entry.file_name().to_string_lossy().to_string();
-            
-            if path.is_file() {
-                // Use the same manual path construction as package loading
-                let virtual_path = if base_path.as_rootless_path().as_os_str().is_empty() {
-                    VirtualPath::new(&name)
-                } else {
-                    let base_str = base_path.as_rootless_path().to_string_lossy();
-                    let full_path = format!("{}/{}", base_str, name);
-                    VirtualPath::new(&full_path)
-                };
+        for asset_path in asset_paths {
+            if let Some(contents) = quill.get_file(&asset_path) {
+                // Create virtual path for the asset
+                let virtual_path = VirtualPath::new(asset_path.to_string_lossy().as_ref());
                 let file_id = FileId::new(None, virtual_path);
-                let data = fs::read(&path)?;
-                binaries.insert(file_id, Bytes::new(data));
-            } else if path.is_dir() {
-                // Use the same manual path construction for subdirectories
-                let sub_path = if base_path.as_rootless_path().as_os_str().is_empty() {
-                    VirtualPath::new(&name)
-                } else {
-                    let base_str = base_path.as_rootless_path().to_string_lossy();
-                    let full_path = format!("{}/{}", base_str, name);
-                    VirtualPath::new(&full_path)
-                };
-                Self::load_assets_recursive(&path, binaries, &sub_path)?;
+                binaries.insert(file_id, Bytes::new(contents.to_vec()));
             }
         }
         
         Ok(())
     }
     
-    /// Efficiently load packages from a directory with better error handling
-    /// 
-    /// This method replaces the previous hardcoded package loading approach with a dynamic
-    /// system that:
-    /// - Scans package directories for typst.toml files
-    /// - Respects package entrypoints and metadata  
-    /// - Preserves directory structure in virtual paths
-    /// - Handles multiple namespaces (@preview, @local, etc.)
-    /// - Provides clear error reporting for debugging
-    fn load_packages_recursive(
-        dir: &Path,
+    /// Load packages from the quill's in-memory file system
+    fn load_packages_from_quill(
+        quill: &Quill,
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        if !dir.exists() {
-            println!("Package directory does not exist: {}", dir.display());
-            return Ok(());
-        }
+        println!("Loading packages from quill's in-memory file system");
         
-        println!("Loading packages from: {}", dir.display());
+        // Get all subdirectories in packages/
+        let package_dirs = quill.list_subdirectories("packages");
         
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
+        for package_dir in package_dirs {
+            let package_name = package_dir.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("unknown")
+                .to_string();
             
-            if path.is_dir() {
-                let package_name = entry.file_name().to_string_lossy().to_string();
-                println!("Processing package directory: {}", package_name);
-                
-                // Look for a typst.toml to determine package info
-                let toml_path = path.join("typst.toml");
-                if toml_path.exists() {
-                    let toml_content = fs::read_to_string(&toml_path)?;
-                    match parse_package_toml(&toml_content) {
-                        Ok(package_info) => {
-                            let spec = PackageSpec {
-                                namespace: package_info.namespace.clone().into(),
-                                name: package_info.name.clone().into(),
-                                version: package_info.version.parse()
-                                    .map_err(|_| format!("Invalid version format: {}", package_info.version))?,
-                            };
-                            
-                            println!("Loading package: {}:{} (namespace: {})", 
-                                package_info.name, package_info.version, package_info.namespace);
-                            
-                            // Load the package files with entrypoint awareness
-                            Self::load_package_files_with_entrypoint(&path, sources, binaries, spec, &package_info.entrypoint)?;
-                        }
-                        Err(e) => {
-                            println!("Warning: Failed to parse typst.toml for {}: {}", package_name, e);
-                            // Continue with other packages
-                        }
+            println!("Processing package directory: {}", package_name);
+            
+            // Look for typst.toml in this package
+            let toml_path = package_dir.join("typst.toml");
+            if let Some(toml_contents) = quill.get_file(&toml_path) {
+                let toml_content = String::from_utf8_lossy(toml_contents);
+                match parse_package_toml(&toml_content) {
+                    Ok(package_info) => {
+                        let spec = PackageSpec {
+                            namespace: package_info.namespace.clone().into(),
+                            name: package_info.name.clone().into(),
+                            version: package_info.version.parse()
+                                .map_err(|_| format!("Invalid version format: {}", package_info.version))?,
+                        };
+                        
+                        println!("Loading package: {}:{} (namespace: {})", 
+                            package_info.name, package_info.version, package_info.namespace);
+                        
+                        // Load the package files with entrypoint awareness
+                        Self::load_package_files_from_quill(quill, &package_dir, sources, binaries, Some(spec), Some(&package_info.entrypoint))?;
                     }
-                } else {
-                    // Load as a simple package directory without typst.toml
-                    println!("No typst.toml found for {}, loading as local package", package_name);
-                    let spec = PackageSpec {
-                        namespace: "local".into(),
-                        name: package_name.into(),
-                        version: "0.1.0".parse()
-                            .map_err(|_| "Invalid version format")?,
-                    };
-                    
-                    Self::load_package_files(&path, sources, binaries, Some(spec))?;
+                    Err(e) => {
+                        println!("Warning: Failed to parse typst.toml for {}: {}", package_name, e);
+                        // Continue with other packages
+                    }
                 }
+            } else {
+                // Load as a simple package directory without typst.toml
+                println!("No typst.toml found for {}, loading as local package", package_name);
+                let spec = PackageSpec {
+                    namespace: "local".into(),
+                    name: package_name.into(),
+                    version: "0.1.0".parse()
+                        .map_err(|_| "Invalid version format")?,
+                };
+                
+                Self::load_package_files_from_quill(quill, &package_dir, sources, binaries, Some(spec), None)?;
             }
         }
         
         Ok(())
     }
-    
-    /// Load files from a package directory with entrypoint support
-    fn load_package_files_with_entrypoint(
-        dir: &Path,
-        sources: &mut HashMap<FileId, Source>,
-        binaries: &mut HashMap<FileId, Bytes>,
-        package_spec: PackageSpec,
-        entrypoint: &str,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Load all files recursively to ensure consistent directory structure
-        Self::load_package_files_recursive(dir, sources, binaries, Some(package_spec.clone()), &VirtualPath::new(""))?;
-        
-        // Verify the entrypoint was loaded correctly
-        let expected_entrypoint_path = VirtualPath::new(entrypoint);
-        let entrypoint_file_id = FileId::new(Some(package_spec.clone()), expected_entrypoint_path);
-        
-        if sources.contains_key(&entrypoint_file_id) {
-            println!("Package {} loaded successfully with {} sources", package_spec.name, sources.len());
-        } else {
-            println!("Warning: Entrypoint {} not found after recursive loading", entrypoint);
-        }
-        
-        Ok(())
-    }
-    
-    /// Load files from a package directory
-    fn load_package_files(
-        dir: &Path,
+
+    /// Load files from a package directory in quill's in-memory file system
+    fn load_package_files_from_quill(
+        quill: &Quill,
+        package_dir: &Path,
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
         package_spec: Option<PackageSpec>,
+        entrypoint: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        Self::load_package_files_recursive(dir, sources, binaries, package_spec, &VirtualPath::new(""))?;
-        Ok(())
-    }
-    
-    /// Recursively load package files
-    fn load_package_files_recursive(
-        dir: &Path,
-        sources: &mut HashMap<FileId, Source>,
-        binaries: &mut HashMap<FileId, Bytes>,
-        package_spec: Option<PackageSpec>,
-        base_path: &VirtualPath,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            let name = entry.file_name().to_string_lossy().to_string();
-            
-            if path.is_file() {
-                let virtual_path = if base_path.as_rootless_path().as_os_str().is_empty() {
-                    VirtualPath::new(&name)
-                } else {
-                    // Manually construct the path to ensure it works correctly
-                    let base_str = base_path.as_rootless_path().to_string_lossy();
-                    let full_path = format!("{}/{}", base_str, name);
-                    VirtualPath::new(&full_path)
-                };
+        // Find all files in the package directory
+        let package_pattern = format!("{}/*", package_dir.to_string_lossy());
+        let package_files = quill.find_files(&package_pattern);
+        
+        for file_path in package_files {
+            if let Some(contents) = quill.get_file(&file_path) {
+                // Calculate the relative path within the package
+                let relative_path = file_path.strip_prefix(package_dir)
+                    .map_err(|_| format!("Failed to get relative path for {}", file_path.display()))?;
                 
+                let virtual_path = VirtualPath::new(relative_path.to_string_lossy().as_ref());
                 let file_id = FileId::new(package_spec.clone(), virtual_path);
                 
-                if name.ends_with(".typ") {
-                    let content = fs::read_to_string(&path)?;
-                    sources.insert(file_id, Source::new(file_id, content));
+                // Check if this is a source file (.typ) or binary
+                if let Some(ext) = file_path.extension() {
+                    if ext == "typ" {
+                        let source_content = String::from_utf8_lossy(contents);
+                        let source = Source::new(file_id, source_content.to_string());
+                        sources.insert(file_id, source);
+                    } else {
+                        binaries.insert(file_id, Bytes::new(contents.to_vec()));
+                    }
                 } else {
-                    let data = fs::read(&path)?;
-                    binaries.insert(file_id, Bytes::new(data));
+                    // No extension, treat as binary
+                    binaries.insert(file_id, Bytes::new(contents.to_vec()));
                 }
-            } else if path.is_dir() {
-                let sub_path = if base_path.as_rootless_path().as_os_str().is_empty() {
-                    VirtualPath::new(&name)
-                } else {
-                    base_path.join(&name)
-                };
-                Self::load_package_files_recursive(&path, sources, binaries, package_spec.clone(), &sub_path)?;
+            }
+        }
+        
+        // Verify entrypoint if specified
+        if let (Some(spec), Some(entrypoint_name)) = (&package_spec, entrypoint) {
+            let entrypoint_path = VirtualPath::new(entrypoint_name);
+            let entrypoint_file_id = FileId::new(Some(spec.clone()), entrypoint_path);
+            
+            if sources.contains_key(&entrypoint_file_id) {
+                println!("Package {} loaded successfully with entrypoint {}", spec.name, entrypoint_name);
+            } else {
+                println!("Warning: Entrypoint {} not found for package {}", entrypoint_name, spec.name);
             }
         }
         
@@ -533,8 +466,6 @@ fn parse_package_toml(content: &str) -> Result<PackageInfo, Box<dyn std::error::
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use tempfile::TempDir;
 
     #[test]
     fn test_parse_package_toml() {
@@ -565,67 +496,5 @@ name = "minimal-package"
         assert_eq!(package_info.version, "0.1.0");
         assert_eq!(package_info.namespace, "preview");
         assert_eq!(package_info.entrypoint, "lib.typ");
-    }
-
-    #[test]
-    fn test_package_loading_with_virtual_paths() {
-        // This test verifies that the improved package loading correctly handles
-        // virtual paths and directory structures
-        let temp_dir = TempDir::new().unwrap();
-        let package_dir = temp_dir.path().join("test-package");
-        let src_dir = package_dir.join("src");
-        
-        fs::create_dir_all(&src_dir).unwrap();
-        
-        // Create typst.toml
-        fs::write(
-            package_dir.join("typst.toml"),
-            r#"
-[package]
-name = "test-package"
-version = "1.0.0" 
-entrypoint = "src/lib.typ"
-"#
-        ).unwrap();
-        
-        // Create package files with directory structure
-        fs::write(src_dir.join("lib.typ"), "#import \"utils.typ\": *\n\n// Main package file").unwrap();
-        fs::write(src_dir.join("utils.typ"), "// Utility functions").unwrap();
-        
-        let mut sources = HashMap::new();
-        let mut binaries = HashMap::new();
-        
-        // Test the package loading
-        let result = QuillWorld::load_packages_recursive(&temp_dir.path(), &mut sources, &mut binaries);
-        assert!(result.is_ok(), "Package loading should succeed");
-        
-        // Verify that files are loaded with correct virtual paths
-        let expected_lib_path = VirtualPath::new("src/lib.typ");
-        let expected_utils_path = VirtualPath::new("src/utils.typ");
-        
-        let lib_id = FileId::new(
-            Some(PackageSpec {
-                namespace: "preview".into(),
-                name: "test-package".into(),
-                version: "1.0.0".parse().unwrap(),
-            }),
-            expected_lib_path
-        );
-        
-        let utils_id = FileId::new(
-            Some(PackageSpec {
-                namespace: "preview".into(),
-                name: "test-package".into(),
-                version: "1.0.0".parse().unwrap(),
-            }),
-            expected_utils_path
-        );
-        
-        assert!(sources.contains_key(&lib_id), "lib.typ should be loaded at src/lib.typ");
-        assert!(sources.contains_key(&utils_id), "utils.typ should be loaded at src/utils.typ");
-        
-        // Verify content is loaded correctly
-        assert!(sources[&lib_id].text().contains("Main package file"));
-        assert!(sources[&utils_id].text().contains("Utility functions"));
     }
 }

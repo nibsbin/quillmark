@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::error::Error as StdError;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // Re-export parsing functionality
 pub mod parse;
@@ -39,6 +39,89 @@ pub struct RenderOptions {
     pub output_format: Option<OutputFormat>,
 }
 
+/// A file entry in the in-memory file system
+#[derive(Debug, Clone)]
+pub struct FileEntry {
+    /// The file contents as bytes
+    pub contents: Vec<u8>,
+    /// The file path relative to the quill root
+    pub path: PathBuf,
+    /// Whether this is a directory entry
+    pub is_dir: bool,
+}
+
+/// Simple gitignore-style pattern matcher for .quillignore
+#[derive(Debug, Clone)]
+pub struct QuillIgnore {
+    patterns: Vec<String>,
+}
+
+impl QuillIgnore {
+    /// Create a new QuillIgnore from pattern strings
+    pub fn new(patterns: Vec<String>) -> Self {
+        Self { patterns }
+    }
+
+    /// Parse .quillignore content into patterns
+    pub fn from_content(content: &str) -> Self {
+        let patterns = content
+            .lines()
+            .map(|line| line.trim())
+            .filter(|line| !line.is_empty() && !line.starts_with('#'))
+            .map(|line| line.to_string())
+            .collect();
+        Self::new(patterns)
+    }
+
+    /// Check if a path should be ignored
+    pub fn is_ignored<P: AsRef<Path>>(&self, path: P) -> bool {
+        let path = path.as_ref();
+        let path_str = path.to_string_lossy();
+        
+        for pattern in &self.patterns {
+            if self.matches_pattern(pattern, &path_str) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Simple pattern matching (supports * wildcard and directory patterns)
+    fn matches_pattern(&self, pattern: &str, path: &str) -> bool {
+        // Handle directory patterns
+        if pattern.ends_with('/') {
+            let pattern_prefix = &pattern[..pattern.len() - 1];
+            return path.starts_with(pattern_prefix) && 
+                   (path.len() == pattern_prefix.len() || path.chars().nth(pattern_prefix.len()) == Some('/'));
+        }
+
+        // Handle exact matches
+        if !pattern.contains('*') {
+            return path == pattern || path.ends_with(&format!("/{}", pattern));
+        }
+
+        // Simple wildcard matching
+        if pattern == "*" {
+            return true;
+        }
+
+        // Handle patterns with wildcards
+        let pattern_parts: Vec<&str> = pattern.split('*').collect();
+        if pattern_parts.len() == 2 {
+            let (prefix, suffix) = (pattern_parts[0], pattern_parts[1]);
+            if prefix.is_empty() {
+                return path.ends_with(suffix);
+            } else if suffix.is_empty() {
+                return path.starts_with(prefix);
+            } else {
+                return path.starts_with(prefix) && path.ends_with(suffix);
+            }
+        }
+
+        false
+    }
+}
+
 /// A quill template containing the template content and metadata with file management capabilities
 #[derive(Debug, Clone)]
 pub struct Quill {
@@ -52,6 +135,8 @@ pub struct Quill {
     pub name: String,
     /// Glue template file name
     pub glue_file: String,
+    /// In-memory file system - all files loaded during initialization
+    pub files: HashMap<PathBuf, FileEntry>,
 }
 
 impl Quill {
@@ -105,13 +190,85 @@ impl Quill {
         let template_content = fs::read_to_string(&glue_path)
             .map_err(|e| format!("Failed to read glue file '{}': {}", glue_file, e))?;
 
+        // Load .quillignore if it exists
+        let quillignore_path = path.join(".quillignore");
+        let ignore = if quillignore_path.exists() {
+            let ignore_content = fs::read_to_string(&quillignore_path)
+                .map_err(|e| format!("Failed to read .quillignore: {}", e))?;
+            QuillIgnore::from_content(&ignore_content)
+        } else {
+            // Default ignore patterns
+            QuillIgnore::new(vec![
+                ".git/".to_string(),
+                ".gitignore".to_string(),
+                ".quillignore".to_string(),
+                "target/".to_string(),
+                "node_modules/".to_string(),
+            ])
+        };
+
+        // Load all files into memory
+        let mut files = HashMap::new();
+        Self::load_directory_recursive(path, path, &mut files, &ignore)?;
+
         Ok(Quill {
             glue_template: template_content,
             metadata,
             base_path: path.to_path_buf(),
             name,
             glue_file,
+            files,
         })
+    }
+
+    /// Recursively load all files from a directory into memory
+    fn load_directory_recursive(
+        current_dir: &Path,
+        base_dir: &Path,
+        files: &mut HashMap<PathBuf, FileEntry>,
+        ignore: &QuillIgnore,
+    ) -> Result<(), Box<dyn StdError + Send + Sync>> {
+        use std::fs;
+        
+        if !current_dir.exists() {
+            return Ok(());
+        }
+
+        for entry in fs::read_dir(current_dir)? {
+            let entry = entry?;
+            let path = entry.path();
+            let relative_path = path.strip_prefix(base_dir)
+                .map_err(|e| format!("Failed to get relative path: {}", e))?
+                .to_path_buf();
+
+            // Check if this path should be ignored
+            if ignore.is_ignored(&relative_path) {
+                continue;
+            }
+
+            if path.is_file() {
+                let contents = fs::read(&path)
+                    .map_err(|e| format!("Failed to read file '{}': {}", path.display(), e))?;
+                
+                files.insert(relative_path.clone(), FileEntry {
+                    contents,
+                    path: relative_path,
+                    is_dir: false,
+                });
+            } else if path.is_dir() {
+                // Add directory entry
+                files.insert(relative_path.clone(), FileEntry {
+                    contents: Vec::new(),
+                    path: relative_path,
+                    is_dir: true,
+                });
+
+                // Recursively process subdirectory
+                Self::load_directory_recursive(&path, base_dir, files, ignore)?;
+            }
+        }
+
+        Ok(())
     }
 
     /// Convert TOML value to YAML value
@@ -138,10 +295,258 @@ impl Quill {
 
     /// Validate the quill structure
     pub fn validate(&self) -> Result<(), Box<dyn StdError + Send + Sync>> {
-        // Check that glue file exists
-        if !self.glue_path().exists() {
+        // Check that glue file exists in memory
+        let glue_path = PathBuf::from(&self.glue_file);
+        if !self.files.contains_key(&glue_path) {
             return Err(format!("Glue file '{}' does not exist", self.glue_file).into());
         }
         Ok(())
+    }
+
+    /// Get file contents by path (relative to quill root)
+    pub fn get_file<P: AsRef<Path>>(&self, path: P) -> Option<&[u8]> {
+        let path = path.as_ref();
+        self.files.get(path).map(|entry| entry.contents.as_slice())
+    }
+
+    /// Get file entry by path (includes metadata)
+    pub fn get_file_entry<P: AsRef<Path>>(&self, path: P) -> Option<&FileEntry> {
+        let path = path.as_ref();
+        self.files.get(path)
+    }
+
+    /// Check if a file exists in memory
+    pub fn file_exists<P: AsRef<Path>>(&self, path: P) -> bool {
+        let path = path.as_ref();
+        self.files.contains_key(path)
+    }
+
+    /// List all files in a directory (returns paths relative to quill root)
+    pub fn list_directory<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
+        let dir_path = dir_path.as_ref();
+        let mut entries = Vec::new();
+        
+        for (path, entry) in &self.files {
+            if let Some(parent) = path.parent() {
+                if parent == dir_path && !entry.is_dir {
+                    entries.push(path.clone());
+                }
+            } else if dir_path == Path::new("") && !entry.is_dir {
+                // Files in root directory
+                entries.push(path.clone());
+            }
+        }
+        
+        entries.sort();
+        entries
+    }
+
+    /// List all directories in a directory (returns paths relative to quill root)
+    pub fn list_subdirectories<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
+        let dir_path = dir_path.as_ref();
+        let mut entries = Vec::new();
+        
+        for (path, entry) in &self.files {
+            if entry.is_dir {
+                if let Some(parent) = path.parent() {
+                    if parent == dir_path {
+                        entries.push(path.clone());
+                    }
+                } else if dir_path == Path::new("") {
+                    // Directories in root
+                    entries.push(path.clone());
+                }
+            }
+        }
+        
+        entries.sort();
+        entries
+    }
+
+    /// Get all files matching a pattern (supports simple wildcards)
+    pub fn find_files<P: AsRef<Path>>(&self, pattern: P) -> Vec<PathBuf> {
+        let pattern_str = pattern.as_ref().to_string_lossy();
+        let mut matches = Vec::new();
+        
+        for (path, entry) in &self.files {
+            if !entry.is_dir {
+                let path_str = path.to_string_lossy();
+                if self.matches_simple_pattern(&pattern_str, &path_str) {
+                    matches.push(path.clone());
+                }
+            }
+        }
+        
+        matches.sort();
+        matches
+    }
+
+    /// Simple pattern matching helper
+    fn matches_simple_pattern(&self, pattern: &str, path: &str) -> bool {
+        if pattern == "*" {
+            return true;
+        }
+        
+        if !pattern.contains('*') {
+            return path == pattern;
+        }
+        
+        // Handle directory/* patterns
+        if pattern.ends_with("/*") {
+            let dir_pattern = &pattern[..pattern.len() - 2];
+            return path.starts_with(&format!("{}/", dir_pattern));
+        }
+        
+        let parts: Vec<&str> = pattern.split('*').collect();
+        if parts.len() == 2 {
+            let (prefix, suffix) = (parts[0], parts[1]);
+            if prefix.is_empty() {
+                return path.ends_with(suffix);
+            } else if suffix.is_empty() {
+                return path.starts_with(prefix);
+            } else {
+                return path.starts_with(prefix) && path.ends_with(suffix);
+            }
+        }
+        
+        false
+    }
+}
+#[cfg(test)]
+mod quill_tests {
+    use super::*;
+    use tempfile::TempDir;
+    use std::fs;
+
+    #[test]
+    fn test_quillignore_parsing() {
+        let ignore_content = r#"
+# This is a comment
+*.tmp
+target/
+node_modules/
+.git/
+"#;
+        let ignore = QuillIgnore::from_content(ignore_content);
+        assert_eq!(ignore.patterns.len(), 4);
+        assert!(ignore.patterns.contains(&"*.tmp".to_string()));
+        assert!(ignore.patterns.contains(&"target/".to_string()));
+    }
+
+    #[test]
+    fn test_quillignore_matching() {
+        let ignore = QuillIgnore::new(vec![
+            "*.tmp".to_string(),
+            "target/".to_string(),
+            "node_modules/".to_string(),
+            ".git/".to_string(),
+        ]);
+
+        // Test file patterns
+        assert!(ignore.is_ignored("test.tmp"));
+        assert!(ignore.is_ignored("path/to/file.tmp"));
+        assert!(!ignore.is_ignored("test.txt"));
+
+        // Test directory patterns
+        assert!(ignore.is_ignored("target"));
+        assert!(ignore.is_ignored("target/debug"));
+        assert!(ignore.is_ignored("target/debug/deps"));
+        assert!(!ignore.is_ignored("src/target.rs"));
+
+        assert!(ignore.is_ignored("node_modules"));
+        assert!(ignore.is_ignored("node_modules/package"));
+        assert!(!ignore.is_ignored("my_node_modules"));
+    }
+
+    #[test]
+    fn test_in_memory_file_system() {
+        let temp_dir = TempDir::new().unwrap();
+        let quill_dir = temp_dir.path();
+
+        // Create test files
+        fs::write(quill_dir.join("quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
+        
+        let assets_dir = quill_dir.join("assets");
+        fs::create_dir_all(&assets_dir).unwrap();
+        fs::write(assets_dir.join("test.txt"), "asset content").unwrap();
+
+        let packages_dir = quill_dir.join("packages");
+        fs::create_dir_all(&packages_dir).unwrap();
+        fs::write(packages_dir.join("package.typ"), "package content").unwrap();
+
+        // Load quill
+        let quill = Quill::from_path(quill_dir).unwrap();
+
+        // Test file access
+        assert!(quill.file_exists("glue.typ"));
+        assert!(quill.file_exists("assets/test.txt"));
+        assert!(quill.file_exists("packages/package.typ"));
+        assert!(!quill.file_exists("nonexistent.txt"));
+
+        // Test file content
+        let asset_content = quill.get_file("assets/test.txt").unwrap();
+        assert_eq!(asset_content, b"asset content");
+
+        // Test directory listing
+        let asset_files = quill.list_directory("assets");
+        assert_eq!(asset_files.len(), 1);
+        assert!(asset_files.contains(&PathBuf::from("assets/test.txt")));
+    }
+
+    #[test]
+    fn test_quillignore_integration() {
+        let temp_dir = TempDir::new().unwrap();
+        let quill_dir = temp_dir.path();
+
+        // Create .quillignore
+        fs::write(quill_dir.join(".quillignore"), "*.tmp\ntarget/\n").unwrap();
+        
+        // Create test files
+        fs::write(quill_dir.join("quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
+        fs::write(quill_dir.join("should_ignore.tmp"), "ignored").unwrap();
+        
+        let target_dir = quill_dir.join("target");
+        fs::create_dir_all(&target_dir).unwrap();
+        fs::write(target_dir.join("debug.txt"), "also ignored").unwrap();
+
+        // Load quill
+        let quill = Quill::from_path(quill_dir).unwrap();
+
+        // Test that ignored files are not loaded
+        assert!(quill.file_exists("glue.typ"));
+        assert!(!quill.file_exists("should_ignore.tmp"));
+        assert!(!quill.file_exists("target/debug.txt"));
+    }
+
+    #[test]
+    fn test_find_files_pattern() {
+        let temp_dir = TempDir::new().unwrap();
+        let quill_dir = temp_dir.path();
+
+        // Create test directory structure
+        fs::write(quill_dir.join("quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(quill_dir.join("glue.typ"), "template").unwrap();
+        
+        let assets_dir = quill_dir.join("assets");
+        fs::create_dir_all(&assets_dir).unwrap();
+        fs::write(assets_dir.join("image.png"), "png data").unwrap();
+        fs::write(assets_dir.join("data.json"), "json data").unwrap();
+
+        let fonts_dir = assets_dir.join("fonts");
+        fs::create_dir_all(&fonts_dir).unwrap();
+        fs::write(fonts_dir.join("font.ttf"), "font data").unwrap();
+
+        // Load quill
+        let quill = Quill::from_path(quill_dir).unwrap();
+
+        // Test pattern matching
+        let all_assets = quill.find_files("assets/*");
+        assert!(all_assets.len() >= 3); // At least image.png, data.json, fonts/font.ttf
+
+        let typ_files = quill.find_files("*.typ");
+        assert_eq!(typ_files.len(), 1);
+        assert!(typ_files.contains(&PathBuf::from("glue.typ")));
     }
 }
