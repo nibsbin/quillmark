@@ -1,3 +1,4 @@
-name = "ice-cream"
+[Quill]
+name = "usaf-memo"
 backend = "typst"
 glue = "glue.typ"

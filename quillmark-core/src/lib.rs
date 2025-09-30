@@ -150,26 +150,26 @@ impl Quill {
             .unwrap_or("unnamed")
             .to_string();
 
-        // Read quill.toml
-        let quill_toml_path = path.join("quill.toml");
+        // Read Quill.toml (capitalized)
+        let quill_toml_path = path.join("Quill.toml");
         let quill_toml_content = fs::read_to_string(&quill_toml_path)
-            .map_err(|e| format!("Failed to read quill.toml: {}", e))?;
+            .map_err(|e| format!("Failed to read Quill.toml: {}", e))?;
 
         let quill_toml: toml::Value = toml::from_str(&quill_toml_content)
-            .map_err(|e| format!("Failed to parse quill.toml: {}", e))?;
+            .map_err(|e| format!("Failed to parse Quill.toml: {}", e))?;
 
         let mut metadata = HashMap::new();
         let mut glue_file = "glue.typ".to_string(); // default
         let mut quill_name = name; // default to directory name
 
-        // Extract standardized top-level fields
-        if let toml::Value::Table(root_table) = &quill_toml {
+        // Extract fields from [Quill] section
+        if let Some(quill_section) = quill_toml.get("Quill") {
             // Extract required fields: name, backend, glue
-            if let Some(name_val) = root_table.get("name").and_then(|v| v.as_str()) {
+            if let Some(name_val) = quill_section.get("name").and_then(|v| v.as_str()) {
                 quill_name = name_val.to_string();
             }
             
-            if let Some(backend_val) = root_table.get("backend").and_then(|v| v.as_str()) {
+            if let Some(backend_val) = quill_section.get("backend").and_then(|v| v.as_str()) {
                 match Self::toml_to_yaml_value(&toml::Value::String(backend_val.to_string())) {
                     Ok(yaml_value) => {
                         metadata.insert("backend".to_string(), yaml_value);
@@ -180,19 +180,21 @@ impl Quill {
                 }
             }
             
-            if let Some(glue_val) = root_table.get("glue").and_then(|v| v.as_str()) {
+            if let Some(glue_val) = quill_section.get("glue").and_then(|v| v.as_str()) {
                 glue_file = glue_val.to_string();
             }
             
             // Add other fields to metadata (excluding special fields and version)
-            for (key, value) in root_table {
-                if key != "name" && key != "backend" && key != "glue" && key != "version" && !key.starts_with('[') {
-                    match Self::toml_to_yaml_value(value) {
-                        Ok(yaml_value) => {
-                            metadata.insert(key.clone(), yaml_value);
-                        }
-                        Err(e) => {
-                            eprintln!("Warning: Failed to convert field '{}': {}", key, e);
+            if let toml::Value::Table(table) = quill_section {
+                for (key, value) in table {
+                    if key != "name" && key != "backend" && key != "glue" && key != "version" {
+                        match Self::toml_to_yaml_value(value) {
+                            Ok(yaml_value) => {
+                                metadata.insert(key.clone(), yaml_value);
+                            }
+                            Err(e) => {
+                                eprintln!("Warning: Failed to convert field '{}': {}", key, e);
+                            }
                         }
                     }
                 }
@@ -478,7 +480,7 @@ node_modules/
         let quill_dir = temp_dir.path();
 
         // Create test files
-        fs::write(quill_dir.join("quill.toml"), "name = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
+        fs::write(quill_dir.join("Quill.toml"), "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
         
         let assets_dir = quill_dir.join("assets");
@@ -517,7 +519,7 @@ node_modules/
         fs::write(quill_dir.join(".quillignore"), "*.tmp\ntarget/\n").unwrap();
         
         // Create test files
-        fs::write(quill_dir.join("quill.toml"), "name = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
+        fs::write(quill_dir.join("Quill.toml"), "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
         fs::write(quill_dir.join("should_ignore.tmp"), "ignored").unwrap();
         
@@ -540,7 +542,7 @@ node_modules/
         let quill_dir = temp_dir.path();
 
         // Create test directory structure
-        fs::write(quill_dir.join("quill.toml"), "name = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
+        fs::write(quill_dir.join("Quill.toml"), "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
         fs::write(quill_dir.join("glue.typ"), "template").unwrap();
         
         let assets_dir = quill_dir.join("assets");
@@ -570,13 +572,14 @@ node_modules/
         let quill_dir = temp_dir.path();
 
         // Create test files using new standardized format
-        let toml_content = r#"name = "my-custom-quill"
+        let toml_content = r#"[Quill]
+name = "my-custom-quill"
 backend = "typst"
 glue = "custom-glue.typ"
 description = "Test quill with new format"
 author = "Test Author"
 "#;
-        fs::write(quill_dir.join("quill.toml"), toml_content).unwrap();
+        fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
         fs::write(quill_dir.join("custom-glue.typ"), "= Custom Template\n\nThis is a custom template.").unwrap();
 
         // Load quill

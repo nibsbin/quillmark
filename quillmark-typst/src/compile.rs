@@ -547,14 +547,16 @@ name = "minimal-package"
         use std::fs;
         use tempfile::TempDir;
         
-        // Create a temporary directory with a minimal quill.toml but no fonts
+        // Create a temporary directory with a minimal Quill.toml but no fonts
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let quill_toml_content = r#"
-[quill]
+[Quill]
 name = "test-quill"
+backend = "typst"
+glue = "glue.typ"
 "#;
-        fs::write(temp_dir.path().join("quill.toml"), quill_toml_content)
-            .expect("Failed to write quill.toml");
+        fs::write(temp_dir.path().join("Quill.toml"), quill_toml_content)
+            .expect("Failed to write Quill.toml");
         
         // Create a minimal glue file
         fs::write(temp_dir.path().join("glue.typ"), "Test content")
@@ -586,12 +588,13 @@ name = "test-quill"
         // Create a temporary directory with a minimal quill but no font assets
         let temp_dir = TempDir::new().expect("Failed to create temp dir");
         let quill_toml_content = r#"
-[quill]
+[Quill]
 name = "system-font-test"
-version = "1.0.0"
+backend = "typst"
+glue = "glue.typ"
 "#;
-        fs::write(temp_dir.path().join("quill.toml"), quill_toml_content)
-            .expect("Failed to write quill.toml");
+        fs::write(temp_dir.path().join("Quill.toml"), quill_toml_content)
+            .expect("Failed to write Quill.toml");
         
         // Create a glue file with some content
         let glue_content = r#"= System Font Test
