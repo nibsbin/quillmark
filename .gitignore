@@ -23,7 +23,7 @@ out/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-# QuillMark example output files and directories
+# Quillmark example output files and directories
 output*.pdf
 output*.svg
 **/out/

@@ -2,7 +2,7 @@
 name = "quillmark-typst"
 version = "0.1.0"
 edition = "2021"
-description = "Typst backend for QuillMark"
+description = "Typst backend for Quillmark"
 license = "Apache-2.0"
 
 [dependencies]

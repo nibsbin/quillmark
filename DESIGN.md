@@ -1,6 +1,6 @@
 # Quillmark Architecture
 
-> This document merges **“QuillMark Architecture Design Document”** and **“QuillMark Improved Architecture Design Document”** into a single, authoritative DESIGN.md. Where the two differed, this doc reconciles them and notes compatibility.
+> This document merges **“Quillmark Architecture Design Document”** and **“Quillmark Improved Architecture Design Document”** into a single, authoritative DESIGN.md. Where the two differed, this doc reconciles them and notes compatibility.
 
 ---
 
@@ -24,7 +24,7 @@
 
 ## System Overview
 
-QuillMark is a flexible, **template-first** Markdown rendering system that converts Markdown with YAML frontmatter into output artifacts (PDF, SVG, TXT, etc.). The architecture is built around a **sealed engine API** for day‑to‑day use, backed by trait-based extensibility for backends.
+Quillmark is a flexible, **template-first** Markdown rendering system that converts Markdown with YAML frontmatter into output artifacts (PDF, SVG, TXT, etc.). The architecture is built around a **sealed engine API** for day‑to‑day use, backed by trait-based extensibility for backends.
 
 High-level data flow:
 

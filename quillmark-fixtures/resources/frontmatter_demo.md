@@ -1,6 +1,6 @@
 ---
-title: QuillMark Frontmatter Demo  
-author: QuillMark Team
+title: Quillmark Frontmatter Demo  
+author: Quillmark Team
 date: 2024-01-01
 version: 1.0
 tags:
@@ -9,17 +9,17 @@ tags:
   - yaml
   - markdown
 description: >
-  This document demonstrates QuillMark's ability to parse 
+  This document demonstrates Quillmark's ability to parse 
   YAML frontmatter and separate it from markdown content.
 ---
 
-# Welcome to QuillMark Frontmatter Demo
+# Welcome to Quillmark Frontmatter Demo
 
-This document demonstrates the new frontmatter parsing capabilities of QuillMark.
+This document demonstrates the new frontmatter parsing capabilities of Quillmark.
 
 ## How It Works
 
-QuillMark now parses **YAML frontmatter** at the beginning of markdown documents. The frontmatter fields are extracted into a dictionary, while the markdown body is converted to the target format.
+Quillmark now parses **YAML frontmatter** at the beginning of markdown documents. The frontmatter fields are extracted into a dictionary, while the markdown body is converted to the target format.
 
 ### Key Features
 
@@ -30,7 +30,7 @@ QuillMark now parses **YAML frontmatter** at the beginning of markdown documents
 
 ## Example Usage
 
-When you process this document with QuillMark:
+When you process this document with Quillmark:
 
 1. The **frontmatter** is parsed into fields like `title`, `author`, `subject`, etc.
 2. The **body** (this markdown content) is converted to the target format
@@ -60,4 +60,4 @@ This enables clean separation of concerns between document metadata and content.
 
 ---
 
-*This document was generated to demonstrate QuillMark's frontmatter capabilities.*
+*This document was generated to demonstrate Quillmark's frontmatter capabilities.*

@@ -21,7 +21,7 @@ name = "test-quill"
 backend = "typst"
 glue = "glue.typ"
 description = "Test quill for integration testing"
-author = "QuillMark Test"
+author = "Quillmark Test"
 "#;
     fs::write(quill_path.join("Quill.toml"), quill_toml).expect("Failed to write Quill.toml");
 

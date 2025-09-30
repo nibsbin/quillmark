@@ -2,7 +2,7 @@
 name = "quillmark-core"
 version = "0.1.0"
 edition = "2021"
-description = "Core types and functionality for QuillMark"
+description = "Core types and functionality for Quillmark"
 license = "Apache-2.0"
 
 [dependencies]

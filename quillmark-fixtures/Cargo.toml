@@ -2,7 +2,7 @@
 name = "quillmark-fixtures"
 version = "0.1.0"
 edition = "2021"
-description = "Test fixtures and utilities for QuillMark"
+description = "Test fixtures and utilities for Quillmark"
 license = "MIT"
 
 [dependencies]
