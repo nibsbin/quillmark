@@ -12,13 +12,13 @@ fn main() {
     );
 
     // Step 2: Create Quill from path
-    let ice_cream_quill_path = resource_path("ice-cream");
+    let ice_cream_quill_path = resource_path("ice_cream");
     let ice_cream_quill =
-        Quill::from_path(ice_cream_quill_path).expect("Failed to load ice-cream quill");
+        Quill::from_path(ice_cream_quill_path).expect("Failed to load ice_cream quill");
 
-    let usaf_memo_quill_path = resource_path("usaf-memo");
+    let usaf_memo_quill_path = resource_path("usaf_memo");
     let usaf_memo_quill =
-        Quill::from_path(usaf_memo_quill_path).expect("Failed to load usaf-memo quill");
+        Quill::from_path(usaf_memo_quill_path).expect("Failed to load usaf_memo quill");
 
     // Step 3: Register Quills to Quillmark
     println!("Registering quill: {}", ice_cream_quill.name);
@@ -31,11 +31,11 @@ fn main() {
 
     // Step 4: Load workflow by quill name and render
 
-    // Render ice-cream document
+    // Render ice_cream document
     let ice_cream_markdown = std::fs::read_to_string(resource_path("ice_cream.md")).unwrap();
     let ice_cream_workflow = engine
-        .load("ice-cream")
-        .expect("Failed to load ice-cream workflow");
+        .load("ice_cream")
+        .expect("Failed to load ice_cream workflow");
 
     println!(
         "\nRendering with quill: {}",
@@ -45,19 +45,19 @@ fn main() {
 
     let ice_cream_result = ice_cream_workflow
         .render(&ice_cream_markdown, Some(OutputFormat::Pdf))
-        .expect("Failed to render ice-cream");
+        .expect("Failed to render ice_cream");
 
-    write_example_output("ice-cream-engine.pdf", &ice_cream_result.artifacts[0].bytes).unwrap();
+    write_example_output("ice_cream-engine.pdf", &ice_cream_result.artifacts[0].bytes).unwrap();
     println!(
-        "Generated ice-cream PDF: {} bytes",
+        "Generated ice_cream PDF: {} bytes",
         ice_cream_result.artifacts[0].bytes.len()
     );
 
-    // Render usaf-memo document
+    // Render usaf_memo document
     let usaf_memo_markdown = std::fs::read_to_string(resource_path("usaf_memo.md")).unwrap();
     let usaf_memo_workflow = engine
-        .load("usaf-memo")
-        .expect("Failed to load usaf-memo workflow");
+        .load("usaf_memo")
+        .expect("Failed to load usaf_memo workflow");
 
     println!(
         "\nRendering with quill: {}",
@@ -67,21 +67,21 @@ fn main() {
 
     let usaf_memo_result = usaf_memo_workflow
         .render(&usaf_memo_markdown, Some(OutputFormat::Pdf))
-        .expect("Failed to render usaf-memo");
+        .expect("Failed to render usaf_memo");
 
-    write_example_output("usaf-memo-engine.pdf", &usaf_memo_result.artifacts[0].bytes).unwrap();
+    write_example_output("usaf_memo-engine.pdf", &usaf_memo_result.artifacts[0].bytes).unwrap();
     println!(
-        "Generated usaf-memo PDF: {} bytes",
+        "Generated usaf_memo PDF: {} bytes",
         usaf_memo_result.artifacts[0].bytes.len()
     );
 
     println!("\nOutput files:");
     println!(
         "- Ice Cream: {}",
-        example_output_dir().join("ice-cream-engine.pdf").display()
+        example_output_dir().join("ice_cream-engine.pdf").display()
     );
     println!(
         "- USAF Memo: {}",
-        example_output_dir().join("usaf-memo-engine.pdf").display()
+        example_output_dir().join("usaf_memo-engine.pdf").display()
     );
 }

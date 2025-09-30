@@ -605,13 +605,13 @@ node_modules/
         let toml_content = r#"[Quill]
 name = "my-custom-quill"
 backend = "typst"
-glue = "custom-glue.typ"
+glue = "custom_glue.typ"
 description = "Test quill with new format"
 author = "Test Author"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
         fs::write(
-            quill_dir.join("custom-glue.typ"),
+            quill_dir.join("custom_glue.typ"),
             "= Custom Template\n\nThis is a custom template.",
         )
         .unwrap();
@@ -623,7 +623,7 @@ author = "Test Author"
         assert_eq!(quill.name, "my-custom-quill");
 
         // Test that glue file is set correctly
-        assert_eq!(quill.glue_file, "custom-glue.typ");
+        assert_eq!(quill.glue_file, "custom_glue.typ");
 
         // Test that backend is in metadata
         assert!(quill.metadata.contains_key("backend"));

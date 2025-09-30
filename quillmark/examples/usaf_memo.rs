@@ -8,7 +8,7 @@ fn main() {
     let markdown = std::fs::read_to_string(resource_path("usaf_memo.md")).unwrap();
 
     //load quill
-    let quill_path = resource_path("usaf-memo");
+    let quill_path = resource_path("usaf_memo");
 
     //setup engine
     let backend = Box::new(TypstBackend::default());
@@ -19,7 +19,7 @@ fn main() {
     let glued = engine
         .process_glue(&markdown)
         .expect("Failed to process glue");
-    write_example_output("usaf-memo-glue.typ", glued.as_bytes()).unwrap();
+    write_example_output("usaf_memo_glue.typ", glued.as_bytes()).unwrap();
 
     println!(
         "Processed glue content preview: \n\n{}...\n",
@@ -31,7 +31,7 @@ fn main() {
         .render(&markdown, Some(OutputFormat::Pdf))
         .expect("Failed to render");
     println!("Generated {} bytes", rendered.artifacts[0].bytes.len());
-    write_example_output("usaf-memo-output.pdf", &rendered.artifacts[0].bytes).unwrap();
+    write_example_output("usaf_memo_output.pdf", &rendered.artifacts[0].bytes).unwrap();
 
     println!(
         "Rendered output bytes: {}",
@@ -40,7 +40,7 @@ fn main() {
 
     println!(
         "Access files:\n- Glue: {}\n- Output: {}",
-        example_output_dir().join("usaf-memo-glue.typ").display(),
-        example_output_dir().join("usaf-memo-output.pdf").display()
+        example_output_dir().join("usaf_memo_glue.typ").display(),
+        example_output_dir().join("usaf_memo_output.pdf").display()
     );
 }

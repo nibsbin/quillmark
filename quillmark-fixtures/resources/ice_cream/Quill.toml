@@ -1,4 +1,4 @@
 [Quill]
-name = "ice-cream"
+name = "ice_cream"
 backend = "typst"
 glue = "glue.typ"

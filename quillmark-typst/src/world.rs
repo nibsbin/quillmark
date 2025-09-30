@@ -567,16 +567,16 @@ name = "minimal-package"
         use quillmark_core::Quill;
         use std::path::Path;
 
-        // Use the actual usaf-memo fixture which has real fonts
+        // Use the actual usaf_memo fixture which has real fonts
         let quill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
             .join("quillmark-fixtures")
             .join("resources")
-            .join("usaf-memo");
+            .join("usaf_memo");
 
         if !quill_path.exists() {
-            println!("Skipping test - usaf-memo fixture not found");
+            println!("Skipping test - usaf_memo fixture not found");
             return;
         }
 

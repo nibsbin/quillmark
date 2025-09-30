@@ -1,4 +1,4 @@
 [Quill]
-name = "usaf-memo"
+name = "usaf_memo"
 backend = "typst"
 glue = "glue.typ"

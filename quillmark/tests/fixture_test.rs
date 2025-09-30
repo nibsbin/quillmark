@@ -5,8 +5,8 @@ use std::fs;
 
 #[test]
 fn test_with_existing_fixture() {
-    // Use the existing usaf-memo fixture
-    let quill_path = resource_path("usaf-memo");
+    // Use the existing usaf_memo fixture
+    let quill_path = resource_path("usaf_memo");
     println!("Testing with fixture at: {:?}", quill_path);
 
     // Load the sample frontmatter demo markdown

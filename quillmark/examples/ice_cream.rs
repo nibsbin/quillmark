@@ -8,7 +8,7 @@ fn main() {
     let markdown = std::fs::read_to_string(resource_path("ice_cream.md")).unwrap();
 
     //load quill
-    let quill_path = resource_path("ice-cream");
+    let quill_path = resource_path("ice_cream");
 
     //setup engine
     let backend = Box::new(TypstBackend::default());
@@ -19,14 +19,14 @@ fn main() {
     let glued = engine
         .process_glue(&markdown)
         .expect("Failed to process glue");
-    write_example_output("ice-cream.typ", glued.as_bytes()).unwrap();
+    write_example_output("ice_cream.typ", glued.as_bytes()).unwrap();
 
     //render end to end
     let rendered = engine
         .render(&markdown, Some(OutputFormat::Pdf))
         .expect("Failed to render");
     println!("Generated {} bytes", rendered.artifacts[0].bytes.len());
-    write_example_output("ice-cream.pdf", &rendered.artifacts[0].bytes).unwrap();
+    write_example_output("ice_cream.pdf", &rendered.artifacts[0].bytes).unwrap();
 
     println!(
         "Rendered output bytes: {}",
@@ -34,7 +34,7 @@ fn main() {
     );
     println!(
         "Access files:\n- Glue: {}\n- Output: {}",
-        example_output_dir().join("ice-cream.typ").display(),
-        example_output_dir().join("ice-cream.pdf").display()
+        example_output_dir().join("ice_cream.typ").display(),
+        example_output_dir().join("ice_cream.pdf").display()
     );
 }
