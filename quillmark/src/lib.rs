@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 // Re-export all core types for backward compatibility
 pub use quillmark_core::{
     Artifact, Backend, OutputFormat, Quill, 
@@ -17,27 +15,8 @@ pub struct Workflow {
 
 impl Workflow {
     /// Create a new Workflow with the specified backend and quill template
-    pub fn new(backend: Box<dyn Backend>, quill_path: PathBuf) -> Result<Self, RenderError> {
-        // Load the quill template
-        let quill = Quill::from_path(&quill_path)
-            .map_err(|e| RenderError::EngineCreation { 
-                diag: quillmark_core::error::Diagnostic::new(
-                    quillmark_core::error::Severity::Error,
-                    format!("Failed to load quill from {:?}: {}", quill_path, e)
-                ),
-                source: Some(anyhow::anyhow!(e))
-            })?;
-
-        // Validate the quill
-        quill.validate()
-            .map_err(|e| RenderError::EngineCreation { 
-                diag: quillmark_core::error::Diagnostic::new(
-                    quillmark_core::error::Severity::Error,
-                    format!("Quill validation failed: {}", e)
-                ),
-                source: Some(anyhow::anyhow!(e))
-            })?;
-
+    pub fn new(backend: Box<dyn Backend>, quill: Quill) -> Result<Self, RenderError> {
+        // Since Quill::from_path() now automatically validates, we don't need to validate again
         Ok(Self { backend, quill })
     }
 

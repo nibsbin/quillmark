@@ -211,14 +211,19 @@ impl Quill {
         let mut files = HashMap::new();
         Self::load_directory_recursive(path, path, &mut files, &ignore)?;
 
-        Ok(Quill {
+        let quill = Quill {
             glue_template: template_content,
             metadata,
             base_path: path.to_path_buf(),
             name,
             glue_file,
             files,
-        })
+        };
+        
+        // Automatically validate the quill upon creation
+        quill.validate()?;
+        
+        Ok(quill)
     }
 
     /// Recursively load all files from a directory into memory
