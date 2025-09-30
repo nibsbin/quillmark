@@ -1454,6 +1454,7 @@ version = "0.1.0"
 name = "quillmark-typst"
 version = "0.1.0"
 dependencies = [
+ "fontdb",
  "pulldown-cmark",
  "quillmark-core",
  "serde_json",

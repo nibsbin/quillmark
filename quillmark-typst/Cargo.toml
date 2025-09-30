@@ -6,6 +6,7 @@ description = "Typst backend for QuillMark"
 license = "MIT"
 
 [dependencies]
+fontdb = "0.21.0"
 pulldown-cmark = "0.13.0"
 quillmark-core = { path = "../quillmark-core" }
 serde_json.workspace = true
