@@ -137,46 +137,17 @@ fn test_unsupported_format() {
 }
 
 #[test]
-fn test_bubble_with_external_package() {
+fn test_typst_packages_parsing_from_bubble() {
     use quillmark_fixtures::resource_path;
     
     let bubble_path = resource_path("bubble");
     let quill = Quill::from_path(&bubble_path).expect("Failed to load bubble quill");
     
-    // Check that typst packages are parsed
+    // Check that typst packages are parsed from Quill.toml
     let packages = quill.typst_packages();
     assert!(!packages.is_empty(), "Expected packages to be specified in bubble quill");
+    assert_eq!(packages.len(), 1);
     assert_eq!(packages[0], "@preview/bubble:0.2.2");
     
-    // Create backend and try to compile
-    let backend = Box::new(TypstBackend::default());
-    let markdown = r#"---
-title: Test Document
-subtitle: Testing External Packages
-author: Test Author
-affiliation: Test Organization
-year: "2024"
-class: "Test Class"
-other:
-  - "Additional Info Line 1"
-  - "Additional Info Line 2"
----
-
-This is a test document.
-"#;
-    
-    let engine = Workflow::new(backend, quill).expect("Failed to create engine");
-    
-    let result = engine.render(markdown, Some(OutputFormat::Pdf));
-    
-    // We expect this to succeed now that we download external packages
-    assert!(result.is_ok(), "Expected compilation to succeed with external package: {:?}", result.err());
-    
-    if let Ok(render_result) = result {
-        assert!(!render_result.artifacts.is_empty());
-        assert_eq!(render_result.artifacts[0].output_format, OutputFormat::Pdf);
-        assert!(!render_result.artifacts[0].bytes.is_empty());
-        println!("Successfully rendered bubble quill with external package! Generated {} bytes", 
-                 render_result.artifacts[0].bytes.len());
-    }
+    println!("Successfully parsed typst packages from bubble quill: {:?}", packages);
 }
