@@ -38,7 +38,7 @@ High-level data flow:
 ## Core Design Principles
 
 1. **Sealed Engine, Explicit Backend**
-   A single entry point (`QuillEngine`) encapsulates orchestration. Backend choice is **explicit** at engine construction.
+   A single entry point (`Workflow`) encapsulates orchestration. Backend choice is **explicit** at engine construction.
 2. **Trait-Based Extensibility**
    New output formats implement the `Backend` trait (thread-safe, zero global state).
 3. **Template-First**
@@ -71,7 +71,7 @@ High-level data flow:
 
 ### `quillmark` (sealed engine)
 
-* Sealed primary API: `QuillEngine`
+* Sealed primary API: `Workflow`
 * Orchestration (parse → compose → compile)
 * Validation and **structured error propagation**
 * *Compatibility shim:* legacy `render(markdown, RenderConfig)` calls through the engine (see [Migration](#migration--compatibility)).
@@ -95,15 +95,15 @@ High-level data flow:
 
 ## Core Interfaces and Structures
 
-### QuillEngine (primary high-level API)
+### Workflow (primary high-level API)
 
 ```rust
-pub struct QuillEngine {
+pub struct Workflow {
     backend: Box<dyn Backend>,
     quill: Quill,
 }
 
-impl QuillEngine {
+impl Workflow {
     pub fn new(backend: Box<dyn Backend>, quill_path: PathBuf) -> Result<Self, RenderError>;
     pub fn render(&self, markdown: &str) -> Result<RenderResult, RenderError>;
     pub fn render_with_format(&self, markdown: &str, format: OutputFormat) -> Result<RenderResult, RenderError>;
@@ -208,7 +208,7 @@ pub struct RenderResult {
 **Public usage:**
 
 ```rust
-let engine = QuillEngine::new(Box::new(TypstBackend::default()), quill_path)?;
+let engine = Workflow::new(Box::new(TypstBackend::default()), quill_path)?;
 let result = engine.render(markdown)?;                // or render_with_format(...)
 for a in result.artifacts { /* write bytes */ }
 ```
@@ -223,7 +223,7 @@ for a in result.artifacts { /* write bytes */ }
 
 ### Implementation Hints
 
-#### Engine Construction (`QuillEngine::new`)
+#### Engine Construction (`Workflow::new`)
 
 * **Backend validation**: Check `backend.id()` matches expected backend type
 * **Quill loading**: Use `Quill::from_path()` with proper error context

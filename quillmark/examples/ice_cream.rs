@@ -1,4 +1,4 @@
-use quillmark::QuillEngine;
+use quillmark::Workflow;
 use quillmark_fixtures::{write_example_output,resource_path,example_output_dir};
 use quillmark_typst::TypstBackend;
 use quillmark_core::{OutputFormat};
@@ -12,7 +12,7 @@ fn main() {
 
     //setup engine
     let backend = Box::new(TypstBackend::default());
-    let engine = QuillEngine::new(
+    let engine = Workflow::new(
         backend,
         quill_path
     ).expect("Failed to create engine");
