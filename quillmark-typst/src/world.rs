@@ -82,11 +82,12 @@ impl QuillWorld {
         // Load assets from the quill's in-memory file system
         Self::load_assets_from_quill(quill, &mut binaries)?;
 
-        // Download and load external packages specified in Quill.toml [typst] section
-        Self::download_and_load_external_packages(quill, &mut sources, &mut binaries)?;
-
         // Load packages from the quill's in-memory file system (embedded packages)
         Self::load_packages_from_quill(quill, &mut sources, &mut binaries)?;
+
+        // Download and load external packages specified in Quill.toml [typst] section
+        // These are loaded AFTER embedded packages so they dominate/override if there's a collision
+        Self::download_and_load_external_packages(quill, &mut sources, &mut binaries)?;
 
         // Create main source
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));
