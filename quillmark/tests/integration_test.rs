@@ -15,15 +15,15 @@ fn test_end_to_end_rendering() {
     fs::create_dir_all(quill_path.join("assets")).expect("Failed to create assets dir");
     fs::create_dir_all(quill_path.join("packages")).expect("Failed to create packages dir");
     
-    // Create quill.toml
-    let quill_toml = r#"
-[Quill]
+    // Create Quill.toml
+    let quill_toml = r#"[Quill]
 name = "test-quill"
-version = "0.1.0"
+backend = "typst"
+glue = "glue.typ"
 description = "Test quill for integration testing"
 author = "QuillMark Test"
 "#;
-    fs::write(quill_path.join("quill.toml"), quill_toml).expect("Failed to write quill.toml");
+    fs::write(quill_path.join("Quill.toml"), quill_toml).expect("Failed to write Quill.toml");
     
     // Create glue.typ template
     let glue_template = r#"
@@ -87,7 +87,7 @@ fn test_engine_properties() {
     let quill_path = temp_dir.path().join("test-quill");
     
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-    fs::write(quill_path.join("quill.toml"), "[Quill]\nname = \"test\"\n").expect("Failed to write quill.toml");
+    fs::write(quill_path.join("Quill.toml"), "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n").expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
     
     let backend = Box::new(TypstBackend::default());
@@ -106,7 +106,7 @@ fn test_unsupported_format() {
     let quill_path = temp_dir.path().join("test-quill");
     
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-    fs::write(quill_path.join("quill.toml"), "[Quill]\nname = \"test\"\n").expect("Failed to write quill.toml");
+    fs::write(quill_path.join("Quill.toml"), "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n").expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
     
     let backend = Box::new(TypstBackend::default());

@@ -150,28 +150,44 @@ impl Quill {
             .unwrap_or("unnamed")
             .to_string();
 
-        // Read quill.toml
-        let quill_toml_path = path.join("quill.toml");
+        // Read Quill.toml (capitalized)
+        let quill_toml_path = path.join("Quill.toml");
         let quill_toml_content = fs::read_to_string(&quill_toml_path)
-            .map_err(|e| format!("Failed to read quill.toml: {}", e))?;
+            .map_err(|e| format!("Failed to read Quill.toml: {}", e))?;
 
         let quill_toml: toml::Value = toml::from_str(&quill_toml_content)
-            .map_err(|e| format!("Failed to parse quill.toml: {}", e))?;
+            .map_err(|e| format!("Failed to parse Quill.toml: {}", e))?;
 
         let mut metadata = HashMap::new();
         let mut glue_file = "glue.typ".to_string(); // default
+        let mut quill_name = name; // default to directory name
 
-        // Extract metadata from [Quill] section
-        if let Some(quill_section) = quill_toml.get("Quill").or_else(|| quill_toml.get("quill")) {
-            // Extract glue_file if present
-            if let Some(gf) = quill_section.get("glue_file").and_then(|v| v.as_str()) {
-                glue_file = gf.to_string();
+        // Extract fields from [Quill] section
+        if let Some(quill_section) = quill_toml.get("Quill") {
+            // Extract required fields: name, backend, glue
+            if let Some(name_val) = quill_section.get("name").and_then(|v| v.as_str()) {
+                quill_name = name_val.to_string();
             }
             
-            // Add all fields from quill section to metadata
+            if let Some(backend_val) = quill_section.get("backend").and_then(|v| v.as_str()) {
+                match Self::toml_to_yaml_value(&toml::Value::String(backend_val.to_string())) {
+                    Ok(yaml_value) => {
+                        metadata.insert("backend".to_string(), yaml_value);
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to convert backend field: {}", e);
+                    }
+                }
+            }
+            
+            if let Some(glue_val) = quill_section.get("glue").and_then(|v| v.as_str()) {
+                glue_file = glue_val.to_string();
+            }
+            
+            // Add other fields to metadata (excluding special fields and version)
             if let toml::Value::Table(table) = quill_section {
                 for (key, value) in table {
-                    if key != "name" && key != "glue_file" { // These are handled specially
+                    if key != "name" && key != "backend" && key != "glue" && key != "version" {
                         match Self::toml_to_yaml_value(value) {
                             Ok(yaml_value) => {
                                 metadata.insert(key.clone(), yaml_value);
@@ -215,7 +231,7 @@ impl Quill {
             glue_template: template_content,
             metadata,
             base_path: path.to_path_buf(),
-            name,
+            name: quill_name,
             glue_file,
             files,
         };
@@ -469,7 +485,7 @@ node_modules/
         let quill_dir = temp_dir.path();
 
         // Create test files
-        fs::write(quill_dir.join("quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(quill_dir.join("Quill.toml"), "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
         
         let assets_dir = quill_dir.join("assets");
@@ -508,7 +524,7 @@ node_modules/
         fs::write(quill_dir.join(".quillignore"), "*.tmp\ntarget/\n").unwrap();
         
         // Create test files
-        fs::write(quill_dir.join("quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(quill_dir.join("Quill.toml"), "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
         fs::write(quill_dir.join("should_ignore.tmp"), "ignored").unwrap();
         
@@ -531,7 +547,7 @@ node_modules/
         let quill_dir = temp_dir.path();
 
         // Create test directory structure
-        fs::write(quill_dir.join("quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(quill_dir.join("Quill.toml"), "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
         fs::write(quill_dir.join("glue.typ"), "template").unwrap();
         
         let assets_dir = quill_dir.join("assets");
@@ -553,5 +569,50 @@ node_modules/
         let typ_files = quill.find_files("*.typ");
         assert_eq!(typ_files.len(), 1);
         assert!(typ_files.contains(&PathBuf::from("glue.typ")));
+    }
+
+    #[test]
+    fn test_new_standardized_toml_format() {
+        let temp_dir = TempDir::new().unwrap();
+        let quill_dir = temp_dir.path();
+
+        // Create test files using new standardized format
+        let toml_content = r#"[Quill]
+name = "my-custom-quill"
+backend = "typst"
+glue = "custom-glue.typ"
+description = "Test quill with new format"
+author = "Test Author"
+"#;
+        fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
+        fs::write(quill_dir.join("custom-glue.typ"), "= Custom Template\n\nThis is a custom template.").unwrap();
+
+        // Load quill
+        let quill = Quill::from_path(quill_dir).unwrap();
+
+        // Test that name comes from TOML, not directory
+        assert_eq!(quill.name, "my-custom-quill");
+        
+        // Test that glue file is set correctly
+        assert_eq!(quill.glue_file, "custom-glue.typ");
+        
+        // Test that backend is in metadata
+        assert!(quill.metadata.contains_key("backend"));
+        if let Some(backend_val) = quill.metadata.get("backend") {
+            if let Some(backend_str) = backend_val.as_str() {
+                assert_eq!(backend_str, "typst");
+            } else {
+                panic!("Backend value is not a string");
+            }
+        }
+        
+        // Test that other fields are in metadata (but not version)
+        assert!(quill.metadata.contains_key("description"));
+        assert!(quill.metadata.contains_key("author"));
+        assert!(!quill.metadata.contains_key("version")); // version should be excluded
+        
+        // Test that glue template content is loaded correctly
+        assert!(quill.glue_template.contains("Custom Template"));
+        assert!(quill.glue_template.contains("custom template"));
     }
 }
