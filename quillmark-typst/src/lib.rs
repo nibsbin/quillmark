@@ -1,9 +1,9 @@
-mod filters;
-mod convert;
-mod world;
 mod compile;
-use quillmark_core::{Backend, Artifact, OutputFormat, Quill, RenderOptions, RenderError, Glue};
-use filters::{string_filter, lines_filter, date_filter, dict_filter, body_filter};
+mod convert;
+mod filters;
+mod world;
+use filters::{body_filter, date_filter, dict_filter, lines_filter, string_filter};
+use quillmark_core::{Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions};
 /// Typst backend implementation
 pub struct TypstBackend;
 
@@ -11,15 +11,15 @@ impl Backend for TypstBackend {
     fn id(&self) -> &'static str {
         "typst"
     }
-    
+
     fn supported_formats(&self) -> &'static [OutputFormat] {
         &[OutputFormat::Pdf, OutputFormat::Svg]
     }
-    
+
     fn glue_type(&self) -> &'static str {
         ".typ"
     }
-    
+
     fn register_filters(&self, glue: &mut Glue) {
         // Register basic filters (simplified for now)
         glue.register_filter("String", string_filter);
@@ -28,15 +28,15 @@ impl Backend for TypstBackend {
         glue.register_filter("Dict", dict_filter);
         glue.register_filter("Body", body_filter);
     }
-    
+
     fn compile(
-        &self, 
-        glued_content: &str, 
-        quill: &Quill, 
-        opts: &RenderOptions
+        &self,
+        glued_content: &str,
+        quill: &Quill,
+        opts: &RenderOptions,
     ) -> Result<Vec<Artifact>, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
-        
+
         // Check if format is supported
         if !self.supported_formats().contains(&format) {
             return Err(RenderError::FormatNotSupported {
@@ -46,29 +46,31 @@ impl Backend for TypstBackend {
         }
 
         println!("Typst backend compiling for quill: {}", quill.name);
-        
+
         match format {
             OutputFormat::Pdf => {
                 let bytes = compile::compile_to_pdf(quill, glued_content).unwrap();
                 Ok(vec![Artifact {
                     bytes: bytes,
                     output_format: OutputFormat::Pdf,
-                }])            
-            },
+                }])
+            }
             OutputFormat::Svg => {
-                let svg_pages = compile::compile_to_svg(quill, glued_content)
-                    .map_err(|e| RenderError::Other(format!("SVG compilation failed: {}", e).into()))?;
-                Ok(svg_pages.into_iter().map(|bytes| Artifact {
-                    bytes,
-                    output_format: OutputFormat::Svg,
-                }).collect())
+                let svg_pages = compile::compile_to_svg(quill, glued_content).map_err(|e| {
+                    RenderError::Other(format!("SVG compilation failed: {}", e).into())
+                })?;
+                Ok(svg_pages
+                    .into_iter()
+                    .map(|bytes| Artifact {
+                        bytes,
+                        output_format: OutputFormat::Svg,
+                    })
+                    .collect())
             }
-            OutputFormat::Txt => {
-                Err(RenderError::FormatNotSupported {
-                    backend: self.id().to_string(),
-                    format: OutputFormat::Txt,
-                })
-            }
+            OutputFormat::Txt => Err(RenderError::FormatNotSupported {
+                backend: self.id().to_string(),
+                format: OutputFormat::Txt,
+            }),
         }
     }
 }

@@ -1,7 +1,7 @@
 use std::fs;
 use tempfile::TempDir;
 
-use quillmark::{Workflow, OutputFormat, Quill};
+use quillmark::{OutputFormat, Quill, Workflow};
 use quillmark_typst::TypstBackend;
 
 #[test]
@@ -9,12 +9,12 @@ fn test_end_to_end_rendering() {
     // Create temporary directory structure for test quill
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let quill_path = temp_dir.path().join("test-quill");
-    
+
     // Create quill directory structure
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::create_dir_all(quill_path.join("assets")).expect("Failed to create assets dir");
     fs::create_dir_all(quill_path.join("packages")).expect("Failed to create packages dir");
-    
+
     // Create Quill.toml
     let quill_toml = r#"[Quill]
 name = "test-quill"
@@ -24,7 +24,7 @@ description = "Test quill for integration testing"
 author = "QuillMark Test"
 "#;
     fs::write(quill_path.join("Quill.toml"), quill_toml).expect("Failed to write Quill.toml");
-    
+
     // Create glue.typ template
     let glue_template = r#"
 = {{ title | String(default="Untitled") }}
@@ -34,7 +34,7 @@ _By {{ author | String(default="Unknown") }}_
 {{ body | Body }}
 "#;
     fs::write(quill_path.join("glue.typ"), glue_template).expect("Failed to write glue.typ");
-    
+
     // Test markdown content with frontmatter
     let markdown = r#"---
 title: Test Document
@@ -54,46 +54,54 @@ This is a **test document** with *italic* text and some features:
 
 This concludes the test document.
 "#;
-    
+
     // Create engine and render
     let backend = Box::new(TypstBackend::default());
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     let engine = Workflow::new(backend, quill).expect("Failed to create engine");
-    
+
     // Test PDF rendering
-    let pdf_result = engine.render(markdown, Some(OutputFormat::Pdf))
+    let pdf_result = engine
+        .render(markdown, Some(OutputFormat::Pdf))
         .expect("Failed to render PDF");
-    
+
     assert!(!pdf_result.artifacts.is_empty());
     assert_eq!(pdf_result.artifacts[0].output_format, OutputFormat::Pdf);
     assert!(!pdf_result.artifacts[0].bytes.is_empty());
-    
+
     // Test SVG rendering
-    let svg_result = engine.render(markdown, Some(OutputFormat::Svg))
+    let svg_result = engine
+        .render(markdown, Some(OutputFormat::Svg))
         .expect("Failed to render SVG");
-    
+
     assert!(!svg_result.artifacts.is_empty());
     assert_eq!(svg_result.artifacts[0].output_format, OutputFormat::Svg);
     assert!(!svg_result.artifacts[0].bytes.is_empty());
-    
-    println!("Integration test passed! Generated {} PDF bytes and {} SVG bytes",
+
+    println!(
+        "Integration test passed! Generated {} PDF bytes and {} SVG bytes",
         pdf_result.artifacts[0].bytes.len(),
-        svg_result.artifacts[0].bytes.len());
+        svg_result.artifacts[0].bytes.len()
+    );
 }
 
 #[test]
 fn test_engine_properties() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let quill_path = temp_dir.path().join("test-quill");
-    
+
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-    fs::write(quill_path.join("Quill.toml"), "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n").expect("Failed to write Quill.toml");
+    fs::write(
+        quill_path.join("Quill.toml"),
+        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n",
+    )
+    .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
-    
+
     let backend = Box::new(TypstBackend::default());
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     let engine = Workflow::new(backend, quill).expect("Failed to create engine");
-    
+
     assert_eq!(engine.backend_id(), "typst");
     assert_eq!(engine.quill_name(), "test-quill");
     assert!(engine.supported_formats().contains(&OutputFormat::Pdf));
@@ -104,17 +112,21 @@ fn test_engine_properties() {
 fn test_unsupported_format() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let quill_path = temp_dir.path().join("test-quill");
-    
+
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-    fs::write(quill_path.join("Quill.toml"), "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n").expect("Failed to write Quill.toml");
+    fs::write(
+        quill_path.join("Quill.toml"),
+        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n",
+    )
+    .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
-    
+
     let backend = Box::new(TypstBackend::default());
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     let engine = Workflow::new(backend, quill).expect("Failed to create engine");
-    
+
     let result = engine.render("# Test", Some(OutputFormat::Txt));
-    
+
     match result {
         Err(quillmark::RenderError::FormatNotSupported { backend, format }) => {
             assert_eq!(backend, "typst");

@@ -2,16 +2,16 @@ use crate::OutputFormat;
 
 /// Error severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
-pub enum Severity { 
-    Error, 
-    Warning, 
-    Note 
+pub enum Severity {
+    Error,
+    Warning,
+    Note,
 }
 
 /// Location information for diagnostics
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Location {
-    pub file: String,   // e.g., "glue.typ", "template.typ", "input.md"
+    pub file: String, // e.g., "glue.typ", "template.typ", "input.md"
     pub line: u32,
     pub col: u32,
 }
@@ -66,15 +66,16 @@ impl Diagnostic {
 
     /// Format diagnostic for pretty printing
     pub fn fmt_pretty(&self) -> String {
-        let mut result = format!("[{}] {}", 
+        let mut result = format!(
+            "[{}] {}",
             match self.severity {
                 Severity::Error => "ERROR",
                 Severity::Warning => "WARN",
                 Severity::Note => "NOTE",
-            }, 
+            },
             self.message
         );
-        
+
         if let Some(ref code) = self.code {
             result.push_str(&format!(" ({})", code));
         }
@@ -94,31 +95,34 @@ impl Diagnostic {
 /// Main error type for rendering operations
 #[derive(thiserror::Error, Debug)]
 pub enum RenderError {
-    #[error("Engine creation failed")] 
-    EngineCreation { 
-        diag: Diagnostic, 
-        #[source] source: Option<anyhow::Error> 
+    #[error("Engine creation failed")]
+    EngineCreation {
+        diag: Diagnostic,
+        #[source]
+        source: Option<anyhow::Error>,
     },
 
-    #[error("Invalid YAML frontmatter")] 
-    InvalidFrontmatter { 
-        diag: Diagnostic, 
-        #[source] source: Option<anyhow::Error> 
+    #[error("Invalid YAML frontmatter")]
+    InvalidFrontmatter {
+        diag: Diagnostic,
+        #[source]
+        source: Option<anyhow::Error>,
     },
 
-    #[error("Template rendering failed")] 
-    TemplateFailed { 
-        #[source] source: minijinja::Error, 
-        diag: Diagnostic 
+    #[error("Template rendering failed")]
+    TemplateFailed {
+        #[source]
+        source: minijinja::Error,
+        diag: Diagnostic,
     },
 
     #[error("Backend compilation failed with {0} error(s)")]
     CompilationFailed(usize, Vec<Diagnostic>),
 
     #[error("{format:?} not supported by {backend}")]
-    FormatNotSupported { 
-        backend: String, 
-        format: OutputFormat 
+    FormatNotSupported {
+        backend: String,
+        format: OutputFormat,
     },
 
     #[error("Unsupported backend: {0}")]
@@ -165,7 +169,7 @@ impl From<minijinja::Error> for RenderError {
             line: line as u32,
             col: 0, // MiniJinja doesn't provide column info
         });
-        
+
         let diag = Diagnostic {
             severity: Severity::Error,
             code: Some(format!("minijinja::{:?}", e.kind())),
@@ -174,7 +178,7 @@ impl From<minijinja::Error> for RenderError {
             related: vec![],
             hint: None,
         };
-        
+
         RenderError::TemplateFailed { source: e, diag }
     }
 }
@@ -183,13 +187,13 @@ impl From<minijinja::Error> for RenderError {
 pub fn print_errors(err: &RenderError) {
     match err {
         RenderError::CompilationFailed(_, diags) => {
-            for d in diags { 
-                eprintln!("{}", d.fmt_pretty()); 
+            for d in diags {
+                eprintln!("{}", d.fmt_pretty());
             }
         }
         RenderError::TemplateFailed { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::InvalidFrontmatter { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::EngineCreation { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
-        _ => eprintln!("{}", err)
+        _ => eprintln!("{}", err),
     }
 }

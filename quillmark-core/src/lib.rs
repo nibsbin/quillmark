@@ -16,7 +16,7 @@ pub use backend::Backend;
 
 // Re-export error types
 pub mod error;
-pub use error::{RenderError, RenderResult, Diagnostic, Severity, Location};
+pub use error::{Diagnostic, Location, RenderError, RenderResult, Severity};
 
 /// Output formats supported by backends
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -77,7 +77,7 @@ impl QuillIgnore {
     pub fn is_ignored<P: AsRef<Path>>(&self, path: P) -> bool {
         let path = path.as_ref();
         let path_str = path.to_string_lossy();
-        
+
         for pattern in &self.patterns {
             if self.matches_pattern(pattern, &path_str) {
                 return true;
@@ -91,8 +91,9 @@ impl QuillIgnore {
         // Handle directory patterns
         if pattern.ends_with('/') {
             let pattern_prefix = &pattern[..pattern.len() - 1];
-            return path.starts_with(pattern_prefix) && 
-                   (path.len() == pattern_prefix.len() || path.chars().nth(pattern_prefix.len()) == Some('/'));
+            return path.starts_with(pattern_prefix)
+                && (path.len() == pattern_prefix.len()
+                    || path.chars().nth(pattern_prefix.len()) == Some('/'));
         }
 
         // Handle exact matches
@@ -125,7 +126,7 @@ impl QuillIgnore {
 /// A quill template containing the template content and metadata with file management capabilities
 #[derive(Debug, Clone)]
 pub struct Quill {
-    /// The template content 
+    /// The template content
     pub glue_template: String,
     /// Quill-specific data that backends might need
     pub metadata: HashMap<String, serde_yaml::Value>,
@@ -141,11 +142,14 @@ pub struct Quill {
 
 impl Quill {
     /// Create a Quill from a directory path
-    pub fn from_path<P: AsRef<std::path::Path>>(path: P) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+    pub fn from_path<P: AsRef<std::path::Path>>(
+        path: P,
+    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         use std::fs;
-        
+
         let path = path.as_ref();
-        let name = path.file_name()
+        let name = path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unnamed")
             .to_string();
@@ -168,7 +172,7 @@ impl Quill {
             if let Some(name_val) = quill_section.get("name").and_then(|v| v.as_str()) {
                 quill_name = name_val.to_string();
             }
-            
+
             if let Some(backend_val) = quill_section.get("backend").and_then(|v| v.as_str()) {
                 match Self::toml_to_yaml_value(&toml::Value::String(backend_val.to_string())) {
                     Ok(yaml_value) => {
@@ -179,11 +183,11 @@ impl Quill {
                     }
                 }
             }
-            
+
             if let Some(glue_val) = quill_section.get("glue").and_then(|v| v.as_str()) {
                 glue_file = glue_val.to_string();
             }
-            
+
             // Add other fields to metadata (excluding special fields and version)
             if let toml::Value::Table(table) = quill_section {
                 for (key, value) in table {
@@ -235,10 +239,10 @@ impl Quill {
             glue_file,
             files,
         };
-        
+
         // Automatically validate the quill upon creation
         quill.validate()?;
-        
+
         Ok(quill)
     }
 
@@ -250,7 +254,7 @@ impl Quill {
         ignore: &QuillIgnore,
     ) -> Result<(), Box<dyn StdError + Send + Sync>> {
         use std::fs;
-        
+
         if !current_dir.exists() {
             return Ok(());
         }
@@ -258,7 +262,8 @@ impl Quill {
         for entry in fs::read_dir(current_dir)? {
             let entry = entry?;
             let path = entry.path();
-            let relative_path = path.strip_prefix(base_dir)
+            let relative_path = path
+                .strip_prefix(base_dir)
                 .map_err(|e| format!("Failed to get relative path: {}", e))?
                 .to_path_buf();
 
@@ -270,19 +275,25 @@ impl Quill {
             if path.is_file() {
                 let contents = fs::read(&path)
                     .map_err(|e| format!("Failed to read file '{}': {}", path.display(), e))?;
-                
-                files.insert(relative_path.clone(), FileEntry {
-                    contents,
-                    path: relative_path,
-                    is_dir: false,
-                });
+
+                files.insert(
+                    relative_path.clone(),
+                    FileEntry {
+                        contents,
+                        path: relative_path,
+                        is_dir: false,
+                    },
+                );
             } else if path.is_dir() {
                 // Add directory entry
-                files.insert(relative_path.clone(), FileEntry {
-                    contents: Vec::new(),
-                    path: relative_path,
-                    is_dir: true,
-                });
+                files.insert(
+                    relative_path.clone(),
+                    FileEntry {
+                        contents: Vec::new(),
+                        path: relative_path,
+                        is_dir: true,
+                    },
+                );
 
                 // Recursively process subdirectory
                 Self::load_directory_recursive(&path, base_dir, files, ignore)?;
@@ -293,7 +304,9 @@ impl Quill {
     }
 
     /// Convert TOML value to YAML value
-    pub fn toml_to_yaml_value(toml_val: &toml::Value) -> Result<serde_yaml::Value, Box<dyn StdError + Send + Sync>> {
+    pub fn toml_to_yaml_value(
+        toml_val: &toml::Value,
+    ) -> Result<serde_yaml::Value, Box<dyn StdError + Send + Sync>> {
         let json_val = serde_json::to_value(toml_val)?;
         let yaml_val = serde_yaml::to_value(json_val)?;
         Ok(yaml_val)
@@ -346,7 +359,7 @@ impl Quill {
     pub fn list_directory<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
         let dir_path = dir_path.as_ref();
         let mut entries = Vec::new();
-        
+
         for (path, entry) in &self.files {
             if let Some(parent) = path.parent() {
                 if parent == dir_path && !entry.is_dir {
@@ -357,7 +370,7 @@ impl Quill {
                 entries.push(path.clone());
             }
         }
-        
+
         entries.sort();
         entries
     }
@@ -366,7 +379,7 @@ impl Quill {
     pub fn list_subdirectories<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
         let dir_path = dir_path.as_ref();
         let mut entries = Vec::new();
-        
+
         for (path, entry) in &self.files {
             if entry.is_dir {
                 if let Some(parent) = path.parent() {
@@ -379,7 +392,7 @@ impl Quill {
                 }
             }
         }
-        
+
         entries.sort();
         entries
     }
@@ -388,7 +401,7 @@ impl Quill {
     pub fn find_files<P: AsRef<Path>>(&self, pattern: P) -> Vec<PathBuf> {
         let pattern_str = pattern.as_ref().to_string_lossy();
         let mut matches = Vec::new();
-        
+
         for (path, entry) in &self.files {
             if !entry.is_dir {
                 let path_str = path.to_string_lossy();
@@ -397,7 +410,7 @@ impl Quill {
                 }
             }
         }
-        
+
         matches.sort();
         matches
     }
@@ -407,17 +420,17 @@ impl Quill {
         if pattern == "*" {
             return true;
         }
-        
+
         if !pattern.contains('*') {
             return path == pattern;
         }
-        
+
         // Handle directory/* patterns
         if pattern.ends_with("/*") {
             let dir_pattern = &pattern[..pattern.len() - 2];
             return path.starts_with(&format!("{}/", dir_pattern));
         }
-        
+
         let parts: Vec<&str> = pattern.split('*').collect();
         if parts.len() == 2 {
             let (prefix, suffix) = (parts[0], parts[1]);
@@ -429,15 +442,15 @@ impl Quill {
                 return path.starts_with(prefix) && path.ends_with(suffix);
             }
         }
-        
+
         false
     }
 }
 #[cfg(test)]
 mod quill_tests {
     use super::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_quillignore_parsing() {
@@ -485,9 +498,13 @@ node_modules/
         let quill_dir = temp_dir.path();
 
         // Create test files
-        fs::write(quill_dir.join("Quill.toml"), "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
+        fs::write(
+            quill_dir.join("Quill.toml"),
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"",
+        )
+        .unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
-        
+
         let assets_dir = quill_dir.join("assets");
         fs::create_dir_all(&assets_dir).unwrap();
         fs::write(assets_dir.join("test.txt"), "asset content").unwrap();
@@ -522,12 +539,16 @@ node_modules/
 
         // Create .quillignore
         fs::write(quill_dir.join(".quillignore"), "*.tmp\ntarget/\n").unwrap();
-        
+
         // Create test files
-        fs::write(quill_dir.join("Quill.toml"), "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
+        fs::write(
+            quill_dir.join("Quill.toml"),
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"",
+        )
+        .unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
         fs::write(quill_dir.join("should_ignore.tmp"), "ignored").unwrap();
-        
+
         let target_dir = quill_dir.join("target");
         fs::create_dir_all(&target_dir).unwrap();
         fs::write(target_dir.join("debug.txt"), "also ignored").unwrap();
@@ -547,9 +568,13 @@ node_modules/
         let quill_dir = temp_dir.path();
 
         // Create test directory structure
-        fs::write(quill_dir.join("Quill.toml"), "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"").unwrap();
+        fs::write(
+            quill_dir.join("Quill.toml"),
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"",
+        )
+        .unwrap();
         fs::write(quill_dir.join("glue.typ"), "template").unwrap();
-        
+
         let assets_dir = quill_dir.join("assets");
         fs::create_dir_all(&assets_dir).unwrap();
         fs::write(assets_dir.join("image.png"), "png data").unwrap();
@@ -585,17 +610,21 @@ description = "Test quill with new format"
 author = "Test Author"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
-        fs::write(quill_dir.join("custom-glue.typ"), "= Custom Template\n\nThis is a custom template.").unwrap();
+        fs::write(
+            quill_dir.join("custom-glue.typ"),
+            "= Custom Template\n\nThis is a custom template.",
+        )
+        .unwrap();
 
         // Load quill
         let quill = Quill::from_path(quill_dir).unwrap();
 
         // Test that name comes from TOML, not directory
         assert_eq!(quill.name, "my-custom-quill");
-        
+
         // Test that glue file is set correctly
         assert_eq!(quill.glue_file, "custom-glue.typ");
-        
+
         // Test that backend is in metadata
         assert!(quill.metadata.contains_key("backend"));
         if let Some(backend_val) = quill.metadata.get("backend") {
@@ -605,12 +634,12 @@ author = "Test Author"
                 panic!("Backend value is not a string");
             }
         }
-        
+
         // Test that other fields are in metadata (but not version)
         assert!(quill.metadata.contains_key("description"));
         assert!(quill.metadata.contains_key("author"));
         assert!(!quill.metadata.contains_key("version")); // version should be excluded
-        
+
         // Test that glue template content is loaded correctly
         assert!(quill.glue_template.contains("Custom Template"));
         assert!(quill.glue_template.contains("custom template"));

@@ -17,8 +17,8 @@ pub enum TemplateError {
 
 /// Public filter ABI that external crates can depend on (no direct minijinja dep required)
 pub mod filter_api {
-    pub use minijinja::{Error, ErrorKind, State};
     pub use minijinja::value::{Kwargs, Value};
+    pub use minijinja::{Error, ErrorKind, State};
 
     /// Trait alias for closures/functions used as filters (thread-safe, 'static)
     pub trait DynFilter: Send + Sync + 'static {}
@@ -26,7 +26,11 @@ pub mod filter_api {
 }
 
 /// Type for filter functions that can be called via function pointers
-type FilterFn = fn(&filter_api::State, filter_api::Value, filter_api::Kwargs) -> Result<filter_api::Value, MjError>;
+type FilterFn = fn(
+    &filter_api::State,
+    filter_api::Value,
+    filter_api::Kwargs,
+) -> Result<filter_api::Value, MjError>;
 
 /// Glue class for template rendering - provides interface for backends to interact with templates
 pub struct Glue {
@@ -37,7 +41,7 @@ pub struct Glue {
 impl Glue {
     /// Create a new Glue instance with a template string
     pub fn new(template: String) -> Self {
-        Self { 
+        Self {
             template,
             filters: HashMap::new(),
         }
@@ -55,45 +59,51 @@ impl Glue {
     ) -> Result<String, TemplateError> {
         // Convert YAML values to MiniJinja values
         let context = convert_yaml_to_minijinja(context)?;
-        
+
         // Create a new environment for this render
         let mut env = Environment::new();
-        
+
         // Register all filters
         for (name, filter_fn) in &self.filters {
             let filter_fn = *filter_fn; // Copy the function pointer
             env.add_filter(name, filter_fn);
         }
-        
-        env.add_template("main", &self.template)
-            .map_err(|e| TemplateError::InvalidTemplate("Failed to add template".to_string(), Box::new(e)))?;
-        
+
+        env.add_template("main", &self.template).map_err(|e| {
+            TemplateError::InvalidTemplate("Failed to add template".to_string(), Box::new(e))
+        })?;
+
         // Render the template
-        let tmpl = env.get_template("main")
-            .map_err(|e| TemplateError::InvalidTemplate("Failed to get template".to_string(), Box::new(e)))?;
-        
+        let tmpl = env.get_template("main").map_err(|e| {
+            TemplateError::InvalidTemplate("Failed to get template".to_string(), Box::new(e))
+        })?;
+
         let result = tmpl.render(&context)?;
         Ok(result)
     }
 }
 
 /// Convert YAML values to MiniJinja values
-fn convert_yaml_to_minijinja(yaml: HashMap<String, serde_yaml::Value>) -> Result<HashMap<String, minijinja::value::Value>, TemplateError> {
+fn convert_yaml_to_minijinja(
+    yaml: HashMap<String, serde_yaml::Value>,
+) -> Result<HashMap<String, minijinja::value::Value>, TemplateError> {
     let mut result = HashMap::new();
-    
+
     for (key, value) in yaml {
         let minijinja_value = yaml_to_minijinja_value(value)?;
         result.insert(key, minijinja_value);
     }
-    
+
     Ok(result)
 }
 
 /// Convert a single YAML value to a MiniJinja value
-fn yaml_to_minijinja_value(value: serde_yaml::Value) -> Result<minijinja::value::Value, TemplateError> {
-    use serde_yaml::Value as YamlValue;
+fn yaml_to_minijinja_value(
+    value: serde_yaml::Value,
+) -> Result<minijinja::value::Value, TemplateError> {
     use minijinja::value::Value as MjValue;
-    
+    use serde_yaml::Value as YamlValue;
+
     let result = match value {
         YamlValue::Null => MjValue::from(()),
         YamlValue::Bool(b) => MjValue::from(b),
@@ -105,7 +115,9 @@ fn yaml_to_minijinja_value(value: serde_yaml::Value) -> Result<minijinja::value:
             } else if let Some(f) = n.as_f64() {
                 MjValue::from(f)
             } else {
-                return Err(TemplateError::FilterError("Invalid number in YAML".to_string()));
+                return Err(TemplateError::FilterError(
+                    "Invalid number in YAML".to_string(),
+                ));
             }
         }
         YamlValue::String(s) => MjValue::from(s),
@@ -121,7 +133,11 @@ fn yaml_to_minijinja_value(value: serde_yaml::Value) -> Result<minijinja::value:
             for (k, v) in map {
                 let key = match k {
                     YamlValue::String(s) => s,
-                    _ => return Err(TemplateError::FilterError("Non-string key in YAML mapping".to_string())),
+                    _ => {
+                        return Err(TemplateError::FilterError(
+                            "Non-string key in YAML mapping".to_string(),
+                        ))
+                    }
                 };
                 obj.insert(key, yaml_to_minijinja_value(v)?);
             }
@@ -132,7 +148,7 @@ fn yaml_to_minijinja_value(value: serde_yaml::Value) -> Result<minijinja::value:
             yaml_to_minijinja_value(tagged.value)?
         }
     };
-    
+
     Ok(result)
 }
 

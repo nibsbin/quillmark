@@ -1,4 +1,4 @@
-use pulldown_cmark::{Parser, Event, Tag, TagEnd};
+use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 
 /// Escapes text for safe use in Typst evals
 pub fn escape_markup(s: &str) -> String {
@@ -20,7 +20,7 @@ pub fn escape_string(s: &str) -> String {
     for ch in s.chars() {
         match ch {
             '\\' => out.push_str("\\\\"),
-            '"'  => out.push_str("\\\""),
+            '"' => out.push_str("\\\""),
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             '\t' => out.push_str("\\t"),
@@ -49,7 +49,7 @@ where
     let mut end_newline = true;
     let mut list_stack: Vec<ListType> = Vec::new();
     let mut in_list_item = false; // Track if we're inside a list item
-    
+
     for event in iter {
         match event {
             Event::Start(tag) => {
@@ -70,20 +70,20 @@ where
                             output.push('\n');
                             end_newline = true;
                         }
-                        
+
                         let list_type = if start_number.is_some() {
                             ListType::Ordered
                         } else {
                             ListType::Bullet
                         };
-                        
+
                         list_stack.push(list_type);
                     }
                     Tag::Item => {
                         in_list_item = true; // We're now inside a list item
                         if let Some(list_type) = list_stack.last() {
                             let indent = "  ".repeat(list_stack.len().saturating_sub(1));
-                            
+
                             match list_type {
                                 ListType::Bullet => {
                                     output.push_str(&format!("{}+ ", indent));
@@ -107,7 +107,9 @@ where
                         output.push_str("#strike[");
                         end_newline = false;
                     }
-                    Tag::Link { dest_url, title: _, .. } => {
+                    Tag::Link {
+                        dest_url, title: _, ..
+                    } => {
                         output.push_str("#link(\"");
                         output.push_str(&escape_markup(&dest_url));
                         output.push_str("\")[");
@@ -194,10 +196,10 @@ where
 pub fn mark_to_typst(markdown: &str) -> String {
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
-    
+
     let parser = Parser::new_ext(markdown, options);
     let mut typst_output = String::new();
-    
+
     push_typst(&mut typst_output, parser);
     typst_output
 }
