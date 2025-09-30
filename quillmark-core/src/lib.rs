@@ -205,6 +205,22 @@ impl Quill {
             }
         }
 
+        // Extract fields from [typst] section
+        if let Some(typst_section) = quill_toml.get("typst") {
+            if let toml::Value::Table(table) = typst_section {
+                for (key, value) in table {
+                    match Self::toml_to_yaml_value(value) {
+                        Ok(yaml_value) => {
+                            metadata.insert(format!("typst_{}", key), yaml_value);
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: Failed to convert typst field '{}': {}", key, e);
+                        }
+                    }
+                }
+            }
+        }
+
         // Read the template content from glue file
         let glue_path = path.join(&glue_file);
         let template_content = fs::read_to_string(&glue_path)
@@ -325,6 +341,19 @@ impl Quill {
     /// Get the path to the glue file
     pub fn glue_path(&self) -> PathBuf {
         self.base_path.join(&self.glue_file)
+    }
+
+    /// Get the list of typst packages to download, if specified in Quill.toml
+    pub fn typst_packages(&self) -> Vec<String> {
+        self.metadata
+            .get("typst_packages")
+            .and_then(|v| v.as_sequence())
+            .map(|seq| {
+                seq.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     /// Validate the quill structure
@@ -643,5 +672,31 @@ author = "Test Author"
         // Test that glue template content is loaded correctly
         assert!(quill.glue_template.contains("Custom Template"));
         assert!(quill.glue_template.contains("custom template"));
+    }
+
+    #[test]
+    fn test_typst_packages_parsing() {
+        let temp_dir = TempDir::new().unwrap();
+        let quill_dir = temp_dir.path();
+
+        let toml_content = r#"
+[Quill]
+name = "test-quill"
+backend = "typst"
+glue = "glue.typ"
+
+[typst]
+packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
+"#;
+
+        fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
+        fs::write(quill_dir.join("glue.typ"), "test").unwrap();
+
+        let quill = Quill::from_path(quill_dir).unwrap();
+        let packages = quill.typst_packages();
+        
+        assert_eq!(packages.len(), 2);
+        assert_eq!(packages[0], "@preview/bubble:0.2.2");
+        assert_eq!(packages[1], "@preview/example:1.0.0");
     }
 }
