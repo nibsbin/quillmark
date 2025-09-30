@@ -1,7 +1,8 @@
 
 **Author: {{ author }}**
-**Ice Cream: {{ ice_cream}}**
+**Ice Cream: {{ ice_cream }}**
 
-*{{ title }}*
+*{{title}}*
+
 
 #{{ body | Body }}
