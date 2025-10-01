@@ -108,6 +108,24 @@ impl Workflow {
         }
         Ok(self)
     }
+    
+    /// Clear all dynamic assets from the workflow
+    /// 
+    /// This method removes all previously added dynamic assets, allowing you to
+    /// start fresh or conditionally reset the asset state in a builder chain.
+    /// 
+    /// # Example
+    /// ```rust
+    /// let workflow = engine.load("report")?
+    ///     .with_asset("temp.png", temp_bytes)?
+    ///     .clear_assets()  // Remove temp.png
+    ///     .with_asset("final.png", final_bytes)?
+    ///     .render(markdown, Some(OutputFormat::Pdf))?;
+    /// ```
+    pub fn clear_assets(mut self) -> Self {
+        self.dynamic_assets.clear();
+        self
+    }
 }
 ```
 
@@ -393,6 +411,33 @@ chart_name: "sales_chart.png"
 ]
 ```
 
+### Example 4: Clearing and Replacing Assets
+
+```rust
+// Start with draft assets
+let mut workflow = engine.load("report")?
+    .with_asset("draft_chart.png", draft_chart_bytes)?
+    .with_asset("draft_data.csv", draft_data_bytes)?;
+
+// Conditionally clear and replace with final assets
+if use_final_version {
+    workflow = workflow
+        .clear_assets()  // Remove all draft assets
+        .with_asset("final_chart.png", final_chart_bytes)?
+        .with_asset("final_data.csv", final_data_bytes)?;
+}
+
+let result = workflow.render(markdown, Some(OutputFormat::Pdf))?;
+```
+
+Template (`glue.typ`):
+```typst
+// References work for both draft and final assets
+#image({{ chart_filename | Asset }})
+#import csv: csv
+#let data = csv({{ data_filename | Asset }})
+```
+
 ## Security Considerations
 
 ### Path Traversal Prevention
@@ -533,6 +578,19 @@ fn test_asset_filter_transforms_filename() {
     let result = asset_filter(&state, Value::from("chart.png"), Kwargs::new())?;
     assert_eq!(result.to_string(), "\"assets/DYNAMIC_ASSET__chart.png\"");
 }
+
+#[test]
+fn test_clear_assets() {
+    let workflow = Workflow::new(backend, quill)?;
+    let workflow = workflow
+        .with_asset("chart1.png", vec![1, 2, 3])?
+        .with_asset("chart2.png", vec![4, 5, 6])?
+        .clear_assets();
+    
+    // After clearing, should be able to add the same filenames again
+    let workflow = workflow.with_asset("chart1.png", vec![7, 8, 9])?;
+    assert!(workflow.is_ok());
+}
 ```
 
 ### Integration Tests
@@ -563,9 +621,10 @@ Image: {{ 'test.jpg' | Asset }}
 
 ## Open Questions
 
-1. **Should we support asset removal?**
-   - Add a `without_asset` method to remove previously added assets?
-   - Current design doesn't support this; consider if needed.
+1. **Should we support individual asset removal?**
+   - Add a `without_asset` method to remove specific previously added assets?
+   - Current design includes `clear_assets()` to remove all assets
+   - Consider if granular removal is needed for specific use cases
 
 2. **Should we limit the number or size of dynamic assets?**
    - Prevent memory exhaustion from too many/large assets?
