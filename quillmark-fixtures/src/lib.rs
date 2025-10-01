@@ -53,8 +53,8 @@ pub fn list_resources() -> Result<Vec<String>, std::io::Error> {
 pub fn demo<F>(
     resource_name: &str,
     quill_dir: &str,
-    glue_name: &str,
-    output_name: &str,
+    glue_output: &str,
+    render_output: &str,
     runner: F,
 ) -> Result<(), Box<dyn Error>>
 where
@@ -70,18 +70,18 @@ where
     let (glued_bytes, output_bytes) = runner(&markdown, &quill_path)?;
 
     // write outputs
-    write_example_output(glue_name, &glued_bytes)?;
+    write_example_output(glue_output, &glued_bytes)?;
     println!(
         "Processed glue content preview: \n\n{}...\n",
         &String::from_utf8_lossy(&glued_bytes)[..std::cmp::min(500, glued_bytes.len())]
     );
 
-    write_example_output(output_name, &output_bytes)?;
+    write_example_output(render_output, &output_bytes)?;
 
     println!(
         "Access files:\n- Glue: {}\n- Output: {}",
-        example_output_dir().join(glue_name).display(),
-        example_output_dir().join(output_name).display()
+        example_output_dir().join(glue_output).display(),
+        example_output_dir().join(render_output).display()
     );
 
     Ok(())
