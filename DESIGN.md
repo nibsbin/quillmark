@@ -558,19 +558,42 @@ let file_id = FileId::new(Some(spec.clone()), virtual_path);
 
 ```
 quill-template/
-├─ quill.toml              # metadata; can override glue file name
+├─ Quill.toml              # metadata; can override glue file name
 ├─ glue.<ext>              # e.g., glue.typ
-├─ packages/               # backend packages
+├─ packages/               # backend packages (embedded in quill)
 │  └─ <pkg>/typst.toml …
 └─ assets/                 # fonts/, images/, data/
 ```
 
+**Quill.toml structure:**
+
+```toml
+[Quill]
+name = "my-quill"
+backend = "typst"
+glue = "glue.typ"
+
+[typst]
+packages = [
+    "@preview/bubble:0.2.2",
+    "@preview/other-package:1.0.0"
+]
+```
+
+The `[typst]` section is optional and allows specifying external packages to download:
+* **packages**: Array of package specifications in format `@namespace/name:version`
+* External packages are downloaded using typst-kit from the Typst package registry
+* Downloaded packages **dominate** (override) embedded packages if there's a name collision
+* Packages are cached locally for reuse
+
 **Package loading (algorithm):**
 
-1. Scan `packages/` recursively
-2. Parse `typst.toml` metadata
-3. Build virtual paths; register namespace (`@preview`, `@local`, custom)
-4. Resolve entrypoints; load all package files preserving structure
+1. **Download external packages** specified in `[typst].packages` from Quill.toml
+2. Load downloaded packages into the virtual file system
+3. Scan `packages/` recursively for embedded packages
+4. Parse `typst.toml` metadata for each package
+5. Build virtual paths; register namespace (`@preview`, `@local`, custom)
+6. Resolve entrypoints; load all package files preserving structure
 
 **Assets:**
 

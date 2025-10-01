@@ -1623,6 +1623,7 @@ version = "0.1.0"
 name = "quillmark-typst"
 version = "0.1.0"
 dependencies = [
+ "dirs",
  "fontdb",
  "pulldown-cmark",
  "quillmark-core",

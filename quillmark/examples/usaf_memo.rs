@@ -1,46 +1,31 @@
 use quillmark::{Quill, Workflow};
 use quillmark_core::OutputFormat;
-use quillmark_fixtures::{example_output_dir, resource_path, write_example_output};
+use quillmark_fixtures::demo;
 use quillmark_typst::TypstBackend;
 
 fn main() {
-    // Load the sample markdown
-    let markdown = std::fs::read_to_string(resource_path("usaf_memo.md")).unwrap();
+    // Use the fixtures demo helper which centralizes file IO and printing.
+    demo(
+        "usaf_memo.md",
+        "usaf_memo",
+        "usaf_memo_glue.typ",
+        "usaf_memo_output.pdf",
+        |markdown: &str, quill_path: &std::path::Path| {
+            // setup engine
+            let backend = Box::new(TypstBackend::default());
+            let quill = Quill::from_path(quill_path.to_path_buf()).expect("Failed to load quill");
+            let engine = Workflow::new(backend, quill).expect("Failed to create engine");
 
-    //load quill
-    let quill_path = resource_path("usaf_memo");
+            // process glue
+            let glued = engine.process_glue(markdown).expect("Failed to process glue");
 
-    //setup engine
-    let backend = Box::new(TypstBackend::default());
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    let engine = Workflow::new(backend, quill).expect("Failed to create engine");
+            // render end to end
+            let rendered = engine
+                .render(markdown, Some(OutputFormat::Pdf))
+                .expect("Failed to render");
 
-    // process glue
-    let glued = engine
-        .process_glue(&markdown)
-        .expect("Failed to process glue");
-    write_example_output("usaf_memo_glue.typ", glued.as_bytes()).unwrap();
-
-    println!(
-        "Processed glue content preview: \n\n{}...\n",
-        &glued[..std::cmp::min(500, glued.len())]
-    );
-
-    //render end to end
-    let rendered = engine
-        .render(&markdown, Some(OutputFormat::Pdf))
-        .expect("Failed to render");
-    println!("Generated {} bytes", rendered.artifacts[0].bytes.len());
-    write_example_output("usaf_memo_output.pdf", &rendered.artifacts[0].bytes).unwrap();
-
-    println!(
-        "Rendered output bytes: {}",
-        rendered.artifacts[0].bytes.len()
-    );
-
-    println!(
-        "Access files:\n- Glue: {}\n- Output: {}",
-        example_output_dir().join("usaf_memo_glue.typ").display(),
-        example_output_dir().join("usaf_memo_output.pdf").display()
-    );
+            Ok((glued.into_bytes(), rendered.artifacts[0].bytes.clone()))
+        },
+    )
+    .expect("Demo failed");
 }
