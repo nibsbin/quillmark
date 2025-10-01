@@ -1,5 +1,5 @@
+use quillmark_fixtures::{example_output_dir, resource_path, write_example_output};
 use std::error::Error;
-use quillmark_fixtures::{resource_path, example_output_dir, write_example_output};
 
 /// Demo helper that centralizes example plumbing.
 ///
@@ -26,12 +26,15 @@ pub fn demo(
 
     // process glue
     let glued = workflow.process_glue(&markdown)?;
-    
+
     // write outputs
     let glued_bytes = glued.into_bytes();
     write_example_output(glue_output, &glued_bytes)?;
 
-    println!("Glue outputted to:: {}", example_output_dir().join(glue_output).display());
+    println!(
+        "Glue outputted to:: {}",
+        example_output_dir().join(glue_output).display()
+    );
 
     // render output
     let rendered = workflow.render(&markdown, Some(quillmark_core::OutputFormat::Pdf))?;
@@ -40,7 +43,10 @@ pub fn demo(
     write_example_output(render_output, &output_bytes)?;
 
     println!("------------------------------");
-    println!("Access glue output: {}", example_output_dir().join(glue_output).display());
+    println!(
+        "Access glue output: {}",
+        example_output_dir().join(glue_output).display()
+    );
     println!(
         "Access render output: {}",
         example_output_dir().join(render_output).display()

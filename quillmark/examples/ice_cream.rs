@@ -7,7 +7,7 @@ fn main() {
         "ice_cream.md",
         "ice_cream",
         "ice_cream.typ",
-        "ice_cream.pdf",            
+        "ice_cream.pdf",
     )
     .expect("Demo failed");
 }

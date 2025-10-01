@@ -169,8 +169,8 @@ impl QuillWorld {
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        use typst_kit::package::{PackageStorage, DEFAULT_PACKAGES_SUBDIR};
         use typst_kit::download::{Downloader, ProgressSink};
+        use typst_kit::package::{PackageStorage, DEFAULT_PACKAGES_SUBDIR};
 
         let packages_list = quill.typst_packages();
         if packages_list.is_empty() {
@@ -181,28 +181,29 @@ impl QuillWorld {
 
         // Create a package storage for downloading packages
         let downloader = Downloader::new("quillmark/0.1.0");
-        let cache_dir = dirs::cache_dir()
-            .map(|d| d.join(DEFAULT_PACKAGES_SUBDIR));
-        let data_dir = dirs::data_dir()
-            .map(|d| d.join(DEFAULT_PACKAGES_SUBDIR));
-        
+        let cache_dir = dirs::cache_dir().map(|d| d.join(DEFAULT_PACKAGES_SUBDIR));
+        let data_dir = dirs::data_dir().map(|d| d.join(DEFAULT_PACKAGES_SUBDIR));
+
         let storage = PackageStorage::new(cache_dir, data_dir, downloader);
 
         // Parse and download each package
         for package_str in packages_list {
             println!("Processing package: {}", package_str);
-            
+
             // Parse package spec from string (e.g., "@preview/bubble:0.2.2")
             match package_str.parse::<PackageSpec>() {
                 Ok(spec) => {
-                    println!("Downloading package: {}:{}:{}", spec.namespace, spec.name, spec.version);
-                    
+                    println!(
+                        "Downloading package: {}:{}:{}",
+                        spec.namespace, spec.name, spec.version
+                    );
+
                     // Download/prepare the package
                     let mut progress = ProgressSink;
                     match storage.prepare_package(&spec, &mut progress) {
                         Ok(package_dir) => {
                             println!("Package downloaded to: {:?}", package_dir);
-                            
+
                             // Load the package files from the downloaded directory
                             Self::load_package_from_filesystem(
                                 &package_dir,
@@ -217,7 +218,10 @@ impl QuillWorld {
                     }
                 }
                 Err(e) => {
-                    eprintln!("Warning: Failed to parse package spec '{}': {}", package_str, e);
+                    eprintln!(
+                        "Warning: Failed to parse package spec '{}': {}",
+                        package_str, e
+                    );
                 }
             }
         }
@@ -246,25 +250,28 @@ impl QuillWorld {
             "lib.typ".to_string()
         };
 
-        println!("Loading package files from filesystem for {}:{}", spec.name, spec.version);
+        println!(
+            "Loading package files from filesystem for {}:{}",
+            spec.name, spec.version
+        );
 
         // Recursively load all files from the package directory
-        Self::load_package_files_recursive(
-            package_dir,
-            package_dir,
-            sources,
-            binaries,
-            &spec,
-        )?;
+        Self::load_package_files_recursive(package_dir, package_dir, sources, binaries, &spec)?;
 
         // Verify entrypoint exists
         let entrypoint_path = VirtualPath::new(&entrypoint);
         let entrypoint_file_id = FileId::new(Some(spec.clone()), entrypoint_path);
-        
+
         if sources.contains_key(&entrypoint_file_id) {
-            println!("Package {}:{} loaded successfully with entrypoint {}", spec.name, spec.version, entrypoint);
+            println!(
+                "Package {}:{} loaded successfully with entrypoint {}",
+                spec.name, spec.version, entrypoint
+            );
         } else {
-            println!("Warning: Entrypoint {} not found for package {}:{}", entrypoint, spec.name, spec.version);
+            println!(
+                "Warning: Entrypoint {} not found for package {}:{}",
+                entrypoint, spec.name, spec.version
+            );
         }
 
         Ok(())
@@ -283,18 +290,19 @@ impl QuillWorld {
         for entry in fs::read_dir(current_dir)? {
             let entry = entry?;
             let path = entry.path();
-            
+
             if path.is_file() {
                 // Calculate relative path from package root
-                let relative_path = path.strip_prefix(package_root)
+                let relative_path = path
+                    .strip_prefix(package_root)
                     .map_err(|e| format!("Failed to strip prefix: {}", e))?;
-                
+
                 let virtual_path = VirtualPath::new(relative_path.to_string_lossy().as_ref());
                 let file_id = FileId::new(Some(spec.clone()), virtual_path);
-                
+
                 // Load file contents
                 let contents = fs::read(&path)?;
-                
+
                 // Determine if it's a source or binary file
                 if let Some(ext) = path.extension() {
                     if ext == "typ" {

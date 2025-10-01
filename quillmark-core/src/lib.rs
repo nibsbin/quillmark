@@ -694,7 +694,7 @@ packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
 
         let quill = Quill::from_path(quill_dir).unwrap();
         let packages = quill.typst_packages();
-        
+
         assert_eq!(packages.len(), 2);
         assert_eq!(packages[0], "@preview/bubble:0.2.2");
         assert_eq!(packages[1], "@preview/example:1.0.0");
