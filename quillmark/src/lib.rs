@@ -63,7 +63,7 @@ impl Workflow {
         Ok(rendered)
     }
 
-    /// Render pre-processed glue content to a specific output format
+    /// Render processed glue content to a specific output format
     pub fn render_content(
         &self,
         content: &str,
@@ -233,7 +233,7 @@ impl Quillmark {
 
         Workflow::new(backend_clone, quill_clone)
     }
-    
+
     /// Helper method to clone a backend (trait object cloning workaround)
     fn clone_backend(&self, backend: &dyn Backend) -> Box<dyn Backend> {
         // For each backend, we need to instantiate a new one
