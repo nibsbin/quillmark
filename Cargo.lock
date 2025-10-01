@@ -1618,6 +1618,10 @@ dependencies = [
 [[package]]
 name = "quillmark-fixtures"
 version = "0.1.0"
+dependencies = [
+ "quillmark",
+ "quillmark-typst",
+]
 
 [[package]]
 name = "quillmark-typst"

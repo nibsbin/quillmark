@@ -1,30 +1,13 @@
-use quillmark::{Quill, Workflow};
-use quillmark_core::OutputFormat;
-use quillmark_fixtures::demo;
-use quillmark_typst::TypstBackend;
+#[path = "../tests/common.rs"]
+mod common;
+use common::demo;
 
 fn main() {
     demo(
         "ice_cream.md",
         "ice_cream",
         "ice_cream.typ",
-        "ice_cream.pdf",
-        |markdown: &str, quill_path: &std::path::Path| {
-            // setup engine
-            let backend = Box::new(TypstBackend::default());
-            let quill = Quill::from_path(quill_path.to_path_buf()).expect("Failed to load quill");
-            let engine = Workflow::new(backend, quill).expect("Failed to create engine");
-
-            // process glue
-            let glued = engine.process_glue(markdown).expect("Failed to process glue");
-
-            // render end to end
-            let rendered = engine
-                .render(markdown, Some(OutputFormat::Pdf))
-                .expect("Failed to render");
-
-            Ok((glued.into_bytes(), rendered.artifacts[0].bytes.clone()))
-        },
+        "ice_cream.pdf",            
     )
     .expect("Demo failed");
 }

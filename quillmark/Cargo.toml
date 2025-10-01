@@ -21,3 +21,4 @@ quillmark-fixtures = { path = "../quillmark-fixtures" }
 [features]
 default = ["typst"]
 typst = ["dep:quillmark-typst"]
+

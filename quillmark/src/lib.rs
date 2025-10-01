@@ -233,15 +233,7 @@ impl Quillmark {
 
         Workflow::new(backend_clone, quill_clone)
     }
-
-    /// Get a workflow for a registered quill by name
-    ///
-    /// **Deprecated**: Use `load()` instead for more ergonomic API that accepts both names and Quill objects.
-    #[deprecated(since = "0.1.0", note = "Use `load()` instead")]
-    pub fn get_workflow(&self, quill_name: &str) -> Result<Workflow, RenderError> {
-        self.load(quill_name)
-    }
-
+    
     /// Helper method to clone a backend (trait object cloning workaround)
     fn clone_backend(&self, backend: &dyn Backend) -> Box<dyn Backend> {
         // For each backend, we need to instantiate a new one

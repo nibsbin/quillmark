@@ -1,10 +1,11 @@
 ---
-title: "Bubble template"
-subtitle: "Simple and colorful template"
-author: "hzkonor"
-affiliation: "University"
-year: "Year"
-class: "Class"
+title: Bubble template
+subtitle: Simple and colorful template
+author: hzkonor
+affiliation: University
+year: Year
+class: Class
+main_color: "#4DA6FF"
 other:
   - "Made with Typst"
   - "https://typst.com"

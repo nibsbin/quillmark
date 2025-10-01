@@ -9,8 +9,8 @@
   year: {{ year | String }},
   class: {{ class | String }},
   other: {{ other | Lines }},
-  //main-color: "4DA6FF", //set the main color
-  logo: image("logo.png"), //set the logo
+  main-color: {{ main_color | String }},
+  logo: image("assets/logo.png"),
 ) 
 
 #{{ body | Body }}
