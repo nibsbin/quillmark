@@ -49,9 +49,9 @@ When you process this document with Quillmark:
 The parsing logic is implemented in `quillmark-core`:
 
 ```rust
-use quillmark_core::{parse_markdown, BODY_FIELD};
+use quillmark_core::{decompose, BODY_FIELD};
 
-let parsed = parse_markdown(markdown_content)?;
+let parsed = decompose(markdown_content)?;
 let frontmatter_title = parsed.get_field("title");
 let body_content = parsed.body();
 ```
