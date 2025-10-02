@@ -8,4 +8,4 @@
   name: {{ name | String }},
 )
 
-#{{ body | Body }}
+#{{ body | Content }}

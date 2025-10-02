@@ -19,4 +19,4 @@ Write your paragraphs here. Separate them with two new lines.
 You can also **bold**, _italicize_, `code`, ~strikethrough~,
 and [link](https://example.com/) your text.
 
-Less formatting. More lethality.
+Less formatting. More lethality. More taro ice cream.

@@ -150,7 +150,7 @@ pub fn dict_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<V
     Ok(Value::from_safe_string(inject_json(&json_str)))
 }
 
-pub fn body_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
+pub fn content_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
     let jv = json::to_value(&value).map_err(|e| {
         err(
             ErrorKind::InvalidOperation,
