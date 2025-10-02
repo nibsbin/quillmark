@@ -7,8 +7,9 @@
 
 *{{title}}*
 
+#{{ body | Content }}
+
+
 {% if picture is defined %}
 #image({{ picture | Asset }})
 {% endif %}
-
-#{{ body | Content }}
