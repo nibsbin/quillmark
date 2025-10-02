@@ -4,7 +4,6 @@ use serde_json as json;
 use std::collections::BTreeMap;
 use time::format_description::well_known::Iso8601;
 use time::{Date, OffsetDateTime}; // <-- add Date
-use toml; // <-- add Iso8601
 
 // ---------- small helpers ----------
 
@@ -19,22 +18,6 @@ fn apply_default(mut v: Value, kwargs: &Kwargs) -> Result<Value, Error> {
 
 fn inject_json(bytes: &str) -> String {
     format!("json(bytes(\"{}\"))", escape_string(bytes))
-}
-
-// Returns a String injector; panics if TOML serialization fails.
-// (If you prefer no panic, change return type to Result<String, Error> and propagate.)
-fn inject_toml(val: toml::Value) -> String {
-    let mut doc = BTreeMap::new();
-    doc.insert("value".to_string(), val);
-
-    // Serialize document and trim trailing newline
-    let mut s = toml::to_string(&doc).expect("TOML serialize failed");
-    if s.ends_with('\n') {
-        s.pop();
-    }
-
-    // Keep the ".value" suffix as requested
-    format!("toml(bytes(\"{}\")).value", escape_string(&s))
 }
 
 fn err(kind: ErrorKind, msg: impl Into<String>) -> Error {
@@ -118,19 +101,14 @@ pub fn date_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<V
         )
     })?;
 
-    // 3) Build toml::Value::Datetime directly
-    let tval = toml::Value::Datetime(toml::value::Datetime {
-        date: Some(toml::value::Date {
-            year: d.year() as u16,
-            month: d.month() as u8,
-            day: d.day(),
-        }),
-        time: None,
-        offset: None,
-    });
+    // 3) Build Typst date
+    let year = d.year() as u16;
+    let month = d.month() as u8;
+    let day = d.day();
+    let injector = format!("datetime(year: {}, month: {}, day: {})", year, month, day);
 
     // 4) Inject as TOML doc (with trailing ".value" in the payload)
-    Ok(Value::from_safe_string(inject_toml(tval)))
+    Ok(Value::from_safe_string(injector))
 }
 
 pub fn dict_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<Value, Error> {

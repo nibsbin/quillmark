@@ -1,7 +1,0 @@
-[Quill]
-name = "bubble"
-backend = "typst"
-glue = "glue.typ"
-
-[typst]
-packages = ["@preview/bubble:0.2.2"]
