@@ -820,3 +820,38 @@ rating: 4
         assert_eq!(doc.fields().len(), 6);
     }
 }
+#[cfg(test)]
+mod demo_file_test {
+    use super::*;
+
+    #[test]
+    fn test_extended_metadata_demo_file() {
+        let markdown = include_str!("../../quillmark-fixtures/resources/extended_metadata_demo.md");
+        let doc = decompose(markdown).unwrap();
+        
+        // Verify global fields
+        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Extended Metadata Demo");
+        assert_eq!(doc.get_field("author").unwrap().as_str().unwrap(), "Quillmark Team");
+        // version is parsed as a number by YAML
+        assert_eq!(doc.get_field("version").unwrap().as_f64().unwrap(), 1.0);
+        
+        // Verify body
+        assert!(doc.body().unwrap().contains("extended YAML metadata standard"));
+        
+        // Verify features collection
+        let features = doc.get_field("features").unwrap().as_sequence().unwrap();
+        assert_eq!(features.len(), 3);
+        
+        // Verify use_cases collection
+        let use_cases = doc.get_field("use_cases").unwrap().as_sequence().unwrap();
+        assert_eq!(use_cases.len(), 2);
+        
+        // Check first feature
+        let feature1 = features[0].as_mapping().unwrap();
+        assert_eq!(
+            feature1.get(&serde_yaml::Value::String("name".to_string()))
+                .unwrap().as_str().unwrap(),
+            "Tag Directives"
+        );
+    }
+}
