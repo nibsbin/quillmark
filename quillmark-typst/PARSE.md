@@ -339,15 +339,386 @@ The current implementation differs from `DESIGN.md` recommendations in several w
 - **Current**: Preserves all whitespace including leading newline
 - **Impact**: Body may start with `\n` when frontmatter is present
 
-## Future Enhancements
+## Extended YAML Metadata Standard (Proposed)
 
-Potential improvements aligned with `DESIGN.md`:
+This section formalizes a proposed extension to the current frontmatter-only approach, allowing **inline metadata sections** throughout the document body. This feature is **NOT YET IMPLEMENTED** and serves as a design specification for future development.
+
+### Motivation
+
+The current single-frontmatter design limits documents to a flat metadata structure at the beginning. Many use cases require:
+- **Structured sub-documents**: Breaking content into logical sections with their own metadata
+- **Repeated elements**: Collections of similar items (e.g., multiple products, blog posts, or chapters)
+- **Hierarchical content**: Documents that naturally contain nested structures
+
+### Design Overview
+
+The extended standard allows metadata blocks to appear anywhere in the document using a **tag directive** syntax:
+
+```markdown
+---
+title: Global Metadata
+author: John Doe
+---
+
+This is the main document body.
+
+---
+!sub_documents
+title: First Sub-Document
+tags: [example, demo]
+---
+
+Body of the *first sub-document* with **markdown formatting**.
+
+---
+!sub_documents
+title: Second Sub-Document
+tags: [test]
+---
+
+Body of the second sub-document.
+```
+
+**Resulting structure:**
+
+```json
+{
+  "title": "Global Metadata",
+  "author": "John Doe",
+  "body": "This is the main document body.",
+  "sub_documents": [
+    {
+      "title": "First Sub-Document",
+      "tags": ["example", "demo"],
+      "body": "Body of the *first sub-document* with **markdown formatting**."
+    },
+    {
+      "title": "Second Sub-Document",
+      "tags": ["test"],
+      "body": "Body of the second sub-document."
+    }
+  ]
+}
+```
+
+### Syntax Specification
+
+#### 1. Tag Directive Format
+
+**Grammar:**
+```
+metadata_block ::= "---" NEWLINE tag_directive? yaml_content "---" NEWLINE body_content
+tag_directive ::= "!" attribute_name NEWLINE
+attribute_name ::= [a-z_][a-z0-9_]*
+```
+
+**Rules:**
+- Tag directive MUST appear on the first line after opening `---`
+- Tag directive MUST start with `!` followed by the attribute name
+- Attribute name MUST be a valid YAML key (lowercase letters, digits, underscores)
+- Attribute name MUST NOT be a reserved field (e.g., `body`)
+- If no tag directive is present, the block is treated as global frontmatter
+
+#### 2. Body Content Extraction
+
+For tagged metadata blocks:
+- **Body starts**: Immediately after the closing `---` delimiter
+- **Body ends**: At the start of the next metadata block OR end of document
+- **Body trimming**: Leading/trailing whitespace handling follows same rules as global body
+
+**Example body extraction:**
+
+```markdown
+---
+!items
+name: Item 1
+---
+
+Content for item 1.
+Next paragraph.
+
+---
+!items
+name: Item 2
+---
+
+Content for item 2.
+```
+
+Item 1 body: `"Content for item 1.\nNext paragraph.\n"`  
+Item 2 body: `"Content for item 2."`
+
+#### 3. Collection Semantics
+
+**Array aggregation:**
+- All tagged blocks with the same attribute name are collected into an array
+- Array preserves document order
+- Each entry is an object containing metadata fields + body
+
+**Global vs. tagged:**
+- First block without tag directive → global frontmatter
+- Subsequent untagged blocks → error (only one global frontmatter allowed)
+- Tagged blocks can appear before or after global frontmatter body
+
+### Parsing Algorithm
+
+**High-level steps:**
+
+1. **Scan document for all `---` delimiters**
+   - Track positions of opening/closing pairs
+   - Identify tag directives
+
+2. **Parse global frontmatter** (if present)
+   - First block without tag directive
+   - Extract YAML fields into global map
+   - Extract body up to next metadata block (or EOF)
+
+3. **Parse tagged metadata blocks**
+   - For each tagged block:
+     - Extract attribute name from tag directive
+     - Parse YAML content
+     - Extract body content up to next block
+     - Append to array under attribute name
+
+4. **Assemble final structure**
+   - Merge global fields with tagged arrays
+   - Validate no conflicts (e.g., global field and tagged array with same name)
+
+### Edge Cases and Validation
+
+#### 1. Multiple Global Frontmatter Blocks
+
+```markdown
+---
+title: First
+---
+
+Body
+
+---
+author: Second
+---
+
+More body
+```
+
+**Behavior**: ERROR - Only one untagged frontmatter block allowed.
+
+#### 2. Empty Tagged Block
+
+```markdown
+---
+!items
+---
+
+Body content
+```
+
+**Behavior**: Valid - creates entry with empty metadata and specified body.
+
+#### 3. Tagged Block Without Body
+
+```markdown
+---
+!items
+name: Item
+---
+```
+
+**Behavior**: Valid - creates entry with empty string body.
+
+#### 4. Name Collision
+
+```markdown
+---
+items: "global value"
+---
+
+Body
+
+---
+!items
+name: Sub-item
+---
+
+Sub-body
+```
+
+**Behavior**: ERROR - Tagged attribute name conflicts with global field.
+
+#### 5. Reserved Field Names
+
+```markdown
+---
+!body
+content: Test
+---
+```
+
+**Behavior**: ERROR - Cannot use reserved field name `body` as tag directive.
+
+#### 6. Invalid Tag Syntax
+
+```markdown
+---
+!Invalid-Name
+title: Test
+---
+```
+
+**Behavior**: ERROR - Tag names must follow `[a-z_][a-z0-9_]*` pattern.
+
+#### 7. Nested Tagged Blocks
+
+```markdown
+---
+!outer
+title: Outer
+---
+
+Body with nested:
+
+---
+!inner
+title: Inner
+---
+```
+
+**Behavior**: Sequential, not nested - both `outer` and `inner` arrays created at top level. No hierarchical nesting supported.
+
+### Data Structure Changes
+
+#### Extended ParsedDocument
+
+```rust
+// Conceptual structure (not implemented)
+pub struct ParsedDocument {
+    fields: HashMap<String, serde_yaml::Value>,
+}
+```
+
+**Internal representation:**
+- Global fields and arrays stored in same `HashMap`
+- Tagged collections represented as `serde_yaml::Value::Sequence`
+- Each array element is a `serde_yaml::Value::Mapping` with fields + body
+
+**Access patterns:**
+```rust
+// Access global field
+doc.get_field("title")
+
+// Access tagged collection
+doc.get_field("sub_documents")
+    .and_then(|v| v.as_sequence())
+    
+// Access specific item in collection
+if let Some(seq) = doc.get_field("items").and_then(|v| v.as_sequence()) {
+    for item in seq {
+        let title = item.get("title").and_then(|v| v.as_str());
+        let body = item.get("body").and_then(|v| v.as_str());
+    }
+}
+```
+
+### Backward Compatibility
+
+**Guarantees:**
+- Documents with only global frontmatter parse identically
+- No tag directive means no behavior change
+- Existing ParsedDocument API remains unchanged
+
+**Migration path:**
+- Old documents continue to work without modification
+- New documents can opt-in by using tag directives
+- Templates can check for presence of tagged arrays with `get_field()`
+
+### Performance Considerations
+
+**Complexity:**
+- Document scan: O(n) where n = document length
+- Metadata extraction: O(m) where m = number of metadata blocks
+- Total: O(n + m) linear time complexity
+
+**Memory:**
+- Single pass parsing (no backtracking required)
+- Metadata blocks stored as YAML values (reuses existing infrastructure)
+
+### Security Considerations
+
+**Potential issues:**
+1. **Deep nesting**: While not structurally nested, many tagged blocks could create large arrays
+   - **Mitigation**: Add configurable limit on array size per attribute
+
+2. **Tag name injection**: Malicious tag names could conflict with template variables
+   - **Mitigation**: Strict validation of tag names (already in spec)
+
+3. **Body content isolation**: Tagged bodies might contain metadata-like syntax
+   - **Mitigation**: Bodies are treated as opaque strings (no recursive parsing)
+
+### Template Integration
+
+Templates can leverage tagged collections using standard iteration:
+
+```typst
+// Typst template example
+#set document(title: {{ title | String }})
+
+{{ body | Content }}
+
+#for item in {{ items | Dict }}
+  #heading(level: 2, item.title)
+  #eval(item.body)
+#endfor
+```
+
+### Testing Requirements
+
+When implementing, the following test cases must be covered:
+
+1. **Basic tagged block**: Single tag directive with metadata and body
+2. **Multiple instances**: Same tag directive used multiple times
+3. **Mixed global and tagged**: Global frontmatter + tagged blocks
+4. **Empty metadata**: Tagged block with no YAML fields
+5. **Empty body**: Tagged block with no body content
+6. **Adjacent blocks**: Back-to-back tagged blocks with different tags
+7. **Order preservation**: Verify array maintains document order
+8. **Error: multiple global**: Second untagged block should fail
+9. **Error: name collision**: Tagged name conflicts with global field
+10. **Error: reserved name**: Using `body` as tag directive
+11. **Error: invalid syntax**: Malformed tag directives
+12. **Complex YAML**: Nested structures within tagged metadata
+13. **Cross-platform**: Line ending variations (`\n` vs `\r\n`)
+
+### Open Design Questions
+
+1. **Hierarchical nesting**: Should tagged blocks support parent-child relationships?
+   - Current design: No nesting, all collections are flat
+   - Alternative: Allow `!parent.child` syntax for nested structures
+
+2. **Body concatenation**: Should adjacent same-tag blocks merge bodies?
+   - Current design: No, each creates separate array entry
+   - Alternative: Concatenate bodies if metadata is identical
+
+3. **Global body placement**: Where does global body end when tagged blocks present?
+   - Current design: Up to first tagged block
+   - Alternative: Only content before first `---` after frontmatter
+
+4. **Type coercion**: Should single tagged block create array or object?
+   - Current design: Always creates array for consistency
+   - Alternative: Single item → object, multiple → array
+
+### Future Enhancements
+
+Beyond the extended metadata standard:
 
 1. **Cross-platform line endings**: Support both `\n` and `\r\n`
 2. **Graceful degradation option**: Add flag for non-fatal YAML errors
 3. **Empty frontmatter handling**: Optimize for `---\n---\n` edge case
 4. **Body trimming option**: Configurable whitespace normalization
 5. **Diagnostic context**: Include line/column numbers in error messages
+6. **Metadata inheritance**: Tagged blocks inherit global fields unless overridden
+7. **Custom delimiters**: Allow alternatives to `---` for metadata blocks
+8. **Schema validation**: JSON Schema or similar for metadata structure validation
 
 ## Related Files
 
