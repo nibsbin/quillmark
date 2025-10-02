@@ -7,7 +7,7 @@ use std::error::Error;
 /// provided `runner` closure to perform backend-specific work. The `runner`
 /// should return a tuple of (glue_bytes, output_bytes) which this helper will
 /// write to the example output directory and print a short preview.
-    pub fn demo(
+pub fn demo(
     resource_name: &str,
     quill_dir: &str,
     asset_resources: Option<Vec<&str>>,
@@ -26,8 +26,14 @@ use std::error::Error;
     let mut workflow = engine.load(&quill).expect("Failed to load workflow");
 
     if let Some(assets) = &asset_resources {
-        let full_assets: Vec<(String, Vec<u8>)> = assets.iter()
-            .map(|name| (name.to_string(), std::fs::read(resource_path(name)).unwrap()))
+        let full_assets: Vec<(String, Vec<u8>)> = assets
+            .iter()
+            .map(|name| {
+                (
+                    name.to_string(),
+                    std::fs::read(resource_path(name)).unwrap(),
+                )
+            })
             .collect();
         workflow = workflow.with_assets(full_assets)?;
     }
