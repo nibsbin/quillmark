@@ -6,9 +6,7 @@ fn main() {
     demo(
         "taro.md",
         "taro",
-        Some(vec![
-            "taro.png"
-        ]),
+        Some(vec!["taro.png"]),
         "taro.typ",
         "taro.pdf",
     )

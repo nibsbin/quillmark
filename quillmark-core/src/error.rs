@@ -129,10 +129,7 @@ pub enum RenderError {
     UnsupportedBackend(String),
 
     #[error("Dynamic asset collision: {filename}")]
-    DynamicAssetCollision {
-        filename: String,
-        message: String,
-    },
+    DynamicAssetCollision { filename: String, message: String },
 
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
