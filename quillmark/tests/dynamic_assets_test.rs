@@ -1,4 +1,4 @@
-use quillmark::{Quillmark, Quill, RenderError};
+use quillmark::{Quill, Quillmark, RenderError};
 use quillmark_fixtures::resource_path;
 
 #[test]
@@ -29,7 +29,10 @@ fn test_with_asset_collision() {
 
     // Should fail - asset already exists
     let result = workflow.with_asset("taro.png", vec![4, 5, 6]);
-    assert!(matches!(result, Err(RenderError::DynamicAssetCollision { .. })));
+    assert!(matches!(
+        result,
+        Err(RenderError::DynamicAssetCollision { .. })
+    ));
 }
 
 #[test]
@@ -69,9 +72,9 @@ fn test_clear_assets() {
     // After clearing, should be able to add the same filenames again
     let workflow = workflow
         .with_asset("taro.png", vec![7, 8, 9])
-            .expect("Should add taro.png again after clearing")
+        .expect("Should add taro.png again after clearing")
         .with_asset("more_taro.png", vec![10, 11, 12])
-            .expect("Should add more_taro.png again after clearing");
+        .expect("Should add more_taro.png again after clearing");
 
     assert_eq!(workflow.quill_name(), "taro");
 }
