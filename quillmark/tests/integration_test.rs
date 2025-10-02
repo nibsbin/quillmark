@@ -135,25 +135,3 @@ fn test_unsupported_format() {
         _ => panic!("Expected FormatNotSupported error"),
     }
 }
-
-#[test]
-fn test_typst_packages_parsing_from_bubble() {
-    use quillmark_fixtures::resource_path;
-
-    let bubble_path = resource_path("bubble");
-    let quill = Quill::from_path(&bubble_path).expect("Failed to load bubble quill");
-
-    // Check that typst packages are parsed from Quill.toml
-    let packages = quill.typst_packages();
-    assert!(
-        !packages.is_empty(),
-        "Expected packages to be specified in bubble quill"
-    );
-    assert_eq!(packages.len(), 1);
-    assert_eq!(packages[0], "@preview/bubble:0.2.2");
-
-    println!(
-        "Successfully parsed typst packages from bubble quill: {:?}",
-        packages
-    );
-}

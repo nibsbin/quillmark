@@ -18,7 +18,6 @@
 10. [Error Handling Patterns](#error-handling-patterns)
 11. [Extension Points](#extension-points)
 12. [Key Design Decisions](#key-design-decisions)
-13. [Migration & Compatibility](#migration--compatibility)
 
 ---
 
@@ -76,7 +75,6 @@ High-level data flow:
 * Orchestration (parse → compose → compile)
 * Validation and **structured error propagation**
 * QuillRef for ergonomic quill references
-* *Compatibility shim:* legacy `render(markdown, RenderConfig)` calls through the engine (see [Migration](#migration--compatibility)).
 
 ### `quillmark-typst` (Typst backend)
 
@@ -111,9 +109,6 @@ impl Quillmark {
     pub fn load<'a>(&self, quill_ref: impl Into<QuillRef<'a>>) -> Result<Workflow, RenderError>;
     pub fn registered_backends(&self) -> Vec<&str>;
     pub fn registered_quills(&self) -> Vec<&str>;
-    
-    #[deprecated(since = "0.1.0", note = "Use `load()` instead")]
-    pub fn get_workflow(&self, quill_name: &str) -> Result<Workflow, RenderError>;
 }
 ```
 
@@ -175,7 +170,7 @@ pub trait Backend: Send + Sync {
 }
 ```
 
-> **Note:** `RenderOptions` is internal to engine orchestration; public callers use the engine methods. Legacy `RenderConfig` maps to `RenderOptions` (see [Migration](#migration--compatibility)).
+> **Note:** `RenderOptions` is internal to engine orchestration; public callers use the engine methods.
 
 ### Quill (template bundle)
 
@@ -725,6 +720,12 @@ pub enum RenderError {
 
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
+
+    #[error("{0}")]
+    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
+
+    #[error("Template error: {0}")]
+    Template(#[from] crate::templating::TemplateError),
 }
 ```
 
@@ -740,11 +741,21 @@ pub enum RenderError {
 ```rust
 impl From<minijinja::Error> for RenderError {
     fn from(e: minijinja::Error) -> Self {
-        let loc = e
-            .name()
-            .and_then(|name| e.line().zip(e.column()).map(|(l,c)| Location { file: name.to_string(), line: l as u32, col: c as u32 }))
-            .or_else(|| e.line().zip(e.column()).map(|(l,c)| Location { file: "template".into(), line: l as u32, col: c as u32 }));
-        let diag = Diagnostic { severity: Severity::Error, code: Some(format!("minijinja::{:?}", e.kind())), message: e.to_string(), primary: loc, related: vec![], hint: None };
+        let loc = e.line().map(|line| Location {
+            file: e.name().unwrap_or("template").to_string(),
+            line: line as u32,
+            col: 0, // MiniJinja doesn't provide column info
+        });
+
+        let diag = Diagnostic {
+            severity: Severity::Error,
+            code: Some(format!("minijinja::{:?}", e.kind())),
+            message: e.to_string(),
+            primary: loc,
+            related: vec![],
+            hint: None,
+        };
+
         RenderError::TemplateFailed { source: e, diag }
     }
 }
@@ -804,6 +815,8 @@ pub fn print_errors(err: &RenderError) {
             for d in diags { eprintln!("{}", d.fmt_pretty()); }
         }
         RenderError::TemplateFailed { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::InvalidFrontmatter { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::EngineCreation { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
         _ => eprintln!("{err}")
     }
 }

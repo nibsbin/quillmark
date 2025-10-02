@@ -1,0 +1,7 @@
+[Quill]
+name = "ice_cream"
+backend = "typst"
+glue = "glue.typ"
+
+[typst]
+packages = ["@preview/appreciated-letter:0.1.0"]
