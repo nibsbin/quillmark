@@ -133,6 +133,7 @@ let workflow = engine.load(&quill)?;  // Also accepts Quill reference
 pub struct Workflow {
     backend: Box<dyn Backend>,
     quill: Quill,
+    dynamic_assets: HashMap<String, Vec<u8>>,
 }
 
 impl Workflow {
@@ -143,8 +144,15 @@ impl Workflow {
     pub fn backend_id(&self) -> &str;
     pub fn supported_formats(&self) -> &'static [OutputFormat];
     pub fn quill_name(&self) -> &str;
+    
+    // Dynamic asset management
+    pub fn with_asset(self, filename: impl Into<String>, contents: impl Into<Vec<u8>>) -> Result<Self, RenderError>;
+    pub fn with_assets(self, assets: impl IntoIterator<Item = (String, Vec<u8>)>) -> Result<Self, RenderError>;
+    pub fn clear_assets(self) -> Self;
 }
 ```
+
+**Dynamic Assets:** The `Workflow` supports adding runtime assets through a builder pattern. Dynamic assets are prefixed with `DYNAMIC_ASSET__` and stored under `assets/` in the virtual file system, accessible via the `Asset` filter in templates.
 
 ### QuillRef (ergonomic quill references)
 
@@ -324,8 +332,11 @@ let parsed = decompose(markdown)?;                      // Step 1
 let mut glue = Glue::new(&quill.glue_template)?;        // Step 2a
 backend.register_filters(&mut glue);                    // Step 2b
 let glue_source = glue.compose(parsed.fields().clone())?; // Step 3
-let artifacts = backend.compile(&glue_source, &quill, &opts)?; // Step 4
+let prepared_quill = self.prepare_quill_with_assets();  // Step 3.5: inject dynamic assets
+let artifacts = backend.compile(&glue_source, &prepared_quill, &opts)?; // Step 4
 ```
+
+**Dynamic Asset Workflow**: Dynamic assets added via `with_asset()` are stored in the `Workflow` and injected into a cloned `Quill` during rendering. The `prepare_quill_with_assets()` method prefixes each filename with `DYNAMIC_ASSET__` and adds it to `assets/` in the quill's virtual file system, ensuring no collisions with static assets.
 
 #### Render Method Variants
 
@@ -347,6 +358,7 @@ let artifacts = backend.compile(&glue_source, &quill, &opts)?; // Step 4
 * **Date**: strict date parsing; produces TOML-like object when needed
 * **Dict**: objects → JSON string; type validation
 * **Body**: Markdown body → backend markup (e.g., Typst) and inject with `eval()` as needed
+* **Asset**: transform dynamic asset filename to virtual path (e.g., `"chart.png"` → `"assets/DYNAMIC_ASSET__chart.png"`)
 * **Toml** *(Typst-only convenience)*: YAML → TOML string injection for `toml()` usage
 
 **Template usage example (Typst glue):**
@@ -357,6 +369,7 @@ let artifacts = backend.compile(&glue_source, &quill, &opts)?; // Step 4
 {{ date | Date }}
 {{ frontmatter | Toml }}          // optional: for Typst-native toml(...)
 {{ body | Content }}
+#image({{ "chart.png" | Asset }}) // dynamic asset
 ```
 
 ### Implementation Hints
@@ -400,6 +413,13 @@ let artifacts = backend.compile(&glue_source, &quill, &opts)?; // Step 4
 * **Markdown conversion**: Apply `mark_to_typst()` to body content
 * **Eval wrapping**: Return `eval("typst_markup")` for safe template injection
 * **Content type**: Treats input as markdown string, outputs Typst markup
+
+##### Asset Filter (`asset_filter`)
+
+* **Dynamic asset path**: Transform filename to prefixed path `assets/DYNAMIC_ASSET__{filename}`
+* **Security validation**: Reject filenames containing path separators (`/` or `\`)
+* **Output format**: Return quoted Typst string literal `"assets/DYNAMIC_ASSET__filename"`
+* **Usage**: Enables runtime asset injection via `Workflow.with_asset()` builder pattern
 
 #### Value Conversion Helpers
 
@@ -462,11 +482,12 @@ if markdown.starts_with("---\n") || markdown.starts_with("---\r\n") {
 
 * **Formats:** PDF, multi-page SVG (validated at runtime against build features)
 * **Markdown→Typst:** `mark_to_typst()` supports emphasis, links, lists, code, breaks; escapes Typst-reserved chars (`* _ ` # [ ] $ < > @`).
-* **Filters:** robust escaping, JSON/TOML embedding, date handling, markup `eval()` generation.
+* **Filters:** robust escaping, JSON/TOML embedding, date handling, markup `eval()` generation, dynamic asset path transformation.
 * **Compilation (`QuillWorld`):** implements Typst `World` for:
 
   * *Dynamic Packages:* load from `packages/` with `typst.toml` (namespace, version, entrypoint)
   * *Assets:* fonts/images under `assets/` with stable virtual paths
+  * *Dynamic Assets:* runtime-injected assets prefixed with `DYNAMIC_ASSET__` under `assets/`
   * *Errors:* line/column mapping, multi-error reporting with source context
 
 #### Implementation Hints
@@ -595,6 +616,7 @@ The `[typst]` section is optional and allows specifying external packages to dow
 * Fonts: `.ttf`, `.otf`, `.woff`, `.woff2`
 * Binary assets: images/data as bytes
 * Recursive discovery; prefix-preserving virtual paths
+* **Dynamic assets**: Runtime-injected via `Workflow.with_asset()`, prefixed with `DYNAMIC_ASSET__` and accessible via `Asset` filter
 
 ### Implementation Hints
 
@@ -639,6 +661,7 @@ The `[typst]` section is optional and allows specifying external packages to dow
   let file_id = FileId::new(None, virtual_path);
   binaries.insert(file_id, Bytes::new(data));
   ```
+* **Dynamic assets**: Added to quill at runtime via `Workflow.prepare_quill_with_assets()`, prefixed with `DYNAMIC_ASSET__` for collision avoidance with static assets
 
 #### Package File Loading
 
