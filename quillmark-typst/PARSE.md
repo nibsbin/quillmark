@@ -410,7 +410,13 @@ Body of the second sub-document.
 metadata_block ::= "---" NEWLINE tag_directive? yaml_content "---" NEWLINE body_content
 tag_directive ::= "!" attribute_name NEWLINE
 attribute_name ::= [a-z_][a-z0-9_]*
+yaml_content ::= (yaml_line NEWLINE)+  // No blank lines allowed
 ```
+
+**Disambiguation from markdown horizontal rules:**
+- Metadata blocks MUST be contiguous (no blank lines between opening `---` and closing `---`)
+- `---` preceded by blank line in body content is treated as horizontal rule, not metadata delimiter
+- This ensures clear distinction between YAML metadata and markdown syntax
 
 **Rules:**
 - Tag directive MUST appear on the first line after opening `---`
@@ -418,6 +424,8 @@ attribute_name ::= [a-z_][a-z0-9_]*
 - Attribute name MUST be a valid YAML key (lowercase letters, digits, underscores)
 - Attribute name MUST NOT be a reserved field (e.g., `body`)
 - If no tag directive is present, the block is treated as global frontmatter
+- YAML metadata blocks (both frontmatter and tagged) are parsed with identical rules and rigor
+- Frontmatter fields are stored in global scope; tagged fields are stored in arrays under the tag name
 
 #### 2. Body Content Extraction
 
@@ -467,16 +475,19 @@ Item 2 body: `"Content for item 2."`
 1. **Scan document for all `---` delimiters**
    - Track positions of opening/closing pairs
    - Identify tag directives
+   - Check for contiguity: validate no blank lines between opening `---` and closing `---`
+   - Distinguish metadata blocks from horizontal rules (metadata blocks are contiguous)
 
 2. **Parse global frontmatter** (if present)
-   - First block without tag directive
-   - Extract YAML fields into global map
+   - First contiguous block without tag directive
+   - Extract YAML fields into global map with same parsing rules as tagged blocks
    - Extract body up to next metadata block (or EOF)
 
 3. **Parse tagged metadata blocks**
    - For each tagged block:
+     - Verify block is contiguous (no blank lines in YAML content)
      - Extract attribute name from tag directive
-     - Parse YAML content
+     - Parse YAML content with same rigor as frontmatter YAML
      - Extract body content up to next block
      - Append to array under attribute name
 
@@ -586,6 +597,95 @@ title: Inner
 
 **Behavior**: Sequential, not nested - both `outer` and `inner` arrays created at top level. No hierarchical nesting supported.
 
+#### 8. Horizontal Rule Ambiguity
+
+The `---` delimiter is also valid markdown syntax for a horizontal rule. To disambiguate YAML metadata blocks from horizontal rules in body content, the following rules apply:
+
+**Requirement: Contiguous YAML blocks**
+
+YAML metadata blocks MUST be **contiguous** - no blank lines are allowed between the opening `---` and the closing `---`. This distinguishes metadata blocks from horizontal rules.
+
+```markdown
+---
+title: Global
+---
+
+Body content
+
+--- 
+This is a horizontal rule (has blank line before it)
+
+More body content
+```
+
+**Valid metadata block (contiguous):**
+```markdown
+---
+!items
+name: Product
+price: 99.99
+---
+Body for this item
+```
+
+**NOT a metadata block (has blank line, treated as horizontal rule + text):**
+```markdown
+---
+
+!items
+name: Product
+---
+```
+
+**Parsing behavior:**
+- **Opening `---` followed by blank line**: Treated as horizontal rule in body content (not a metadata block)
+- **Opening `---` followed by content**: Parsed as YAML metadata block
+- **`---` preceded by blank line in body**: Treated as horizontal rule (not closing delimiter)
+
+This rule ensures:
+1. Metadata blocks are always recognized by their contiguous structure
+2. Users can still use `---` horizontal rules in body content by adding a blank line before them
+3. No ambiguity exists between metadata delimiters and markdown syntax
+
+**Alternative horizontal rule syntaxes:**
+
+To avoid potential confusion, users can use alternative markdown horizontal rule syntaxes:
+- `***` (three or more asterisks)
+- `___` (three or more underscores)
+- `- - -` (three or more hyphens with spaces)
+
+**Examples with mixed content:**
+
+```markdown
+---
+title: Document with Rules
+---
+
+Introduction paragraph.
+
+***
+This uses asterisks for a horizontal rule.
+
+---
+!sections
+title: Section 1
+---
+
+Section 1 content.
+
+___
+Another horizontal rule using underscores.
+
+---
+!sections  
+title: Section 2
+---
+
+Section 2 content.
+```
+
+This approach maintains backward compatibility while providing clear disambiguation.
+
 ### Data Structure Changes
 
 #### Extended ParsedDocument
@@ -688,6 +788,9 @@ When implementing, the following test cases must be covered:
 11. **Error: invalid syntax**: Malformed tag directives
 12. **Complex YAML**: Nested structures within tagged metadata
 13. **Cross-platform**: Line ending variations (`\n` vs `\r\n`)
+14. **Horizontal rule disambiguation**: `---` with blank line before it in body is horizontal rule, not metadata
+15. **Non-contiguous block**: Blank line between opening `---` and YAML content should error or be treated as horizontal rule
+16. **Alternative horizontal rules**: Verify `***` and `___` work as horizontal rules in body content
 
 ### Open Design Questions
 
