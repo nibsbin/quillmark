@@ -10,6 +10,7 @@ use std::error::Error;
 pub fn demo(
     resource_name: &str,
     quill_dir: &str,
+    assets: Option<Vec<(String, Vec<u8>)>>,
     glue_output: &str,
     render_output: &str,
 ) -> Result<(), Box<dyn Error>> {
@@ -22,7 +23,12 @@ pub fn demo(
     // Default engine flow used by examples: Typst backend, Quill from path, Workflow
     let quill = quillmark::Quill::from_path(quill_path.clone()).expect("Failed to load quill");
     let engine = quillmark::Quillmark::new();
-    let workflow = engine.load(&quill)?;
+    let workflow = engine.load(&quill).expect("Failed to load workflow");
+    let workflow = if let Some(assets) = assets {
+        workflow.with_assets(assets)?
+    } else {
+        workflow
+    };
 
     // process glue
     let glued = workflow.process_glue(&markdown)?;
