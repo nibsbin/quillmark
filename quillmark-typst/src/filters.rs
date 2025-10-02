@@ -198,8 +198,6 @@ pub fn asset_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Val
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_asset_path_construction() {
         // Test the path construction logic directly

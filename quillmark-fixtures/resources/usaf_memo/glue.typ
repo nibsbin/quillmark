@@ -29,7 +29,7 @@
   {%- endif -%}
 
   // //Optional distribution
-  {% if distribution is defined -%}
+  {%- if distribution is defined -%}
   distribution: {{ distribution | Lines }},
   {%- endif -%}
 

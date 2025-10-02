@@ -1,5 +1,5 @@
 [Quill]
-name = "ice_cream"
+name = "taro"
 backend = "typst"
 glue = "glue.typ"
 

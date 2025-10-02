@@ -58,7 +58,7 @@ fn test_quill_engine_get_workflow() {
     .expect("Failed to write Quill.toml");
     fs::write(
         quill_path.join("glue.typ"),
-        "= {{ title | String(default=\"Test\") }}\n\n{{ body | Body }}",
+        "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",
     )
     .expect("Failed to write glue.typ");
 
@@ -145,7 +145,7 @@ fn test_quill_engine_end_to_end() {
 
 _By {{ author | String(default="Unknown") }}_
 
-{{ body | Body }}
+{{ body | Content }}
 "#;
     fs::write(quill_path.join("glue.typ"), glue_template).expect("Failed to write glue.typ");
 
@@ -192,7 +192,7 @@ fn test_quill_engine_load_with_quill_object() {
     .expect("Failed to write Quill.toml");
     fs::write(
         quill_path.join("glue.typ"),
-        "= {{ title | String(default=\"Test\") }}\n\n{{ body | Body }}",
+        "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",
     )
     .expect("Failed to write glue.typ");
 
@@ -224,7 +224,7 @@ fn test_quill_engine_load_with_different_string_types() {
     .expect("Failed to write Quill.toml");
     fs::write(
         quill_path.join("glue.typ"),
-        "= {{ title | String(default=\"Test\") }}\n\n{{ body | Body }}",
+        "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",
     )
     .expect("Failed to write glue.typ");
 

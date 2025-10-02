@@ -4,10 +4,10 @@ use common::demo;
 
 fn main() {
     demo(
-        "ice_cream.md",
-        "ice_cream",
-        "ice_cream.typ",
-        "ice_cream.pdf",
+        "taro.md",
+        "taro",
+        "taro.typ",
+        "taro.pdf",
     )
     .expect("Demo failed");
 }
