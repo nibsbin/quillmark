@@ -2,7 +2,7 @@ mod compile;
 mod convert;
 mod filters;
 mod world;
-use filters::{content_filter, date_filter, dict_filter, lines_filter, string_filter};
+use filters::{asset_filter, content_filter, date_filter, dict_filter, lines_filter, string_filter};
 use quillmark_core::{Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions};
 /// Typst backend implementation
 pub struct TypstBackend;
@@ -27,6 +27,7 @@ impl Backend for TypstBackend {
         glue.register_filter("Date", date_filter);
         glue.register_filter("Dict", dict_filter);
         glue.register_filter("Content", content_filter);
+        glue.register_filter("Asset", asset_filter);
     }
 
     fn compile(

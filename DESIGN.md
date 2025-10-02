@@ -356,7 +356,7 @@ let artifacts = backend.compile(&glue_source, &quill, &opts)?; // Step 4
 {{ recipients | Lines }}
 {{ date | Date }}
 {{ frontmatter | Toml }}          // optional: for Typst-native toml(...)
-{{ body | Body }}
+{{ body | Content }}
 ```
 
 ### Implementation Hints

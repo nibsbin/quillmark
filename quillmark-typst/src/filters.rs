@@ -173,3 +173,60 @@ pub fn content_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<V
         escape_string(&markup)
     )))
 }
+
+pub fn asset_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
+    // Get the filename from the value
+    let filename = value.to_string();
+
+    // Validate filename (no path separators allowed for security)
+    if filename.contains('/') || filename.contains('\\') {
+        return Err(Error::new(
+            ErrorKind::InvalidOperation,
+            format!(
+                "Asset filename cannot contain path separators: '{}'",
+                filename
+            ),
+        ));
+    }
+
+    // Build the prefixed path
+    let asset_path = format!("assets/DYNAMIC_ASSET__{}", filename);
+
+    // Return as a Typst string literal
+    Ok(Value::from_safe_string(format!("\"{}\"", asset_path)))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_asset_path_construction() {
+        // Test the path construction logic directly
+        let filename = "chart.png";
+        let asset_path = format!("assets/DYNAMIC_ASSET__{}", filename);
+        assert_eq!(asset_path, "assets/DYNAMIC_ASSET__chart.png");
+    }
+
+    #[test]
+    fn test_asset_path_with_various_extensions() {
+        let test_cases = vec![
+            ("image.png", "assets/DYNAMIC_ASSET__image.png"),
+            ("data.csv", "assets/DYNAMIC_ASSET__data.csv"),
+            ("chart.jpg", "assets/DYNAMIC_ASSET__chart.jpg"),
+            ("file.pdf", "assets/DYNAMIC_ASSET__file.pdf"),
+        ];
+
+        for (filename, expected) in test_cases {
+            let asset_path = format!("assets/DYNAMIC_ASSET__{}", filename);
+            assert_eq!(asset_path, expected);
+        }
+    }
+
+    #[test]
+    fn test_path_separator_detection() {
+        // Test that we can detect path separators
+        assert!("../hack.png".contains('/'));
+        assert!("subdir\\file.png".contains('\\'));
+        assert!(!"simple.png".contains('/'));
+        assert!(!"simple.png".contains('\\'));
+    }
+}

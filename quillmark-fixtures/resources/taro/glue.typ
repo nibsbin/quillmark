@@ -3,9 +3,13 @@
 
 **Author: {{ author }}**
 
-**Ice Cream: {{ ice_cream }}**
+**Favorite Ice Cream: {{ taro }}**
 
 *{{title}}*
 
-
 #{{ body | Content }}
+
+
+{% if picture is defined %}
+#image({{ picture | Asset }})
+{% endif %}

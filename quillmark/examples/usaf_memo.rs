@@ -7,6 +7,7 @@ fn main() {
     demo(
         "usaf_memo.md",
         "usaf_memo",
+        None,
         "usaf_memo_glue.typ",
         "usaf_memo_output.pdf",
     )

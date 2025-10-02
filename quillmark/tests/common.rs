@@ -7,9 +7,10 @@ use std::error::Error;
 /// provided `runner` closure to perform backend-specific work. The `runner`
 /// should return a tuple of (glue_bytes, output_bytes) which this helper will
 /// write to the example output directory and print a short preview.
-pub fn demo(
+    pub fn demo(
     resource_name: &str,
     quill_dir: &str,
+    asset_resources: Option<Vec<&str>>,
     glue_output: &str,
     render_output: &str,
 ) -> Result<(), Box<dyn Error>> {
@@ -22,7 +23,14 @@ pub fn demo(
     // Default engine flow used by examples: Typst backend, Quill from path, Workflow
     let quill = quillmark::Quill::from_path(quill_path.clone()).expect("Failed to load quill");
     let engine = quillmark::Quillmark::new();
-    let workflow = engine.load(&quill)?;
+    let mut workflow = engine.load(&quill).expect("Failed to load workflow");
+
+    if let Some(assets) = &asset_resources {
+        let full_assets: Vec<(String, Vec<u8>)> = assets.iter()
+            .map(|name| (name.to_string(), std::fs::read(resource_path(name)).unwrap()))
+            .collect();
+        workflow = workflow.with_assets(full_assets)?;
+    }
 
     // process glue
     let glued = workflow.process_glue(&markdown)?;

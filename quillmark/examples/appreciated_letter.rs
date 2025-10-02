@@ -7,6 +7,7 @@ fn main() {
     demo(
         "appreciated_letter.md",
         "appreciated_letter",
+        None,
         "appreciated_letter_glue.typ",
         "appreciated_letter_output.pdf",
     )
