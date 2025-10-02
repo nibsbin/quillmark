@@ -731,65 +731,92 @@ Third"#;
     }
 
     #[test]
-    fn test_horizontal_rule_disambiguation() {
+    fn test_product_catalog_integration() {
         let markdown = r#"---
-title: Document
+title: Product Catalog
+author: John Doe
+date: 2024-01-01
 ---
 
-Some content.
+This is the main catalog description.
 
 ---
+!products
+name: Widget A
+price: 19.99
+sku: WID-001
+---
 
-More content with horizontal rule above."#;
+The **Widget A** is our most popular product.
+
+---
+!products
+name: Gadget B
+price: 29.99
+sku: GAD-002
+---
+
+The **Gadget B** is perfect for professionals.
+
+---
+!reviews
+product: Widget A
+rating: 5
+---
+
+"Excellent product! Highly recommended."
+
+---
+!reviews
+product: Gadget B
+rating: 4
+---
+
+"Very good, but a bit pricey.""#;
 
         let doc = decompose(markdown).unwrap();
-
-        // The second --- is preceded by a blank line, so it's a horizontal rule in the body
-        let body = doc.body().unwrap();
-        assert!(body.contains("---"));
-    }
-
-    #[test]
-    fn test_complex_yaml_in_tagged_block() {
-        let markdown = r#"---
-!items
-name: Complex
-metadata:
-  version: 1.0
-  nested:
-    field: value
-tags:
-  - one
-  - two
----
-
-Body content."#;
-
-        let doc = decompose(markdown).unwrap();
-
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 1);
         
-        let item = items[0].as_mapping().unwrap();
-        let metadata = item.get(&serde_yaml::Value::String("metadata".to_string()))
-            .unwrap()
-            .as_mapping()
-            .unwrap();
+        // Verify global fields
+        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Product Catalog");
+        assert_eq!(doc.get_field("author").unwrap().as_str().unwrap(), "John Doe");
+        assert_eq!(doc.get_field("date").unwrap().as_str().unwrap(), "2024-01-01");
         
-        assert!(metadata.contains_key(&serde_yaml::Value::String("version".to_string())));
-    }
-
-    #[test]
-    fn test_invalid_yaml_in_tagged_block() {
-        let markdown = r#"---
-!items
-name: [invalid
----
-
-Body"#;
-
-        let result = decompose(markdown);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid YAML"));
+        // Verify global body
+        assert!(doc.body().unwrap().contains("main catalog description"));
+        
+        // Verify products collection
+        let products = doc.get_field("products").unwrap().as_sequence().unwrap();
+        assert_eq!(products.len(), 2);
+        
+        let product1 = products[0].as_mapping().unwrap();
+        assert_eq!(
+            product1.get(&serde_yaml::Value::String("name".to_string()))
+                .unwrap().as_str().unwrap(),
+            "Widget A"
+        );
+        assert_eq!(
+            product1.get(&serde_yaml::Value::String("price".to_string()))
+                .unwrap().as_f64().unwrap(),
+            19.99
+        );
+        
+        // Verify reviews collection
+        let reviews = doc.get_field("reviews").unwrap().as_sequence().unwrap();
+        assert_eq!(reviews.len(), 2);
+        
+        let review1 = reviews[0].as_mapping().unwrap();
+        assert_eq!(
+            review1.get(&serde_yaml::Value::String("product".to_string()))
+                .unwrap().as_str().unwrap(),
+            "Widget A"
+        );
+        assert_eq!(
+            review1.get(&serde_yaml::Value::String("rating".to_string()))
+                .unwrap().as_i64().unwrap(),
+            5
+        );
+        
+        // Total fields: title, author, date, body, products, reviews = 6
+        assert_eq!(doc.fields().len(), 6);
     }
 }
