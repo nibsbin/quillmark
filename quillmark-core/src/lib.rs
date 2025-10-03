@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
-#[doc = include_str!("../docs/parsing.md")]
+#[doc = include_str!("../docs/parse.md")]
 pub mod parse;
 pub use parse::{decompose, ParsedDocument, BODY_FIELD};
 
