@@ -8,9 +8,13 @@ Quillmark uses a **frontmatter-aware markdown parser** that separates YAML metad
 
 **Key capabilities:**
 - Parse YAML frontmatter delimited by `---` markers
+- **NEW**: Support inline metadata sections with tag directives (Extended YAML Metadata Standard)
+- **NEW**: Aggregate tagged blocks into collections (arrays of objects)
 - Extract frontmatter fields into a structured `HashMap`
 - Preserve markdown body content separately
-- Graceful error handling for malformed documents
+- Robust error handling with descriptive messages
+- Cross-platform line ending support (`\n` and `\r\n`)
+- Horizontal rule disambiguation (distinguish metadata from markdown syntax)
 
 ## Design Principles
 
@@ -85,52 +89,79 @@ pub fn decompose(
 ) -> Result<ParsedDocument, Box<dyn std::error::Error + Send + Sync>>
 ```
 
-**Algorithm:**
+**High-Level Algorithm:**
 
-1. **Frontmatter detection**
-   - Check if document starts with `"---\n"` 
-   - Note: Current implementation only checks Unix line endings
+1. **Metadata block discovery**
+   - Scan entire document for all `---` delimiters
+   - Support both `---\n` and `---\r\n` line endings
+   - Distinguish metadata blocks from horizontal rules via blank line detection
 
-2. **Frontmatter extraction** (if detected)
-   - Skip opening `"---\n"` (first 4 characters)
-   - Search for closing `"\n---\n"` delimiter
-   - Extract text between delimiters as YAML
+2. **Block classification**
+   - Check if opening `---` is followed by blank line → horizontal rule (skip)
+   - Check if opening `---` is followed by content → metadata block (parse)
+   - Validate contiguity (no blank lines within YAML content)
 
-3. **YAML parsing**
-   - Parse frontmatter string with `serde_yaml::from_str`
+3. **Tag directive extraction**
+   - If first line after opening `---` starts with `!` → tagged block
+   - Extract tag name and validate pattern `[a-z_][a-z0-9_]*`
+   - If no tag directive → global frontmatter
+
+4. **YAML parsing**
+   - Parse YAML content with `serde_yaml::from_str`
    - Return descriptive error if YAML is malformed
-   - Validate that result is a flat key-value map
+   - Apply same parsing rigor to both frontmatter and tagged blocks
 
-4. **Body extraction**
-   - Take remaining content after closing `---\n`
-   - Preserve all whitespace (including leading newline)
-   - Store under `BODY_FIELD` in the same HashMap
+5. **Body extraction**
+   - For global frontmatter: body starts after closing `---`, ends at first tagged block or EOF
+   - For tagged blocks: body starts after closing `---`, ends at next block or EOF
+   - Preserve all whitespace (including leading newlines)
 
-5. **Fallback for no frontmatter**
-   - If no opening `---` found, treat entire input as body
-   - Still wrap in `ParsedDocument` with single `BODY_FIELD` entry
+6. **Collection aggregation**
+   - Group all blocks with same tag name into arrays
+   - Each array element contains metadata fields + body
+   - Preserve document order
 
-### String Slice Management
+7. **Validation**
+   - Check for multiple global frontmatter blocks → error
+   - Check for name collisions (global field vs tagged attribute) → error
+   - Check for reserved field names in tags (`body`) → error
+   - Validate tag name syntax → error if invalid
 
-The implementation uses careful string slicing to avoid copying:
+8. **Result assembly**
+   - Merge global fields, global body, and tagged collections
+   - Return unified `ParsedDocument` with all fields in single HashMap
 
-```rust
-let rest = &markdown[4..];                    // Skip "---\n"
-let frontmatter = &rest[..end_pos];           // YAML content
-let body = &rest[end_pos + 5..];              // Skip "\n---\n"
-```
+### Supporting Functions
 
-**Offset calculations:**
-- Opening delimiter `"---\n"` = 4 bytes
-- Closing delimiter `"\n---\n"` = 5 bytes
-- Body starts at `end_pos + 5` relative to `rest`
+**`find_metadata_blocks()`**
+
+Scans the document and returns a list of all metadata blocks with their positions, content, and optional tag directives.
+
+**Key logic:**
+- Pattern matching for `---\n` and `---\r\n`
+- Blank line detection (opening `---` followed by `\n` or `\r\n` → horizontal rule)
+- Contiguity validation (content between delimiters must have no blank lines)
+- End-of-file delimiter support (closing `---` at EOF without trailing newline)
+- Tag directive parsing (first line starting with `!`)
+
+**`is_valid_tag_name()`**
+
+Validates tag names against the pattern `[a-z_][a-z0-9_]*`:
+- Must start with lowercase letter or underscore
+- Remaining chars must be lowercase letters, digits, or underscores
 
 ### Error Messages
 
-The implementation provides specific error messages:
+The implementation provides specific, actionable error messages:
 
-- `"Invalid YAML frontmatter: {error}"` - YAML parser rejected the frontmatter
+- `"Invalid YAML frontmatter: {error}"` - YAML parser rejected frontmatter
+- `"Invalid YAML in tagged block '{tag}': {error}"` - YAML parser rejected tagged block
 - `"Frontmatter started but not closed with ---"` - Missing closing delimiter
+- `"Multiple global frontmatter blocks found: only one untagged block allowed"` - Duplicate frontmatter
+- `"Invalid tag name '{name}': must match pattern [a-z_][a-z0-9_]*"` - Invalid tag syntax
+- `"Cannot use reserved field name '{name}' as tag directive"` - Protected field name
+- `"Name collision: global field '{name}' conflicts with tagged attribute"` - Field/tag conflict
+- `"Name collision: tagged attribute '{name}' conflicts with global field"` - Tag/field conflict
 
 ## Edge Cases and Behavior
 
@@ -265,25 +296,51 @@ let artifacts = backend.compile(&glue_source, &quill, &opts)?;
 
 ## Testing Strategy
 
-The test suite in `parse.rs` covers:
+The test suite in `parse.rs` provides comprehensive coverage:
 
-### 1. Normal Cases
+### 1. Basic Frontmatter Cases
 - `test_no_frontmatter` - Document without any YAML metadata
 - `test_with_frontmatter` - Standard frontmatter with title and author
 - `test_complex_yaml_frontmatter` - Nested structures and arrays
 
-### 2. Error Cases
-- `test_invalid_yaml` - Malformed YAML syntax
-- `test_unclosed_frontmatter` - Missing closing delimiter
+### 2. Extended Metadata Standard Cases
+- `test_basic_tagged_block` - Single tagged block with metadata and body
+- `test_multiple_tagged_blocks` - Multiple blocks with same tag (array creation)
+- `test_mixed_global_and_tagged` - Global frontmatter combined with tagged blocks
+- `test_empty_tagged_metadata` - Tagged block with no YAML fields
+- `test_tagged_block_without_body` - Tagged block with no body content
+- `test_adjacent_blocks_different_tags` - Multiple different collections
+- `test_order_preservation` - Verify array maintains document order
+- `test_complex_yaml_in_tagged_block` - Nested YAML within tagged blocks
 
-### 3. Validation Approach
+### 3. Error Cases
+- `test_invalid_yaml` - Malformed YAML syntax in frontmatter
+- `test_invalid_yaml_in_tagged_block` - Malformed YAML in tagged block
+- `test_unclosed_frontmatter` - Missing closing delimiter
+- `test_multiple_global_frontmatter_blocks` - Multiple untagged blocks (error)
+- `test_name_collision_global_and_tagged` - Field/tag name conflicts
+- `test_reserved_field_name` - Using `body` as tag directive
+- `test_invalid_tag_syntax` - Invalid tag names (uppercase, hyphens, etc.)
+
+### 4. Horizontal Rule Disambiguation Cases
+- `test_horizontal_rule_disambiguation` - `---` with blank line before it in body
+
+### 5. Integration Cases
+- `test_product_catalog_integration` - Real-world product catalog example
+- `test_extended_metadata_demo_file` - Full demo file with multiple collections
+
+### Validation Approach
 
 Tests verify:
 - **Structural integrity**: Field count matches expected values
 - **Field access**: Individual fields can be retrieved correctly
-- **Body separation**: Body content excludes frontmatter
-- **Error messages**: Errors contain expected keywords
+- **Body separation**: Body content excludes metadata blocks
+- **Error messages**: Errors contain expected keywords and are descriptive
 - **Type preservation**: YAML types (strings, sequences, maps) are accessible
+- **Collection aggregation**: Tagged blocks create proper arrays
+- **Order preservation**: Arrays maintain document order
+- **Name validation**: Tag names follow required pattern
+- **Collision detection**: Conflicts are properly detected and reported
 
 ### Example Test Pattern
 
@@ -315,33 +372,41 @@ This is the body."#;
 }
 ```
 
-## Implementation Divergence from DESIGN.md
+## Implementation Status and DESIGN.md Alignment
 
-The current implementation differs from `DESIGN.md` recommendations in several ways:
+The current implementation has evolved beyond the `DESIGN.md` recommendations to support the Extended YAML Metadata Standard:
 
-### 1. Line Ending Support
+### 1. Line Ending Support ✅
 - **DESIGN.md**: Check both `\n` and `\r\n`
-- **Current**: Only checks `\n`
-- **Impact**: Windows users may encounter issues
+- **Current**: **IMPLEMENTED** - Checks both `\n` and `\r\n` for full cross-platform compatibility
+- **Status**: Fully aligned with DESIGN.md
 
 ### 2. Error Handling Philosophy
 - **DESIGN.md**: "Graceful degradation" - treat errors as warnings
 - **Current**: Fail-fast with explicit errors
-- **Rationale**: Prevents silent data corruption from malformed YAML
+- **Rationale**: Prevents silent data corruption from malformed YAML; provides clear diagnostics
+- **Status**: Intentional divergence for data integrity
 
 ### 3. Delimiter Search Strategy
 - **DESIGN.md**: Line-by-line iteration with `line.trim() == "---"`
-- **Current**: String search for `"\n---\n"` substring
-- **Trade-off**: Current approach is simpler but less flexible
+- **Current**: Pattern matching for `---\n` and `---\r\n` with contiguity validation
+- **Trade-off**: More sophisticated approach supports extended metadata standard
+- **Status**: Enhanced beyond DESIGN.md for new features
 
 ### 4. Body Whitespace Handling
 - **DESIGN.md**: Use `trim_start()` to remove leading whitespace
 - **Current**: Preserves all whitespace including leading newline
-- **Impact**: Body may start with `\n` when frontmatter is present
+- **Impact**: Body may start with `\n` when frontmatter is present (preserves user formatting)
+- **Status**: Intentional divergence for content fidelity
 
-## Extended YAML Metadata Standard (Proposed)
+### 5. Extended Metadata Standard ✅
+- **DESIGN.md**: Not mentioned
+- **Current**: **FULLY IMPLEMENTED** - Tag directives, collection aggregation, horizontal rule disambiguation
+- **Status**: New capability beyond original DESIGN.md scope
 
-This section formalizes a proposed extension to the current frontmatter-only approach, allowing **inline metadata sections** throughout the document body. This feature is **NOT YET IMPLEMENTED** and serves as a design specification for future development.
+## Extended YAML Metadata Standard (Implemented)
+
+This section documents the implemented extension to the frontmatter-only approach, allowing **inline metadata sections** throughout the document body. This feature is **FULLY IMPLEMENTED** and production-ready as of the implementation in `quillmark-core/src/parse.rs`.
 
 ### Motivation
 

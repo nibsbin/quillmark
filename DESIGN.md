@@ -434,37 +434,93 @@ fn kwargs_default(kwargs: &Kwargs) -> Result<Option<Json>, Error>; // Extract de
 
 ## Parsing and Document Decomposition
 
+Quillmark supports advanced markdown parsing with both traditional frontmatter and the **Extended YAML Metadata Standard** for structured content organization.
+
+### Basic Frontmatter Parsing
+
 * **Frontmatter:** YAML delimited by `---` … `---` at the top of the document.
 * **Process:**
 
   1. Detect frontmatter block; parse to `HashMap<String, serde_yaml::Value>`
   2. Store the remainder as body under `BODY_FIELD`
-  3. Preserve original content on failures; errors are reported but non-fatal
+  3. Validate YAML syntax with fail-fast error reporting
 * **Policy:** YAML-only input; no TOML frontmatter. Backends can convert via filters.
 
-**Error posture:** graceful degradation (invalid frontmatter → treat as body; log/return warnings).
+### Extended YAML Metadata Standard (Implemented)
+
+The parser now supports **inline metadata sections** throughout documents using tag directives:
+
+* **Tag Directive Syntax**: Use `!attribute_name` after opening `---` to create collections
+* **Collection Aggregation**: Multiple blocks with same tag → array of objects
+* **Horizontal Rule Disambiguation**: Smart detection distinguishes metadata blocks from markdown `---` horizontal rules
+* **Contiguity Validation**: Metadata blocks must be contiguous (no blank lines within YAML content)
+* **Validation**: Tag names match `[a-z_][a-z0-9_]*` pattern; reserved name protection; name collision detection
+
+**Example:**
+
+```markdown
+---
+title: Product Catalog
+---
+Main description.
+
+---
+!products
+name: Widget
+price: 19.99
+---
+Widget description.
+```
+
+Parses to structured data with a `products` array containing objects with metadata fields and body content.
+
+**Error posture:** Fail-fast for malformed YAML to prevent silent data corruption; clear error messages for invalid tag syntax or name collisions.
+
+**See `quillmark-core/PARSE.md` for comprehensive documentation of the Extended YAML Metadata Standard.**
 
 ### Implementation Hints
 
 #### Frontmatter Detection (`decompose` function)
 
-* **Line ending gotcha**: Check both `"---\n"` and `"---\r\n"` for Windows compatibility
-* **End marker search**: Skip first line (opening `---`), find closing `---` with `line.trim() == "---"`
-* **Body extraction**: Join lines after closing `---` with `trim_start()` to remove leading whitespace
-* **Edge cases to handle**:
+The implementation uses pattern matching for delimiter detection with full cross-platform support:
 
-  * Empty frontmatter between `---` markers → return just body
-  * Missing closing `---` → treat entire content as body
-  * YAML parsing failure → graceful degradation, log warning, return entire content as body
+* **Line ending support**: Checks both `"---\n"` and `"---\r\n"` for Windows/Unix compatibility
+* **Delimiter search**: Finds opening and closing delimiters using pattern matching
+* **Horizontal rule disambiguation**: 
+  - Opening `---` followed by blank line → treated as horizontal rule
+  - Opening `---` followed by content → treated as metadata block
+  - Metadata blocks must be contiguous (no blank lines within)
+* **Tag directive parsing**: Extracts `!tag_name` from first line after opening `---`
+* **Collection aggregation**: Groups tagged blocks into arrays under tag name
+* **Edge cases handled**:
+
+  * Empty frontmatter between `---` markers → valid, empty fields
+  * Missing closing `---` at document start → error (fail-fast)
+  * YAML parsing failure → error with descriptive message
+  * Name collisions → error (prevents conflicts)
+  * Reserved field names → error (protects `body` field)
+  * Invalid tag syntax → error (validates `[a-z_][a-z0-9_]*` pattern)
+  * End-of-file delimiters → supported (no trailing newline required)
+
+**Key implementation pattern:**
 
 ```rust
-// Key implementation pattern:
-if markdown.starts_with("---\n") || markdown.starts_with("---\r\n") {
-    let lines: Vec<&str> = markdown.lines().collect();
-    // Find closing --- (skip line 0 which is opening ---)
-    for (i, line) in lines.iter().enumerate().skip(1) {
-        if line.trim() == "---" { /* Found end */ }
-    }
+// Scan for all metadata blocks (both frontmatter and tagged)
+fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, Error> {
+    // Find all opening delimiters (---\n or ---\r\n)
+    // Check if followed by blank line (→ horizontal rule) or content (→ metadata)
+    // For metadata blocks: extract tag directive if present (!tag_name)
+    // Validate contiguity (no blank lines within block)
+    // Find closing delimiter (including EOF support)
+}
+
+// Aggregate and structure results
+fn decompose(markdown: &str) -> Result<ParsedDocument, Error> {
+    let blocks = find_metadata_blocks(markdown)?;
+    // Separate global frontmatter from tagged blocks
+    // Validate no name collisions or reserved names
+    // Aggregate tagged blocks into arrays
+    // Extract global body content
 }
 ```
 
