@@ -4,7 +4,8 @@ version.workspace = true
 edition.workspace = true
 description = "Test fixtures and utilities for Quillmark"
 license = "MIT"
+publish = false  # Don't publish test fixtures to crates.io
 
 [dependencies]
-quillmark = { path = "../quillmark" }
-quillmark-typst = { path = "../quillmark-typst" }
+quillmark = { workspace = true }
+quillmark-typst = { workspace = true }
