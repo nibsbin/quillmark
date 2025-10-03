@@ -200,32 +200,13 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, Box<dyn st
     Ok(blocks)
 }
 
-/// Decompose markdown into frontmatter fields and body
-///
-/// Parses markdown documents with YAML frontmatter and optional tagged metadata blocks.
-///
-/// # Examples
-///
-/// ```
-/// use quillmark_core::decompose;
-///
-/// let markdown = "---\ntitle: Example\n---\n\n# Content";
-/// let doc = decompose(markdown).unwrap();
-/// assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Example");
-/// ```
+/// Parse markdown into frontmatter fields and body. See [module docs](crate::parse) for examples.
 ///
 /// # Errors
 ///
-/// Returns an error if:
-/// - YAML frontmatter is malformed
-/// - Frontmatter is unclosed (missing closing `---`)
-/// - Multiple global frontmatter blocks are present
-/// - Invalid tag directive syntax
-/// - Reserved field names are used as tags
-/// - Name collisions between global fields and tagged attributes
-///
+/// Returns an error for malformed YAML, unclosed frontmatter, invalid tags, or name collisions.
 /// See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-core/PARSE.md)
-/// for comprehensive documentation of the Extended YAML Metadata Standard.
+/// for details.
 pub fn decompose(
     markdown: &str,
 ) -> Result<ParsedDocument, Box<dyn std::error::Error + Send + Sync>> {
