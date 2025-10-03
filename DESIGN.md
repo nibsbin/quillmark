@@ -199,11 +199,11 @@ pub struct Quill {
 
 ```rust
 pub struct ParsedDocument {
-    pub fields: HashMap<String, serde_yaml::Value>,
+    fields: HashMap<String, serde_yaml::Value>,  // private - access via methods
 }
 ```
 
-**Helpers:** `body()`, `get_field()`, `fields()`; body is stored under reserved `BODY_FIELD`.
+**Public API:** `new(fields)`, `body()`, `get_field()`, `fields()`; body is stored under reserved `BODY_FIELD` constant.
 
 ### Glue (MiniJinja wrapper with stable filter API)
 
