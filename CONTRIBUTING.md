@@ -4,68 +4,81 @@ Thank you for your interest in contributing to Quillmark!
 
 ## Documentation Strategy
 
-Quillmark uses a **hybrid inline/external documentation approach** to balance code iteration speed with comprehensive documentation:
+Quillmark uses a **hybrid inline/external documentation approach** to keep code iteration fast while delivering comprehensive documentation.
 
-### Inline Documentation (Minimal)
+### Documentation Structure
 
-- **Public items**: Each public type, function, or method has a brief 1-2 line summary using `///`
-- **Cross-references**: Inline docs point to deeper documentation with `/// See [module docs](self) for examples`
-- **IDE support**: Brief summaries ensure IDE hover and completion aren't empty
+#### Inline Documentation (Minimal)
+- **1-2 line summaries** on each public item using `///`
+- **References to deeper docs**: `/// See [module docs](self) for examples.`
+- Ensures IDE hover and completion provide helpful context
 
-### External Documentation (Detailed)
+#### Module/Crate Documentation (Rich Markdown)
+- **Location**: `quillmark-core/docs/` directory
+- **Included via**: `#[doc = include_str!("../docs/filename.md")]`
+- **Content**: Comprehensive examples, error documentation, usage patterns
+- **Doctest control**: Use `no_run`, `ignore`, `should_panic` attributes as needed
 
-- **Location**: Rich documentation lives in Markdown files under `quillmark/docs/`
-- **Inclusion**: External docs are attached using `#[doc = include_str!("../docs/filename.md")]`
-- **Content**: External docs include:
-  - Comprehensive examples
-  - Usage patterns and best practices
-  - Detailed explanations of behavior
-  - Edge cases and gotchas
+#### Key Files
+- **`docs/overview.md`**: Crate-level documentation with quick start
+- **`docs/parsing.md`**: Parsing module deep dive
+- **`docs/templating.md`**: Templating module documentation
+- **`docs/backend.md`**: Backend trait implementation guide
+- **`docs/errors.md`**: Error handling patterns and examples
+- **`API.md`**: Complete API reference (comprehensive external docs)
+- **`PARSE.md`**: Extended YAML Metadata Standard specification
 
-### Doctest Control
+### Adding New Documentation
 
-- Use doctest attributes to control test execution:
-  - `no_run` - Compile but don't execute (for examples requiring filesystem)
-  - `ignore` - Skip compilation and execution
-  - `should_panic` - Expect the code to panic
-  - `compile_fail` - Expect compilation to fail
+When adding or modifying public APIs:
 
-### Examples
+1. **Add a 1-2 line summary** in the source file:
+   ```rust
+   /// Parse markdown with frontmatter. See [module docs](crate::parse) for examples.
+   pub fn decompose(markdown: &str) -> Result<ParsedDocument, Error>
+   ```
 
-- **Location**: End-to-end demos live in `quillmark/examples/`
-- **Purpose**: Demonstrate real-world usage patterns
-- **Testing**: Run `cargo test --examples` to ensure examples stay green
+2. **Add detailed examples** to the relevant `docs/*.md` file:
+   - Use proper code fence attributes (`rust`, `rust,no_run`, `rust,ignore`)
+   - Include working examples that compile (or are marked `no_run`)
+   - Add hidden setup code with `#` prefix for context
 
-## Documentation Files
+3. **Test your documentation**:
+   ```bash
+   # Run doc tests
+   cargo test --package quillmark-core --doc
+   
+   # Build docs with strict mode
+   RUSTDOCFLAGS="-D warnings -D missing-docs" cargo doc --no-deps
+   ```
 
-Current external documentation files:
+### Testing & CI
 
-- `quillmark/docs/lib.md` - Crate-level overview and quick start
-- `quillmark/docs/quillmark.md` - Quillmark engine documentation
-- `quillmark/docs/workflow.md` - Workflow API documentation  
-- `quillmark/docs/quillref.md` - QuillRef enum documentation
+- **`cargo test`** runs doctests from included Markdown files and README
+- **Doc examples** in `docs/*.md` are tested as part of the build
+- **Keep examples green** to prevent documentation drift
 
-## Testing Documentation
+### Discoverability
 
-```bash
-# Run all doctests (both inline and from external Markdown)
-cargo test --doc
+- Inline one-liners ensure IDE hover/completion isn't empty
+- Rich module docs accessible via `cargo doc --open`
+- External `API.md` provides searchable reference
+- Cross-references between docs help navigation
 
-# Build documentation locally
-cargo doc --open
+## Code Style
 
-# Check for broken links and warnings
-cargo doc --no-deps 2>&1 | grep warning
-```
+- Follow existing code formatting (use `rustfmt`)
+- Add tests for new functionality
+- Update documentation when changing public APIs
+- Run `cargo clippy` to catch common issues
 
-## Documentation Guidelines
+## Pull Request Process
 
-1. **Inline summaries**: Keep to 1-2 lines, focus on "what" not "how"
-2. **External details**: Put comprehensive examples and explanations in Markdown files
-3. **Keep examples working**: Update examples when APIs change
-4. **Test your changes**: Run `cargo test --doc` before submitting
-5. **IDE-friendly**: Ensure inline docs provide enough context for code completion
+1. Ensure all tests pass (`cargo test`)
+2. Update documentation as needed
+3. Add a clear description of changes
+4. Reference any related issues
 
 ## Questions?
 
-If you're unsure where documentation should live, err on the side of external Markdown files - they're easier to maintain and update without touching code.
+Feel free to open an issue for questions or discussions!

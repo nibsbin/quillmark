@@ -1,41 +1,49 @@
+#![doc = include_str!("../docs/overview.md")]
+
 use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
-// Re-export parsing functionality
+#[doc = include_str!("../docs/parsing.md")]
 pub mod parse;
 pub use parse::{decompose, ParsedDocument, BODY_FIELD};
 
-// Re-export templating functionality
+#[doc = include_str!("../docs/templating.md")]
 pub mod templating;
 pub use templating::{Glue, TemplateError};
 
-// Re-export backend trait
+#[doc = include_str!("../docs/backend.md")]
 pub mod backend;
 pub use backend::Backend;
 
-// Re-export error types
+#[doc = include_str!("../docs/errors.md")]
 pub mod error;
 pub use error::{Diagnostic, Location, RenderError, RenderResult, Severity};
 
-/// Output formats supported by backends
+/// Output formats supported by backends. See [module docs](self) for examples.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum OutputFormat {
+    /// Plain text output
     Txt,
+    /// Scalable Vector Graphics output
     Svg,
+    /// Portable Document Format output
     Pdf,
 }
 
-/// An artifact produced by rendering
+/// An artifact produced by rendering. See [module docs](self) for examples.
 #[derive(Debug)]
 pub struct Artifact {
+    /// The binary content of the artifact
     pub bytes: Vec<u8>,
+    /// The format of the output
     pub output_format: OutputFormat,
 }
 
-/// Internal rendering options used by engine orchestration
+/// Internal rendering options. See [module docs](self) for examples.
 #[derive(Debug)]
 pub struct RenderOptions {
+    /// Optional output format specification
     pub output_format: Option<OutputFormat>,
 }
 
@@ -123,20 +131,20 @@ impl QuillIgnore {
     }
 }
 
-/// A quill template containing the template content and metadata with file management capabilities
+/// A quill template bundle. See [module docs](self) for examples.
 #[derive(Debug, Clone)]
 pub struct Quill {
     /// The template content
     pub glue_template: String,
-    /// Quill-specific data that backends might need
+    /// Quill-specific metadata
     pub metadata: HashMap<String, serde_yaml::Value>,
     /// Base path for resolving relative paths
     pub base_path: PathBuf,
-    /// Name of the quill (derived from directory name)
+    /// Name of the quill
     pub name: String,
     /// Glue template file name
     pub glue_file: String,
-    /// In-memory file system - all files loaded during initialization
+    /// In-memory file system
     pub files: HashMap<PathBuf, FileEntry>,
 }
 

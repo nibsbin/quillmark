@@ -4,6 +4,10 @@
 
 ---
 
+**See also:**
+- [quillmark-core/API.md](quillmark-core/API.md) - Comprehensive API reference for the core library
+- [quillmark-core/PARSE.md](quillmark-core/PARSE.md) - Detailed parsing and Extended YAML Metadata Standard documentation
+
 ## Table of Contents
 
 1. [System Overview](#system-overview)
@@ -62,11 +66,13 @@ High-level data flow:
 * Types: `Backend`, `Artifact`, `OutputFormat`
 * Parsing: `decompose`, `ParsedDocument`
 * Templating: `Glue` + stable `filter_api`
-* Template model: `Quill` (+ `quill.toml`)
+* Template model: `Quill` (+ `Quill.toml`)
 * **Errors & Diagnostics:** `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
 * Utilities: TOML⇄YAML conversion helpers (for backend filters)
 
 **Design Note:** No external backend deps; backends depend on core → no cycles.
+
+**See [quillmark-core/API.md](quillmark-core/API.md) for comprehensive API documentation.**
 
 ### `quillmark` (sealed engine)
 
