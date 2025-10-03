@@ -39,7 +39,8 @@ Located in each crate's `docs/` directory:
 
 ### Testing Documentation
 
-- Run `cargo doc --no-deps` to build documentation
+- Run `cargo doc --no-deps` to build documentation for all crates
+- Run `cargo doc -p quillmark -p quillmark-typst -p quillmark-core --no-deps` to build documentation for specific packages
 - Run `cargo test` to execute doctests from both inline and included Markdown
 - Keep examples green to prevent documentation drift
 
