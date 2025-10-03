@@ -14,9 +14,9 @@ All Quillmark crates use a hybrid documentation strategy to balance code iterati
 
 - Include a `lib.md` for crate-level overview
 - Include a `{module}.md` for each public module with:
+  - Overview of the module's purpose and functionality
   - Key functions and types
   - Quick examples
-  - Links to deeper documentation
 - Include design documents in `docs/designs/` for complex topics and specifications
 - Link external docs using `#[doc = include_str!("../docs/{file}.md")]`
 
