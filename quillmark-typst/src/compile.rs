@@ -1,4 +1,4 @@
-#![doc = include_str!("compile.md")]
+#![doc = include_str!("../docs/compile.md")]
 
 use typst::diag::{SourceDiagnostic, Warned};
 use typst::layout::PagedDocument;
