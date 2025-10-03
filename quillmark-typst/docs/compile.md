@@ -4,8 +4,8 @@ This module compiles Typst documents to output formats (PDF and SVG).
 
 ## Functions
 
-- [`compile::compile_to_pdf()`] - Compile Typst to PDF format
-- [`compile::compile_to_svg()`] - Compile Typst to SVG format (one file per page)
+- [`compile_to_pdf()`] - Compile Typst to PDF format
+- [`compile_to_svg()`] - Compile Typst to SVG format (one file per page)
 
 ## Quick Example
 
