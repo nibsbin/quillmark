@@ -1,3 +1,5 @@
+#[doc = include_str!("../docs/templating.md")]
+
 use std::collections::HashMap;
 use std::error::Error as StdError;
 

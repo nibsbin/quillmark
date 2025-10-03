@@ -1,3 +1,5 @@
+#[doc = include_str!("../docs/errors.md")]
+
 use crate::OutputFormat;
 
 /// Error severity levels

@@ -1,3 +1,5 @@
+#[doc = include_str!("../docs/backend.md")]
+
 use crate::error::RenderError;
 use crate::templating::Glue;
 use crate::{Artifact, OutputFormat, Quill, RenderOptions};

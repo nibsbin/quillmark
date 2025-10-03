@@ -1,3 +1,5 @@
+#[doc = include_str!("../docs/parse.md")]
+
 use std::collections::HashMap;
 
 /// The field name used to store the document body

@@ -1,22 +1,18 @@
-#![doc = include_str!("../docs/overview.md")]
+#![doc = include_str!("../docs/lib.md")]
 
 use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
-#[doc = include_str!("../docs/parse.md")]
 pub mod parse;
 pub use parse::{decompose, ParsedDocument, BODY_FIELD};
 
-#[doc = include_str!("../docs/templating.md")]
 pub mod templating;
 pub use templating::{Glue, TemplateError};
 
-#[doc = include_str!("../docs/backend.md")]
 pub mod backend;
 pub use backend::Backend;
 
-#[doc = include_str!("../docs/errors.md")]
 pub mod error;
 pub use error::{Diagnostic, Location, RenderError, RenderResult, Severity};
 
