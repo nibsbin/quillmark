@@ -1,35 +1,4 @@
-//! Typst document compilation to output formats.
-//!
-//! This module provides functions for compiling Typst documents to PDF and SVG formats.
-//! It handles the Typst compilation process and manages the `QuillWorld` environment.
-//!
-//! # Functions
-//!
-//! - [`compile_to_pdf`] - Compile Typst to PDF format
-//! - [`compile_to_svg`] - Compile Typst to SVG format (one file per page)
-//!
-//! # Compilation Process
-//!
-//! 1. Creates a `QuillWorld` with the quill's assets and packages
-//! 2. Compiles the Typst document using the Typst compiler
-//! 3. Converts the compiled document to the target format
-//! 4. Returns the output bytes
-//!
-//! # Example
-//!
-//! ```no_run
-//! use quillmark_typst::compile::compile_to_pdf;
-//! use quillmark_core::Quill;
-//!
-//! let quill = Quill::from_path("path/to/quill").unwrap();
-//! let typst_content = r#"
-//!     #set document(title: "My Document")
-//!     = Hello World
-//! "#;
-//!
-//! let pdf_bytes = compile_to_pdf(&quill, typst_content).unwrap();
-//! std::fs::write("output.pdf", pdf_bytes).unwrap();
-//! ```
+#![doc = include_str!("../docs/compile.md")]
 
 use typst::diag::{SourceDiagnostic, Warned};
 use typst::layout::PagedDocument;
@@ -40,39 +9,7 @@ use quillmark_core::Quill;
 
 /// Compiles a Typst document to PDF format.
 ///
-/// This function takes a quill template and Typst source code, creates a compilation
-/// environment, and produces a PDF file as bytes.
-///
-/// # Arguments
-///
-/// * `quill` - The quill template providing assets, packages, and fonts
-/// * `glued_content` - The complete Typst source code to compile
-///
-/// # Returns
-///
-/// Returns `Ok(Vec<u8>)` containing the PDF file bytes on success, or an error
-/// if compilation fails.
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The Typst source has syntax errors
-/// - Required assets or packages are missing
-/// - PDF generation fails
-///
-/// # Examples
-///
-/// ```no_run
-/// use quillmark_typst::compile::compile_to_pdf;
-/// use quillmark_core::Quill;
-///
-/// let quill = Quill::from_path("path/to/quill")?;
-/// let typst_content = "#set document(title: \"Test\")\n= Hello";
-///
-/// let pdf_bytes = compile_to_pdf(&quill, typst_content)?;
-/// std::fs::write("output.pdf", pdf_bytes)?;
-/// # Ok::<(), Box<dyn std::error::Error>>(())
-/// ```
+/// See [module docs](self) for usage examples.
 pub fn compile_to_pdf(
     quill: &Quill,
     glued_content: &str,
@@ -87,55 +24,9 @@ pub fn compile_to_pdf(
     Ok(pdf)
 }
 
-/// Compiles a Typst document to SVG format.
+/// Compiles a Typst document to SVG format (one file per page).
 ///
-/// This function takes a quill template and Typst source code, creates a compilation
-/// environment, and produces SVG files (one per page) as bytes.
-///
-/// # Arguments
-///
-/// * `quill` - The quill template providing assets, packages, and fonts
-/// * `glued_content` - The complete Typst source code to compile
-///
-/// # Returns
-///
-/// Returns `Ok(Vec<Vec<u8>>)` containing a vector of SVG file bytes (one per page)
-/// on success, or an error if compilation fails.
-///
-/// # Errors
-///
-/// Returns an error if:
-/// - The Typst source has syntax errors
-/// - Required assets or packages are missing
-/// - SVG generation fails
-///
-/// # Examples
-///
-/// ```no_run
-/// use quillmark_typst::compile::compile_to_svg;
-/// use quillmark_core::Quill;
-///
-/// let quill = Quill::from_path("path/to/quill")?;
-/// let typst_content = r#"
-///     = Page 1
-///     Content on first page.
-///     
-///     #pagebreak()
-///     
-///     = Page 2
-///     Content on second page.
-/// "#;
-///
-/// let svg_pages = compile_to_svg(&quill, typst_content)?;
-/// for (i, svg_bytes) in svg_pages.iter().enumerate() {
-///     std::fs::write(format!("page_{}.svg", i + 1), svg_bytes)?;
-/// }
-/// # Ok::<(), Box<dyn std::error::Error>>(())
-/// ```
-///
-/// # Note
-///
-/// Each page is rendered as a separate SVG document for maximum compatibility.
+/// See [module docs](self) for usage examples.
 pub fn compile_to_svg(
     quill: &Quill,
     glued_content: &str,

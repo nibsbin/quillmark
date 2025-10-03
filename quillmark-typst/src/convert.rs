@@ -1,73 +1,10 @@
-//! Markdown to Typst markup conversion.
-//!
-//! This module provides functionality to transform CommonMark markdown into Typst
-//! markup language. It's a critical component of the Typst backend, enabling markdown
-//! content to be embedded in Typst templates through the `Content` filter.
-//!
-//! # Key Functions
-//!
-//! - [`mark_to_typst`] - Primary conversion function
-//! - [`escape_markup`] - Escapes text for Typst markup context
-//! - [`escape_string`] - Escapes text for Typst string literals
-//!
-//! # Design Principles
-//!
-//! - **Event-based parsing** using `pulldown_cmark` for robust markdown parsing
-//! - **Character escaping** to handle Typst's reserved characters
-//! - **Stateful conversion** to manage context like list nesting and formatting
-//! - **Minimal output** that leverages Typst's natural text flow
-//!
-//! # Example
-//!
-//! ```
-//! use quillmark_typst::convert::mark_to_typst;
-//!
-//! let markdown = r#"
-//! # Hello
-//!
-//! This is **bold** and _italic_.
-//!
-//! - List item 1
-//! - List item 2
-//! "#;
-//!
-//! let typst = mark_to_typst(markdown);
-//! // Output contains Typst-formatted text
-//! ```
+#![doc = include_str!("../docs/convert.md")]
 
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 
 /// Escapes text for safe use in Typst markup context.
 ///
-/// This function escapes special characters that have meaning in Typst markup,
-/// preventing them from being interpreted as formatting commands.
-///
-/// # Characters Escaped
-///
-/// - `\` → `\\` (backslash - **must be first**)
-/// - `*` → `\*` (bold/strong markers)
-/// - `_` → `\_` (emphasis markers)
-/// - `` ` `` → ``\` `` (inline code markers)
-/// - `#` → `\#` (headings and Typst functions)
-/// - `[`, `]` → `\[`, `\]` (link/reference delimiters)
-/// - `$` → `\$` (math mode)
-/// - `<`, `>` → `\<`, `\>` (angle brackets)
-/// - `@` → `\@` (references)
-///
-/// # Examples
-///
-/// ```
-/// use quillmark_typst::convert::escape_markup;
-///
-/// let text = "Use * for bold and # for functions";
-/// let escaped = escape_markup(text);
-/// assert_eq!(escaped, "Use \\* for bold and \\# for functions");
-/// ```
-///
-/// # Note
-///
-/// Backslash must be escaped first to prevent double-escaping of subsequent
-/// escape sequences. This function is primarily used internally by [`mark_to_typst`].
+/// See [module docs](self) for detailed information on character escaping.
 pub fn escape_markup(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('*', "\\*")
@@ -82,29 +19,9 @@ pub fn escape_markup(s: &str) -> String {
         .replace('@', "\\@")
 }
 
-/// Escapes text for embedding in Typst string literals (within quotes).
+/// Escapes text for embedding in Typst string literals.
 ///
-/// This function is used when wrapping Typst markup in `eval()` calls or
-/// embedding in JSON structures for filter outputs.
-///
-/// # Characters Escaped
-///
-/// - `\` → `\\`
-/// - `"` → `\"`
-/// - `\n` → `\n` (literal backslash-n)
-/// - `\r` → `\r` (literal backslash-r)  
-/// - `\t` → `\t` (literal backslash-t)
-/// - Control characters → `\u{...}` (Unicode escape sequences)
-///
-/// # Examples
-///
-/// ```
-/// use quillmark_typst::convert::escape_string;
-///
-/// let text = "Hello \"world\"\nNew line";
-/// let escaped = escape_string(text);
-/// assert_eq!(escaped, "Hello \\\"world\\\"\\nNew line");
-/// ```
+/// See [module docs](self) for usage examples.
 pub fn escape_string(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
@@ -287,44 +204,7 @@ where
 
 /// Converts CommonMark Markdown to Typst markup.
 ///
-/// This is the primary conversion function that transforms markdown into Typst markup
-/// suitable for compilation or embedding in templates.
-///
-/// # Features
-///
-/// - Supports CommonMark specification
-/// - Enables strikethrough extension (`~~text~~`)
-/// - Handles text formatting (bold, italic, strikethrough)
-/// - Converts lists (bullet and ordered, including nested)
-/// - Processes links and inline code
-/// - Escapes Typst special characters automatically
-///
-/// # Conversion Reference
-///
-/// | Markdown | Typst Output |
-/// |----------|--------------|
-/// | `**bold**` | `*bold*` |
-/// | `_italic_` | `_italic_` |
-/// | `~~strike~~` | `#strike[strike]` |
-/// | `` `code` `` | `` `code` `` |
-/// | `[text](url)` | `#link("url")[text]` |
-/// | `- item` | `+ item` |
-/// | `1. item` | `1. item` |
-///
-/// # Examples
-///
-/// ```
-/// use quillmark_typst::convert::mark_to_typst;
-///
-/// let markdown = "This is **bold** and _italic_ text.";
-/// let typst = mark_to_typst(markdown);
-/// assert_eq!(typst, "This is *bold* and _italic_ text.\n\n");
-/// ```
-///
-/// # See Also
-///
-/// For detailed conversion documentation, see
-/// [CONVERT.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-typst/CONVERT.md).
+/// See [module docs](self) for examples and [CONVERT.md](../docs/CONVERT.md) for detailed conversion specification.
 pub fn mark_to_typst(markdown: &str) -> String {
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);

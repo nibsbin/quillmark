@@ -84,7 +84,7 @@ High-level data flow:
 * Compilation environment (`QuillWorld`)
 * Dynamic package loading (`typst.toml`), font & asset resolution
 * **Structured diagnostics** with source locations (maps Typst diagnostics → `Diagnostic`)
-* **API Documentation:** See [quillmark-typst/API.md](quillmark-typst/API.md) for complete API reference
+* **API Documentation:** See [quillmark-typst/docs/API.md](quillmark-typst/docs/API.md) for complete API reference
 
 ### `quillmark-fixtures` (dev/test utilities)
 
