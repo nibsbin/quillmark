@@ -10,32 +10,15 @@ All Quillmark crates use a hybrid documentation strategy to balance code iterati
 - **Deep dive links**: Inline docs point to detailed module or external documentation
 - **Examples**: Simple usage examples in inline docs where helpful
 
-### External Documentation (Comprehensive)
+### External Documentation
 
-Located in each crate's `docs/` directory:
-
-#### quillmark-core
-
-- **`overview.md`**: Crate-level overview included via `#![doc = include_str!()]` in `lib.rs`
-- **`parse.md`**: Parsing module documentation included via `#[doc = include_str!()]`
-- **`templating.md`**: Templating module documentation included via `#[doc = include_str!()]`
-- **`backend.md`**: Backend trait documentation included via `#[doc = include_str!()]`
-- **`errors.md`**: Error handling documentation included via `#[doc = include_str!()]`
-- **`designs/API.md`**: Complete API reference with detailed examples
-- **`designs/PARSE.md`**: Full Extended YAML Metadata Standard specification
-
-#### quillmark-typst
-
-- **`overview.md`**: Crate-level overview included via `#![doc = include_str!()]` in `lib.rs`
-- **`compile.md`**: Compilation module documentation included via `#[doc = include_str!()]`
-- **`convert.md`**: Conversion module documentation included via `#[doc = include_str!()]`
-- **`designs/CONVERT_DESIGN.md`**: Full Markdown to Typst conversion specification and design notes
-
-#### quillmark
-
-- **`lib.md`**: Crate-level overview included via `#[doc = include_str!()]` in `lib.rs`
-- **`workflow.md`**: Workflow API documentation included via `#[doc = include_str!()]`
-- **`quillmark.md`**: Quillmark engine documentation included via `#[doc = include_str!()]`
+- Include a `lib.md` for crate-level overview
+- Include a `{module}.md` for each public module with:
+  - Key functions and types
+  - Quick examples
+  - Links to deeper documentation
+- Include design documents in `docs/designs/` for complex topics and specifications
+- Link external docs using `#[doc = include_str!("../docs/{file}.md")]`
 
 ### Testing Documentation
 
@@ -94,17 +77,17 @@ All Quillmark crates follow this structure:
 ```
 crate-name/
 ├── docs/
-│   ├── overview.md (or lib.md)  # Crate-level overview (included in lib.rs)
-│   ├── {module}.md              # Module-level documentation (one per public module)
-│   └── designs/                 # Design documents and specifications
+│   ├── lib.md                    # Crate-level overview (included in lib.rs)
+│   ├── {module}.md                # Module-level documentation (one per public module)
+│   └── designs/                   # Design documents and specifications
 │       └── {DESIGN}.md
 ├── src/
-│   ├── lib.rs                   # #![doc = include_str!("../docs/overview.md")]
-│   └── {module}.rs              # #![doc = include_str!("../docs/{module}.md")]
+│   ├── lib.rs                     # #![doc = include_str!("../docs/overview.md")]
+│   └── {module}.rs                # #![doc = include_str!("../docs/{module}.md")]
 └── ...
 ```
 
-This structure is consistent across `quillmark-core`, `quillmark-typst`, and `quillmark` crates.
+This structure needs to be consistent across `quillmark-core`, `quillmark-typst`, and `quillmark` crates.
 
 ### Design Documents
 
