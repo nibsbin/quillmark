@@ -200,13 +200,7 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, Box<dyn st
     Ok(blocks)
 }
 
-/// Parse markdown into frontmatter fields and body. See [module docs](crate::parse) for examples.
-///
-/// # Errors
-///
-/// Returns an error for malformed YAML, unclosed frontmatter, invalid tags, or name collisions.
-/// See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-core/PARSE.md)
-/// for details.
+/// Decompose markdown into frontmatter fields and body
 pub fn decompose(
     markdown: &str,
 ) -> Result<ParsedDocument, Box<dyn std::error::Error + Send + Sync>> {
