@@ -1,4 +1,4 @@
-#![doc = include_str!("../docs/overview.md")]
+#![doc = include_str!("../docs/lib.md")]
 
 #[doc = include_str!("../docs/compile.md")]
 pub mod compile;
