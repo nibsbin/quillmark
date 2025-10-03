@@ -1,8 +1,6 @@
 //! Flexible template-first Markdown rendering system. See [module docs](self) for examples and usage patterns.
 
 #[doc = include_str!("../docs/lib.md")]
-#[allow(unused)]
-mod _module_docs {}
 
 // Re-export all core types for backward compatibility
 pub use quillmark_core::{
