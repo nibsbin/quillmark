@@ -7,10 +7,13 @@ use serde_yaml;
 /// Error types for template rendering
 #[derive(thiserror::Error, Debug)]
 pub enum TemplateError {
+    /// Template rendering error from MiniJinja
     #[error("{0}")]
     RenderError(#[from] minijinja::Error),
+    /// Invalid template compilation error
     #[error("{0}")]
     InvalidTemplate(String, #[source] Box<dyn StdError + Send + Sync>),
+    /// Filter execution error
     #[error("{0}")]
     FilterError(String),
 }

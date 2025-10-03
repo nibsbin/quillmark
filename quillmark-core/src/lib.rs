@@ -1,41 +1,88 @@
+//! Core types and functionality for the Quillmark template-first Markdown rendering system.
+//!
+//! This crate provides the foundational types and traits for Quillmark:
+//!
+//! - **Parsing**: YAML frontmatter extraction with Extended YAML Metadata Standard support
+//! - **Templating**: MiniJinja-based template composition with stable filter API
+//! - **Template model**: `Quill` type for managing template bundles with in-memory file system
+//! - **Backend trait**: Extensible interface for implementing output format backends
+//! - **Error handling**: Structured diagnostics with source location tracking
+//! - **Utilities**: TOML⇄YAML conversion helpers
+//!
+//! # Examples
+//!
+//! ```no_run
+//! use quillmark_core::{decompose, Quill};
+//!
+//! // Parse markdown with frontmatter
+//! let markdown = "---\ntitle: Example\n---\n\n# Content";
+//! let doc = decompose(markdown).unwrap();
+//!
+//! // Load a quill template
+//! let quill = Quill::from_path("path/to/quill").unwrap();
+//! ```
+//!
+//! See also:
+//! - [API.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-core/API.md) - Comprehensive API reference
+//! - [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-core/PARSE.md) - Parsing documentation
+
 use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
-// Re-export parsing functionality
+/// Parsing functionality for markdown with YAML frontmatter.
+///
+/// This module provides the `decompose` function for parsing markdown documents
+/// and the `ParsedDocument` type for accessing parsed content.
 pub mod parse;
 pub use parse::{decompose, ParsedDocument, BODY_FIELD};
 
-// Re-export templating functionality
+/// Templating functionality with MiniJinja-based template composition.
+///
+/// This module provides the `Glue` type for template rendering and a stable
+/// filter API for backends to register custom filters.
 pub mod templating;
 pub use templating::{Glue, TemplateError};
 
-// Re-export backend trait
+/// Backend trait for implementing output format backends.
+///
+/// This module defines the `Backend` trait that backends must implement
+/// to support different output formats (PDF, SVG, TXT, etc.).
 pub mod backend;
 pub use backend::Backend;
 
-// Re-export error types
+/// Error handling types with structured diagnostics.
+///
+/// This module provides error types (`RenderError`, `TemplateError`) and
+/// diagnostic types (`Diagnostic`, `Location`, `Severity`) for actionable
+/// error reporting with source location tracking.
 pub mod error;
 pub use error::{Diagnostic, Location, RenderError, RenderResult, Severity};
 
 /// Output formats supported by backends
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum OutputFormat {
+    /// Plain text output
     Txt,
+    /// Scalable Vector Graphics output
     Svg,
+    /// Portable Document Format output
     Pdf,
 }
 
 /// An artifact produced by rendering
 #[derive(Debug)]
 pub struct Artifact {
+    /// The binary content of the artifact
     pub bytes: Vec<u8>,
+    /// The format of the output
     pub output_format: OutputFormat,
 }
 
 /// Internal rendering options used by engine orchestration
 #[derive(Debug)]
 pub struct RenderOptions {
+    /// Optional output format specification
     pub output_format: Option<OutputFormat>,
 }
 

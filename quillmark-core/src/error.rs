@@ -3,27 +3,39 @@ use crate::OutputFormat;
 /// Error severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum Severity {
+    /// Fatal error that prevents completion
     Error,
+    /// Non-fatal issue that may need attention
     Warning,
+    /// Informational message
     Note,
 }
 
 /// Location information for diagnostics
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Location {
-    pub file: String, // e.g., "glue.typ", "template.typ", "input.md"
+    /// Source file name (e.g., "glue.typ", "template.typ", "input.md")
+    pub file: String,
+    /// Line number (1-indexed)
     pub line: u32,
+    /// Column number (1-indexed)
     pub col: u32,
 }
 
 /// Structured diagnostic information
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct Diagnostic {
+    /// Error severity level
     pub severity: Severity,
+    /// Optional error code (e.g., "E001", "typst::syntax")
     pub code: Option<String>,
+    /// Human-readable error message
     pub message: String,
+    /// Primary source location
     pub primary: Option<Location>,
+    /// Related source locations for context
     pub related: Vec<Location>,
+    /// Optional hint for fixing the error
     pub hint: Option<String>,
 }
 
@@ -95,48 +107,76 @@ impl Diagnostic {
 /// Main error type for rendering operations
 #[derive(thiserror::Error, Debug)]
 pub enum RenderError {
+    /// Failed to create rendering engine
     #[error("Engine creation failed")]
     EngineCreation {
+        /// Diagnostic information
         diag: Diagnostic,
         #[source]
+        /// Optional source error
         source: Option<anyhow::Error>,
     },
 
+    /// Invalid YAML frontmatter in markdown document
     #[error("Invalid YAML frontmatter")]
     InvalidFrontmatter {
+        /// Diagnostic information
         diag: Diagnostic,
         #[source]
+        /// Optional source error
         source: Option<anyhow::Error>,
     },
 
+    /// Template rendering failed
     #[error("Template rendering failed")]
     TemplateFailed {
         #[source]
+        /// MiniJinja error
         source: minijinja::Error,
+        /// Diagnostic information
         diag: Diagnostic,
     },
 
+    /// Backend compilation failed with one or more errors
     #[error("Backend compilation failed with {0} error(s)")]
-    CompilationFailed(usize, Vec<Diagnostic>),
+    CompilationFailed(
+        /// Number of errors
+        usize,
+        /// List of diagnostics
+        Vec<Diagnostic>,
+    ),
 
+    /// Requested output format not supported by backend
     #[error("{format:?} not supported by {backend}")]
     FormatNotSupported {
+        /// Backend identifier
         backend: String,
+        /// Requested format
         format: OutputFormat,
     },
 
+    /// Backend not registered with engine
     #[error("Unsupported backend: {0}")]
     UnsupportedBackend(String),
 
+    /// Dynamic asset filename collision
     #[error("Dynamic asset collision: {filename}")]
-    DynamicAssetCollision { filename: String, message: String },
+    DynamicAssetCollision {
+        /// Filename that collided
+        filename: String,
+        /// Error message
+        message: String,
+    },
 
+    /// Internal error (wraps anyhow::Error)
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
 
+    /// Other errors (boxed trait object)
     #[error("{0}")]
     Other(#[from] Box<dyn std::error::Error + Send + Sync>),
 
+    /// Template-related error
     #[error("Template error: {0}")]
     Template(#[from] crate::templating::TemplateError),
 }
@@ -144,7 +184,9 @@ pub enum RenderError {
 /// Result type containing artifacts and warnings
 #[derive(Debug)]
 pub struct RenderResult {
+    /// Generated output artifacts
     pub artifacts: Vec<crate::Artifact>,
+    /// Non-fatal diagnostic messages
     pub warnings: Vec<Diagnostic>,
 }
 
