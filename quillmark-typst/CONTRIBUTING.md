@@ -36,8 +36,7 @@ Located in the `docs/` directory:
 
 When adding new public APIs:
 
-1. Add a 1-2 line summary to the item
-2. Include a simple example if helpful
-3. Link to module or external docs for details: `/// See [module docs](self) for examples.`
-4. Update relevant `.md` files in `docs/` directory
-5. Test with `cargo doc --no-deps` and `cargo test --doc`
+1. Add a 1-2 line summary to the item with `///`
+1. Create or update a `{module}.md` file next to the script/module
+1. Link `{module}.md` link with `#[doc = include_str!("{module}.md")]`
+1. Test with `cargo doc --no-deps` and `cargo test --doc`
