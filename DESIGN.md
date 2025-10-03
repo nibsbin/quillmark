@@ -444,6 +444,7 @@ Quillmark supports advanced markdown parsing with both traditional frontmatter a
   1. Detect frontmatter block; parse to `HashMap<String, serde_yaml::Value>`
   2. Store the remainder as body under `BODY_FIELD`
   3. Validate YAML syntax with fail-fast error reporting
+  4. Preserve all body whitespace (including leading/trailing)
 * **Policy:** YAML-only input; no TOML frontmatter. Backends can convert via filters.
 
 ### Extended YAML Metadata Standard (Implemented)
@@ -455,6 +456,21 @@ The parser now supports **inline metadata sections** throughout documents using 
 * **Horizontal Rule Disambiguation**: Smart detection distinguishes metadata blocks from markdown `---` horizontal rules
 * **Contiguity Validation**: Metadata blocks must be contiguous (no blank lines within YAML content)
 * **Validation**: Tag names match `[a-z_][a-z0-9_]*` pattern; reserved name protection; name collision detection
+
+**Grammar:**
+```
+metadata_block ::= "---" NEWLINE tag_directive? yaml_content "---" NEWLINE body_content
+tag_directive ::= "!" attribute_name NEWLINE
+attribute_name ::= [a-z_][a-z0-9_]*
+yaml_content ::= (yaml_line NEWLINE)+  // No blank lines allowed
+```
+
+**Key Rules:**
+* Tag directive MUST appear on first line after opening `---` (if present)
+* If no tag directive, block is treated as global frontmatter
+* Metadata blocks MUST be contiguous - `---` followed by blank line is treated as horizontal rule
+* YAML parsing uses same rigor for both frontmatter and tagged blocks
+* Body content preserves all whitespace (including leading/trailing)
 
 **Example:**
 
@@ -473,6 +489,13 @@ Widget description.
 ```
 
 Parses to structured data with a `products` array containing objects with metadata fields and body content.
+
+**Collection Semantics:**
+* All tagged blocks with the same attribute name → aggregated into array
+* Array preserves document order
+* Each entry is an object containing metadata fields + `body` field
+* Global frontmatter fields stored at top level
+* Only one global frontmatter block allowed (subsequent untagged blocks error)
 
 **Error posture:** Fail-fast for malformed YAML to prevent silent data corruption; clear error messages for invalid tag syntax or name collisions.
 
