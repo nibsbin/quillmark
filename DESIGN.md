@@ -76,6 +76,8 @@ High-level data flow:
 * Validation and **structured error propagation**
 * QuillRef for ergonomic quill references
 
+**API Documentation:** See the crate's rustdoc for comprehensive API documentation with usage examples, including module-level overview, detailed method documentation, and doc tests.
+
 ### `quillmark-typst` (Typst backend)
 
 * Implements `Backend` for PDF/SVG
@@ -94,6 +96,8 @@ High-level data flow:
 ---
 
 ## Core Interfaces and Structures
+
+> **Note:** The following sections provide high-level API signatures and design rationale. For detailed API documentation with comprehensive examples, error handling, and usage patterns, see the `quillmark` crate's rustdoc (available at docs.rs or via `cargo doc --open`).
 
 ### Quillmark (high-level engine API)
 
