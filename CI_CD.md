@@ -684,36 +684,35 @@ cargo install cargo-release
 
 #### Configuration
 
-Create a `release.toml` file in the workspace root to configure cargo-release behavior:
+A `release.toml` file has been created in the workspace root with the following configuration:
 
 ```toml
-# Workspace-wide release configuration
-[workspace]
-# Publish all crates together with the same version
+# Allow releases only from the main branch
+allow-branch = ["main"]
+
+# Consolidate all workspace crate commits into a single commit
 consolidate-commits = true
 
-# Git commit and tag configuration
+# Git commit and tag settings
 pre-release-commit-message = "chore: release {{version}}"
 tag-name = "v{{version}}"
 tag-message = "Release {{version}}"
 
-# Allow releases from main branch only
-allow-branch = ["main"]
-
-# Default settings for all crates
-[workspace.metadata.release]
-sign-commit = false
-sign-tag = false
+# Push commits and tags to origin
 push = true
-verify = true
-publish = true
+push-remote = "origin"
 
-# Individual crate configuration
-[[package]]
-name = "quillmark-fixtures"
-# Don't publish test fixtures
-publish = false
+# Publish to crates.io
+publish = true
+verify = true
+
+# How to handle workspace dependency versions
+dependent-version = "upgrade"
 ```
+
+See the `release.toml` file in the repository root for the complete configuration including examples of CHANGELOG automation.
+
+**Note**: The `quillmark-fixtures` crate is marked with `publish = false` in its `Cargo.toml` to prevent publishing test utilities to crates.io.
 
 #### Basic Usage
 
