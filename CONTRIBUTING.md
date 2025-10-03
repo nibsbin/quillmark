@@ -39,9 +39,11 @@ Located in each crate's `docs/` directory:
 
 ### Testing Documentation
 
-- Run `cargo doc --no-deps` to build documentation
+- Run `cargo doc --no-deps` to build documentation for all crates
+- Run `cargo doc -p quillmark -p quillmark-typst -p quillmark-core --no-deps` to build documentation for specific packages
 - Run `cargo test` to execute doctests from both inline and included Markdown
 - Keep examples green to prevent documentation drift
+- **Always check for warnings** - documentation warnings about broken links should be fixed immediately
 
 ### Discoverability
 
@@ -57,6 +59,33 @@ When adding new public APIs:
 1. Create or update a `{module}.md` file in the crate's `docs/` directory
 1. Link the documentation file with `#[doc = include_str!("../docs/{module}.md")]`
 1. Test with `cargo doc --no-deps` and `cargo test --doc`
+
+### Intra-Doc Links in Included Markdown
+
+When using `#[doc = include_str!()]` to include markdown files, be aware of the scope context for intra-doc links:
+
+**Problem**: Markdown files included on module declarations (in `lib.rs`) have different scope than when included inside the module itself.
+
+**Example**:
+```rust
+// In lib.rs
+#[doc = include_str!("../docs/compile.md")]
+pub mod compile;
+
+// In compile.rs
+#![doc = include_str!("../docs/compile.md")]
+```
+
+The same `compile.md` is used in both contexts, but:
+- When attached to `pub mod compile` in `lib.rs`, functions are NOT in direct scope
+- When attached inside `compile.rs`, functions ARE in direct scope
+
+**Solution**: Use module-qualified paths in the markdown files:
+- ✅ Correct: `` [`compile::compile_to_pdf()`] ``
+- ✅ Correct: `` [`convert::mark_to_typst()`] ``
+- ❌ Wrong: `` [`compile_to_pdf`] `` (breaks when used in `lib.rs`)
+
+This ensures links work in both contexts. Always verify with `cargo doc --no-deps` to catch broken links.
 
 ### Documentation Structure Standard
 

@@ -4,9 +4,9 @@ This module transforms CommonMark markdown into Typst markup language.
 
 ## Key Functions
 
-- [`mark_to_typst`] - Primary conversion function for Markdown to Typst
-- [`escape_markup`] - Escapes text for safe use in Typst markup context
-- [`escape_string`] - Escapes text for embedding in Typst string literals
+- [`convert::mark_to_typst()`] - Primary conversion function for Markdown to Typst
+- [`convert::escape_markup()`] - Escapes text for safe use in Typst markup context
+- [`convert::escape_string()`] - Escapes text for embedding in Typst string literals
 
 ## Quick Example
 
