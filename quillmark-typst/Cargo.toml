@@ -8,7 +8,7 @@ license = "Apache-2.0"
 [dependencies]
 fontdb = { workspace = true }
 pulldown-cmark = { workspace = true }
-quillmark-core = { path = "../quillmark-core" }
+quillmark-core = { workspace = true }
 serde_json = { workspace = true }
 time = { workspace = true }
 toml = { workspace = true }

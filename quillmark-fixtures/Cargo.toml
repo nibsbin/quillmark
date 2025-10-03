@@ -6,5 +6,5 @@ description = "Test fixtures and utilities for Quillmark"
 license = "MIT"
 
 [dependencies]
-quillmark = { path = "../quillmark" }
-quillmark-typst = { path = "../quillmark-typst" }
+quillmark = { workspace = true }
+quillmark-typst = { workspace = true }

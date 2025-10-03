@@ -6,8 +6,8 @@ description = "Quillmark sealed engine API"
 license = "Apache-2.0"
 
 [dependencies]
-quillmark-core = { path = "../quillmark-core" }
-quillmark-typst = { path = "../quillmark-typst", optional = true }
+quillmark-core = { workspace = true }
+quillmark-typst = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }
@@ -15,8 +15,8 @@ anyhow = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-quillmark-typst = { path = "../quillmark-typst" }
-quillmark-fixtures = { path = "../quillmark-fixtures" }
+quillmark-typst = { workspace = true }
+quillmark-fixtures = { workspace = true }
 
 [features]
 default = ["typst"]

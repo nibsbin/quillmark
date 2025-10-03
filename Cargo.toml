@@ -30,5 +30,11 @@ typst-pdf = "0.13.1"
 typst-svg = "0.13.1"
 dirs = "6.0"
 
+# Intra-project dependencies
+quillmark-core = { version = "0.1.0", path = "quillmark-core" }
+quillmark-typst = { version = "0.1.0", path = "quillmark-typst" }
+quillmark = { version = "0.1.0", path = "quillmark" }
+quillmark-fixtures = { version = "0.1.0", path = "quillmark-fixtures" }
+
 # Test and dev dependencies
 tempfile = "~3.23"
