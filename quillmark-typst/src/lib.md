@@ -29,12 +29,6 @@ let quill = Quill::from_path("path/to/quill").unwrap();
 // Use with Workflow API (recommended)
 // let workflow = Workflow::new(Box::new(backend), quill);
 ```
-
-## Documentation
-
-- **[API Reference](docs/API.md)** - Complete API documentation with examples
-- **[Conversion Details](docs/CONVERT.md)** - Markdown to Typst conversion specification
-
 ## Modules
 
 - [`convert`] - Markdown to Typst conversion utilities

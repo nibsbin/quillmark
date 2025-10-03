@@ -1,4 +1,4 @@
-#![doc = include_str!("../docs/compile.md")]
+#![doc = include_str!("compile.md")]
 
 use typst::diag::{SourceDiagnostic, Warned};
 use typst::layout::PagedDocument;
@@ -8,8 +8,6 @@ use crate::world::QuillWorld;
 use quillmark_core::Quill;
 
 /// Compiles a Typst document to PDF format.
-///
-/// See [module docs](self) for usage examples.
 pub fn compile_to_pdf(
     quill: &Quill,
     glued_content: &str,
@@ -25,8 +23,6 @@ pub fn compile_to_pdf(
 }
 
 /// Compiles a Typst document to SVG format (one file per page).
-///
-/// See [module docs](self) for usage examples.
 pub fn compile_to_svg(
     quill: &Quill,
     glued_content: &str,

@@ -1,4 +1,4 @@
-#![doc = include_str!("../docs/lib.md")]
+#![doc = include_str!("lib.md")]
 
 pub mod compile;
 pub mod convert;
@@ -10,8 +10,6 @@ use filters::{
 use quillmark_core::{Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions};
 
 /// Typst backend implementation for Quillmark.
-///
-/// See [module docs](self) for usage examples and detailed information.
 pub struct TypstBackend;
 
 impl Backend for TypstBackend {
