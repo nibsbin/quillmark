@@ -16,7 +16,7 @@ and the `ParsedDocument` type for accessing parsed content.
 
 ### Basic Parsing
 
-```rust,no_run
+```rust
 use quillmark_core::decompose;
 
 let markdown = r#"---
@@ -29,7 +29,7 @@ author: John Doe
 Document content here.
 "#;
 
-let doc = decompose(markdown)?;
+let doc = decompose(markdown).unwrap();
 let title = doc.get_field("title")
     .and_then(|v| v.as_str())
     .unwrap_or("Untitled");
@@ -37,7 +37,7 @@ let title = doc.get_field("title")
 
 ### Extended Metadata with Tags
 
-```rust,no_run
+```rust
 use quillmark_core::decompose;
 
 let markdown = r#"---
@@ -55,7 +55,7 @@ price: 19.99
 A versatile widget for all occasions.
 "#;
 
-let doc = decompose(markdown)?;
+let doc = decompose(markdown).unwrap();
 
 // Access tagged collections
 if let Some(products) = doc.get_field("products")

@@ -37,7 +37,7 @@ let mut context = HashMap::new();
 context.insert("title".to_string(), serde_yaml::Value::String("My Doc".into()));
 context.insert("body".to_string(), serde_yaml::Value::String("Content".into()));
 
-let output = glue.compose(context)?;
+let output = glue.compose(context).unwrap();
 ```
 
 ### Custom Filter Implementation

@@ -81,7 +81,7 @@ match workflow.render(markdown, None) {
 
 ### Creating Diagnostics
 
-```rust,no_run
+```rust
 use quillmark_core::{Diagnostic, Location, Severity};
 
 let diag = Diagnostic::new(Severity::Error, "Undefined variable".to_string())
@@ -94,9 +94,12 @@ let diag = Diagnostic::new(Severity::Error, "Undefined variable".to_string())
     .with_hint("Check variable spelling".to_string());
 
 println!("{}", diag.fmt_pretty());
-// Output:
-// [ERROR] Undefined variable (E001) at template.typ:10:5
-//   hint: Check variable spelling
+```
+
+Example output:
+```text
+[ERROR] Undefined variable (E001) at template.typ:10:5
+  hint: Check variable spelling
 ```
 
 ### Result with Warnings
@@ -113,17 +116,14 @@ let result = RenderResult::new(artifacts)
 
 ## Pretty Printing
 
-The `Diagnostic` type provides `fmt_pretty()` for human-readable output:
-
-```rust
-[ERROR] Undefined variable (E001) at template.typ:10:5
-  hint: Check variable spelling
-```
+The `Diagnostic` type provides `fmt_pretty()` for human-readable output with error code, location, and hints.
 
 ## Machine-Readable Output
 
 All diagnostic types implement `serde::Serialize` for JSON export:
 
 ```rust,no_run
-let json = serde_json::to_string(&diagnostic)?;
+# use quillmark_core::{Diagnostic, Severity};
+# let diagnostic = Diagnostic::new(Severity::Error, "Test".to_string());
+let json = serde_json::to_string(&diagnostic).unwrap();
 ```
