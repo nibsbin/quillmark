@@ -13,8 +13,7 @@ pub use quillmark_core::{
 use quillmark_core::RenderOptions;
 use std::collections::HashMap;
 
-/// Ergonomic reference to a Quill by name or object. See [module docs](self) for examples.
-#[doc = include_str!("../docs/quillref.md")]
+/// Ergonomic reference to a Quill by name or object.
 pub enum QuillRef<'a> {
     /// Reference to a quill by its registered name
     Name(&'a str),
