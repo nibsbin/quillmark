@@ -1,12 +1,15 @@
-mod compile;
-mod convert;
+#![doc = include_str!("lib.md")]
+
+pub mod compile;
+pub mod convert;
 mod filters;
 mod world;
 use filters::{
     asset_filter, content_filter, date_filter, dict_filter, lines_filter, string_filter,
 };
 use quillmark_core::{Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions};
-/// Typst backend implementation
+
+/// Typst backend implementation for Quillmark.
 pub struct TypstBackend;
 
 impl Backend for TypstBackend {
@@ -79,6 +82,7 @@ impl Backend for TypstBackend {
 }
 
 impl Default for TypstBackend {
+    /// Creates a new [`TypstBackend`] instance.
     fn default() -> Self {
         Self
     }

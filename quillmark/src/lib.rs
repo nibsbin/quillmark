@@ -1,3 +1,9 @@
+//! Flexible template-first Markdown rendering system. See [module docs](self) for examples and usage patterns.
+
+#[doc = include_str!("../docs/lib.md")]
+#[allow(unused)]
+mod _module_docs {}
+
 // Re-export all core types for backward compatibility
 pub use quillmark_core::{
     decompose, Artifact, Backend, Diagnostic, Glue, Location, OutputFormat, ParsedDocument, Quill,
@@ -7,7 +13,7 @@ pub use quillmark_core::{
 use quillmark_core::RenderOptions;
 use std::collections::HashMap;
 
-/// Reference to a Quill, either by name or by borrowed object
+/// Ergonomic reference to a Quill by name or object.
 pub enum QuillRef<'a> {
     /// Reference to a quill by its registered name
     Name(&'a str),
@@ -39,7 +45,8 @@ impl<'a> From<&'a std::borrow::Cow<'a, str>> for QuillRef<'a> {
     }
 }
 
-/// The main sealed engine API
+/// Sealed workflow for rendering Markdown documents. See [module docs](self) for usage patterns.
+#[doc = include_str!("../docs/workflow.md")]
 pub struct Workflow {
     backend: Box<dyn Backend>,
     quill: Quill,
@@ -47,7 +54,7 @@ pub struct Workflow {
 }
 
 impl Workflow {
-    /// Create a new Workflow with the specified backend and quill template
+    /// Create a new Workflow with the specified backend and quill. Usually called via [`Quillmark::load`].
     pub fn new(backend: Box<dyn Backend>, quill: Quill) -> Result<Self, RenderError> {
         // Since Quill::from_path() now automatically validates, we don't need to validate again
         Ok(Self {
@@ -57,7 +64,7 @@ impl Workflow {
         })
     }
 
-    /// Render markdown to a specific output format
+    /// Render Markdown with YAML frontmatter to output artifacts. See [module docs](self) for examples.
     pub fn render(
         &self,
         markdown: &str,
@@ -72,7 +79,7 @@ impl Workflow {
         self.render_content_with_quill(&glue_output, format, &prepared_quill)
     }
 
-    /// Render processed glue content to a specific output format
+    /// Render pre-processed glue content, skipping parsing and template composition.
     pub fn render_content(
         &self,
         content: &str,
@@ -112,6 +119,7 @@ impl Workflow {
         Ok(RenderResult::new(artifacts))
     }
 
+    /// Process Markdown through the glue template without compilation, returning the composed output.
     pub fn process_glue(&self, markdown: &str) -> Result<String, RenderError> {
         let parsed_doc = decompose(markdown).map_err(|e| RenderError::InvalidFrontmatter {
             diag: quillmark_core::error::Diagnostic::new(
@@ -129,29 +137,22 @@ impl Workflow {
         Ok(glue_output)
     }
 
-    /// Get the backend ID
+    /// Get the backend identifier (e.g., "typst").
     pub fn backend_id(&self) -> &str {
         self.backend.id()
     }
 
-    /// Get supported output formats
+    /// Get the supported output formats for this workflow's backend.
     pub fn supported_formats(&self) -> &'static [OutputFormat] {
         self.backend.supported_formats()
     }
 
-    /// Get the quill name
+    /// Get the quill name used by this workflow.
     pub fn quill_name(&self) -> &str {
         &self.quill.name
     }
 
-    /// Add a dynamic asset to the workflow
-    ///
-    /// # Arguments
-    /// * `filename` - The filename to use (e.g., "chart.png")
-    /// * `contents` - The file contents as bytes
-    ///
-    /// # Errors
-    /// Returns error if a dynamic asset with the same filename already exists (collision detection)
+    /// Add a dynamic asset to the workflow (builder pattern). See [module docs](self) for examples.
     pub fn with_asset(
         mut self,
         filename: impl Into<String>,
@@ -174,7 +175,7 @@ impl Workflow {
         Ok(self)
     }
 
-    /// Add multiple dynamic assets at once
+    /// Add multiple dynamic assets at once (builder pattern).
     pub fn with_assets(
         mut self,
         assets: impl IntoIterator<Item = (String, Vec<u8>)>,
@@ -185,10 +186,7 @@ impl Workflow {
         Ok(self)
     }
 
-    /// Clear all dynamic assets from the workflow
-    ///
-    /// This method removes all previously added dynamic assets, allowing you to
-    /// start fresh or conditionally reset the asset state in a builder chain.
+    /// Clear all dynamic assets from the workflow (builder pattern).
     pub fn clear_assets(mut self) -> Self {
         self.dynamic_assets.clear();
         self
@@ -215,37 +213,15 @@ impl Workflow {
     }
 }
 
-/// High-level engine for orchestrating backends and quills
-///
-/// `Quillmark` manages the registration of backends and quills, and provides
-/// a convenient way to create workflows. Backends are automatically registered
-/// based on enabled crate features.
-///
-/// # Example
-///
-/// ```no_run
-/// use quillmark::{Quillmark, Quill, OutputFormat};
-///
-/// // Step 1: Create engine with auto-registered backends (typst by default)
-/// let mut engine = Quillmark::new();
-///
-/// // Step 2: Create and register quills
-/// let quill = Quill::from_path("path/to/quill").unwrap();
-/// engine.register_quill(quill);
-///
-/// // Step 3: Load workflow by quill name
-/// let workflow = engine.load("my-quill").unwrap();
-///
-/// // Step 4: Render markdown
-/// let result = workflow.render("# Hello", Some(OutputFormat::Pdf)).unwrap();
-/// ```
+/// High-level engine for orchestrating backends and quills. See [module docs](self) for usage patterns.
+#[doc = include_str!("../docs/quillmark.md")]
 pub struct Quillmark {
     backends: HashMap<String, Box<dyn Backend>>,
     quills: HashMap<String, Quill>,
 }
 
 impl Quillmark {
-    /// Create a new Quillmark with auto-registered backends based on enabled features
+    /// Create a new Quillmark engine with auto-registered backends based on enabled features.
     pub fn new() -> Self {
         #[allow(unused_mut)]
         let mut backends: HashMap<String, Box<dyn Backend>> = HashMap::new();
@@ -263,29 +239,13 @@ impl Quillmark {
         }
     }
 
-    /// Register a quill by name
+    /// Register a quill template with the engine by name.
     pub fn register_quill(&mut self, quill: Quill) {
         let name = quill.name.clone();
         self.quills.insert(name, quill);
     }
 
-    /// Load a workflow for a quill
-    ///
-    /// Accepts either a quill name (as &str, &String, etc.) or a borrowed Quill object.
-    ///
-    /// # Examples
-    ///
-    /// ```no_run
-    /// # use quillmark::{Quillmark, Quill};
-    /// # let mut engine = Quillmark::new();
-    /// # let quill = Quill::from_path("path/to/quill").unwrap();
-    /// # engine.register_quill(quill.clone());
-    /// // Load by name
-    /// let workflow = engine.load("my-quill").unwrap();
-    ///
-    /// // Load by object
-    /// let workflow = engine.load(&quill).unwrap();
-    /// ```
+    /// Load a workflow by quill name or object reference. See [module docs](self) for examples.
     pub fn load<'a>(&self, quill_ref: impl Into<QuillRef<'a>>) -> Result<Workflow, RenderError> {
         let quill_ref = quill_ref.into();
 
@@ -340,12 +300,12 @@ impl Quillmark {
         }
     }
 
-    /// Get list of registered backend IDs
+    /// Get a list of registered backend IDs.
     pub fn registered_backends(&self) -> Vec<&str> {
         self.backends.keys().map(|s| s.as_str()).collect()
     }
 
-    /// Get list of registered quill names
+    /// Get a list of registered quill names.
     pub fn registered_quills(&self) -> Vec<&str> {
         self.quills.keys().map(|s| s.as_str()).collect()
     }

@@ -1,6 +1,8 @@
+#![doc = include_str!("convert.md")]
+
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 
-/// Escapes text for safe use in Typst evals
+/// Escapes text for safe use in Typst markup context.
 pub fn escape_markup(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace('*', "\\*")
@@ -15,6 +17,7 @@ pub fn escape_markup(s: &str) -> String {
         .replace('@', "\\@")
 }
 
+/// Escapes text for embedding in Typst string literals.
 pub fn escape_string(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for ch in s.chars() {
@@ -195,7 +198,7 @@ where
     }
 }
 
-/// Converts markdown to Typst markup
+/// Converts CommonMark Markdown to Typst markup.
 pub fn mark_to_typst(markdown: &str) -> String {
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
