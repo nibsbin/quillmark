@@ -1,4 +1,4 @@
-# Contributing to quillmark-typst
+# Contributing to quillmark-core
 
 ## Documentation Structure
 
@@ -15,9 +15,12 @@ This crate uses a hybrid documentation strategy to balance code iteration speed 
 Located in the `docs/` directory:
 
 - **`overview.md`**: Crate-level overview included via `#![doc = include_str!()]` in `lib.rs`
-- **`convert.md`**: Conversion module documentation included via `#[doc = include_str!()]`
-- **`compile.md`**: Compilation module documentation included via `#[doc = include_str!()]`
-- **`CONVERT_DESIGN.md`**: Full Markdown to Typst conversion specification and design notes
+- **`parse.md`**: Parsing module documentation included via `#[doc = include_str!()]`
+- **`templating.md`**: Templating module documentation included via `#[doc = include_str!()]`
+- **`backend.md`**: Backend trait documentation included via `#[doc = include_str!()]`
+- **`errors.md`**: Error handling documentation included via `#[doc = include_str!()]`
+- **`API.md`**: Complete API reference with detailed examples
+- **`PARSE.md`**: Full Extended YAML Metadata Standard specification
 
 ### Testing Documentation
 
