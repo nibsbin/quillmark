@@ -80,10 +80,11 @@ High-level data flow:
 
 * Implements `Backend` for PDF/SVG
 * Markdown→Typst conversion (`mark_to_typst`)
-* Filters: `String`, `Lines`, `Date`, `Dict`, `Body`, and YAML→TOML injector
+* Filters: `String`, `Lines`, `Date`, `Dict`, `Content`, `Asset` (via JSON injection)
 * Compilation environment (`QuillWorld`)
 * Dynamic package loading (`typst.toml`), font & asset resolution
 * **Structured diagnostics** with source locations (maps Typst diagnostics → `Diagnostic`)
+* **API Documentation:** See [quillmark-typst/API.md](quillmark-typst/API.md) for complete API reference
 
 ### `quillmark-fixtures` (dev/test utilities)
 
@@ -355,11 +356,10 @@ let artifacts = backend.compile(&glue_source, &prepared_quill, &opts)?; // Step 
 
 * **String**: escape/quote; `default=` kwarg; special handling for `none` sentinel
 * **Lines**: string array for multi-line embedding
-* **Date**: strict date parsing; produces TOML-like object when needed
+* **Date**: strict date parsing; produces datetime constructor for Typst
 * **Dict**: objects → JSON string; type validation
-* **Body**: Markdown body → backend markup (e.g., Typst) and inject with `eval()` as needed
+* **Content**: Markdown body → backend markup (e.g., Typst) and inject with `eval()` as needed
 * **Asset**: transform dynamic asset filename to virtual path (e.g., `"chart.png"` → `"assets/DYNAMIC_ASSET__chart.png"`)
-* **Toml** *(Typst-only convenience)*: YAML → TOML string injection for `toml()` usage
 
 **Template usage example (Typst glue):**
 
@@ -367,7 +367,7 @@ let artifacts = backend.compile(&glue_source, &prepared_quill, &opts)?; // Step 
 {{ title | String(default="Untitled") }}
 {{ recipients | Lines }}
 {{ date | Date }}
-{{ frontmatter | Toml }}          // optional: for Typst-native toml(...)
+{{ metadata | Dict }}
 {{ body | Content }}
 #image({{ "chart.png" | Asset }}) // dynamic asset
 ```
@@ -408,10 +408,10 @@ let artifacts = backend.compile(&glue_source, &prepared_quill, &opts)?; // Step 
 * **Typst embedding**: Wrap in `json(bytes("..."))` for Typst evaluation
 * **Escaping**: Use `escape_string()` on serialized JSON
 
-##### Body Filter (`body_filter`)
+##### Content Filter (`content_filter`)
 
 * **Markdown conversion**: Apply `mark_to_typst()` to body content
-* **Eval wrapping**: Return `eval("typst_markup")` for safe template injection
+* **Eval wrapping**: Return `eval("typst_markup", mode: "markup")` for safe template injection
 * **Content type**: Treats input as markdown string, outputs Typst markup
 
 ##### Asset Filter (`asset_filter`)
