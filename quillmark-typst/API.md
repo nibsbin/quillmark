@@ -952,17 +952,20 @@ match backend.compile(content, &quill, &opts) {
 
 **Stability Guarantees:**
 
-- ✅ **Stable**: `TypstBackend`, `mark_to_typst`, `compile_to_pdf`, `compile_to_svg`
-- ✅ **Stable**: All filter functions (via stable `filter_api`)
-- ⚠️ **Semi-Stable**: `escape_markup`, `escape_string` (exposed but primarily internal)
-- 🔒 **Internal**: `QuillWorld` internals (public constructor, private fields)
+- ✅ **Stable (Public)**: `TypstBackend` struct and its `Backend` trait implementation
+- 🔒 **Internal (Private)**: All other modules (`compile`, `convert`, `filters`, `world`)
+  - These are implementation details that may change between versions
+  - Users should rely on the `Backend` trait interface and `Workflow` API
+  - Documentation is provided for reference, not as a public contract
 
 **Breaking Changes:**
 
-Any breaking changes will be clearly documented in release notes. The API follows semantic versioning:
-- Major version: Breaking changes to public API
-- Minor version: New features, backward compatible
+Any breaking changes to the public API (`TypstBackend`) will be clearly documented in release notes. The API follows semantic versioning:
+- Major version: Breaking changes to public API (e.g., `Backend` trait methods)
+- Minor version: New features, backward compatible enhancements
 - Patch version: Bug fixes, no API changes
+
+Internal module changes (compile, convert, filters, world) are not considered breaking changes as they are not part of the public API.
 
 ---
 
