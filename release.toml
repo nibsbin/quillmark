@@ -53,8 +53,6 @@ enable-all-features = false
 # [{{version}}]: https://github.com/nibsbin/quillmark/releases/tag/v{{version}}"""
 # exactly = 1
 
-# Crate-specific configuration
-[[package]]
-name = "quillmark-fixtures"
-# Don't publish test fixtures to crates.io
-publish = false
+# Note: To prevent a crate from being published, add this to its Cargo.toml:
+# [package]
+# publish = false
