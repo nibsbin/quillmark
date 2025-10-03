@@ -672,7 +672,108 @@ All crates follow [Semantic Versioning 2.0.0](https://semver.org/):
 - Use workspace verification step in publish workflow
 - Document version sync in CONTRIBUTING.md
 
-### Version Bumping Process
+### cargo-release Integration
+
+[cargo-release](https://github.com/crate-ci/cargo-release) is a powerful tool that automates the entire release process, from version bumping to publishing. It's the **recommended** approach for releases.
+
+#### Installation
+
+```bash
+cargo install cargo-release
+```
+
+#### Configuration
+
+Create a `release.toml` file in the workspace root to configure cargo-release behavior:
+
+```toml
+# Workspace-wide release configuration
+[workspace]
+# Publish all crates together with the same version
+consolidate-commits = true
+
+# Git commit and tag configuration
+pre-release-commit-message = "chore: release {{version}}"
+tag-name = "v{{version}}"
+tag-message = "Release {{version}}"
+
+# Allow releases from main branch only
+allow-branch = ["main"]
+
+# Default settings for all crates
+[workspace.metadata.release]
+sign-commit = false
+sign-tag = false
+push = true
+verify = true
+publish = true
+
+# Individual crate configuration
+[[package]]
+name = "quillmark-fixtures"
+# Don't publish test fixtures
+publish = false
+```
+
+#### Basic Usage
+
+**Dry-run mode** (preview changes without executing - always use this first):
+
+```bash
+# Preview a patch release
+cargo release patch
+
+# Preview a minor release
+cargo release minor
+
+# Preview a major release
+cargo release major
+```
+
+**Execute a release**:
+
+```bash
+# Execute a patch release (0.1.0 → 0.1.1)
+cargo release patch --execute
+
+# Execute a minor release (0.1.0 → 0.2.0)
+cargo release minor --execute
+
+# Execute a major release (0.1.0 → 1.0.0)
+cargo release major --execute
+
+# Release a specific version
+cargo release 0.3.0 --execute
+```
+
+**Advanced options**:
+
+```bash
+# Don't push to remote (for testing)
+cargo release patch --execute --no-push
+
+# Don't create git tag
+cargo release patch --execute --no-tag
+
+# Don't publish to crates.io
+cargo release patch --execute --no-publish
+
+# Skip confirmation prompts
+cargo release patch --execute --no-confirm
+```
+
+**Key Benefits of cargo-release**:
+- ✅ Automatically bumps versions across all workspace crates
+- ✅ Updates Cargo.lock
+- ✅ Creates git commits and tags
+- ✅ Publishes to crates.io in dependency order
+- ✅ Handles inter-crate dependencies correctly
+- ✅ Validates versions before publishing
+- ✅ Supports pre-release versions (alpha, beta, rc)
+
+### Manual Version Bumping Process
+
+If not using cargo-release, follow these manual steps:
 
 1. **Determine Version Bump Type**:
    - Breaking changes → MAJOR bump
@@ -754,13 +855,95 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Release Steps
 
-#### 1. Prepare Release Branch (Optional for Major/Minor)
+There are two approaches to releasing: **Using cargo-release (Recommended)** or **Manual Process**.
+
+#### Option A: Using cargo-release (Recommended)
+
+This is the streamlined, automated approach that handles all steps for you.
+
+**1. Prepare for Release**
+
+```bash
+# Ensure you're on main branch and up-to-date
+git checkout main
+git pull origin main
+
+# Ensure all tests pass
+cargo test --workspace --all-features
+
+# Update CHANGELOG.md with release notes
+vim CHANGELOG.md
+git add CHANGELOG.md
+git commit -m "docs: update CHANGELOG for release"
+```
+
+**2. Preview the Release**
+
+```bash
+# Dry-run to preview all changes
+cargo release minor  # or patch, major, or specific version like 0.2.0
+
+# This will show:
+# - Version changes
+# - Git commits that will be created
+# - Git tags that will be created
+# - Crates that will be published
+```
+
+**3. Execute the Release**
+
+```bash
+# Execute the release
+cargo release minor --execute
+
+# This will:
+# 1. Bump versions in all Cargo.toml files
+# 2. Update Cargo.lock
+# 3. Create a git commit
+# 4. Create a git tag (v0.2.0)
+# 5. Publish quillmark-core to crates.io
+# 6. Wait for crates.io indexing
+# 7. Publish quillmark-typst to crates.io
+# 8. Wait for crates.io indexing
+# 9. Publish quillmark to crates.io
+# 10. Push commits and tags to GitHub
+```
+
+**4. Create GitHub Release**
+
+After cargo-release completes:
+
+- Go to https://github.com/nibsbin/quillmark/releases/new
+- Select the tag that was just created (e.g., `v0.2.0`)
+- Release title: `v0.2.0`
+- Description: Copy relevant section from CHANGELOG.md
+- Click "Publish release"
+
+The `publish-crates.yml` workflow will run automatically when the GitHub release is published.
+
+**5. Verify Publication**
+
+```bash
+# Check crates.io
+open https://crates.io/crates/quillmark-core
+open https://crates.io/crates/quillmark-typst
+open https://crates.io/crates/quillmark
+
+# Verify installation works
+cargo install quillmark --version 0.2.0
+```
+
+#### Option B: Manual Release Process
+
+If you prefer manual control or cargo-release is unavailable:
+
+**1. Prepare Release Branch (Optional for Major/Minor)**
 
 ```bash
 git checkout -b release/v0.2.0
 ```
 
-#### 2. Update Versions
+**2. Update Versions**
 
 ```bash
 # Update all Cargo.toml files
@@ -772,7 +955,7 @@ sed -i 's/^version = ".*"/version = "0.2.0"/' quillmark-typst/Cargo.toml
 sed -i 's/^version = ".*"/version = "0.2.0"/' quillmark/Cargo.toml
 ```
 
-#### 3. Update CHANGELOG.md
+**3. Update CHANGELOG.md**
 
 ```bash
 # Move [Unreleased] changes to new version section
@@ -780,7 +963,7 @@ sed -i 's/^version = ".*"/version = "0.2.0"/' quillmark/Cargo.toml
 vim CHANGELOG.md
 ```
 
-#### 4. Commit and Tag
+**4. Commit and Tag**
 
 ```bash
 # Commit version bump
@@ -795,7 +978,7 @@ git push origin main
 git push origin v0.2.0
 ```
 
-#### 5. Create GitHub Release
+**5. Create GitHub Release**
 
 - Go to https://github.com/nibsbin/quillmark/releases/new
 - Select tag: `v0.2.0`
@@ -803,14 +986,14 @@ git push origin v0.2.0
 - Description: Copy relevant section from CHANGELOG.md
 - Click "Publish release"
 
-#### 6. Automatic Publishing
+**6. Automatic Publishing**
 
 The `publish-crates.yml` workflow will automatically:
 - Verify version consistency
 - Publish crates to crates.io in dependency order
 - Create release summary
 
-#### 7. Verify Publication
+**7. Verify Publication**
 
 ```bash
 # Check crates.io
@@ -822,7 +1005,7 @@ open https://crates.io/crates/quillmark
 cargo install quillmark --version 0.2.0
 ```
 
-#### 8. Announce Release
+**8. Announce Release**
 
 - Update documentation site
 - Announce on social media (Twitter, Reddit, etc.)
@@ -1324,6 +1507,8 @@ jobs:
 
 ### A. Useful Commands
 
+#### Development Commands
+
 ```bash
 # Check all crates
 cargo check --workspace --all-features
@@ -1356,6 +1541,41 @@ cargo tarpaulin --workspace --all-features --out Html
 cargo bench
 ```
 
+#### cargo-release Commands
+
+```bash
+# Install cargo-release
+cargo install cargo-release
+
+# Preview release changes (dry-run)
+cargo release patch              # Preview patch release
+cargo release minor              # Preview minor release
+cargo release major              # Preview major release
+cargo release 0.3.0              # Preview specific version
+
+# Execute releases
+cargo release patch --execute    # Execute patch release
+cargo release minor --execute    # Execute minor release
+cargo release major --execute    # Execute major release
+
+# Release with options
+cargo release patch --execute --no-push       # Don't push to remote
+cargo release patch --execute --no-tag        # Don't create git tag
+cargo release patch --execute --no-publish    # Don't publish to crates.io
+cargo release patch --execute --no-confirm    # Skip confirmations
+
+# Pre-release versions
+cargo release alpha --execute    # Create alpha pre-release
+cargo release beta --execute     # Create beta pre-release
+cargo release rc --execute       # Create release candidate
+
+# Show current config
+cargo release config
+
+# Show what changes since last release
+cargo release changes
+```
+
 ### B. Badge Examples
 
 For README.md files:
@@ -1370,17 +1590,23 @@ For README.md files:
 
 ### C. Example Version Bump Script
 
+**Note**: This script is for manual version bumping. Consider using `cargo-release` instead for automated version management (see Version Management section).
+
 **File**: `scripts/bump-version.sh`
 
 ```bash
 #!/bin/bash
 # Bump version across all workspace crates
+# Note: cargo-release is the recommended tool for automated releases
 
 set -e
 
 if [ -z "$1" ]; then
     echo "Usage: $0 <new-version>"
     echo "Example: $0 0.2.0"
+    echo ""
+    echo "Recommended: Use cargo-release instead:"
+    echo "  cargo release minor --execute"
     exit 1
 fi
 
@@ -1410,16 +1636,28 @@ echo "  3. Create and push tag: git tag v$NEW_VERSION && git push origin v$NEW_V
 
 ### D. Resources
 
+#### Rust and Cargo
+
 - [The Cargo Book](https://doc.rust-lang.org/cargo/)
 - [crates.io Publishing Guide](https://doc.rust-lang.org/cargo/reference/publishing.html)
 - [docs.rs Documentation](https://docs.rs/about)
+- [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/)
+
+#### Release Management
+
+- [cargo-release](https://github.com/crate-ci/cargo-release) - Automated release tool
+- [cargo-release Documentation](https://github.com/crate-ci/cargo-release/blob/master/docs/reference.md)
 - [Semantic Versioning](https://semver.org/)
 - [Keep a Changelog](https://keepachangelog.com/)
+- [Conventional Commits](https://www.conventionalcommits.org/)
+
+#### CI/CD
+
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/)
+- [GitHub Actions for Rust](https://github.com/actions-rs)
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2024-01-15  
-**Status**: Planning Phase - Ready for Implementation
+**Document Version**: 1.1  
+**Last Updated**: 2025-01-15  
+**Status**: Planning Phase - cargo-release Integration Complete

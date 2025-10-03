@@ -1,0 +1,60 @@
+# cargo-release configuration
+# https://github.com/crate-ci/cargo-release/blob/master/docs/reference.md
+
+# Allow releases only from the main branch
+allow-branch = ["main"]
+
+# Consolidate all workspace crate commits into a single commit
+consolidate-commits = true
+
+# Git commit and tag settings
+pre-release-commit-message = "chore: release {{version}}"
+tag-name = "v{{version}}"
+tag-message = "Release {{version}}"
+
+# Don't sign commits/tags by default (can be overridden with --sign)
+sign-commit = false
+sign-tag = false
+
+# Push commits and tags to origin
+push = true
+push-remote = "origin"
+
+# Publish to crates.io
+publish = true
+
+# Verify crates before publishing
+verify = true
+
+# How to handle workspace dependency versions
+# "upgrade" - always upgrade to the latest version
+# "fix" - only upgrade if the old version requirement doesn't match
+dependent-version = "upgrade"
+
+# Enable all features when building/testing
+enable-all-features = false
+
+# Pre-release replacements (example - uncomment and modify as needed)
+# [[pre-release-replacements]]
+# file = "CHANGELOG.md"
+# search = "## \\[Unreleased\\]"
+# replace = """
+# ## [Unreleased]
+# 
+# ## [{{version}}] - {{date}}"""
+# exactly = 1
+
+# [[pre-release-replacements]]
+# file = "CHANGELOG.md"
+# search = "<!-- next-url -->"
+# replace = """
+# <!-- next-url -->
+# [Unreleased]: https://github.com/nibsbin/quillmark/compare/v{{version}}...HEAD
+# [{{version}}]: https://github.com/nibsbin/quillmark/releases/tag/v{{version}}"""
+# exactly = 1
+
+# Crate-specific configuration
+[[package]]
+name = "quillmark-fixtures"
+# Don't publish test fixtures to crates.io
+publish = false
