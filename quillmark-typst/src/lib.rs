@@ -1,12 +1,80 @@
-mod compile;
-mod convert;
+//! Typst backend for Quillmark document rendering.
+//!
+//! This crate provides a complete Typst backend implementation that converts Markdown
+//! documents to PDF and SVG formats via the Typst typesetting system.
+//!
+//! # Overview
+//!
+//! The primary entry point is the [`TypstBackend`] struct, which implements the
+//! [`Backend`] trait from `quillmark-core`. Users typically interact with this backend
+//! through the high-level `Workflow` API from the `quillmark` crate.
+//!
+//! # Features
+//!
+//! - Converts CommonMark Markdown to Typst markup
+//! - Compiles Typst documents to PDF and SVG formats
+//! - Provides template filters for YAML data transformation
+//! - Manages fonts, assets, and packages dynamically
+//! - Thread-safe for concurrent rendering
+//!
+//! # Example
+//!
+//! ```no_run
+//! use quillmark_typst::TypstBackend;
+//! use quillmark_core::{Backend, Quill, OutputFormat};
+//!
+//! let backend = TypstBackend::default();
+//! let quill = Quill::from_path("path/to/quill").unwrap();
+//!
+//! // Use with Workflow API (recommended)
+//! // let workflow = Workflow::new(Box::new(backend), quill);
+//! ```
+//!
+//! # Documentation
+//!
+//! For detailed API documentation, see [API.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-typst/API.md).
+//!
+//! For Markdown to Typst conversion details, see [CONVERT.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-typst/CONVERT.md).
+
+pub mod compile;
+pub mod convert;
 mod filters;
 mod world;
 use filters::{
     asset_filter, content_filter, date_filter, dict_filter, lines_filter, string_filter,
 };
 use quillmark_core::{Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions};
-/// Typst backend implementation
+
+/// Typst backend implementation for Quillmark.
+///
+/// This struct implements the [`Backend`] trait to provide Typst rendering capabilities.
+/// It supports compilation to PDF and SVG formats.
+///
+/// # Supported Formats
+///
+/// - [`OutputFormat::Pdf`] - Portable Document Format
+/// - [`OutputFormat::Svg`] - Scalable Vector Graphics (one file per page)
+///
+/// # Template Filters
+///
+/// The backend registers the following filters for use in Typst templates:
+///
+/// - `String` - Converts values to Typst string literals
+/// - `Lines` - Converts arrays to Typst arrays
+/// - `Date` - Converts ISO 8601 dates to Typst datetime objects
+/// - `Dict` - Converts YAML/JSON objects to Typst dictionaries
+/// - `Content` - Converts Markdown to Typst markup
+/// - `Asset` - Resolves asset paths for Typst
+///
+/// # Examples
+///
+/// ```
+/// use quillmark_typst::TypstBackend;
+/// use quillmark_core::Backend;
+///
+/// let backend = TypstBackend::default();
+/// assert_eq!(backend.id(), "typst");
+/// ```
 pub struct TypstBackend;
 
 impl Backend for TypstBackend {
@@ -79,6 +147,15 @@ impl Backend for TypstBackend {
 }
 
 impl Default for TypstBackend {
+    /// Creates a new [`TypstBackend`] instance.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use quillmark_typst::TypstBackend;
+    ///
+    /// let backend = TypstBackend::default();
+    /// ```
     fn default() -> Self {
         Self
     }
