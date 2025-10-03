@@ -1,4 +1,4 @@
-#![doc = include_str!("convert.md")]
+#![doc = include_str!("../docs/convert.md")]
 
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 
