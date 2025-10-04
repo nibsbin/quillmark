@@ -12,15 +12,11 @@
 
 See `designs/DESIGN.md` for complete architecture.
 
-## Documentation Pattern (Critical)
+## Documentation Strategy
 
-**Hybrid strategy** - minimal inline docs + external markdown via `#[doc = include_str!("../docs/{module}.md")]`
-
-**Gotcha**: Intra-doc links MUST use module-qualified paths:
-- ✅ `` [`compile::compile_to_pdf()`] ``
-- ❌ `` [`compile_to_pdf`] `` (breaks when included in lib.rs)
-
-Always run `cargo doc --no-deps` after doc changes.
+- Use standard in-line Rust doc comments (`///`)
+- Only create minimal examples for public APIs
+- Err on the side of brevity
 
 ## Build & Test
 
@@ -93,16 +89,6 @@ cargo release minor --execute    # Execute
 ```
 
 All crates share version (automated via `release.toml`). See `designs/CI_CD.md`.
-
-## Common Pitfalls
-
-1. Doc links without module qualification
-2. Virtual paths with backslashes or `Path::join()`
-3. Missing character escaping for Typst
-4. Non-contiguous metadata blocks
-5. Hardcoded fixture paths
-6. Unsynchronized versions
-7. Direct MiniJinja imports
 
 ## Reference
 
