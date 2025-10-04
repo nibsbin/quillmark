@@ -24,6 +24,7 @@ quillmark-typst = { workspace = true }
 quillmark-fixtures = { workspace = true }
 
 [features]
-default = ["typst"]
+default = ["typst", "native-fonts"]
 typst = ["dep:quillmark-typst"]
 
+native-fonts = ["quillmark-typst?/native-fonts"]

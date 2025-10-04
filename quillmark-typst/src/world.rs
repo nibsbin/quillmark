@@ -6,6 +6,7 @@ use typst::syntax::{package::PackageSpec, FileId, Source, VirtualPath};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, World};
+#[cfg(feature = "native-fonts")]
 use typst_kit::fonts::{FontSearcher, FontSlot};
 
 use quillmark_core::Quill;
@@ -30,7 +31,8 @@ use quillmark_core::Quill;
 pub struct QuillWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
-    fonts: Vec<Font>,          // For fonts loaded from assets
+    fonts: Vec<Font>, // For fonts loaded from assets
+    #[cfg(feature = "native-fonts")]
     font_slots: Vec<FontSlot>, // For lazy-loaded system fonts
     source: Source,
     sources: HashMap<FileId, Source>,
@@ -62,23 +64,33 @@ impl QuillWorld {
             }
         }
 
-        // Now initialize FontSearcher for system fonts (lazy loading)
-        // These will be added AFTER asset fonts in the book
-        let searcher_fonts = FontSearcher::new().include_system_fonts(true).search();
+        #[cfg(feature = "native-fonts")]
+        let font_slots = {
+            // Now initialize FontSearcher for system fonts (lazy loading)
+            // These will be added AFTER asset fonts in the book
+            let searcher_fonts = FontSearcher::new().include_system_fonts(true).search();
 
-        // Add system fonts to the book after asset fonts
-        // Copy all FontInfo entries from the system font book
-        let mut system_font_index = 0;
-        while let Some(font_info) = searcher_fonts.book.info(system_font_index) {
-            book.push(font_info.clone());
-            system_font_index += 1;
-        }
-        let font_slots = searcher_fonts.fonts;
+            // Add system fonts to the book after asset fonts
+            // Copy all FontInfo entries from the system font book
+            let mut system_font_index = 0;
+            while let Some(font_info) = searcher_fonts.book.info(system_font_index) {
+                book.push(font_info.clone());
+                system_font_index += 1;
+            }
+            searcher_fonts.fonts
+        };
 
         // Error if no fonts are available at all
+        #[cfg(feature = "native-fonts")]
         if fonts.is_empty() && font_slots.is_empty() {
             return Err(
                 "No fonts found: neither quill assets nor system fonts are available".into(),
+            );
+        }
+        #[cfg(not(feature = "native-fonts"))]
+        if fonts.is_empty() {
+            return Err(
+                "No fonts found in quill assets. Provide fonts in assets/fonts/ or assets/ directory.".into(),
             );
         }
 
@@ -100,6 +112,7 @@ impl QuillWorld {
             library: LazyHash::new(Library::default()),
             book: LazyHash::new(book),
             fonts,
+            #[cfg(feature = "native-fonts")]
             font_slots,
             source,
             sources,
@@ -169,6 +182,7 @@ impl QuillWorld {
     }
 
     /// Download and load external packages specified in Quill.toml [typst] section
+    #[cfg(feature = "native-fonts")]
     fn download_and_load_external_packages(
         quill: &Quill,
         sources: &mut HashMap<FileId, Source>,
@@ -234,7 +248,23 @@ impl QuillWorld {
         Ok(())
     }
 
+    /// Download and load external packages specified in Quill.toml [typst] section
+    /// When native-fonts feature is disabled, this function does nothing (WASM compatibility)
+    #[cfg(not(feature = "native-fonts"))]
+    fn download_and_load_external_packages(
+        quill: &Quill,
+        _sources: &mut HashMap<FileId, Source>,
+        _binaries: &mut HashMap<FileId, Bytes>,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let packages_list = quill.typst_packages();
+        if !packages_list.is_empty() {
+            eprintln!("Warning: External package download is not supported without the 'native-fonts' feature. Packages specified in Quill.toml will be ignored.");
+        }
+        Ok(())
+    }
+
     /// Load a package from the filesystem (for downloaded packages)
+    #[cfg(feature = "native-fonts")]
     fn load_package_from_filesystem(
         package_dir: &Path,
         sources: &mut HashMap<FileId, Source>,
@@ -283,6 +313,7 @@ impl QuillWorld {
     }
 
     /// Recursively load files from a package directory on the filesystem
+    #[cfg(feature = "native-fonts")]
     fn load_package_files_recursive(
         current_dir: &Path,
         package_root: &Path,
@@ -518,9 +549,12 @@ impl World for QuillWorld {
 
         // If not, check if we need to lazy-load from font slots
         // The index needs to be adjusted for the font_slots
-        let font_slot_index = index - self.fonts.len();
-        if let Some(font_slot) = self.font_slots.get(font_slot_index) {
-            return font_slot.get();
+        #[cfg(feature = "native-fonts")]
+        {
+            let font_slot_index = index - self.fonts.len();
+            if let Some(font_slot) = self.font_slots.get(font_slot_index) {
+                return font_slot.get();
+            }
         }
 
         None
