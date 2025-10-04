@@ -7,7 +7,7 @@
 **See also:**
 - [quillmark-core/API.md](quillmark-core/API.md) - Comprehensive API reference for the core library
 - [quillmark-core/PARSE.md](quillmark-core/PARSE.md) - Detailed parsing and Extended YAML Metadata Standard documentation
-- [ERROR_PROPOSAL.md](ERROR_PROPOSAL.md) - Error handling evaluation and improvement proposals
+- [ERROR.md](ERROR.md) - Error handling system documentation and implementation guide
 
 ## Table of Contents
 
@@ -776,7 +776,7 @@ struct PackageInfo {
 
 ## Error Handling Patterns
 
-> **📋 Status Report:** See [ERROR_PROPOSAL.md](ERROR_PROPOSAL.md) for comprehensive evaluation of current error handling implementation, identified gaps, and proposed improvements.
+> **📋 Implementation Guide:** See [ERROR.md](ERROR.md) for comprehensive documentation of the error handling system, including usage examples, migration notes, and future improvement plans.
 
 This project uses a **simple, production‑usable, structured error strategy** that:
 
