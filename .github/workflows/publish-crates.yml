@@ -1,0 +1,103 @@
+name: Publish to crates.io
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 0.1.0)'
+        required: true
+        type: string
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: Publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            # Extract version from tag (remove 'v' prefix)
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify version consistency
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Verifying version: $VERSION"
+          
+          # Check workspace version
+          WORKSPACE_VERSION=$(grep -A 1 '^\[workspace.package\]' Cargo.toml | grep '^version' | cut -d'"' -f2)
+          if [ "$WORKSPACE_VERSION" != "$VERSION" ]; then
+            echo "Error: Workspace version ($WORKSPACE_VERSION) does not match target version ($VERSION)"
+            exit 1
+          fi
+          
+          # Check individual crate versions
+          for crate in quillmark-core quillmark-typst quillmark; do
+            CRATE_VERSION=$(grep '^version.workspace = true' "$crate/Cargo.toml" > /dev/null && echo "$WORKSPACE_VERSION" || grep '^version' "$crate/Cargo.toml" | cut -d'"' -f2)
+            if [ "$CRATE_VERSION" != "$VERSION" ]; then
+              echo "Error: Crate $crate version ($CRATE_VERSION) does not match target version ($VERSION)"
+              exit 1
+            fi
+          done
+          
+          echo "✓ All versions are synchronized at $VERSION"
+
+      - name: Run CI checks
+        run: |
+          cargo check --workspace --all-features
+          cargo test --workspace --all-features
+          cargo fmt --all -- --check
+
+      - name: Dry-run publish quillmark-core
+        run: cargo publish --dry-run -p quillmark-core
+
+      - name: Dry-run publish quillmark-typst
+        run: cargo publish --dry-run -p quillmark-typst
+
+      - name: Dry-run publish quillmark
+        run: cargo publish --dry-run -p quillmark || echo "Note - quillmark dry-run failed as expected until dependencies are published"
+
+      - name: Publish quillmark-core
+        run: cargo publish -p quillmark-core --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io indexing
+        run: sleep 30
+
+      - name: Publish quillmark-typst
+        run: cargo publish -p quillmark-typst --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Wait for crates.io indexing
+        run: sleep 30
+
+      - name: Publish quillmark
+        run: cargo publish -p quillmark --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+      - name: Verify publication
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Published version $VERSION to crates.io"
+          echo "Verify at:"
+          echo "  - https://crates.io/crates/quillmark-core"
+          echo "  - https://crates.io/crates/quillmark-typst"
+          echo "  - https://crates.io/crates/quillmark"
+          echo ""
+          echo "Wait for docs.rs builds at:"
+          echo "  - https://docs.rs/quillmark-core"
+          echo "  - https://docs.rs/quillmark-typst"
+          echo "  - https://docs.rs/quillmark"
