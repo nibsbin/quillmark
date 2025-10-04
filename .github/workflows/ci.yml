@@ -18,6 +18,7 @@ jobs:
         with:
           shared-key: ubuntu-latest
           cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Check (no default features)
         run: cargo check --workspace --no-default-features --locked
