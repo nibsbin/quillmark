@@ -19,9 +19,8 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
 
 Add Quillmark to your `Cargo.toml`:
 
-```toml
-[dependencies]
-quillmark = "0.0.1"
+```bash
+cargo add quillmark
 ```
 
 ## Quick Start
