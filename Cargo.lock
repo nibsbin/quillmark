@@ -1589,7 +1589,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "quillmark-core",
@@ -1603,7 +1603,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-core"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "minijinja",
@@ -1617,7 +1617,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fixtures"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "quillmark",
  "quillmark-typst",
@@ -1625,7 +1625,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-typst"
-version = "0.0.10"
+version = "0.0.11"
 dependencies = [
  "anyhow",
  "dirs",
