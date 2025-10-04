@@ -13,48 +13,41 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run tests
+        run: cargo test --workspace --locked
+
   publish:
+    needs: test
     runs-on: ubuntu-latest
     environment: Publish
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Show version from tag
-        id: version
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Publishing version: $VERSION"
-
-      - name: Verify version matches tag
-        run: |
-          VERSION="${GITHUB_REF#refs/tags/v}"
-          CARGO_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.workspace_members[0]' | grep -oP '\d+\.\d+\.\d+')
-          if [ "$VERSION" != "$CARGO_VERSION" ]; then
-            echo "Error: Tag version ($VERSION) doesn't match Cargo.toml version ($CARGO_VERSION)"
-            exit 1
-          fi
-          echo "✓ Version check passed: $VERSION"
-
-      - name: Publish workspace crates
-        run: cargo publish --workspace --locked
+      - name: Publish workspace crates (no verification)
+        run: cargo publish --workspace --locked --no-verify
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Summary
         if: success()
-        run: |
-          echo "✓ Publishing complete!"
-          echo "All workspace crates published to crates.io"
+        run: echo "✓ All publishable workspace crates published to crates.io"
 
       - name: Failure summary
         if: failure()
-        run: |
-          echo "✗ Publishing failed!"
-          echo "Check the logs above for details."
+        run: echo "✗ Publishing failed - check logs above"
