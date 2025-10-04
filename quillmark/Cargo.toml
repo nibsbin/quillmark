@@ -6,6 +6,9 @@ include.workspace = true
 readme.workspace = true
 description = "Quillmark engine API"
 license = "Apache-2.0"
+documentation = "https://docs.rs/quillmark"
+homepage = "https://github.com/nibsbin/quillmark"
+repository = "https://github.com/nibsbin/quillmark"
 
 [dependencies]
 quillmark-core = { workspace = true }
