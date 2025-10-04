@@ -18,7 +18,7 @@ let typst_content = "#set document(title: \"Test\")\n= Hello";
 
 let pdf_bytes = compile_to_pdf(&quill, typst_content)?;
 std::fs::write("output.pdf", pdf_bytes)?;
-# Ok::<(), Box<dyn std::error::Error>>(())
+# Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
 ```
 
 ## Process
