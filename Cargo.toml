@@ -40,10 +40,10 @@ dirs = "6.0"
 quillmark-core = { version = "0.0.7", path = "quillmark-core" }
 quillmark-typst = { version = "0.0.7", path = "quillmark-typst" }
 quillmark = { version = "0.0.7", path = "quillmark" }
-quillmark-fixtures = { path = "quillmark-fixtures" }
 
 # Test and dev dependencies
 tempfile = "~3.23"
+quillmark-fixtures = { path = "quillmark-fixtures" }
 
 [workspace.metadata.workspaces]
 # Exclude fixtures from publishing since it's dev-only
