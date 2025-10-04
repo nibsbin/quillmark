@@ -1,6 +1,6 @@
 //! High-level orchestration API for backends and workflows. See [module docs](self) for usage patterns.
 
-#![doc = include_str!("../docs/quillmark.md")]
+#![doc = include_str!("../docs/orchestration.md")]
 
 use quillmark_core::{
     decompose, Backend, Glue, OutputFormat, Quill, RenderError, RenderResult, RenderOptions,
@@ -40,7 +40,6 @@ impl<'a> From<&'a std::borrow::Cow<'a, str>> for QuillRef<'a> {
 }
 
 /// High-level engine for orchestrating backends and quills. See [module docs](self) for usage patterns.
-#[doc = include_str!("../docs/quillmark.md")]
 pub struct Quillmark {
     backends: HashMap<String, Box<dyn Backend>>,
     quills: HashMap<String, Quill>,
@@ -144,7 +143,6 @@ impl Default for Quillmark {
 }
 
 /// Sealed workflow for rendering Markdown documents. See [module docs](self) for usage patterns.
-#[doc = include_str!("../docs/workflow.md")]
 pub struct Workflow {
     backend: Box<dyn Backend>,
     quill: Quill,

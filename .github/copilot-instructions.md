@@ -7,7 +7,7 @@
 **Workspace structure** (publish order `core` → `typst` → `quillmark`, synchronized versions):
 - `quillmark-core/` - Foundation (parsing, templating, Backend trait)
 - `quillmark-typst/` - Typst backend implementation
-- `quillmark/` - Sealed engine API
+- `quillmark/` - Orchestration layer (Quillmark engine and workflows)
 - `quillmark-fixtures/` - Test resources (not published)
 
 See `designs/DESIGN.md` for complete architecture.
