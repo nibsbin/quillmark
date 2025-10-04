@@ -690,14 +690,9 @@ for target in "${targets[@]}"; do
   
   wasm-pack build quillmark-web \
     --target "$target" \
-    --out-dir "../pkg-$target" \
+    --out-dir "../pkg/$target" \
     --release \
     --scope quillmark
-    
-  # Copy to pkg/ directory for default target (bundler)
-  if [ "$target" = "bundler" ]; then
-    cp -r "pkg-$target" pkg
-  fi
 done
 
 echo "WASM build complete!"
@@ -738,7 +733,7 @@ echo
 echo
 
 echo "=== Build Complete ==="
-echo "WASM modules: pkg/, pkg-nodejs/, pkg-web/"
+echo "WASM modules: pkg/bundler/, pkg/nodejs/, pkg/web/"
 echo "TypeScript: typescript/dist/"
 ```
 
@@ -831,7 +826,7 @@ jobs:
         run: |
           wasm-pack build quillmark-web \
             --target bundler \
-            --out-dir ../pkg \
+            --out-dir ../pkg/bundler \
             --release \
             --scope quillmark
 
@@ -839,7 +834,7 @@ jobs:
         run: |
           wasm-pack build quillmark-web \
             --target nodejs \
-            --out-dir ../pkg-nodejs \
+            --out-dir ../pkg/nodejs \
             --release \
             --scope quillmark
 
@@ -847,16 +842,16 @@ jobs:
         run: |
           wasm-pack build quillmark-web \
             --target web \
-            --out-dir ../pkg-web \
+            --out-dir ../pkg/web \
             --release \
             --scope quillmark
 
       - name: Check WASM size
         run: |
           echo "WASM Binary Sizes:"
-          ls -lh pkg/*.wasm
-          ls -lh pkg-nodejs/*.wasm
-          ls -lh pkg-web/*.wasm
+          ls -lh pkg/bundler/*.wasm
+          ls -lh pkg/nodejs/*.wasm
+          ls -lh pkg/web/*.wasm
 
       - name: Run WASM tests
         run: wasm-pack test --node quillmark-web
@@ -867,8 +862,6 @@ jobs:
           name: wasm-modules
           path: |
             pkg/
-            pkg-nodejs/
-            pkg-web/
 
   build-typescript:
     name: Build TypeScript Wrapper

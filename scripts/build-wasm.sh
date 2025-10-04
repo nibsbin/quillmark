@@ -22,14 +22,21 @@ for target in "${targets[@]}"; do
     
     wasm-pack build quillmark-wasm \
         --target "$target" \
-        --out-dir "../pkg-$target" \
+        --out-dir "../pkg/$target" \
         --out-name wasm \
         --release \
         --scope quillmark
         
     # Update package name to @quillmark/wasm
-    if [ -f "pkg-$target/package.json" ]; then
-        sed -i '' 's/"@quillmark\/quillmark-wasm"/"@quillmark\/wasm"/' "pkg-$target/package.json"
+    # Use sed in a cross-platform way
+    if [ -f "pkg/$target/package.json" ]; then
+        if sed --version 2>&1 | grep -q GNU; then
+            # GNU sed (Linux)
+            sed -i 's/"@quillmark\/quillmark-wasm"/"@quillmark\/wasm"/' "pkg/$target/package.json"
+        else
+            # BSD sed (macOS)
+            sed -i '' 's/"@quillmark\/quillmark-wasm"/"@quillmark\/wasm"/' "pkg/$target/package.json"
+        fi
     fi
 done
 
@@ -37,5 +44,5 @@ echo ""
 echo "WASM build complete!"
 echo "Output directories:"
 for target in "${targets[@]}"; do
-    echo "  - pkg-$target/"
+    echo "  - pkg/$target/"
 done

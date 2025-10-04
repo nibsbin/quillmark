@@ -35,4 +35,3 @@ quillmark-fixtures/output/
 
 # WASM build outputs
 pkg/
-pkg-*/
