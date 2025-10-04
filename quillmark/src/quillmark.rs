@@ -39,7 +39,6 @@ impl<'a> From<&'a std::borrow::Cow<'a, str>> for QuillRef<'a> {
 }
 
 /// High-level engine for orchestrating backends and quills. See [module docs](self) for usage patterns.
-#[doc = include_str!("../docs/quillmark.md")]
 pub struct Quillmark {
     backends: HashMap<String, Box<dyn Backend>>,
     quills: HashMap<String, Quill>,

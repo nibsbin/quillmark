@@ -8,7 +8,6 @@ use quillmark_core::{
 use std::collections::HashMap;
 
 /// Sealed workflow for rendering Markdown documents. See [module docs](self) for usage patterns.
-#[doc = include_str!("../docs/workflow.md")]
 pub struct Workflow {
     backend: Box<dyn Backend>,
     quill: Quill,

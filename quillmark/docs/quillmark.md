@@ -16,8 +16,8 @@ registers all backends based on enabled features:
 ## Workflow
 
 1. Create an engine with [`Quillmark::new`]
-2. Register quills with [`register_quill`](Self::register_quill)
-3. Load workflows with [`load`](Self::load)
+2. Register quills with [`register_quill`](Quillmark::register_quill)
+3. Load workflows with [`load`](Quillmark::load)
 4. Render documents using the workflow
 
 ## Examples
