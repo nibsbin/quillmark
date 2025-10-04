@@ -11,7 +11,7 @@ use quillmark_core::Quill;
 pub fn compile_to_pdf(
     quill: &Quill,
     glued_content: &str,
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
     println!("Using quill: {}", quill.name);
     let world = QuillWorld::new(quill, glued_content)?;
     let document = compile_document(&world)?;
@@ -26,7 +26,7 @@ pub fn compile_to_pdf(
 pub fn compile_to_svg(
     quill: &Quill,
     glued_content: &str,
-) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
+) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
     let world = QuillWorld::new(quill, glued_content)?;
     let document = compile_document(&world)?;
 
@@ -40,7 +40,7 @@ pub fn compile_to_svg(
 }
 
 /// Internal compilation function
-fn compile_document(world: &QuillWorld) -> Result<PagedDocument, Box<dyn std::error::Error>> {
+fn compile_document(world: &QuillWorld) -> Result<PagedDocument, Box<dyn std::error::Error + Send + Sync>> {
     let Warned {
         output,
         warnings: _,
