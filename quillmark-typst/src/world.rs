@@ -39,7 +39,7 @@ pub struct QuillWorld {
 
 impl QuillWorld {
     /// Create a new QuillWorld from a quill template and Typst content
-    pub fn new(quill: &Quill, main: &str) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new(quill: &Quill, main: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut sources = HashMap::new();
         let mut binaries = HashMap::new();
 
@@ -105,7 +105,7 @@ impl QuillWorld {
     }
 
     /// Load fonts from the quill's in-memory file system
-    fn load_fonts_from_quill(quill: &Quill) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error>> {
+    fn load_fonts_from_quill(quill: &Quill) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
         let mut font_data = Vec::new();
 
         // Look for fonts in assets/fonts/ first
@@ -147,7 +147,7 @@ impl QuillWorld {
     fn load_assets_from_quill(
         quill: &Quill,
         binaries: &mut HashMap<FileId, Bytes>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get all files that start with "assets/"
         let asset_paths = quill.find_files("assets/*");
 
@@ -168,7 +168,7 @@ impl QuillWorld {
         quill: &Quill,
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use typst_kit::download::{Downloader, ProgressSink};
         use typst_kit::package::{PackageStorage, DEFAULT_PACKAGES_SUBDIR};
 
@@ -235,7 +235,7 @@ impl QuillWorld {
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
         spec: PackageSpec,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use std::fs;
 
         // Read typst.toml to get package info
@@ -284,7 +284,7 @@ impl QuillWorld {
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
         spec: &PackageSpec,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use std::fs;
 
         for entry in fs::read_dir(current_dir)? {
@@ -331,7 +331,7 @@ impl QuillWorld {
         quill: &Quill,
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         println!("Loading packages from quill's in-memory file system");
 
         // Get all subdirectories in packages/
@@ -417,7 +417,7 @@ impl QuillWorld {
         binaries: &mut HashMap<FileId, Bytes>,
         package_spec: Option<PackageSpec>,
         entrypoint: Option<&str>,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Find all files in the package directory
         let package_pattern = format!("{}/*", package_dir.to_string_lossy());
         let package_files = quill.find_files(&package_pattern);
@@ -547,7 +547,7 @@ struct PackageInfo {
 }
 
 /// Parse a typst.toml for package information with better error handling
-fn parse_package_toml(content: &str) -> Result<PackageInfo, Box<dyn std::error::Error>> {
+fn parse_package_toml(content: &str) -> Result<PackageInfo, Box<dyn std::error::Error + Send + Sync>> {
     let value: toml::Value = toml::from_str(content)?;
 
     let package_section = value
