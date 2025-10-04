@@ -38,7 +38,7 @@ The `@quillmark/web` library will provide a WebAssembly-based TypeScript wrapper
 
 ### Target Environments
 
-- **Node.js** (v18+): Server-side rendering, CLI tools, build processes
+- **Node.js** (v20+): Server-side rendering, CLI tools, build processes
 - **Browsers**: Client-side document generation (with appropriate feature detection)
 - **Deno** (v1.30+): Alternative runtime support
 - **Bun** (v1.0+): Modern JavaScript runtime
@@ -662,7 +662,7 @@ quillmark/
     "vitest": "^1.0.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }
 ```
@@ -916,7 +916,7 @@ jobs:
     
     strategy:
       matrix:
-        node-version: [18, 20, 21]
+        node-version: [20, 21]
     
     steps:
       - name: Checkout repository
