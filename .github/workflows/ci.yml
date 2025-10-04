@@ -43,7 +43,7 @@ jobs:
 
       # Pre-build dependencies to warm the cache for parallel jobs
       - name: Build dependencies
-        run: cargo build --workspace --all-features --locked --test
+        run: cargo build --workspace --all-features --locked
 
   lint:
     runs-on: ubuntu-latest
