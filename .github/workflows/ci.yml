@@ -14,14 +14,20 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0  # Disable incremental compilation for CI (faster clean builds)
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+  CARGO_PROFILE_DEV_DEBUG: 0  # Disable debug info in dev builds (much faster)
+  CARGO_PROFILE_TEST_DEBUG: 0  # Disable debug info in test builds
 
 jobs:
-  lint:
+  # Single preparation job to share checkout and cache across jobs
+  prepare:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Rust (stable)
+      - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
@@ -29,19 +35,51 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ubuntu-latest
+          shared-key: "ci-${{ hashFiles('**/Cargo.lock') }}"
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      # Pre-build dependencies to warm the cache for parallel jobs
+      - name: Build dependencies
+        run: cargo build --workspace --all-features --locked --tests -j $(nproc)
+
+  lint:
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-${{ hashFiles('**/Cargo.lock') }}"
+          cache-on-failure: true
 
       - name: Format check
         run: cargo fmt --all -- --check
 
+      # TODO: formalize Clippy later
+      # - name: Clippy check
+      #   run: cargo clippy --workspace --all-features --all-targets --locked -- -D warnings
+
   test:
     runs-on: ubuntu-latest
+    needs: prepare
     strategy:
       fail-fast: false
       matrix:
-        features: ["", "--all-features", "--no-default-features"]
+        features: 
+          - name: "default"
+            flags: ""
+          - name: "all-features"
+            flags: "--all-features"
+          - name: "no-default"
+            flags: "--no-default-features"
 
     steps:
       - uses: actions/checkout@v4
@@ -52,12 +90,48 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: ubuntu-latest
+          shared-key: "ci-${{ hashFiles('**/Cargo.lock') }}"
           cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Tests ${{ matrix.features || 'default features' }}
-        run: cargo test --workspace ${{ matrix.features }} --locked
+      # Run tests and doctests in parallel using nextest (faster test runner)
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
 
-      - name: Doctests ${{ matrix.features || 'default features' }}
-        run: cargo test --doc --workspace ${{ matrix.features }} --locked
+      - name: Tests (${{ matrix.features.name }})
+        run: cargo nextest run --workspace ${{ matrix.features.flags }} --locked
+
+      - name: Doctests (${{ matrix.features.name }})
+        run: cargo test --doc --workspace ${{ matrix.features.flags }} --locked
+
+  docs:
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-${{ hashFiles('**/Cargo.lock') }}"
+          cache-on-failure: true
+
+      - name: Build docs
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+        run: cargo doc --workspace --no-deps --all-features --locked
+
+  # Optional: Add a final job that all checks must pass
+  ci-success:
+    runs-on: ubuntu-latest
+    needs: [lint, test, docs]
+    if: always()
+    steps:
+      - name: Check all jobs succeeded
+        run: |
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            echo "One or more jobs failed"
+            exit 1
+          fi
