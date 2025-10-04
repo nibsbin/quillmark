@@ -25,17 +25,6 @@ jobs:
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo-workspaces
-        id: cache-workspaces
-        uses: actions/cache@v4
-        with:
-          path: ~/.cargo/bin/cargo-workspaces
-          key: ${{ runner.os }}-cargo-workspaces-0.4.1
-
-      - name: Install cargo-workspaces
-        if: steps.cache-workspaces.outputs.cache-hit != 'true'
-        run: cargo install cargo-workspaces --version 0.4.1
-
       - name: Show version from tag
         id: version
         run: |
@@ -54,13 +43,7 @@ jobs:
           echo "✓ Version check passed: $VERSION"
 
       - name: Publish workspace crates
-        run: |
-          cargo workspaces publish \
-            --from-git \
-            --allow-dirty \
-            --yes \
-            --no-git-push \
-            --skip-published
+        run: cargo publish --workspace --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
