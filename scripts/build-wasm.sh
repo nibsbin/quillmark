@@ -29,7 +29,7 @@ for target in "${targets[@]}"; do
         
     # Update package name to @quillmark/wasm
     if [ -f "pkg-$target/package.json" ]; then
-        sed -i 's/"@quillmark\/quillmark-wasm"/"@quillmark\/wasm"/' "pkg-$target/package.json"
+        sed -i '' 's/"@quillmark\/quillmark-wasm"/"@quillmark\/wasm"/' "pkg-$target/package.json"
     fi
 done
 
