@@ -2,73 +2,46 @@
 
 ## Documentation Structure
 
-All Quillmark crates use a hybrid documentation strategy to balance code iteration speed with comprehensive documentation:
+All Quillmark crates use inline Rust documentation to keep code and documentation together:
 
-### Inline Documentation (Minimal)
+### Inline Documentation
 
-- **Public items**: Each public function/struct has a 1-2 line summary using `///`
-- **Deep dive links**: Inline docs point to detailed module or external documentation
-- **Examples**: Simple usage examples in inline docs where helpful
+- **Crate-level docs**: Use `//!` at the top of `lib.rs` with comprehensive overview, examples, and architecture
+- **Module-level docs**: Use `//!` at the top of each module file with overview, key types, and examples
+- **Public items**: Each public function/struct/trait has detailed doc comments using `///`
+- **Examples**: Include code examples in doc comments - they serve as both documentation and tests
+- **Cross-references**: Use intra-doc links like `[`TypeName`]`, `[`function_name()`]`, `[`module::item`]`
 
-### External Documentation
+### Design Documentation
 
-- Include a `lib.md` for crate-level overview
-- Include a `{module}.md` for each public module with:
-  - Overview of the module's purpose and functionality
-  - Key functions and types
-  - Quick examples
-- Include design documents in `docs/designs/` for complex topics and specifications
-- Link external docs using `#[doc = include_str!("../docs/{file}.md")]`
+- **External design docs only**: Keep high-level design documents in `docs/designs/` for architectural decisions and specifications
+- **Examples**: API.md, PARSE.md, CONVERT.md, ERROR.md, DESIGN.md
+- **Purpose**: Detailed specifications, rationale, and design decisions that don't fit well in inline comments
+- **Link from code**: Reference design docs from inline documentation using GitHub URLs
 
 ### Testing Documentation
 
 - Run `cargo doc --no-deps` to build documentation for all crates
 - Run `cargo doc -p quillmark -p quillmark-typst -p quillmark-core --no-deps` to build documentation for specific packages
-- Run `cargo test` to execute doctests from both inline and included Markdown
+- Run `cargo test --doc` to execute doctests from inline documentation
 - Keep examples green to prevent documentation drift
 - **Always check for warnings** - documentation warnings about broken links should be fixed immediately
 
 ### Discoverability
 
-- Inline one-liners ensure IDE hover/completion shows useful information
-- Module docs provide quick examples and links to deeper documentation
-- External docs provide comprehensive details for complex topics
+- Inline documentation ensures IDE hover/completion shows useful information
+- Full documentation visible without switching files
+- Design docs provide deep dives into complex topics
 
 ## Adding Documentation
 
 When adding new public APIs:
 
-1. Add a 1-2 line summary to the item with `///`
-1. Create or update a `{module}.md` file in the crate's `docs/` directory
-1. Link the documentation file with `#[doc = include_str!("../docs/{module}.md")]`
-1. Test with `cargo doc --no-deps` and `cargo test --doc`
-
-### Intra-Doc Links in Included Markdown
-
-When using `#[doc = include_str!()]` to include markdown files, be aware of the scope context for intra-doc links:
-
-**Problem**: Markdown files included on module declarations (in `lib.rs`) have different scope than when included inside the module itself.
-
-**Example**:
-```rust
-// In lib.rs
-#[doc = include_str!("../docs/compile.md")]
-pub mod compile;
-
-// In compile.rs
-#![doc = include_str!("../docs/compile.md")]
-```
-
-The same `compile.md` is used in both contexts, but:
-- When attached to `pub mod compile` in `lib.rs`, functions are NOT in direct scope
-- When attached inside `compile.rs`, functions ARE in direct scope
-
-**Solution**: Use module-qualified paths in the markdown files:
-- ✅ Correct: `` [`compile::compile_to_pdf()`] ``
-- ✅ Correct: `` [`convert::mark_to_typst()`] ``
-- ❌ Wrong: `` [`compile_to_pdf`] `` (breaks when used in `lib.rs`)
-
-This ensures links work in both contexts. Always verify with `cargo doc --no-deps` to catch broken links.
+1. Add comprehensive doc comments using `///` for items and `//!` for modules
+2. Include examples in doc comments (these become doctests)
+3. Use intra-doc links to cross-reference types: `[`TypeName`]`, `[`module::function()`]`
+4. Link to design documents for complex specifications
+5. Test with `cargo doc --no-deps` and `cargo test --doc`
 
 ### Documentation Structure Standard
 
@@ -77,22 +50,60 @@ All Quillmark crates follow this structure:
 ```
 crate-name/
 ├── docs/
-│   ├── lib.md                    # Crate-level overview (included in lib.rs)
-│   ├── {module}.md                # Module-level documentation (one per public module)
-│   └── designs/                   # Design documents and specifications
+│   └── designs/                   # Design documents and specifications only
 │       └── {DESIGN}.md
-├── src/
-│   ├── lib.rs                     # #![doc = include_str!("../docs/lib.md")]
-│   └── {module}.rs                # #![doc = include_str!("../docs/{module}.md")]
-└── ...
+└── src/
+    ├── lib.rs                     # //! Crate-level documentation
+    └── {module}.rs                # //! Module-level documentation
 ```
 
-This structure needs to be consistent across `quillmark-core`, `quillmark-typst`, and `quillmark` crates.
+This structure is consistent across `quillmark-core`, `quillmark-typst`, and `quillmark` crates.
 
 ### Design Documents
 
 Design documents and comprehensive specifications are stored in `docs/designs/` directories:
 
 - Use `designs/` for detailed architectural documentation, specifications, and design rationale
-- Module-level documentation in `docs/` should be concise and focused on usage
-- Link from module docs to design docs when readers need deeper understanding
+- Examples: API.md (comprehensive API reference), PARSE.md (parsing specification), CONVERT.md (conversion details)
+- Link from inline docs to design docs when readers need deeper understanding
+- Use GitHub URLs for stable links: `https://github.com/nibsbin/quillmark/blob/main/quillmark-core/docs/designs/API.md`
+
+### Example Documentation Pattern
+
+```rust
+//! # Module Name
+//!
+//! Brief module overview.
+//!
+//! ## Overview
+//!
+//! Detailed description of module purpose and functionality.
+//!
+//! ## Examples
+//!
+//! ```
+//! use crate_name::ModuleName;
+//!
+//! let example = ModuleName::new();
+//! ```
+//!
+//! ## See Also
+//!
+//! - [Design Doc](https://github.com/nibsbin/quillmark/blob/main/docs/designs/DESIGN.md)
+
+/// Brief description of function/type.
+///
+/// More detailed explanation of behavior, parameters, and return values.
+///
+/// # Examples
+///
+/// ```
+/// use crate_name::function_name;
+///
+/// let result = function_name(42);
+/// assert_eq!(result, 42);
+/// ```
+pub fn function_name(param: i32) -> i32 {
+    param
+}
+```
