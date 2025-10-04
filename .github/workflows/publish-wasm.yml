@@ -1,0 +1,92 @@
+name: Publish WASM to npm
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      - name: Run WASM tests
+        run: wasm-pack test --node quillmark-wasm
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: Publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          target: wasm32-unknown-unknown
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      - name: Extract version from Cargo.toml
+        id: version
+        run: |
+          VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
+
+      - name: Build WASM packages
+        run: ./scripts/build-wasm.sh
+
+      - name: Update package version
+        run: |
+          # Update version in package.json to match Cargo.toml
+          # We'll publish the bundler target as the main package
+          if [ -f "pkg/bundler/package.json" ]; then
+            if sed --version 2>&1 | grep -q GNU; then
+              sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${{ steps.version.outputs.version }}\"/" "pkg/bundler/package.json"
+            else
+              sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"${{ steps.version.outputs.version }}\"/" "pkg/bundler/package.json"
+            fi
+          fi
+
+      - name: Publish @quillmark/wasm
+        working-directory: pkg/bundler
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Summary
+        if: success()
+        run: echo "✓ @quillmark/wasm v${{ steps.version.outputs.version }} published to npm"
+
+      - name: Failure summary
+        if: failure()
+        run: echo "✗ Publishing failed - check logs above"
