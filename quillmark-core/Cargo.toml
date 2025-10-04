@@ -6,6 +6,9 @@ include.workspace = true
 readme.workspace = true
 description = "Core types and functionality for Quillmark"
 license = "Apache-2.0"
+documentation = "https://docs.rs/quillmark-core"
+homepage = "https://github.com/nibsbin/quillmark"
+repository = "https://github.com/nibsbin/quillmark"
 
 [dependencies]
 serde = { workspace = true }
