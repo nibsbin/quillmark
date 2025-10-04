@@ -1,12 +1,51 @@
 name: CI
+
 on:
   pull_request:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  ci:
+  lint:
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-latest
+          cache-on-failure: true
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Format check
+        run: cargo fmt --all -- --check
+
+      - name: Build docs (all features)
+        run: cargo doc --workspace --no-deps --all-features --locked
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        features: ["", "--all-features", "--no-default-features"]
+
     steps:
       - uses: actions/checkout@v4
 
@@ -20,17 +59,5 @@ jobs:
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Check (no default features)
-        run: cargo check --workspace --no-default-features --locked
-
-      - name: Build tests (all features, no run)
-        run: cargo test --workspace --all-features --no-run --locked
-
-      - name: Test
-        run: cargo test --workspace --all-features --locked
-
-      - name: Format check
-        run: cargo fmt --all -- --check
-
-      - name: Docs test
-        run: cargo doc --workspace --no-deps --all-features --locked
+      - name: Test ${{ matrix.features || 'default features' }}
+        run: cargo test --workspace ${{ matrix.features }} --locked
