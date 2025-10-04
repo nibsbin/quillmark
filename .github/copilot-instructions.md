@@ -31,6 +31,9 @@ Tests: unit (in-file), integration (`tests/*.rs` with `common.rs`), doc (externa
 
 Before committing, ALWAYS run `cargo fmt` to ensure consistent formatting.
 
+When working with WASM, install the wasm target with `rustup target add wasm32-unknown-unknown`
+and use `scripts/build-wasm.sh` to build all targets.
+
 ## Extended YAML Metadata (Non-Obvious)
 
 Supports **inline metadata sections** with tag directives:
@@ -59,14 +62,6 @@ use quillmark_core::templating::filter_api::{State, Value, Kwargs, Error, ErrorK
 ```
 
 Common filters: `String`, `Lines`, `Date`, `Dict`, `Content`, `Asset` (prefixed with `DYNAMIC_ASSET__`).
-
-## Backend Implementation
-
-Implement `Backend` trait (see `designs/DESIGN.md`). Typst gotchas:
-- Escape `* _ # $ @ [ ] < > \`` in text
-- Convert markdown `-` to Typst `+` for lists
-- Virtual paths: use forward slashes, not `Path::join()`
-- Fonts: `assets/fonts/` → `assets/` → system (lazy load via `typst-kit`)
 
 ## Error Handling
 
