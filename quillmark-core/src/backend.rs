@@ -1,4 +1,4 @@
-#[doc = include_str!("../docs/backend.md")]
+#![doc = include_str!("../docs/backend.md")]
 
 use crate::error::RenderError;
 use crate::templating::Glue;
