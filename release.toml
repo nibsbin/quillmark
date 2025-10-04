@@ -1,58 +1,24 @@
-# cargo-release configuration
-# https://github.com/crate-ci/cargo-release/blob/master/docs/reference.md
+# Drive bumps + tagging with cargo-release; publishing happens in CI on tag.
+# Invoke locally or in CI like:
+#   cargo release <patch|minor|major> --workspace
 
-# Allow releases only from the main branch
+# Only release from main
 allow-branch = ["main"]
 
-# Consolidate all workspace crate commits into a single commit
-consolidate-commits = true
+# Bump + tag + push, but DO NOT publish here
+publish = false
+tag = true
+push = true
+push-remote = "origin"
 
-# Git commit and tag settings
+# Versioning + commits/tags
+dependent-version = "upgrade"              # auto-update intra-workspace dependency versions
+consolidate-commits = true                 # single bump commit for the workspace
 pre-release-commit-message = "chore: release {{version}}"
 tag-name = "v{{version}}"
 tag-message = "Release {{version}}"
 
-# Don't sign commits/tags by default (can be overridden with --sign)
+# Safety / defaults
+verify = true
 sign-commit = false
 sign-tag = false
-
-# Push commits and tags to origin
-push = true
-push-remote = "origin"
-
-# Publish to crates.io
-publish = true
-
-# Verify crates before publishing
-verify = true
-
-# How to handle workspace dependency versions
-# "upgrade" - always upgrade to the latest version
-# "fix" - only upgrade if the old version requirement doesn't match
-dependent-version = "upgrade"
-
-# Enable all features when building/testing
-enable-all-features = false
-
-# Pre-release replacements (example - uncomment and modify as needed)
-# [[pre-release-replacements]]
-# file = "CHANGELOG.md"
-# search = "## \\[Unreleased\\]"
-# replace = """
-# ## [Unreleased]
-# 
-# ## [{{version}}] - {{date}}"""
-# exactly = 1
-
-# [[pre-release-replacements]]
-# file = "CHANGELOG.md"
-# search = "<!-- next-url -->"
-# replace = """
-# <!-- next-url -->
-# [Unreleased]: https://github.com/nibsbin/quillmark/compare/v{{version}}...HEAD
-# [{{version}}]: https://github.com/nibsbin/quillmark/releases/tag/v{{version}}"""
-# exactly = 1
-
-# Note: To prevent a crate from being published, add this to its Cargo.toml:
-# [package]
-# publish = false
