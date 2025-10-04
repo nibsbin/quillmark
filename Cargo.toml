@@ -4,6 +4,7 @@ members = [
     "quillmark",
     "quillmark-typst",
     "quillmark-fixtures",
+    "quillmark-wasm",
 ]
 resolver = "2"
 
@@ -48,3 +49,10 @@ quillmark-fixtures = { path = "quillmark-fixtures" }
 [workspace.metadata.workspaces]
 # Exclude fixtures from publishing since it's dev-only
 no_individual_tags = true
+
+[profile.release]
+opt-level = "z"      # Optimize for size
+lto = true           # Link-time optimization
+codegen-units = 1    # Better optimization
+panic = "abort"      # Smaller binary
+strip = true         # Remove debug symbols
