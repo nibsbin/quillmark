@@ -32,75 +32,43 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing version: $VERSION"
 
-      # Publish quillmark-core
-      - name: Publish quillmark-core
-        uses: katyo/publish-crates@v2
-        with:
-          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          path: './quillmark-core'
-          args: --locked
-          ignore-unpublished-changes: true
-          check-repo: true
+      - name: Install cargo-workspaces
+        run: cargo install cargo-workspaces
 
-      # Wait for quillmark-core to be available
-      - name: Wait for quillmark-core to be indexed
+      - name: Verify version matches tag
         run: |
-          echo "Waiting for quillmark-core to be available on crates.io..."
-          for i in {1..12}; do
-            if cargo search quillmark-core | grep -q "0.0.6"; then
-              echo "quillmark-core 0.0.6 is now available!"
-              break
-            fi
-            echo "Attempt $i/12: Not available yet, waiting 10 seconds..."
-            sleep 10
-          done
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          CARGO_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')
+          if [ "$VERSION" != "$CARGO_VERSION" ]; then
+            echo "Error: Tag version ($VERSION) doesn't match Cargo.toml version ($CARGO_VERSION)"
+            exit 1
+          fi
+          echo "Version check passed: $VERSION"
 
-      # Publish quillmark-typst
-      - name: Publish quillmark-typst
-        uses: katyo/publish-crates@v2
-        with:
-          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          path: './quillmark-typst'
-          args: --locked
-          ignore-unpublished-changes: true
-          check-repo: true
-
-      # Wait for quillmark-typst to be available with dry-run verification
-      - name: Wait for quillmark-typst to be indexed
-        working-directory: ./quillmark
+      - name: Publish workspace crates
         run: |
-          echo "Waiting for quillmark-typst 0.0.6 to be available on crates.io..."
-          for i in {1..20}; do
-            echo "Attempt $i/20: Testing with cargo publish --dry-run..."
-            if cargo publish --dry-run --locked 2>&1 | tee /tmp/dry-run.log; then
-              echo "✓ Dry-run successful! quillmark-typst 0.0.6 is available."
-              break
-            fi
-            
-            if grep -q "failed to select a version for the requirement.*quillmark-typst" /tmp/dry-run.log; then
-              echo "quillmark-typst not indexed yet, waiting 10 seconds..."
-              sleep 10
-            else
-              echo "Different error occurred, check logs above"
-              exit 1
-            fi
-            
-            if [ $i -eq 20 ]; then
-              echo "Timeout waiting for quillmark-typst to be indexed"
-              exit 1
-            fi
-          done
-
-      # Publish quillmark
-      - name: Publish quillmark
-        uses: katyo/publish-crates@v2
-        with:
-          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-          path: './quillmark'
-          args: --locked
-          ignore-unpublished-changes: true
-          check-repo: true
+          cargo workspaces publish \
+            --from-git \
+            --allow-dirty \
+            --yes \
+            --no-git-commit \
+            --no-git-tag \
+            --skip-published
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
       - name: Summary
-        if: always()
-        run: echo "Publishing complete. Check individual steps for details."
+        if: success()
+        run: |
+          echo "✓ Publishing complete!"
+          echo "All workspace crates have been published to crates.io"
+
+      - name: Failure summary
+        if: failure()
+        run: |
+          echo "✗ Publishing failed!"
+          echo "Check the logs above for details."
+          echo "Common issues:"
+          echo "  - Version already published (check --skip-published worked)"
+          echo "  - Missing CARGO_REGISTRY_TOKEN"
+          echo "  - Network issues with crates.io"
