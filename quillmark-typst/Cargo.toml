@@ -28,7 +28,6 @@ dirs = { workspace = true, optional = true }
 tempfile = { workspace = true }
 
 [features]
-default = ["packages"]
-embed-fonts = ["typst-kit/embed-fonts"]
-packages = ["typst-kit/packages", "dep:dirs"]
+default = ["native"]
+native = ["typst-kit/packages", "typst-kit/embed-fonts", "dep:dirs"]
 

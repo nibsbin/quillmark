@@ -90,7 +90,7 @@ impl QuillWorld {
 
         // Download and load external packages specified in Quill.toml [typst] section
         // These are loaded AFTER embedded packages so they dominate/override if there's a collision
-        #[cfg(feature = "packages")]
+        #[cfg(feature = "native")]
         Self::download_and_load_external_packages(quill, &mut sources, &mut binaries)?;
 
         // Create main source
@@ -170,7 +170,7 @@ impl QuillWorld {
     }
 
     /// Download and load external packages specified in Quill.toml [typst] section
-    #[cfg(feature = "packages")]
+    #[cfg(feature = "native")]
     fn download_and_load_external_packages(
         quill: &Quill,
         sources: &mut HashMap<FileId, Source>,
@@ -237,7 +237,7 @@ impl QuillWorld {
     }
 
     /// Load a package from the filesystem (for downloaded packages)
-    #[cfg(feature = "packages")]
+    #[cfg(feature = "native")]
     fn load_package_from_filesystem(
         package_dir: &Path,
         sources: &mut HashMap<FileId, Source>,
@@ -286,7 +286,7 @@ impl QuillWorld {
     }
 
     /// Recursively load files from a package directory on the filesystem
-    #[cfg(feature = "packages")]
+    #[cfg(feature = "native")]
     fn load_package_files_recursive(
         current_dir: &Path,
         package_root: &Path,
