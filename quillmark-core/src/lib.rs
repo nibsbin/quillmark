@@ -37,7 +37,6 @@
 //!
 //! ## Further Reading
 //!
-//! - [API.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-core/docs/designs/API.md) - Comprehensive API reference
 //! - [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-core/docs/designs/PARSE.md) - Detailed parsing documentation
 //! - [Examples](https://github.com/nibsbin/quillmark/tree/main/examples) - Working examples
 

@@ -5,7 +5,6 @@
 ---
 
 **See also:**
-- [quillmark-core/API.md](quillmark-core/API.md) - Comprehensive API reference for the core library
 - [quillmark-core/PARSE.md](quillmark-core/PARSE.md) - Detailed parsing and Extended YAML Metadata Standard documentation
 - [ERROR.md](ERROR.md) - Error handling system documentation and implementation guide
 
@@ -73,8 +72,6 @@ High-level data flow:
 
 **Design Note:** No external backend deps; backends depend on core → no cycles.
 
-**See [quillmark-core/API.md](quillmark-core/API.md) for comprehensive API documentation.**
-
 ### `quillmark` (orchestration layer)
 
 * High-level API: `Quillmark` engine for managing backends and quills
@@ -93,7 +90,6 @@ High-level data flow:
 * Compilation environment (`QuillWorld`)
 * Dynamic package loading (`typst.toml`), font & asset resolution
 * **Structured diagnostics** with source locations (maps Typst diagnostics → `Diagnostic`)
-* **API Documentation:** See [quillmark-typst/docs/API.md](quillmark-typst/docs/API.md) for complete API reference
 
 ### `quillmark-fixtures` (dev/test utilities)
 

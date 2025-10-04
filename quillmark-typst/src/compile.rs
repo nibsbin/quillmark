@@ -28,9 +28,7 @@
 //! 3. Converts to target format (PDF or SVG)
 //! 4. Returns output bytes
 //!
-//! ## Detailed Documentation
-//!
-//! See [API.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-typst/docs/designs/API.md) for complete compilation API documentation.
+//! The output bytes can be written to a file or returned directly to the caller.
 
 use typst::diag::Warned;
 use typst::layout::PagedDocument;
