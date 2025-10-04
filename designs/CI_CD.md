@@ -1,6 +1,6 @@
 # Quillmark Rust Workspace — Basic CI/CD
 
-**Status**: Planning
+**Status**: Implemented
 **Scope**: Build, test, and publish the following crates to crates.io:
 
 * `quillmark-core` (publish ✅)
