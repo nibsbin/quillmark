@@ -37,11 +37,13 @@ jobs:
         with:
           shared-key: "ci-${{ hashFiles('**/Cargo.lock') }}"
           cache-on-failure: true
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Cargo fetch
+        run: cargo fetch --locked
 
       # Pre-build dependencies to warm the cache for parallel jobs
       - name: Build dependencies
-        run: cargo build --workspace --all-features --locked --tests -j $(nproc)
+        run: cargo build --workspace --all-features --locked --test
 
   lint:
     runs-on: ubuntu-latest
