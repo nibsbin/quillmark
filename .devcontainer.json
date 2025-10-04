@@ -1,0 +1,14 @@
+
+{
+  "image": "mcr.microsoft.com/devcontainers/rust:latest",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "samuelcolvin.jinjahtml",
+        "tamasfe.even-better-toml",
+        "rust-lang.rust-analyzer"
+      ]
+    }
+  }
+}
