@@ -13,8 +13,6 @@ edition = "2021"
 include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
 readme = "README.md"
 
-
-
 [workspace.dependencies]
 # Core dependencies
 serde = { version = "~1.0", features = ["derive"] }
