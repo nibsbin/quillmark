@@ -34,7 +34,7 @@ jobs:
 
       - name: Install cargo-workspaces
         if: steps.cache-workspaces.outputs.cache-hit != 'true'
-        run: cargo install cargo-workspaces --version 0.4.1 --locked
+        run: cargo install cargo-workspaces --version 0.4.1
 
       - name: Show version from tag
         id: version
