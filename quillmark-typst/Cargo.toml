@@ -6,6 +6,7 @@ description = "Typst backend for Quillmark"
 license = "Apache-2.0"
 
 [dependencies]
+anyhow = { workspace = true }
 fontdb = { workspace = true }
 pulldown-cmark = { workspace = true }
 quillmark-core = { workspace = true }

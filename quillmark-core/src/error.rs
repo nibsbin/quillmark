@@ -95,7 +95,18 @@ impl Diagnostic {
         }
 
         if let Some(ref loc) = self.primary {
-            result.push_str(&format!(" at {}:{}:{}", loc.file, loc.line, loc.col));
+            result.push_str(&format!("\n  --> {}:{}:{}", loc.file, loc.line, loc.col));
+        }
+
+        // Add related locations (trace)
+        for (i, related) in self.related.iter().enumerate() {
+            result.push_str(&format!(
+                "\n  {} {}:{}:{}",
+                if i == 0 { "trace:" } else { "      " },
+                related.file,
+                related.line,
+                related.col
+            ));
         }
 
         if let Some(ref hint) = self.hint {
@@ -211,11 +222,18 @@ impl RenderResult {
 /// Convert minijinja errors to RenderError
 impl From<minijinja::Error> for RenderError {
     fn from(e: minijinja::Error) -> Self {
-        let loc = e.line().map(|line| Location {
-            file: e.name().unwrap_or("template").to_string(),
-            line: line as u32,
-            col: 0, // MiniJinja doesn't provide column info
+        // Extract location with proper range information
+        let loc = e.line().map(|line| {
+            Location {
+                file: e.name().unwrap_or("template").to_string(),
+                line: line as u32,
+                // MiniJinja provides range, extract approximate column
+                col: e.range().map(|r| r.start as u32).unwrap_or(0),
+            }
         });
+
+        // Generate helpful hints based on error kind
+        let hint = generate_minijinja_hint(&e);
 
         let diag = Diagnostic {
             severity: Severity::Error,
@@ -223,12 +241,31 @@ impl From<minijinja::Error> for RenderError {
             message: e.to_string(),
             primary: loc,
             related: vec![],
-            hint: None,
+            hint,
         };
 
         RenderError::TemplateFailed { source: e, diag }
     }
 }
+
+/// Generate helpful hints for common MiniJinja errors
+fn generate_minijinja_hint(e: &minijinja::Error) -> Option<String> {
+    use minijinja::ErrorKind;
+    
+    match e.kind() {
+        ErrorKind::UndefinedError => {
+            Some("Check variable spelling and ensure it's defined in frontmatter".to_string())
+        }
+        ErrorKind::InvalidOperation => {
+            Some("Check that you're using the correct filter or operator for this type".to_string())
+        }
+        ErrorKind::SyntaxError => {
+            Some("Check template syntax - look for unclosed tags or invalid expressions".to_string())
+        }
+        _ => e.detail().map(|d| d.to_string()),
+    }
+}
+
 
 /// Helper to print structured errors
 pub fn print_errors(err: &RenderError) {
@@ -241,6 +278,23 @@ pub fn print_errors(err: &RenderError) {
         RenderError::TemplateFailed { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::InvalidFrontmatter { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::EngineCreation { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
-        _ => eprintln!("{}", err),
+        RenderError::FormatNotSupported { backend, format } => {
+            eprintln!("[ERROR] Format {:?} not supported by {} backend", format, backend);
+        }
+        RenderError::UnsupportedBackend(name) => {
+            eprintln!("[ERROR] Unsupported backend: {}", name);
+        }
+        RenderError::DynamicAssetCollision { filename, message } => {
+            eprintln!("[ERROR] Dynamic asset collision: {}\n  {}", filename, message);
+        }
+        RenderError::Internal(e) => {
+            eprintln!("[ERROR] Internal error: {}", e);
+        }
+        RenderError::Template(e) => {
+            eprintln!("[ERROR] Template error: {}", e);
+        }
+        RenderError::Other(e) => {
+            eprintln!("[ERROR] {}", e);
+        }
     }
 }

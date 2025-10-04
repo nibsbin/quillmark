@@ -2,6 +2,7 @@
 
 pub mod compile;
 pub mod convert;
+mod error_mapping;
 mod filters;
 mod world;
 use filters::{
@@ -55,16 +56,14 @@ impl Backend for TypstBackend {
 
         match format {
             OutputFormat::Pdf => {
-                let bytes = compile::compile_to_pdf(quill, glued_content).unwrap();
+                let bytes = compile::compile_to_pdf(quill, glued_content)?;
                 Ok(vec![Artifact {
-                    bytes: bytes,
+                    bytes,
                     output_format: OutputFormat::Pdf,
                 }])
             }
             OutputFormat::Svg => {
-                let svg_pages = compile::compile_to_svg(quill, glued_content).map_err(|e| {
-                    RenderError::Other(format!("SVG compilation failed: {}", e).into())
-                })?;
+                let svg_pages = compile::compile_to_svg(quill, glued_content)?;
                 Ok(svg_pages
                     .into_iter()
                     .map(|bytes| Artifact {
