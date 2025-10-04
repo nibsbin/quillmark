@@ -1,46 +1,106 @@
-[workspace]
-members = [
-    "quillmark-core",
-    "quillmark",
-    "quillmark-typst",
-    "quillmark-fixtures",
-]
-resolver = "2"
+name: Publish crates to crates.io
 
-[workspace.package]
-version = "0.0.6"
-edition = "2021"
-include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
-readme = "README.md"
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
 
-[workspace.dependencies]
-# Core dependencies
-serde = { version = "~1.0", features = ["derive"] }
-serde_yaml = "~0.9"
-serde_json = "~1.0"
-toml = "~0.9"
+permissions:
+  contents: read
 
-thiserror = "~2.0"
-anyhow = "~1.0"
+env:
+  CARGO_TERM_COLOR: always
 
-# Templating
-minijinja = "~2.12"
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: Publish
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-# Typst backend dependencies
-fontdb = "0.21.0"
-pulldown-cmark = "0.13.0"
-time = { version = "0.3.44", features = ["formatting", "parsing"] }
-typst = "0.13.1"
-typst-kit = "0.13.1"
-typst-pdf = "0.13.1"
-typst-svg = "0.13.1"
-dirs = "6.0"
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-# Intra-project dependencies
-quillmark-core = { version = "0.0.6", path = "quillmark-core" }
-quillmark-typst = { version = "0.0.6", path = "quillmark-typst" }
-quillmark = { version = "0.0.6", path = "quillmark" }
-quillmark-fixtures = { path = "quillmark-fixtures" }
+      - name: Show version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing version: $VERSION"
 
-# Test and dev dependencies
-tempfile = "~3.23"
+      # Publish quillmark-core
+      - name: Publish quillmark-core
+        uses: katyo/publish-crates@v2
+        with:
+          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          path: './quillmark-core'
+          args: --locked
+          ignore-unpublished-changes: true
+          check-repo: true
+
+      # Wait for quillmark-core to be available
+      - name: Wait for quillmark-core to be indexed
+        run: |
+          echo "Waiting for quillmark-core to be available on crates.io..."
+          for i in {1..12}; do
+            if cargo search quillmark-core | grep -q "0.0.6"; then
+              echo "quillmark-core 0.0.6 is now available!"
+              break
+            fi
+            echo "Attempt $i/12: Not available yet, waiting 10 seconds..."
+            sleep 10
+          done
+
+      # Publish quillmark-typst
+      - name: Publish quillmark-typst
+        uses: katyo/publish-crates@v2
+        with:
+          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          path: './quillmark-typst'
+          args: --locked
+          ignore-unpublished-changes: true
+          check-repo: true
+
+      # Wait for quillmark-typst to be available with dry-run verification
+      - name: Wait for quillmark-typst to be indexed
+        working-directory: ./quillmark
+        run: |
+          echo "Waiting for quillmark-typst 0.0.6 to be available on crates.io..."
+          for i in {1..20}; do
+            echo "Attempt $i/20: Testing with cargo publish --dry-run..."
+            if cargo publish --dry-run --locked 2>&1 | tee /tmp/dry-run.log; then
+              echo "✓ Dry-run successful! quillmark-typst 0.0.6 is available."
+              break
+            fi
+            
+            if grep -q "failed to select a version for the requirement.*quillmark-typst" /tmp/dry-run.log; then
+              echo "quillmark-typst not indexed yet, waiting 10 seconds..."
+              sleep 10
+            else
+              echo "Different error occurred, check logs above"
+              exit 1
+            fi
+            
+            if [ $i -eq 20 ]; then
+              echo "Timeout waiting for quillmark-typst to be indexed"
+              exit 1
+            fi
+          done
+
+      # Publish quillmark
+      - name: Publish quillmark
+        uses: katyo/publish-crates@v2
+        with:
+          registry-token: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          path: './quillmark'
+          args: --locked
+          ignore-unpublished-changes: true
+          check-repo: true
+
+      - name: Summary
+        if: always()
+        run: echo "Publishing complete. Check individual steps for details."
