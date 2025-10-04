@@ -1,0 +1,72 @@
+# Quillmark
+
+A template-first Markdown rendering system that converts Markdown with YAML frontmatter into PDF, SVG, and other output formats.
+
+## Features
+
+- **Template-first design**: Quill templates control structure and styling, Markdown provides content
+- **YAML frontmatter support**: Extended YAML metadata with inline sections
+- **Multiple backends**: PDF and SVG output via Typst backend
+- **Structured error handling**: Clear diagnostics with source locations
+- **Dynamic asset loading**: Fonts, images, and packages resolved at runtime
+
+## Installation
+
+Add Quillmark to your `Cargo.toml`:
+
+```toml
+[dependencies]
+quillmark = "0.0.1"
+```
+
+## Quick Start
+
+```rust
+use quillmark::{Quillmark, OutputFormat};
+use quillmark_core::Quill;
+
+// Create engine with Typst backend
+let mut engine = Quillmark::new();
+
+// Load a quill template
+let quill = Quill::from_path("path/to/quill")?;
+engine.register_quill(quill);
+
+// Render markdown to PDF
+let workflow = engine.load("quill_name")?;
+let markdown = "---\ntitle: Example\n---\n\n# Hello World";
+let result = workflow.render(markdown, OutputFormat::Pdf)?;
+
+// Access the generated PDF
+let pdf_bytes = &result.artifacts[0].bytes;
+```
+
+## Examples
+
+Run the included examples:
+
+```bash
+cargo run --example appreciated_letter
+cargo run --example usaf_memo
+cargo run --example taro
+```
+
+## Documentation
+
+- [API Documentation](https://docs.rs/quillmark)
+- [Architecture Design](designs/DESIGN.md)
+- [Error Handling](designs/ERROR.md)
+- [Contributing Guide](CONTRIBUTING.md)
+
+## Project Structure
+
+This workspace contains:
+
+- **quillmark-core** - Core parsing, templating, and backend traits
+- **quillmark** - High-level orchestration API
+- **quillmark-typst** - Typst backend for PDF/SVG output
+- **quillmark-fixtures** - Test fixtures and utilities
+
+## License
+
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) for details.
