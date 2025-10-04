@@ -32,7 +32,7 @@ This document outlines the design and implementation plan for `pyquillmark`, a P
 - **Developer Experience**: Modern tooling with `uv` for fast dependency management
 - **Cross-Platform**: Support Linux, macOS, and Windows with pre-built wheels
 
-### Non-Goals
+### Non-Goals (DO NOTS)
 
 - Expose low-level `quillmark-core` internals (keep focused on high-level API)
 - Support custom backend implementation in Python (Rust only)
