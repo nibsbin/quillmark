@@ -4,6 +4,7 @@ members = [
     "quillmark",
     "quillmark-typst",
     "quillmark-fixtures",
+    "quillmark-wasm",
 ]
 resolver = "2"
 
@@ -31,15 +32,15 @@ fontdb = "0.21.0"
 pulldown-cmark = "0.13.0"
 time = { version = "0.3.44", features = ["formatting", "parsing"] }
 typst = "0.13.1"
-typst-kit = "0.13.1"
+typst-kit = { version = "0.13.1", default-features = false }
 typst-pdf = "0.13.1"
 typst-svg = "0.13.1"
 dirs = "6.0"
 
 # Intra-project dependencies
 quillmark-core = { version = "0.0.11", path = "quillmark-core" }
-quillmark-typst = { version = "0.0.11", path = "quillmark-typst" }
-quillmark = { version = "0.0.11", path = "quillmark" }
+quillmark-typst = { version = "0.0.11", path = "quillmark-typst", default-features = false }
+quillmark = { version = "0.0.11", path = "quillmark", default-features = false }
 
 # Test and dev dependencies
 tempfile = "~3.23"
@@ -48,3 +49,10 @@ quillmark-fixtures = { path = "quillmark-fixtures" }
 [workspace.metadata.workspaces]
 # Exclude fixtures from publishing since it's dev-only
 no_individual_tags = true
+
+[profile.release]
+opt-level = "z"      # Optimize for size
+lto = true           # Link-time optimization
+codegen-units = 1    # Better optimization
+panic = "abort"      # Smaller binary
+strip = true         # Remove debug symbols
