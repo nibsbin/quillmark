@@ -10,6 +10,9 @@ resolver = "2"
 [workspace.package]
 version = "0.0.3"
 edition = "2021"
+include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
+readme = "README.md"
+
 
 
 [workspace.dependencies]
