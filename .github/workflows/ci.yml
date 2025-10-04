@@ -36,9 +36,6 @@ jobs:
       - name: Format check
         run: cargo fmt --all -- --check
 
-      - name: Build docs (all features)
-        run: cargo doc --workspace --no-deps --all-features --locked
-
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -59,5 +56,8 @@ jobs:
           cache-on-failure: true
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
-      - name: Test ${{ matrix.features || 'default features' }}
+      - name: Tests ${{ matrix.features || 'default features' }}
         run: cargo test --workspace ${{ matrix.features }} --locked
+
+      - name: Doctests ${{ matrix.features || 'default features' }}
+        run: cargo test --doc --workspace ${{ matrix.features }} --locked
