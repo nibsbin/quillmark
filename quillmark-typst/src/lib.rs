@@ -1,6 +1,8 @@
 #![doc = include_str!("../docs/lib.md")]
 
+#[doc = include_str!("../docs/compile.md")]
 pub mod compile;
+#[doc = include_str!("../docs/convert.md")]
 pub mod convert;
 mod error_mapping;
 mod filters;
