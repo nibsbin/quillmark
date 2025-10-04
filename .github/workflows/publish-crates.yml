@@ -32,8 +32,16 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Releasing version: $VERSION"
 
+      - name: Cache cargo-workspaces
+        id: cache-workspaces
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/cargo-workspaces
+          key: ${{ runner.os }}-cargo-workspaces-0.4.1
+
       - name: Install cargo-workspaces
-        run: cargo install cargo-workspaces
+        if: steps.cache-workspaces.outputs.cache-hit != 'true'
+        run: cargo install cargo-workspaces --version 0.4.1 --locked
 
       - name: Verify version matches tag
         run: |
