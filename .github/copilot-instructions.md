@@ -29,6 +29,8 @@ cargo run --example appreciated_letter
 
 Tests: unit (in-file), integration (`tests/*.rs` with `common.rs`), doc (external `.md`), examples (use fixtures).
 
+Before committing, ALWAYS run `cargo fmt` to ensure consistent formatting.
+
 ## Extended YAML Metadata (Non-Obvious)
 
 Supports **inline metadata sections** with tag directives:
@@ -80,15 +82,6 @@ pub struct Diagnostic {
 ```
 
 Map external errors (MiniJinja, Typst) to preserve context.
-
-## Releases
-
-```bash
-cargo release minor              # Preview
-cargo release minor --execute    # Execute
-```
-
-All crates share version (automated via `release.toml`). See `designs/CI_CD.md`.
 
 ## Reference
 
