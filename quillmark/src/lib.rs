@@ -8,10 +8,8 @@ pub use quillmark_core::{
     RenderError, RenderResult, Severity, TemplateError, BODY_FIELD,
 };
 
-// Declare modules
-pub mod workflow;
-pub mod quillmark;
+// Declare orchestration module
+pub mod orchestration;
 
-// Re-export types from modules for backward compatibility
-pub use workflow::Workflow;
-pub use quillmark::{Quillmark, QuillRef};
+// Re-export types from orchestration module for backward compatibility
+pub use orchestration::{Quillmark, QuillRef, Workflow};

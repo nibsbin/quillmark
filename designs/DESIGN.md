@@ -28,7 +28,7 @@
 
 ## System Overview
 
-Quillmark is a flexible, **template-first** Markdown rendering system that converts Markdown with YAML frontmatter into output artifacts (PDF, SVG, TXT, etc.). The architecture is built around a **sealed engine API** for day‑to‑day use, backed by trait-based extensibility for backends.
+Quillmark is a flexible, **template-first** Markdown rendering system that converts Markdown with YAML frontmatter into output artifacts (PDF, SVG, TXT, etc.). The architecture is built around a an orchestration API for high-level use, backed by trait-based extensibility for backends.
 
 High-level data flow:
 
@@ -41,7 +41,7 @@ High-level data flow:
 
 ## Core Design Principles
 
-1. **Sealed Engine, Explicit Backend**
+1. **Sealed Orchestration, Explicit Backend**
    A single entry point (`Workflow`) encapsulates orchestration. Backend choice is **explicit** at engine construction.
 2. **Trait-Based Extensibility**
    New output formats implement the `Backend` trait (thread-safe, zero global state).
@@ -75,7 +75,7 @@ High-level data flow:
 
 **See [quillmark-core/API.md](quillmark-core/API.md) for comprehensive API documentation.**
 
-### `quillmark` (sealed engine)
+### `quillmark` (orchestration layer)
 
 * High-level API: `Quillmark` engine for managing backends and quills
 * Sealed rendering API: `Workflow`
