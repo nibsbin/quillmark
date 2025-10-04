@@ -8,7 +8,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.0.7"
+version = "0.0.8"
 edition = "2021"
 include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
 readme = "README.md"
@@ -37,9 +37,9 @@ typst-svg = "0.13.1"
 dirs = "6.0"
 
 # Intra-project dependencies
-quillmark-core = { version = "0.0.7", path = "quillmark-core" }
-quillmark-typst = { version = "0.0.7", path = "quillmark-typst" }
-quillmark = { version = "0.0.7", path = "quillmark" }
+quillmark-core = { version = "0.0.8", path = "quillmark-core" }
+quillmark-typst = { version = "0.0.8", path = "quillmark-typst" }
+quillmark = { version = "0.0.8", path = "quillmark" }
 
 # Test and dev dependencies
 tempfile = "~3.23"
