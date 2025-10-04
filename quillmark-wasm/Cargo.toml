@@ -11,7 +11,7 @@ readme = "README.md"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-quillmark = { workspace = true, default-features = true }
+quillmark = { workspace = true, default-features = false, features = ["typst"] }
 quillmark-core = { workspace = true }
 wasm-bindgen = "0.2"
 serde = { workspace = true }
@@ -29,4 +29,4 @@ features = ["console"]
 wasm-bindgen-test = "0.3"
 
 [package.metadata.wasm-pack.profile.release]
-wasm-opt = ["-Oz", "--enable-mutable-globals"]
+wasm-opt = false

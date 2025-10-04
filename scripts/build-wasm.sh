@@ -23,8 +23,14 @@ for target in "${targets[@]}"; do
     wasm-pack build quillmark-wasm \
         --target "$target" \
         --out-dir "../pkg-$target" \
+        --out-name wasm \
         --release \
         --scope quillmark
+        
+    # Update package name to @quillmark/wasm
+    if [ -f "pkg-$target/package.json" ]; then
+        sed -i 's/"@quillmark\/quillmark-wasm"/"@quillmark\/wasm"/' "pkg-$target/package.json"
+    fi
 done
 
 echo ""
