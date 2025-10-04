@@ -1,5 +1,10 @@
 # Quillmark
 
+[![Crates.io](https://img.shields.io/crates/v/quillmark.svg)](https://crates.io/crates/quillmark)
+[![Documentation](https://docs.rs/quillmark/badge.svg)](https://docs.rs/quillmark)
+[![CI](https://github.com/nibsbin/quillmark/workflows/CI/badge.svg)](https://github.com/nibsbin/quillmark/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 A template-first Markdown rendering system that converts Markdown with YAML frontmatter into PDF, SVG, and other output formats.
 
 ## Features
