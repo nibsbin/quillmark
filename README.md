@@ -1,5 +1,10 @@
 # Quillmark
 
+[![Crates.io](https://img.shields.io/crates/v/quillmark.svg)](https://crates.io/crates/quillmark)
+[![Documentation](https://docs.rs/quillmark/badge.svg)](https://docs.rs/quillmark)
+[![CI](https://github.com/nibsbin/quillmark/workflows/CI/badge.svg)](https://github.com/nibsbin/quillmark/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+
 A template-first Markdown rendering system that converts Markdown with YAML frontmatter into PDF, SVG, and other output formats.
 
 ## Features
@@ -14,9 +19,8 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
 
 Add Quillmark to your `Cargo.toml`:
 
-```toml
-[dependencies]
-quillmark = "0.0.1"
+```bash
+cargo add quillmark
 ```
 
 ## Quick Start
@@ -55,7 +59,6 @@ cargo run --example taro
 
 - [API Documentation](https://docs.rs/quillmark)
 - [Architecture Design](designs/DESIGN.md)
-- [Error Handling](designs/ERROR.md)
 - [Contributing Guide](CONTRIBUTING.md)
 
 ## Project Structure
