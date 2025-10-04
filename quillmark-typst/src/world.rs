@@ -39,7 +39,10 @@ pub struct QuillWorld {
 
 impl QuillWorld {
     /// Create a new QuillWorld from a quill template and Typst content
-    pub fn new(quill: &Quill, main: &str) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+    pub fn new(
+        quill: &Quill,
+        main: &str,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut sources = HashMap::new();
         let mut binaries = HashMap::new();
 
@@ -105,7 +108,9 @@ impl QuillWorld {
     }
 
     /// Load fonts from the quill's in-memory file system
-    fn load_fonts_from_quill(quill: &Quill) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
+    fn load_fonts_from_quill(
+        quill: &Quill,
+    ) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
         let mut font_data = Vec::new();
 
         // Look for fonts in assets/fonts/ first
@@ -547,7 +552,9 @@ struct PackageInfo {
 }
 
 /// Parse a typst.toml for package information with better error handling
-fn parse_package_toml(content: &str) -> Result<PackageInfo, Box<dyn std::error::Error + Send + Sync>> {
+fn parse_package_toml(
+    content: &str,
+) -> Result<PackageInfo, Box<dyn std::error::Error + Send + Sync>> {
     let value: toml::Value = toml::from_str(content)?;
 
     let package_section = value

@@ -57,7 +57,7 @@ The Quillmark workspace consists of four crates:
 | Crate | Publish to crates.io | Reason |
 |-------|---------------------|---------|
 | `quillmark-core` | ✅ Yes | Public API - core types and interfaces |
-| `quillmark-typst` | ✅ Yes | Public backend - users may want standalone Typst backend |
+| `quillmark-typst` | ✅ Yes | Public backend that is required by the quillmark typst feature |
 | `quillmark` | ✅ Yes | Primary public API - main entry point |
 | `quillmark-fixtures` | ❌ No | Internal test utilities only |
 
@@ -69,82 +69,7 @@ Crates must be published in dependency order:
 2. **quillmark-typst** (depends on quillmark-core)
 3. **quillmark** (depends on quillmark-core and quillmark-typst)
 
-### Visibility and Metadata
-
-All published crates should include:
-
-```toml
-[package]
-name = "quillmark-*"
-version = "0.1.0"
-edition = "2021"
-authors = ["Quillmark Contributors"]
-license = "Apache-2.0"
-description = "Brief, compelling description"
-documentation = "https://docs.rs/quillmark-*"
-homepage = "https://github.com/nibsbin/quillmark"
-repository = "https://github.com/nibsbin/quillmark"
-keywords = ["markdown", "pdf", "typst", "rendering", "templates"]
-categories = ["text-processing", "template-engine"]
-readme = "../README.md"  # or crate-specific README
-```
-
-**README Requirements**: Each published crate needs a README with:
-- Quick overview
-- Installation instructions
-- Basic usage example
-- Link to full documentation
-- License information
-
----
-
-## Workspace Structure
-
-### Current Structure
-
-```
-quillmark/
-├── Cargo.toml                  # Workspace manifest
-├── Cargo.lock                  # Locked dependencies
-├── .github/
-│   └── workflows/
-│       ├── ci.yml              # Continuous integration
-│       ├── publish-crates.yml  # Publish to crates.io
-│       ├── docs.yml            # Documentation checks
-│       └── security.yml        # Dependency audits
-├── quillmark-core/
-│   ├── Cargo.toml
-│   ├── src/
-│   └── README.md
-├── quillmark-typst/
-│   ├── Cargo.toml
-│   ├── src/
-│   └── README.md
-├── quillmark/
-│   ├── Cargo.toml
-│   ├── src/
-│   └── README.md
-└── quillmark-fixtures/
-    ├── Cargo.toml
-    └── src/
-```
-
-### Configuration Files
-
-**.gitignore**:
-```gitignore
-/target
-**/*.rs.bk
-Cargo.lock  # Remove this line - we want to commit Cargo.lock
-.idea/
-.vscode/
-*.swp
-.DS_Store
-```
-
-**Note**: Cargo.lock SHOULD be committed for applications and workspace roots to ensure reproducible builds.
-
----
+**README Requirements**: Each published crate will use the README.md at the root of the project.
 
 ## CI/CD Workflows
 
@@ -152,7 +77,7 @@ Cargo.lock  # Remove this line - we want to commit Cargo.lock
 
 **File**: `.github/workflows/ci.yml`
 
-**Trigger**: Push to main/develop, all pull requests
+**Trigger**: Push to main, all pull requests
 
 **Jobs**:
 
@@ -177,7 +102,6 @@ Cargo.lock  # Remove this line - we want to commit Cargo.lock
   - Run `cargo test --workspace --all-features`
   - Run `cargo test --workspace --no-default-features`
   - Run `cargo test --workspace --doc` (doctest)
-  - Upload coverage to Codecov (ubuntu only)
 
 #### Job: `fmt`
 - **Purpose**: Verify code formatting
@@ -1099,51 +1023,6 @@ max_width = 100
 use_small_heuristics = "Max"
 imports_granularity = "Crate"
 group_imports = "StdExternalCrate"
-```
-
-#### Testing Standards
-
-- **Coverage Target**: >80% line coverage
-- **Test Organization**:
-  - Unit tests: Same file as implementation
-  - Integration tests: `tests/` directory
-  - Doc tests: Documentation examples
-  - Fixtures: Use `quillmark-fixtures` crate
-
-- **Test Naming**: Descriptive names using snake_case
-  ```rust
-  #[test]
-  fn parse_valid_frontmatter_returns_ok() { ... }
-  ```
-
-#### Documentation Standards
-
-- **Public API**: All public items must have doc comments
-- **Examples**: Include usage examples in doc comments
-- **Doc Tests**: Use ````rust` blocks that compile and run
-- **Module Docs**: High-level overview at module level
-
-**Example**:
-```rust
-/// Parses a Markdown document with YAML frontmatter.
-///
-/// # Examples
-///
-/// ```rust
-/// use quillmark_core::decompose;
-///
-/// let markdown = "---\ntitle: Hello\n---\n# Content";
-/// let parsed = decompose(markdown)?;
-/// assert_eq!(parsed.frontmatter.get("title"), Some("Hello"));
-/// # Ok::<(), Box<dyn std::error::Error>>(())
-/// ```
-///
-/// # Errors
-///
-/// Returns an error if the frontmatter is not valid YAML.
-pub fn decompose(input: &str) -> Result<ParsedDocument, ParseError> {
-    // ...
-}
 ```
 
 ### Performance Benchmarking

@@ -78,4 +78,4 @@ pub use quillmark_core::{
 pub mod orchestration;
 
 // Re-export types from orchestration module for backward compatibility
-pub use orchestration::{Quillmark, QuillRef, Workflow};
+pub use orchestration::{QuillRef, Quillmark, Workflow};

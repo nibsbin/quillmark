@@ -1,22 +1,19 @@
 //! Error mapping utilities for converting Typst diagnostics to Quillmark diagnostics
 
+use crate::world::QuillWorld;
 use quillmark_core::{Diagnostic, Location, Severity};
 use typst::diag::SourceDiagnostic;
-use crate::world::QuillWorld;
 
 /// Convert Typst SourceDiagnostic array to structured Diagnostic array
-pub fn map_typst_errors(
-    errors: &[SourceDiagnostic],
-    world: &QuillWorld,
-) -> Vec<Diagnostic> {
-    errors.iter().map(|e| map_single_diagnostic(e, world)).collect()
+pub fn map_typst_errors(errors: &[SourceDiagnostic], world: &QuillWorld) -> Vec<Diagnostic> {
+    errors
+        .iter()
+        .map(|e| map_single_diagnostic(e, world))
+        .collect()
 }
 
 /// Convert a single Typst SourceDiagnostic to a Quillmark Diagnostic
-fn map_single_diagnostic(
-    error: &SourceDiagnostic,
-    world: &QuillWorld,
-) -> Diagnostic {
+fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagnostic {
     // Map Typst severity to Quillmark severity
     let severity = match error.severity {
         typst::diag::Severity::Error => Severity::Error,
@@ -27,7 +24,9 @@ fn map_single_diagnostic(
     let location = resolve_span_to_location(&error.span, world);
 
     // Map trace to related locations
-    let related = error.trace.iter()
+    let related = error
+        .trace
+        .iter()
         .filter_map(|spanned| resolve_span_to_location(&spanned.span, world))
         .collect();
 
@@ -35,7 +34,8 @@ fn map_single_diagnostic(
     let hint = error.hints.first().map(|h| h.to_string());
 
     // Extract error code from message (simple heuristic)
-    let code = Some(format!("typst::{}", 
+    let code = Some(format!(
+        "typst::{}",
         error.message.split(':').next().unwrap_or("error").trim()
     ));
 
@@ -50,20 +50,17 @@ fn map_single_diagnostic(
 }
 
 /// Resolve a Typst span to a Quillmark Location
-fn resolve_span_to_location(
-    span: &typst::syntax::Span,
-    world: &QuillWorld,
-) -> Option<Location> {
+fn resolve_span_to_location(span: &typst::syntax::Span, world: &QuillWorld) -> Option<Location> {
     use typst::World;
-    
+
     let source_id = world.main();
     let source = world.source(source_id).ok()?;
     let range = source.range(*span)?;
-    
+
     let text = source.text();
     let line = text[..range.start].matches('\n').count() + 1;
     let col = range.start - text[..range.start].rfind('\n').map_or(0, |pos| pos + 1) + 1;
-    
+
     Some(Location {
         file: source.id().vpath().as_rootless_path().display().to_string(),
         line: line as u32,
@@ -85,7 +82,7 @@ mod tests {
             },
             Severity::Error
         );
-        
+
         assert_eq!(
             match typst::diag::Severity::Warning {
                 typst::diag::Severity::Error => Severity::Error,

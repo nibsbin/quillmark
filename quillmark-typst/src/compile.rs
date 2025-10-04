@@ -34,19 +34,17 @@ use typst::diag::Warned;
 use typst::layout::PagedDocument;
 use typst_pdf::PdfOptions;
 
-use crate::world::QuillWorld;
 use crate::error_mapping::map_typst_errors;
+use crate::world::QuillWorld;
 use quillmark_core::{Quill, RenderError};
 
 /// Compiles a Typst document to PDF format.
-pub fn compile_to_pdf(
-    quill: &Quill,
-    glued_content: &str,
-) -> Result<Vec<u8>, RenderError> {
+pub fn compile_to_pdf(quill: &Quill, glued_content: &str) -> Result<Vec<u8>, RenderError> {
     println!("Using quill: {}", quill.name);
-    let world = QuillWorld::new(quill, glued_content)
-        .map_err(|e| RenderError::Internal(anyhow::anyhow!("Failed to create Typst world: {}", e)))?;
-    
+    let world = QuillWorld::new(quill, glued_content).map_err(|e| {
+        RenderError::Internal(anyhow::anyhow!("Failed to create Typst world: {}", e))
+    })?;
+
     let document = compile_document(&world)?;
 
     let pdf = typst_pdf::pdf(&document, &PdfOptions::default())
@@ -56,13 +54,11 @@ pub fn compile_to_pdf(
 }
 
 /// Compiles a Typst document to SVG format (one file per page).
-pub fn compile_to_svg(
-    quill: &Quill,
-    glued_content: &str,
-) -> Result<Vec<Vec<u8>>, RenderError> {
-    let world = QuillWorld::new(quill, glued_content)
-        .map_err(|e| RenderError::Internal(anyhow::anyhow!("Failed to create Typst world: {}", e)))?;
-    
+pub fn compile_to_svg(quill: &Quill, glued_content: &str) -> Result<Vec<Vec<u8>>, RenderError> {
+    let world = QuillWorld::new(quill, glued_content).map_err(|e| {
+        RenderError::Internal(anyhow::anyhow!("Failed to create Typst world: {}", e))
+    })?;
+
     let document = compile_document(&world)?;
 
     let mut pages = Vec::new();
@@ -80,7 +76,7 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
         output,
         warnings: _,
     } = typst::compile::<PagedDocument>(world);
-    
+
     match output {
         Ok(doc) => {
             // TODO: Capture and propagate warnings to RenderResult
@@ -88,7 +84,10 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
         }
         Err(errors) => {
             let diagnostics = map_typst_errors(&errors, world);
-            Err(RenderError::CompilationFailed(diagnostics.len(), diagnostics))
+            Err(RenderError::CompilationFailed(
+                diagnostics.len(),
+                diagnostics,
+            ))
         }
     }
 }

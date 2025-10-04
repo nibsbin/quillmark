@@ -379,7 +379,7 @@ impl From<minijinja::Error> for RenderError {
 /// Generate helpful hints for common MiniJinja errors
 fn generate_minijinja_hint(e: &minijinja::Error) -> Option<String> {
     use minijinja::ErrorKind;
-    
+
     match e.kind() {
         ErrorKind::UndefinedError => {
             Some("Check variable spelling and ensure it's defined in frontmatter".to_string())
@@ -387,13 +387,12 @@ fn generate_minijinja_hint(e: &minijinja::Error) -> Option<String> {
         ErrorKind::InvalidOperation => {
             Some("Check that you're using the correct filter or operator for this type".to_string())
         }
-        ErrorKind::SyntaxError => {
-            Some("Check template syntax - look for unclosed tags or invalid expressions".to_string())
-        }
+        ErrorKind::SyntaxError => Some(
+            "Check template syntax - look for unclosed tags or invalid expressions".to_string(),
+        ),
         _ => e.detail().map(|d| d.to_string()),
     }
 }
-
 
 /// Helper to print structured errors
 pub fn print_errors(err: &RenderError) {
@@ -407,13 +406,19 @@ pub fn print_errors(err: &RenderError) {
         RenderError::InvalidFrontmatter { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::EngineCreation { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::FormatNotSupported { backend, format } => {
-            eprintln!("[ERROR] Format {:?} not supported by {} backend", format, backend);
+            eprintln!(
+                "[ERROR] Format {:?} not supported by {} backend",
+                format, backend
+            );
         }
         RenderError::UnsupportedBackend(name) => {
             eprintln!("[ERROR] Unsupported backend: {}", name);
         }
         RenderError::DynamicAssetCollision { filename, message } => {
-            eprintln!("[ERROR] Dynamic asset collision: {}\n  {}", filename, message);
+            eprintln!(
+                "[ERROR] Dynamic asset collision: {}\n  {}",
+                filename, message
+            );
         }
         RenderError::Internal(e) => {
             eprintln!("[ERROR] Internal error: {}", e);
