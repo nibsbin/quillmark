@@ -10,9 +10,9 @@ rendering at different stages of the pipeline.
 
 The workflow supports rendering at three levels:
 
-1. **Full render** ([`render`](Self::render)) - Parse Markdown → Compose with template → Compile to artifacts
-2. **Content render** ([`render_content`](Self::render_content)) - Skip parsing, render pre-composed content
-3. **Glue only** ([`process_glue`](Self::process_glue)) - Parse and compose, return template output
+1. **Full render** ([`render`](Workflow::render)) - Parse Markdown → Compose with template → Compile to artifacts
+2. **Content render** ([`render_content`](Workflow::render_content)) - Skip parsing, render pre-composed content
+3. **Glue only** ([`process_glue`](Workflow::process_glue)) - Parse and compose, return template output
 
 ## Examples
 
