@@ -1,4 +1,4 @@
-#[doc = include_str!("../docs/errors.md")]
+#![doc = include_str!("../docs/errors.md")]
 
 use crate::OutputFormat;
 

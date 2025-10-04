@@ -1,4 +1,4 @@
-#[doc = include_str!("../docs/parse.md")]
+#![doc = include_str!("../docs/parse.md")]
 
 use std::collections::HashMap;
 

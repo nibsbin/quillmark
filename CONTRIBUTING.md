@@ -82,7 +82,7 @@ crate-name/
 │   └── designs/                   # Design documents and specifications
 │       └── {DESIGN}.md
 ├── src/
-│   ├── lib.rs                     # #![doc = include_str!("../docs/overview.md")]
+│   ├── lib.rs                     # #![doc = include_str!("../docs/lib.md")]
 │   └── {module}.rs                # #![doc = include_str!("../docs/{module}.md")]
 └── ...
 ```
