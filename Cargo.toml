@@ -50,6 +50,12 @@ quillmark-fixtures = { path = "quillmark-fixtures" }
 # Exclude fixtures from publishing since it's dev-only
 no_individual_tags = true
 
+[workspace.metadata.release]
+# Update package.json versions to match workspace version
+pre-release-replacements = [
+  {file="quillmark-fixtures/package.json", search="\"version\": \"[^\"]*\"", replace="\"version\": \"{{version}}\""},
+]
+
 [profile.release]
 opt-level = "z"      # Optimize for size
 lto = true           # Link-time optimization

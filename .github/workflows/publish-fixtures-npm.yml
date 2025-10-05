@@ -50,22 +50,13 @@ jobs:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Extract version from workspace Cargo.toml
+      - name: Get version from package.json
         id: version
-        run: |
-          VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Publishing version: $VERSION"
-
-      - name: Update package version
         working-directory: quillmark-fixtures
         run: |
-          # Update version in package.json to match workspace Cargo.toml
-          if sed --version 2>&1 | grep -q GNU; then
-            sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${{ steps.version.outputs.version }}\"/" "package.json"
-          else
-            sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"${{ steps.version.outputs.version }}\"/" "package.json"
-          fi
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Publishing version: $VERSION"
 
       - name: Publish @quillmark-test/fixtures
         working-directory: quillmark-fixtures
