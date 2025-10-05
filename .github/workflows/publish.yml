@@ -79,27 +79,15 @@ jobs:
       - name: Install wasm-pack
         run: cargo install wasm-pack
 
-      - name: Extract version from Cargo.toml
+      - name: Extract version from workspace Cargo.toml
         id: version
         run: |
           VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Publishing version: $VERSION"
+          echo "Publishing WASM version: $VERSION"
 
       - name: Build WASM packages
         run: ./scripts/build-wasm.sh
-
-      - name: Update package version
-        run: |
-          # Update version in package.json to match Cargo.toml
-          # We'll publish the bundler target as the main package
-          if [ -f "pkg/bundler/package.json" ]; then
-            if sed --version 2>&1 | grep -q GNU; then
-              sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"${{ steps.version.outputs.version }}\"/" "pkg/bundler/package.json"
-            else
-              sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"${{ steps.version.outputs.version }}\"/" "pkg/bundler/package.json"
-            fi
-          fi
 
       - name: Publish @quillmark/wasm
         working-directory: pkg/bundler
