@@ -309,6 +309,22 @@ pub enum RenderError {
         message: String,
     },
 
+    /// Compilation timeout - document took too long to compile
+    #[error("Compilation timeout: document compilation exceeded {timeout_secs} seconds")]
+    CompilationTimeout {
+        /// Timeout in seconds
+        timeout_secs: u64,
+    },
+
+    /// Too many pages generated
+    #[error("Too many pages: document generated {page_count} pages (limit: {max_pages})")]
+    TooManyPages {
+        /// Number of pages generated
+        page_count: usize,
+        /// Maximum allowed pages
+        max_pages: usize,
+    },
+
     /// Internal error (wraps anyhow::Error)
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
@@ -419,6 +435,23 @@ pub fn print_errors(err: &RenderError) {
                 "[ERROR] Dynamic asset collision: {}\n  {}",
                 filename, message
             );
+        }
+        RenderError::CompilationTimeout { timeout_secs } => {
+            eprintln!(
+                "[ERROR] Compilation timeout: document compilation exceeded {} seconds",
+                timeout_secs
+            );
+            eprintln!("  hint: The document may contain infinite loops or excessive computations");
+        }
+        RenderError::TooManyPages {
+            page_count,
+            max_pages,
+        } => {
+            eprintln!(
+                "[ERROR] Too many pages: document generated {} pages (limit: {})",
+                page_count, max_pages
+            );
+            eprintln!("  hint: Reduce document content or increase page limit");
         }
         RenderError::Internal(e) => {
             eprintln!("[ERROR] Internal error: {}", e);
