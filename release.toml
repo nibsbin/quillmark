@@ -1,6 +1,6 @@
-# Drive bumps + tagging with cargo-release; publishing happens in CI on tag.
-# Invoke locally or in CI like:
-#   cargo release <patch|minor|major> --workspace
+# Drive bumps + tagging with cargo-release; publishing happens in CI after commit to main.
+# Invoke locally like:
+#   cargo release <patch|minor|major> --execute --workspace
 
 # Only release from main
 allow-branch = ["main"]

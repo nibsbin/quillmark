@@ -5,9 +5,6 @@ on:
     workflows: ["CI"]
     types: [completed]
     branches: [main]
-  push:
-    tags:
-      - "v*.*.*"
   workflow_dispatch:
 
 permissions:
