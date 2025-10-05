@@ -35,6 +35,38 @@
 //! - **Compilation Timeout**: Documents that take longer than 60 seconds to compile are terminated
 //! - **Page Limit**: Documents cannot generate more than 1000 pages
 //! - **Memory Limits** (Unix only): Compilation memory limited to 512 MB when available
+//!
+//! ### Security Limitations
+//!
+//! **Important**: The current timeout implementation detects slow compilations after they complete,
+//! but does NOT prevent infinite loops during compilation. For true timeout enforcement,
+//! process isolation is needed (see `designs/SECURITY_REC.md`).
+//!
+//! ### Example Error Handling
+//!
+//! ```no_run
+//! use quillmark_typst::compile::compile_to_pdf;
+//! use quillmark_core::{Quill, RenderError};
+//!
+//! let quill = Quill::from_path("path/to/quill")?;
+//! let typst_content = "#set document(title: \"Test\")\n= Hello";
+//!
+//! match compile_to_pdf(&quill, typst_content) {
+//!     Ok(pdf_bytes) => {
+//!         std::fs::write("output.pdf", pdf_bytes)?;
+//!     }
+//!     Err(RenderError::CompilationTimeout { timeout_secs }) => {
+//!         eprintln!("Compilation exceeded {} seconds", timeout_secs);
+//!     }
+//!     Err(RenderError::TooManyPages { page_count, max_pages }) => {
+//!         eprintln!("Document has {} pages (max: {})", page_count, max_pages);
+//!     }
+//!     Err(e) => {
+//!         eprintln!("Compilation failed: {}", e);
+//!     }
+//! }
+//! # Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+//! ```
 
 use std::time::{Duration, Instant};
 use typst::diag::Warned;
