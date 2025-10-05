@@ -34,11 +34,11 @@ Quillmark processes untrusted user input through multiple parsing and evaluation
 6. **Typst compilation** (Typst compiler)
 
 **Key Security Posture**: 
-- ✅ **Strong**: No unsafe Rust code, well-isolated parsing stages
-- ⚠️ **Medium Risk**: Template injection, path traversal in asset filters
-- ❌ **Requires Hardening**: Resource exhaustion, compilation timeouts
+- ✅ **Strong**: No unsafe Rust code, well-isolated parsing stages, resource limits implemented
+- ⚠️ **Medium Risk**: Template injection (mitigated by trust model), path traversal (mitigated)
+- ❌ **Requires Hardening**: Typst execution sandboxing, compilation timeouts
 
-**Critical Recommendation**: Implement sandboxing for Typst execution and add resource limits for all parsing/compilation stages.
+**Critical Recommendation**: Implement sandboxing for Typst execution. Resource limits for parsing/compilation stages are now in place.
 
 ---
 
@@ -46,11 +46,11 @@ Quillmark processes untrusted user input through multiple parsing and evaluation
 
 | Component | Risk Level | Injection | DoS | Path Traversal | Data Leak | Overall Score |
 |-----------|------------|-----------|-----|----------------|-----------|---------------|
-| **Markdown Parser** | 🟢 Low | ✅ Mitigated | ⚠️ Moderate | N/A | ✅ Safe | **8/10** |
-| **YAML Parser** | 🟡 Medium | ✅ Mitigated | ⚠️ Moderate | N/A | ⚠️ Moderate | **7/10** |
-| **MiniJinja Templates** | 🟡 Medium | ⚠️ Moderate | ⚠️ Moderate | N/A | ⚠️ Moderate | **6/10** |
-| **Backend Filters** | 🟡 Medium | ✅ Mitigated | ⚠️ Moderate | ✅ Mitigated | ✅ Safe | **7/10** |
-| **Typst Conversion** | 🟢 Low | ✅ Mitigated | ✅ Safe | N/A | ✅ Safe | **9/10** |
+| **Markdown Parser** | 🟢 Good | ✅ Mitigated | ✅ Mitigated | N/A | ✅ Safe | **9/10** |
+| **YAML Parser** | 🟢 Good | ✅ Mitigated | ✅ Mitigated | N/A | ⚠️ Moderate | **8/10** |
+| **MiniJinja Templates** | 🟢 Good | ✅ Mitigated | ✅ Mitigated | N/A | ⚠️ Moderate | **8/10** |
+| **Backend Filters** | 🟡 Medium | ✅ Mitigated | ✅ Mitigated | ✅ Mitigated | ✅ Safe | **8/10** |
+| **Typst Conversion** | 🟢 Low | ✅ Mitigated | ✅ Mitigated | N/A | ✅ Safe | **9/10** |
 | **Typst Execution** | 🔴 High | ⚠️ Moderate | 🔴 High | 🔴 High | ⚠️ Moderate | **4/10** |
 | **Dynamic Assets** | 🟡 Medium | N/A | ⚠️ Moderate | ✅ Mitigated | ⚠️ Moderate | **6/10** |
 
@@ -78,74 +78,57 @@ Quillmark processes untrusted user input through multiple parsing and evaluation
 - ✅ Event-based parsing prevents unbounded memory allocation
 - ✅ No HTML injection (HTML events are escaped in Typst conversion)
 - ✅ CommonMark spec compliance
+- ✅ **Input size limit**: 10 MB maximum (implemented)
+- ✅ **Nesting depth limit**: 100 levels maximum (implemented)
 
-**Vulnerabilities**:
-- ⚠️ **DoS via deeply nested structures**: Unlimited nesting depth (e.g., 10,000+ nested blockquotes)
-- ⚠️ **Algorithmic complexity**: Quadratic behavior with certain backtracking patterns
-- ⚠️ **Large documents**: No size limit on input markdown
+**Previous Vulnerabilities (NOW MITIGATED)**:
+- ✅ ~~**DoS via deeply nested structures**~~: Now limited to 100 levels
+- ✅ ~~**Large documents**~~: Now limited to 10 MB total input size
+- ⚠️ **Algorithmic complexity**: Quadratic behavior with certain backtracking patterns (inherent to pulldown-cmark)
 
 **Evidence**:
 ```rust
-// quillmark-typst/src/convert.rs:286
-pub fn mark_to_typst(markdown: &str) -> String {
-    let parser = Parser::new(markdown); // No size or depth limits
-    let mut output = String::new();
-    push_typst(&mut output, parser);
-    output
+// quillmark-typst/src/convert.rs (IMPLEMENTED)
+const MAX_NESTING_DEPTH: usize = 100;
+
+pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
+    let mut options = pulldown_cmark::Options::empty();
+    options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
+
+    let parser = Parser::new_ext(markdown, options);
+    let mut typst_output = String::new();
+
+    push_typst(&mut typst_output, parser)?; // Now returns Result
+    Ok(typst_output)
+}
+
+// Input size checking in quillmark-core/src/parse.rs (IMPLEMENTED)
+pub fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error + Send + Sync>> {
+    if markdown.len() > MAX_INPUT_SIZE {
+        return Err(format!(
+            "Input too large: {} bytes (max: {} bytes)",
+            markdown.len(),
+            MAX_INPUT_SIZE
+        ).into());
+    }
+    // ... rest of implementation
 }
 ```
 
-**Recommended Mitigations**:
-1. **Add input size limits**:
-   ```rust
-   const MAX_MARKDOWN_SIZE: usize = 10 * 1024 * 1024; // 10 MB
-   
-   pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
-       if markdown.len() > MAX_MARKDOWN_SIZE {
-           return Err(ConversionError::InputTooLarge(markdown.len()));
-       }
-       // ... existing code
-   }
-   ```
+**Mitigations Status**:
+1. ✅ **Input size limits IMPLEMENTED**:
+   - `MAX_INPUT_SIZE` = 10 MB in `quillmark-core/src/error.rs`
+   - Checked in `decompose()` function before parsing
+   - Returns clear error with actual vs. max size
 
-2. **Add nesting depth tracking**:
-   ```rust
-   const MAX_NESTING_DEPTH: usize = 100;
-   
-   fn push_typst<'a, I>(output: &mut String, iter: I) -> Result<(), ConversionError>
-   where
-       I: Iterator<Item = Event<'a>>,
-   {
-       let mut depth = 0;
-       for event in iter {
-           match event {
-               Event::Start(_) => {
-                   depth += 1;
-                   if depth > MAX_NESTING_DEPTH {
-                       return Err(ConversionError::NestingTooDeep);
-                   }
-               }
-               Event::End(_) => depth -= 1,
-               _ => {}
-           }
-       }
-       Ok(())
-   }
-   ```
+2. ✅ **Nesting depth tracking IMPLEMENTED**:
+   - `MAX_NESTING_DEPTH` = 100 in `quillmark-typst/src/convert.rs`
+   - Tracks depth on `Event::Start` and `Event::End`
+   - Returns `ConversionError::NestingTooDeep` when exceeded
 
-3. **Add parsing timeout**:
-   ```rust
-   use std::time::{Duration, Instant};
-   
-   const PARSE_TIMEOUT: Duration = Duration::from_secs(30);
-   
-   pub fn mark_to_typst_with_timeout(markdown: &str) -> Result<String, ConversionError> {
-       let start = Instant::now();
-       // Check timeout periodically during conversion
-   }
-   ```
+3. ⚠️ **Parsing timeout**: Not implemented (requires more complex threading/async changes)
 
-**Risk Assessment**: 🟢 **Low** - Parser itself is safe, but lacks resource limits
+**Risk Assessment**: 🟢 **Good** - Parser has resource limits, safe with reasonable inputs
 
 ---
 
@@ -186,9 +169,9 @@ fn is_valid_tag_name(name: &str) -> bool {
 ```
 
 **Vulnerabilities**:
-- ⚠️ **YAML bomb**: Large YAML documents can cause memory exhaustion
+- ✅ ~~**YAML bomb**~~: Now limited to 1 MB per block (IMPLEMENTED)
 - ⚠️ **Billion laughs attack**: Not explicitly prevented (though anchors are not used)
-- ⚠️ **Recursive structures**: Could cause stack overflow or memory issues
+- ⚠️ **Recursive structures**: Could cause stack overflow or memory issues (serde_yaml limitation)
 
 **Example Attack Vector**:
 ```yaml
@@ -200,45 +183,29 @@ huge_array: [
 ---
 ```
 
-**Recommended Mitigations**:
-1. **Add YAML size limits**:
+**Mitigations Status**:
+1. ✅ **YAML size limits IMPLEMENTED**:
    ```rust
-   const MAX_YAML_SIZE: usize = 1 * 1024 * 1024; // 1 MB per block
+   const MAX_YAML_SIZE: usize = 1 * 1024 * 1024; // 1 MB per block (IMPLEMENTED)
    
    fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, Error> {
        // ... existing code
        
-       if yaml_content.len() > MAX_YAML_SIZE {
+       if content.len() > MAX_YAML_SIZE {
            return Err(format!(
-               "YAML block too large: {} bytes (max: {})",
-               yaml_content.len(),
+               "YAML block too large: {} bytes (max: {} bytes)",
+               content.len(),
                MAX_YAML_SIZE
            ).into());
        }
    }
    ```
 
-2. **Add deserialization limits**:
-   ```rust
-   // Configure serde_yaml with limits
-   use serde_yaml::de::Deserializer;
-   
-   let mut deserializer = Deserializer::from_str(&yaml_content);
-   deserializer.set_recursion_limit(Some(100));
-   let yaml_fields: HashMap<String, serde_yaml::Value> = 
-       serde::Deserialize::deserialize(&mut deserializer)?;
-   ```
+2. ⚠️ **Deserialization limits**: Not implemented (requires serde_yaml API changes)
 
-3. **Add field count validation**:
-   ```rust
-   const MAX_YAML_FIELDS: usize = 1000;
-   
-   if yaml_fields.len() > MAX_YAML_FIELDS {
-       return Err(format!("Too many fields in YAML: {}", yaml_fields.len()).into());
-   }
-   ```
+3. ⚠️ **Field count validation**: Not implemented (not critical for typical use cases)
 
-**Risk Assessment**: 🟡 **Medium** - Parser is safe but needs resource limits
+**Risk Assessment**: 🟡 **Medium-Good** - Parser has size limits, safe for typical inputs
 
 ---
 
@@ -277,10 +244,11 @@ pub fn compose(
 ```
 
 **Vulnerabilities**:
-- ⚠️ **Template injection**: If template source is user-controlled
-- ⚠️ **Information disclosure**: Templates can access all context data
-- ⚠️ **DoS via template complexity**: Infinite loops, large iterations
-- ⚠️ **Filter chaining attacks**: Malicious filter combinations
+- ⚠️ **Template injection**: If template source is user-controlled (NOT the case - templates are trusted)
+- ⚠️ **Information disclosure**: Templates can access all context data (by design)
+- ✅ ~~**DoS via large output**~~: Now limited to 50 MB (IMPLEMENTED)
+- ⚠️ **DoS via infinite loops**: Not prevented (requires timeout implementation)
+- ⚠️ **Filter chaining attacks**: Malicious filter combinations (mitigated by trusted templates)
 
 **Attack Scenarios**:
 
@@ -304,34 +272,32 @@ pub fn compose(
    {% set x = "a" * 999999999 %}
    ```
 
-**Recommended Mitigations**:
+**Mitigations Status**:
 
-1. **Treat templates as trusted code** (current model is correct):
+1. ✅ **Treat templates as trusted code** (current model is correct):
    - ✅ Templates are part of the Quill, not user input
    - ✅ Only frontmatter and markdown body are untrusted
    - Document this trust boundary clearly
 
-2. **Add rendering timeout and resource limits**:
+2. ✅ **Template output size limit IMPLEMENTED**:
    ```rust
-   use std::time::{Duration, Instant};
-   
-   const RENDER_TIMEOUT: Duration = Duration::from_secs(10);
-   const MAX_OUTPUT_SIZE: usize = 50 * 1024 * 1024; // 50 MB
+   const MAX_TEMPLATE_OUTPUT: usize = 50 * 1024 * 1024; // 50 MB (IMPLEMENTED)
    
    impl Glue {
-       pub fn compose_with_limits(
+       pub fn compose(
            &mut self,
            context: HashMap<String, serde_yaml::Value>,
        ) -> Result<String, TemplateError> {
-           let start = Instant::now();
-           let result = self.compose(context)?;
+           // ... render template
+           let result = tmpl.render(&context)?;
            
-           if start.elapsed() > RENDER_TIMEOUT {
-               return Err(TemplateError::RenderTimeout);
-           }
-           
-           if result.len() > MAX_OUTPUT_SIZE {
-               return Err(TemplateError::OutputTooLarge(result.len()));
+           // Check output size limit
+           if result.len() > MAX_TEMPLATE_OUTPUT {
+               return Err(TemplateError::FilterError(format!(
+                   "Template output too large: {} bytes (max: {} bytes)",
+                   result.len(),
+                   MAX_TEMPLATE_OUTPUT
+               )));
            }
            
            Ok(result)
@@ -339,24 +305,17 @@ pub fn compose(
    }
    ```
 
-3. **Add context size validation**:
-   ```rust
-   fn validate_context_size(context: &HashMap<String, serde_yaml::Value>) -> Result<(), TemplateError> {
-       let serialized = serde_json::to_string(context)?;
-       if serialized.len() > MAX_CONTEXT_SIZE {
-           return Err(TemplateError::ContextTooLarge);
-       }
-       Ok(())
-   }
-   ```
+3. ⚠️ **Rendering timeout**: Not implemented (requires threading/async changes)
 
-4. **Consider template pre-compilation and caching**:
+4. ⚠️ **Context size validation**: Not implemented (not critical for typical use cases)
+
+5. ⚠️ **Template pre-compilation and caching**: Consider for future optimization
    ```rust
    // Compile templates once at Quill load time
    // Cache compiled templates to avoid repeated compilation
    ```
 
-**Risk Assessment**: 🟡 **Medium** - Safe when templates are trusted, needs limits for robustness
+**Risk Assessment**: 🟢 **Good** - Safe when templates are trusted, has output size limits
 
 ---
 
@@ -790,27 +749,33 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
 - Memory exhaustion via large array generation
 - Algorithmic complexity attacks (quadratic regex, etc.)
 
-**Current State**: ⚠️ **Vulnerable** - No size/depth/time limits
+**Current State**: ✅ **MITIGATED** - Resource limits implemented
 
-**Mitigations**:
+**Implemented Mitigations**:
 ```rust
-// Global configuration
+// Global configuration (IMPLEMENTED in quillmark-core/src/error.rs)
 const MAX_INPUT_SIZE: usize = 10 * 1024 * 1024;      // 10 MB
 const MAX_YAML_SIZE: usize = 1 * 1024 * 1024;        // 1 MB
 const MAX_NESTING_DEPTH: usize = 100;                 // 100 levels
 const MAX_TEMPLATE_OUTPUT: usize = 50 * 1024 * 1024; // 50 MB
-const COMPILE_TIMEOUT: Duration = Duration::from_secs(60);
-const PARSE_TIMEOUT: Duration = Duration::from_secs(30);
 
-// Add to RenderError
+// Error variants (IMPLEMENTED in quillmark-core/src/error.rs)
 pub enum RenderError {
     InputTooLarge { size: usize, max: usize },
+    YamlTooLarge { size: usize, max: usize },
     NestingTooDeep { depth: usize, max: usize },
-    TimeoutExceeded { stage: String },
-    ResourceLimitExceeded { resource: String, value: usize },
+    OutputTooLarge { size: usize, max: usize },
     // ... existing variants
 }
 ```
+
+**Implementation Status**:
+- ✅ Input size limit (10 MB) - enforced in `parse::decompose()`
+- ✅ YAML size limit (1 MB) - enforced in `find_metadata_blocks()`
+- ✅ Nesting depth (100 levels) - enforced in `mark_to_typst()`
+- ✅ Template output (50 MB) - enforced in `Glue::compose()`
+- ⚠️ Parsing timeouts - not implemented (complex threading required)
+- ⚠️ Compilation timeout - not implemented (Typst limitation)
 
 ### 2. Template Injection
 
@@ -943,13 +908,14 @@ fn verify_package_checksum(pkg_data: &[u8], expected: &str) -> Result<(), Error>
 
 ### Immediate Actions (Critical - Do Now)
 
-1. **Add resource limits to all parsing/compilation stages**
-   - Input size limits (markdown, YAML)
-   - Nesting depth limits
-   - Compilation timeout
-   - Memory limits
+1. ✅ **COMPLETED: Add resource limits to all parsing/compilation stages**
+   - ✅ Input size limits (markdown: 10 MB, YAML: 1 MB)
+   - ✅ Nesting depth limits (100 levels)
+   - ✅ Template output limit (50 MB)
+   - ⚠️ Compilation timeout (requires Typst API changes)
+   - ⚠️ Memory limits (OS-level, not application-level)
 
-2. **Implement Typst execution sandboxing**
+2. **Implement Typst execution sandboxing** (STILL REQUIRED)
    - Process isolation
    - Filesystem restrictions
    - Network blocking
