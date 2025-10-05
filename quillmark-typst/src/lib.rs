@@ -39,6 +39,14 @@ pub mod convert;
 mod error_mapping;
 mod filters;
 mod world;
+
+/// Utilities exposed for fuzzing tests.
+/// Not intended for general use.
+#[doc(hidden)]
+pub mod fuzz_utils {
+    pub use super::filters::inject_json;
+}
+
 use filters::{
     asset_filter, content_filter, date_filter, dict_filter, lines_filter, string_filter,
 };

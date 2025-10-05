@@ -16,7 +16,10 @@ fn apply_default(mut v: Value, kwargs: &Kwargs) -> Result<Value, Error> {
     Ok(v)
 }
 
-fn inject_json(bytes: &str) -> String {
+/// Helper function to inject JSON into Typst code.
+/// Exposed for fuzzing tests.
+#[doc(hidden)]
+pub fn inject_json(bytes: &str) -> String {
     format!("json(bytes(\"{}\"))", escape_string(bytes))
 }
 

@@ -5,6 +5,14 @@ members = [
     "quillmark-typst",
     "quillmark-fixtures",
     "quillmark-wasm",
+    "quillmark-fuzz",
+]
+default-members = [
+    "quillmark-core",
+    "quillmark",
+    "quillmark-typst",
+    "quillmark-fixtures",
+    "quillmark-wasm",
 ]
 resolver = "2"
 
@@ -44,6 +52,7 @@ quillmark = { version = "0.0.20", path = "quillmark", default-features = false }
 
 # Test and dev dependencies
 tempfile = "~3.23"
+proptest = "~1.5"
 quillmark-fixtures = { path = "quillmark-fixtures" }
 
 [workspace.metadata.workspaces]
