@@ -130,6 +130,18 @@
 
 use crate::OutputFormat;
 
+/// Maximum input size for markdown (10 MB)
+pub const MAX_INPUT_SIZE: usize = 10 * 1024 * 1024;
+
+/// Maximum YAML size (1 MB)
+pub const MAX_YAML_SIZE: usize = 1 * 1024 * 1024;
+
+/// Maximum nesting depth for markdown structures (100 levels)
+pub const MAX_NESTING_DEPTH: usize = 100;
+
+/// Maximum template output size (50 MB)
+pub const MAX_TEMPLATE_OUTPUT: usize = 50 * 1024 * 1024;
+
 /// Error severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum Severity {
@@ -320,6 +332,42 @@ pub enum RenderError {
     /// Template-related error
     #[error("Template error: {0}")]
     Template(#[from] crate::templating::TemplateError),
+
+    /// Input size exceeded maximum allowed
+    #[error("Input too large: {size} bytes (max: {max} bytes)")]
+    InputTooLarge {
+        /// Actual size
+        size: usize,
+        /// Maximum allowed size
+        max: usize,
+    },
+
+    /// YAML size exceeded maximum allowed
+    #[error("YAML block too large: {size} bytes (max: {max} bytes)")]
+    YamlTooLarge {
+        /// Actual size
+        size: usize,
+        /// Maximum allowed size
+        max: usize,
+    },
+
+    /// Nesting depth exceeded maximum allowed
+    #[error("Nesting too deep: {depth} levels (max: {max} levels)")]
+    NestingTooDeep {
+        /// Actual depth
+        depth: usize,
+        /// Maximum allowed depth
+        max: usize,
+    },
+
+    /// Template output exceeded maximum size
+    #[error("Template output too large: {size} bytes (max: {max} bytes)")]
+    OutputTooLarge {
+        /// Actual size
+        size: usize,
+        /// Maximum allowed size
+        max: usize,
+    },
 }
 
 /// Result type containing artifacts and warnings
@@ -428,6 +476,30 @@ pub fn print_errors(err: &RenderError) {
         }
         RenderError::Other(e) => {
             eprintln!("[ERROR] {}", e);
+        }
+        RenderError::InputTooLarge { size, max } => {
+            eprintln!(
+                "[ERROR] Input too large: {} bytes (maximum: {} bytes)",
+                size, max
+            );
+        }
+        RenderError::YamlTooLarge { size, max } => {
+            eprintln!(
+                "[ERROR] YAML block too large: {} bytes (maximum: {} bytes)",
+                size, max
+            );
+        }
+        RenderError::NestingTooDeep { depth, max } => {
+            eprintln!(
+                "[ERROR] Nesting too deep: {} levels (maximum: {} levels)",
+                depth, max
+            );
+        }
+        RenderError::OutputTooLarge { size, max } => {
+            eprintln!(
+                "[ERROR] Template output too large: {} bytes (maximum: {} bytes)",
+                size, max
+            );
         }
     }
 }
