@@ -594,24 +594,69 @@ pub fn escape_string(s: &str) -> String {
 
 **Location**: `quillmark-typst/src/compile.rs`, `quillmark-typst/src/world.rs`
 
-**Current State**:
+**Current State** (Updated as of 2024):
 - ❌ **No sandboxing**: Typst compiler runs in the same process
-- ❌ **No resource limits**: Compilation can use unlimited memory/CPU
-- ❌ **No timeout**: Long-running compilations not terminated
+- ⚠️ **Partial timeout**: Compilation time is tracked and errors reported after 60s, but not enforced during execution
+- ✅ **Page limit**: Documents are limited to 1000 pages maximum
+- ⚠️ **No memory limits**: Compilation can use unlimited memory (requires OS-level controls)
 - ⚠️ **Filesystem access**: QuillWorld provides virtual filesystem, but Typst might have native file access
 - ✅ **Package loading**: Controlled through QuillWorld
 
+**Implemented Mitigations**:
+
+1. ✅ **Timeout Detection** (Partial):
+   - Compilation time is tracked using `Instant::now()`
+   - If compilation exceeds 60 seconds, a `RenderError::CompilationTimeout` is returned
+   - **Limitation**: This does NOT prevent infinite loops during compilation, only detects slow completions
+   - **Future Enhancement**: Process isolation needed for true timeout enforcement
+
+2. ✅ **Page Count Limit**:
+   - Documents are limited to 1000 pages maximum
+   - Exceeding this limit returns `RenderError::TooManyPages`
+   - Prevents output size explosion attacks
+
+3. ❌ **Memory Limits** (Not Yet Implemented):
+   - Requires OS-level controls (rlimit on Unix, job objects on Windows)
+   - Would need `rlimit` crate dependency and platform-specific code
+   - Recommended: 512 MB limit
+
+4. ❌ **Process Isolation** (Not Yet Implemented):
+   - Would require spawning Typst CLI as separate process
+   - Enables true timeout enforcement via process termination
+   - Adds complexity and performance overhead
+
 **Evidence**:
 ```rust
-// quillmark-typst/src/compile.rs:44
+// quillmark-typst/src/compile.rs:116 (Updated Implementation)
 fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
+    let start = Instant::now();
+    
     let Warned {
         output,
         warnings: _,
-    } = typst::compile::<PagedDocument>(world);  // No timeout, no resource limits
+    } = typst::compile::<PagedDocument>(world);
+
+    let elapsed = start.elapsed();
     
+    // Check if compilation took too long (detection, not prevention)
+    if elapsed > COMPILE_TIMEOUT {
+        return Err(RenderError::CompilationTimeout {
+            timeout_secs: COMPILE_TIMEOUT.as_secs(),
+        });
+    }
+
     match output {
-        Ok(doc) => Ok(doc),
+        Ok(doc) => {
+            // Check page count limit
+            if doc.pages.len() > MAX_COMPILATION_PAGES {
+                return Err(RenderError::TooManyPages {
+                    page_count: doc.pages.len(),
+                    max_pages: MAX_COMPILATION_PAGES,
+                });
+            }
+            
+            Ok(doc)
+        }
         Err(errors) => {
             let diagnostics = map_typst_errors(&errors, world);
             Err(RenderError::CompilationFailed(diagnostics.len(), diagnostics))
@@ -657,36 +702,38 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
    // Could download malicious packages if package source is compromised
    ```
 
-**Recommended Mitigations** (CRITICAL - HIGH PRIORITY):
+**Recommended Mitigations**:
 
-1. **Implement compilation timeout**:
-   ```rust
-   use std::sync::{Arc, Mutex};
-   use std::thread;
-   use std::time::{Duration, Instant};
+**Priority Legend**:
+- ✅ **Implemented** - Security feature is in place
+- ⚠️ **Partially Implemented** - Feature exists but has limitations
+- ❌ **Not Implemented** - Still needs to be added
+
+1. ⚠️ **Compilation timeout** (PARTIALLY IMPLEMENTED):
+   - ✅ Timeout detection implemented (60 seconds)
+   - ❌ Timeout enforcement not implemented (requires process isolation)
    
+   Current implementation (detection only):
+   ```rust
    const COMPILE_TIMEOUT: Duration = Duration::from_secs(60);
    
-   fn compile_document_with_timeout(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
+   fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
        let start = Instant::now();
-       let result = Arc::new(Mutex::new(None));
-       let result_clone = result.clone();
+       let Warned { output, warnings: _ } = typst::compile::<PagedDocument>(world);
+       let elapsed = start.elapsed();
        
-       let handle = thread::spawn(move || {
-           let compiled = typst::compile::<PagedDocument>(world);
-           *result_clone.lock().unwrap() = Some(compiled);
-       });
-       
-       // Wait with timeout
-       if handle.join_timeout(COMPILE_TIMEOUT).is_err() {
-           return Err(RenderError::CompilationTimeout);
+       if elapsed > COMPILE_TIMEOUT {
+           return Err(RenderError::CompilationTimeout {
+               timeout_secs: COMPILE_TIMEOUT.as_secs(),
+           });
        }
-       
-       // ... process result
+       // ... rest of implementation
    }
    ```
+   
+   For true enforcement, process isolation needed (see item 3 below).
 
-2. **Add memory limits** (requires OS-level controls):
+2. ❌ **Add memory limits** (NOT IMPLEMENTED - requires OS-level controls):
    ```rust
    // Use rlimit crate to set memory limits
    #[cfg(unix)]
@@ -697,7 +744,7 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
    }
    ```
 
-3. **Sandbox Typst execution** (process isolation):
+3. ❌ **Sandbox Typst execution** (NOT IMPLEMENTED - process isolation):
    ```rust
    use std::process::Command;
    
@@ -725,7 +772,7 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
    }
    ```
 
-4. **Restrict Typst capabilities in World implementation**:
+4. ❌ **Restrict Typst capabilities in World implementation** (NOT IMPLEMENTED):
    ```rust
    impl World for QuillWorld {
        fn file(&self, id: FileId) -> FileResult<Bytes> {
@@ -758,23 +805,44 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
    }
    ```
 
-6. **Add compilation limits**:
+6. ✅ **Add compilation limits** (IMPLEMENTED):
    ```rust
    const MAX_COMPILATION_PAGES: usize = 1000;
-   const MAX_OUTPUT_SIZE: usize = 100 * 1024 * 1024; // 100 MB
+   const MAX_OUTPUT_SIZE: usize = 100 * 1024 * 1024; // 100 MB (not yet enforced)
    
    fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
        let doc = /* ... compilation ... */;
        
        if doc.pages.len() > MAX_COMPILATION_PAGES {
-           return Err(RenderError::TooManyPages(doc.pages.len()));
+           return Err(RenderError::TooManyPages {
+               page_count: doc.pages.len(),
+               max_pages: MAX_COMPILATION_PAGES,
+           });
        }
        
        Ok(doc)
    }
    ```
+   
+   **Status**: Page limit implemented. Output size limit not yet enforced.
 
-**Risk Assessment**: 🔴 **High** - Requires immediate hardening for production use with untrusted input
+**Risk Assessment**: 🟡 **Medium** - Partial mitigations in place, but full sandboxing still needed for production use with untrusted input
+
+**Implementation Progress**:
+- ✅ Page count limits (1000 pages max)
+- ⚠️ Timeout detection (60 seconds, detection only)
+- ❌ Timeout enforcement (requires process isolation)
+- ❌ Memory limits (requires OS-level controls)
+- ❌ Process isolation/sandboxing
+- ❌ Filesystem access restrictions
+- ❌ Network access restrictions
+
+**Next Steps for Full Security**:
+1. Implement process isolation for true timeout enforcement
+2. Add OS-level memory limits (rlimit on Unix)
+3. Restrict filesystem access in QuillWorld
+4. Add package allowlist
+5. Consider WASM compilation for additional sandboxing
 
 ---
 
