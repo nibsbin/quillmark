@@ -180,6 +180,10 @@ pub struct Quill {
     pub name: String,
     /// Glue template file name
     pub glue_file: String,
+    /// Markdown template file name (optional)
+    pub template_file: Option<String>,
+    /// Markdown template content (optional)
+    pub template: Option<String>,
     /// In-memory file system
     pub files: HashMap<PathBuf, FileEntry>,
 }
@@ -208,11 +212,12 @@ impl Quill {
 
         let mut metadata = HashMap::new();
         let mut glue_file = "glue.typ".to_string(); // default
+        let mut template_file: Option<String> = None;
         let mut quill_name = name; // default to directory name
 
         // Extract fields from [Quill] section
         if let Some(quill_section) = quill_toml.get("Quill") {
-            // Extract required fields: name, backend, glue
+            // Extract required fields: name, backend, glue, template
             if let Some(name_val) = quill_section.get("name").and_then(|v| v.as_str()) {
                 quill_name = name_val.to_string();
             }
@@ -232,10 +237,19 @@ impl Quill {
                 glue_file = glue_val.to_string();
             }
 
+            if let Some(template_val) = quill_section.get("template").and_then(|v| v.as_str()) {
+                template_file = Some(template_val.to_string());
+            }
+
             // Add other fields to metadata (excluding special fields and version)
             if let toml::Value::Table(table) = quill_section {
                 for (key, value) in table {
-                    if key != "name" && key != "backend" && key != "glue" && key != "version" {
+                    if key != "name"
+                        && key != "backend"
+                        && key != "glue"
+                        && key != "template"
+                        && key != "version"
+                    {
                         match Self::toml_to_yaml_value(value) {
                             Ok(yaml_value) => {
                                 metadata.insert(key.clone(), yaml_value);
@@ -270,6 +284,23 @@ impl Quill {
         let template_content = fs::read_to_string(&glue_path)
             .map_err(|e| format!("Failed to read glue file '{}': {}", glue_file, e))?;
 
+        // Read the markdown template content if specified
+        let template_content_opt = if let Some(ref template_file_name) = template_file {
+            let template_path = path.join(template_file_name);
+            match fs::read_to_string(&template_path) {
+                Ok(content) => Some(content),
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Failed to read template file '{}': {}",
+                        template_file_name, e
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
         // Load .quillignore if it exists
         let quillignore_path = path.join(".quillignore");
         let ignore = if quillignore_path.exists() {
@@ -297,6 +328,8 @@ impl Quill {
             base_path: path.to_path_buf(),
             name: quill_name,
             glue_file,
+            template_file,
+            template: template_content_opt,
             files,
         };
 
@@ -742,5 +775,66 @@ packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
         assert_eq!(packages.len(), 2);
         assert_eq!(packages[0], "@preview/bubble:0.2.2");
         assert_eq!(packages[1], "@preview/example:1.0.0");
+    }
+
+    #[test]
+    fn test_template_loading() {
+        let temp_dir = TempDir::new().unwrap();
+        let quill_dir = temp_dir.path();
+
+        // Create test files with template specified
+        let toml_content = r#"[Quill]
+name = "test-with-template"
+backend = "typst"
+glue = "glue.typ"
+template = "example.md"
+"#;
+        fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
+        fs::write(quill_dir.join("glue.typ"), "glue content").unwrap();
+        fs::write(
+            quill_dir.join("example.md"),
+            "---\ntitle: Test\n---\n\nThis is a test template.",
+        )
+        .unwrap();
+
+        // Load quill
+        let quill = Quill::from_path(quill_dir).unwrap();
+
+        // Test that template file name is set
+        assert_eq!(quill.template_file, Some("example.md".to_string()));
+
+        // Test that template content is loaded
+        assert!(quill.template.is_some());
+        let template = quill.template.unwrap();
+        assert!(template.contains("title: Test"));
+        assert!(template.contains("This is a test template"));
+
+        // Test that glue template is still loaded
+        assert_eq!(quill.glue_template, "glue content");
+    }
+
+    #[test]
+    fn test_template_optional() {
+        let temp_dir = TempDir::new().unwrap();
+        let quill_dir = temp_dir.path();
+
+        // Create test files without template specified
+        let toml_content = r#"[Quill]
+name = "test-without-template"
+backend = "typst"
+glue = "glue.typ"
+"#;
+        fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
+        fs::write(quill_dir.join("glue.typ"), "glue content").unwrap();
+
+        // Load quill
+        let quill = Quill::from_path(quill_dir).unwrap();
+
+        // Test that template fields are None
+        assert_eq!(quill.template_file, None);
+        assert_eq!(quill.template, None);
+
+        // Test that glue template is still loaded
+        assert_eq!(quill.glue_template, "glue content");
     }
 }
