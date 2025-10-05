@@ -1,4 +1,4 @@
-name: Publish Fixtures, WASM, and Crates
+name: Publish
 
 on:
   workflow_run:
