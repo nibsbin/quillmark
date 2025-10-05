@@ -95,7 +95,7 @@ jobs:
       - name: Build WASM packages
         run: ./scripts/build-wasm.sh
 
-      - name: Publish @quillmark/wasm
+      - name: Publish @quillmark-test/wasm
         working-directory: pkg/bundler
         run: npm publish --access public
         env:
@@ -103,7 +103,7 @@ jobs:
 
       - name: WASM publish summary
         if: success()
-        run: echo "✓ @quillmark/wasm v${{ steps.version.outputs.version }} published to npm"
+        run: echo "✓ @quillmark-test/wasm v${{ steps.version.outputs.version }} published to npm"
 
   publish-crates:
     runs-on: ubuntu-latest
@@ -143,18 +143,37 @@ jobs:
         run: |
           echo "## Publishing Summary"
           echo ""
+
+          # Fixtures
           if [ "${{ needs.publish-fixtures.result }}" == "success" ]; then
             echo "✓ Fixtures published to npm"
+          elif [ "${{ needs.publish-fixtures.result }}" == "skipped" ]; then
+            echo "⊘ Fixtures publishing skipped"
           else
             echo "✗ Fixtures publishing failed"
           fi
+
+          # WASM
           if [ "${{ needs.publish-wasm.result }}" == "success" ]; then
             echo "✓ WASM published to npm"
+          elif [ "${{ needs.publish-wasm.result }}" == "skipped" ]; then
+            echo "⊘ WASM publishing skipped"
           else
             echo "✗ WASM publishing failed"
           fi
+
+          # Crates
           if [ "${{ needs.publish-crates.result }}" == "success" ]; then
             echo "✓ Crates published to crates.io"
+          elif [ "${{ needs.publish-crates.result }}" == "skipped" ]; then
+            echo "⊘ Crates publishing skipped"
           else
             echo "✗ Crates publishing failed"
+          fi
+
+          # Exit with failure if any job failed
+          if [ "${{ contains(needs.*.result, 'failure') }}" == "true" ]; then
+            echo ""
+            echo "⚠️  One or more publishing jobs failed"
+            exit 1
           fi
