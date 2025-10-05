@@ -4,6 +4,31 @@ This crate contains comprehensive property-based fuzzing tests for Quillmark usi
 
 **Note:** This crate is not published to crates.io and is only used for internal testing.
 
+## Quickstart
+
+Run all property-based fuzzing tests:
+
+```bash
+cargo test --package quillmark-fuzz
+```
+
+Or from the `quillmark-fuzz` directory:
+
+```bash
+cd quillmark-fuzz
+cargo test
+```
+
+Run a specific test module:
+
+```bash
+cargo test --package quillmark-fuzz --test convert_fuzz
+cargo test --package quillmark-fuzz --test filter_fuzz
+cargo test --package quillmark-fuzz --test parse_fuzz
+```
+
+**Note:** This crate is excluded from `default-members` to avoid running expensive fuzzing tests on every `cargo test`. Use `cargo test --workspace` to run all tests including fuzzing. This crate uses `proptest` for property-based testing, not `cargo-fuzz`.
+
 ## Test Coverage
 
 ### Escaping Function Security (`convert_fuzz`)
