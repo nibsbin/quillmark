@@ -51,10 +51,7 @@ quillmark-fixtures = { path = "quillmark-fixtures" }
 no_individual_tags = true
 
 [workspace.metadata.release]
-# Update package.json versions to match workspace version
-pre-release-replacements = [
-  {file="quillmark-fixtures/package.json", search="\"version\": \"[^\"]*\"", replace="\"version\": \"{{version}}\""},
-]
+allow-branch = ["main"]
 
 [profile.release]
 opt-level = "z"      # Optimize for size
