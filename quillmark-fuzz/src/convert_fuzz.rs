@@ -159,7 +159,7 @@ proptest! {
     fn fuzz_markdown_parser_malicious_nesting(depth in 1usize..20) {
         // Test deeply nested structures
         let nested_quotes = "> ".repeat(depth) + "text";
-        let result = mark_to_typst(&nested_quotes);
+        let result = mark_to_typst(&nested_quotes).expect("Conversion should succeed");
         // Should not panic and should produce some output
         assert!(!result.is_empty() || depth == 0);
     }
@@ -171,7 +171,7 @@ proptest! {
             .map(|i| format!("{}- item", "  ".repeat(i)))
             .collect::<Vec<_>>()
             .join("\n");
-        let result = mark_to_typst(&nested_list);
+        let result = mark_to_typst(&nested_list).expect("Conversion should succeed");
         // Should not panic
         assert!(!result.is_empty());
     }
@@ -180,7 +180,7 @@ proptest! {
     fn fuzz_markdown_large_input(size in 1usize..10000) {
         // Test with large inputs (but not too large for tests)
         let input = "a".repeat(size);
-        let result = mark_to_typst(&input);
+        let result = mark_to_typst(&input).expect("Conversion should succeed");
         // Should handle large inputs without panic
         assert!(result.contains("a"));
     }
