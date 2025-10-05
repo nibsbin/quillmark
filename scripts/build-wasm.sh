@@ -22,17 +22,17 @@ wasm-pack build quillmark-wasm \
     --out-dir "../pkg/bundler" \
     --out-name wasm \
     --release \
-    --scope quillmark
+    --scope quillmark-test
 
-# Update package name from @quillmark/quillmark-wasm to @quillmark-test/wasm
+# Update package name from @quillmark-test/quillmark-wasm to @quillmark-test/wasm
 # Use sed in a cross-platform way
 if [ -f "pkg/bundler/package.json" ]; then
     if sed --version 2>&1 | grep -q GNU; then
         # GNU sed (Linux)
-        sed -i 's/"@quillmark\/quillmark-wasm"/"@quillmark\/wasm"/' "pkg/bundler/package.json"
+        sed -i 's/"@quillmark-test\/quillmark-wasm"/"@quillmark-test\/wasm"/' "pkg/bundler/package.json"
     else
         # BSD sed (macOS)
-        sed -i '' 's/"@quillmark\/quillmark-wasm"/"@quillmark\/wasm"/' "pkg/bundler/package.json"
+        sed -i '' 's/"@quillmark-test\/quillmark-wasm"/"@quillmark-test\/wasm"/' "pkg/bundler/package.json"
     fi
 fi
 
