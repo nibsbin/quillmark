@@ -1,10 +1,9 @@
 name: Publish
 
 on:
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
 
 permissions:
@@ -12,18 +11,79 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
 
 jobs:
+  # Run CI checks before publishing
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+          targets: wasm32-unknown-unknown
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "publish-${{ hashFiles('**/Cargo.lock') }}"
+          cache-on-failure: true
+
+      - name: Cargo fetch
+        run: cargo fetch --locked
+
+      - name: Build dependencies
+        run: cargo build --workspace --all-features --locked
+
+  test:
+    runs-on: ubuntu-latest
+    needs: prepare
+    strategy:
+      fail-fast: true
+      matrix:
+        features:
+          - name: "default"
+            flags: ""
+          - name: "all-features"
+            flags: "--all-features"
+          - name: "no-default"
+            flags: "--no-default-features"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "publish-${{ hashFiles('**/Cargo.lock') }}"
+          cache-on-failure: true
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@nextest
+
+      - name: Tests (${{ matrix.features.name }})
+        run: cargo nextest run --workspace ${{ matrix.features.flags }} --locked
+
+      - name: Doctests (${{ matrix.features.name }})
+        run: cargo test --doc --workspace ${{ matrix.features.flags }} --locked
+
   publish-fixtures:
+    needs: [test]
     runs-on: ubuntu-latest
     environment: Publish
-    # Only run if CI succeeded or triggered manually/by tag
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name != 'workflow_run' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -50,15 +110,12 @@ jobs:
         run: echo "✓ @quillmark-test/fixtures v${{ steps.version.outputs.version }} published to npm"
 
   publish-wasm:
+    needs: [test]
     runs-on: ubuntu-latest
     environment: Publish
-    # Only run if CI succeeded or triggered manually/by tag
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name != 'workflow_run' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -68,7 +125,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "ci-${{ hashFiles('**/Cargo.lock') }}"
+          shared-key: "publish-${{ hashFiles('**/Cargo.lock') }}"
           cache-on-failure: true
 
       - name: Setup Node.js
@@ -103,15 +160,12 @@ jobs:
         run: echo "✓ @quillmark-test/wasm v${{ steps.version.outputs.version }} published to npm"
 
   publish-crates:
+    needs: [test]
     runs-on: ubuntu-latest
     environment: Publish
-    # Only run if CI succeeded or triggered manually/by tag
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name != 'workflow_run' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -119,7 +173,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "ci-${{ hashFiles('**/Cargo.lock') }}"
+          shared-key: "publish-${{ hashFiles('**/Cargo.lock') }}"
           cache-on-failure: true
 
       - name: Publish workspace crates (no verification)
