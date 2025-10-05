@@ -1621,7 +1621,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "anyhow",
  "quillmark-core",
@@ -1635,7 +1635,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-core"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "anyhow",
  "minijinja",
@@ -1649,7 +1649,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fixtures"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "quillmark",
  "quillmark-typst",
@@ -1657,7 +1657,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-typst"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1676,7 +1676,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-wasm"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "console_error_panic_hook",
  "getrandom 0.2.16",
