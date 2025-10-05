@@ -8,7 +8,7 @@ This crate provides minimal WASM bindings for Quillmark, enabling use in web bro
 
 ## Publishing
 
-This package is published to npm as `@quillmark/wasm`.
+This package is published to npm as `@quillmark-test/wasm`.
 
 ### Building for Web
 
@@ -33,7 +33,7 @@ This will create `pkg-bundler/`, `pkg-nodejs/`, and `pkg-web/` directories with 
 ## Installation
 
 ```bash
-npm install @quillmark/wasm
+npm install @quillmark-test/wasm
 ```
 
 ## Usage
@@ -41,7 +41,7 @@ npm install @quillmark/wasm
 ### Basic Example
 
 ```typescript
-import { QuillmarkEngine, Quill, OutputFormat } from '@quillmark/wasm';
+import { QuillmarkEngine, Quill, OutputFormat } from '@quillmark-test/wasm';
 
 // Create the engine
 const engine = QuillmarkEngine.create();
