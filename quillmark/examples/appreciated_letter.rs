@@ -5,7 +5,6 @@ use common::demo;
 fn main() {
     // Use the fixtures demo helper which centralizes file IO and printing.
     demo(
-        "appreciated_letter.md",
         "appreciated_letter",
         None,
         "appreciated_letter_glue.typ",

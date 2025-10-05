@@ -3,25 +3,25 @@ use std::error::Error;
 
 /// Demo helper that centralizes example plumbing.
 ///
-/// It reads the given resource markdown, computes the quill path, then calls the
-/// provided `runner` closure to perform backend-specific work. The `runner`
-/// should return a tuple of (glue_bytes, output_bytes) which this helper will
-/// write to the example output directory and print a short preview.
+/// It loads the quill and uses its markdown template, then processes and renders it.
 pub fn demo(
-    resource_name: &str,
     quill_dir: &str,
     asset_resources: Option<Vec<&str>>,
     glue_output: &str,
     render_output: &str,
 ) -> Result<(), Box<dyn Error>> {
-    // Load the sample markdown
-    let markdown = std::fs::read_to_string(resource_path(resource_name))?;
-
     // quill path (folder)
     let quill_path = resource_path(quill_dir);
 
     // Default engine flow used by examples: Typst backend, Quill from path, Workflow
     let quill = quillmark::Quill::from_path(quill_path.clone()).expect("Failed to load quill");
+
+    // Load the markdown template from the quill
+    let markdown = quill
+        .template
+        .as_ref()
+        .ok_or("Quill does not have a markdown template")?
+        .clone();
     let engine = quillmark::Quillmark::new();
     let mut workflow = engine.load(&quill).expect("Failed to load workflow");
 
