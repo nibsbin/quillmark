@@ -1,0 +1,12 @@
+[package]
+name = "quillmark-fuzz"
+version.workspace = true
+edition.workspace = true
+description = "Fuzzing tests for Quillmark"
+license = "Apache-2.0"
+publish = false  # Don't publish fuzzing tests to crates.io
+
+[dependencies]
+quillmark-core = { workspace = true }
+quillmark-typst = { workspace = true }
+proptest = { workspace = true }

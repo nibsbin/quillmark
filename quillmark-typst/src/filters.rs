@@ -16,7 +16,10 @@ fn apply_default(mut v: Value, kwargs: &Kwargs) -> Result<Value, Error> {
     Ok(v)
 }
 
-fn inject_json(bytes: &str) -> String {
+/// Helper function to inject JSON into Typst code.
+/// Exposed for fuzzing tests.
+#[doc(hidden)]
+pub fn inject_json(bytes: &str) -> String {
     format!("json(bytes(\"{}\"))", escape_string(bytes))
 }
 
@@ -167,7 +170,12 @@ pub fn content_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<V
         other => other.to_string(),
     };
 
-    let markup = mark_to_typst(&content);
+    let markup = mark_to_typst(&content).map_err(|e| {
+        err(
+            ErrorKind::InvalidOperation,
+            format!("Markdown conversion failed: {}", e),
+        )
+    })?;
     Ok(Value::from_safe_string(format!(
         "eval(\"{}\", mode: \"markup\")",
         escape_string(&markup)

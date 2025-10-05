@@ -217,6 +217,16 @@ fn find_metadata_blocks(
                 let abs_closing_pos = content_start + closing_pos;
                 let content = &markdown[content_start..abs_closing_pos];
 
+                // Check YAML size limit
+                if content.len() > crate::error::MAX_YAML_SIZE {
+                    return Err(format!(
+                        "YAML block too large: {} bytes (max: {} bytes)",
+                        content.len(),
+                        crate::error::MAX_YAML_SIZE
+                    )
+                    .into());
+                }
+
                 // Check if the block is contiguous (no blank lines in the YAML content)
                 if content.contains("\n\n") || content.contains("\r\n\r\n") {
                     // Not a contiguous block
@@ -298,6 +308,16 @@ fn find_metadata_blocks(
 pub fn decompose(
     markdown: &str,
 ) -> Result<ParsedDocument, Box<dyn std::error::Error + Send + Sync>> {
+    // Check input size limit
+    if markdown.len() > crate::error::MAX_INPUT_SIZE {
+        return Err(format!(
+            "Input too large: {} bytes (max: {} bytes)",
+            markdown.len(),
+            crate::error::MAX_INPUT_SIZE
+        )
+        .into());
+    }
+
     let mut fields = HashMap::new();
 
     // Find all metadata blocks
@@ -999,5 +1019,55 @@ mod demo_file_test {
                 .unwrap(),
             "Tag Directives"
         );
+    }
+
+    #[test]
+    fn test_input_size_limit() {
+        // Create markdown larger than MAX_INPUT_SIZE (10 MB)
+        let size = crate::error::MAX_INPUT_SIZE + 1;
+        let large_markdown = "a".repeat(size);
+
+        let result = decompose(&large_markdown);
+        assert!(result.is_err());
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Input too large"));
+    }
+
+    #[test]
+    fn test_yaml_size_limit() {
+        // Create YAML block larger than MAX_YAML_SIZE (1 MB)
+        let mut markdown = String::from("---\n");
+
+        // Create a very large YAML field
+        let size = crate::error::MAX_YAML_SIZE + 1;
+        markdown.push_str("data: \"");
+        markdown.push_str(&"x".repeat(size));
+        markdown.push_str("\"\n---\n\nBody");
+
+        let result = decompose(&markdown);
+        assert!(result.is_err());
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("YAML block too large"));
+    }
+
+    #[test]
+    fn test_input_within_size_limit() {
+        // Create markdown just under the limit
+        let size = 1000; // Much smaller than limit
+        let markdown = format!("---\ntitle: Test\n---\n\n{}", "a".repeat(size));
+
+        let result = decompose(&markdown);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_yaml_within_size_limit() {
+        // Create YAML block well within the limit
+        let markdown = "---\ntitle: Test\nauthor: John Doe\n---\n\nBody content";
+
+        let result = decompose(&markdown);
+        assert!(result.is_ok());
     }
 }
