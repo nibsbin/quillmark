@@ -12,16 +12,6 @@ pub struct Quill {
 
 #[wasm_bindgen]
 impl Quill {
-    /// Load Quill from a ZIP archive
-    #[wasm_bindgen(js_name = fromZip)]
-    pub fn from_zip(_buffer: &[u8]) -> Result<Quill, JsValue> {
-        // For now, we'll extract and load the ZIP into memory
-        // This is a simplified implementation - a full version would parse ZIP files
-        Err(QuillmarkError::system(
-            "Quill.fromZip is not yet implemented - use fromFiles instead".to_string(),
-        )
-        .to_js_value())
-    }
 
     /// Create Quill from in-memory file map (browser-friendly)
     #[wasm_bindgen(js_name = fromFiles)]
@@ -92,12 +82,6 @@ impl Quill {
             .keys()
             .map(|path| path.to_string_lossy().to_string())
             .collect()
-    }
-
-    /// Export Quill as ZIP (not yet implemented)
-    #[wasm_bindgen(js_name = toZip)]
-    pub fn to_zip(&self) -> Result<Vec<u8>, JsValue> {
-        Err(QuillmarkError::system("Quill.toZip is not yet implemented".to_string()).to_js_value())
     }
 }
 

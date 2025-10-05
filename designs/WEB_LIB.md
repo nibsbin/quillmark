@@ -1,8 +1,8 @@
 # Quillmark TypeScript/WASM Wrapper Library Design
 
-> **Status**: Design Phase - Implementation Not Yet Started
+> **Status**: Not Planned - Reference Design Only
 >
-> This document outlines the comprehensive design for creating a TypeScript/WASM wrapper library (`@quillmark/web`) that exposes the high-level functionality of the `quillmark` Rust crate to JavaScript/TypeScript environments.
+> This document was an initial design for a high-level TypeScript wrapper around `@quillmark/wasm`. However, we've decided to keep the API minimal and publish only `@quillmark/wasm` directly. Users can add their own TypeScript wrappers as needed. This document remains as a reference for what a higher-level wrapper could look like.
 
 ---
 

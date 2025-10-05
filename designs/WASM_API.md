@@ -1,8 +1,8 @@
 # Quillmark WASM API Design
 
-> **Status**: Design Phase - Opinionated High-Level Interface
+> **Status**: Implementation Phase - Formalized Minimal Interface
 >
-> This document defines the WebAssembly API surface for exposing Quillmark's rendering capabilities to web applications. It focuses on the core capabilities needed for markdown typesetting apps, including dynamic Quill management, asset handling, and optimized rendering workflows.
+> This document defines the WebAssembly API surface for exposing Quillmark's rendering capabilities to web applications. The API is intentionally minimal and uses JSON serialization for all data interchange between JavaScript and Rust.
 
 ---
 
@@ -43,36 +43,32 @@ The Quillmark WASM API provides a production-ready interface for web application
 ### Design Goals
 
 1. **Minimal Surface Area**: Expose only what's necessary; hide internal complexity
-2. **Stateless by Default**: Each render is independent unless explicitly cached
-3. **Streaming-Ready**: Support incremental rendering and progress callbacks
-4. **Web-Native**: Leverage Web APIs (Fetch, Blob, URL, etc.)
+2. **JSON-Only Serialization**: All data passes through JSON for simplicity and debuggability
+3. **Instant Rendering**: Rendering is fast enough that progress tracking is unnecessary
+4. **Stateless by Default**: Each render is independent unless explicitly cached
 5. **Zero Configuration**: Sensible defaults for 90% of use cases
 
 ---
 
 ## Core Philosophy
 
-### Opinionated Decisions
+### Core Principles
 
-**1. Dynamic Quill Loading is First-Class**
+**1. JSON for All Data Exchange**
 
-Web apps need to download Quills from CDNs, package registries, or user uploads. The API treats Quill loading as a primary concern, not an afterthought.
+All structured data crossing the WASM boundary uses JSON serialization via `serde-wasm-bindgen`. Quill files are passed as JSON objects mapping filenames to Uint8Array byte arrays.
 
-**2. Explicit Over Implicit**
+**2. JavaScript Handles I/O**
 
-No global state. No auto-registration. Every Quill, every asset, every render must be explicitly managed. This makes the system predictable and testable.
+The WASM layer only handles rendering. JavaScript is responsible for fetching files, reading file systems, unzipping archives, and preparing data.
 
-**3. Async Everything**
+**3. Explicit Management**
 
-All operations return Promises. Even if some operations are synchronous in Rust, the WASM boundary is async to support future optimizations (worker threads, streaming, etc.).
+No global state. No auto-registration. Every Quill, asset, and render is explicitly managed for predictability.
 
-**4. Memory Management is Transparent**
+**4. Fail Fast with Rich Context**
 
-WASM owns memory during render; JavaScript gets immutable copies. No shared buffers, no manual cleanup. Use typed arrays for binary data.
-
-**5. Fail Fast with Rich Context**
-
-Errors include diagnostics with file locations, line numbers, and actionable hints. Never fail silently.
+Errors include diagnostics with file locations, line numbers, and actionable hints.
 
 ---
 
@@ -82,12 +78,18 @@ Errors include diagnostics with file locations, line numbers, and actionable hin
 
 ```typescript
 // User edits markdown; app renders PDF on-demand
-const engine = await QuillmarkEngine.create();
-const quill = await engine.downloadQuill('https://cdn.quillmark.io/letter.zip');
-const workflow = await engine.loadWorkflow(quill);
+const engine = QuillmarkEngine.create();
+
+// JavaScript fetches and prepares the Quill
+const quillZip = await fetch('https://cdn.quillmark.io/letter.zip').then(r => r.arrayBuffer());
+const quillFiles = await unzipToFileMap(quillZip);
+const quill = Quill.fromFiles(quillFiles, { name: 'letter', backend: 'typst' });
+
+engine.registerQuill(quill);
+const workflow = engine.loadWorkflow('letter');
 
 // Re-render on every keystroke (debounced)
-const result = await workflow.render(editorContent, { format: 'pdf' });
+const result = workflow.render(editorContent, { format: OutputFormat.PDF });
 displayPreview(result.artifacts[0].bytes);
 ```
 
@@ -95,13 +97,21 @@ displayPreview(result.artifacts[0].bytes);
 
 ```typescript
 // API endpoint: generate invoices from templates
-const engine = await QuillmarkEngine.create();
-await engine.registerQuill(await Quill.fromPath('./quills/invoice'));
+const engine = QuillmarkEngine.create();
 
+// Node.js reads Quill from filesystem
+const fs = require('fs');
+const quillFiles = {
+  'Quill.toml': fs.readFileSync('./quills/invoice/Quill.toml'),
+  'glue.typ': fs.readFileSync('./quills/invoice/glue.typ')
+};
+const quill = Quill.fromFiles(quillFiles, { name: 'invoice', backend: 'typst' });
+engine.registerQuill(quill);
+
+const workflow = engine.loadWorkflow('invoice');
 for (const order of orders) {
   const markdown = generateMarkdown(order);
-  const workflow = await engine.loadWorkflow('invoice');
-  const result = await workflow.render(markdown, { format: 'pdf' });
+  const result = workflow.render(markdown, { format: OutputFormat.PDF });
   await saveToS3(result.artifacts[0]);
 }
 ```
@@ -111,24 +121,24 @@ for (const order of orders) {
 ```typescript
 // User uploads a Quill ZIP; app validates and uses it
 const zipFile = await uploadForm.getFile();
-const quill = await Quill.fromZip(await zipFile.arrayBuffer());
-await quill.validate(); // Throws if invalid
+const quillFiles = await unzipToFileMap(await zipFile.arrayBuffer());
+const quill = Quill.fromFiles(quillFiles, { name: 'custom', backend: 'typst' });
+quill.validate(); // Throws if invalid
 
-const engine = await QuillmarkEngine.create();
-const workflow = await engine.loadWorkflow(quill);
+const engine = QuillmarkEngine.create();
+engine.registerQuill(quill);
+const workflow = engine.loadWorkflow('custom');
 ```
 
 ### 4. Multi-Format Export
 
 ```typescript
 // Generate PDF and SVG from same markdown
-const workflow = await engine.loadWorkflow('report');
+const workflow = engine.loadWorkflow('report');
 const markdown = buildReport(data);
 
-const [pdf, svg] = await Promise.all([
-  workflow.render(markdown, { format: 'pdf' }),
-  workflow.render(markdown, { format: 'svg' })
-]);
+const pdfResult = workflow.render(markdown, { format: OutputFormat.PDF });
+const svgResult = workflow.render(markdown, { format: OutputFormat.SVG });
 ```
 
 ---
@@ -204,7 +214,6 @@ interface RenderResult {
  */
 interface RenderOptions {
   format?: OutputFormat;
-  progressCallback?: (percent: number) => void;
 }
 
 /**
@@ -227,44 +236,25 @@ interface QuillMetadata {
  */
 class Quill {
   /**
-   * Load Quill from a directory (Node.js only)
+   * Create Quill from in-memory file map
+   * Files are passed as a JSON object: { [filename: string]: Uint8Array }
    */
-  static fromPath(path: string): Promise<Quill>;
-  
-  /**
-   * Load Quill from a ZIP archive
-   */
-  static fromZip(buffer: ArrayBuffer): Promise<Quill>;
-  
-  /**
-   * Load Quill from a URL (downloads and parses)
-   */
-  static fromUrl(url: string, options?: FetchOptions): Promise<Quill>;
-  
-  /**
-   * Create Quill from in-memory file map (browser-friendly)
-   */
-  static fromFiles(files: Map<string, Uint8Array>, metadata: QuillMetadata): Promise<Quill>;
-  
+  static fromFiles(files: object, metadata: QuillMetadata): Quill;
+
   /**
    * Validate Quill structure (throws on error)
    */
-  validate(): Promise<void>;
-  
+  validate(): void;
+
   /**
    * Get Quill metadata
    */
   getMetadata(): QuillMetadata;
-  
+
   /**
    * List files in the Quill
    */
   listFiles(): string[];
-  
-  /**
-   * Export Quill as ZIP
-   */
-  toZip(): Promise<Uint8Array>;
 }
 
 /**
@@ -274,33 +264,34 @@ class Workflow {
   /**
    * Render markdown to artifacts
    */
-  render(markdown: string, options?: RenderOptions): Promise<RenderResult>;
-  
+  render(markdown: string, options?: RenderOptions): RenderResult;
+
   /**
    * Render pre-processed glue content (advanced)
    */
-  renderContent(content: string, options?: RenderOptions): Promise<RenderResult>;
-  
+  renderContent(content: string, options?: RenderOptions): RenderResult;
+
   /**
    * Process markdown to glue without compilation (for debugging)
    */
-  processGlue(markdown: string): Promise<string>;
-  
+  processGlue(markdown: string): string;
+
   /**
    * Add dynamic assets (builder pattern)
+   * Assets are passed as a JSON object: { [filename: string]: Uint8Array }
    */
   withAsset(filename: string, bytes: Uint8Array): Workflow;
-  
+
   /**
    * Add multiple dynamic assets
    */
-  withAssets(assets: Map<string, Uint8Array>): Workflow;
-  
+  withAssets(assets: object): Workflow;
+
   /**
    * Clear all dynamic assets
    */
   clearAssets(): Workflow;
-  
+
   /**
    * Get workflow metadata
    */
@@ -316,52 +307,42 @@ class QuillmarkEngine {
   /**
    * Create a new engine instance
    */
-  static create(options?: EngineOptions): Promise<QuillmarkEngine>;
-  
+  static create(options?: EngineOptions): QuillmarkEngine;
+
   /**
    * Register a Quill by name
    */
-  registerQuill(quill: Quill): Promise<void>;
-  
+  registerQuill(quill: Quill): void;
+
   /**
    * Unregister a Quill
    */
   unregisterQuill(name: string): void;
-  
-  /**
-   * Download and register a Quill from URL
-   */
-  downloadQuill(url: string, options?: FetchOptions): Promise<Quill>;
-  
+
   /**
    * List registered Quill names
    */
   listQuills(): string[];
-  
+
   /**
    * Get details about a registered Quill
    */
   getQuill(name: string): Quill | undefined;
-  
+
   /**
    * Load a workflow for rendering
    */
-  loadWorkflow(quillOrName: Quill | string): Promise<Workflow>;
-  
+  loadWorkflow(quillOrName: Quill | string): Workflow;
+
   /**
    * List available backends
    */
   listBackends(): string[];
-  
+
   /**
    * Get supported formats for a backend
    */
   getSupportedFormats(backend: string): OutputFormat[];
-  
-  /**
-   * Dispose of the engine and free resources
-   */
-  dispose(): void;
 }
 
 /**
@@ -372,25 +353,11 @@ interface EngineOptions {
    * Enable caching of compiled Quills (default: false)
    */
   enableCache?: boolean;
-  
+
   /**
    * Maximum cache size in bytes (default: 100MB)
    */
   maxCacheSize?: number;
-  
-  /**
-   * Custom backend configurations
-   */
-  backends?: Record<string, unknown>;
-}
-
-/**
- * Fetch options for downloading Quills
- */
-interface FetchOptions {
-  headers?: Record<string, string>;
-  credentials?: 'include' | 'omit' | 'same-origin';
-  signal?: AbortSignal;
 }
 
 /**
@@ -406,61 +373,55 @@ class QuillmarkError extends Error {
 
 ## Quill Management
 
-### Downloading and Caching
+### Loading Quills
 
-**Opinion**: Web apps should download Quills from URLs, not bundle them. This enables:
-- Centralized template repositories
-- Version updates without app redeployment
-- User-contributed templates
+JavaScript handles all I/O. The WASM layer only receives prepared file data:
 
 ```typescript
-// Download from CDN
-const quill = await engine.downloadQuill('https://cdn.quillmark.io/quills/letter-v2.zip');
+// Browser: fetch and unzip
+const response = await fetch('https://cdn.quillmark.io/quills/letter.zip');
+const zipBuffer = await response.arrayBuffer();
+const files = await unzipToObject(zipBuffer); // { [filename]: Uint8Array }
+const quill = Quill.fromFiles(files, { name: 'letter', backend: 'typst' });
 
-// Download with auth
-const quill = await engine.downloadQuill('https://api.internal.com/quills/invoice', {
-  headers: { 'Authorization': 'Bearer ...' }
-});
-
-// Handle failures gracefully
-try {
-  const quill = await engine.downloadQuill(url);
-} catch (e) {
-  if (e instanceof QuillmarkError && e.kind === 'network') {
-    showOfflineError();
-  }
-}
+// Node.js: read from filesystem
+const fs = require('fs');
+const files = {
+  'Quill.toml': fs.readFileSync('./quills/letter/Quill.toml'),
+  'glue.typ': fs.readFileSync('./quills/letter/glue.typ')
+};
+const quill = Quill.fromFiles(files, { name: 'letter', backend: 'typst' });
 ```
 
 ### Registration and Lifecycle
 
-**Opinion**: Explicit registration prevents naming collisions and makes dependencies clear.
+Explicit registration prevents naming collisions and makes dependencies clear:
 
 ```typescript
-// Register after download
-const quill = await Quill.fromUrl(url);
-await quill.validate(); // Always validate before use
-await engine.registerQuill(quill);
+// Validate and register
+const quill = Quill.fromFiles(files, metadata);
+quill.validate(); // Always validate before use
+engine.registerQuill(quill);
 
 // Use registered Quill by name
-const workflow = await engine.loadWorkflow('letter-v2');
+const workflow = engine.loadWorkflow('letter');
 
 // Unregister when done (free memory)
-engine.unregisterQuill('letter-v2');
+engine.unregisterQuill('letter');
 ```
 
 ### Validation
 
-**Opinion**: Validation should be explicit and comprehensive. Fail early before first render.
+Validation should be explicit and comprehensive. Fail early before first render:
 
 ```typescript
-const quill = await Quill.fromZip(userUpload);
+const quill = Quill.fromFiles(userUploadedFiles, metadata);
 
 try {
-  await quill.validate();
+  quill.validate();
   // Checks:
-  // - quill.toml exists and is valid
-  // - template.typ exists
+  // - Quill.toml exists and is valid
+  // - glue.typ exists
   // - backend is supported
   // - no malicious file paths
   // - size limits
@@ -471,7 +432,7 @@ try {
 
 ### Enumeration and Discovery
 
-**Opinion**: Apps should be able to list and inspect Quills for UI purposes (dropdowns, galleries, etc.).
+Apps can list and inspect Quills for UI purposes:
 
 ```typescript
 // List all registered Quills
@@ -480,10 +441,11 @@ const quillNames = engine.listQuills();
 // Get details for UI
 const quills = quillNames.map(name => {
   const quill = engine.getQuill(name)!;
+  const metadata = quill.getMetadata();
   return {
-    name: quill.getMetadata().name,
-    description: quill.getMetadata().description,
-    backend: quill.getMetadata().backend
+    name: metadata.name,
+    description: metadata.description,
+    backend: metadata.backend
   };
 });
 
@@ -497,13 +459,13 @@ populateQuillSelector(quills);
 
 ### Basic Rendering
 
-**Opinion**: Render is always async, even if fast. Enables progressive enhancement.
+Rendering is synchronous (fast enough to not need async):
 
 ```typescript
-const workflow = await engine.loadWorkflow('report');
+const workflow = engine.loadWorkflow('report');
 const markdown = '# Report\n\nContent here...';
 
-const result = await workflow.render(markdown, {
+const result = workflow.render(markdown, {
   format: OutputFormat.PDF
 });
 
@@ -519,46 +481,29 @@ if (result.warnings.length > 0) {
 
 ### Multi-Format Rendering
 
-**Opinion**: Same workflow can produce multiple formats. Render independently to avoid state issues.
+Same workflow can produce multiple formats:
 
 ```typescript
-const workflow = await engine.loadWorkflow('article');
+const workflow = engine.loadWorkflow('article');
 
-// Parallel rendering
-const [pdfResult, svgResult] = await Promise.all([
-  workflow.render(markdown, { format: OutputFormat.PDF }),
-  workflow.render(markdown, { format: OutputFormat.SVG })
-]);
+// Render to different formats
+const pdfResult = workflow.render(markdown, { format: OutputFormat.PDF });
+const svgResult = workflow.render(markdown, { format: OutputFormat.SVG });
 
 // Download both
 downloadFile(pdfResult.artifacts[0].bytes, 'article.pdf');
 downloadFile(svgResult.artifacts[0].bytes, 'article.svg');
 ```
 
-### Progress Tracking
-
-**Opinion**: Long renders should report progress for better UX.
-
-```typescript
-const workflow = await engine.loadWorkflow('book');
-
-const result = await workflow.render(largeMarkdown, {
-  format: OutputFormat.PDF,
-  progressCallback: (percent) => {
-    updateProgressBar(percent);
-  }
-});
-```
-
 ### Debugging Output
 
-**Opinion**: Expose intermediate glue for debugging template issues.
+Expose intermediate glue for debugging template issues:
 
 ```typescript
-const workflow = await engine.loadWorkflow('custom-template');
+const workflow = engine.loadWorkflow('custom-template');
 
 // Generate glue without compiling
-const glue = await workflow.processGlue(markdown);
+const glue = workflow.processGlue(markdown);
 console.log('Generated Typst:', glue);
 
 // Copy to editor for tweaking
@@ -571,29 +516,29 @@ navigator.clipboard.writeText(glue);
 
 ### Dynamic Assets
 
-**Opinion**: Dynamic assets are essential for user-generated content (logos, signatures, charts).
+Dynamic assets are essential for user-generated content:
 
 ```typescript
-const workflow = await engine.loadWorkflow('invoice');
+const workflow = engine.loadWorkflow('invoice');
 
 // Add company logo
 const logo = await fetch('/api/company/logo').then(r => r.arrayBuffer());
 const withLogo = workflow.withAsset('logo.png', new Uint8Array(logo));
 
-// Add multiple assets
-const withAllAssets = workflow.withAssets(new Map([
-  ['logo.png', logoBytes],
-  ['signature.png', signatureBytes],
-  ['chart.svg', chartBytes]
-]));
+// Add multiple assets (passed as JSON object)
+const withAllAssets = workflow.withAssets({
+  'logo.png': logoBytes,
+  'signature.png': signatureBytes,
+  'chart.svg': chartBytes
+});
 
 // Render with assets
-const result = await withAllAssets.render(markdown);
+const result = withAllAssets.render(markdown);
 ```
 
 ### Asset Naming and Security
 
-**Opinion**: Asset names must be validated to prevent path traversal attacks.
+Asset names are validated to prevent path traversal:
 
 ```typescript
 // Safe: just filename
@@ -606,7 +551,7 @@ workflow.withAsset('assets/logo.png', bytes); // ✗ Throws error
 
 ### Asset in Templates
 
-**Opinion**: Templates reference dynamic assets via the `Asset` filter.
+Templates reference dynamic assets in frontmatter:
 
 ```markdown
 <!-- In markdown document -->
@@ -618,14 +563,14 @@ logo: "company-logo.png"
 ```
 
 ```typst
-// In template.typ
+// In glue.typ template
 #let logo = Asset("company-logo.png")
 #image(logo)
 ```
 
 ### Clearing Assets
 
-**Opinion**: Asset builder is immutable; clearing returns new workflow.
+Asset builder is immutable; clearing returns new workflow:
 
 ```typescript
 const workflow1 = workflow.withAsset('a.png', bytesA);
@@ -643,32 +588,27 @@ const workflow3 = workflow2.clearAssets();
 
 ### Caching and Reuse
 
-**Opinion**: Caching is opt-in. Most apps don't need it; those that do can enable it.
+Caching is opt-in for apps that need it:
 
 ```typescript
-const engine = await QuillmarkEngine.create({
+const engine = QuillmarkEngine.create({
   enableCache: true,
   maxCacheSize: 200 * 1024 * 1024 // 200MB
 });
 
-// First render: compiles and caches
-const result1 = await workflow.render(markdown1);
-
-// Second render: uses cached compilation
-const result2 = await workflow.render(markdown2);
+// Subsequent renders may benefit from cached compilation
+const result = workflow.render(markdown);
 ```
 
 ### Batch Processing
 
-**Opinion**: Provide helpers for common batch patterns.
+Process multiple documents with the same Quill:
 
 ```typescript
-// Process multiple documents with same Quill
-const workflow = await engine.loadWorkflow('report');
+const workflow = engine.loadWorkflow('report');
 
-const results = await Promise.all(
-  documents.map(doc => workflow.render(doc.content))
-);
+// Process each document
+const results = documents.map(doc => workflow.render(doc.content));
 
 // Save all PDFs
 results.forEach((result, i) => {
@@ -676,65 +616,15 @@ results.forEach((result, i) => {
 });
 ```
 
-### Abort and Timeout
-
-**Opinion**: Long-running renders should be abortable.
-
-```typescript
-const controller = new AbortController();
-
-// Render with timeout
-const timeoutId = setTimeout(() => controller.abort(), 30000);
-
-try {
-  const result = await workflow.render(markdown, {
-    signal: controller.signal
-  });
-} catch (e) {
-  if (e.name === 'AbortError') {
-    console.log('Render timed out');
-  }
-} finally {
-  clearTimeout(timeoutId);
-}
-```
-
-### Streaming Artifacts
-
-**Opinion**: Large artifacts (multi-page PDFs) should support streaming.
-
-```typescript
-// Future enhancement
-const stream = await workflow.renderStream(markdown, {
-  format: OutputFormat.PDF
-});
-
-// Stream to file or network
-const response = new Response(stream);
-await downloadStream(response.body, 'output.pdf');
-```
-
-### Metadata Extraction
-
-**Opinion**: Apps often need to extract metadata without full rendering.
-
-```typescript
-// Quick metadata extraction
-const metadata = await workflow.extractMetadata(markdown);
-console.log(metadata.title, metadata.author, metadata.date);
-
-// Useful for search indexing, previews, etc.
-```
-
 ### Format Detection
 
-**Opinion**: Auto-detect best format based on backend capabilities.
+Auto-detect best format based on backend capabilities:
 
 ```typescript
-const workflow = await engine.loadWorkflow('article');
+const workflow = engine.loadWorkflow('article');
 
 // No format specified: backend chooses best default
-const result = await workflow.render(markdown);
+const result = workflow.render(markdown);
 console.log(`Rendered as ${result.artifacts[0].format}`);
 
 // List what's available
@@ -747,92 +637,63 @@ console.log(`Supported: ${workflow.supportedFormats.join(', ')}`);
 
 ### WASM Binary Size
 
-**Opinion**: Target < 5MB gzipped for browser use. This is achievable with:
-- Aggressive size optimization (`wasm-opt -Oz`)
-- Lazy loading of backends
-- Shared dependencies
+Target < 5MB gzipped for browser use through aggressive optimization (`wasm-opt -Oz`).
 
 ### Initialization Time
 
-**Opinion**: Engine creation should be fast (< 100ms). Defer heavy work to first render.
+Engine creation is fast (< 100ms) with minimal setup:
 
 ```typescript
 // Fast: no I/O, minimal setup
-const engine = await QuillmarkEngine.create();
+const engine = QuillmarkEngine.create();
 
-// Heavy work happens here
-const workflow = await engine.loadWorkflow(quill);
-const result = await workflow.render(markdown);
+// First render may compile templates
+const workflow = engine.loadWorkflow('letter');
+const result = workflow.render(markdown);
 ```
 
 ### Memory Management
 
-**Opinion**: WASM manages memory internally; JavaScript gets copies. This prevents memory leaks but requires discipline.
+WASM manages memory internally; JavaScript gets copies via JSON:
 
 ```typescript
 // Good: reuse workflow for multiple renders
-const workflow = await engine.loadWorkflow('letter');
+const workflow = engine.loadWorkflow('letter');
 for (const data of dataset) {
-  const result = await workflow.render(generateMarkdown(data));
+  const result = workflow.render(generateMarkdown(data));
   processResult(result);
 }
 
 // Bad: creating new workflow each time
 for (const data of dataset) {
-  const workflow = await engine.loadWorkflow('letter'); // ✗ Wasteful
-  const result = await workflow.render(generateMarkdown(data));
+  const workflow = engine.loadWorkflow('letter'); // ✗ Wasteful
+  const result = workflow.render(generateMarkdown(data));
 }
 ```
 
-### Parallelization
+### Parallelization with Web Workers
 
-**Opinion**: Use Web Workers for CPU-intensive rendering in browsers.
+For CPU-intensive rendering in browsers:
 
 ```typescript
 // Main thread
 const worker = new Worker('quillmark-worker.js');
-worker.postMessage({ markdown, quillName: 'report' });
+worker.postMessage({ markdown, quillName: 'report', quillFiles });
 
 worker.onmessage = (e) => {
-  const result = e.data;
-  displayPDF(result.artifacts[0].bytes);
+  displayPDF(e.data.artifacts[0].bytes);
 };
 
 // Worker thread (quillmark-worker.js)
-const engine = await QuillmarkEngine.create();
-await engine.registerQuill(await Quill.fromUrl(quillUrl));
+const engine = QuillmarkEngine.create();
 
-self.onmessage = async (e) => {
-  const workflow = await engine.loadWorkflow(e.data.quillName);
-  const result = await workflow.render(e.data.markdown);
+self.onmessage = (e) => {
+  const quill = Quill.fromFiles(e.data.quillFiles, { name: e.data.quillName, backend: 'typst' });
+  engine.registerQuill(quill);
+  const workflow = engine.loadWorkflow(e.data.quillName);
+  const result = workflow.render(e.data.markdown);
   self.postMessage(result);
 };
-```
-
-### Caching Strategy
-
-**Opinion**: Three-level cache for optimal performance:
-1. **Engine cache**: Compiled Quills (in-memory)
-2. **Browser cache**: Downloaded Quills (IndexedDB)
-3. **CDN cache**: Quill distribution (HTTP cache headers)
-
-```typescript
-// Level 1: Engine cache
-const engine = await QuillmarkEngine.create({ enableCache: true });
-
-// Level 2: Browser cache (app implements)
-async function getCachedQuill(url: string): Promise<Quill> {
-  const db = await openDB('quillmark-cache');
-  const cached = await db.get('quills', url);
-  if (cached) return Quill.fromZip(cached);
-  
-  const quill = await Quill.fromUrl(url);
-  await db.put('quills', await quill.toZip(), url);
-  return quill;
-}
-
-// Level 3: CDN cache (server configures)
-// Cache-Control: public, max-age=31536000, immutable
 ```
 
 ---

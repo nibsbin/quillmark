@@ -4,7 +4,7 @@ WebAssembly bindings for the Quillmark markdown rendering engine.
 
 ## Overview
 
-This crate provides WASM bindings for Quillmark, enabling use in web browsers, Node.js, and other JavaScript/TypeScript environments.
+This crate provides minimal WASM bindings for Quillmark, enabling use in web browsers, Node.js, and other JavaScript/TypeScript environments. All data exchange uses JSON serialization, and JavaScript is responsible for all I/O operations (fetching, reading files, unzipping archives).
 
 ## Publishing
 
@@ -125,11 +125,26 @@ The WASM API closely mirrors the Rust API, with these main classes:
 
 See `designs/WASM_API.md` in the repository for the complete API specification.
 
-## Current Limitations
+## Design Principles
 
-- `Quill.fromZip()` - Not yet implemented (use `fromFiles` instead)
-- `Quill.toZip()` - Not yet implemented
-- Package downloading is disabled in WASM builds (embed packages in your Quills instead)
+- **JSON-Only Data Exchange**: All structured data uses JSON serialization via `serde-wasm-bindgen`
+- **JavaScript Handles I/O**: The WASM layer only handles rendering; JavaScript fetches files, reads filesystems, and unzips archives
+- **Synchronous Operations**: Rendering is fast enough (typically <100ms) that async operations are unnecessary
+- **No File System Abstractions**: No `fromPath()`, `fromUrl()`, or `fromZip()` methods - JavaScript prepares all data
+
+## Current Status
+
+Core API is implemented:
+- ✅ `QuillmarkEngine` - Engine management
+- ✅ `Quill.fromFiles()` - Create Quills from JSON file maps
+- ✅ `Workflow.render()` - Synchronous rendering to PDF/SVG
+- ✅ `Workflow.withAsset()` - Dynamic asset injection
+- ✅ Rich error diagnostics
+
+Not implemented (by design):
+- ❌ `Quill.fromZip()`, `fromUrl()`, `fromPath()` - JavaScript handles I/O
+- ❌ Progress callbacks - rendering is instant
+- ❌ Streaming APIs - unnecessary for fast operations
 
 ## License
 
