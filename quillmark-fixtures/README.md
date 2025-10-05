@@ -1,4 +1,4 @@
-# @quillmark/fixtures
+# @quillmark-test/fixtures
 
 Test fixtures and sample Quill templates for [Quillmark](https://github.com/nibsbin/quillmark).
 
@@ -17,7 +17,7 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const fixturesPath = join(__dirname, 'node_modules/@quillmark/fixtures/resources');
+const fixturesPath = join(__dirname, 'node_modules/@quillmark-test/fixtures/resources');
 
 // Access a fixture file
 const sampleMd = readFileSync(join(fixturesPath, 'sample.md'), 'utf-8');
@@ -26,7 +26,7 @@ const sampleMd = readFileSync(join(fixturesPath, 'sample.md'), 'utf-8');
 ```javascript
 // In browser with bundler
 // Import the path and fetch the resource
-const response = await fetch('node_modules/@quillmark/fixtures/resources/sample.md');
+const response = await fetch('node_modules/@quillmark-test/fixtures/resources/sample.md');
 const sampleMd = await response.text();
 ```
 
