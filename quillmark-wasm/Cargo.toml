@@ -1,6 +1,6 @@
 [package]
 name = "quillmark-wasm"
-version = "0.0.13"
+version = "0.0.14"
 edition = "2021"
 description = "WebAssembly bindings for quillmark"
 license = "Apache-2.0"
