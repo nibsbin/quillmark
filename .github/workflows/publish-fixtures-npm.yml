@@ -1,6 +1,10 @@
 name: Publish Fixtures, WASM, and Crates
 
 on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   push:
     tags:
       - "v*.*.*"
@@ -13,33 +17,11 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          target: wasm32-unknown-unknown
-
-      - name: Cache dependencies
-        uses: Swatinem/rust-cache@v2
-
-      - name: Install wasm-pack
-        run: cargo install wasm-pack
-
-      - name: Run workspace tests
-        run: cargo test --workspace --locked
-
-      - name: Run WASM tests
-        run: wasm-pack test --node quillmark-wasm
-
   publish-fixtures:
-    needs: test
     runs-on: ubuntu-latest
     environment: Publish
+    # Only run if CI succeeded or triggered manually/by tag
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name != 'workflow_run' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,9 +51,10 @@ jobs:
         run: echo "✓ @quillmark-test/fixtures v${{ steps.version.outputs.version }} published to npm"
 
   publish-wasm:
-    needs: test
     runs-on: ubuntu-latest
     environment: Publish
+    # Only run if CI succeeded or triggered manually/by tag
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name != 'workflow_run' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -80,6 +63,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           target: wasm32-unknown-unknown
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-${{ hashFiles('**/Cargo.lock') }}"
+          cache-on-failure: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -123,15 +112,22 @@ jobs:
         run: echo "✓ @quillmark/wasm v${{ steps.version.outputs.version }} published to npm"
 
   publish-crates:
-    needs: test
     runs-on: ubuntu-latest
     environment: Publish
+    # Only run if CI succeeded or triggered manually/by tag
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name != 'workflow_run' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "ci-${{ hashFiles('**/Cargo.lock') }}"
+          cache-on-failure: true
 
       - name: Publish workspace crates (no verification)
         run: cargo publish --workspace --locked --no-verify
