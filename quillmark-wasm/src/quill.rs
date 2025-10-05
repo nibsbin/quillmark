@@ -12,7 +12,6 @@ pub struct Quill {
 
 #[wasm_bindgen]
 impl Quill {
-
     /// Create Quill from in-memory file map (browser-friendly)
     #[wasm_bindgen(js_name = fromFiles)]
     pub fn from_files(files_js: JsValue, metadata_js: JsValue) -> Result<Quill, JsValue> {
