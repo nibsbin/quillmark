@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -58,6 +60,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -77,12 +81,14 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install wasm-pack
-        run: cargo install wasm-pack
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-pack
 
-      - name: Extract version from workspace Cargo.toml
+      - name: Extract version from workspace
         id: version
         run: |
-          VERSION=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "quillmark-wasm") | .version')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Publishing WASM version: $VERSION"
 
@@ -107,6 +113,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable

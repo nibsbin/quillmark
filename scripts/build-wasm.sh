@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "Building WASM module for @quillmark-test/wasm..."
+echo "Building WASM module for @quillmark/wasm..."
 
 # Navigate to workspace root
 cd "$(dirname "$0")/.."
@@ -24,7 +24,7 @@ wasm-pack build quillmark-wasm \
     --release \
     --scope quillmark
 
-# Update package name to @quillmark-test/wasm
+# Update package name from @quillmark/quillmark-wasm to @quillmark/wasm
 # Use sed in a cross-platform way
 if [ -f "pkg/bundler/package.json" ]; then
     if sed --version 2>&1 | grep -q GNU; then
