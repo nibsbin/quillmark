@@ -26,7 +26,6 @@ dirs = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-proptest = { workspace = true }
 
 [features]
 default = ["native"]

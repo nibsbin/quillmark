@@ -5,6 +5,7 @@ members = [
     "quillmark-typst",
     "quillmark-fixtures",
     "quillmark-wasm",
+    "quillmark-fuzz",
 ]
 resolver = "2"
 

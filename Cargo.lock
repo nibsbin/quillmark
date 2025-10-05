@@ -1687,7 +1687,6 @@ version = "0.0.20"
 dependencies = [
  "anyhow",
  "minijinja",
- "proptest",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -1705,13 +1704,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "quillmark-fuzz"
+version = "0.0.20"
+dependencies = [
+ "proptest",
+ "quillmark-core",
+ "quillmark-typst",
+]
+
+[[package]]
 name = "quillmark-typst"
 version = "0.0.20"
 dependencies = [
  "anyhow",
  "dirs",
  "fontdb",
- "proptest",
  "pulldown-cmark",
  "quillmark-core",
  "serde_json",
