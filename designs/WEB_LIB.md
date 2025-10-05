@@ -2,7 +2,7 @@
 
 > **Status**: Not Planned - Reference Design Only
 >
-> This document was an initial design for a high-level TypeScript wrapper around `@quillmark/wasm`. However, we've decided to keep the API minimal and publish only `@quillmark/wasm` directly. Users can add their own TypeScript wrappers as needed. This document remains as a reference for what a higher-level wrapper could look like.
+> This document was an initial design for a high-level TypeScript wrapper around `@quillmark-test/wasm`. However, we've decided to keep the API minimal and publish only `@quillmark-test/wasm` directly. Users can add their own TypeScript wrappers as needed. This document remains as a reference for what a higher-level wrapper could look like.
 
 ---
 
