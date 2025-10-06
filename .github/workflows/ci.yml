@@ -102,10 +102,10 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Tests (${{ matrix.features.name }})
-        run: cargo nextest run --workspace ${{ matrix.features.flags }} --locked
+        run: cargo nextest run ${{ matrix.features.flags }} --locked
 
       - name: Doctests (${{ matrix.features.name }})
-        run: cargo test --doc --workspace ${{ matrix.features.flags }} --locked
+        run: cargo test --doc ${{ matrix.features.flags }} --locked
 
   docs:
     runs-on: ubuntu-latest
