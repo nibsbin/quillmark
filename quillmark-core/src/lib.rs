@@ -202,10 +202,62 @@ impl Quill {
             .unwrap_or("unnamed")
             .to_string();
 
-        // Read Quill.toml (capitalized)
-        let quill_toml_path = path.join("Quill.toml");
-        let quill_toml_content = fs::read_to_string(&quill_toml_path)
-            .map_err(|e| format!("Failed to read Quill.toml: {}", e))?;
+        // Load .quillignore if it exists
+        let quillignore_path = path.join(".quillignore");
+        let ignore = if quillignore_path.exists() {
+            let ignore_content = fs::read_to_string(&quillignore_path)
+                .map_err(|e| format!("Failed to read .quillignore: {}", e))?;
+            QuillIgnore::from_content(&ignore_content)
+        } else {
+            // Default ignore patterns
+            QuillIgnore::new(vec![
+                ".git/".to_string(),
+                ".gitignore".to_string(),
+                ".quillignore".to_string(),
+                "target/".to_string(),
+                "node_modules/".to_string(),
+            ])
+        };
+
+        // Load all files into memory
+        let mut files = HashMap::new();
+        Self::load_directory_recursive(path, path, &mut files, &ignore)?;
+
+        // Create Quill from the file tree
+        Self::from_tree(files, Some(path.to_path_buf()), Some(name))
+    }
+
+    /// Create a Quill from a tree of files (authoritative method)
+    ///
+    /// This is the authoritative method for creating a Quill from an in-memory file tree.
+    /// Both `from_path` and `from_json` use this method internally.
+    ///
+    /// # Arguments
+    ///
+    /// * `files` - A map of file paths to `FileEntry` objects representing the file tree
+    /// * `base_path` - Optional base path for the Quill (defaults to "/")
+    /// * `default_name` - Optional default name (will be overridden by name in Quill.toml)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Quill.toml is not found in the file tree
+    /// - Quill.toml is not valid UTF-8 or TOML
+    /// - The glue file specified in Quill.toml is not found or not valid UTF-8
+    /// - Validation fails
+    pub fn from_tree(
+        files: HashMap<PathBuf, FileEntry>,
+        base_path: Option<PathBuf>,
+        default_name: Option<String>,
+    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        // Read Quill.toml
+        let quill_toml_path = PathBuf::from("Quill.toml");
+        let quill_toml_entry = files
+            .get(&quill_toml_path)
+            .ok_or("Quill.toml not found in file tree")?;
+
+        let quill_toml_content = String::from_utf8(quill_toml_entry.contents.clone())
+            .map_err(|e| format!("Quill.toml is not valid UTF-8: {}", e))?;
 
         let quill_toml: toml::Value = toml::from_str(&quill_toml_content)
             .map_err(|e| format!("Failed to parse Quill.toml: {}", e))?;
@@ -213,7 +265,7 @@ impl Quill {
         let mut metadata = HashMap::new();
         let mut glue_file = "glue.typ".to_string(); // default
         let mut template_file: Option<String> = None;
-        let mut quill_name = name; // default to directory name
+        let mut quill_name = default_name.unwrap_or_else(|| "unnamed".to_string());
 
         // Extract fields from [Quill] section
         if let Some(quill_section) = quill_toml.get("Quill") {
@@ -280,52 +332,36 @@ impl Quill {
         }
 
         // Read the template content from glue file
-        let glue_path = path.join(&glue_file);
-        let template_content = fs::read_to_string(&glue_path)
-            .map_err(|e| format!("Failed to read glue file '{}': {}", glue_file, e))?;
+        let glue_path = PathBuf::from(&glue_file);
+        let glue_entry = files
+            .get(&glue_path)
+            .ok_or_else(|| format!("Glue file '{}' not found in file tree", glue_file))?;
+
+        let template_content = String::from_utf8(glue_entry.contents.clone())
+            .map_err(|e| format!("Glue file '{}' is not valid UTF-8: {}", glue_file, e))?;
 
         // Read the markdown template content if specified
         let template_content_opt = if let Some(ref template_file_name) = template_file {
-            let template_path = path.join(template_file_name);
-            match fs::read_to_string(&template_path) {
-                Ok(content) => Some(content),
-                Err(e) => {
-                    eprintln!(
-                        "Warning: Failed to read template file '{}': {}",
-                        template_file_name, e
-                    );
-                    None
-                }
-            }
+            let template_path = PathBuf::from(template_file_name);
+            files.get(&template_path).and_then(|entry| {
+                String::from_utf8(entry.contents.clone())
+                    .map_err(|e| {
+                        eprintln!(
+                            "Warning: Template file '{}' is not valid UTF-8: {}",
+                            template_file_name, e
+                        );
+                        e
+                    })
+                    .ok()
+            })
         } else {
             None
         };
 
-        // Load .quillignore if it exists
-        let quillignore_path = path.join(".quillignore");
-        let ignore = if quillignore_path.exists() {
-            let ignore_content = fs::read_to_string(&quillignore_path)
-                .map_err(|e| format!("Failed to read .quillignore: {}", e))?;
-            QuillIgnore::from_content(&ignore_content)
-        } else {
-            // Default ignore patterns
-            QuillIgnore::new(vec![
-                ".git/".to_string(),
-                ".gitignore".to_string(),
-                ".quillignore".to_string(),
-                "target/".to_string(),
-                "node_modules/".to_string(),
-            ])
-        };
-
-        // Load all files into memory
-        let mut files = HashMap::new();
-        Self::load_directory_recursive(path, path, &mut files, &ignore)?;
-
         let quill = Quill {
             glue_template: template_content,
             metadata,
-            base_path: path.to_path_buf(),
+            base_path: base_path.unwrap_or_else(|| PathBuf::from("/")),
             name: quill_name,
             glue_file,
             template_file,
@@ -337,6 +373,99 @@ impl Quill {
         quill.validate()?;
 
         Ok(quill)
+    }
+
+    /// Create a Quill from a JSON representation
+    ///
+    /// Parses a JSON string representing a Quill and creates a Quill instance.
+    /// The JSON should have the following structure:
+    ///
+    /// ```json
+    /// {
+    ///   "name": "optional-default-name",
+    ///   "base_path": "/optional/base/path",
+    ///   "files": {
+    ///     "Quill.toml": {
+    ///       "contents": "...",  // UTF-8 string or byte array
+    ///       "is_dir": false
+    ///     },
+    ///     "glue.typ": {
+    ///       "contents": "...",
+    ///       "is_dir": false
+    ///     }
+    ///   }
+    /// }
+    /// ```
+    ///
+    /// File contents can be either:
+    /// - A UTF-8 string (recommended for text files)
+    /// - An array of byte values (for binary files)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The JSON is malformed
+    /// - The "files" field is missing or not an object
+    /// - Any file contents are invalid
+    /// - Validation fails (via `from_tree`)
+    pub fn from_json(json_str: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        use serde_json::Value as JsonValue;
+
+        let json: JsonValue =
+            serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {}", e))?;
+
+        // Parse files from JSON
+        let files_json = json.get("files").ok_or("Missing 'files' field in JSON")?;
+
+        let mut files = HashMap::new();
+        if let JsonValue::Object(files_obj) = files_json {
+            for (path_str, file_data) in files_obj {
+                let path = PathBuf::from(path_str);
+
+                let contents =
+                    if let Some(content_str) = file_data.get("contents").and_then(|v| v.as_str()) {
+                        // Direct UTF-8 string
+                        content_str.as_bytes().to_vec()
+                    } else if let Some(bytes_array) =
+                        file_data.get("contents").and_then(|v| v.as_array())
+                    {
+                        // Array of byte values
+                        bytes_array
+                            .iter()
+                            .filter_map(|v| v.as_u64().and_then(|n| u8::try_from(n).ok()))
+                            .collect()
+                    } else {
+                        return Err(format!("Invalid contents for file '{}'", path_str).into());
+                    };
+
+                let is_dir = file_data
+                    .get("is_dir")
+                    .and_then(|v| v.as_bool())
+                    .unwrap_or(false);
+
+                files.insert(
+                    path.clone(),
+                    FileEntry {
+                        contents,
+                        path,
+                        is_dir,
+                    },
+                );
+            }
+        } else {
+            return Err("'files' field must be an object".into());
+        }
+
+        // Extract optional base_path and name from JSON
+        let base_path = json
+            .get("base_path")
+            .and_then(|v| v.as_str())
+            .map(PathBuf::from);
+
+        let default_name = json.get("name").and_then(|v| v.as_str()).map(String::from);
+
+        // Create Quill from the file tree
+        Self::from_tree(files, base_path, default_name)
     }
 
     /// Recursively load all files from a directory into memory
@@ -836,5 +965,166 @@ glue = "glue.typ"
 
         // Test that glue template is still loaded
         assert_eq!(quill.glue_template, "glue content");
+    }
+
+    #[test]
+    fn test_from_tree() {
+        // Create a simple in-memory file tree
+        let mut files = HashMap::new();
+
+        // Add Quill.toml
+        let quill_toml = r#"[Quill]
+name = "test-from-tree"
+backend = "typst"
+glue = "glue.typ"
+description = "A test quill from tree"
+"#;
+        files.insert(
+            PathBuf::from("Quill.toml"),
+            FileEntry {
+                contents: quill_toml.as_bytes().to_vec(),
+                path: PathBuf::from("Quill.toml"),
+                is_dir: false,
+            },
+        );
+
+        // Add glue file
+        let glue_content = "= Test Template\n\nThis is a test.";
+        files.insert(
+            PathBuf::from("glue.typ"),
+            FileEntry {
+                contents: glue_content.as_bytes().to_vec(),
+                path: PathBuf::from("glue.typ"),
+                is_dir: false,
+            },
+        );
+
+        // Create Quill from tree
+        let quill = Quill::from_tree(files, Some(PathBuf::from("/test")), None).unwrap();
+
+        // Validate the quill
+        assert_eq!(quill.name, "test-from-tree");
+        assert_eq!(quill.glue_file, "glue.typ");
+        assert_eq!(quill.glue_template, glue_content);
+        assert_eq!(quill.base_path, PathBuf::from("/test"));
+        assert!(quill.metadata.contains_key("backend"));
+        assert!(quill.metadata.contains_key("description"));
+    }
+
+    #[test]
+    fn test_from_tree_with_template() {
+        let mut files = HashMap::new();
+
+        // Add Quill.toml with template specified
+        let quill_toml = r#"[Quill]
+name = "test-tree-template"
+backend = "typst"
+glue = "glue.typ"
+template = "template.md"
+"#;
+        files.insert(
+            PathBuf::from("Quill.toml"),
+            FileEntry {
+                contents: quill_toml.as_bytes().to_vec(),
+                path: PathBuf::from("Quill.toml"),
+                is_dir: false,
+            },
+        );
+
+        // Add glue file
+        files.insert(
+            PathBuf::from("glue.typ"),
+            FileEntry {
+                contents: b"glue content".to_vec(),
+                path: PathBuf::from("glue.typ"),
+                is_dir: false,
+            },
+        );
+
+        // Add template file
+        let template_content = "# {{ title }}\n\n{{ body }}";
+        files.insert(
+            PathBuf::from("template.md"),
+            FileEntry {
+                contents: template_content.as_bytes().to_vec(),
+                path: PathBuf::from("template.md"),
+                is_dir: false,
+            },
+        );
+
+        // Create Quill from tree
+        let quill = Quill::from_tree(files, None, None).unwrap();
+
+        // Validate template is loaded
+        assert_eq!(quill.template_file, Some("template.md".to_string()));
+        assert_eq!(quill.template, Some(template_content.to_string()));
+    }
+
+    #[test]
+    fn test_from_json() {
+        // Create JSON representation of a Quill
+        let json_str = r#"{
+            "name": "test-from-json",
+            "base_path": "/test/path",
+            "files": {
+                "Quill.toml": {
+                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n",
+                    "is_dir": false
+                },
+                "glue.typ": {
+                    "contents": "= Test Glue\n\nThis is test content.",
+                    "is_dir": false
+                }
+            }
+        }"#;
+
+        // Create Quill from JSON
+        let quill = Quill::from_json(json_str).unwrap();
+
+        // Validate the quill
+        assert_eq!(quill.name, "test-from-json");
+        assert_eq!(quill.base_path, PathBuf::from("/test/path"));
+        assert_eq!(quill.glue_file, "glue.typ");
+        assert!(quill.glue_template.contains("Test Glue"));
+        assert!(quill.metadata.contains_key("backend"));
+    }
+
+    #[test]
+    fn test_from_json_with_byte_array() {
+        // Create JSON with byte array representation
+        let json_str = r#"{
+            "files": {
+                "Quill.toml": {
+                    "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10],
+                    "is_dir": false
+                },
+                "glue.typ": {
+                    "contents": "test glue",
+                    "is_dir": false
+                }
+            }
+        }"#;
+
+        // Create Quill from JSON
+        let quill = Quill::from_json(json_str).unwrap();
+
+        // Validate the quill was created
+        assert_eq!(quill.name, "test");
+        assert_eq!(quill.glue_file, "glue.typ");
+    }
+
+    #[test]
+    fn test_from_json_missing_files() {
+        // JSON without files field should fail
+        let json_str = r#"{
+            "name": "test"
+        }"#;
+
+        let result = Quill::from_json(json_str);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing 'files' field"));
     }
 }
