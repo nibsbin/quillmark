@@ -4,6 +4,23 @@ use crate::error::QuillmarkError;
 use crate::types::{OutputFormat, RenderMetadata, RenderOptions, RenderResult};
 use wasm_bindgen::prelude::*;
 
+// Cross-platform helper to get current time in milliseconds as f64.
+fn now_ms() -> f64 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        js_sys::Date::now()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let dur = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        dur.as_millis() as f64
+    }
+}
+
 /// Rendering workflow for a specific Quill
 #[wasm_bindgen]
 pub struct Workflow {
@@ -16,7 +33,7 @@ pub struct Workflow {
 impl Workflow {
     /// Render markdown to artifacts
     pub fn render(&self, markdown: &str, options_js: JsValue) -> Result<JsValue, JsValue> {
-        let start = js_sys::Date::now();
+        let start = now_ms();
 
         // Parse options
         let options: RenderOptions = if options_js.is_undefined() || options_js.is_null() {
@@ -37,7 +54,7 @@ impl Workflow {
             .render(markdown, output_format)
             .map_err(|e| QuillmarkError::from(e).to_js_value())?;
 
-        let elapsed_ms = js_sys::Date::now() - start;
+        let elapsed_ms = now_ms() - start;
 
         // Convert result
         let render_result = RenderResult {
@@ -58,7 +75,7 @@ impl Workflow {
     /// Render pre-processed glue content (advanced)
     #[wasm_bindgen(js_name = renderSource)]
     pub fn render_source(&self, content: &str, options_js: JsValue) -> Result<JsValue, JsValue> {
-        let start = js_sys::Date::now();
+        let start = now_ms();
 
         // Parse options
         let options: RenderOptions = if options_js.is_undefined() || options_js.is_null() {
@@ -79,7 +96,7 @@ impl Workflow {
             .render_source(content, output_format)
             .map_err(|e| QuillmarkError::from(e).to_js_value())?;
 
-        let elapsed_ms = js_sys::Date::now() - start;
+        let elapsed_ms = now_ms() - start;
 
         // Convert result
         let render_result = RenderResult {
