@@ -55,9 +55,9 @@ impl QuillWorld {
         // so it acts as a stable fallback across platforms.
         #[cfg(feature = "embed-default-font")]
         {
-            // The font file should be placed at `quillmark-typst/assets/fonts/RobotoCondensed-Regular.ttf`
+            // The font file should be placed at `quillmark-typst/assets/fonts/RobotoCondensed-VariableFont_wght.ttf`
             // and included in the crate via include_bytes! at compile time.
-            const ROBOTO_BYTES: &[u8] = include_bytes!("../assets/RobotoCondensed-Regular.ttf");
+            const ROBOTO_BYTES: &[u8] = include_bytes!("../assets/RobotoCondensed-VariableFont_wght.ttf");
             let roboto_bytes = Bytes::new(ROBOTO_BYTES.to_vec());
             for font in Font::iter(roboto_bytes) {
                 book.push(font.info().clone());
