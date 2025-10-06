@@ -1719,6 +1719,7 @@ dependencies = [
  "anyhow",
  "dirs",
  "fontdb",
+ "js-sys",
  "pulldown-cmark",
  "quillmark-core",
  "serde_json",

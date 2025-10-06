@@ -89,9 +89,28 @@ pub fn date_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<V
         }
     }
 
-    // 2) if still undefined, use today's date (UTC) as "YYYY-MM-DD"
+    // 2) if still undefined, use today's date (UTC) as "YYYY-MM-DD". On wasm
+    // targets OffsetDateTime::now_utc() may be unavailable; provide a safe
+    // fallback to a fixed epoch date instead of panicking.
     let s = if value.is_undefined() {
-        OffsetDateTime::now_utc().date().to_string()
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            OffsetDateTime::now_utc().date().to_string()
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            // Use js-sys to get the current UTC date string on wasm targets.
+            // We format as YYYY-MM-DD to match Iso8601::DEFAULT parsing expectations.
+            use js_sys::Date;
+            use wasm_bindgen::JsValue;
+
+            let d = Date::new_0();
+            let year = d.get_utc_full_year() as i32;
+            let month = (d.get_utc_month() as u8).saturating_add(1);
+            let day = d.get_utc_date() as u8;
+            format!("{:04}-{:02}-{:02}", year, month, day)
+        }
     } else {
         value.to_string()
     };

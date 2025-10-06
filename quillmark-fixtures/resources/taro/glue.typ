@@ -16,7 +16,10 @@
 *#{{ quote.author | String }}*: _#{{ quote.body | Content }}_
 {% endfor %}
 
+
 // Include an image with a dynamic asset
 {% if picture is defined %}
 #image({{ picture | Asset }})
+{% else %}
+#image("assets/taro.png")
 {% endif %}

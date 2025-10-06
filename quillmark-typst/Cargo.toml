@@ -25,6 +25,9 @@ typst-pdf = { workspace = true }
 typst-svg = { workspace = true }
 dirs = { workspace = true, optional = true }
 
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = { workspace = true, optional = false }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 

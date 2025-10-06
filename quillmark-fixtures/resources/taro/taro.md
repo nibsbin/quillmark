@@ -2,7 +2,6 @@
 author: Nibs
 ice_cream: Taro
 title: "My Favorite Cream Flavor"
-picture: taro.png
 ---
 
 I love Taro ice cream for its subtly sweet, nutty flavor and creamy, earthy undertones that set it apart from more common flavors. Its unique purple hue and smooth texture make it both visually striking and deliciously comforting. Here are some quotes from satisfied customers:

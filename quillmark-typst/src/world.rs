@@ -569,18 +569,51 @@ impl World for QuillWorld {
     }
 
     fn today(&self, offset: Option<i64>) -> Option<Datetime> {
-        use time::{Duration, OffsetDateTime};
+        // On native targets we can use the system clock. On wasm32 we call into
+        // the JavaScript Date API via js-sys to get UTC date components.
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use time::{Duration, OffsetDateTime};
 
-        // Get current UTC time and apply optional hour offset
-        let now = OffsetDateTime::now_utc();
-        let adjusted = if let Some(hours) = offset {
-            now + Duration::hours(hours)
-        } else {
-            now
-        };
+            // Get current UTC time and apply optional hour offset
+            let now = OffsetDateTime::now_utc();
+            let adjusted = if let Some(hours) = offset {
+                now + Duration::hours(hours)
+            } else {
+                now
+            };
 
-        let date = adjusted.date();
-        Datetime::from_ymd(date.year(), date.month() as u8, date.day() as u8)
+            let date = adjusted.date();
+            Datetime::from_ymd(date.year(), date.month() as u8, date.day() as u8)
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            // Use js-sys to access the JS Date methods. This returns components in
+            // UTC using getUTCFullYear/getUTCMonth/getUTCDate.
+            use js_sys::Date;
+            use wasm_bindgen::JsValue;
+
+            let d = Date::new_0();
+            // get_utc_full_year returns f64
+            let year = d.get_utc_full_year() as i32;
+            // get_utc_month returns 0-based month
+            let month = (d.get_utc_month() as u8).saturating_add(1);
+            let day = d.get_utc_date() as u8;
+
+            // Apply hour offset if requested by constructing a JS Date with hours
+            if let Some(hours) = offset {
+                // Create a new Date representing now + offset hours
+                let millis = d.get_time() + (hours as f64) * 3_600_000.0;
+                let d2 = Date::new(&JsValue::from_f64(millis));
+                let year = d2.get_utc_full_year() as i32;
+                let month = (d2.get_utc_month() as u8).saturating_add(1);
+                let day = d2.get_utc_date() as u8;
+                return Datetime::from_ymd(year as u16, month, day);
+            }
+
+            Datetime::from_ymd(year as u16, month, day)
+        }
     }
 }
 
