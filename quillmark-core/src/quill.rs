@@ -485,40 +485,10 @@ impl Quill {
 
     /// Create a Quill from a JSON representation
     ///
-    /// Parses a JSON string representing a Quill and creates a Quill instance.
-    ///
-    /// **Tree structure format:**
-    /// ```json
-    /// {
-    ///   "name": "optional-default-name",
-    ///   "base_path": "/optional/base/path",
-    ///   "Quill.toml": {
-    ///     "contents": "..."
-    ///   },
-    ///   "src": {
-    ///     "files": {
-    ///       "main.rs": {
-    ///         "contents": "..."
-    ///       },
-    ///       "lib.rs": {
-    ///         "contents": "..."
-    ///       }
-    ///     }
-    ///   }
-    /// }
-    /// ```
-    ///
-    /// File contents can be either:
-    /// - A UTF-8 string (recommended for text files)
-    /// - An array of byte values (for binary files)
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The JSON is malformed
-    /// - The file tree structure is invalid
-    /// - Any file contents are invalid
-    /// - Validation fails (via `from_tree`)
+    /// Parses a JSON string into an in-memory file tree and validates it. The
+    /// precise JSON contract is documented in `quillmark-core/docs/JSON_CONTRACT.md`.
+    /// In brief: root object → file tree, optional `name`/`base_path` metadata,
+    /// optional legacy `files` wrapper is supported and merged.
     pub fn from_json(json_str: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         use serde_json::Value as JsonValue;
 
@@ -534,7 +504,9 @@ impl Quill {
         let default_name = json.get("name").and_then(|v| v.as_str()).map(String::from);
 
         // Parse tree format - the root JSON object contains the file tree directly
-        // Create a virtual root directory containing all the files
+        // Create a virtual root directory containing all the files.
+        // Note: the root object is expected to contain file/directory entries
+        // directly. Reserved metadata keys `name` and `base_path` are skipped.
         let mut root_files = HashMap::new();
 
         if let JsonValue::Object(obj) = &json {

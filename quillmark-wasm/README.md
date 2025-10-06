@@ -38,99 +38,28 @@ npm install @quillmark-test/wasm
 
 ## Usage
 
-### Basic Example
+This WASM package follows the canonical Quill JSON contract defined in
+`quillmark-core/docs/JSON_CONTRACT.md`. In short: build a JS object shaped as
+the file tree, then pass a JSON string to `Quill.fromJson(...)`.
+
+Minimal example:
 
 ```typescript
 import { QuillmarkEngine, Quill, OutputFormat } from '@quillmark-test/wasm';
 
-// Create the engine
 const engine = QuillmarkEngine.create();
-
-// Serialize a Quill folder as JSON
-// The structure matches quillmark_core::Quill::from_json format
-const quillJson = JSON.stringify({
-  name: 'my-quill',  // optional default name
-  base_path: '/',    // optional base path
-  files: {
-    'Quill.toml': {
-      contents: `[Quill]
-name = "my-quill"
-backend = "typst"
-glue = "glue.typ"
-`,
-      is_dir: false
-    },
-    'glue.typ': {
-      contents: '#let render(doc) = { doc.body }',
-      is_dir: false
-    },
-    // Add all your quill files here (packages, assets, etc.)
-    'packages/some-package.typ': {
-      contents: '// package content',
-      is_dir: false
-    }
-  }
-});
-
-// Create Quill from the serialized JSON
-const quill = Quill.fromJson(quillJson);
-
-// Register the quill
+const quillObj = {
+  name: 'my-quill',
+  'Quill.toml': { contents: '[Quill]\nname = "my-quill"\nbackend = "typst"\nglue = "glue.typ"\n' },
+  'glue.typ': { contents: '= Hello\n\n{{ body }}' }
+};
+const quill = Quill.fromJson(JSON.stringify(quillObj));
 engine.registerQuill(quill);
-
-// Load a workflow
 const workflow = engine.loadWorkflow('my-quill');
-
-// Render markdown to PDF
-const markdown = '# Hello, World!\\n\\nThis is a test document.';
-const result = workflow.render(markdown, { format: OutputFormat.PDF });
-
-// Access the PDF bytes
-const pdfBytes = result.artifacts[0].bytes;
+const result = workflow.render('# Hi', { format: OutputFormat.PDF });
 ```
 
-### With Dynamic Assets
-
-```typescript
-const workflow = engine.loadWorkflow('my-quill');
-
-// Add dynamic assets (e.g., images, logos)
-const withAssets = workflow
-  .withAsset('logo.png', logoBytes)
-  .withAsset('signature.png', signatureBytes);
-
-// Render with assets
-const result = withAssets.render(markdown, { format: OutputFormat.PDF });
-```
-
-### Error Handling
-
-```typescript
-try {
-  const result = workflow.render(markdown, { format: OutputFormat.PDF });
-  
-  // Check for warnings
-  if (result.warnings.length > 0) {
-    console.warn('Rendering warnings:', result.warnings);
-  }
-  
-  // Use the artifacts
-  const pdf = result.artifacts[0];
-  downloadFile(pdf.bytes, 'output.pdf', pdf.mimeType);
-} catch (error) {
-  // Error is a serialized QuillmarkError object
-  console.error('Rendering failed:', error);
-  
-  if (error.diagnostics) {
-    error.diagnostics.forEach(diag => {
-      console.error(`${diag.severity}: ${diag.message}`);
-      if (diag.location) {
-        console.error(`  at ${diag.location.file}:${diag.location.line}:${diag.location.column}`);
-      }
-    });
-  }
-}
-```
+See `quillmark-core/docs/JSON_CONTRACT.md` for the full contract and examples.
 
 ## API
 
@@ -156,7 +85,10 @@ All data crossing the JavaScript <-> WebAssembly boundary uses JSON/serde-compat
 This means a few concrete rules you should follow when calling into the WASM module from JS/TS:
 
 - Enums: exported Rust enums are serialized as strings (not numeric discriminants). This was a compatibility fix in the recent WASM changes — pass enum values as their string names (for example `"PDF"`) or use the generated JS enum helpers (e.g. `OutputFormat.PDF`). Avoid using raw numeric indices for enums.
-- Bytes / binary data: `Vec<u8>` and similar binary buffers map to `Uint8Array`. When creating Quills or assets, pass `Uint8Array` (or `Buffer` in Node) for file contents.
+- Bytes / binary data: `Vec<u8>` and similar binary buffers map to `Uint8Array` across the WASM boundary.
+
+  - When serializing a Quill into a JSON string for `Quill.fromJson()` you must represent binary file contents as an array of numeric byte values (e.g. `[137,80,78,71,...]`). The `quillmark-core` JSON parser accepts either a UTF-8 string or a numeric array in the `contents` field.
+  - For runtime APIs that accept binary buffers directly (for example `Workflow.withAsset()`), pass a `Uint8Array` in the JS call (or `Buffer` in Node) — you do NOT JSON.stringify these runtime binary arguments.
 - Collections: `Vec<T>` <-> JS arrays, and `HashMap<String, T>` / `BTreeMap<String, T>` map to plain JS objects or `Map` where appropriate. You can pass a `Map<string, Uint8Array>` for file maps, or a plain object whose values are `Uint8Array`.
 - Option and nullability: `Option<T>` is represented as either the value or `null` in JS. Use `null` to indicate `None`.
 - Errors / Result: Rust `Result` errors are surfaced to JS as thrown exceptions containing a serialized `QuillmarkError` object (see "Error Handling" above). Inspect `error.diagnostics` for rich diagnostic information.

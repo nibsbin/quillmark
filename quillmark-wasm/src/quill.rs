@@ -13,33 +13,12 @@ pub struct Quill {
 
 #[wasm_bindgen]
 impl Quill {
-    /// Create Quill from JSON (string or object)
+    /// Create Quill from JSON
     ///
-    /// Accepts either a JSON string or a JS object representing a Quill folder structure.
-    /// The structure must follow `quillmark_core::Quill::from_json` format (flat `files` map
-    /// or the recommended hierarchical tree format). Passing a JS object is preferred from
-    /// JavaScript since it avoids re-serializing on the JS side.
-    ///
-    /// ```json
-    /// {
-    ///   "name": "optional-default-name",
-    ///   "base_path": "/optional/base/path",
-    ///   "Quill.toml": { "contents": "..." },
-    ///   "glue.typ": { "contents": "..." },
-    ///   "src": {
-    ///     "files": {
-    ///       "main.rs": { "contents": "..." }
-    ///     }
-    ///   }
-    /// }
-    /// ```
-    ///
-    /// File contents can be either:
-    /// - A UTF-8 string (recommended for text files)
-    /// - An array of byte values (for binary files)
-    ///
-    /// The JSON should represent the entire Quill folder serialized.
-    /// quillmark-core handles all parsing, ignoring, and validation.
+    /// Accepts a JSON string describing the Quill file tree. See the canonical
+    /// contract at `quillmark-core/docs/JSON_CONTRACT.md` for the precise
+    /// shape and examples. The WASM wrapper exposes this as `Quill.fromJson()`
+    /// (JS) which forwards to `quillmark_core::Quill::from_json`.
     #[wasm_bindgen(js_name = fromJson)]
     pub fn from_json(json_str: &str) -> Result<Quill, JsValue> {
         let inner = quillmark_core::Quill::from_json(json_str).map_err(|e| {
