@@ -13,10 +13,12 @@ pub struct Quill {
 
 #[wasm_bindgen]
 impl Quill {
-    /// Create Quill from JSON string
+    /// Create Quill from JSON (string or object)
     ///
-    /// Accepts a JSON string representing a Quill folder structure.
-    /// The JSON must follow the quillmark_core::Quill::from_json format:
+    /// Accepts either a JSON string or a JS object representing a Quill folder structure.
+    /// The structure must follow `quillmark_core::Quill::from_json` format (flat `files` map
+    /// or the recommended hierarchical tree format). Passing a JS object is preferred from
+    /// JavaScript since it avoids re-serializing on the JS side.
     ///
     /// ```json
     /// {
