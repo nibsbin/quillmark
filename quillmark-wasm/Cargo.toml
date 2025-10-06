@@ -16,6 +16,8 @@ quillmark-core = { workspace = true }
 wasm-bindgen = "0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+toml = { workspace = true }
 serde-wasm-bindgen = "0.6"
 console_error_panic_hook = "0.1"
 js-sys = "0.3"
