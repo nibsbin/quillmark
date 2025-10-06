@@ -48,7 +48,8 @@ impl Quill {
         } else {
             // Otherwise, deserialize the JS value into serde_json::Value
             serde_wasm_bindgen::from_value(json.clone()).map_err(|e| {
-                QuillmarkError::system(format!("Failed to convert JS value to JSON: {}", e)).to_js_value()
+                QuillmarkError::system(format!("Failed to convert JS value to JSON: {}", e))
+                    .to_js_value()
             })?
         };
 
@@ -58,8 +59,7 @@ impl Quill {
         })?;
 
         let inner = quillmark_core::Quill::from_json(&json_str).map_err(|e| {
-            QuillmarkError::system(format!("Failed to create Quill from JSON: {}", e))
-                .to_js_value()
+            QuillmarkError::system(format!("Failed to create Quill from JSON: {}", e)).to_js_value()
         })?;
 
         Ok(Quill { inner })
