@@ -57,8 +57,8 @@ impl Workflow {
     }
 
     /// Render pre-processed glue content (advanced)
-    #[wasm_bindgen(js_name = renderContent)]
-    pub fn render_content(&self, content: &str, options_js: JsValue) -> Result<JsValue, JsValue> {
+    #[wasm_bindgen(js_name = renderSource)]
+    pub fn render_source(&self, content: &str, options_js: JsValue) -> Result<JsValue, JsValue> {
         let start = Instant::now();
 
         // Parse options
@@ -77,7 +77,7 @@ impl Workflow {
         // Perform rendering
         let result = self
             .inner
-            .render_content(content, output_format)
+            .render_source(content, output_format)
             .map_err(|e| QuillmarkError::from(e).to_js_value())?;
 
         let elapsed = start.elapsed();

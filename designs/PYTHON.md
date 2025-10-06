@@ -161,7 +161,7 @@ quill_name = workflow.quill_name()           # -> str
 **Methods:**
 - `__init__(backend: str, quill: Quill) -> None`: Create workflow
 - `render(markdown: str, format: Optional[OutputFormat] = None) -> RenderResult`: Render markdown
-- `render_content(content: str, format: Optional[OutputFormat] = None) -> RenderResult`: Render pre-processed content
+- `render_source(content: str, format: Optional[OutputFormat] = None) -> RenderResult`: Render pre-processed content
 - `process_glue(markdown: str) -> str`: Process markdown through glue template
 - `with_asset(filename: str, contents: bytes) -> Workflow`: Add dynamic asset (returns new instance)
 - `with_assets(assets: Dict[str, bytes]) -> Workflow`: Add multiple assets
@@ -1169,7 +1169,7 @@ python -m http.server -d docs/_build/html 8000
   - [ ] `registered_backends()` / `registered_quills()`
 - [ ] **2.2** Complete `Workflow` class implementation
   - [ ] `render()`
-  - [ ] `render_content()`
+  - [ ] `render_source()`
   - [ ] `process_glue()`
   - [ ] Property getters
 - [ ] **2.3** Implement `Quill` class
