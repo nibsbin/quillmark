@@ -2,7 +2,6 @@
 
 use crate::error::QuillmarkError;
 use crate::types::{OutputFormat, RenderMetadata, RenderOptions, RenderResult};
-use std::time::Instant;
 use wasm_bindgen::prelude::*;
 
 /// Rendering workflow for a specific Quill
@@ -17,7 +16,7 @@ pub struct Workflow {
 impl Workflow {
     /// Render markdown to artifacts
     pub fn render(&self, markdown: &str, options_js: JsValue) -> Result<JsValue, JsValue> {
-        let start = Instant::now();
+        let start = js_sys::Date::now();
 
         // Parse options
         let options: RenderOptions = if options_js.is_undefined() || options_js.is_null() {
@@ -38,14 +37,14 @@ impl Workflow {
             .render(markdown, output_format)
             .map_err(|e| QuillmarkError::from(e).to_js_value())?;
 
-        let elapsed = start.elapsed();
+        let elapsed_ms = js_sys::Date::now() - start;
 
         // Convert result
         let render_result = RenderResult {
             artifacts: result.artifacts.into_iter().map(|a| a.into()).collect(),
             warnings: result.warnings.into_iter().map(|d| d.into()).collect(),
             metadata: RenderMetadata {
-                render_time_ms: elapsed.as_secs_f64() * 1000.0,
+                render_time_ms: elapsed_ms,
                 backend: self.backend_id.clone(),
                 quill_name: self.quill_name.clone(),
             },
@@ -59,7 +58,7 @@ impl Workflow {
     /// Render pre-processed glue content (advanced)
     #[wasm_bindgen(js_name = renderSource)]
     pub fn render_source(&self, content: &str, options_js: JsValue) -> Result<JsValue, JsValue> {
-        let start = Instant::now();
+        let start = js_sys::Date::now();
 
         // Parse options
         let options: RenderOptions = if options_js.is_undefined() || options_js.is_null() {
@@ -80,14 +79,14 @@ impl Workflow {
             .render_source(content, output_format)
             .map_err(|e| QuillmarkError::from(e).to_js_value())?;
 
-        let elapsed = start.elapsed();
+        let elapsed_ms = js_sys::Date::now() - start;
 
         // Convert result
         let render_result = RenderResult {
             artifacts: result.artifacts.into_iter().map(|a| a.into()).collect(),
             warnings: result.warnings.into_iter().map(|d| d.into()).collect(),
             metadata: RenderMetadata {
-                render_time_ms: elapsed.as_secs_f64() * 1000.0,
+                render_time_ms: elapsed_ms,
                 backend: self.backend_id.clone(),
                 quill_name: self.quill_name.clone(),
             },
