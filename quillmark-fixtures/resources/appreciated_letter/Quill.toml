@@ -1,5 +1,5 @@
 [Quill]
-name = "taro"
+name = "appreeciated_letter"
 backend = "typst"
 glue = "glue.typ"
 template = "appreciated_letter.md"
