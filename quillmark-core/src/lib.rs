@@ -228,6 +228,23 @@ impl Quill {
     }
 
     /// Create a Quill from a tree of files (authoritative method)
+    ///
+    /// This is the authoritative method for creating a Quill from an in-memory file tree.
+    /// Both `from_path` and `from_json` use this method internally.
+    ///
+    /// # Arguments
+    ///
+    /// * `files` - A map of file paths to `FileEntry` objects representing the file tree
+    /// * `base_path` - Optional base path for the Quill (defaults to "/")
+    /// * `default_name` - Optional default name (will be overridden by name in Quill.toml)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - Quill.toml is not found in the file tree
+    /// - Quill.toml is not valid UTF-8 or TOML
+    /// - The glue file specified in Quill.toml is not found or not valid UTF-8
+    /// - Validation fails
     pub fn from_tree(
         files: HashMap<PathBuf, FileEntry>,
         base_path: Option<PathBuf>,
@@ -359,6 +376,38 @@ impl Quill {
     }
 
     /// Create a Quill from a JSON representation
+    ///
+    /// Parses a JSON string representing a Quill and creates a Quill instance.
+    /// The JSON should have the following structure:
+    ///
+    /// ```json
+    /// {
+    ///   "name": "optional-default-name",
+    ///   "base_path": "/optional/base/path",
+    ///   "files": {
+    ///     "Quill.toml": {
+    ///       "contents": "...",  // UTF-8 string or byte array
+    ///       "is_dir": false
+    ///     },
+    ///     "glue.typ": {
+    ///       "contents": "...",
+    ///       "is_dir": false
+    ///     }
+    ///   }
+    /// }
+    /// ```
+    ///
+    /// File contents can be either:
+    /// - A UTF-8 string (recommended for text files)
+    /// - An array of byte values (for binary files)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The JSON is malformed
+    /// - The "files" field is missing or not an object
+    /// - Any file contents are invalid
+    /// - Validation fails (via `from_tree`)
     pub fn from_json(json_str: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         use serde_json::Value as JsonValue;
 
