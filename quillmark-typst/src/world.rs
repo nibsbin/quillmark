@@ -57,7 +57,8 @@ impl QuillWorld {
         {
             // The font file should be placed at `quillmark-typst/assets/RobotoCondensed-VariableFont_wght.ttf`
             // and included in the crate via include_bytes! at compile time.
-            const ROBOTO_BYTES: &[u8] = include_bytes!("../assets/RobotoCondensed-VariableFont_wght.ttf");
+            const ROBOTO_BYTES: &[u8] =
+                include_bytes!("../assets/RobotoCondensed-VariableFont_wght.ttf");
             let roboto_bytes = Bytes::new(ROBOTO_BYTES.to_vec());
             let mut embedded_parsed = 0usize;
             for font in Font::iter(roboto_bytes) {
@@ -66,7 +67,10 @@ impl QuillWorld {
                 fonts.push(font);
                 embedded_parsed += 1;
             }
-            println!("quillmark-typst: embed-default-font active -> parsed {} embedded font face(s)", embedded_parsed);
+            println!(
+                "quillmark-typst: embed-default-font active -> parsed {} embedded font face(s)",
+                embedded_parsed
+            );
         }
 
         // Load fonts from the quill's in-memory assets FIRST and add to the book
@@ -167,18 +171,16 @@ impl QuillWorld {
             }
         }
 
-        // If no fonts in fonts subdirectory, look in assets/ root
-        if font_data.is_empty() {
-            let asset_paths = quill.find_files("assets/*");
-            for asset_path in asset_paths {
-                if let Some(ext) = asset_path.extension() {
-                    if matches!(
-                        ext.to_string_lossy().to_lowercase().as_str(),
-                        "ttf" | "otf" | "woff" | "woff2"
-                    ) {
-                        if let Some(contents) = quill.get_file(&asset_path) {
-                            font_data.push(contents.to_vec());
-                        }
+        // Also look in assets/ root for dynamic fonts (DYNAMIC_FONT__*)
+        let asset_paths = quill.find_files("assets/*");
+        for asset_path in asset_paths {
+            if let Some(ext) = asset_path.extension() {
+                if matches!(
+                    ext.to_string_lossy().to_lowercase().as_str(),
+                    "ttf" | "otf" | "woff" | "woff2"
+                ) {
+                    if let Some(contents) = quill.get_file(&asset_path) {
+                        font_data.push(contents.to_vec());
                     }
                 }
             }

@@ -321,6 +321,15 @@ pub enum RenderError {
         message: String,
     },
 
+    /// Dynamic font filename collision
+    #[error("Dynamic font collision: {filename}")]
+    DynamicFontCollision {
+        /// Filename that collided
+        filename: String,
+        /// Error message
+        message: String,
+    },
+
     /// Internal error (wraps anyhow::Error)
     #[error(transparent)]
     Internal(#[from] anyhow::Error),
@@ -465,6 +474,12 @@ pub fn print_errors(err: &RenderError) {
         RenderError::DynamicAssetCollision { filename, message } => {
             eprintln!(
                 "[ERROR] Dynamic asset collision: {}\n  {}",
+                filename, message
+            );
+        }
+        RenderError::DynamicFontCollision { filename, message } => {
+            eprintln!(
+                "[ERROR] Dynamic font collision: {}\n  {}",
                 filename, message
             );
         }
