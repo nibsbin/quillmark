@@ -1272,4 +1272,20 @@ template = "template.md"
         assert!(quill.file_exists("src/main.rs"));
         assert!(quill.file_exists("glue.typ"));
     }
+
+    #[test]
+    fn test_from_json_files_wrapper_rejected() {
+        // The JSON contract requires files to live at the root. The legacy
+        // `{ "files": { ... } }` wrapper is no longer supported and should
+        // produce an error.
+        let json_str = r#"{
+            "files": {
+                "Quill.toml": { "contents": "[Quill]\nname = \"wrap\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n" },
+                "glue.typ": { "contents": "= glue" }
+            }
+        }"#;
+
+        let result = Quill::from_json(json_str);
+        assert!(result.is_err(), "legacy files wrapper should be rejected");
+    }
 }
