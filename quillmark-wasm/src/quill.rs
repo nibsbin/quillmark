@@ -12,10 +12,12 @@ pub struct Quill {
 
 #[wasm_bindgen]
 impl Quill {
-    /// Create Quill from JSON string
+    /// Create Quill from JSON (string or object)
     ///
-    /// Accepts a JSON string representing a Quill folder structure.
-    /// The JSON must follow the quillmark_core::Quill::from_json format:
+    /// Accepts either a JSON string or a JS object representing a Quill folder structure.
+    /// The structure must follow `quillmark_core::Quill::from_json` format (flat `files` map
+    /// or the recommended hierarchical tree format). Passing a JS object is preferred from
+    /// JavaScript since it avoids re-serializing on the JS side.
     ///
     /// ```json
     /// {
@@ -35,8 +37,27 @@ impl Quill {
     /// The JSON should represent the entire Quill folder serialized.
     /// quillmark-core handles all parsing, ignoring, and validation.
     #[wasm_bindgen(js_name = fromJson)]
-    pub fn from_json(json_str: &str) -> Result<Quill, JsValue> {
-        let inner = quillmark_core::Quill::from_json(json_str).map_err(|e| {
+    pub fn from_json(json: &JsValue) -> Result<Quill, JsValue> {
+        // Convert the incoming JsValue into serde_json::Value
+        let json_value: serde_json::Value = if json.is_string() {
+            // If it's a string, parse it
+            let s = json.as_string().unwrap_or_default();
+            serde_json::from_str(&s).map_err(|e| {
+                QuillmarkError::system(format!("Failed to parse JSON string: {}", e)).to_js_value()
+            })?
+        } else {
+            // Otherwise, deserialize the JS value into serde_json::Value
+            serde_wasm_bindgen::from_value(json.clone()).map_err(|e| {
+                QuillmarkError::system(format!("Failed to convert JS value to JSON: {}", e)).to_js_value()
+            })?
+        };
+
+        // Serialize to string and pass to core (core accepts &str JSON)
+        let json_str = serde_json::to_string(&json_value).map_err(|e| {
+            QuillmarkError::system(format!("Failed to serialize JSON value: {}", e)).to_js_value()
+        })?;
+
+        let inner = quillmark_core::Quill::from_json(&json_str).map_err(|e| {
             QuillmarkError::system(format!("Failed to create Quill from JSON: {}", e))
                 .to_js_value()
         })?;
