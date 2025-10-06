@@ -56,6 +56,48 @@ impl Workflow {
         })
     }
 
+    /// Render pre-processed glue content (advanced)
+    #[wasm_bindgen(js_name = renderContent)]
+    pub fn render_content(&self, content: &str, options_js: JsValue) -> Result<JsValue, JsValue> {
+        let start = Instant::now();
+
+        // Parse options
+        let options: RenderOptions = if options_js.is_undefined() || options_js.is_null() {
+            RenderOptions { format: None }
+        } else {
+            serde_wasm_bindgen::from_value(options_js).map_err(|e| {
+                QuillmarkError::system(format!("Failed to parse render options: {}", e))
+                    .to_js_value()
+            })?
+        };
+
+        // Convert format if specified
+        let output_format = options.format.map(|f| f.into());
+
+        // Perform rendering
+        let result = self
+            .inner
+            .render_content(content, output_format)
+            .map_err(|e| QuillmarkError::from(e).to_js_value())?;
+
+        let elapsed = start.elapsed();
+
+        // Convert result
+        let render_result = RenderResult {
+            artifacts: result.artifacts.into_iter().map(|a| a.into()).collect(),
+            warnings: result.warnings.into_iter().map(|d| d.into()).collect(),
+            metadata: RenderMetadata {
+                render_time_ms: elapsed.as_secs_f64() * 1000.0,
+                backend: self.backend_id.clone(),
+                quill_name: self.quill_name.clone(),
+            },
+        };
+
+        serde_wasm_bindgen::to_value(&render_result).map_err(|e| {
+            QuillmarkError::system(format!("Failed to serialize result: {}", e)).to_js_value()
+        })
+    }
+
     /// Process markdown to glue without compilation (for debugging)
     #[wasm_bindgen(js_name = processGlue)]
     pub fn process_glue(&self, markdown: &str) -> Result<String, JsValue> {
