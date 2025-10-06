@@ -159,12 +159,15 @@ impl Workflow {
 
     /// Get workflow metadata - supported formats
     #[wasm_bindgen(getter, js_name = supportedFormats)]
-    pub fn supported_formats(&self) -> Vec<OutputFormat> {
-        self.inner
+    pub fn supported_formats(&self) -> JsValue {
+        let formats: Vec<OutputFormat> = self
+            .inner
             .supported_formats()
             .iter()
             .map(|&f| f.into())
-            .collect()
+            .collect();
+
+        serde_wasm_bindgen::to_value(&formats).unwrap_or(JsValue::NULL)
     }
 
     /// Get workflow metadata - quill name

@@ -99,14 +99,12 @@ impl QuillmarkEngine {
 
     /// Get supported formats for a backend
     #[wasm_bindgen(js_name = getSupportedFormats)]
-    pub fn get_supported_formats(&self, _backend: &str) -> Result<Vec<OutputFormat>, JsValue> {
+    pub fn get_supported_formats(&self, _backend: &str) -> JsValue {
         // For now, return the formats for the default backend (typst)
         // This is a simplified implementation
-        Ok(vec![
-            OutputFormat::PDF,
-            OutputFormat::SVG,
-            OutputFormat::TXT,
-        ])
+        let formats = vec![OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Txt];
+
+        serde_wasm_bindgen::to_value(&formats).unwrap_or(JsValue::NULL)
     }
 
     /// Dispose of the engine and free resources
