@@ -1731,6 +1731,7 @@ dependencies = [
  "typst-kit",
  "typst-pdf",
  "typst-svg",
+ "wasm-bindgen",
 ]
 
 [[package]]

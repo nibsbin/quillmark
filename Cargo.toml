@@ -45,8 +45,7 @@ typst-pdf = "0.13.1"
 typst-svg = "0.13.1"
 dirs = "6.0"
 
-# JS interop for wasm targets
-js-sys = "0.3"
+
 
 # Intra-project dependencies
 quillmark-core = { version = "0.0.29", path = "quillmark-core" }

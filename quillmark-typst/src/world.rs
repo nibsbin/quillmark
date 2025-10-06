@@ -609,10 +609,10 @@ impl World for QuillWorld {
                 let year = d2.get_utc_full_year() as i32;
                 let month = (d2.get_utc_month() as u8).saturating_add(1);
                 let day = d2.get_utc_date() as u8;
-                return Datetime::from_ymd(year as u16, month, day);
+                return Datetime::from_ymd(year, month, day);
             }
 
-            Datetime::from_ymd(year as u16, month, day)
+            Datetime::from_ymd(year, month, day)
         }
     }
 }

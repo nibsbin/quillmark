@@ -3,7 +3,7 @@ use quillmark_core::templating::filter_api::{Error, ErrorKind, Kwargs, State, Va
 use serde_json as json;
 use std::collections::BTreeMap;
 use time::format_description::well_known::Iso8601;
-use time::{Date, OffsetDateTime}; // <-- add Date
+use time::Date; // <-- add Date
 
 // ---------- small helpers ----------
 
