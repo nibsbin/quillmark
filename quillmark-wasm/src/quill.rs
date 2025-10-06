@@ -2,6 +2,7 @@
 
 use crate::error::QuillmarkError;
 use crate::types::QuillMetadata;
+use std::path::{Path, PathBuf};
 use wasm_bindgen::prelude::*;
 
 /// Represents a Quill template bundle
@@ -23,9 +24,12 @@ impl Quill {
     /// {
     ///   "name": "optional-default-name",
     ///   "base_path": "/optional/base/path",
-    ///   "files": {
-    ///     "Quill.toml": { "contents": "...", "is_dir": false },
-    ///     "glue.typ": { "contents": "...", "is_dir": false }
+    ///   "Quill.toml": { "contents": "..." },
+    ///   "glue.typ": { "contents": "..." },
+    ///   "src": {
+    ///     "files": {
+    ///       "main.rs": { "contents": "..." }
+    ///     }
     ///   }
     /// }
     /// ```
@@ -37,28 +41,8 @@ impl Quill {
     /// The JSON should represent the entire Quill folder serialized.
     /// quillmark-core handles all parsing, ignoring, and validation.
     #[wasm_bindgen(js_name = fromJson)]
-    pub fn from_json(json: &JsValue) -> Result<Quill, JsValue> {
-        // Convert the incoming JsValue into serde_json::Value
-        let json_value: serde_json::Value = if json.is_string() {
-            // If it's a string, parse it
-            let s = json.as_string().unwrap_or_default();
-            serde_json::from_str(&s).map_err(|e| {
-                QuillmarkError::system(format!("Failed to parse JSON string: {}", e)).to_js_value()
-            })?
-        } else {
-            // Otherwise, deserialize the JS value into serde_json::Value
-            serde_wasm_bindgen::from_value(json.clone()).map_err(|e| {
-                QuillmarkError::system(format!("Failed to convert JS value to JSON: {}", e))
-                    .to_js_value()
-            })?
-        };
-
-        // Serialize to string and pass to core (core accepts &str JSON)
-        let json_str = serde_json::to_string(&json_value).map_err(|e| {
-            QuillmarkError::system(format!("Failed to serialize JSON value: {}", e)).to_js_value()
-        })?;
-
-        let inner = quillmark_core::Quill::from_json(&json_str).map_err(|e| {
+    pub fn from_json(json_str: &str) -> Result<Quill, JsValue> {
+        let inner = quillmark_core::Quill::from_json(json_str).map_err(|e| {
             QuillmarkError::system(format!("Failed to create Quill from JSON: {}", e)).to_js_value()
         })?;
 
@@ -110,15 +94,39 @@ impl Quill {
     /// List files in the Quill
     #[wasm_bindgen(js_name = listFiles)]
     pub fn list_files(&self) -> Vec<String> {
-        self.inner
-            .files
-            .keys()
-            .map(|path| path.to_string_lossy().to_string())
-            .collect()
+        let mut all_files = Vec::new();
+        Self::collect_all_file_paths(&self.inner.files, Path::new(""), &mut all_files);
+        all_files
     }
 }
 
 impl Quill {
+    /// Helper to recursively collect all file paths from tree
+    fn collect_all_file_paths(
+        node: &quillmark_core::FileTreeNode,
+        current_path: &Path,
+        result: &mut Vec<String>,
+    ) {
+        use quillmark_core::FileTreeNode;
+
+        match node {
+            FileTreeNode::File { .. } => {
+                if current_path != Path::new("") {
+                    result.push(current_path.to_string_lossy().to_string());
+                }
+            }
+            FileTreeNode::Directory { files } => {
+                for (name, child_node) in files {
+                    let child_path = if current_path == Path::new("") {
+                        PathBuf::from(name)
+                    } else {
+                        current_path.join(name)
+                    };
+                    Self::collect_all_file_paths(child_node, &child_path, result);
+                }
+            }
+        }
+    }
     /// Create a Quill from the internal representation
     pub(crate) fn from_inner(inner: quillmark_core::Quill) -> Self {
         Self { inner }

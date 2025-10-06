@@ -58,4 +58,4 @@ pub mod types;
 pub use types::{Artifact, OutputFormat, RenderOptions};
 
 pub mod quill;
-pub use quill::{FileEntry, FileTreeNode, Quill, QuillIgnore};
+pub use quill::{FileTreeNode, Quill, QuillIgnore};

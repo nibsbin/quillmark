@@ -501,30 +501,28 @@ impl Workflow {
 
     /// Internal method to prepare a quill with dynamic assets and fonts
     fn prepare_quill_with_assets(&self) -> Quill {
-        use std::path::PathBuf;
+        use quillmark_core::FileTreeNode;
 
         let mut quill = self.quill.clone();
 
         // Add dynamic assets to the cloned quill's file system
         for (filename, contents) in &self.dynamic_assets {
-            let prefixed_path = PathBuf::from(format!("assets/DYNAMIC_ASSET__{}", filename));
-            let entry = quillmark_core::FileEntry {
+            let prefixed_path = format!("assets/DYNAMIC_ASSET__{}", filename);
+            let file_node = FileTreeNode::File {
                 contents: contents.clone(),
-                path: prefixed_path.clone(),
-                is_dir: false,
             };
-            quill.files.insert(prefixed_path, entry);
+            // Ignore errors if insertion fails (e.g., path already exists)
+            let _ = quill.files.insert(&prefixed_path, file_node);
         }
 
         // Add dynamic fonts to the cloned quill's file system
         for (filename, contents) in &self.dynamic_fonts {
-            let prefixed_path = PathBuf::from(format!("assets/DYNAMIC_FONT__{}", filename));
-            let entry = quillmark_core::FileEntry {
+            let prefixed_path = format!("assets/DYNAMIC_FONT__{}", filename);
+            let file_node = FileTreeNode::File {
                 contents: contents.clone(),
-                path: prefixed_path.clone(),
-                is_dir: false,
             };
-            quill.files.insert(prefixed_path, entry);
+            // Ignore errors if insertion fails (e.g., path already exists)
+            let _ = quill.files.insert(&prefixed_path, file_node);
         }
 
         quill
