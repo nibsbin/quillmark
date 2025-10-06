@@ -109,6 +109,9 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Publishing WASM version: $VERSION"
 
+      - name: Check WASM build
+        run: cargo check --package quillmark-wasm --target wasm32-unknown-unknown --locked
+
       - name: Build WASM packages
         run: ./scripts/build-wasm.sh
 
