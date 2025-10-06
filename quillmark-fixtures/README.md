@@ -38,11 +38,14 @@ The package includes:
   - `appreciated_letter/` - A formal letter template
   - `usaf_memo/` - US Air Force memo template
   - `taro/` - Custom template example
-  
+
+  Each Quill template now includes a `template` field in `Quill.toml` that points to a sample markdown file demonstrating the template's usage. This allows users to see example content for each template.
+
 - **Sample Markdown Files**: Example markdown files for testing
   - `sample.md` - Basic markdown example
   - `frontmatter_demo.md` - Demonstrates YAML frontmatter
   - `extended_metadata_demo.md` - Extended metadata examples
+  - Template-specific markdown files (e.g., `appreciated_letter.md`, `usaf_memo.md`, `taro.md`)
   - `*.md` - Various markdown test files
 
 ## Rust Crate
