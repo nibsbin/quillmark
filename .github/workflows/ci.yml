@@ -45,7 +45,7 @@ jobs:
 
       # Pre-build dependencies to warm the cache for parallel jobs
       - name: Build dependencies
-        run: cargo build --workspace --all-features --locked
+        run: cargo build --all-features --locked
 
   lint:
     runs-on: ubuntu-latest
@@ -69,7 +69,7 @@ jobs:
 
       # TODO: formalize Clippy later
       # - name: Clippy check
-      #   run: cargo clippy --workspace --all-features --all-targets --locked -- -D warnings
+      #   run: cargo clippy --all-features --all-targets --locked -- -D warnings
 
   test:
     runs-on: ubuntu-latest
@@ -125,7 +125,7 @@ jobs:
       - name: Build docs
         env:
           RUSTDOCFLAGS: -Dwarnings
-        run: cargo doc --workspace --no-deps --all-features --locked
+        run: cargo doc --no-deps --all-features --locked
 
   # Optional: Add a final job that all checks must pass
   ci-success:
