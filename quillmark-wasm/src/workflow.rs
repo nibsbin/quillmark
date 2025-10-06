@@ -151,6 +151,52 @@ impl Workflow {
         }
     }
 
+    /// Add dynamic font (builder pattern)
+    #[wasm_bindgen(js_name = withFont)]
+    pub fn with_font(self, filename: String, bytes: Vec<u8>) -> Result<Workflow, JsValue> {
+        let inner = self.inner.with_font(filename, bytes).map_err(|e| {
+            QuillmarkError::system(format!("Failed to add font: {}", e)).to_js_value()
+        })?;
+
+        Ok(Workflow {
+            inner,
+            quill_name: self.quill_name,
+            backend_id: self.backend_id,
+        })
+    }
+
+    /// Add multiple dynamic fonts
+    #[wasm_bindgen(js_name = withFonts)]
+    pub fn with_fonts(self, fonts_js: JsValue) -> Result<Workflow, JsValue> {
+        let fonts: std::collections::HashMap<String, Vec<u8>> =
+            serde_wasm_bindgen::from_value(fonts_js).map_err(|e| {
+                QuillmarkError::system(format!("Failed to parse fonts: {}", e)).to_js_value()
+            })?;
+
+        let mut inner = self.inner;
+        for (filename, bytes) in fonts {
+            inner = inner.with_font(filename, bytes).map_err(|e| {
+                QuillmarkError::system(format!("Failed to add font: {}", e)).to_js_value()
+            })?;
+        }
+
+        Ok(Workflow {
+            inner,
+            quill_name: self.quill_name,
+            backend_id: self.backend_id,
+        })
+    }
+
+    /// Clear all dynamic fonts
+    #[wasm_bindgen(js_name = clearFonts)]
+    pub fn clear_fonts(self) -> Workflow {
+        Workflow {
+            inner: self.inner.clear_fonts(),
+            quill_name: self.quill_name,
+            backend_id: self.backend_id,
+        }
+    }
+
     /// Get workflow metadata - backend ID
     #[wasm_bindgen(getter, js_name = backendId)]
     pub fn backend_id(&self) -> String {
@@ -180,11 +226,16 @@ impl Workflow {
     /// Useful to verify that assets passed from JS were parsed and stored correctly.
     #[wasm_bindgen(js_name = getDynamicAssets)]
     pub fn get_dynamic_assets(&self) -> JsValue {
-        let names: Vec<String> = self
-            .inner
-            .dynamic_asset_names()
-            .into_iter()
-            .collect();
+        let names: Vec<String> = self.inner.dynamic_asset_names().into_iter().collect();
+
+        serde_wasm_bindgen::to_value(&names).unwrap_or(JsValue::NULL)
+    }
+
+    /// Debug helper: return the list of dynamic font filenames currently registered on this workflow.
+    /// Useful to verify that fonts passed from JS were parsed and stored correctly.
+    #[wasm_bindgen(js_name = getDynamicFonts)]
+    pub fn get_dynamic_fonts(&self) -> JsValue {
+        let names: Vec<String> = self.inner.dynamic_font_names().into_iter().collect();
 
         serde_wasm_bindgen::to_value(&names).unwrap_or(JsValue::NULL)
     }

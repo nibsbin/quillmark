@@ -286,6 +286,7 @@ pub struct Workflow {
     backend: Box<dyn Backend>,
     quill: Quill,
     dynamic_assets: HashMap<String, Vec<u8>>,
+    dynamic_fonts: HashMap<String, Vec<u8>>,
 }
 
 impl Workflow {
@@ -296,6 +297,7 @@ impl Workflow {
             backend,
             quill,
             dynamic_assets: HashMap::new(),
+            dynamic_fonts: HashMap::new(),
         })
     }
 
@@ -435,7 +437,55 @@ impl Workflow {
         self
     }
 
-    /// Internal method to prepare a quill with dynamic assets
+    /// Return the list of dynamic font filenames currently stored in the workflow.
+    ///
+    /// This is primarily a debugging helper so callers (for example wasm bindings)
+    /// can inspect which fonts have been added via `with_font` / `with_fonts`.
+    pub fn dynamic_font_names(&self) -> Vec<String> {
+        self.dynamic_fonts.keys().cloned().collect()
+    }
+
+    /// Add a dynamic font to the workflow (builder pattern). Fonts are saved to assets/ with DYNAMIC_FONT__ prefix.
+    pub fn with_font(
+        mut self,
+        filename: impl Into<String>,
+        contents: impl Into<Vec<u8>>,
+    ) -> Result<Self, RenderError> {
+        let filename = filename.into();
+
+        // Check for collision
+        if self.dynamic_fonts.contains_key(&filename) {
+            return Err(RenderError::DynamicFontCollision {
+                filename: filename.clone(),
+                message: format!(
+                    "Dynamic font '{}' already exists. Each font filename must be unique.",
+                    filename
+                ),
+            });
+        }
+
+        self.dynamic_fonts.insert(filename, contents.into());
+        Ok(self)
+    }
+
+    /// Add multiple dynamic fonts at once (builder pattern).
+    pub fn with_fonts(
+        mut self,
+        fonts: impl IntoIterator<Item = (String, Vec<u8>)>,
+    ) -> Result<Self, RenderError> {
+        for (filename, contents) in fonts {
+            self = self.with_font(filename, contents)?;
+        }
+        Ok(self)
+    }
+
+    /// Clear all dynamic fonts from the workflow (builder pattern).
+    pub fn clear_fonts(mut self) -> Self {
+        self.dynamic_fonts.clear();
+        self
+    }
+
+    /// Internal method to prepare a quill with dynamic assets and fonts
     fn prepare_quill_with_assets(&self) -> Quill {
         use std::path::PathBuf;
 
@@ -444,6 +494,17 @@ impl Workflow {
         // Add dynamic assets to the cloned quill's file system
         for (filename, contents) in &self.dynamic_assets {
             let prefixed_path = PathBuf::from(format!("assets/DYNAMIC_ASSET__{}", filename));
+            let entry = quillmark_core::FileEntry {
+                contents: contents.clone(),
+                path: prefixed_path.clone(),
+                is_dir: false,
+            };
+            quill.files.insert(prefixed_path, entry);
+        }
+
+        // Add dynamic fonts to the cloned quill's file system
+        for (filename, contents) in &self.dynamic_fonts {
+            let prefixed_path = PathBuf::from(format!("assets/DYNAMIC_FONT__{}", filename));
             let entry = quillmark_core::FileEntry {
                 contents: contents.clone(),
                 path: prefixed_path.clone(),
