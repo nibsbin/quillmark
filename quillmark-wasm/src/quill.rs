@@ -12,137 +12,32 @@ pub struct Quill {
 
 #[wasm_bindgen]
 impl Quill {
-    /// Create Quill from in-memory file map (browser-friendly)
-    #[wasm_bindgen(js_name = fromFiles)]
-    pub fn from_files(files_js: JsValue, metadata_js: JsValue) -> Result<Quill, JsValue> {
-        use std::collections::HashMap;
-        use std::path::PathBuf;
-
-        let files: HashMap<String, Vec<u8>> =
-            serde_wasm_bindgen::from_value(files_js).map_err(|e| {
-                QuillmarkError::system(format!("Failed to parse files: {}", e)).to_js_value()
-            })?;
-
-        let metadata_input: QuillMetadata =
-            serde_wasm_bindgen::from_value(metadata_js).map_err(|e| {
-                QuillmarkError::system(format!("Failed to parse metadata: {}", e)).to_js_value()
-            })?;
-
-        // Parse Quill.toml
-        let quill_toml_bytes = files.get("Quill.toml").ok_or_else(|| {
-            QuillmarkError::system("Quill.toml not found in files".to_string()).to_js_value()
-        })?;
-
-        let quill_toml_content = String::from_utf8(quill_toml_bytes.clone()).map_err(|e| {
-            QuillmarkError::system(format!("Quill.toml is not valid UTF-8: {}", e)).to_js_value()
-        })?;
-
-        let quill_toml: toml::Value = toml::from_str(&quill_toml_content).map_err(|e| {
-            QuillmarkError::system(format!("Failed to parse Quill.toml: {}", e)).to_js_value()
-        })?;
-
-        // Extract fields from [Quill] section
-        let mut metadata_map = HashMap::new();
-        let mut glue_file = "glue.typ".to_string(); // default
-        let mut template_file: Option<String> = None;
-        let mut quill_name = metadata_input.name.clone();
-
-        if let Some(quill_section) = quill_toml.get("Quill") {
-            if let Some(name_val) = quill_section.get("name").and_then(|v| v.as_str()) {
-                quill_name = name_val.to_string();
-            }
-
-            if let Some(backend_val) = quill_section.get("backend").and_then(|v| v.as_str()) {
-                metadata_map.insert(
-                    "backend".to_string(),
-                    serde_yaml::Value::String(backend_val.to_string()),
-                );
-            } else {
-                // Use backend from metadata input
-                metadata_map.insert(
-                    "backend".to_string(),
-                    serde_yaml::Value::String(metadata_input.backend.clone()),
-                );
-            }
-
-            if let Some(glue_val) = quill_section.get("glue").and_then(|v| v.as_str()) {
-                glue_file = glue_val.to_string();
-            }
-
-            if let Some(template_val) = quill_section.get("template").and_then(|v| v.as_str()) {
-                template_file = Some(template_val.to_string());
-            }
-
-            // Add other metadata fields
-            if let Some(desc) = &metadata_input.description {
-                metadata_map.insert(
-                    "description".to_string(),
-                    serde_yaml::Value::String(desc.clone()),
-                );
-            }
-
-            if let Some(author) = &metadata_input.author {
-                metadata_map.insert(
-                    "author".to_string(),
-                    serde_yaml::Value::String(author.clone()),
-                );
-            }
-        }
-
-        // Read glue template content
-        let glue_template = files
-            .get(&glue_file)
-            .ok_or_else(|| {
-                QuillmarkError::system(format!("Glue file '{}' not found", glue_file)).to_js_value()
-            })
-            .and_then(|bytes| {
-                String::from_utf8(bytes.clone()).map_err(|e| {
-                    QuillmarkError::system(format!(
-                        "Glue file '{}' is not valid UTF-8: {}",
-                        glue_file, e
-                    ))
-                    .to_js_value()
-                })
-            })?;
-
-        // Read template content if specified
-        let template_content = if let Some(ref template_file_name) = template_file {
-            files
-                .get(template_file_name)
-                .and_then(|bytes| String::from_utf8(bytes.clone()).ok())
-        } else {
-            None
-        };
-
-        // Build file entries
-        let mut file_entries = HashMap::new();
-        for (path_str, bytes) in files {
-            let path = PathBuf::from(&path_str);
-            file_entries.insert(
-                path.clone(),
-                quillmark_core::FileEntry {
-                    contents: bytes,
-                    path: path.clone(),
-                    is_dir: false,
-                },
-            );
-        }
-
-        // Create the Quill
-        let inner = quillmark_core::Quill {
-            glue_template,
-            metadata: metadata_map,
-            base_path: PathBuf::from("/"),
-            name: quill_name,
-            glue_file,
-            template_file,
-            template: template_content,
-            files: file_entries,
-        };
-
-        // Validate the quill
-        inner.validate().map_err(|e| {
-            QuillmarkError::validation(format!("Quill validation failed: {}", e), vec![])
+    /// Create Quill from JSON string
+    ///
+    /// Accepts a JSON string representing a Quill folder structure.
+    /// The JSON must follow the quillmark_core::Quill::from_json format:
+    ///
+    /// ```json
+    /// {
+    ///   "name": "optional-default-name",
+    ///   "base_path": "/optional/base/path",
+    ///   "files": {
+    ///     "Quill.toml": { "contents": "...", "is_dir": false },
+    ///     "glue.typ": { "contents": "...", "is_dir": false }
+    ///   }
+    /// }
+    /// ```
+    ///
+    /// File contents can be either:
+    /// - A UTF-8 string (recommended for text files)
+    /// - An array of byte values (for binary files)
+    ///
+    /// The JSON should represent the entire Quill folder serialized.
+    /// quillmark-core handles all parsing, ignoring, and validation.
+    #[wasm_bindgen(js_name = fromJson)]
+    pub fn from_json(json_str: &str) -> Result<Quill, JsValue> {
+        let inner = quillmark_core::Quill::from_json(json_str).map_err(|e| {
+            QuillmarkError::system(format!("Failed to create Quill from JSON: {}", e))
                 .to_js_value()
         })?;
 

@@ -46,16 +46,34 @@ import { QuillmarkEngine, Quill, OutputFormat } from '@quillmark-test/wasm';
 // Create the engine
 const engine = QuillmarkEngine.create();
 
-// Load a quill from files
-const quillFiles = new Map([
-  ['Quill.toml', tomlBytes],
-  ['glue.typ', glueBytes]
-]);
-const metadata = {
-  name: 'my-quill',
-  backend: 'typst'
-};
-const quill = Quill.fromFiles(quillFiles, metadata);
+// Serialize a Quill folder as JSON
+// The structure matches quillmark_core::Quill::from_json format
+const quillJson = JSON.stringify({
+  name: 'my-quill',  // optional default name
+  base_path: '/',    // optional base path
+  files: {
+    'Quill.toml': {
+      contents: `[Quill]
+name = "my-quill"
+backend = "typst"
+glue = "glue.typ"
+`,
+      is_dir: false
+    },
+    'glue.typ': {
+      contents: '#let render(doc) = { doc.body }',
+      is_dir: false
+    },
+    // Add all your quill files here (packages, assets, etc.)
+    'packages/some-package.typ': {
+      contents: '// package content',
+      is_dir: false
+    }
+  }
+});
+
+// Create Quill from the serialized JSON
+const quill = Quill.fromJson(quillJson);
 
 // Register the quill
 engine.registerQuill(quill);
@@ -147,13 +165,13 @@ This means a few concrete rules you should follow when calling into the WASM mod
 
 Core API is implemented:
 - ✅ `QuillmarkEngine` - Engine management
-- ✅ `Quill.fromFiles()` - Create Quills from JSON file maps
+- ✅ `Quill.fromJson()` - Create Quills from JSON-serialized folder structure
 - ✅ `Workflow.render()` - Synchronous rendering to PDF/SVG
 - ✅ `Workflow.withAsset()` - Dynamic asset injection
 - ✅ Rich error diagnostics
 
 Not implemented (by design):
-- ❌ `Quill.fromZip()`, `fromUrl()`, `fromPath()` - JavaScript handles I/O
+- ❌ `Quill.fromZip()`, `fromUrl()`, `fromPath()` - JavaScript handles I/O and folder serialization
 - ❌ Progress callbacks - rendering is instant
 - ❌ Streaming APIs - unnecessary for fast operations
 
