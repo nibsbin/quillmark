@@ -1,23 +1,22 @@
 //! Type definitions for the WASM API
 
 use serde::{Deserialize, Serialize};
-use wasm_bindgen::prelude::*;
 
 /// Output formats supported by backends
-#[wasm_bindgen]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum OutputFormat {
-    PDF,
-    SVG,
-    TXT,
+    Pdf,
+    Svg,
+    Txt,
 }
 
 impl From<OutputFormat> for quillmark_core::OutputFormat {
     fn from(format: OutputFormat) -> Self {
         match format {
-            OutputFormat::PDF => quillmark_core::OutputFormat::Pdf,
-            OutputFormat::SVG => quillmark_core::OutputFormat::Svg,
-            OutputFormat::TXT => quillmark_core::OutputFormat::Txt,
+            OutputFormat::Pdf => quillmark_core::OutputFormat::Pdf,
+            OutputFormat::Svg => quillmark_core::OutputFormat::Svg,
+            OutputFormat::Txt => quillmark_core::OutputFormat::Txt,
         }
     }
 }
@@ -25,28 +24,28 @@ impl From<OutputFormat> for quillmark_core::OutputFormat {
 impl From<quillmark_core::OutputFormat> for OutputFormat {
     fn from(format: quillmark_core::OutputFormat) -> Self {
         match format {
-            quillmark_core::OutputFormat::Pdf => OutputFormat::PDF,
-            quillmark_core::OutputFormat::Svg => OutputFormat::SVG,
-            quillmark_core::OutputFormat::Txt => OutputFormat::TXT,
+            quillmark_core::OutputFormat::Pdf => OutputFormat::Pdf,
+            quillmark_core::OutputFormat::Svg => OutputFormat::Svg,
+            quillmark_core::OutputFormat::Txt => OutputFormat::Txt,
         }
     }
 }
 
 /// Severity levels for diagnostics
-#[wasm_bindgen]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
-    ERROR,
-    WARNING,
-    NOTE,
+    Error,
+    Warning,
+    Note,
 }
 
 impl From<quillmark_core::Severity> for Severity {
     fn from(severity: quillmark_core::Severity) -> Self {
         match severity {
-            quillmark_core::Severity::Error => Severity::ERROR,
-            quillmark_core::Severity::Warning => Severity::WARNING,
-            quillmark_core::Severity::Note => Severity::NOTE,
+            quillmark_core::Severity::Error => Severity::Error,
+            quillmark_core::Severity::Warning => Severity::Warning,
+            quillmark_core::Severity::Note => Severity::Note,
         }
     }
 }
@@ -111,9 +110,9 @@ pub struct Artifact {
 impl Artifact {
     fn mime_type_for_format(format: OutputFormat) -> String {
         match format {
-            OutputFormat::PDF => "application/pdf".to_string(),
-            OutputFormat::SVG => "image/svg+xml".to_string(),
-            OutputFormat::TXT => "text/plain".to_string(),
+            OutputFormat::Pdf => "application/pdf".to_string(),
+            OutputFormat::Svg => "image/svg+xml".to_string(),
+            OutputFormat::Txt => "text/plain".to_string(),
         }
     }
 }
@@ -177,4 +176,81 @@ pub struct EngineOptions {
     pub enable_cache: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub max_cache_size: Option<usize>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_output_format_serialization() {
+        // Test that OutputFormat serializes to lowercase strings
+        let pdf = OutputFormat::Pdf;
+        let json_pdf = serde_json::to_string(&pdf).unwrap();
+        assert_eq!(json_pdf, "\"pdf\"");
+
+        let svg = OutputFormat::Svg;
+        let json_svg = serde_json::to_string(&svg).unwrap();
+        assert_eq!(json_svg, "\"svg\"");
+
+        let txt = OutputFormat::Txt;
+        let json_txt = serde_json::to_string(&txt).unwrap();
+        assert_eq!(json_txt, "\"txt\"");
+    }
+
+    #[test]
+    fn test_output_format_deserialization() {
+        // Test that lowercase strings deserialize to OutputFormat
+        let pdf: OutputFormat = serde_json::from_str("\"pdf\"").unwrap();
+        assert_eq!(pdf, OutputFormat::Pdf);
+
+        let svg: OutputFormat = serde_json::from_str("\"svg\"").unwrap();
+        assert_eq!(svg, OutputFormat::Svg);
+
+        let txt: OutputFormat = serde_json::from_str("\"txt\"").unwrap();
+        assert_eq!(txt, OutputFormat::Txt);
+    }
+
+    #[test]
+    fn test_severity_serialization() {
+        // Test that Severity serializes to lowercase strings
+        let error = Severity::Error;
+        let json_error = serde_json::to_string(&error).unwrap();
+        assert_eq!(json_error, "\"error\"");
+
+        let warning = Severity::Warning;
+        let json_warning = serde_json::to_string(&warning).unwrap();
+        assert_eq!(json_warning, "\"warning\"");
+
+        let note = Severity::Note;
+        let json_note = serde_json::to_string(&note).unwrap();
+        assert_eq!(json_note, "\"note\"");
+    }
+
+    #[test]
+    fn test_severity_deserialization() {
+        // Test that lowercase strings deserialize to Severity
+        let error: Severity = serde_json::from_str("\"error\"").unwrap();
+        assert_eq!(error, Severity::Error);
+
+        let warning: Severity = serde_json::from_str("\"warning\"").unwrap();
+        assert_eq!(warning, Severity::Warning);
+
+        let note: Severity = serde_json::from_str("\"note\"").unwrap();
+        assert_eq!(note, Severity::Note);
+    }
+
+    #[test]
+    fn test_render_options_with_format() {
+        // Test that RenderOptions with format works correctly
+        let options = RenderOptions {
+            format: Some(OutputFormat::Pdf),
+        };
+        let json = serde_json::to_string(&options).unwrap();
+        assert!(json.contains("\"format\":\"pdf\""));
+
+        // Test deserialization
+        let options_from_json: RenderOptions = serde_json::from_str(r#"{"format":"svg"}"#).unwrap();
+        assert_eq!(options_from_json.format, Some(OutputFormat::Svg));
+    }
 }

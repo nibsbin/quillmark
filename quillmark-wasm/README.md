@@ -132,6 +132,17 @@ See `designs/WASM_API.md` in the repository for the complete API specification.
 - **Synchronous Operations**: Rendering is fast enough (typically <100ms) that async operations are unnecessary
 - **No File System Abstractions**: No `fromPath()`, `fromUrl()`, or `fromZip()` methods - JavaScript prepares all data
 
+## Type passing / WASM boundary
+
+All data crossing the JavaScript <-> WebAssembly boundary uses JSON/serde-compatible serialization via `serde-wasm-bindgen`.
+This means a few concrete rules you should follow when calling into the WASM module from JS/TS:
+
+- Enums: exported Rust enums are serialized as strings (not numeric discriminants). This was a compatibility fix in the recent WASM changes — pass enum values as their string names (for example `"PDF"`) or use the generated JS enum helpers (e.g. `OutputFormat.PDF`). Avoid using raw numeric indices for enums.
+- Bytes / binary data: `Vec<u8>` and similar binary buffers map to `Uint8Array`. When creating Quills or assets, pass `Uint8Array` (or `Buffer` in Node) for file contents.
+- Collections: `Vec<T>` <-> JS arrays, and `HashMap<String, T>` / `BTreeMap<String, T>` map to plain JS objects or `Map` where appropriate. You can pass a `Map<string, Uint8Array>` for file maps, or a plain object whose values are `Uint8Array`.
+- Option and nullability: `Option<T>` is represented as either the value or `null` in JS. Use `null` to indicate `None`.
+- Errors / Result: Rust `Result` errors are surfaced to JS as thrown exceptions containing a serialized `QuillmarkError` object (see "Error Handling" above). Inspect `error.diagnostics` for rich diagnostic information.
+
 ## Current Status
 
 Core API is implemented:
