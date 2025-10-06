@@ -127,6 +127,20 @@
 //! let result = workflow.render("# Report", Some(OutputFormat::Pdf)).unwrap();
 //! ```
 //!
+//! ### Dynamic Fonts (Builder Pattern)
+//!
+//! ```no_run
+//! # use quillmark::{Quillmark, OutputFormat};
+//! # let mut engine = Quillmark::new();
+//! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
+//! # engine.register_quill(quill);
+//! let workflow = engine.load("my-quill").unwrap()
+//!     .with_font("custom-font.ttf", vec![/* TTF bytes */]).unwrap()
+//!     .with_font("another-font.otf", vec![/* OTF bytes */]).unwrap();
+//!
+//! let result = workflow.render("# Report", Some(OutputFormat::Pdf)).unwrap();
+//! ```
+//!
 //! ### Inspecting Workflow Properties
 //!
 //! ```no_run
