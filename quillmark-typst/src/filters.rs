@@ -3,7 +3,7 @@ use quillmark_core::templating::filter_api::{Error, ErrorKind, Kwargs, State, Va
 use serde_json as json;
 use std::collections::BTreeMap;
 use time::format_description::well_known::Iso8601;
-use time::Date; // <-- add Date
+use time::Date;
 
 // ---------- small helpers ----------
 
@@ -95,7 +95,7 @@ pub fn date_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<V
     let s = if value.is_undefined() {
         #[cfg(not(target_arch = "wasm32"))]
         {
-            OffsetDateTime::now_utc().date().to_string()
+            time::OffsetDateTime::now_utc().date().to_string()
         }
 
         #[cfg(target_arch = "wasm32")]
