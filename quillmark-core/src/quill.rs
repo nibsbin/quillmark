@@ -4,17 +4,6 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
-/// A file entry in the in-memory file system
-#[derive(Debug, Clone)]
-pub struct FileEntry {
-    /// The file contents as bytes
-    pub contents: Vec<u8>,
-    /// The file path relative to the quill root
-    pub path: PathBuf,
-    /// Whether this is a directory entry
-    pub is_dir: bool,
-}
-
 /// A node in the file tree structure
 #[derive(Debug, Clone)]
 pub enum FileTreeNode {
@@ -31,48 +20,150 @@ pub enum FileTreeNode {
 }
 
 impl FileTreeNode {
-    /// Convert tree structure to flat HashMap of FileEntry
-    fn flatten_to_map(
-        &self,
-        current_path: &Path,
-        map: &mut HashMap<PathBuf, FileEntry>,
-    ) -> Result<(), Box<dyn StdError + Send + Sync>> {
-        match self {
-            FileTreeNode::File { contents } => {
-                map.insert(
-                    current_path.to_path_buf(),
-                    FileEntry {
-                        contents: contents.clone(),
-                        path: current_path.to_path_buf(),
-                        is_dir: false,
-                    },
-                );
-            }
-            FileTreeNode::Directory { files } => {
-                // Add directory entry
-                if current_path != Path::new("") {
-                    map.insert(
-                        current_path.to_path_buf(),
-                        FileEntry {
-                            contents: Vec::new(),
-                            path: current_path.to_path_buf(),
-                            is_dir: true,
-                        },
-                    );
-                }
+    /// Get a file or directory node by path
+    pub fn get_node<P: AsRef<Path>>(&self, path: P) -> Option<&FileTreeNode> {
+        let path = path.as_ref();
 
-                // Recursively flatten children
-                for (name, node) in files {
-                    let child_path = if current_path == Path::new("") {
-                        PathBuf::from(name)
-                    } else {
-                        current_path.join(name)
-                    };
-                    node.flatten_to_map(&child_path, map)?;
+        // Handle root path
+        if path == Path::new("") {
+            return Some(self);
+        }
+
+        // Split path into components
+        let components: Vec<_> = path
+            .components()
+            .filter_map(|c| {
+                if let std::path::Component::Normal(s) = c {
+                    s.to_str()
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if components.is_empty() {
+            return Some(self);
+        }
+
+        // Navigate through the tree
+        let mut current_node = self;
+        for component in components {
+            match current_node {
+                FileTreeNode::Directory { files } => {
+                    current_node = files.get(component)?;
+                }
+                FileTreeNode::File { .. } => {
+                    return None; // Can't traverse into a file
                 }
             }
         }
-        Ok(())
+
+        Some(current_node)
+    }
+
+    /// Get file contents by path
+    pub fn get_file<P: AsRef<Path>>(&self, path: P) -> Option<&[u8]> {
+        match self.get_node(path)? {
+            FileTreeNode::File { contents } => Some(contents.as_slice()),
+            FileTreeNode::Directory { .. } => None,
+        }
+    }
+
+    /// Check if a file exists at the given path
+    pub fn file_exists<P: AsRef<Path>>(&self, path: P) -> bool {
+        matches!(self.get_node(path), Some(FileTreeNode::File { .. }))
+    }
+
+    /// Check if a directory exists at the given path
+    pub fn dir_exists<P: AsRef<Path>>(&self, path: P) -> bool {
+        matches!(self.get_node(path), Some(FileTreeNode::Directory { .. }))
+    }
+
+    /// List all files in a directory (non-recursive)
+    pub fn list_files<P: AsRef<Path>>(&self, dir_path: P) -> Vec<String> {
+        match self.get_node(dir_path) {
+            Some(FileTreeNode::Directory { files }) => files
+                .iter()
+                .filter_map(|(name, node)| {
+                    if matches!(node, FileTreeNode::File { .. }) {
+                        Some(name.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// List all subdirectories in a directory (non-recursive)
+    pub fn list_subdirectories<P: AsRef<Path>>(&self, dir_path: P) -> Vec<String> {
+        match self.get_node(dir_path) {
+            Some(FileTreeNode::Directory { files }) => files
+                .iter()
+                .filter_map(|(name, node)| {
+                    if matches!(node, FileTreeNode::Directory { .. }) {
+                        Some(name.clone())
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Insert a file or directory at the given path
+    pub fn insert<P: AsRef<Path>>(
+        &mut self,
+        path: P,
+        node: FileTreeNode,
+    ) -> Result<(), Box<dyn StdError + Send + Sync>> {
+        let path = path.as_ref();
+
+        // Split path into components
+        let components: Vec<_> = path
+            .components()
+            .filter_map(|c| {
+                if let std::path::Component::Normal(s) = c {
+                    s.to_str().map(|s| s.to_string())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if components.is_empty() {
+            return Err("Cannot insert at root path".into());
+        }
+
+        // Navigate to parent directory, creating directories as needed
+        let mut current_node = self;
+        for component in &components[..components.len() - 1] {
+            match current_node {
+                FileTreeNode::Directory { files } => {
+                    current_node =
+                        files
+                            .entry(component.clone())
+                            .or_insert_with(|| FileTreeNode::Directory {
+                                files: HashMap::new(),
+                            });
+                }
+                FileTreeNode::File { .. } => {
+                    return Err("Cannot traverse into a file".into());
+                }
+            }
+        }
+
+        // Insert the new node
+        let filename = &components[components.len() - 1];
+        match current_node {
+            FileTreeNode::Directory { files } => {
+                files.insert(filename.clone(), node);
+                Ok(())
+            }
+            FileTreeNode::File { .. } => Err("Cannot insert into a file".into()),
+        }
     }
 
     /// Parse a tree structure from JSON value
@@ -206,8 +297,8 @@ pub struct Quill {
     pub template_file: Option<String>,
     /// Markdown template content (optional)
     pub template: Option<String>,
-    /// In-memory file system
-    pub files: HashMap<PathBuf, FileEntry>,
+    /// In-memory file system (tree structure)
+    pub files: FileTreeNode,
 }
 
 impl Quill {
@@ -241,22 +332,20 @@ impl Quill {
             ])
         };
 
-        // Load all files into memory
-        let mut files = HashMap::new();
-        Self::load_directory_recursive(path, path, &mut files, &ignore)?;
+        // Load all files into a tree structure
+        let root = Self::load_directory_as_tree(path, path, &ignore)?;
 
         // Create Quill from the file tree
-        Self::from_tree(files, Some(path.to_path_buf()), Some(name))
+        Self::from_tree(root, Some(path.to_path_buf()), Some(name))
     }
 
-    /// Create a Quill from a tree of files (authoritative method)
+    /// Create a Quill from a tree structure
     ///
     /// This is the authoritative method for creating a Quill from an in-memory file tree.
-    /// Accepts either a flat HashMap (for backward compatibility) or the new tree structure.
     ///
     /// # Arguments
     ///
-    /// * `files` - A map of file paths to `FileEntry` objects representing the file tree
+    /// * `root` - The root node of the file tree
     /// * `base_path` - Optional base path for the Quill (defaults to "/")
     /// * `default_name` - Optional default name (will be overridden by name in Quill.toml)
     ///
@@ -268,57 +357,16 @@ impl Quill {
     /// - The glue file specified in Quill.toml is not found or not valid UTF-8
     /// - Validation fails
     pub fn from_tree(
-        files: HashMap<PathBuf, FileEntry>,
-        base_path: Option<PathBuf>,
-        default_name: Option<String>,
-    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
-        Self::from_flat_tree(files, base_path, default_name)
-    }
-
-    /// Create a Quill from a hierarchical tree structure
-    ///
-    /// This is the new tree-based method that accepts a hierarchical file tree.
-    ///
-    /// # Arguments
-    ///
-    /// * `root` - The root node of the file tree
-    /// * `base_path` - Optional base path for the Quill (defaults to "/")
-    /// * `default_name` - Optional default name (will be overridden by name in Quill.toml)
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The tree structure is invalid
-    /// - Quill.toml is not found in the file tree
-    /// - Quill.toml is not valid UTF-8 or TOML
-    /// - The glue file specified in Quill.toml is not found or not valid UTF-8
-    /// - Validation fails
-    pub fn from_tree_structure(
         root: FileTreeNode,
         base_path: Option<PathBuf>,
         default_name: Option<String>,
     ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
-        // Flatten the tree structure to a HashMap
-        let mut files = HashMap::new();
-        root.flatten_to_map(Path::new(""), &mut files)?;
-
-        // Use the existing flat tree method
-        Self::from_flat_tree(files, base_path, default_name)
-    }
-
-    /// Internal method: Create a Quill from a flat HashMap of FileEntry
-    fn from_flat_tree(
-        files: HashMap<PathBuf, FileEntry>,
-        base_path: Option<PathBuf>,
-        default_name: Option<String>,
-    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         // Read Quill.toml
-        let quill_toml_path = PathBuf::from("Quill.toml");
-        let quill_toml_entry = files
-            .get(&quill_toml_path)
+        let quill_toml_bytes = root
+            .get_file("Quill.toml")
             .ok_or("Quill.toml not found in file tree")?;
 
-        let quill_toml_content = String::from_utf8(quill_toml_entry.contents.clone())
+        let quill_toml_content = String::from_utf8(quill_toml_bytes.to_vec())
             .map_err(|e| format!("Quill.toml is not valid UTF-8: {}", e))?;
 
         let quill_toml: toml::Value = toml::from_str(&quill_toml_content)
@@ -394,19 +442,17 @@ impl Quill {
         }
 
         // Read the template content from glue file
-        let glue_path = PathBuf::from(&glue_file);
-        let glue_entry = files
-            .get(&glue_path)
+        let glue_bytes = root
+            .get_file(&glue_file)
             .ok_or_else(|| format!("Glue file '{}' not found in file tree", glue_file))?;
 
-        let template_content = String::from_utf8(glue_entry.contents.clone())
+        let template_content = String::from_utf8(glue_bytes.to_vec())
             .map_err(|e| format!("Glue file '{}' is not valid UTF-8: {}", glue_file, e))?;
 
         // Read the markdown template content if specified
         let template_content_opt = if let Some(ref template_file_name) = template_file {
-            let template_path = PathBuf::from(template_file_name);
-            files.get(&template_path).and_then(|entry| {
-                String::from_utf8(entry.contents.clone())
+            root.get_file(template_file_name).and_then(|bytes| {
+                String::from_utf8(bytes.to_vec())
                     .map_err(|e| {
                         eprintln!(
                             "Warning: Template file '{}' is not valid UTF-8: {}",
@@ -428,7 +474,7 @@ impl Quill {
             glue_file,
             template_file,
             template: template_content_opt,
-            files,
+            files: root,
         };
 
         // Automatically validate the quill upon creation
@@ -440,27 +486,8 @@ impl Quill {
     /// Create a Quill from a JSON representation
     ///
     /// Parses a JSON string representing a Quill and creates a Quill instance.
-    /// Supports both flat and hierarchical tree structures.
     ///
-    /// **Flat structure (legacy):**
-    /// ```json
-    /// {
-    ///   "name": "optional-default-name",
-    ///   "base_path": "/optional/base/path",
-    ///   "files": {
-    ///     "Quill.toml": {
-    ///       "contents": "...",  // UTF-8 string or byte array
-    ///       "is_dir": false
-    ///     },
-    ///     "glue.typ": {
-    ///       "contents": "...",
-    ///       "is_dir": false
-    ///     }
-    ///   }
-    /// }
-    /// ```
-    ///
-    /// **Tree structure (recommended):**
+    /// **Tree structure format:**
     /// ```json
     /// {
     ///   "name": "optional-default-name",
@@ -506,87 +533,43 @@ impl Quill {
 
         let default_name = json.get("name").and_then(|v| v.as_str()).map(String::from);
 
-        // Check if this is the old flat format with a "files" key
-        if let Some(files_json) = json.get("files") {
-            // Legacy flat format
-            let mut files = HashMap::new();
-            if let JsonValue::Object(files_obj) = files_json {
-                for (path_str, file_data) in files_obj {
-                    let path = PathBuf::from(path_str);
+        // Parse tree format - the root JSON object contains the file tree directly
+        // Create a virtual root directory containing all the files
+        let mut root_files = HashMap::new();
 
-                    let contents = if let Some(content_str) =
-                        file_data.get("contents").and_then(|v| v.as_str())
-                    {
-                        // Direct UTF-8 string
-                        content_str.as_bytes().to_vec()
-                    } else if let Some(bytes_array) =
-                        file_data.get("contents").and_then(|v| v.as_array())
-                    {
-                        // Array of byte values
-                        bytes_array
-                            .iter()
-                            .filter_map(|v| v.as_u64().and_then(|n| u8::try_from(n).ok()))
-                            .collect()
-                    } else {
-                        return Err(format!("Invalid contents for file '{}'", path_str).into());
-                    };
-
-                    let is_dir = file_data
-                        .get("is_dir")
-                        .and_then(|v| v.as_bool())
-                        .unwrap_or(false);
-
-                    files.insert(
-                        path.clone(),
-                        FileEntry {
-                            contents,
-                            path,
-                            is_dir,
-                        },
-                    );
+        if let JsonValue::Object(obj) = &json {
+            for (key, value) in obj {
+                // Skip metadata fields
+                if key == "name" || key == "base_path" {
+                    continue;
                 }
-            } else {
-                return Err("'files' field must be an object".into());
+                root_files.insert(key.clone(), FileTreeNode::from_json_value(value)?);
             }
-
-            // Create Quill from the flat tree
-            Self::from_tree(files, base_path, default_name)
         } else {
-            // New tree format - the root JSON object contains the file tree directly
-            // Create a virtual root directory containing all the files
-            let mut root_files = HashMap::new();
-
-            if let JsonValue::Object(obj) = &json {
-                for (key, value) in obj {
-                    // Skip metadata fields
-                    if key == "name" || key == "base_path" {
-                        continue;
-                    }
-                    root_files.insert(key.clone(), FileTreeNode::from_json_value(value)?);
-                }
-            } else {
-                return Err("JSON root must be an object".into());
-            }
-
-            let root = FileTreeNode::Directory { files: root_files };
-
-            // Create Quill from the tree structure
-            Self::from_tree_structure(root, base_path, default_name)
+            return Err("JSON root must be an object".into());
         }
+
+        let root = FileTreeNode::Directory { files: root_files };
+
+        // Create Quill from the tree structure
+        Self::from_tree(root, base_path, default_name)
     }
 
-    /// Recursively load all files from a directory into memory
-    fn load_directory_recursive(
+    /// Recursively load all files from a directory into a tree structure
+    fn load_directory_as_tree(
         current_dir: &Path,
         base_dir: &Path,
-        files: &mut HashMap<PathBuf, FileEntry>,
         ignore: &QuillIgnore,
-    ) -> Result<(), Box<dyn StdError + Send + Sync>> {
+    ) -> Result<FileTreeNode, Box<dyn StdError + Send + Sync>> {
         use std::fs;
 
         if !current_dir.exists() {
-            return Ok(());
+            return Ok(FileTreeNode::Directory {
+                files: HashMap::new(),
+            });
         }
+
+        let mut files = HashMap::new();
 
         for entry in fs::read_dir(current_dir)? {
             let entry = entry?;
@@ -601,35 +584,26 @@ impl Quill {
                 continue;
             }
 
+            // Get the filename
+            let filename = path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .ok_or_else(|| format!("Invalid filename: {}", path.display()))?
+                .to_string();
+
             if path.is_file() {
                 let contents = fs::read(&path)
                     .map_err(|e| format!("Failed to read file '{}': {}", path.display(), e))?;
 
-                files.insert(
-                    relative_path.clone(),
-                    FileEntry {
-                        contents,
-                        path: relative_path,
-                        is_dir: false,
-                    },
-                );
+                files.insert(filename, FileTreeNode::File { contents });
             } else if path.is_dir() {
-                // Add directory entry
-                files.insert(
-                    relative_path.clone(),
-                    FileEntry {
-                        contents: Vec::new(),
-                        path: relative_path,
-                        is_dir: true,
-                    },
-                );
-
                 // Recursively process subdirectory
-                Self::load_directory_recursive(&path, base_dir, files, ignore)?;
+                let subdir_tree = Self::load_directory_as_tree(&path, base_dir, ignore)?;
+                files.insert(filename, subdir_tree);
             }
         }
 
-        Ok(())
+        Ok(FileTreeNode::Directory { files })
     }
 
     /// Convert TOML value to YAML value
@@ -672,8 +646,7 @@ impl Quill {
     /// Validate the quill structure
     pub fn validate(&self) -> Result<(), Box<dyn StdError + Send + Sync>> {
         // Check that glue file exists in memory
-        let glue_path = PathBuf::from(&self.glue_file);
-        if !self.files.contains_key(&glue_path) {
+        if !self.files.file_exists(&self.glue_file) {
             return Err(format!("Glue file '{}' does not exist", self.glue_file).into());
         }
         Ok(())
@@ -681,62 +654,48 @@ impl Quill {
 
     /// Get file contents by path (relative to quill root)
     pub fn get_file<P: AsRef<Path>>(&self, path: P) -> Option<&[u8]> {
-        let path = path.as_ref();
-        self.files.get(path).map(|entry| entry.contents.as_slice())
-    }
-
-    /// Get file entry by path (includes metadata)
-    pub fn get_file_entry<P: AsRef<Path>>(&self, path: P) -> Option<&FileEntry> {
-        let path = path.as_ref();
-        self.files.get(path)
+        self.files.get_file(path)
     }
 
     /// Check if a file exists in memory
     pub fn file_exists<P: AsRef<Path>>(&self, path: P) -> bool {
-        let path = path.as_ref();
-        self.files.contains_key(path)
+        self.files.file_exists(path)
     }
 
     /// List all files in a directory (returns paths relative to quill root)
     pub fn list_directory<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
         let dir_path = dir_path.as_ref();
-        let mut entries = Vec::new();
+        let filenames = self.files.list_files(dir_path);
 
-        for (path, entry) in &self.files {
-            if let Some(parent) = path.parent() {
-                if parent == dir_path && !entry.is_dir {
-                    entries.push(path.clone());
+        // Convert filenames to full paths
+        filenames
+            .iter()
+            .map(|name| {
+                if dir_path == Path::new("") {
+                    PathBuf::from(name)
+                } else {
+                    dir_path.join(name)
                 }
-            } else if dir_path == Path::new("") && !entry.is_dir {
-                // Files in root directory
-                entries.push(path.clone());
-            }
-        }
-
-        entries.sort();
-        entries
+            })
+            .collect()
     }
 
     /// List all directories in a directory (returns paths relative to quill root)
     pub fn list_subdirectories<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
         let dir_path = dir_path.as_ref();
-        let mut entries = Vec::new();
+        let subdirs = self.files.list_subdirectories(dir_path);
 
-        for (path, entry) in &self.files {
-            if entry.is_dir {
-                if let Some(parent) = path.parent() {
-                    if parent == dir_path {
-                        entries.push(path.clone());
-                    }
-                } else if dir_path == Path::new("") {
-                    // Directories in root
-                    entries.push(path.clone());
+        // Convert subdirectory names to full paths
+        subdirs
+            .iter()
+            .map(|name| {
+                if dir_path == Path::new("") {
+                    PathBuf::from(name)
+                } else {
+                    dir_path.join(name)
                 }
-            }
-        }
-
-        entries.sort();
-        entries
+            })
+            .collect()
     }
 
     /// Get all files matching a pattern (supports simple wildcards)
@@ -744,17 +703,39 @@ impl Quill {
         let pattern_str = pattern.as_ref().to_string_lossy();
         let mut matches = Vec::new();
 
-        for (path, entry) in &self.files {
-            if !entry.is_dir {
-                let path_str = path.to_string_lossy();
-                if self.matches_simple_pattern(&pattern_str, &path_str) {
-                    matches.push(path.clone());
-                }
-            }
-        }
+        // Recursively search the tree for matching files
+        self.find_files_recursive(&self.files, Path::new(""), &pattern_str, &mut matches);
 
         matches.sort();
         matches
+    }
+
+    /// Helper method to recursively search for files matching a pattern
+    fn find_files_recursive(
+        &self,
+        node: &FileTreeNode,
+        current_path: &Path,
+        pattern: &str,
+        matches: &mut Vec<PathBuf>,
+    ) {
+        match node {
+            FileTreeNode::File { .. } => {
+                let path_str = current_path.to_string_lossy();
+                if self.matches_simple_pattern(pattern, &path_str) {
+                    matches.push(current_path.to_path_buf());
+                }
+            }
+            FileTreeNode::Directory { files } => {
+                for (name, child_node) in files {
+                    let child_path = if current_path == Path::new("") {
+                        PathBuf::from(name)
+                    } else {
+                        current_path.join(name)
+                    };
+                    self.find_files_recursive(child_node, &child_path, pattern, matches);
+                }
+            }
+        }
     }
 
     /// Simple pattern matching helper
@@ -1078,7 +1059,7 @@ glue = "glue.typ"
     #[test]
     fn test_from_tree() {
         // Create a simple in-memory file tree
-        let mut files = HashMap::new();
+        let mut root_files = HashMap::new();
 
         // Add Quill.toml
         let quill_toml = r#"[Quill]
@@ -1087,28 +1068,26 @@ backend = "typst"
 glue = "glue.typ"
 description = "A test quill from tree"
 "#;
-        files.insert(
-            PathBuf::from("Quill.toml"),
-            FileEntry {
+        root_files.insert(
+            "Quill.toml".to_string(),
+            FileTreeNode::File {
                 contents: quill_toml.as_bytes().to_vec(),
-                path: PathBuf::from("Quill.toml"),
-                is_dir: false,
             },
         );
 
         // Add glue file
         let glue_content = "= Test Template\n\nThis is a test.";
-        files.insert(
-            PathBuf::from("glue.typ"),
-            FileEntry {
+        root_files.insert(
+            "glue.typ".to_string(),
+            FileTreeNode::File {
                 contents: glue_content.as_bytes().to_vec(),
-                path: PathBuf::from("glue.typ"),
-                is_dir: false,
             },
         );
 
+        let root = FileTreeNode::Directory { files: root_files };
+
         // Create Quill from tree
-        let quill = Quill::from_tree(files, Some(PathBuf::from("/test")), None).unwrap();
+        let quill = Quill::from_tree(root, Some(PathBuf::from("/test")), None).unwrap();
 
         // Validate the quill
         assert_eq!(quill.name, "test-from-tree");
@@ -1121,7 +1100,7 @@ description = "A test quill from tree"
 
     #[test]
     fn test_from_tree_with_template() {
-        let mut files = HashMap::new();
+        let mut root_files = HashMap::new();
 
         // Add Quill.toml with template specified
         let quill_toml = r#"[Quill]
@@ -1130,38 +1109,34 @@ backend = "typst"
 glue = "glue.typ"
 template = "template.md"
 "#;
-        files.insert(
-            PathBuf::from("Quill.toml"),
-            FileEntry {
+        root_files.insert(
+            "Quill.toml".to_string(),
+            FileTreeNode::File {
                 contents: quill_toml.as_bytes().to_vec(),
-                path: PathBuf::from("Quill.toml"),
-                is_dir: false,
             },
         );
 
         // Add glue file
-        files.insert(
-            PathBuf::from("glue.typ"),
-            FileEntry {
+        root_files.insert(
+            "glue.typ".to_string(),
+            FileTreeNode::File {
                 contents: b"glue content".to_vec(),
-                path: PathBuf::from("glue.typ"),
-                is_dir: false,
             },
         );
 
         // Add template file
         let template_content = "# {{ title }}\n\n{{ body }}";
-        files.insert(
-            PathBuf::from("template.md"),
-            FileEntry {
+        root_files.insert(
+            "template.md".to_string(),
+            FileTreeNode::File {
                 contents: template_content.as_bytes().to_vec(),
-                path: PathBuf::from("template.md"),
-                is_dir: false,
             },
         );
 
+        let root = FileTreeNode::Directory { files: root_files };
+
         // Create Quill from tree
-        let quill = Quill::from_tree(files, None, None).unwrap();
+        let quill = Quill::from_tree(root, None, None).unwrap();
 
         // Validate template is loaded
         assert_eq!(quill.template_file, Some("template.md".to_string()));
@@ -1170,19 +1145,15 @@ template = "template.md"
 
     #[test]
     fn test_from_json() {
-        // Create JSON representation of a Quill
+        // Create JSON representation of a Quill using tree format
         let json_str = r#"{
             "name": "test-from-json",
             "base_path": "/test/path",
-            "files": {
-                "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n",
-                    "is_dir": false
-                },
-                "glue.typ": {
-                    "contents": "= Test Glue\n\nThis is test content.",
-                    "is_dir": false
-                }
+            "Quill.toml": {
+                "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+            },
+            "glue.typ": {
+                "contents": "= Test Glue\n\nThis is test content."
             }
         }"#;
 
@@ -1199,17 +1170,13 @@ template = "template.md"
 
     #[test]
     fn test_from_json_with_byte_array() {
-        // Create JSON with byte array representation
+        // Create JSON with byte array representation using tree format
         let json_str = r#"{
-            "files": {
-                "Quill.toml": {
-                    "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10],
-                    "is_dir": false
-                },
-                "glue.typ": {
-                    "contents": "test glue",
-                    "is_dir": false
-                }
+            "Quill.toml": {
+                "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10]
+            },
+            "glue.typ": {
+                "contents": "test glue"
             }
         }"#;
 
@@ -1327,7 +1294,7 @@ template = "template.md"
 
         let root = FileTreeNode::Directory { files: root_files };
 
-        let quill = Quill::from_tree_structure(root, None, None).unwrap();
+        let quill = Quill::from_tree(root, None, None).unwrap();
 
         assert_eq!(quill.name, "direct-tree");
         assert!(quill.file_exists("src/main.rs"));
