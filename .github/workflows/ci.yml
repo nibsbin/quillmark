@@ -64,15 +64,8 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      # Run tests and doctests in parallel using nextest (faster test runner)
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@nextest
-
       - name: Tests (${{ matrix.features.name }})
-        run: cargo nextest run ${{ matrix.features.flags }} --locked
-
-      - name: Doctests (${{ matrix.features.name }})
-        run: cargo test --doc ${{ matrix.features.flags }} --locked
+        run: cargo test ${{ matrix.features.flags }} --locked
 
   docs:
     runs-on: ubuntu-latest
