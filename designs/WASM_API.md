@@ -269,7 +269,7 @@ class Workflow {
   /**
    * Render pre-processed glue content (advanced)
    */
-  renderContent(content: string, options?: RenderOptions): RenderResult;
+  renderSource(content: string, options?: RenderOptions): RenderResult;
 
   /**
    * Process markdown to glue without compilation (for debugging)

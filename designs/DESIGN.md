@@ -147,7 +147,7 @@ pub struct Workflow {
 impl Workflow {
     pub fn new(backend: Box<dyn Backend>, quill: Quill) -> Result<Self, RenderError>;
     pub fn render(&self, markdown: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError>;
-    pub fn render_content(&self, content: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError>;
+    pub fn render_source(&self, content: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError>;
     pub fn process_glue(&self, markdown: &str) -> Result<String, RenderError>;
     pub fn backend_id(&self) -> &str;
     pub fn supported_formats(&self) -> &'static [OutputFormat];
@@ -349,7 +349,7 @@ let artifacts = backend.compile(&glue_source, &prepared_quill, &opts)?; // Step 
 #### Render Method Variants
 
 * **render()**: Full pipeline from markdown to artifacts with optional format
-* **render_content()**: Skip parsing, compile pre-processed glue content
+* **render_source()**: Skip parsing, compile pre-processed glue content
 * **process_glue()**: Extract just the glue composition step (markdown → glue source)
 
 ---

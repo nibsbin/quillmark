@@ -332,7 +332,7 @@ export class Workflow {
    * @param content - Glue content (e.g., Typst markup)
    * @param format - Desired output format
    */
-  async renderContent(
+  async renderSource(
     content: string,
     format?: OutputFormat
   ): Promise<RenderResult>;
