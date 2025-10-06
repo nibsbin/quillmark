@@ -1741,6 +1741,7 @@ dependencies = [
  "js-sys",
  "quillmark",
  "quillmark-core",
+ "quillmark-typst",
  "serde",
  "serde-wasm-bindgen",
  "serde_json",

@@ -50,6 +50,22 @@ impl QuillWorld {
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
 
+        // Optionally include an embedded default font (compile-time feature)
+        // When enabled, this embedded font is registered BEFORE any quill asset fonts
+        // so it acts as a stable fallback across platforms.
+        #[cfg(feature = "embed-default-font")]
+        {
+            // The font file should be placed at `quillmark-typst/assets/fonts/RobotoCondensed-Regular.ttf`
+            // and included in the crate via include_bytes! at compile time.
+            const ROBOTO_BYTES: &[u8] = include_bytes!("../assets/RobotoCondensed-Regular.ttf");
+            let roboto_bytes = Bytes::new(ROBOTO_BYTES.to_vec());
+            for font in Font::iter(roboto_bytes) {
+                book.push(font.info().clone());
+                // keep a Font handle so the underlying data lives long enough
+                fonts.push(font);
+            }
+        }
+
         // Load fonts from the quill's in-memory assets FIRST and add to the book
         // These are loaded eagerly as they are part of the template
         // Adding them first ensures their indices in the book match the font() method
