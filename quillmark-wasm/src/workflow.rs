@@ -175,6 +175,19 @@ impl Workflow {
     pub fn quill_name(&self) -> String {
         self.quill_name.clone()
     }
+
+    /// Debug helper: return the list of dynamic asset filenames currently registered on this workflow.
+    /// Useful to verify that assets passed from JS were parsed and stored correctly.
+    #[wasm_bindgen(js_name = getDynamicAssets)]
+    pub fn get_dynamic_assets(&self) -> JsValue {
+        let names: Vec<String> = self
+            .inner
+            .dynamic_asset_names()
+            .into_iter()
+            .collect();
+
+        serde_wasm_bindgen::to_value(&names).unwrap_or(JsValue::NULL)
+    }
 }
 
 impl Workflow {

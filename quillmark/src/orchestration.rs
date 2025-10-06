@@ -387,6 +387,14 @@ impl Workflow {
         &self.quill.name
     }
 
+    /// Return the list of dynamic asset filenames currently stored in the workflow.
+    ///
+    /// This is primarily a debugging helper so callers (for example wasm bindings)
+    /// can inspect which assets have been added via `with_asset` / `with_assets`.
+    pub fn dynamic_asset_names(&self) -> Vec<String> {
+        self.dynamic_assets.keys().cloned().collect()
+    }
+
     /// Add a dynamic asset to the workflow (builder pattern). See [module docs](self) for examples.
     pub fn with_asset(
         mut self,

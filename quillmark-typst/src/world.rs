@@ -59,17 +59,21 @@ impl QuillWorld {
             // and included in the crate via include_bytes! at compile time.
             const ROBOTO_BYTES: &[u8] = include_bytes!("../assets/RobotoCondensed-VariableFont_wght.ttf");
             let roboto_bytes = Bytes::new(ROBOTO_BYTES.to_vec());
+            let mut embedded_parsed = 0usize;
             for font in Font::iter(roboto_bytes) {
                 book.push(font.info().clone());
                 // keep a Font handle so the underlying data lives long enough
                 fonts.push(font);
+                embedded_parsed += 1;
             }
+            println!("quillmark-typst: embed-default-font active -> parsed {} embedded font face(s)", embedded_parsed);
         }
 
         // Load fonts from the quill's in-memory assets FIRST and add to the book
         // These are loaded eagerly as they are part of the template
         // Adding them first ensures their indices in the book match the font() method
         let font_data_list = Self::load_fonts_from_quill(quill)?;
+        let before_assets = fonts.len();
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
             for font in Font::iter(font_bytes) {
@@ -77,6 +81,12 @@ impl QuillWorld {
                 fonts.push(font);
             }
         }
+        let assets_added = fonts.len().saturating_sub(before_assets);
+        println!(
+            "quillmark-typst: loaded {} font face(s) from quill assets (total asset handles: {})",
+            assets_added,
+            fonts.len()
+        );
 
         // Now initialize FontSearcher for system fonts (lazy loading)
         // These will be added AFTER asset fonts in the book
@@ -91,10 +101,22 @@ impl QuillWorld {
         }
         let font_slots = searcher_fonts.fonts;
 
+        // Diagnostic: report system slot count and final asset/font counts
+        println!(
+            "quillmark-typst: system font slots discovered: {}, total parsed asset font handles: {}",
+            font_slots.len(),
+            fonts.len()
+        );
+
         // Error if no fonts are available at all
         if fonts.is_empty() && font_slots.is_empty() {
             return Err(
-                "No fonts found: neither quill assets nor system fonts are available".into(),
+                format!(
+                    "No fonts found: neither quill assets nor system fonts are available. asset_faces={}, system_slots={}",
+                    fonts.len(),
+                    font_slots.len()
+                )
+                .into(),
             );
         }
 
