@@ -11,8 +11,6 @@ pub struct FileEntry {
     pub contents: Vec<u8>,
     /// The file path relative to the quill root
     pub path: PathBuf,
-    /// Whether this is a directory entry
-    pub is_dir: bool,
 }
 
 /// A node in the file tree structure
@@ -44,22 +42,12 @@ impl FileTreeNode {
                     FileEntry {
                         contents: contents.clone(),
                         path: current_path.to_path_buf(),
-                        is_dir: false,
                     },
                 );
             }
             FileTreeNode::Directory { files } => {
-                // Add directory entry
-                if current_path != Path::new("") {
-                    map.insert(
-                        current_path.to_path_buf(),
-                        FileEntry {
-                            contents: Vec::new(),
-                            path: current_path.to_path_buf(),
-                            is_dir: true,
-                        },
-                    );
-                }
+                // Don't add directory entries - only store files
+                // Directories are implicit from file paths
 
                 // Recursively flatten children
                 for (name, node) in files {
@@ -449,16 +437,17 @@ impl Quill {
     ///   "base_path": "/optional/base/path",
     ///   "files": {
     ///     "Quill.toml": {
-    ///       "contents": "...",  // UTF-8 string or byte array
-    ///       "is_dir": false
+    ///       "contents": "..."  // UTF-8 string or byte array
     ///     },
     ///     "glue.typ": {
-    ///       "contents": "...",
-    ///       "is_dir": false
+    ///       "contents": "..."
     ///     }
     ///   }
     /// }
     /// ```
+    ///
+    /// Note: The legacy format may include an `is_dir` field for backward compatibility,
+    /// but it is ignored. Only files are stored; directories are inferred from file paths.
     ///
     /// **Tree structure (recommended):**
     /// ```json
@@ -531,19 +520,16 @@ impl Quill {
                         return Err(format!("Invalid contents for file '{}'", path_str).into());
                     };
 
+                    // Skip directory entries - we only store files
+                    // The is_dir field is ignored for backward compatibility
                     let is_dir = file_data
                         .get("is_dir")
                         .and_then(|v| v.as_bool())
                         .unwrap_or(false);
 
-                    files.insert(
-                        path.clone(),
-                        FileEntry {
-                            contents,
-                            path,
-                            is_dir,
-                        },
-                    );
+                    if !is_dir {
+                        files.insert(path.clone(), FileEntry { contents, path });
+                    }
                 }
             } else {
                 return Err("'files' field must be an object".into());
@@ -610,19 +596,11 @@ impl Quill {
                     FileEntry {
                         contents,
                         path: relative_path,
-                        is_dir: false,
                     },
                 );
             } else if path.is_dir() {
-                // Add directory entry
-                files.insert(
-                    relative_path.clone(),
-                    FileEntry {
-                        contents: Vec::new(),
-                        path: relative_path,
-                        is_dir: true,
-                    },
-                );
+                // Don't add directory entries - only store files
+                // Directories are implicit from file paths
 
                 // Recursively process subdirectory
                 Self::load_directory_recursive(&path, base_dir, files, ignore)?;
@@ -702,12 +680,12 @@ impl Quill {
         let dir_path = dir_path.as_ref();
         let mut entries = Vec::new();
 
-        for (path, entry) in &self.files {
+        for (path, _entry) in &self.files {
             if let Some(parent) = path.parent() {
-                if parent == dir_path && !entry.is_dir {
+                if parent == dir_path {
                     entries.push(path.clone());
                 }
-            } else if dir_path == Path::new("") && !entry.is_dir {
+            } else if dir_path == Path::new("") {
                 // Files in root directory
                 entries.push(path.clone());
             }
@@ -720,21 +698,35 @@ impl Quill {
     /// List all directories in a directory (returns paths relative to quill root)
     pub fn list_subdirectories<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
         let dir_path = dir_path.as_ref();
-        let mut entries = Vec::new();
+        let mut subdirs = std::collections::HashSet::new();
 
-        for (path, entry) in &self.files {
-            if entry.is_dir {
-                if let Some(parent) = path.parent() {
-                    if parent == dir_path {
-                        entries.push(path.clone());
+        // Infer subdirectories from file paths
+        for (path, _entry) in &self.files {
+            if let Some(parent) = path.parent() {
+                // If the parent is the directory we're looking at,
+                // we may need to check if the path itself has children
+                if parent.starts_with(dir_path) && parent != dir_path {
+                    // Find the immediate subdirectory
+                    let relative = if dir_path == Path::new("") {
+                        parent
+                    } else {
+                        parent.strip_prefix(dir_path).unwrap_or(parent)
+                    };
+
+                    // Get the first component of the relative path
+                    if let Some(first_component) = relative.components().next() {
+                        let subdir = if dir_path == Path::new("") {
+                            PathBuf::from(first_component.as_os_str())
+                        } else {
+                            dir_path.join(first_component.as_os_str())
+                        };
+                        subdirs.insert(subdir);
                     }
-                } else if dir_path == Path::new("") {
-                    // Directories in root
-                    entries.push(path.clone());
                 }
             }
         }
 
+        let mut entries: Vec<PathBuf> = subdirs.into_iter().collect();
         entries.sort();
         entries
     }
@@ -744,12 +736,10 @@ impl Quill {
         let pattern_str = pattern.as_ref().to_string_lossy();
         let mut matches = Vec::new();
 
-        for (path, entry) in &self.files {
-            if !entry.is_dir {
-                let path_str = path.to_string_lossy();
-                if self.matches_simple_pattern(&pattern_str, &path_str) {
-                    matches.push(path.clone());
-                }
+        for (path, _entry) in &self.files {
+            let path_str = path.to_string_lossy();
+            if self.matches_simple_pattern(&pattern_str, &path_str) {
+                matches.push(path.clone());
             }
         }
 
@@ -1092,7 +1082,6 @@ description = "A test quill from tree"
             FileEntry {
                 contents: quill_toml.as_bytes().to_vec(),
                 path: PathBuf::from("Quill.toml"),
-                is_dir: false,
             },
         );
 
@@ -1103,7 +1092,6 @@ description = "A test quill from tree"
             FileEntry {
                 contents: glue_content.as_bytes().to_vec(),
                 path: PathBuf::from("glue.typ"),
-                is_dir: false,
             },
         );
 
@@ -1135,7 +1123,6 @@ template = "template.md"
             FileEntry {
                 contents: quill_toml.as_bytes().to_vec(),
                 path: PathBuf::from("Quill.toml"),
-                is_dir: false,
             },
         );
 
@@ -1145,7 +1132,6 @@ template = "template.md"
             FileEntry {
                 contents: b"glue content".to_vec(),
                 path: PathBuf::from("glue.typ"),
-                is_dir: false,
             },
         );
 
@@ -1156,7 +1142,6 @@ template = "template.md"
             FileEntry {
                 contents: template_content.as_bytes().to_vec(),
                 path: PathBuf::from("template.md"),
-                is_dir: false,
             },
         );
 

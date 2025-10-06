@@ -22,11 +22,14 @@ impl Quill {
     ///   "name": "optional-default-name",
     ///   "base_path": "/optional/base/path",
     ///   "files": {
-    ///     "Quill.toml": { "contents": "...", "is_dir": false },
-    ///     "glue.typ": { "contents": "...", "is_dir": false }
+    ///     "Quill.toml": { "contents": "..." },
+    ///     "glue.typ": { "contents": "..." }
     ///   }
     /// }
     /// ```
+    ///
+    /// Note: The legacy format may include an `is_dir` field for backward compatibility,
+    /// but it is ignored. Only files are stored; directories are inferred from file paths.
     ///
     /// File contents can be either:
     /// - A UTF-8 string (recommended for text files)
@@ -37,8 +40,7 @@ impl Quill {
     #[wasm_bindgen(js_name = fromJson)]
     pub fn from_json(json_str: &str) -> Result<Quill, JsValue> {
         let inner = quillmark_core::Quill::from_json(json_str).map_err(|e| {
-            QuillmarkError::system(format!("Failed to create Quill from JSON: {}", e))
-                .to_js_value()
+            QuillmarkError::system(format!("Failed to create Quill from JSON: {}", e)).to_js_value()
         })?;
 
         Ok(Quill { inner })

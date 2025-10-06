@@ -57,17 +57,14 @@ const quillJson = JSON.stringify({
 name = "my-quill"
 backend = "typst"
 glue = "glue.typ"
-`,
-      is_dir: false
+`
     },
     'glue.typ': {
-      contents: '#let render(doc) = { doc.body }',
-      is_dir: false
+      contents: '#let render(doc) = { doc.body }'
     },
     // Add all your quill files here (packages, assets, etc.)
     'packages/some-package.typ': {
-      contents: '// package content',
-      is_dir: false
+      contents: '// package content'
     }
   }
 });

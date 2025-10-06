@@ -511,7 +511,6 @@ impl Workflow {
             let entry = quillmark_core::FileEntry {
                 contents: contents.clone(),
                 path: prefixed_path.clone(),
-                is_dir: false,
             };
             quill.files.insert(prefixed_path, entry);
         }
@@ -522,7 +521,6 @@ impl Workflow {
             let entry = quillmark_core::FileEntry {
                 contents: contents.clone(),
                 path: prefixed_path.clone(),
-                is_dir: false,
             };
             quill.files.insert(prefixed_path, entry);
         }
