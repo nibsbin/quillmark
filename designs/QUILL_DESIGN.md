@@ -12,7 +12,7 @@
 2. [Problem Statement](#problem-statement)
 3. [Design Goals](#design-goals)
 4. [Internal File Structure: HashMap vs Tree](#internal-file-structure-hashmap-vs-tree)
-5. [JSON Structure: Table vs Tree-Based](#json-structure-table-vs-tree-based)
+5. [JSON Structure: Tree-Based Only](#json-structure-tree-based-only)
 6. [Proposed Unified Design](#proposed-unified-design)
 7. [API Surface Enumeration](#api-surface-enumeration)
 8. [Metadata Handling](#metadata-handling)
@@ -176,9 +176,9 @@ struct FileTree {
 
 ---
 
-## JSON Structure: Table vs Tree-Based
+## JSON Structure: Tree-Based Only
 
-### Option 1: Tree-Based (Current)
+### Tree-Based Format
 
 ```json
 {
@@ -197,51 +197,21 @@ struct FileTree {
 }
 ```
 
-**Pros:**
+**Benefits:**
 - Natural nesting matches directory structure
 - Easy to construct in JS: mirrors filesystem
 - Clear directory boundaries
 - Intuitive for developers
+- Explicit structure at a glance
 
-**Cons:**
-- Deep nesting for deep paths
-- Harder to programmatically generate (nested object creation)
-- Parsing requires recursion
-
-### Option 2: Table-Based (Flat)
-
-```json
-{
-  "metadata": {
-    "name": "my-quill",
-    "base_path": "/",
-    "version": "1.0.0"
-  },
-  "files": [
-    { "path": "Quill.toml", "contents": "..." },
-    { "path": "glue.typ", "contents": "..." },
-    { "path": "assets/logo.png", "contents": [...] }
-  ]
-}
-```
-
-**Pros:**
-- Easy to generate programmatically (map over array)
-- No recursion needed for parsing
-- Simpler for table-driven UIs
-- Easy to filter/search
-
-**Cons:**
-- Less intuitive (doesn't mirror filesystem)
-- Path separator issues (Unix `/` vs Windows `\`)
-- No explicit directory entries
-- Harder to see structure at a glance
+**Tradeoffs:**
+- Deep nesting for deep paths (acceptable for typical Quill structures)
+- Requires recursion for parsing (standard approach for tree structures)
 
 ### Frontend Considerations
 
-**JavaScript/TypeScript code to build each:**
+**JavaScript/TypeScript code to build tree-based format:**
 
-**Tree-based:**
 ```typescript
 const quill = {
   metadata: { name: "my-quill", base_path: "/" },
@@ -255,40 +225,41 @@ const quill = {
 };
 ```
 
-**Table-based:**
+**For programmatic generation from file uploads:**
 ```typescript
-const quill = {
-  metadata: { name: "my-quill", base_path: "/" },
-  files: [
-    { path: "Quill.toml", contents: quillTomlText },
-    { path: "glue.typ", contents: glueText },
-    { path: "assets/logo.png", contents: Array.from(logoBytes) }
-  ]
-};
-```
-
-**Verdict:** Tree-based is slightly more verbose but more intuitive. However, for programmatic generation (e.g., from file uploads), table-based is easier.
-
-### Recommendation: **Support Both, Default to Tree**
-
-**Primary (Tree-based):**
-- Default for documentation and examples
-- Natural for hand-crafting
-- Better developer experience
-
-**Secondary (Table-based):**
-- Optional format for programmatic generation
-- Easier for tools that scan filesystems
-- Better for large Quills with many files
-
-**Implementation:** Detect format automatically:
-```rust
-if json.contains_key("files") && json["files"].is_array() {
-    // Table-based
-} else {
-    // Tree-based (current behavior)
+// Helper to build nested structure from flat file list
+function buildFileTree(files: File[]): object {
+  const tree: any = {};
+  
+  for (const file of files) {
+    const path = file.webkitRelativePath || file.name;
+    const parts = path.split('/');
+    let current = tree;
+    
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!current[parts[i]]) current[parts[i]] = {};
+      current = current[parts[i]];
+    }
+    
+    current[parts[parts.length - 1]] = { 
+      contents: isImage(file) 
+        ? Array.from(new Uint8Array(await file.arrayBuffer()))
+        : await file.text()
+    };
+  }
+  
+  return tree;
 }
 ```
+
+### Recommendation: **Tree-Based Only**
+
+**Rationale:**
+- Matches mental model of filesystem
+- Natural for both hand-crafting and programmatic generation
+- Consistent with internal `FileTreeNode` structure
+- Simpler implementation without format detection
+- Reduces API surface and complexity
 
 ---
 
@@ -303,7 +274,7 @@ if json.contains_key("files") && json["files"].is_array() {
 
 ### Updated JSON Contracts
 
-#### Tree-Based Format (Primary)
+#### Tree-Based Format (Standard)
 
 ```json
 {
@@ -331,30 +302,7 @@ if json.contains_key("files") && json["files"].is_array() {
 - File nodes have `contents` (string or byte array)
 - Directory nodes are nested objects
 
-#### Table-Based Format (Alternative)
-
-```json
-{
-  "metadata": {
-    "name": "my-quill",
-    "base_path": "/",
-    "version": "1.0.0"
-  },
-  "files": [
-    { "path": "Quill.toml", "contents": "[Quill]\n..." },
-    { "path": "glue.typ", "contents": "= Template\n..." },
-    { "path": "assets/logo.png", "contents": [137, 80, 78, 71, ...] }
-  ]
-}
-```
-
-**Rules:**
-- Root must have `files` key (array)
-- Each entry has `path` and `contents`
-- Paths use `/` separator (Unix-style)
-- Directories inferred from paths (no explicit entries needed)
-
-#### Legacy Format (Backward Compatibility)
+#### Legacy Format (Deprecated, Backward Compatibility)
 
 ```json
 {
@@ -449,10 +397,10 @@ impl Quill {
     
     /// Load from JSON string
     /// 
-    /// Auto-detects format (tree-based, table-based, or legacy).
+    /// Parses tree-based JSON format with explicit metadata object.
     /// Extracts metadata and builds internal tree structure.
     /// 
-    /// # Example (tree-based)
+    /// # Example
     /// ```rust
     /// let json = r#"{
     ///   "metadata": { "name": "letter" },
@@ -460,18 +408,6 @@ impl Quill {
     ///     "Quill.toml": { "contents": "..." },
     ///     "glue.typ": { "contents": "..." }
     ///   }
-    /// }"#;
-    /// let quill = Quill::from_json(json)?;
-    /// ```
-    /// 
-    /// # Example (table-based)
-    /// ```rust
-    /// let json = r#"{
-    ///   "metadata": { "name": "letter" },
-    ///   "files": [
-    ///     { "path": "Quill.toml", "contents": "..." },
-    ///     { "path": "glue.typ", "contents": "..." }
-    ///   ]
     /// }"#;
     /// let quill = Quill::from_json(json)?;
     /// ```
@@ -664,9 +600,8 @@ fn parse_json_metadata(json: &JsonValue) -> QuillMetadata {
 ### Phase 1: Enhance JSON Parsing (Backward Compatible)
 
 1. Support explicit `metadata` object in JSON
-2. Support table-based `files` array format
-3. Auto-detect format and parse accordingly
-4. Maintain legacy format support (root-level reserved keys)
+2. Parse tree-based `files` object format
+3. Maintain legacy format support (root-level reserved keys)
 
 ### Phase 2: Deprecate Legacy Format
 
@@ -692,9 +627,7 @@ pub fn from_json(json_str: &str) -> Result<Self, Box<dyn StdError + Send + Sync>
     let metadata = extract_metadata(&json)?;
     
     // Parse files based on format
-    let root_files = if has_files_array(&json) {
-        parse_table_based_files(&json)?
-    } else if has_files_object(&json) {
+    let root_files = if has_files_object(&json) {
         parse_tree_based_files(&json)?
     } else {
         parse_legacy_format(&json)?
@@ -710,84 +643,22 @@ pub fn from_json(json_str: &str) -> Result<Self, Box<dyn StdError + Send + Sync>
     )
 }
 
-fn has_files_array(json: &JsonValue) -> bool {
-    json.get("files").map(|v| v.is_array()).unwrap_or(false)
-}
-
 fn has_files_object(json: &JsonValue) -> bool {
     json.get("files").map(|v| v.is_object()).unwrap_or(false)
 }
 
-fn parse_table_based_files(json: &JsonValue) -> Result<HashMap<String, FileTreeNode>, Box<dyn StdError>> {
-    let files_array = json.get("files")
-        .and_then(|v| v.as_array())
-        .ok_or("files must be an array")?;
+fn parse_tree_based_files(json: &JsonValue) -> Result<HashMap<String, FileTreeNode>, Box<dyn StdError>> {
+    let files_obj = json.get("files")
+        .and_then(|v| v.as_object())
+        .ok_or("files must be an object")?;
     
     let mut root_files = HashMap::new();
     
-    for file_entry in files_array {
-        let path = file_entry.get("path")
-            .and_then(|v| v.as_str())
-            .ok_or("file entry must have 'path' field")?;
-        
-        let contents_value = file_entry.get("contents")
-            .ok_or("file entry must have 'contents' field")?;
-        
-        let contents = parse_contents(contents_value)?;
-        
-        // Insert into tree at correct path
-        insert_at_path(&mut root_files, path, contents)?;
+    for (key, value) in files_obj {
+        root_files.insert(key.clone(), FileTreeNode::from_json_value(value)?);
     }
     
     Ok(root_files)
-}
-
-fn insert_at_path(
-    root: &mut HashMap<String, FileTreeNode>,
-    path: &str,
-    contents: Vec<u8>,
-) -> Result<(), Box<dyn StdError>> {
-    let parts: Vec<&str> = path.split('/').collect();
-    
-    if parts.is_empty() {
-        return Err("empty path".into());
-    }
-    
-    if parts.len() == 1 {
-        // File at root
-        root.insert(parts[0].to_string(), FileTreeNode::File { contents });
-        return Ok(());
-    }
-    
-    // Navigate/create directories
-    let mut current = root;
-    for (i, part) in parts.iter().enumerate() {
-        if i == parts.len() - 1 {
-            // Last component - insert file
-            current.insert(part.to_string(), FileTreeNode::File { contents });
-        } else {
-            // Intermediate directory
-            current = match current.entry(part.to_string()) {
-                Entry::Occupied(e) => match e.into_mut() {
-                    FileTreeNode::Directory { files } => files,
-                    FileTreeNode::File { .. } => {
-                        return Err(format!("path conflict: {} is a file", part).into())
-                    }
-                },
-                Entry::Vacant(e) => {
-                    let new_dir = FileTreeNode::Directory {
-                        files: HashMap::new(),
-                    };
-                    match e.insert(new_dir) {
-                        FileTreeNode::Directory { files } => files,
-                        _ => unreachable!(),
-                    }
-                }
-            };
-        }
-    }
-    
-    Ok(())
 }
 ```
 
@@ -833,7 +704,7 @@ const quillData = {
 const quill = Quill.fromJson(JSON.stringify(quillData));
 ```
 
-**After (tree-based):**
+**After:**
 ```typescript
 const quillData = {
   metadata: { name: "letter" },
@@ -841,19 +712,6 @@ const quillData = {
     "Quill.toml": { contents: quillToml },
     "glue.typ": { contents: glue }
   }
-};
-const quill = Quill.fromJson(JSON.stringify(quillData));
-```
-
-**After (table-based, for programmatic generation):**
-```typescript
-const quillData = {
-  metadata: { name: "letter" },
-  files: [
-    { path: "Quill.toml", contents: quillToml },
-    { path: "glue.typ", contents: glue },
-    { path: "assets/logo.png", contents: Array.from(logoBytes) }
-  ]
 };
 const quill = Quill.fromJson(JSON.stringify(quillData));
 ```
@@ -874,10 +732,11 @@ const quill = Quill.fromJson(JSON.stringify(quillData));
    - Provides O(1) per-level lookup with directory semantics
    - Optimal for typical Quill structures
 
-2. **JSON Format**: Support both tree-based and table-based
-   - **Tree-based (primary)**: Natural, mirrors filesystem, better DX
-   - **Table-based (secondary)**: Easier for programmatic generation
-   - Auto-detect format in `from_json`
+2. **JSON Format**: Tree-based only
+   - Natural structure that mirrors filesystem
+   - Intuitive for both hand-crafting and programmatic generation
+   - Consistent with internal `FileTreeNode` structure
+   - Simpler implementation without format detection
 
 3. **Metadata**: Explicit `metadata` object in JSON
    - Robust, extensible, no name conflicts
@@ -886,15 +745,14 @@ const quill = Quill.fromJson(JSON.stringify(quillData));
 4. **API Surface**: Three clear entry points
    - `from_path`: Load from filesystem
    - `from_tree`: Canonical constructor (internal)
-   - `from_json`: Load from JSON (auto-detects format)
+   - `from_json`: Load from JSON (tree-based format)
 
 ### Implementation Priority
 
 **High Priority (v0.1.0):**
 - [ ] Add `metadata` object support to `from_json`
-- [ ] Implement table-based format parsing
-- [ ] Auto-detect format in `from_json`
-- [ ] Update JSON_CONTRACT.md with new formats
+- [ ] Parse tree-based `files` object format
+- [ ] Update JSON_CONTRACT.md with new format
 
 **Medium Priority (v0.2.0):**
 - [ ] Add deprecation warnings for legacy format
@@ -909,27 +767,41 @@ const quill = Quill.fromJson(JSON.stringify(quillData));
 ### Frontend Guidance
 
 **For web applications:**
-- Use **tree-based** format for hand-crafted templates
-- Use **table-based** format when building from file uploads
+- Use tree-based format for all Quill creation
 - Always use explicit `metadata` object
+- Build nested structure for file uploads using helper function
 
 **Example (file upload handler):**
 ```typescript
 async function buildQuillFromUpload(files: File[]): Promise<Quill> {
-  const fileEntries = await Promise.all(
-    files.map(async (file) => ({
-      path: file.webkitRelativePath || file.name,
-      contents: file.name.endsWith('.png') || file.name.endsWith('.jpg')
+  // Build nested file tree from flat file list
+  const fileTree: any = {};
+  
+  for (const file of files) {
+    const path = file.webkitRelativePath || file.name;
+    const parts = path.split('/');
+    let current = fileTree;
+    
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!current[parts[i]]) current[parts[i]] = {};
+      current = current[parts[i]];
+    }
+    
+    const fileName = parts[parts.length - 1];
+    const isImage = /\.(png|jpg|jpeg|gif)$/i.test(fileName);
+    
+    current[fileName] = {
+      contents: isImage
         ? Array.from(new Uint8Array(await file.arrayBuffer()))
         : await file.text()
-    }))
-  );
+    };
+  }
   
   const quillData = {
     metadata: {
       name: files[0]?.webkitRelativePath?.split('/')[0] || 'uploaded-quill'
     },
-    files: fileEntries
+    files: fileTree
   };
   
   return Quill.fromJson(JSON.stringify(quillData));
@@ -940,11 +812,11 @@ async function buildQuillFromUpload(files: File[]): Promise<Quill> {
 
 ## Open Questions
 
-1. **Path normalization**: Should table-based format allow Windows paths (`\`)?
-   - **Recommendation**: No, enforce Unix-style `/` for portability
+1. **Path normalization**: How to handle edge cases in nested paths?
+   - **Recommendation**: Validate against path traversal (no `..`, no absolute paths)
    
-2. **Empty directories**: Should table-based format support explicit empty dirs?
-   - **Recommendation**: No, directories inferred from file paths
+2. **Empty directories**: Should tree-based format support explicit empty dirs?
+   - **Recommendation**: Yes, via empty object: `"empty_dir": {}`
    
 3. **Symlinks**: Support in file tree?
    - **Recommendation**: No, keep simple for security
