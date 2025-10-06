@@ -15,6 +15,107 @@ pub struct FileEntry {
     pub is_dir: bool,
 }
 
+/// A node in the file tree structure
+#[derive(Debug, Clone)]
+pub enum FileTreeNode {
+    /// A file with its contents
+    File {
+        /// The file contents as bytes or UTF-8 string
+        contents: Vec<u8>,
+    },
+    /// A directory containing other files and directories
+    Directory {
+        /// The files and subdirectories in this directory
+        files: HashMap<String, FileTreeNode>,
+    },
+}
+
+impl FileTreeNode {
+    /// Convert tree structure to flat HashMap of FileEntry
+    fn flatten_to_map(
+        &self,
+        current_path: &Path,
+        map: &mut HashMap<PathBuf, FileEntry>,
+    ) -> Result<(), Box<dyn StdError + Send + Sync>> {
+        match self {
+            FileTreeNode::File { contents } => {
+                map.insert(
+                    current_path.to_path_buf(),
+                    FileEntry {
+                        contents: contents.clone(),
+                        path: current_path.to_path_buf(),
+                        is_dir: false,
+                    },
+                );
+            }
+            FileTreeNode::Directory { files } => {
+                // Add directory entry
+                if current_path != Path::new("") {
+                    map.insert(
+                        current_path.to_path_buf(),
+                        FileEntry {
+                            contents: Vec::new(),
+                            path: current_path.to_path_buf(),
+                            is_dir: true,
+                        },
+                    );
+                }
+
+                // Recursively flatten children
+                for (name, node) in files {
+                    let child_path = if current_path == Path::new("") {
+                        PathBuf::from(name)
+                    } else {
+                        current_path.join(name)
+                    };
+                    node.flatten_to_map(&child_path, map)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Parse a tree structure from JSON value
+    fn from_json_value(value: &serde_json::Value) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        if let Some(contents_str) = value.get("contents").and_then(|v| v.as_str()) {
+            // It's a file with string contents
+            Ok(FileTreeNode::File {
+                contents: contents_str.as_bytes().to_vec(),
+            })
+        } else if let Some(bytes_array) = value.get("contents").and_then(|v| v.as_array()) {
+            // It's a file with byte array contents
+            let contents: Vec<u8> = bytes_array
+                .iter()
+                .filter_map(|v| v.as_u64().and_then(|n| u8::try_from(n).ok()))
+                .collect();
+            Ok(FileTreeNode::File { contents })
+        } else if let Some(files_obj) = value.get("files").and_then(|v| v.as_object()) {
+            // It's a directory
+            let mut files = HashMap::new();
+            for (name, child_value) in files_obj {
+                files.insert(name.clone(), Self::from_json_value(child_value)?);
+            }
+            Ok(FileTreeNode::Directory { files })
+        } else if let Some(obj) = value.as_object() {
+            // Check if this is a directory represented as direct object with nested files
+            let mut files = HashMap::new();
+            for (name, child_value) in obj {
+                // Skip metadata fields
+                if name == "is_dir" {
+                    continue;
+                }
+                files.insert(name.clone(), Self::from_json_value(child_value)?);
+            }
+            if files.is_empty() {
+                return Err("Empty directory or invalid file node".into());
+            }
+            Ok(FileTreeNode::Directory { files })
+        } else {
+            Err(format!("Invalid file tree node: {:?}", value).into())
+        }
+    }
+}
+
 /// Simple gitignore-style pattern matcher for .quillignore
 #[derive(Debug, Clone)]
 pub struct QuillIgnore {
@@ -151,7 +252,7 @@ impl Quill {
     /// Create a Quill from a tree of files (authoritative method)
     ///
     /// This is the authoritative method for creating a Quill from an in-memory file tree.
-    /// Both `from_path` and `from_json` use this method internally.
+    /// Accepts either a flat HashMap (for backward compatibility) or the new tree structure.
     ///
     /// # Arguments
     ///
@@ -167,6 +268,46 @@ impl Quill {
     /// - The glue file specified in Quill.toml is not found or not valid UTF-8
     /// - Validation fails
     pub fn from_tree(
+        files: HashMap<PathBuf, FileEntry>,
+        base_path: Option<PathBuf>,
+        default_name: Option<String>,
+    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        Self::from_flat_tree(files, base_path, default_name)
+    }
+
+    /// Create a Quill from a hierarchical tree structure
+    ///
+    /// This is the new tree-based method that accepts a hierarchical file tree.
+    ///
+    /// # Arguments
+    ///
+    /// * `root` - The root node of the file tree
+    /// * `base_path` - Optional base path for the Quill (defaults to "/")
+    /// * `default_name` - Optional default name (will be overridden by name in Quill.toml)
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The tree structure is invalid
+    /// - Quill.toml is not found in the file tree
+    /// - Quill.toml is not valid UTF-8 or TOML
+    /// - The glue file specified in Quill.toml is not found or not valid UTF-8
+    /// - Validation fails
+    pub fn from_tree_structure(
+        root: FileTreeNode,
+        base_path: Option<PathBuf>,
+        default_name: Option<String>,
+    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        // Flatten the tree structure to a HashMap
+        let mut files = HashMap::new();
+        root.flatten_to_map(Path::new(""), &mut files)?;
+
+        // Use the existing flat tree method
+        Self::from_flat_tree(files, base_path, default_name)
+    }
+
+    /// Internal method: Create a Quill from a flat HashMap of FileEntry
+    fn from_flat_tree(
         files: HashMap<PathBuf, FileEntry>,
         base_path: Option<PathBuf>,
         default_name: Option<String>,
@@ -299,8 +440,9 @@ impl Quill {
     /// Create a Quill from a JSON representation
     ///
     /// Parses a JSON string representing a Quill and creates a Quill instance.
-    /// The JSON should have the following structure:
+    /// Supports both flat and hierarchical tree structures.
     ///
+    /// **Flat structure (legacy):**
     /// ```json
     /// {
     ///   "name": "optional-default-name",
@@ -318,6 +460,27 @@ impl Quill {
     /// }
     /// ```
     ///
+    /// **Tree structure (recommended):**
+    /// ```json
+    /// {
+    ///   "name": "optional-default-name",
+    ///   "base_path": "/optional/base/path",
+    ///   "Quill.toml": {
+    ///     "contents": "..."
+    ///   },
+    ///   "src": {
+    ///     "files": {
+    ///       "main.rs": {
+    ///         "contents": "..."
+    ///       },
+    ///       "lib.rs": {
+    ///         "contents": "..."
+    ///       }
+    ///     }
+    ///   }
+    /// }
+    /// ```
+    ///
     /// File contents can be either:
     /// - A UTF-8 string (recommended for text files)
     /// - An array of byte values (for binary files)
@@ -326,7 +489,7 @@ impl Quill {
     ///
     /// Returns an error if:
     /// - The JSON is malformed
-    /// - The "files" field is missing or not an object
+    /// - The file tree structure is invalid
     /// - Any file contents are invalid
     /// - Validation fails (via `from_tree`)
     pub fn from_json(json_str: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
@@ -335,16 +498,25 @@ impl Quill {
         let json: JsonValue =
             serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
-        // Parse files from JSON
-        let files_json = json.get("files").ok_or("Missing 'files' field in JSON")?;
+        // Extract optional base_path and name from JSON
+        let base_path = json
+            .get("base_path")
+            .and_then(|v| v.as_str())
+            .map(PathBuf::from);
 
-        let mut files = HashMap::new();
-        if let JsonValue::Object(files_obj) = files_json {
-            for (path_str, file_data) in files_obj {
-                let path = PathBuf::from(path_str);
+        let default_name = json.get("name").and_then(|v| v.as_str()).map(String::from);
 
-                let contents =
-                    if let Some(content_str) = file_data.get("contents").and_then(|v| v.as_str()) {
+        // Check if this is the old flat format with a "files" key
+        if let Some(files_json) = json.get("files") {
+            // Legacy flat format
+            let mut files = HashMap::new();
+            if let JsonValue::Object(files_obj) = files_json {
+                for (path_str, file_data) in files_obj {
+                    let path = PathBuf::from(path_str);
+
+                    let contents = if let Some(content_str) =
+                        file_data.get("contents").and_then(|v| v.as_str())
+                    {
                         // Direct UTF-8 string
                         content_str.as_bytes().to_vec()
                     } else if let Some(bytes_array) =
@@ -359,34 +531,48 @@ impl Quill {
                         return Err(format!("Invalid contents for file '{}'", path_str).into());
                     };
 
-                let is_dir = file_data
-                    .get("is_dir")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
+                    let is_dir = file_data
+                        .get("is_dir")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
 
-                files.insert(
-                    path.clone(),
-                    FileEntry {
-                        contents,
-                        path,
-                        is_dir,
-                    },
-                );
+                    files.insert(
+                        path.clone(),
+                        FileEntry {
+                            contents,
+                            path,
+                            is_dir,
+                        },
+                    );
+                }
+            } else {
+                return Err("'files' field must be an object".into());
             }
+
+            // Create Quill from the flat tree
+            Self::from_tree(files, base_path, default_name)
         } else {
-            return Err("'files' field must be an object".into());
+            // New tree format - the root JSON object contains the file tree directly
+            // Create a virtual root directory containing all the files
+            let mut root_files = HashMap::new();
+
+            if let JsonValue::Object(obj) = &json {
+                for (key, value) in obj {
+                    // Skip metadata fields
+                    if key == "name" || key == "base_path" {
+                        continue;
+                    }
+                    root_files.insert(key.clone(), FileTreeNode::from_json_value(value)?);
+                }
+            } else {
+                return Err("JSON root must be an object".into());
+            }
+
+            let root = FileTreeNode::Directory { files: root_files };
+
+            // Create Quill from the tree structure
+            Self::from_tree_structure(root, base_path, default_name)
         }
-
-        // Extract optional base_path and name from JSON
-        let base_path = json
-            .get("base_path")
-            .and_then(|v| v.as_str())
-            .map(PathBuf::from);
-
-        let default_name = json.get("name").and_then(|v| v.as_str()).map(String::from);
-
-        // Create Quill from the file tree
-        Self::from_tree(files, base_path, default_name)
     }
 
     /// Recursively load all files from a directory into memory
@@ -1044,9 +1230,107 @@ template = "template.md"
 
         let result = Quill::from_json(json_str);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Missing 'files' field"));
+        // The error message changed since we now support tree structure
+        // It will fail because there's no Quill.toml in the tree
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_from_json_tree_structure() {
+        // Test the new tree structure format
+        let json_str = r#"{
+            "name": "test-tree-json",
+            "base_path": "/test",
+            "Quill.toml": {
+                "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+            },
+            "glue.typ": {
+                "contents": "= Test Glue\n\nTree structure content."
+            }
+        }"#;
+
+        let quill = Quill::from_json(json_str).unwrap();
+
+        assert_eq!(quill.name, "test-tree-json");
+        assert_eq!(quill.base_path, PathBuf::from("/test"));
+        assert!(quill.glue_template.contains("Tree structure content"));
+        assert!(quill.metadata.contains_key("backend"));
+    }
+
+    #[test]
+    fn test_from_json_nested_tree_structure() {
+        // Test nested directories in tree structure
+        let json_str = r#"{
+            "Quill.toml": {
+                "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+            },
+            "glue.typ": {
+                "contents": "glue"
+            },
+            "src": {
+                "files": {
+                    "main.rs": {
+                        "contents": "fn main() {}"
+                    },
+                    "lib.rs": {
+                        "contents": "// lib"
+                    }
+                }
+            }
+        }"#;
+
+        let quill = Quill::from_json(json_str).unwrap();
+
+        assert_eq!(quill.name, "nested-test");
+        // Verify nested files are accessible
+        assert!(quill.file_exists("src/main.rs"));
+        assert!(quill.file_exists("src/lib.rs"));
+
+        let main_rs = quill.get_file("src/main.rs").unwrap();
+        assert_eq!(main_rs, b"fn main() {}");
+    }
+
+    #[test]
+    fn test_from_tree_structure_direct() {
+        // Test using from_tree_structure directly
+        let mut root_files = HashMap::new();
+
+        root_files.insert(
+            "Quill.toml".to_string(),
+            FileTreeNode::File {
+                contents:
+                    b"[Quill]\nname = \"direct-tree\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                        .to_vec(),
+            },
+        );
+
+        root_files.insert(
+            "glue.typ".to_string(),
+            FileTreeNode::File {
+                contents: b"glue content".to_vec(),
+            },
+        );
+
+        // Add a nested directory
+        let mut src_files = HashMap::new();
+        src_files.insert(
+            "main.rs".to_string(),
+            FileTreeNode::File {
+                contents: b"fn main() {}".to_vec(),
+            },
+        );
+
+        root_files.insert(
+            "src".to_string(),
+            FileTreeNode::Directory { files: src_files },
+        );
+
+        let root = FileTreeNode::Directory { files: root_files };
+
+        let quill = Quill::from_tree_structure(root, None, None).unwrap();
+
+        assert_eq!(quill.name, "direct-tree");
+        assert!(quill.file_exists("src/main.rs"));
+        assert!(quill.file_exists("glue.typ"));
     }
 }
