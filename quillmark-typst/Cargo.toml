@@ -32,7 +32,6 @@ tempfile = { workspace = true }
 default = ["native"]
 native = ["typst-kit/packages", "typst-kit/embed-fonts", "dep:dirs"]
 # Opt-in: embed a default fallback font (Roboto Condensed) into the typst backend
-# When enabled, the crate will include `assets/fonts/RobotoCondensed-Regular.ttf`
-# at compile time and register it ahead of system fonts and quill asset fonts.
+# When enabled, the crate will include `assets/fonts/RobotoCondensed-VariableFont_wght.ttf`
 embed-default-font = []
 
