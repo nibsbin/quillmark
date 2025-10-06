@@ -78,6 +78,10 @@ pub struct Diagnostic {
 
 Map external errors (MiniJinja, Typst) to preserve context.
 
+## Implmentation Philosophy
+
+- Do not worry about backwards compatibility. This is a new project.
+
 ## Reference
 
 - `designs/` - Complete architecture, workflows, specs
