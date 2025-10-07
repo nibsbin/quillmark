@@ -43,7 +43,7 @@ fn test_process_web_input_quill_from_json() {
     let quill_core =
         quillmark_core::Quill::from_json(&json_str).expect("core from_json should succeed");
 
-    let mut engine = quillmark::Quillmark::new();
+    let mut engine = quillmark::QuillmarkEngine::new();
     engine.register_quill(quill_core.clone());
     let workflow = engine.load(&quill_core).expect("failed to load workflow");
     let render_result = workflow.render(&markdown, None).expect("render failed");

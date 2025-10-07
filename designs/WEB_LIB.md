@@ -54,7 +54,7 @@ The `@quillmark/web` library will provide a WebAssembly-based TypeScript wrapper
 
 ### Functional Requirements
 
-1. **API Parity**: Expose equivalent functionality to the Rust `Quillmark` high-level API
+1. **API Parity**: Expose equivalent functionality to the Rust `QuillmarkEngine` high-level API
 2. **Type Safety**: Full TypeScript type definitions with comprehensive intellisense
 3. **Ergonomic API**: JavaScript-idiomatic patterns (Promises, async/await, builders)
 4. **Format Support**: PDF and SVG output formats (matching Typst backend capabilities)

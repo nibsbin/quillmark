@@ -8,22 +8,22 @@
 //!
 //! High-level engine for orchestrating backends and quills.
 //!
-//! [`Quillmark`] manages the registration of backends and quills, and provides
+//! [`QuillmarkEngine`] manages the registration of backends and quills, and provides
 //! a convenient way to create workflows. Backends are automatically registered
 //! based on enabled crate features.
 //!
 //! ## Backend Auto-Registration
 //!
-//! When a [`Quillmark`] engine is created with [`Quillmark::new`], it automatically
+//! When a [`QuillmarkEngine`] engine is created with [`QuillmarkEngine::new`], it automatically
 //! registers all backends based on enabled features:
 //!
 //! - **typst** (default) - Typst backend for PDF/SVG rendering
 //!
 //! ## Workflow (Engine Level)
 //!
-//! 1. Create an engine with [`Quillmark::new`]
-//! 2. Register quills with [`Quillmark::register_quill()`]
-//! 3. Load workflows with [`Quillmark::load()`]
+//! 1. Create an engine with [`QuillmarkEngine::new`]
+//! 2. Register quills with [`QuillmarkEngine::register_quill()`]
+//! 3. Load workflows with [`QuillmarkEngine::load()`]
 //! 4. Render documents using the workflow
 //!
 //! ## Examples
@@ -31,10 +31,10 @@
 //! ### Basic Usage
 //!
 //! ```no_run
-//! use quillmark::{Quillmark, Quill, OutputFormat};
+//! use quillmark::{QuillmarkEngine, Quill, OutputFormat};
 //!
 //! // Step 1: Create engine with auto-registered backends
-//! let mut engine = Quillmark::new();
+//! let mut engine = QuillmarkEngine::new();
 //!
 //! // Step 2: Create and register quills
 //! let quill = Quill::from_path("path/to/quill").unwrap();
@@ -50,8 +50,8 @@
 //! ### Loading by Reference
 //!
 //! ```no_run
-//! # use quillmark::{Quillmark, Quill};
-//! # let mut engine = Quillmark::new();
+//! # use quillmark::{QuillmarkEngine, Quill};
+//! # let mut engine = QuillmarkEngine::new();
 //! let quill = Quill::from_path("path/to/quill").unwrap();
 //! engine.register_quill(quill.clone());
 //!
@@ -65,8 +65,8 @@
 //! ### Inspecting Engine State
 //!
 //! ```no_run
-//! # use quillmark::Quillmark;
-//! # let engine = Quillmark::new();
+//! # use quillmark::QuillmarkEngine;
+//! # let engine = QuillmarkEngine::new();
 //! println!("Available backends: {:?}", engine.registered_backends());
 //! println!("Registered quills: {:?}", engine.registered_quills());
 //! ```
@@ -94,8 +94,8 @@
 //! ### Basic Rendering
 //!
 //! ```no_run
-//! # use quillmark::{Quillmark, OutputFormat};
-//! # let mut engine = Quillmark::new();
+//! # use quillmark::{QuillmarkEngine, OutputFormat};
+//! # let mut engine = QuillmarkEngine::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
 //! let workflow = engine.load("my-quill").unwrap();
@@ -116,8 +116,8 @@
 //! ### Dynamic Assets (Builder Pattern)
 //!
 //! ```no_run
-//! # use quillmark::{Quillmark, OutputFormat};
-//! # let mut engine = Quillmark::new();
+//! # use quillmark::{QuillmarkEngine, OutputFormat};
+//! # let mut engine = QuillmarkEngine::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
 //! let workflow = engine.load("my-quill").unwrap()
@@ -130,8 +130,8 @@
 //! ### Dynamic Fonts (Builder Pattern)
 //!
 //! ```no_run
-//! # use quillmark::{Quillmark, OutputFormat};
-//! # let mut engine = Quillmark::new();
+//! # use quillmark::{QuillmarkEngine, OutputFormat};
+//! # let mut engine = QuillmarkEngine::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
 //! let workflow = engine.load("my-quill").unwrap()
@@ -144,8 +144,8 @@
 //! ### Inspecting Workflow Properties
 //!
 //! ```no_run
-//! # use quillmark::Quillmark;
-//! # let mut engine = Quillmark::new();
+//! # use quillmark::QuillmarkEngine;
+//! # let mut engine = QuillmarkEngine::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
 //! let workflow = engine.load("my-quill").unwrap();
@@ -193,13 +193,13 @@ impl<'a> From<&'a std::borrow::Cow<'a, str>> for QuillRef<'a> {
 }
 
 /// High-level engine for orchestrating backends and quills. See [module docs](self) for usage patterns.
-pub struct Quillmark {
+pub struct QuillmarkEngine {
     backends: HashMap<String, Box<dyn Backend>>,
     quills: HashMap<String, Quill>,
 }
 
-impl Quillmark {
-    /// Create a new Quillmark engine with auto-registered backends based on enabled features.
+impl QuillmarkEngine {
+    /// Create a new QuillmarkEngine with auto-registered backends based on enabled features.
     pub fn new() -> Self {
         #[allow(unused_mut)]
         let mut backends: HashMap<String, Box<dyn Backend>> = HashMap::new();
@@ -289,7 +289,7 @@ impl Quillmark {
     }
 }
 
-impl Default for Quillmark {
+impl Default for QuillmarkEngine {
     fn default() -> Self {
         Self::new()
     }
@@ -304,7 +304,7 @@ pub struct Workflow {
 }
 
 impl Workflow {
-    /// Create a new Workflow with the specified backend and quill. Usually called via [`crate::orchestration::Quillmark::load`].
+    /// Create a new Workflow with the specified backend and quill. Usually called via [`crate::orchestration::QuillmarkEngine::load`].
     pub fn new(backend: Box<dyn Backend>, quill: Quill) -> Result<Self, RenderError> {
         // Since Quill::from_path() now automatically validates, we don't need to validate again
         Ok(Self {

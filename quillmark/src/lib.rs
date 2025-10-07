@@ -14,7 +14,7 @@
 //!
 //! ## Core Components
 //!
-//! - [`Quillmark`] - High-level engine for managing backends and quills
+//! - [`QuillmarkEngine`] - High-level engine for managing backends and quills
 //! - [`Workflow`] - Sealed rendering API for executing the render pipeline
 //! - [`QuillRef`] - Ergonomic references to quills (by name or object)
 //! - [`Quill`] - Template bundle containing glue templates and assets
@@ -22,10 +22,10 @@
 //! ## Quick Start
 //!
 //! ```no_run
-//! use quillmark::{Quillmark, Quill, OutputFormat};
+//! use quillmark::{QuillmarkEngine, Quill, OutputFormat};
 //!
 //! // Create engine with auto-registered backends
-//! let mut engine = Quillmark::new();
+//! let mut engine = QuillmarkEngine::new();
 //!
 //! // Load and register a quill template
 //! let quill = Quill::from_path("path/to/quill").unwrap();
@@ -49,8 +49,8 @@
 //! Workflows support adding runtime assets through a builder pattern:
 //!
 //! ```no_run
-//! # use quillmark::{Quillmark, Quill, OutputFormat};
-//! # let mut engine = Quillmark::new();
+//! # use quillmark::{QuillmarkEngine, Quill, OutputFormat};
+//! # let mut engine = QuillmarkEngine::new();
 //! # let quill = Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
 //! let workflow = engine.load("my-quill").unwrap()
@@ -68,7 +68,7 @@
 //!
 //! This crate re-exports commonly used types from `quillmark-core` for convenience.
 
-// Re-export all core types for backward compatibility
+// Re-export all core types for convenience
 pub use quillmark_core::{
     decompose, Artifact, Backend, Diagnostic, Glue, Location, OutputFormat, ParsedDocument, Quill,
     RenderError, RenderResult, Severity, TemplateError, BODY_FIELD,
@@ -77,5 +77,5 @@ pub use quillmark_core::{
 // Declare orchestration module
 pub mod orchestration;
 
-// Re-export types from orchestration module for backward compatibility
-pub use orchestration::{QuillRef, Quillmark, Workflow};
+// Re-export types from orchestration module
+pub use orchestration::{QuillRef, QuillmarkEngine, Workflow};

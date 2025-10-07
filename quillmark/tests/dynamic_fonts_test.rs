@@ -1,9 +1,9 @@
-use quillmark::{Quill, Quillmark, RenderError};
+use quillmark::{Quill, QuillmarkEngine, RenderError};
 use quillmark_fixtures::resource_path;
 
 #[test]
 fn test_with_font_basic() {
-    let mut engine = Quillmark::new();
+    let mut engine = QuillmarkEngine::new();
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     // Create some dummy font data
     let font_data = vec![1, 2, 3, 4, 5];
@@ -19,7 +19,7 @@ fn test_with_font_basic() {
 
 #[test]
 fn test_with_font_collision() {
-    let mut engine = Quillmark::new();
+    let mut engine = QuillmarkEngine::new();
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
@@ -38,7 +38,7 @@ fn test_with_font_collision() {
 
 #[test]
 fn test_with_fonts_multiple() {
-    let mut engine = Quillmark::new();
+    let mut engine = QuillmarkEngine::new();
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
@@ -58,7 +58,7 @@ fn test_with_fonts_multiple() {
 
 #[test]
 fn test_clear_fonts() {
-    let mut engine = Quillmark::new();
+    let mut engine = QuillmarkEngine::new();
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
@@ -82,7 +82,7 @@ fn test_clear_fonts() {
 
 #[test]
 fn test_with_font_and_asset_together() {
-    let mut engine = Quillmark::new();
+    let mut engine = QuillmarkEngine::new();
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
@@ -98,7 +98,7 @@ fn test_with_font_and_asset_together() {
 
 #[test]
 fn test_dynamic_font_names() {
-    let mut engine = Quillmark::new();
+    let mut engine = QuillmarkEngine::new();
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
@@ -119,7 +119,7 @@ fn test_dynamic_font_names() {
 fn test_with_real_font_file() {
     use std::fs;
 
-    let mut engine = Quillmark::new();
+    let mut engine = QuillmarkEngine::new();
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 

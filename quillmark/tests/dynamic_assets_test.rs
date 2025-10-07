@@ -1,9 +1,9 @@
-use quillmark::{Quill, Quillmark, RenderError};
+use quillmark::{Quill, QuillmarkEngine, RenderError};
 use quillmark_fixtures::resource_path;
 
 #[test]
 fn test_with_asset_basic() {
-    let mut engine = Quillmark::new();
+    let mut engine = QuillmarkEngine::new();
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     let taro_picture = std::fs::read(resource_path("taro.png")).unwrap();
     engine.register_quill(quill);
@@ -18,7 +18,7 @@ fn test_with_asset_basic() {
 
 #[test]
 fn test_with_asset_collision() {
-    let mut engine = Quillmark::new();
+    let mut engine = QuillmarkEngine::new();
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
@@ -37,7 +37,7 @@ fn test_with_asset_collision() {
 
 #[test]
 fn test_with_assets_multiple() {
-    let mut engine = Quillmark::new();
+    let mut engine = QuillmarkEngine::new();
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
@@ -57,7 +57,7 @@ fn test_with_assets_multiple() {
 
 #[test]
 fn test_clear_assets() {
-    let mut engine = Quillmark::new();
+    let mut engine = QuillmarkEngine::new();
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
