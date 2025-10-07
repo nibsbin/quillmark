@@ -15,7 +15,7 @@ const SMALL_QUILL_JSON: &str = r#"{
 #[wasm_bindgen_test]
 fn engine_register_and_render() {
     // Create engine
-    let mut engine = Quillmark::create();
+    let mut engine = Quillmark::new();
 
     // Register quill
     engine
