@@ -134,16 +134,7 @@ impl From<quillmark_core::Artifact> for Artifact {
 pub struct RenderResult {
     pub artifacts: Vec<Artifact>,
     pub warnings: Vec<Diagnostic>,
-    pub metadata: RenderMetadata,
-}
-
-/// Metadata about the render operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RenderMetadata {
     pub render_time_ms: f64,
-    pub backend: String,
-    pub quill_name: String,
 }
 
 /// Quill metadata
@@ -171,16 +162,17 @@ pub struct QuillMetadata {
 pub struct RenderOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<OutputFormat>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub assets: Option<std::collections::HashMap<String, Vec<u8>>>,
 }
 
-/// Engine creation options
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EngineOptions {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub enable_cache: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub max_cache_size: Option<usize>,
+impl Default for RenderOptions {
+    fn default() -> Self {
+        RenderOptions {
+            format: Some(OutputFormat::Pdf),
+            assets: None,
+        }
+    }
 }
 
 #[cfg(test)]

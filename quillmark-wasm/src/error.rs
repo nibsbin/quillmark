@@ -1,47 +1,30 @@
 //! Error types for the WASM API
 
-use crate::types::Diagnostic;
+use crate::types::{Diagnostic, Location};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
-
-/// Error kind for categorizing errors
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ErrorKind {
-    Render,
-    Validation,
-    Network,
-    System,
-}
 
 /// Error type for Quillmark operations
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuillmarkError {
-    pub kind: ErrorKind,
     pub message: String,
-    pub diagnostics: Vec<Diagnostic>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub location: Option<Location>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub diagnostics: Option<Vec<Diagnostic>>,
 }
 
 impl QuillmarkError {
-    pub fn new(kind: ErrorKind, message: String, diagnostics: Vec<Diagnostic>) -> Self {
+    pub fn new(message: String, location: Option<Location>, hint: Option<String>) -> Self {
         Self {
-            kind,
             message,
-            diagnostics,
+            location,
+            hint,
+            diagnostics: None,
         }
-    }
-
-    pub fn render(message: String, diagnostics: Vec<Diagnostic>) -> Self {
-        Self::new(ErrorKind::Render, message, diagnostics)
-    }
-
-    pub fn validation(message: String, diagnostics: Vec<Diagnostic>) -> Self {
-        Self::new(ErrorKind::Validation, message, diagnostics)
-    }
-
-    pub fn system(message: String) -> Self {
-        Self::new(ErrorKind::System, message, vec![])
     }
 
     /// Convert to JsValue for throwing
@@ -54,32 +37,45 @@ impl From<quillmark_core::RenderError> for QuillmarkError {
     fn from(error: quillmark_core::RenderError) -> Self {
         use quillmark_core::RenderError;
 
-        let (message, diagnostics) = match error {
-            RenderError::CompilationFailed(count, diags) => (
-                format!("Compilation failed with {} error(s)", count),
-                diags.into_iter().map(|d| d.into()).collect(),
-            ),
-            RenderError::TemplateFailed { diag, .. } => (diag.message.clone(), vec![diag.into()]),
-            RenderError::InvalidFrontmatter { diag, .. } => {
-                (diag.message.clone(), vec![diag.into()])
-            }
-            RenderError::EngineCreation { diag, .. } => (diag.message.clone(), vec![diag.into()]),
-            other => (other.to_string(), vec![]),
-        };
-
-        QuillmarkError::render(message, diagnostics)
+        match error {
+            RenderError::CompilationFailed(count, diags) => QuillmarkError {
+                message: format!("Compilation failed with {} error(s)", count),
+                location: None,
+                hint: None,
+                diagnostics: Some(diags.into_iter().map(|d| d.into()).collect()),
+            },
+            RenderError::TemplateFailed { diag, .. } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            RenderError::InvalidFrontmatter { diag, .. } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            RenderError::EngineCreation { diag, .. } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            other => QuillmarkError::new(other.to_string(), None, None),
+        }
     }
 }
 
 impl From<String> for QuillmarkError {
     fn from(message: String) -> Self {
-        QuillmarkError::system(message)
+        QuillmarkError::new(message, None, None)
     }
 }
 
 impl From<&str> for QuillmarkError {
     fn from(message: &str) -> Self {
-        QuillmarkError::system(message.to_string())
+        QuillmarkError::new(message.to_string(), None, None)
     }
 }
 

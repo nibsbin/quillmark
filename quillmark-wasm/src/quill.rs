@@ -22,7 +22,12 @@ impl Quill {
     #[wasm_bindgen(js_name = fromJson)]
     pub fn from_json(json_str: &str) -> Result<Quill, JsValue> {
         let inner = quillmark_core::Quill::from_json(json_str).map_err(|e| {
-            QuillmarkError::system(format!("Failed to create Quill from JSON: {}", e)).to_js_value()
+            QuillmarkError::new(
+                format!("Failed to create Quill from JSON: {}", e),
+                None,
+                None,
+            )
+            .to_js_value()
         })?;
 
         Ok(Quill { inner })
@@ -47,12 +52,17 @@ impl Quill {
         // Convert JS object to JSON string
         let json_str = js_sys::JSON::stringify(&files_obj)
             .map_err(|e| {
-                QuillmarkError::system(format!("Failed to stringify files object: {:?}", e))
-                    .to_js_value()
+                QuillmarkError::new(
+                    format!("Failed to stringify files object: {:?}", e),
+                    None,
+                    None,
+                )
+                .to_js_value()
             })?
             .as_string()
             .ok_or_else(|| {
-                QuillmarkError::system("Failed to convert JSON to string".to_string()).to_js_value()
+                QuillmarkError::new("Failed to convert JSON to string".to_string(), None, None)
+                    .to_js_value()
             })?;
 
         // Call from_json with the stringified object
@@ -62,8 +72,7 @@ impl Quill {
     /// Validate Quill structure (throws on error)
     pub fn validate(&self) -> Result<(), JsValue> {
         self.inner.validate().map_err(|e| {
-            QuillmarkError::validation(format!("Quill validation failed: {}", e), vec![])
-                .to_js_value()
+            QuillmarkError::new(format!("Quill validation failed: {}", e), None, None).to_js_value()
         })
     }
 
@@ -116,7 +125,8 @@ impl Quill {
         };
 
         serde_wasm_bindgen::to_value(&metadata).map_err(|e| {
-            QuillmarkError::system(format!("Failed to serialize metadata: {}", e)).to_js_value()
+            QuillmarkError::new(format!("Failed to serialize metadata: {}", e), None, None)
+                .to_js_value()
         })
     }
 

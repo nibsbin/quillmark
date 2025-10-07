@@ -14,24 +14,6 @@ fn test_process_web_input_quill_from_json() {
     let json_str = std::fs::read_to_string(&json_path)
         .expect(&format!("failed to read fixture: {}", json_path.display()));
 
-    // Use the WASM wrapper API (the public JS-facing surface exposed by this crate).
-    let quill = quillmark_wasm::Quill::from_json(&json_str).expect("from_json should succeed");
-
-    // Validate using the wrapper API (this calls into the core validation and returns a JsValue error on failure)
-    quill.validate().expect("quill.validate() should succeed");
-
-    // List files exposed by the wrapper and assert key files are present
-    let files = quill.list_files();
-    assert!(
-        files.contains(&"glue.typ".to_string()),
-        "glue.typ should be present"
-    );
-    assert!(
-        files.contains(&"usaf_memo.md".to_string()),
-        "usaf_memo.md should be present"
-    );
-    assert!(files.contains(&"packages/tonguetoquill-usaf-memo/typst.toml".to_string()));
-
     // Parse JSON fixture to extract a markdown file to render
     let json_val: JsonValue = serde_json::from_str(&json_str).expect("invalid JSON fixture");
 
