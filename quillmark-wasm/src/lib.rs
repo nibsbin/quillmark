@@ -5,13 +5,11 @@
 //! This crate provides a JavaScript/TypeScript API for using Quillmark in web browsers,
 //! Node.js, and other JavaScript environments.
 //!
-//! ## API Structure
+//! ## API
 //!
-//! The WASM API provides three main classes:
+//! The WASM API provides a single class for all operations:
 //!
-//! - [`QuillmarkEngine`] - Engine for managing backends and Quills
-//! - [`Quill`] - Represents a Quill template bundle
-//! - [`Workflow`] - Rendering workflow for a specific Quill
+//! - [`Quillmark`] - Engine for registering Quills and rendering markdown
 //!
 //! ## Error Handling
 //!
@@ -26,10 +24,14 @@ mod quill;
 mod types;
 mod workflow;
 
-pub use engine::QuillmarkEngine;
+pub use engine::Quillmark;
 pub use error::QuillmarkError;
-pub use quill::Quill;
 pub use types::*;
+
+// Legacy exports for backward compatibility (not part of public API)
+#[doc(hidden)]
+pub use quill::Quill;
+#[doc(hidden)]
 pub use workflow::Workflow;
 
 /// Initialize the WASM module with panic hooks for better error messages

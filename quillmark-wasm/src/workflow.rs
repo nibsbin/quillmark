@@ -1,7 +1,7 @@
 //! Workflow class for rendering documents
 
 use crate::error::QuillmarkError;
-use crate::types::{OutputFormat, RenderMetadata, RenderOptions, RenderResult};
+use crate::types::{OutputFormat, RenderOptions, RenderResult};
 use wasm_bindgen::prelude::*;
 
 // Cross-platform helper to get current time in milliseconds as f64.
@@ -37,10 +37,13 @@ impl Workflow {
 
         // Parse options
         let options: RenderOptions = if options_js.is_undefined() || options_js.is_null() {
-            RenderOptions { format: None }
+            RenderOptions {
+                format: None,
+                assets: None,
+            }
         } else {
             serde_wasm_bindgen::from_value(options_js).map_err(|e| {
-                QuillmarkError::system(format!("Failed to parse render options: {}", e))
+                QuillmarkError::new(format!("Failed to parse render options: {}", e), None, None)
                     .to_js_value()
             })?
         };
@@ -60,15 +63,12 @@ impl Workflow {
         let render_result = RenderResult {
             artifacts: result.artifacts.into_iter().map(|a| a.into()).collect(),
             warnings: result.warnings.into_iter().map(|d| d.into()).collect(),
-            metadata: RenderMetadata {
-                render_time_ms: elapsed_ms,
-                backend: self.backend_id.clone(),
-                quill_name: self.quill_name.clone(),
-            },
+            render_time_ms: elapsed_ms,
         };
 
         serde_wasm_bindgen::to_value(&render_result).map_err(|e| {
-            QuillmarkError::system(format!("Failed to serialize result: {}", e)).to_js_value()
+            QuillmarkError::new(format!("Failed to serialize result: {}", e), None, None)
+                .to_js_value()
         })
     }
 
@@ -79,10 +79,13 @@ impl Workflow {
 
         // Parse options
         let options: RenderOptions = if options_js.is_undefined() || options_js.is_null() {
-            RenderOptions { format: None }
+            RenderOptions {
+                format: None,
+                assets: None,
+            }
         } else {
             serde_wasm_bindgen::from_value(options_js).map_err(|e| {
-                QuillmarkError::system(format!("Failed to parse render options: {}", e))
+                QuillmarkError::new(format!("Failed to parse render options: {}", e), None, None)
                     .to_js_value()
             })?
         };
@@ -102,15 +105,12 @@ impl Workflow {
         let render_result = RenderResult {
             artifacts: result.artifacts.into_iter().map(|a| a.into()).collect(),
             warnings: result.warnings.into_iter().map(|d| d.into()).collect(),
-            metadata: RenderMetadata {
-                render_time_ms: elapsed_ms,
-                backend: self.backend_id.clone(),
-                quill_name: self.quill_name.clone(),
-            },
+            render_time_ms: elapsed_ms,
         };
 
         serde_wasm_bindgen::to_value(&render_result).map_err(|e| {
-            QuillmarkError::system(format!("Failed to serialize result: {}", e)).to_js_value()
+            QuillmarkError::new(format!("Failed to serialize result: {}", e), None, None)
+                .to_js_value()
         })
     }
 
@@ -126,7 +126,7 @@ impl Workflow {
     #[wasm_bindgen(js_name = withAsset)]
     pub fn with_asset(self, filename: String, bytes: Vec<u8>) -> Result<Workflow, JsValue> {
         let inner = self.inner.with_asset(filename, bytes).map_err(|e| {
-            QuillmarkError::system(format!("Failed to add asset: {}", e)).to_js_value()
+            QuillmarkError::new(format!("Failed to add asset: {}", e), None, None).to_js_value()
         })?;
 
         Ok(Workflow {
@@ -141,13 +141,14 @@ impl Workflow {
     pub fn with_assets(self, assets_js: JsValue) -> Result<Workflow, JsValue> {
         let assets: std::collections::HashMap<String, Vec<u8>> =
             serde_wasm_bindgen::from_value(assets_js).map_err(|e| {
-                QuillmarkError::system(format!("Failed to parse assets: {}", e)).to_js_value()
+                QuillmarkError::new(format!("Failed to parse assets: {}", e), None, None)
+                    .to_js_value()
             })?;
 
         let mut inner = self.inner;
         for (filename, bytes) in assets {
             inner = inner.with_asset(filename, bytes).map_err(|e| {
-                QuillmarkError::system(format!("Failed to add asset: {}", e)).to_js_value()
+                QuillmarkError::new(format!("Failed to add asset: {}", e), None, None).to_js_value()
             })?;
         }
 
@@ -172,7 +173,7 @@ impl Workflow {
     #[wasm_bindgen(js_name = withFont)]
     pub fn with_font(self, filename: String, bytes: Vec<u8>) -> Result<Workflow, JsValue> {
         let inner = self.inner.with_font(filename, bytes).map_err(|e| {
-            QuillmarkError::system(format!("Failed to add font: {}", e)).to_js_value()
+            QuillmarkError::new(format!("Failed to add font: {}", e), None, None).to_js_value()
         })?;
 
         Ok(Workflow {
@@ -187,13 +188,14 @@ impl Workflow {
     pub fn with_fonts(self, fonts_js: JsValue) -> Result<Workflow, JsValue> {
         let fonts: std::collections::HashMap<String, Vec<u8>> =
             serde_wasm_bindgen::from_value(fonts_js).map_err(|e| {
-                QuillmarkError::system(format!("Failed to parse fonts: {}", e)).to_js_value()
+                QuillmarkError::new(format!("Failed to parse fonts: {}", e), None, None)
+                    .to_js_value()
             })?;
 
         let mut inner = self.inner;
         for (filename, bytes) in fonts {
             inner = inner.with_font(filename, bytes).map_err(|e| {
-                QuillmarkError::system(format!("Failed to add font: {}", e)).to_js_value()
+                QuillmarkError::new(format!("Failed to add font: {}", e), None, None).to_js_value()
             })?;
         }
 

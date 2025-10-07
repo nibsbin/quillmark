@@ -1,61 +1,178 @@
-//! QuillmarkEngine class for managing Quills and rendering
+//! Quillmark WASM Engine - Simplified API
 
 use crate::error::QuillmarkError;
-use crate::quill::Quill;
-use crate::types::{EngineOptions, OutputFormat};
-use crate::workflow::Workflow;
+use crate::types::{RenderOptions, RenderResult};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
-/// Main engine for managing Quills and rendering
+// Cross-platform helper to get current time in milliseconds as f64.
+fn now_ms() -> f64 {
+    #[cfg(target_arch = "wasm32")]
+    {
+        js_sys::Date::now()
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let dur = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+        dur.as_millis() as f64
+    }
+}
+
+/// Quillmark WASM Engine
+///
+/// Create once, register Quills, render markdown. That's it.
 #[wasm_bindgen]
-pub struct QuillmarkEngine {
+pub struct Quillmark {
     inner: quillmark::Quillmark,
     quills: HashMap<String, quillmark_core::Quill>,
 }
 
 #[wasm_bindgen]
-impl QuillmarkEngine {
-    /// Create a new engine instance
-    pub fn create(options_js: JsValue) -> Result<QuillmarkEngine, JsValue> {
-        // Parse options if provided
-        let _options: EngineOptions = if options_js.is_undefined() || options_js.is_null() {
-            EngineOptions {
-                enable_cache: None,
-                max_cache_size: None,
-            }
-        } else {
-            serde_wasm_bindgen::from_value(options_js).map_err(|e| {
-                QuillmarkError::system(format!("Failed to parse engine options: {}", e))
-                    .to_js_value()
-            })?
-        };
-
-        // Create engine with default backends
-        let inner = quillmark::Quillmark::new();
-
-        Ok(QuillmarkEngine {
-            inner,
+impl Quillmark {
+    /// Create a new Quillmark engine
+    #[wasm_bindgen]
+    pub fn create() -> Quillmark {
+        Quillmark {
+            inner: quillmark::Quillmark::new(),
             quills: HashMap::new(),
-        })
+        }
     }
 
-    /// Register a Quill by name
+    /// Register a Quill template bundle
+    ///
+    /// Accepts either a JSON string or a JsValue object representing the Quill file tree.
+    /// Validation happens automatically on registration.
     #[wasm_bindgen(js_name = registerQuill)]
-    pub fn register_quill(&mut self, quill: Quill) -> Result<(), JsValue> {
-        let inner_quill = quill.into_inner();
-        let name = inner_quill.name.clone();
+    pub fn register_quill(&mut self, name: &str, quill_json: JsValue) -> Result<(), JsValue> {
+        // Convert JsValue to JSON string
+        let json_str = if quill_json.is_string() {
+            quill_json.as_string().ok_or_else(|| {
+                QuillmarkError::new(
+                    "Failed to convert JsValue to string".to_string(),
+                    None,
+                    None,
+                )
+                .to_js_value()
+            })?
+        } else {
+            js_sys::JSON::stringify(&quill_json)
+                .map_err(|e| {
+                    QuillmarkError::new(
+                        format!("Failed to serialize Quill JSON: {:?}", e),
+                        None,
+                        Some("Ensure the Quill object has the correct structure".to_string()),
+                    )
+                    .to_js_value()
+                })?
+                .as_string()
+                .ok_or_else(|| {
+                    QuillmarkError::new("Failed to convert JSON to string".to_string(), None, None)
+                        .to_js_value()
+                })?
+        };
 
-        self.inner.register_quill(inner_quill.clone());
-        self.quills.insert(name, inner_quill);
+        // Parse and validate Quill
+        let quill = quillmark_core::Quill::from_json(&json_str).map_err(|e| {
+            QuillmarkError::new(
+                format!("Failed to parse Quill: {}", e),
+                None,
+                Some("Ensure Quill.toml exists and is valid TOML".to_string()),
+            )
+            .to_js_value()
+        })?;
+
+        // Validate
+        quill.validate().map_err(|e| {
+            QuillmarkError::new(format!("Quill validation failed: {}", e), None, None).to_js_value()
+        })?;
+
+        // Register
+        self.inner.register_quill(quill.clone());
+        self.quills.insert(name.to_string(), quill);
 
         Ok(())
     }
 
-    /// Unregister a Quill
-    #[wasm_bindgen(js_name = unregisterQuill)]
-    pub fn unregister_quill(&mut self, name: &str) {
-        self.quills.remove(name);
+    /// Process markdown through template engine (debugging)
+    ///
+    /// Returns template source code (Typst, LaTeX, etc.)
+    #[wasm_bindgen(js_name = renderGlue)]
+    pub fn render_glue(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
+        let workflow = self.inner.load(quill_name).map_err(|e| {
+            QuillmarkError::new(
+                format!("Quill '{}' not found: {}", quill_name, e),
+                None,
+                Some("Use registerQuill() before rendering".to_string()),
+            )
+            .to_js_value()
+        })?;
+
+        workflow
+            .process_glue(markdown)
+            .map_err(|e| QuillmarkError::from(e).to_js_value())
+    }
+
+    /// Render markdown to final artifacts (PDF, SVG, TXT)
+    #[wasm_bindgen]
+    pub fn render(
+        &mut self,
+        quill_name: &str,
+        markdown: &str,
+        options: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let opts: RenderOptions = if options.is_undefined() || options.is_null() {
+            RenderOptions::default()
+        } else {
+            serde_wasm_bindgen::from_value(options).map_err(|e| {
+                QuillmarkError::new(
+                    format!("Invalid render options: {}", e),
+                    None,
+                    Some("Check that format is 'pdf', 'svg', or 'txt'".to_string()),
+                )
+                .to_js_value()
+            })?
+        };
+
+        let mut workflow = self.inner.load(quill_name).map_err(|e| {
+            QuillmarkError::new(
+                format!("Quill '{}' not found: {}", quill_name, e),
+                None,
+                Some("Use registerQuill() before rendering".to_string()),
+            )
+            .to_js_value()
+        })?;
+
+        // Add assets if provided
+        if let Some(assets) = opts.assets {
+            for (filename, bytes) in assets {
+                workflow = workflow.with_asset(filename, bytes).map_err(|e| {
+                    QuillmarkError::new(format!("Failed to add asset: {}", e), None, None)
+                        .to_js_value()
+                })?;
+            }
+        }
+
+        let start = now_ms();
+
+        let output_format = opts.format.map(|f| f.into());
+        let result = workflow
+            .render(markdown, output_format)
+            .map_err(|e| QuillmarkError::from(e).to_js_value())?;
+
+        let render_result = RenderResult {
+            artifacts: result.artifacts.into_iter().map(Into::into).collect(),
+            warnings: result.warnings.into_iter().map(Into::into).collect(),
+            render_time_ms: now_ms() - start,
+        };
+
+        serde_wasm_bindgen::to_value(&render_result).map_err(|e| {
+            QuillmarkError::new(format!("Failed to serialize result: {}", e), None, None)
+                .to_js_value()
+        })
     }
 
     /// List registered Quill names
@@ -64,51 +181,9 @@ impl QuillmarkEngine {
         self.quills.keys().cloned().collect()
     }
 
-    /// Get details about a registered Quill
-    #[wasm_bindgen(js_name = getQuill)]
-    pub fn get_quill(&self, name: &str) -> Option<Quill> {
-        self.quills.get(name).map(|q| Quill::from_inner(q.clone()))
-    }
-
-    /// Load a workflow for rendering
-    #[wasm_bindgen(js_name = loadWorkflow)]
-    pub fn load_workflow(&mut self, quill_or_name: &str) -> Result<Workflow, JsValue> {
-        // Try to load by name
-        let workflow = self.inner.load(quill_or_name).map_err(|e| {
-            QuillmarkError::system(format!("Failed to load workflow: {}", e)).to_js_value()
-        })?;
-
-        let backend_id = workflow.backend_id().to_string();
-
-        Ok(Workflow::new(
-            workflow,
-            quill_or_name.to_string(),
-            backend_id,
-        ))
-    }
-
-    /// List available backends
-    #[wasm_bindgen(js_name = listBackends)]
-    pub fn list_backends(&self) -> Vec<String> {
-        self.inner
-            .registered_backends()
-            .into_iter()
-            .map(|s| s.to_string())
-            .collect()
-    }
-
-    /// Get supported formats for a backend
-    #[wasm_bindgen(js_name = getSupportedFormats)]
-    pub fn get_supported_formats(&self, _backend: &str) -> JsValue {
-        // For now, return the formats for the default backend (typst)
-        // This is a simplified implementation
-        let formats = vec![OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Txt];
-
-        serde_wasm_bindgen::to_value(&formats).unwrap_or(JsValue::NULL)
-    }
-
-    /// Dispose of the engine and free resources
-    pub fn dispose(&mut self) {
-        self.quills.clear();
+    /// Unregister a Quill (free memory)
+    #[wasm_bindgen(js_name = unregisterQuill)]
+    pub fn unregister_quill(&mut self, name: &str) {
+        self.quills.remove(name);
     }
 }
