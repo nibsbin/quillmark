@@ -287,8 +287,6 @@ pub struct Quill {
     pub glue_template: String,
     /// Quill-specific metadata
     pub metadata: HashMap<String, serde_yaml::Value>,
-    /// Base path for resolving relative paths
-    pub base_path: PathBuf,
     /// Name of the quill
     pub name: String,
     /// Glue template file name
@@ -336,7 +334,7 @@ impl Quill {
         let root = Self::load_directory_as_tree(path, path, &ignore)?;
 
         // Create Quill from the file tree
-        Self::from_tree(root, Some(path.to_path_buf()), Some(name))
+        Self::from_tree(root, Some(name))
     }
 
     /// Create a Quill from a tree structure
@@ -346,7 +344,7 @@ impl Quill {
     /// # Arguments
     ///
     /// * `root` - The root node of the file tree
-    /// * `base_path` - Optional base path for the Quill (defaults to "/")
+    /// * `default_name` - Optional default name (will be overridden by name in Quill.toml)
     /// * `default_name` - Optional default name (will be overridden by name in Quill.toml)
     ///
     /// # Errors
@@ -358,7 +356,6 @@ impl Quill {
     /// - Validation fails
     pub fn from_tree(
         root: FileTreeNode,
-        base_path: Option<PathBuf>,
         default_name: Option<String>,
     ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         // Read Quill.toml
@@ -469,7 +466,6 @@ impl Quill {
         let quill = Quill {
             glue_template: template_content,
             metadata,
-            base_path: base_path.unwrap_or_else(|| PathBuf::from("/")),
             name: quill_name,
             glue_file,
             template_file,
@@ -487,7 +483,7 @@ impl Quill {
     ///
     /// Parses a JSON string into an in-memory file tree and validates it. The
     /// precise JSON contract is documented in `quillmark-core/docs/JSON_CONTRACT.md`.
-    /// In brief: root object → file tree, optional `name`/`base_path` metadata,
+    /// In brief: root object → file tree, optional `name` metadata,
     /// optional legacy `files` wrapper is supported and merged.
     pub fn from_json(json_str: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         use serde_json::Value as JsonValue;
@@ -495,24 +491,19 @@ impl Quill {
         let json: JsonValue =
             serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
-        // Extract optional base_path and name from JSON
-        let base_path = json
-            .get("base_path")
-            .and_then(|v| v.as_str())
-            .map(PathBuf::from);
-
+        // Extract optional name from JSON
         let default_name = json.get("name").and_then(|v| v.as_str()).map(String::from);
 
         // Parse tree format - the root JSON object contains the file tree directly
         // Create a virtual root directory containing all the files.
         // Note: the root object is expected to contain file/directory entries
-        // directly. Reserved metadata keys `name` and `base_path` are skipped.
+        // directly. Reserved metadata key `name` is skipped.
         let mut root_files = HashMap::new();
 
         if let JsonValue::Object(obj) = &json {
             for (key, value) in obj {
                 // Skip metadata fields
-                if key == "name" || key == "base_path" {
+                if key == "name" {
                     continue;
                 }
                 root_files.insert(key.clone(), FileTreeNode::from_json_value(value)?);
@@ -524,7 +515,7 @@ impl Quill {
         let root = FileTreeNode::Directory { files: root_files };
 
         // Create Quill from the tree structure
-        Self::from_tree(root, base_path, default_name)
+        Self::from_tree(root, default_name)
     }
 
     /// Recursively load all files from a directory into a tree structure
@@ -585,21 +576,6 @@ impl Quill {
         let json_val = serde_json::to_value(toml_val)?;
         let yaml_val = serde_yaml::to_value(json_val)?;
         Ok(yaml_val)
-    }
-
-    /// Get the path to the assets directory
-    pub fn assets_path(&self) -> PathBuf {
-        self.base_path.join("assets")
-    }
-
-    /// Get the path to the packages directory
-    pub fn packages_path(&self) -> PathBuf {
-        self.base_path.join("packages")
-    }
-
-    /// Get the path to the glue file
-    pub fn glue_path(&self) -> PathBuf {
-        self.base_path.join(&self.glue_file)
     }
 
     /// Get the list of typst packages to download, if specified in Quill.toml
@@ -1059,13 +1035,12 @@ description = "A test quill from tree"
         let root = FileTreeNode::Directory { files: root_files };
 
         // Create Quill from tree
-        let quill = Quill::from_tree(root, Some(PathBuf::from("/test")), None).unwrap();
+        let quill = Quill::from_tree(root, Some("test-from-tree".to_string())).unwrap();
 
         // Validate the quill
         assert_eq!(quill.name, "test-from-tree");
         assert_eq!(quill.glue_file, "glue.typ");
         assert_eq!(quill.glue_template, glue_content);
-        assert_eq!(quill.base_path, PathBuf::from("/test"));
         assert!(quill.metadata.contains_key("backend"));
         assert!(quill.metadata.contains_key("description"));
     }
@@ -1108,7 +1083,7 @@ template = "template.md"
         let root = FileTreeNode::Directory { files: root_files };
 
         // Create Quill from tree
-        let quill = Quill::from_tree(root, None, None).unwrap();
+        let quill = Quill::from_tree(root, None).unwrap();
 
         // Validate template is loaded
         assert_eq!(quill.template_file, Some("template.md".to_string()));
@@ -1120,7 +1095,6 @@ template = "template.md"
         // Create JSON representation of a Quill using tree format
         let json_str = r#"{
             "name": "test-from-json",
-            "base_path": "/test/path",
             "Quill.toml": {
                 "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
             },
@@ -1134,7 +1108,6 @@ template = "template.md"
 
         // Validate the quill
         assert_eq!(quill.name, "test-from-json");
-        assert_eq!(quill.base_path, PathBuf::from("/test/path"));
         assert_eq!(quill.glue_file, "glue.typ");
         assert!(quill.glue_template.contains("Test Glue"));
         assert!(quill.metadata.contains_key("backend"));
@@ -1179,7 +1152,6 @@ template = "template.md"
         // Test the new tree structure format
         let json_str = r#"{
             "name": "test-tree-json",
-            "base_path": "/test",
             "Quill.toml": {
                 "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
             },
@@ -1191,7 +1163,6 @@ template = "template.md"
         let quill = Quill::from_json(json_str).unwrap();
 
         assert_eq!(quill.name, "test-tree-json");
-        assert_eq!(quill.base_path, PathBuf::from("/test"));
         assert!(quill.glue_template.contains("Tree structure content"));
         assert!(quill.metadata.contains_key("backend"));
     }
@@ -1266,7 +1237,7 @@ template = "template.md"
 
         let root = FileTreeNode::Directory { files: root_files };
 
-        let quill = Quill::from_tree(root, None, None).unwrap();
+        let quill = Quill::from_tree(root, None).unwrap();
 
         assert_eq!(quill.name, "direct-tree");
         assert!(quill.file_exists("src/main.rs"));

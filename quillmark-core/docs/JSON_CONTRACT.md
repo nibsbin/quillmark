@@ -1,56 +1,186 @@
 ## Quill JSON Contract
 
-Summary
-- Input to `Quill::from_json` (core) and the WASM wrapper `Quill.fromJson` (JS) is a JSON string whose root value MUST be an object.
-- The root object represents the Quill file tree. Two reserved top-level metadata keys are supported: `name` and `base_path`.
+### Summary
 
-Node shapes
-- File with UTF-8 string contents:
-  "path/to/file.txt": { "contents": "...utf-8 text..." }
+Input to `Quill::from_json` (core) and the WASM wrapper `Quill.fromJson` (JS) is a JSON string whose root value MUST be an object with a `files` key. An optional `metadata` key provides metadata overrides.
 
-- File with JSON-encoded bytes (use when embedding binary files into JSON):
-  "image.png": { "contents": [137,80,78,71, ...] }
+---
 
-- Directory using explicit `files` map:
-  "dir": { "files": { "a.txt": { "contents": "..." } } }
+### Structure
 
-- Directory using direct nested object (shorthand):
-  "dir": { "a.txt": { "contents": "..." }, "sub": { "files": { ... } } }
-
-Reserved keys
-- name (optional): a default name used if `Quill.toml` does not provide one.
-- base_path (optional): base path for resolving assets and packages.
-
-Validation
-- After parsing the file tree, the implementation validates the Quill (for example `Quill.toml` must exist and reference an existing glue file). Validation errors are returned as failures from `from_json`.
-
-Usage notes (JS / WASM)
-- The WASM wrapper `Quill.fromJson` expects a JSON string. Build a JS object matching this contract and call `JSON.stringify(quillObj)` before passing it into WASM.
-- When embedding binary files into JSON, convert a `Uint8Array` to an array of numeric bytes (e.g. `Array.from(uint8arr)`).
-- For runtime APIs that accept binary buffers directly (e.g. `withAsset`), pass `Uint8Array`/`Buffer` instead of JSON-encoding the bytes.
-
-Minimal example
+**Root object:**
 ```json
 {
-  "name": "my-quill",
-  "base_path": "/",
-  "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n" },
-  "glue.typ": { "contents": "= Template\n\n{{ body }}" }
+  "files": { ... },      // Required: file tree
+  "metadata": { ... }    // Optional: metadata overrides
 }
 ```
 
-Binary example (embed image)
+**Minimal example:**
 ```json
 {
-  "Quill.toml": { "contents": "..." },
-  "glue.typ": { "contents": "..." },
-  "assets": {
-    "logo.png": { "contents": [137,80,78,71, ...] }
+  "files": {
+    "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n" },
+    "glue.typ": { "contents": "= Template\n\n{{ body }}" }
   }
 }
 ```
 
-Implementation note
-- This contract is enforced by `quillmark-core::Quill::from_json` (parsing and merging) and by the WASM binding which exposes `Quill.fromJson` (JS name) that forwards to the same core parser.
+**With metadata:**
+```json
+{
+  "metadata": {
+    "name": "my-quill",
+    "version": "1.0.0"
+  },
+  "files": {
+    "Quill.toml": { "contents": "..." },
+    "glue.typ": { "contents": "..." },
+    "assets": {
+      "logo.png": { "contents": [137, 80, 78, 71, ...] }
+    }
+  }
+}
+```
 
-Keep this document short — it is the canonical contract referenced by core and wasm bindings.
+---
+
+### Node Types
+
+**File with UTF-8 string contents:**
+```json
+"file.txt": { "contents": "Hello, world!" }
+```
+
+**File with binary contents (byte array 0-255):**
+```json
+"image.png": { "contents": [137, 80, 78, 71, 13, 10, 26, 10, ...] }
+```
+
+**Directory (nested object):**
+```json
+"assets": {
+  "logo.png": { "contents": [...] },
+  "icon.svg": { "contents": "..." }
+}
+```
+
+**Empty directory:**
+```json
+"empty_dir": {}
+```
+
+---
+
+### Metadata Object (Optional)
+
+```json
+{
+  "name": "my-quill",              // Quill name (overrides Quill.toml)
+  "version": "1.0.0",              // Semantic version
+  "description": "...",            // Human-readable description
+  "author": "John Doe",            // Author name
+  "license": "MIT",                // License identifier
+  "tags": ["letter", "formal"]     // Tags for categorization
+}
+```
+
+All metadata fields are optional. If not provided, values are extracted from `Quill.toml` or use defaults.
+
+**Metadata priority (highest to lowest):**
+1. JSON `metadata` object
+2. `Quill.toml` `[Quill]` section
+3. Function arguments (`default_name`)
+4. Defaults
+
+---
+
+### Validation Rules
+
+1. Root MUST be an object with a `files` key
+2. `files` value MUST be an object
+3. `metadata` key is optional
+4. File nodes MUST have a `contents` key with:
+   - A string (UTF-8 text), OR
+   - An array of numbers 0-255 (binary)
+5. Directory nodes are objects without a `contents` key
+6. Empty objects represent empty directories
+7. After parsing, `Quill.toml` MUST exist and be valid
+8. Glue file referenced in `Quill.toml` MUST exist
+
+---
+
+### Usage Notes (JS / WASM)
+
+**Creating Quill from JS object:**
+```typescript
+const quillData = {
+  files: {
+    "Quill.toml": { contents: "[Quill]\nname = \"my-quill\"\n..." },
+    "glue.typ": { contents: "= Template\n\n{{ body }}" }
+  }
+};
+
+const quill = Quill.fromJson(JSON.stringify(quillData));
+```
+
+**Embedding binary files:**
+```typescript
+const imageBytes = new Uint8Array(await file.arrayBuffer());
+
+const quillData = {
+  files: {
+    "Quill.toml": { contents: "..." },
+    "glue.typ": { contents: "..." },
+    "assets": {
+      "logo.png": { contents: Array.from(imageBytes) }
+    }
+  }
+};
+```
+
+**Building from file uploads:**
+```typescript
+async function buildQuillFromUpload(files: File[]): Promise<object> {
+  const fileTree: any = {};
+
+  for (const file of files) {
+    const path = file.webkitRelativePath || file.name;
+    const parts = path.split('/');
+    let current = fileTree;
+
+    // Build nested structure
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!current[parts[i]]) current[parts[i]] = {};
+      current = current[parts[i]];
+    }
+
+    // Add file
+    const fileName = parts[parts.length - 1];
+    const isBinary = /\.(png|jpg|jpeg|gif|pdf)$/i.test(fileName);
+
+    current[fileName] = {
+      contents: isBinary
+        ? Array.from(new Uint8Array(await file.arrayBuffer()))
+        : await file.text()
+    };
+  }
+
+  return {
+    metadata: {
+      name: files[0]?.webkitRelativePath?.split('/')[0] || 'uploaded-quill'
+    },
+    files: fileTree
+  };
+}
+```
+
+---
+
+### Implementation Note
+
+This contract is enforced by:
+- `quillmark-core::Quill::from_json` (Rust core)
+- WASM binding `Quill.fromJson` (forwards to core parser)
+
+See [QUILL_DESIGN.md](../../designs/QUILL_DESIGN.md) for full design rationale.
