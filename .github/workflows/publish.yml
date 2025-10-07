@@ -43,38 +43,6 @@ jobs:
       - name: Tests (${{ matrix.features.name }})
         run: cargo test ${{ matrix.features.flags }} --locked
 
-  publish-fixtures:
-    needs: [test]
-    runs-on: ubuntu-latest
-    environment: Publish
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Get version from package.json
-        id: version
-        working-directory: quillmark-fixtures
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Publishing version: $VERSION"
-
-      - name: Publish @quillmark-test/fixtures
-        working-directory: quillmark-fixtures
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Fixtures publish summary
-        if: success()
-        run: echo "✓ @quillmark-test/fixtures v${{ steps.version.outputs.version }} published to npm"
-
   publish-wasm:
     needs: [test]
     runs-on: ubuntu-latest
@@ -149,7 +117,7 @@ jobs:
         run: echo "✓ All publishable workspace crates published to crates.io"
 
   summary:
-    needs: [publish-fixtures, publish-wasm, publish-crates]
+    needs: [publish-wasm, publish-crates]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -157,15 +125,6 @@ jobs:
         run: |
           echo "## Publishing Summary"
           echo ""
-
-          # Fixtures
-          if [ "${{ needs.publish-fixtures.result }}" == "success" ]; then
-            echo "✓ Fixtures published to npm"
-          elif [ "${{ needs.publish-fixtures.result }}" == "skipped" ]; then
-            echo "⊘ Fixtures publishing skipped"
-          else
-            echo "✗ Fixtures publishing failed"
-          fi
 
           # WASM
           if [ "${{ needs.publish-wasm.result }}" == "success" ]; then
