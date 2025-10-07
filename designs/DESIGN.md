@@ -74,7 +74,7 @@ High-level data flow:
 
 ### `quillmark` (orchestration layer)
 
-* High-level API: `Quillmark` engine for managing backends and quills
+* High-level API: `QuillmarkEngine` for managing backends and quills
 * Sealed rendering API: `Workflow`
 * Orchestration (parse → compose → compile)
 * Validation and **structured error propagation**
@@ -103,15 +103,15 @@ High-level data flow:
 
 > **Note:** The following sections provide high-level API signatures and design rationale. For detailed API documentation with comprehensive examples, error handling, and usage patterns, see the `quillmark` crate's rustdoc (available at docs.rs or via `cargo doc --open`).
 
-### Quillmark (high-level engine API)
+### QuillmarkEngine (high-level engine API)
 
 ```rust
-pub struct Quillmark {
+pub struct QuillmarkEngine {
     backends: HashMap<String, Box<dyn Backend>>,
     quills: HashMap<String, Quill>,
 }
 
-impl Quillmark {
+impl QuillmarkEngine {
     pub fn new() -> Self;
     pub fn register_quill(&mut self, quill: Quill);
     pub fn load<'a>(&self, quill_ref: impl Into<QuillRef<'a>>) -> Result<Workflow, RenderError>;
@@ -124,7 +124,7 @@ impl Quillmark {
 
 ```rust
 // Create engine with auto-registered backends
-let mut engine = Quillmark::new();
+let mut engine = QuillmarkEngine::new();
 
 // Register quills
 let quill = Quill::from_path("path/to/quill")?;
@@ -256,11 +256,11 @@ pub struct RenderResult {
 
 ## End-to-End Orchestration Workflow
 
-**Public usage (high-level Quillmark API):**
+**Public usage (high-level QuillmarkEngine API):**
 
 ```rust
 // Create engine with auto-registered backends (typst by default)
-let mut engine = Quillmark::new();
+let mut engine = QuillmarkEngine::new();
 
 // Register quills
 let quill = Quill::from_path("path/to/quill")?;
@@ -290,7 +290,7 @@ let result = workflow.render(markdown, Some(OutputFormat::Pdf))?;
 
 ### Implementation Hints
 
-#### Quillmark Engine Construction
+#### QuillmarkEngine Construction
 
 * **Auto-registration**: Backends are registered based on enabled crate features (e.g., `#[cfg(feature = "typst")]`)
 * **Backend storage**: Use `HashMap<String, Box<dyn Backend>>` keyed by backend ID
