@@ -27,10 +27,6 @@ pub use engine::Quillmark;
 pub use error::QuillmarkError;
 pub use types::*;
 
-// Internal exports (not part of public API)
-#[doc(hidden)]
-pub use quill::Quill;
-
 /// Initialize the WASM module with panic hooks for better error messages
 #[wasm_bindgen(start)]
 pub fn init() {

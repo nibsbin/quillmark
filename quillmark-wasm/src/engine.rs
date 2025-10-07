@@ -33,9 +33,9 @@ pub struct Quillmark {
 
 #[wasm_bindgen]
 impl Quillmark {
-    /// Create a new Quillmark engine
-    #[wasm_bindgen]
-    pub fn create() -> Quillmark {
+    /// JavaScript constructor: `new Quillmark()`
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> Quillmark {
         Quillmark {
             inner: quillmark::Quillmark::new(),
             quills: HashMap::new(),

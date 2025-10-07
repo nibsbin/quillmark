@@ -141,6 +141,3 @@ mod tests {
         assert!(backend.supported_formats().contains(&OutputFormat::Svg));
     }
 }
-
-// Re-export for compatibility
-pub use TypstBackend as backend;

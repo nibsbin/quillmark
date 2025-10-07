@@ -39,27 +39,32 @@ npm install @quillmark-test/wasm
 ## Usage
 
 This WASM package follows the canonical Quill JSON contract defined in
-`quillmark-core/docs/JSON_CONTRACT.md`. In short: build a JS object shaped as
-the file tree, then pass a JSON string to `Quill.fromJson(...)`.
+`designs/QUILL_DESIGN.md`. Build a JS object shaped as the file tree or pass
+a JSON string describing the Quill when creating `Quill` instances.
 
 Minimal example:
 
 ```typescript
 import { Quillmark, Quill, OutputFormat } from '@quillmark-test/wasm';
 
-const engine = Quillmark.create();
-const quillObj = {
-  name: 'my-quill',
-  'Quill.toml': { contents: '[Quill]\nname = "my-quill"\nbackend = "typst"\nglue = "glue.typ"\n' },
-  'glue.typ': { contents: '= Hello\n\n{{ body }}' }
-};
-const quill = Quill.fromJson(JSON.stringify(quillObj));
-engine.registerQuill(quill);
-const workflow = engine.loadWorkflow('my-quill');
-const result = workflow.render('# Hi', { format: OutputFormat.PDF });
-```
+// Create engine
+const engine = new Quillmark();
 
-See `quillmark-core/docs/JSON_CONTRACT.md` for the full contract and examples.
+// Prepare a Quill in memory
+const quillObj = {
+  files: {
+    'Quill.toml': { contents: '[Quill]\nname = "my-quill"\nbackend = "typst"\nglue = "glue.typ"\n' },
+    'glue.typ': { contents: '= Hello\n\n{{ body }}' }
+  }
+};
+
+// Create Quill from in-memory object
+const quill = Quill.fromJson(JSON.stringify(quillObj));
+
+// Register and render
+engine.registerQuill('my-quill', quill);
+const result = engine.render('my-quill', '# Hi', { format: OutputFormat.Pdf });
+```
 
 ## API
 
