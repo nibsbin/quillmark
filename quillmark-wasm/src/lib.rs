@@ -22,7 +22,6 @@ mod engine;
 mod error;
 mod quill;
 mod types;
-mod workflow;
 
 pub use engine::Quillmark;
 pub use error::QuillmarkError;
@@ -31,8 +30,6 @@ pub use types::*;
 // Internal exports (not part of public API)
 #[doc(hidden)]
 pub use quill::Quill;
-#[doc(hidden)]
-pub use workflow::Workflow;
 
 /// Initialize the WASM module with panic hooks for better error messages
 #[wasm_bindgen(start)]
