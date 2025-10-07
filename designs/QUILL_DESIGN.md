@@ -562,5 +562,4 @@ interface QuillMetadata {
 
 ## References
 
-- [JSON_CONTRACT.md](../quillmark-core/docs/JSON_CONTRACT.md) - JSON contract specification
-- [quillmark-core/src/quill.rs](../quillmark-core/src/quill.rs) - Implementation
+- [quillmark-core/src/quill.rs] (../quillmark-core/src/quill.rs) - Implementation
