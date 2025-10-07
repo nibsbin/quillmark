@@ -384,7 +384,7 @@ impl QuillWorld {
         println!("Loading packages from quill's in-memory file system");
 
         // Get all subdirectories in packages/
-        let package_dirs = quill.list_subdirectories("packages");
+        let package_dirs = quill.list_directories("packages");
 
         for package_dir in package_dirs {
             let package_name = package_dir

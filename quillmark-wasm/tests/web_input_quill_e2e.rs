@@ -7,7 +7,6 @@ use wasm_bindgen_test::*;
 
 // Run as a normal cargo test on native, and as a wasm-bindgen-test on wasm32.
 #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test::wasm_bindgen_test)]
-#[cfg_attr(not(target_arch = "wasm32"), test)]
 fn test_process_web_input_quill_from_json() {
     // Load the JSON fixture shipped with the crate
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));

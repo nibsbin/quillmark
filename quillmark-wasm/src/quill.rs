@@ -16,9 +16,9 @@ impl Quill {
     /// Create Quill from JSON
     ///
     /// Accepts a JSON string describing the Quill file tree. See the canonical
-    /// contract at `quillmark-core/docs/JSON_CONTRACT.md` for the precise
-    /// shape and examples. The WASM wrapper exposes this as `Quill.fromJson()`
-    /// (JS) which forwards to `quillmark_core::Quill::from_json`.
+    /// contract at `designs/QUILL_DESIGN.md` for the precise shape and examples.
+    /// The WASM wrapper exposes this as `Quill.fromJson()` (JS) which forwards
+    /// to `quillmark_core::Quill::from_json`.
     #[wasm_bindgen(js_name = fromJson)]
     pub fn from_json(json_str: &str) -> Result<Quill, JsValue> {
         let inner = quillmark_core::Quill::from_json(json_str).map_err(|e| {
@@ -26,6 +26,37 @@ impl Quill {
         })?;
 
         Ok(Quill { inner })
+    }
+
+    /// Create Quill from files object
+    ///
+    /// Accepts a JS object describing the Quill file tree. Internally converts
+    /// to JSON and calls from_json. The object should have the structure:
+    /// ```js
+    /// {
+    ///   metadata: { name: "my-quill", ... },  // optional
+    ///   files: {
+    ///     "Quill.toml": { contents: "..." },
+    ///     "glue.typ": { contents: "..." },
+    ///     ...
+    ///   }
+    /// }
+    /// ```
+    #[wasm_bindgen(js_name = fromFiles)]
+    pub fn from_files(files_obj: JsValue) -> Result<Quill, JsValue> {
+        // Convert JS object to JSON string
+        let json_str = js_sys::JSON::stringify(&files_obj)
+            .map_err(|e| {
+                QuillmarkError::system(format!("Failed to stringify files object: {:?}", e))
+                    .to_js_value()
+            })?
+            .as_string()
+            .ok_or_else(|| {
+                QuillmarkError::system("Failed to convert JSON to string".to_string()).to_js_value()
+            })?;
+
+        // Call from_json with the stringified object
+        Self::from_json(&json_str)
     }
 
     /// Validate Quill structure (throws on error)
@@ -39,18 +70,20 @@ impl Quill {
     /// Get Quill metadata
     #[wasm_bindgen(js_name = getMetadata)]
     pub fn get_metadata(&self) -> Result<JsValue, JsValue> {
-        let backend = self
-            .inner
-            .metadata
-            .get("backend")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_string();
-
         let metadata = QuillMetadata {
             name: self.inner.name.clone(),
-            version: None,
-            backend,
+            version: self
+                .inner
+                .metadata
+                .get("version")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            backend: self
+                .inner
+                .metadata
+                .get("backend")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
             description: self
                 .inner
                 .metadata
@@ -63,6 +96,23 @@ impl Quill {
                 .get("author")
                 .and_then(|v| v.as_str())
                 .map(|s| s.to_string()),
+            license: self
+                .inner
+                .metadata
+                .get("license")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            tags: self
+                .inner
+                .metadata
+                .get("tags")
+                .and_then(|v| v.as_sequence())
+                .map(|seq| {
+                    seq.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default(),
         };
 
         serde_wasm_bindgen::to_value(&metadata).map_err(|e| {
@@ -70,12 +120,38 @@ impl Quill {
         })
     }
 
-    /// List files in the Quill
+    /// List all files in the Quill (recursive paths)
     #[wasm_bindgen(js_name = listFiles)]
     pub fn list_files(&self) -> Vec<String> {
         let mut all_files = Vec::new();
         Self::collect_all_file_paths(&self.inner.files, Path::new(""), &mut all_files);
         all_files
+    }
+
+    /// Check if a file exists
+    #[wasm_bindgen(js_name = fileExists)]
+    pub fn file_exists(&self, path: &str) -> bool {
+        self.inner.file_exists(path)
+    }
+
+    /// Get file contents as Uint8Array
+    #[wasm_bindgen(js_name = getFile)]
+    pub fn get_file(&self, path: &str) -> Option<Vec<u8>> {
+        self.inner.get_file(path).map(|bytes| bytes.to_vec())
+    }
+
+    /// Get file contents as string (UTF-8)
+    #[wasm_bindgen(js_name = getFileAsString)]
+    pub fn get_file_as_string(&self, path: &str) -> Option<String> {
+        self.inner
+            .get_file(path)
+            .and_then(|bytes| String::from_utf8(bytes.to_vec()).ok())
+    }
+
+    /// Check if a directory exists
+    #[wasm_bindgen(js_name = dirExists)]
+    pub fn dir_exists(&self, path: &str) -> bool {
+        self.inner.dir_exists(path)
     }
 }
 
