@@ -210,7 +210,7 @@ All workspace crates share the same version number (e.g., 0.1.0) to:
 ### quillmark
 
 #### Functionality
-- [ ] **QuillmarkEngine** - High-level API for managing backends and quills
+- [ ] **Quillmark** - High-level API for managing backends and quills
 - [ ] **Workflow** - Sealed rendering API
 - [ ] **Orchestration** - Parse → compose → compile pipeline
 - [ ] **Validation** - Input validation and error propagation
@@ -227,7 +227,7 @@ All workspace crates share the same version number (e.g., 0.1.0) to:
   - Link to full documentation
   - License information
 - [ ] **API documentation** for:
-  - `QuillmarkEngine` type
+  - `Quillmark` type
   - `Workflow` type
   - `QuillRef` type
   - Orchestration functions
@@ -563,7 +563,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initial release
 - Core parsing and templating functionality
 - Typst backend implementation
-- High-level QuillmarkEngine API
+- High-level Quillmark API
 
 [Unreleased]: https://github.com/nibsbin/quillmark/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/nibsbin/quillmark/releases/tag/v0.1.0

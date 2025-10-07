@@ -26,7 +26,7 @@ This document outlines the design and implementation plan for `pyquillmark`, a P
 
 ### Goals
 
-- **Pythonic API**: Expose Quillmark's high-level API (`QuillmarkEngine` and `Workflow`) with Python idioms
+- **Pythonic API**: Expose Quillmark's high-level API (`Quillmark` and `Workflow`) with Python idioms
 - **Type Safety**: Leverage Python type hints and runtime type checking
 - **Performance**: Minimal overhead through efficient PyO3 bindings
 - **Developer Experience**: Modern tooling with `uv` for fast dependency management
@@ -85,15 +85,15 @@ pyquillmark/
 
 ### Core Classes
 
-#### 1. `QuillmarkEngine` (Engine)
+#### 1. `Quillmark` (Engine)
 
 High-level engine for managing backends and quills.
 
 ```python
-from pyquillmark import QuillmarkEngine, Quill, OutputFormat
+from pyquillmark import Quillmark, Quill, OutputFormat
 
 # Create engine with auto-registered backends
-engine = QuillmarkEngine()
+engine = Quillmark()
 
 # Register quills
 quill = Quill.from_path("path/to/quill")
@@ -373,7 +373,7 @@ use pyo3::prelude::*;
 #[pymodule]
 fn pyquillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register classes
-    m.add_class::<PyQuillmarkEngine>()?;
+    m.add_class::<PyQuillmark>()?;
     m.add_class::<PyWorkflow>()?;
     m.add_class::<PyQuill>()?;
     m.add_class::<PyRenderResult>()?;
@@ -397,17 +397,17 @@ fn pyquillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
 Each Python-exposed class wraps the corresponding Rust type:
 
 ```rust
-#[pyclass(name = "QuillmarkEngine")]
-struct PyQuillmarkEngine {
-    inner: quillmark::QuillmarkEngine,
+#[pyclass(name = "Quillmark")]
+struct PyQuillmark {
+    inner: quillmark::Quillmark,
 }
 
 #[pymethods]
-impl PyQuillmarkEngine {
+impl PyQuillmark {
     #[new]
     fn new() -> Self {
         Self {
-            inner: quillmark::QuillmarkEngine::new(),
+            inner: quillmark::Quillmark::new(),
         }
     }
     
@@ -978,12 +978,12 @@ Test individual components in isolation:
 ```python
 # test_engine.py
 def test_engine_creation():
-    engine = QuillmarkEngine()
+    engine = Quillmark()
     assert "typst" in engine.registered_backends()
     assert len(engine.registered_quills()) == 0
 
 def test_register_quill(tmp_path):
-    engine = QuillmarkEngine()
+    engine = Quillmark()
     quill = create_test_quill(tmp_path)
     engine.register_quill(quill)
     assert quill.name in engine.registered_quills()
@@ -996,7 +996,7 @@ Test component interactions:
 ```python
 # test_workflow.py
 def test_end_to_end_render(tmp_path):
-    engine = QuillmarkEngine()
+    engine = Quillmark()
     quill = create_test_quill(tmp_path)
     engine.register_quill(quill)
     
@@ -1322,10 +1322,10 @@ python -m http.server -d docs/_build/html 8000
 `examples/basic_usage.py`:
 
 ```python
-from pyquillmark import QuillmarkEngine, OutputFormat
+from pyquillmark import Quillmark, OutputFormat
 
 # Create engine
-engine = QuillmarkEngine()
+engine = Quillmark()
 
 # Load quill
 from pyquillmark import Quill
@@ -1356,7 +1356,7 @@ print(f"Generated {len(result.artifacts[0].bytes)} bytes")
 `examples/dynamic_assets.py`:
 
 ```python
-from pyquillmark import QuillmarkEngine, OutputFormat
+from pyquillmark import Quillmark, OutputFormat
 import matplotlib.pyplot as plt
 from io import BytesIO
 
@@ -1369,7 +1369,7 @@ fig.savefig(chart_buffer, format='png')
 chart_bytes = chart_buffer.getvalue()
 
 # Render with dynamic asset
-engine = QuillmarkEngine()
+engine = Quillmark()
 workflow = engine.load("report")
 
 result = (
@@ -1386,11 +1386,11 @@ result.artifacts[0].save("report.pdf")
 `examples/batch_rendering.py`:
 
 ```python
-from pyquillmark import QuillmarkEngine, OutputFormat
+from pyquillmark import Quillmark, OutputFormat
 from pathlib import Path
 import concurrent.futures
 
-engine = QuillmarkEngine()
+engine = Quillmark()
 workflow = engine.load("letter")
 
 markdown_files = Path("documents").glob("*.md")

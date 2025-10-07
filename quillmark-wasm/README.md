@@ -45,9 +45,9 @@ the file tree, then pass a JSON string to `Quill.fromJson(...)`.
 Minimal example:
 
 ```typescript
-import { QuillmarkEngine, Quill, OutputFormat } from '@quillmark-test/wasm';
+import { Quillmark, Quill, OutputFormat } from '@quillmark-test/wasm';
 
-const engine = QuillmarkEngine.create();
+const engine = Quillmark.create();
 const quillObj = {
   name: 'my-quill',
   'Quill.toml': { contents: '[Quill]\nname = "my-quill"\nbackend = "typst"\nglue = "glue.typ"\n' },
@@ -65,7 +65,7 @@ See `quillmark-core/docs/JSON_CONTRACT.md` for the full contract and examples.
 
 The WASM API closely mirrors the Rust API, with these main classes:
 
-- `QuillmarkEngine` - Main engine for managing Quills and workflows
+- `Quillmark` - Main engine for managing Quills and workflows
 - `Quill` - Represents a Quill template bundle
 - `Workflow` - Rendering workflow for a specific Quill
 - `QuillmarkError` - Error type with rich diagnostics
@@ -96,7 +96,7 @@ This means a few concrete rules you should follow when calling into the WASM mod
 ## Current Status
 
 Core API is implemented:
-- ✅ `QuillmarkEngine` - Engine management
+- ✅ `Quillmark` - Engine management
 - ✅ `Quill.fromJson()` - Create Quills from JSON-serialized folder structure
 - ✅ `Workflow.render()` - Synchronous rendering to PDF/SVG
 - ✅ `Workflow.withAsset()` - Dynamic asset injection
