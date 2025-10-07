@@ -31,7 +31,6 @@ Input to `Quill::from_json` (core) and the WASM wrapper `Quill.fromJson` (JS) is
 {
   "metadata": {
     "name": "my-quill",
-    "base_path": "/",
     "version": "1.0.0"
   },
   "files": {
@@ -78,7 +77,6 @@ Input to `Quill::from_json` (core) and the WASM wrapper `Quill.fromJson` (JS) is
 ```json
 {
   "name": "my-quill",              // Quill name (overrides Quill.toml)
-  "base_path": "/",                // Base path for asset resolution
   "version": "1.0.0",              // Semantic version
   "description": "...",            // Human-readable description
   "author": "John Doe",            // Author name
@@ -92,8 +90,8 @@ All metadata fields are optional. If not provided, values are extracted from `Qu
 **Metadata priority (highest to lowest):**
 1. JSON `metadata` object
 2. `Quill.toml` `[Quill]` section
-3. Function arguments (`default_name`, `base_path`)
-4. Defaults (e.g., `base_path = "/"`)
+3. Function arguments (`default_name`)
+4. Defaults
 
 ---
 

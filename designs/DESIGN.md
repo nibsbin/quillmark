@@ -190,18 +190,8 @@ pub trait Backend: Send + Sync {
 
 ### Quill (template bundle)
 
-```rust
-pub struct Quill {
-    pub glue_template: String,
-    pub metadata: HashMap<String, serde_yaml::Value>,
-    pub base_path: PathBuf,
-    pub name: String,
-    pub glue_file: String,
-    pub files: HashMap<PathBuf, FileEntry>,
-}
-```
+See `designs/QUILL_DESIGN.md` for full design rationale.
 
-**Key methods:** `from_path()`, `validate()`, `glue_path()`, `assets_path()`, `packages_path()`, `toml_to_yaml_value()`.
 
 ### ParsedDocument
 
@@ -722,14 +712,8 @@ The `[typst]` section is optional and allows specifying external packages to dow
 * **Critical pattern**: Preserve directory structure in virtual file system
 
   ```rust
-  // Manual path construction (avoid `join()` for virtual paths):
-  let virtual_path = if base_path.as_rootless_path().as_os_str().is_empty() {
-      VirtualPath::new(&filename)
-  } else {
-      let base_str = base_path.as_rootless_path().to_string_lossy();
-      let full_path = format!("{}/{}", base_str, filename);
-      VirtualPath::new(&full_path)  // Forward slashes required
-  };
+  // Manual path construction for virtual paths (paths are relative):
+  let virtual_path = VirtualPath::new(&filename); // Forward slashes required
   ```
 * **FileId creation**:
 

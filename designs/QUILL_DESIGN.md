@@ -46,10 +46,7 @@ pub struct Quill {
     pub glue_template: String,
 
     /// Quill-specific metadata from Quill.toml
-    pub metadata: HashMap<String, serde_yaml::Value>,
-
-    /// Base path for resolving relative paths
-    pub base_path: PathBuf,
+    pub metadata: HashMap<String, serde_yaml::Value>,  
 
     /// Name of the quill
     pub name: String,
@@ -110,7 +107,6 @@ The JSON format MUST have a root object with a `files` key. The optional `metada
 {
   "metadata": {
     "name": "my-quill",
-    "base_path": "/custom/path",
     "version": "1.0.0",
     "description": "A beautiful letter template",
     "author": "John Doe",
@@ -179,8 +175,7 @@ const quill = {
 // With metadata override
 const quillWithMetadata = {
   metadata: {
-    name: "my-custom-name",
-    base_path: "/custom"
+    name: "my-custom-name"
   },
   files: {
     "Quill.toml": { contents: quillToml },
@@ -235,9 +230,7 @@ pub struct QuillMetadata {
     /// Quill name (required)
     pub name: String,
 
-    /// Base path for asset resolution (optional, defaults to "/")
-    pub base_path: Option<PathBuf>,
-
+  
     /// Semantic version (optional)
     pub version: Option<String>,
 
@@ -262,8 +255,8 @@ pub struct QuillMetadata {
 
 1. **JSON `metadata` object** - Explicit overrides in JSON
 2. **Quill.toml `[Quill]` section** - Metadata from Quill.toml
-3. **Function arguments** - `default_name`, `base_path` passed to constructors
-4. **Defaults** - Sensible defaults (e.g., `base_path = "/"`)
+3. **Function arguments** - `default_name` passed to constructors
+4. **Defaults** - Sensible defaults
 
 ### Example Priority Resolution
 
@@ -313,13 +306,12 @@ impl Quill {
     /// files.insert("glue.typ".to_string(), FileTreeNode::File { contents: b"...".to_vec() });
     /// let root = FileTreeNode::Directory { files };
     ///
-    /// let quill = Quill::from_tree(root, None, None)?;
+  /// let quill = Quill::from_tree(root, None)?;
     /// ```
-    pub fn from_tree(
-        root: FileTreeNode,
-        base_path: Option<PathBuf>,
-        default_name: Option<String>,
-    ) -> Result<Self, QuillError>;
+  pub fn from_tree(
+    root: FileTreeNode,
+    default_name: Option<String>,
+  ) -> Result<Self, QuillError>;
 
     /// Load from JSON string
     ///
@@ -408,12 +400,11 @@ pub fn from_json(json_str: &str) -> Result<Self, QuillError> {
 
     let root = FileTreeNode::Directory { files: root_files };
 
-    // Create Quill from tree
-    Self::from_tree(
-        root,
-        metadata.as_ref().and_then(|m| m.base_path.clone()),
-        metadata.as_ref().map(|m| m.name.clone()),
-    )
+  // Create Quill from tree
+  Self::from_tree(
+    root,
+    metadata.as_ref().map(|m| m.name.clone()),
+  )
 }
 ```
 
@@ -556,7 +547,6 @@ class Quill {
 
 interface QuillMetadata {
     name: string;
-    base_path?: string;
     version?: string;
     description?: string;
     author?: string;
