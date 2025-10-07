@@ -180,26 +180,13 @@ impl FileTreeNode {
                 .filter_map(|v| v.as_u64().and_then(|n| u8::try_from(n).ok()))
                 .collect();
             Ok(FileTreeNode::File { contents })
-        } else if let Some(files_obj) = value.get("files").and_then(|v| v.as_object()) {
-            // It's a directory
-            let mut files = HashMap::new();
-            for (name, child_value) in files_obj {
-                files.insert(name.clone(), Self::from_json_value(child_value)?);
-            }
-            Ok(FileTreeNode::Directory { files })
         } else if let Some(obj) = value.as_object() {
-            // Check if this is a directory represented as direct object with nested files
+            // It's a directory (either empty or with nested files)
             let mut files = HashMap::new();
             for (name, child_value) in obj {
-                // Skip metadata fields
-                if name == "is_dir" {
-                    continue;
-                }
                 files.insert(name.clone(), Self::from_json_value(child_value)?);
             }
-            if files.is_empty() {
-                return Err("Empty directory or invalid file node".into());
-            }
+            // Empty directories are valid
             Ok(FileTreeNode::Directory { files })
         } else {
             Err(format!("Invalid file tree node: {:?}", value).into())
@@ -482,39 +469,39 @@ impl Quill {
     /// Create a Quill from a JSON representation
     ///
     /// Parses a JSON string into an in-memory file tree and validates it. The
-    /// precise JSON contract is documented in `quillmark-core/docs/JSON_CONTRACT.md`.
-    /// In brief: root object → file tree, optional `name` metadata,
-    /// optional legacy `files` wrapper is supported and merged.
+    /// precise JSON contract is documented in `designs/QUILL_DESIGN.md`.
+    /// The JSON format MUST have a root object with a `files` key. The optional
+    /// `metadata` key provides additional metadata that overrides defaults.
     pub fn from_json(json_str: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         use serde_json::Value as JsonValue;
 
         let json: JsonValue =
             serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
-        // Extract optional name from JSON
-        let default_name = json.get("name").and_then(|v| v.as_str()).map(String::from);
+        let obj = json.as_object().ok_or_else(|| "Root must be an object")?;
 
-        // Parse tree format - the root JSON object contains the file tree directly
-        // Create a virtual root directory containing all the files.
-        // Note: the root object is expected to contain file/directory entries
-        // directly. Reserved metadata key `name` is skipped.
+        // Extract metadata (optional)
+        let default_name = obj
+            .get("metadata")
+            .and_then(|m| m.get("name"))
+            .and_then(|v| v.as_str())
+            .map(String::from);
+
+        // Extract files (required)
+        let files_obj = obj
+            .get("files")
+            .and_then(|v| v.as_object())
+            .ok_or_else(|| "Missing or invalid 'files' key")?;
+
+        // Parse file tree
         let mut root_files = HashMap::new();
-
-        if let JsonValue::Object(obj) = &json {
-            for (key, value) in obj {
-                // Skip metadata fields
-                if key == "name" {
-                    continue;
-                }
-                root_files.insert(key.clone(), FileTreeNode::from_json_value(value)?);
-            }
-        } else {
-            return Err("JSON root must be an object".into());
+        for (key, value) in files_obj {
+            root_files.insert(key.clone(), FileTreeNode::from_json_value(value)?);
         }
 
         let root = FileTreeNode::Directory { files: root_files };
 
-        // Create Quill from the tree structure
+        // Create Quill from tree
         Self::from_tree(root, default_name)
     }
 
@@ -610,6 +597,21 @@ impl Quill {
         self.files.file_exists(path)
     }
 
+    /// Check if a directory exists in memory
+    pub fn dir_exists<P: AsRef<Path>>(&self, path: P) -> bool {
+        self.files.dir_exists(path)
+    }
+
+    /// List files in a directory (non-recursive, returns file names only)
+    pub fn list_files<P: AsRef<Path>>(&self, path: P) -> Vec<String> {
+        self.files.list_files(path)
+    }
+
+    /// List subdirectories in a directory (non-recursive, returns directory names only)
+    pub fn list_subdirectories<P: AsRef<Path>>(&self, path: P) -> Vec<String> {
+        self.files.list_subdirectories(path)
+    }
+
     /// List all files in a directory (returns paths relative to quill root)
     pub fn list_directory<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
         let dir_path = dir_path.as_ref();
@@ -629,7 +631,7 @@ impl Quill {
     }
 
     /// List all directories in a directory (returns paths relative to quill root)
-    pub fn list_subdirectories<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
+    pub fn list_directories<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
         let dir_path = dir_path.as_ref();
         let subdirs = self.files.list_subdirectories(dir_path);
 
@@ -1092,14 +1094,18 @@ template = "template.md"
 
     #[test]
     fn test_from_json() {
-        // Create JSON representation of a Quill using tree format
+        // Create JSON representation of a Quill using new format
         let json_str = r#"{
-            "name": "test-from-json",
-            "Quill.toml": {
-                "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+            "metadata": {
+                "name": "test-from-json"
             },
-            "glue.typ": {
-                "contents": "= Test Glue\n\nThis is test content."
+            "files": {
+                "Quill.toml": {
+                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                },
+                "glue.typ": {
+                    "contents": "= Test Glue\n\nThis is test content."
+                }
             }
         }"#;
 
@@ -1115,13 +1121,15 @@ template = "template.md"
 
     #[test]
     fn test_from_json_with_byte_array() {
-        // Create JSON with byte array representation using tree format
+        // Create JSON with byte array representation using new format
         let json_str = r#"{
-            "Quill.toml": {
-                "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10]
-            },
-            "glue.typ": {
-                "contents": "test glue"
+            "files": {
+                "Quill.toml": {
+                    "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10]
+                },
+                "glue.typ": {
+                    "contents": "test glue"
+                }
             }
         }"#;
 
@@ -1137,26 +1145,28 @@ template = "template.md"
     fn test_from_json_missing_files() {
         // JSON without files field should fail
         let json_str = r#"{
-            "name": "test"
+            "metadata": {
+                "name": "test"
+            }
         }"#;
 
         let result = Quill::from_json(json_str);
         assert!(result.is_err());
-        // The error message changed since we now support tree structure
-        // It will fail because there's no Quill.toml in the tree
-        assert!(result.is_err());
+        // Should fail because there's no 'files' key
+        assert!(result.unwrap_err().to_string().contains("files"));
     }
 
     #[test]
     fn test_from_json_tree_structure() {
         // Test the new tree structure format
         let json_str = r#"{
-            "name": "test-tree-json",
-            "Quill.toml": {
-                "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
-            },
-            "glue.typ": {
-                "contents": "= Test Glue\n\nTree structure content."
+            "files": {
+                "Quill.toml": {
+                    "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                },
+                "glue.typ": {
+                    "contents": "= Test Glue\n\nTree structure content."
+                }
             }
         }"#;
 
@@ -1171,14 +1181,14 @@ template = "template.md"
     fn test_from_json_nested_tree_structure() {
         // Test nested directories in tree structure
         let json_str = r#"{
-            "Quill.toml": {
-                "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
-            },
-            "glue.typ": {
-                "contents": "glue"
-            },
-            "src": {
-                "files": {
+            "files": {
+                "Quill.toml": {
+                    "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                },
+                "glue.typ": {
+                    "contents": "glue"
+                },
+                "src": {
                     "main.rs": {
                         "contents": "fn main() {}"
                     },
@@ -1245,18 +1255,151 @@ template = "template.md"
     }
 
     #[test]
-    fn test_from_json_files_wrapper_rejected() {
-        // The JSON contract requires files to live at the root. The legacy
-        // `{ "files": { ... } }` wrapper is no longer supported and should
-        // produce an error.
+    fn test_from_json_with_metadata_override() {
+        // Test that metadata key overrides name from Quill.toml
         let json_str = r#"{
+            "metadata": {
+                "name": "override-name"
+            },
             "files": {
-                "Quill.toml": { "contents": "[Quill]\nname = \"wrap\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n" },
-                "glue.typ": { "contents": "= glue" }
+                "Quill.toml": {
+                    "contents": "[Quill]\nname = \"toml-name\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                },
+                "glue.typ": {
+                    "contents": "= glue"
+                }
             }
         }"#;
 
-        let result = Quill::from_json(json_str);
-        assert!(result.is_err(), "legacy files wrapper should be rejected");
+        let quill = Quill::from_json(json_str).unwrap();
+        // Metadata name should be used as default, but Quill.toml takes precedence
+        // when from_tree is called
+        assert_eq!(quill.name, "toml-name");
+    }
+
+    #[test]
+    fn test_from_json_empty_directory() {
+        // Test that empty directories are supported
+        let json_str = r#"{
+            "files": {
+                "Quill.toml": {
+                    "contents": "[Quill]\nname = \"empty-dir-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                },
+                "glue.typ": {
+                    "contents": "glue"
+                },
+                "empty_dir": {}
+            }
+        }"#;
+
+        let quill = Quill::from_json(json_str).unwrap();
+        assert_eq!(quill.name, "empty-dir-test");
+        assert!(quill.dir_exists("empty_dir"));
+        assert!(!quill.file_exists("empty_dir"));
+    }
+
+    #[test]
+    fn test_dir_exists_and_list_apis() {
+        let mut root_files = HashMap::new();
+
+        // Add Quill.toml
+        root_files.insert(
+            "Quill.toml".to_string(),
+            FileTreeNode::File {
+                contents: b"[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    .to_vec(),
+            },
+        );
+
+        // Add glue file
+        root_files.insert(
+            "glue.typ".to_string(),
+            FileTreeNode::File {
+                contents: b"glue content".to_vec(),
+            },
+        );
+
+        // Add assets directory with files
+        let mut assets_files = HashMap::new();
+        assets_files.insert(
+            "logo.png".to_string(),
+            FileTreeNode::File {
+                contents: vec![137, 80, 78, 71],
+            },
+        );
+        assets_files.insert(
+            "icon.svg".to_string(),
+            FileTreeNode::File {
+                contents: b"<svg></svg>".to_vec(),
+            },
+        );
+
+        // Add subdirectory in assets
+        let mut fonts_files = HashMap::new();
+        fonts_files.insert(
+            "font.ttf".to_string(),
+            FileTreeNode::File {
+                contents: b"font data".to_vec(),
+            },
+        );
+        assets_files.insert(
+            "fonts".to_string(),
+            FileTreeNode::Directory { files: fonts_files },
+        );
+
+        root_files.insert(
+            "assets".to_string(),
+            FileTreeNode::Directory {
+                files: assets_files,
+            },
+        );
+
+        // Add empty directory
+        root_files.insert(
+            "empty".to_string(),
+            FileTreeNode::Directory {
+                files: HashMap::new(),
+            },
+        );
+
+        let root = FileTreeNode::Directory { files: root_files };
+        let quill = Quill::from_tree(root, None).unwrap();
+
+        // Test dir_exists
+        assert!(quill.dir_exists("assets"));
+        assert!(quill.dir_exists("assets/fonts"));
+        assert!(quill.dir_exists("empty"));
+        assert!(!quill.dir_exists("nonexistent"));
+        assert!(!quill.dir_exists("glue.typ")); // file, not directory
+
+        // Test file_exists
+        assert!(quill.file_exists("glue.typ"));
+        assert!(quill.file_exists("assets/logo.png"));
+        assert!(quill.file_exists("assets/fonts/font.ttf"));
+        assert!(!quill.file_exists("assets")); // directory, not file
+
+        // Test list_files
+        let root_files_list = quill.list_files("");
+        assert_eq!(root_files_list.len(), 2); // Quill.toml and glue.typ
+        assert!(root_files_list.contains(&"Quill.toml".to_string()));
+        assert!(root_files_list.contains(&"glue.typ".to_string()));
+
+        let assets_files_list = quill.list_files("assets");
+        assert_eq!(assets_files_list.len(), 2); // logo.png and icon.svg
+        assert!(assets_files_list.contains(&"logo.png".to_string()));
+        assert!(assets_files_list.contains(&"icon.svg".to_string()));
+
+        // Test list_subdirectories
+        let root_subdirs = quill.list_subdirectories("");
+        assert_eq!(root_subdirs.len(), 2); // assets and empty
+        assert!(root_subdirs.contains(&"assets".to_string()));
+        assert!(root_subdirs.contains(&"empty".to_string()));
+
+        let assets_subdirs = quill.list_subdirectories("assets");
+        assert_eq!(assets_subdirs.len(), 1); // fonts
+        assert!(assets_subdirs.contains(&"fonts".to_string()));
+
+        let empty_subdirs = quill.list_subdirectories("empty");
+        assert_eq!(empty_subdirs.len(), 0);
     }
 }
