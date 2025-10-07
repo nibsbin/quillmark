@@ -242,6 +242,7 @@ mod tests {
         // Test that RenderOptions with format works correctly
         let options = RenderOptions {
             format: Some(OutputFormat::Pdf),
+            assets: None,
         };
         let json = serde_json::to_string(&options).unwrap();
         assert!(json.contains("\"format\":\"pdf\""));
