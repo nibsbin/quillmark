@@ -6,11 +6,7 @@ description = "Test fixtures and utilities for Quillmark"
 license = "MIT"
 publish = false  # Don't publish test fixtures to crates.io
 
-[package.metadata.release]
-# Update package.json version to match Cargo.toml version
-pre-release-replacements = [
-  {file="package.json", search="\"version\": \"[^\"]*\"", replace="\"version\": \"{{version}}\""},
-]
+
 
 [dependencies]
 quillmark = { workspace = true }
