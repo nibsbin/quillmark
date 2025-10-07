@@ -14,7 +14,7 @@
 //!
 //! ## Core Components
 //!
-//! - [`QuillmarkEngine`] - High-level engine for managing backends and quills
+//! - [`Quillmark`] - High-level engine for managing backends and quills
 //! - [`Workflow`] - Sealed rendering API for executing the render pipeline
 //! - [`QuillRef`] - Ergonomic references to quills (by name or object)
 //! - [`Quill`] - Template bundle containing glue templates and assets
@@ -22,10 +22,10 @@
 //! ## Quick Start
 //!
 //! ```no_run
-//! use quillmark::{QuillmarkEngine, Quill, OutputFormat};
+//! use quillmark::{Quillmark, Quill, OutputFormat};
 //!
 //! // Create engine with auto-registered backends
-//! let mut engine = QuillmarkEngine::new();
+//! let mut engine = Quillmark::new();
 //!
 //! // Load and register a quill template
 //! let quill = Quill::from_path("path/to/quill").unwrap();
@@ -49,8 +49,8 @@
 //! Workflows support adding runtime assets through a builder pattern:
 //!
 //! ```no_run
-//! # use quillmark::{QuillmarkEngine, Quill, OutputFormat};
-//! # let mut engine = QuillmarkEngine::new();
+//! # use quillmark::{Quillmark, Quill, OutputFormat};
+//! # let mut engine = Quillmark::new();
 //! # let quill = Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
 //! let workflow = engine.load("my-quill").unwrap()
@@ -78,4 +78,4 @@ pub use quillmark_core::{
 pub mod orchestration;
 
 // Re-export types from orchestration module
-pub use orchestration::{QuillRef, QuillmarkEngine, Workflow};
+pub use orchestration::{QuillRef, Quillmark, Workflow};

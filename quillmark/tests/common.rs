@@ -22,7 +22,7 @@ pub fn demo(
         .as_ref()
         .ok_or("Quill does not have a markdown template")?
         .clone();
-    let engine = quillmark::QuillmarkEngine::new();
+    let engine = quillmark::Quillmark::new();
     let mut workflow = engine.load(&quill).expect("Failed to load workflow");
 
     if let Some(assets) = &asset_resources {

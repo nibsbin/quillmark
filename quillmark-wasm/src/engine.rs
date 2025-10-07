@@ -27,7 +27,7 @@ fn now_ms() -> f64 {
 /// Create once, register Quills, render markdown. That's it.
 #[wasm_bindgen]
 pub struct Quillmark {
-    inner: quillmark::QuillmarkEngine,
+    inner: quillmark::Quillmark,
     quills: HashMap<String, quillmark_core::Quill>,
 }
 
@@ -37,7 +37,7 @@ impl Quillmark {
     #[wasm_bindgen]
     pub fn create() -> Quillmark {
         Quillmark {
-            inner: quillmark::QuillmarkEngine::new(),
+            inner: quillmark::Quillmark::new(),
             quills: HashMap::new(),
         }
     }

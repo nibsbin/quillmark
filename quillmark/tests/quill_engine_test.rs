@@ -1,11 +1,11 @@
 use std::fs;
 use tempfile::TempDir;
 
-use quillmark::{OutputFormat, Quill, QuillmarkEngine};
+use quillmark::{OutputFormat, Quill, Quillmark};
 
 #[test]
 fn test_quill_engine_creation() {
-    let engine = QuillmarkEngine::new();
+    let engine = Quillmark::new();
 
     // Check that typst backend is auto-registered (default feature)
     let backends = engine.registered_backends();
@@ -19,7 +19,7 @@ fn test_quill_engine_creation() {
 
 #[test]
 fn test_quill_engine_register_quill() {
-    let mut engine = QuillmarkEngine::new();
+    let mut engine = Quillmark::new();
 
     // Create a test quill
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -44,7 +44,7 @@ fn test_quill_engine_register_quill() {
 
 #[test]
 fn test_quill_engine_get_workflow() {
-    let mut engine = QuillmarkEngine::new();
+    let mut engine = Quillmark::new();
 
     // Create and register a test quill
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -78,7 +78,7 @@ fn test_quill_engine_get_workflow() {
 
 #[test]
 fn test_quill_engine_workflow_not_found() {
-    let engine = QuillmarkEngine::new();
+    let engine = Quillmark::new();
 
     // Try to load workflow for non-existent quill
     let result = engine.load("non-existent");
@@ -94,7 +94,7 @@ fn test_quill_engine_workflow_not_found() {
 
 #[test]
 fn test_quill_engine_backend_not_found() {
-    let mut engine = QuillmarkEngine::new();
+    let mut engine = Quillmark::new();
 
     // Create a quill with non-existent backend
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -127,7 +127,7 @@ fn test_quill_engine_backend_not_found() {
 
 #[test]
 fn test_quill_engine_end_to_end() {
-    let mut engine = QuillmarkEngine::new();
+    let mut engine = Quillmark::new();
 
     // Create and register a test quill
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -178,7 +178,7 @@ This is a test document with some **bold** text.
 
 #[test]
 fn test_quill_engine_load_with_quill_object() {
-    let mut engine = QuillmarkEngine::new();
+    let mut engine = Quillmark::new();
 
     // Create a test quill
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
@@ -210,7 +210,7 @@ fn test_quill_engine_load_with_quill_object() {
 
 #[test]
 fn test_quill_engine_load_with_different_string_types() {
-    let mut engine = QuillmarkEngine::new();
+    let mut engine = Quillmark::new();
 
     // Create and register a test quill
     let temp_dir = TempDir::new().expect("Failed to create temp dir");

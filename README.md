@@ -26,11 +26,11 @@ cargo add quillmark
 ## Quick Start
 
 ```rust
-use quillmark::{QuillmarkEngine, OutputFormat};
+use quillmark::{Quillmark, OutputFormat};
 use quillmark_core::Quill;
 
 // Create engine with Typst backend
-let mut engine = QuillmarkEngine::new();
+let mut engine = Quillmark::new();
 
 // Load a quill template
 let quill = Quill::from_path("path/to/quill")?;
