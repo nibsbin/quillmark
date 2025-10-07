@@ -68,7 +68,7 @@
 //!
 //! This crate re-exports commonly used types from `quillmark-core` for convenience.
 
-// Re-export all core types for backward compatibility
+// Re-export all core types for convenience
 pub use quillmark_core::{
     decompose, Artifact, Backend, Diagnostic, Glue, Location, OutputFormat, ParsedDocument, Quill,
     RenderError, RenderResult, Severity, TemplateError, BODY_FIELD,
@@ -77,9 +77,5 @@ pub use quillmark_core::{
 // Declare orchestration module
 pub mod orchestration;
 
-// Re-export types from orchestration module for backward compatibility
+// Re-export types from orchestration module
 pub use orchestration::{QuillRef, QuillmarkEngine, Workflow};
-
-// Type alias for backward compatibility
-#[deprecated(since = "0.0.36", note = "Use `QuillmarkEngine` instead")]
-pub type Quillmark = QuillmarkEngine;

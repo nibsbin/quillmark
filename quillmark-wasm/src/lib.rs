@@ -28,7 +28,7 @@ pub use engine::Quillmark;
 pub use error::QuillmarkError;
 pub use types::*;
 
-// Legacy exports for backward compatibility (not part of public API)
+// Internal exports (not part of public API)
 #[doc(hidden)]
 pub use quill::Quill;
 #[doc(hidden)]
