@@ -192,13 +192,14 @@ impl Quill {
             }
         }
     }
-    /// Create a Quill from the internal representation
-    pub(crate) fn from_inner(inner: quillmark_core::Quill) -> Self {
-        Self { inner }
-    }
 
-    /// Take ownership of the internal Quill
-    pub(crate) fn into_inner(self) -> quillmark_core::Quill {
-        self.inner
-    }
+    // /// Create a Quill from the internal representation
+    // pub(crate) fn from_inner(inner: quillmark_core::Quill) -> Self {
+    //     Self { inner }
+    // }
+
+    // /// Take ownership of the internal Quill
+    // pub(crate) fn into_inner(self) -> quillmark_core::Quill {
+    //     self.inner
+    // }
 }
