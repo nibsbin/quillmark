@@ -188,12 +188,9 @@ workflow = engine.workflow_from_quill_name("my-quill")
 parsed = ParsedDocument.from_markdown(markdown)
 result = workflow.render(parsed, OutputFormat.PDF)
 
-# Dynamic assets (builder pattern)
-workflow_with_assets = (
-    workflow
-    .with_asset("chart.png", chart_bytes)
-    .with_asset("data.csv", csv_bytes)
-)
+# Dynamic assets
+workflow.add_asset("chart.png", chart_bytes)
+workflow.add_asset("data.csv", csv_bytes)
 
 # Query properties
 backend_id = workflow.backend_id()        # -> str
@@ -227,22 +224,22 @@ def process_glue(markdown: str) -> str:
 def process_glue_parsed(parsed: ParsedDocument) -> str:
     """Process parsed document through glue template."""
 
-def with_asset(filename: str, contents: bytes) -> Workflow:
-    """Add dynamic asset (returns new workflow instance)."""
+def add_asset(filename: str, contents: bytes) -> None:
+    """Add dynamic asset (mutates workflow)."""
 
-def with_assets(assets: dict[str, bytes]) -> Workflow:
+def add_assets(assets: dict[str, bytes]) -> None:
     """Add multiple dynamic assets."""
 
-def clear_assets() -> Workflow:
+def clear_assets() -> None:
     """Remove all dynamic assets."""
 
-def with_font(filename: str, contents: bytes) -> Workflow:
+def add_font(filename: str, contents: bytes) -> None:
     """Add dynamic font."""
 
-def with_fonts(fonts: dict[str, bytes]) -> Workflow:
+def add_fonts(fonts: dict[str, bytes]) -> None:
     """Add multiple dynamic fonts."""
 
-def clear_fonts() -> Workflow:
+def clear_fonts() -> None:
     """Remove all dynamic fonts."""
 
 def backend_id() -> str:
@@ -1074,7 +1071,7 @@ class Workflow:
         parsed: ParsedDocument,
         format: OutputFormat | None = None
     ) -> RenderResult: ...
-    def with_asset(self, filename: str, contents: bytes) -> Workflow: ...
+    def add_asset(self, filename: str, contents: bytes) -> None: ...
     def backend_id(self) -> str: ...
     # ... other methods
 
@@ -1183,10 +1180,10 @@ chart_bytes = Path("chart.png").read_bytes()
 engine = Quillmark()
 workflow = engine.workflow_from_quill_name("report")
 
-workflow_with_asset = workflow.with_asset("chart.png", chart_bytes)
+workflow.add_asset("chart.png", chart_bytes)
 
 parsed = ParsedDocument.from_markdown("# Report\n\n![Chart](chart.png)")
-result = workflow_with_asset.render(parsed, OutputFormat.PDF)
+result = workflow.render(parsed, OutputFormat.PDF)
 
 result.artifacts[0].save("report.pdf")
 ```

@@ -41,7 +41,7 @@ pub fn demo(
                 )
             })
             .collect();
-        workflow = workflow.with_assets(full_assets)?;
+        workflow.add_assets(full_assets)?;
     }
 
     // process glue

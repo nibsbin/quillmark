@@ -189,7 +189,7 @@ impl Quillmark {
         // Add assets if provided
         if let Some(assets) = opts.assets {
             for (filename, bytes) in assets {
-                workflow = workflow.with_asset(filename, bytes).map_err(|e| {
+                workflow.add_asset(filename, bytes).map_err(|e| {
                     QuillmarkError::new(format!("Failed to add asset: {}", e), None, None)
                         .to_js_value()
                 })?;

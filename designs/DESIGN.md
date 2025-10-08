@@ -161,13 +161,13 @@ impl Workflow {
     pub fn quill_name(&self) -> &str;
     
     // Dynamic asset management
-    pub fn with_asset(self, filename: impl Into<String>, contents: impl Into<Vec<u8>>) -> Result<Self, RenderError>;
-    pub fn with_assets(self, assets: impl IntoIterator<Item = (String, Vec<u8>)>) -> Result<Self, RenderError>;
-    pub fn clear_assets(self) -> Self;
+    pub fn add_asset(&mut self, filename: impl Into<String>, contents: impl Into<Vec<u8>>) -> Result<(), RenderError>;
+    pub fn add_assets(&mut self, assets: impl IntoIterator<Item = (String, Vec<u8>)>) -> Result<(), RenderError>;
+    pub fn clear_assets(&mut self);
 }
 ```
 
-**Dynamic Assets:** The `Workflow` supports adding runtime assets through a builder pattern. Dynamic assets are prefixed with `DYNAMIC_ASSET__` and stored under `assets/` in the virtual file system, accessible via the `Asset` filter in templates.
+**Dynamic Assets:** The `Workflow` supports adding runtime assets through mutation methods. Dynamic assets are prefixed with `DYNAMIC_ASSET__` and stored under `assets/` in the virtual file system, accessible via the `Asset` filter in templates.
 
 ### QuillRef (ergonomic quill references)
 
@@ -430,7 +430,7 @@ let artifacts = backend.compile(&glue_source, &prepared_quill, &opts)?; // Step 
 * **Dynamic asset path**: Transform filename to prefixed path `assets/DYNAMIC_ASSET__{filename}`
 * **Security validation**: Reject filenames containing path separators (`/` or `\`)
 * **Output format**: Return quoted Typst string literal `"assets/DYNAMIC_ASSET__filename"`
-* **Usage**: Enables runtime asset injection via `Workflow.with_asset()` builder pattern
+* **Usage**: Enables runtime asset injection via `Workflow.add_asset()` methods
 
 #### Value Conversion Helpers
 

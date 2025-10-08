@@ -1,0 +1,23 @@
+[package]
+name = "pyquillmark"
+version = "0.1.0"
+edition = "2021"
+description = "Python bindings for Quillmark"
+license = "Apache-2.0"
+
+[lib]
+name = "_pyquillmark"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module", "abi3-py310"] }
+quillmark = { path = "../quillmark", features = ["typst"] }
+quillmark-core = { path = "../quillmark-core" }
+anyhow = {workspace = true}
+serde_yaml = {workspace = true}
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
+opt-level = "z"
