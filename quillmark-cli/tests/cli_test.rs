@@ -122,7 +122,7 @@ fn test_cli_warning_on_mismatched_quill_tag() {
 
     // Write markdown with a different quill tag
     let markdown_content =
-        "---\n!quill different_quill\nfrom: Test\nto: Test\nsubject: Test\n---\n\nTest content";
+        "---\nQUILL: different_quill\nfrom: Test\nto: Test\nsubject: Test\n---\n\nTest content";
     fs::write(&markdown_path, markdown_content).unwrap();
 
     let output_path = temp_dir.path().join("output.pdf");

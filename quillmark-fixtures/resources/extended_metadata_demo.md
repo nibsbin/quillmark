@@ -6,20 +6,20 @@ version: 1.0
 
 This document demonstrates the new **extended YAML metadata standard** for Quillmark.
 
-The extended standard allows you to define inline metadata sections throughout your document using tag directives.
+The extended standard allows you to define inline metadata sections throughout your document using reserved keys.
 
 ## Features Demonstrated
 
 ---
-!scope features
+SCOPE: features
 name: Tag Directives
 status: implemented
 ---
 
-Use `!scope tag_name` syntax to create collections of related items. Each tagged block creates an entry in an array.
+Use `SCOPE: tag_name` syntax to create collections of related items. Each tagged block creates an entry in an array.
 
 ---
-!scope features
+SCOPE: features
 name: Structured Content
 status: implemented
 ---
@@ -27,7 +27,7 @@ status: implemented
 Break your document into logical sections with their own metadata. Perfect for catalogs, lists, and structured documents.
 
 ---
-!scope features
+SCOPE: features
 name: Backward Compatible
 status: stable
 ---
@@ -37,7 +37,7 @@ Documents without tag directives continue to work exactly as before. No breaking
 ## Use Cases
 
 ---
-!scope use_cases
+SCOPE: use_cases
 category: Documentation
 example: Technical specifications with multiple sections
 ---
@@ -45,7 +45,7 @@ example: Technical specifications with multiple sections
 Perfect for API documentation, user manuals, and technical guides where you need structured metadata for each section.
 
 ---
-!scope use_cases
+SCOPE: use_cases
 category: Content Management
 example: Product catalogs, blog posts, portfolios
 ---

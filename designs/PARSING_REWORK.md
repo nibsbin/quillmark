@@ -1,15 +1,16 @@
 # Quillmark Parsing Rework
 
-This rework introduces the ability to tag markdown documents with the Quill to be used for rendering. This rework also changes the subdocument standard for consistency.
+This rework introduces the ability to tag markdown documents with the Quill to be used for rendering using reserved YAML keys instead of YAML tag directives.
 
 ## Quill Tagging
 
-Users should be able to tag documents with `!quill {quill_name}`. `quillmark` crate consumer should be able to load workflows with `quillmark::Quillmark::workflow_from_parsed()`. This pipes into `workflow_from_quill_name` internally.
+Users should be able to tag documents with `QUILL: {quill_name}`. The `quillmark` crate consumer should be able to load workflows with `quillmark::Quillmark::workflow_from_parsed()`. This pipes into `workflow_from_quill_name` internally.
 
 For example, for the following document:
 
 ```md
---- !quill usaf_memo
+---
+QUILL: usaf_memo
 memo_for: [ORG/SYMBOL]
 ---
 ```
@@ -24,28 +25,24 @@ let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?; // 3
 
 ## Subdocument Tagging
 
-Currently, subdocuments are specified with `!{parent_field}`. This should be changed to `!scope {parent_field}` for consistency with quil ltagging.
+Subdocuments are specified with the `SCOPE:` reserved key. This uses standard YAML syntax instead of custom tag directives.
 
-### Before
-
-```md
----
-!indorsements
-name: "FIRST M. LAST, Rank, USSF"
-title: "Title"
-organization: "ORG/SYMBOL"
-```
-
-### After
+### Format
 
 ```md
 ---
-!scope indorsements
+SCOPE: indorsements
 name: "FIRST M. LAST, Rank, USSF"
 title: "Title"
 organization: "ORG/SYMBOL"
 ---
 ```
+
+## Reserved Keys
+
+- `QUILL`: Specifies the quill (template/workflow) to use for rendering
+- `SCOPE`: Specifies the field name for scoped/tagged blocks that become arrays
+- `body`: Reserved field for document body content (cannot be used as SCOPE value)
 
 ## References
 
