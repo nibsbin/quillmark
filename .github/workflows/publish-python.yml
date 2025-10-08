@@ -108,6 +108,7 @@ jobs:
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
         run: |
+          uv venv
           uv pip install maturin
           uv run maturin upload dist/*.whl
 
