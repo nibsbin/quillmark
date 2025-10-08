@@ -64,7 +64,7 @@ High-level data flow:
 ### `quillmark-core` (foundations)
 
 * Types: `Backend`, `Artifact`, `OutputFormat`
-* Parsing: `decompose`, `ParsedDocument`
+* Parsing: `ParsedDocument` with `from_markdown()` constructor (internal `decompose` function)
 * Templating: `Glue` + stable `filter_api`
 * Template model: `Quill` (+ `Quill.toml`)
 * **Errors & Diagnostics:** `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
@@ -114,7 +114,9 @@ pub struct Quillmark {
 impl Quillmark {
     pub fn new() -> Self;
     pub fn register_quill(&mut self, quill: Quill);
-    pub fn load<'a>(&self, quill_ref: impl Into<QuillRef<'a>>) -> Result<Workflow, RenderError>;
+    pub fn workflow_from_parsed(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError>;
+    pub fn workflow_from_quill<'a>(&self, quill_ref: impl Into<QuillRef<'a>>) -> Result<Workflow, RenderError>;
+    pub fn workflow_from_quill_name(&self, name: &str) -> Result<Workflow, RenderError>;
     pub fn registered_backends(&self) -> Vec<&str>;
     pub fn registered_quills(&self) -> Vec<&str>;
 }
@@ -130,9 +132,14 @@ let mut engine = Quillmark::new();
 let quill = Quill::from_path("path/to/quill")?;
 engine.register_quill(quill);
 
-// Load workflow by name or object
-let workflow = engine.load("my-quill")?;
-let workflow = engine.load(&quill)?;  // Also accepts Quill reference
+// Parse markdown once
+let markdown = "---\ntitle: Example\n---\n\n# Content";
+let parsed = ParsedDocument::from_markdown(markdown)?;
+
+// Load workflow by name or from parsed document
+let workflow = engine.workflow_from_quill_name("my-quill")?;
+let workflow = engine.workflow_from_parsed(&parsed)?;  // Auto-detects from !quill tag
+let workflow = engine.workflow_from_quill(&quill)?;    // Also accepts Quill reference
 ```
 
 ### Workflow (render execution API)
@@ -146,9 +153,9 @@ pub struct Workflow {
 
 impl Workflow {
     pub fn new(backend: Box<dyn Backend>, quill: Quill) -> Result<Self, RenderError>;
-    pub fn render(&self, markdown: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError>;
+    pub fn render(&self, parsed: &ParsedDocument, format: Option<OutputFormat>) -> Result<RenderResult, RenderError>;
     pub fn render_source(&self, content: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError>;
-    pub fn process_glue(&self, markdown: &str) -> Result<String, RenderError>;
+    pub fn process_glue_parsed(&self, parsed: &ParsedDocument) -> Result<String, RenderError>;
     pub fn backend_id(&self) -> &str;
     pub fn supported_formats(&self) -> &'static [OutputFormat];
     pub fn quill_name(&self) -> &str;
@@ -201,7 +208,7 @@ pub struct ParsedDocument {
 }
 ```
 
-**Public API:** `new(fields)`, `body()`, `get_field()`, `fields()`; body is stored under reserved `BODY_FIELD` constant.
+**Public API:** `new(fields)`, `from_markdown(markdown)`, `body()`, `get_field()`, `fields()`, `quill_tag()`; body is stored under reserved `BODY_FIELD` constant. The `from_markdown()` constructor parses markdown and extracts frontmatter and body in one step.
 
 ### Glue (MiniJinja wrapper with stable filter API)
 
@@ -266,9 +273,13 @@ let mut engine = Quillmark::new();
 let quill = Quill::from_path("path/to/quill")?;
 engine.register_quill(quill);
 
+// Parse markdown once
+let markdown = "# Hello";
+let parsed = ParsedDocument::from_markdown(markdown)?;
+
 // Load workflow and render
-let workflow = engine.load("my-quill")?;
-let result = workflow.render("# Hello", Some(OutputFormat::Pdf))?;
+let workflow = engine.workflow_from_quill_name("my-quill")?;
+let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
 for a in result.artifacts { /* write bytes */ }
 ```
 
@@ -278,12 +289,15 @@ for a in result.artifacts { /* write bytes */ }
 let backend = Box::new(TypstBackend::default());
 let quill = Quill::from_path("path/to/quill")?;
 let workflow = Workflow::new(backend, quill)?;
-let result = workflow.render(markdown, Some(OutputFormat::Pdf))?;
+
+let markdown = "# Hello";
+let parsed = ParsedDocument::from_markdown(markdown)?;
+let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
 ```
 
 **Internal steps (encapsulated in Workflow::render):**
 
-1. **Parse Markdown**: `decompose(markdown)` → YAML frontmatter + body.
+1. **Parse Markdown**: Already done by caller via `ParsedDocument::from_markdown(markdown)` → YAML frontmatter + body.
 2. **Setup Glue**: `Glue::new(quill.glue_template)`; backend `register_filters(&mut glue)`.
 3. **Compose**: `glue.compose(parsed.fields().clone())` → backend-specific glue source.
 4. **Compile**: `backend.compile(&glue_src, &quill, &opts)` → `Vec<Artifact>` (PDF/SVG/TXT…).
@@ -326,21 +340,21 @@ let result = workflow.render(markdown, Some(OutputFormat::Pdf))?;
 
 ```rust
 // Typical orchestration pattern (encapsulated in Workflow::render):
-let parsed = decompose(markdown)?;                      // Step 1  
-let mut glue = Glue::new(&quill.glue_template)?;        // Step 2a
-backend.register_filters(&mut glue);                    // Step 2b
-let glue_source = glue.compose(parsed.fields().clone())?; // Step 3
-let prepared_quill = self.prepare_quill_with_assets();  // Step 3.5: inject dynamic assets
-let artifacts = backend.compile(&glue_source, &prepared_quill, &opts)?; // Step 4
+// Parsing is done externally by caller via ParsedDocument::from_markdown()
+let mut glue = Glue::new(&quill.glue_template)?;        // Step 1a
+backend.register_filters(&mut glue);                    // Step 1b
+let glue_source = glue.compose(parsed.fields().clone())?; // Step 2
+let prepared_quill = self.prepare_quill_with_assets();  // Step 2.5: inject dynamic assets
+let artifacts = backend.compile(&glue_source, &prepared_quill, &opts)?; // Step 3
 ```
 
 **Dynamic Asset Workflow**: Dynamic assets added via `with_asset()` are stored in the `Workflow` and injected into a cloned `Quill` during rendering. The `prepare_quill_with_assets()` method prefixes each filename with `DYNAMIC_ASSET__` and adds it to `assets/` in the quill's virtual file system, ensuring no collisions with static assets.
 
 #### Render Method Variants
 
-* **render()**: Full pipeline from markdown to artifacts with optional format
+* **render()**: Full pipeline from parsed document to artifacts with optional format
 * **render_source()**: Skip parsing, compile pre-processed glue content
-* **process_glue()**: Extract just the glue composition step (markdown → glue source)
+* **process_glue_parsed()**: Extract just the glue composition step (ParsedDocument → glue source)
 
 ---
 
@@ -500,9 +514,9 @@ Parses to structured data with a `products` array containing objects with metada
 
 ### Implementation Hints
 
-#### Frontmatter Detection (`decompose` function)
+#### Frontmatter Detection (internal implementation)
 
-The implementation uses pattern matching for delimiter detection with full cross-platform support:
+The internal implementation (accessed via `ParsedDocument::from_markdown()`) uses pattern matching for delimiter detection with full cross-platform support:
 
 * **Line ending support**: Checks both `"---\n"` and `"---\r\n"` for Windows/Unix compatibility
 * **Delimiter search**: Finds opening and closing delimiters using pattern matching
@@ -525,16 +539,7 @@ The implementation uses pattern matching for delimiter detection with full cross
 **Key implementation pattern:**
 
 ```rust
-// Scan for all metadata blocks (both frontmatter and tagged)
-fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, Error> {
-    // Find all opening delimiters (---\n or ---\r\n)
-    // Check if followed by blank line (→ horizontal rule) or content (→ metadata)
-    // For metadata blocks: extract tag directive if present (!tag_name)
-    // Validate contiguity (no blank lines within block)
-    // Find closing delimiter (including EOF support)
-}
-
-// Aggregate and structure results
+// Internal function - use ParsedDocument::from_markdown() instead
 fn decompose(markdown: &str) -> Result<ParsedDocument, Error> {
     let blocks = find_metadata_blocks(markdown)?;
     // Separate global frontmatter from tagged blocks
