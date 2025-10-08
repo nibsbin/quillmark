@@ -302,7 +302,7 @@ All errors are thrown as JavaScript exceptions containing serialized `QuillmarkE
 ### Error Structure
 ```typescript
 try {
-  engine.render('my-quill', markdown, options);
+  engine.render(markdown, options);
 } catch (error) {
   const quillError = error as QuillmarkError;
   
