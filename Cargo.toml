@@ -5,7 +5,7 @@ members = [
     "quillmark-typst",
     "quillmark-fixtures",
     "quillmark-wasm",
-    "quillmark-fuzz",
+    "quillmark-fuzz", "quillmark-cli",
 ]
 default-members = [
     "quillmark-core",
