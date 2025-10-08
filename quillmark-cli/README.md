@@ -32,14 +32,59 @@ quillmark-cli --quill <QUILL_DIR> --markdown <MARKDOWN_FILE> --output <OUTPUT_PD
 - `--markdown <MARKDOWN_FILE>` - Path to the markdown file to render
 - `--output <OUTPUT_PDF>` - Output PDF file path (default: `output.pdf`)
 
-### Example
+### Examples
+
+#### Example 1: Render a USAF Memo
 
 ```bash
-# Render a memo using the usaf_memo quill
+# Using the usaf_memo quill from fixtures
 quillmark-cli \
   --quill ./quillmark-fixtures/resources/usaf_memo \
   --markdown ./my-memo.md \
   --output ./my-memo.pdf
+```
+
+Create `my-memo.md`:
+```markdown
+---
+from: HQ AFGSC/A3TW
+to: ALL MAJCOM UNITS
+subject: Test Memorandum
+date: 2024-01-15
+---
+
+This is the body of the memorandum.
+```
+
+#### Example 2: Render with a Simple Quill
+
+```bash
+# Using the taro quill (simpler, no external packages)
+quillmark-cli \
+  --quill ./quillmark-fixtures/resources/taro \
+  --markdown ./simple-doc.md \
+  --output ./simple-doc.pdf
+```
+
+Create `simple-doc.md`:
+```markdown
+---
+author: John Doe
+ice_cream: Chocolate
+title: My Document
+---
+
+This is a simple document.
+```
+
+#### Example 3: Testing Your Own Quill
+
+```bash
+# Test your custom quill during development
+quillmark-cli \
+  --quill ./path/to/my-quill \
+  --markdown ./test.md \
+  --output ./test.pdf
 ```
 
 ## Features
