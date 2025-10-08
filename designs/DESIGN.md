@@ -5,7 +5,7 @@
 ---
 
 **See also:**
-- [quillmark-core/PARSE.md](quillmark-core/PARSE.md) - Detailed parsing and Extended YAML Metadata Standard documentation
+- [PARSE.md](PARSE.md) - Detailed parsing and Extended YAML Metadata Standard documentation
 - [ERROR.md](ERROR.md) - Error handling system documentation and implementation guide
 
 ## Table of Contents
@@ -510,7 +510,7 @@ Parses to structured data with a `products` array containing objects with metada
 
 **Error posture:** Fail-fast for malformed YAML to prevent silent data corruption; clear error messages for invalid tag syntax or name collisions.
 
-**See `quillmark-core/PARSE.md` for comprehensive documentation of the Extended YAML Metadata Standard.**
+**See `designs/PARSE.md` for comprehensive documentation of the Extended YAML Metadata Standard.**
 
 ### Implementation Hints
 

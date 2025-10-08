@@ -39,7 +39,7 @@
 //!
 //! ## Further Reading
 //!
-//! - [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-core/docs/designs/PARSE.md) - Detailed parsing documentation
+//! - [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) - Detailed parsing documentation
 //! - [Examples](https://github.com/nibsbin/quillmark/tree/main/examples) - Working examples
 
 pub mod parse;

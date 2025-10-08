@@ -51,7 +51,7 @@ Creates `products` array with metadata + `body` field. Rules:
 - Blocks must be contiguous (no blank lines)
 - `---` + blank line = horizontal rule (NOT metadata)
 
-See `quillmark-core/docs/designs/PARSE.md`.
+See `designs/PARSE.md`.
 
 ## Filter API (Stable Abstraction)
 

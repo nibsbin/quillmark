@@ -79,7 +79,7 @@
 //! - Reserved field name usage
 //! - Name collisions
 //!
-//! See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-core/docs/designs/PARSE.md) for comprehensive documentation of the Extended YAML Metadata Standard.
+//! See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) for comprehensive documentation of the Extended YAML Metadata Standard.
 
 use std::collections::HashMap;
 
