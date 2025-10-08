@@ -3,7 +3,7 @@ requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "pyquillmark"
+name = "quillmark"
 version = "0.1.0"
 description = "Python bindings for Quillmark - template-first Markdown rendering"
 authors = [{ name = "Quillmark Contributors" }]
@@ -38,8 +38,8 @@ dev = [
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "python"
-module-name = "pyquillmark._pyquillmark"
-include = ["python/pyquillmark/**/*.py", "python/pyquillmark/py.typed"]
+module-name = "quillmark._quillmark"
+include = ["python/quillmark/**/*.py", "python/quillmark/py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

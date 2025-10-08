@@ -1,6 +1,6 @@
 title: Hello World
 author: Alice
-# PyQuillmark — Python bindings for Quillmark
+# Quillmark — Python bindings for Quillmark
 
 Compact docs and canonical developer workflow.
 
@@ -8,14 +8,14 @@ Installation
 ------------
 
 ```bash
-pip install pyquillmark
+pip install quillmark
 ```
 
 Quick start
 -----------
 
 ```python
-from pyquillmark import Quillmark, ParsedDocument, OutputFormat
+from quillmark import Quillmark, ParsedDocument, OutputFormat
 
 engine = Quillmark()
 parsed = ParsedDocument.from_markdown("# Hello")
@@ -90,6 +90,6 @@ uv run python -m maturin develop --release
 uv run pytest
 
 # run mypy and ruff checks (project recommends these)
-uv run mypy python/pyquillmark
+uv run mypy python/quillmark
 uv run ruff check python/
 ```w

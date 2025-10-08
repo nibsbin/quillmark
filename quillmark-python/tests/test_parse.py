@@ -2,7 +2,7 @@
 
 import pytest
 
-from pyquillmark import ParsedDocument, ParseError
+from quillmark import ParsedDocument, ParseError
 
 
 def test_parse_markdown(simple_markdown):

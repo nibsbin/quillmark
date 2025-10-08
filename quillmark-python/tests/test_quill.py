@@ -2,7 +2,7 @@
 
 import pytest
 
-from pyquillmark import Quill, QuillmarkError
+from quillmark import Quill, QuillmarkError
 
 
 def test_load_quill(test_quill_dir):

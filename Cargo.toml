@@ -7,7 +7,7 @@ members = [
     "quillmark-wasm",
     "quillmark-fuzz",
     "quillmark-cli",
-    "pyquillmark",
+    "quillmark-python",
 ]
 # The default members to include when running `cargo build` or `cargo test` in the workspace root.
 default-members = [

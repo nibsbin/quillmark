@@ -1,6 +1,6 @@
-"""PyQuillmark - Python bindings for Quillmark."""
+"""Quillmark - Python bindings for Quillmark."""
 
-from ._pyquillmark import (
+from ._quillmark import (
     Artifact,
     CompilationError,
     Diagnostic,

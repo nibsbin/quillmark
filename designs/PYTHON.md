@@ -1,12 +1,12 @@
 # Python Package Design for Quillmark
 
 > **Status**: Design Phase  
-> **Package Name**: `pyquillmark`  
+> **Package Name**: `quillmark`  
 > **Target**: Python 3.10+  
 
 ## Executive Summary
 
-This document outlines the design for `pyquillmark`, a Python package that exposes the Quillmark rendering engine to Python applications. The package uses PyO3 for Rust-Python bindings and maturin for building and distributing binary wheels to PyPI.
+This document outlines the design for `quillmark`, a Python package that exposes the Quillmark rendering engine to Python applications. The package uses PyO3 for Rust-Python bindings and maturin for building and distributing binary wheels to PyPI.
 
 **Design Goals:**
 - Mirror the public API of the `quillmark` Rust crate
@@ -53,10 +53,10 @@ This document outlines the design for `pyquillmark`, a Python package that expos
 ┌─────────────────────────────────────────┐
 │         Python Application              │
 └──────────────┬──────────────────────────┘
-               │ import pyquillmark
+               │ import quillmark
                ▼
 ┌─────────────────────────────────────────┐
-│       pyquillmark (Python Layer)        │
+│       quillmark (Python Layer)        │
 │  - Type hints & stubs                   │
 │  - Python-friendly wrappers             │
 │  - Exception hierarchy                  │
@@ -64,7 +64,7 @@ This document outlines the design for `pyquillmark`, a Python package that expos
                │ PyO3 FFI
                ▼
 ┌─────────────────────────────────────────┐
-│    _pyquillmark (Native Extension)      │
+│    _quillmark (Native Extension)      │
 │  - PyO3 #[pyclass] wrappers             │
 │  - Rust→Python type conversions         │
 │  - Error mapping                        │
@@ -84,7 +84,7 @@ This document outlines the design for `pyquillmark`, a Python package that expos
 ## Package Structure
 
 ```
-pyquillmark/
+quillmark/
 ├── src/
 │   ├── lib.rs              # PyO3 module entry point
 │   ├── engine.rs           # Quillmark engine wrapper
@@ -95,7 +95,7 @@ pyquillmark/
 │   ├── errors.rs           # Exception definitions
 │   └── conversions.rs      # Rust↔Python conversions
 ├── python/
-│   └── pyquillmark/
+│   └── quillmark/
 │       ├── __init__.py     # Public API exports
 │       ├── __init__.pyi    # Type stubs
 │       └── py.typed        # PEP 561 marker
@@ -128,7 +128,7 @@ The Python API mirrors the Rust `quillmark` crate's public API with Pythonic con
 The main orchestration engine for managing backends and quills.
 
 ```python
-from pyquillmark import Quillmark
+from quillmark import Quillmark
 
 # Create engine (auto-registers backends)
 engine = Quillmark()
@@ -180,7 +180,7 @@ def registered_quills() -> list[str]:
 Sealed workflow for executing the render pipeline.
 
 ```python
-from pyquillmark import Workflow, OutputFormat
+from quillmark import Workflow, OutputFormat
 
 workflow = engine.workflow_from_quill_name("my-quill")
 
@@ -265,7 +265,7 @@ def dynamic_font_names() -> list[str]:
 Represents a quill template bundle loaded from the filesystem.
 
 ```python
-from pyquillmark import Quill
+from quillmark import Quill
 
 # Load from path
 quill = Quill.from_path("path/to/quill")
@@ -314,7 +314,7 @@ def metadata() -> dict[str, Any]:
 Represents a parsed markdown document with frontmatter.
 
 ```python
-from pyquillmark import ParsedDocument
+from quillmark import ParsedDocument
 
 # Parse markdown
 parsed = ParsedDocument.from_markdown(markdown)
@@ -424,7 +424,7 @@ def save(path: str | Path) -> None:
 #### `OutputFormat`
 
 ```python
-from pyquillmark import OutputFormat
+from quillmark import OutputFormat
 
 # Available formats
 OutputFormat.PDF
@@ -435,7 +435,7 @@ OutputFormat.TXT
 #### `Severity`
 
 ```python
-from pyquillmark import Severity
+from quillmark import Severity
 
 Severity.ERROR
 Severity.WARNING
@@ -476,7 +476,7 @@ class Location:
 Python exception hierarchy mapping Rust errors:
 
 ```python
-from pyquillmark import (
+from quillmark import (
     QuillmarkError,        # Base exception
     ParseError,            # YAML parsing failed
     TemplateError,         # Template rendering failed
@@ -521,7 +521,7 @@ QuillmarkError (base)
 use pyo3::prelude::*;
 
 #[pymodule]
-fn _pyquillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _quillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register classes
     m.add_class::<PyQuillmark>()?;
     m.add_class::<PyWorkflow>()?;
@@ -605,12 +605,12 @@ use pyo3::exceptions::PyException;
 use quillmark_core::RenderError;
 
 // Base exception
-create_exception!(_pyquillmark, QuillmarkError, PyException);
+create_exception!(_quillmark, QuillmarkError, PyException);
 
 // Specific exceptions
-create_exception!(_pyquillmark, ParseError, QuillmarkError);
-create_exception!(_pyquillmark, TemplateError, QuillmarkError);
-create_exception!(_pyquillmark, CompilationError, QuillmarkError);
+create_exception!(_quillmark, ParseError, QuillmarkError);
+create_exception!(_quillmark, TemplateError, QuillmarkError);
+create_exception!(_quillmark, CompilationError, QuillmarkError);
 
 pub fn convert_render_error(err: RenderError) -> PyErr {
     match err {
@@ -691,7 +691,7 @@ requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "pyquillmark"
+name = "quillmark"
 version = "0.1.0"
 description = "Python bindings for Quillmark - template-first Markdown rendering"
 authors = [{ name = "Quillmark Contributors" }]
@@ -728,8 +728,8 @@ dev = [
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "python"
-module-name = "pyquillmark._pyquillmark"
-include = ["python/pyquillmark/**/*.py", "python/pyquillmark/py.typed"]
+module-name = "quillmark._quillmark"
+include = ["python/quillmark/**/*.py", "python/quillmark/py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -751,14 +751,14 @@ select = ["E", "F", "W", "I", "N", "UP"]
 
 ```toml
 [package]
-name = "pyquillmark"
+name = "quillmark"
 version = "0.1.0"
 edition = "2021"
 description = "Python bindings for Quillmark"
 license = "Apache-2.0"
 
 [lib]
-name = "_pyquillmark"
+name = "_quillmark"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -823,7 +823,7 @@ uv pip install -e ".[dev]"
 uv run pytest
 
 # Type checking
-uv run mypy python/pyquillmark
+uv run mypy python/quillmark
 
 # Linting and formatting
 uv run ruff check python/
@@ -856,7 +856,7 @@ tests/
 **`tests/test_engine.py`:**
 ```python
 import pytest
-from pyquillmark import Quillmark, Quill
+from quillmark import Quillmark, Quill
 
 def test_engine_creation():
     engine = Quillmark()
@@ -872,7 +872,7 @@ def test_register_quill(tmp_path):
 
 **`tests/test_workflow.py`:**
 ```python
-from pyquillmark import Quillmark, ParsedDocument, OutputFormat
+from quillmark import Quillmark, ParsedDocument, OutputFormat
 
 def test_end_to_end_render(test_quill_path):
     engine = Quillmark()
@@ -999,15 +999,15 @@ jobs:
 
 ```bash
 # From PyPI (when published)
-pip install pyquillmark
-uv pip install pyquillmark
+pip install quillmark
+uv pip install quillmark
 
 # With dev dependencies
-pip install pyquillmark[dev]
+pip install quillmark[dev]
 
 # From source
 git clone https://github.com/nibsbin/quillmark.git
-cd quillmark/pyquillmark
+cd quillmark/quillmark
 maturin develop
 ```
 
@@ -1052,7 +1052,7 @@ def render(
 
 ### Type Stubs
 
-**`python/pyquillmark/__init__.pyi`:**
+**`python/quillmark/__init__.pyi`:**
 ```python
 from typing import Any
 from pathlib import Path
@@ -1083,7 +1083,7 @@ class Workflow:
 ## Implementation Roadmap
 
 ### Phase 1: Foundation (Week 1-2)
-- [ ] Set up `pyquillmark/` directory structure
+- [ ] Set up `quillmark/` directory structure
 - [ ] Configure `pyproject.toml` and `Cargo.toml`
 - [ ] Implement basic PyO3 module structure (`lib.rs`)
 - [ ] Create error exception hierarchy
@@ -1136,7 +1136,7 @@ class Workflow:
 ### Basic Rendering
 
 ```python
-from pyquillmark import Quillmark, Quill, ParsedDocument, OutputFormat
+from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat
 
 # Create engine
 engine = Quillmark()
@@ -1170,7 +1170,7 @@ print(f"Generated {len(result.artifacts[0].bytes)} bytes")
 ### Dynamic Assets
 
 ```python
-from pyquillmark import Quillmark, OutputFormat, ParsedDocument
+from quillmark import Quillmark, OutputFormat, ParsedDocument
 from pathlib import Path
 
 # Load chart image
@@ -1191,7 +1191,7 @@ result.artifacts[0].save("report.pdf")
 ### Batch Processing
 
 ```python
-from pyquillmark import Quillmark, OutputFormat, ParsedDocument
+from quillmark import Quillmark, OutputFormat, ParsedDocument
 from pathlib import Path
 import concurrent.futures
 

@@ -1,4 +1,4 @@
-"""Type stubs for pyquillmark."""
+"""Type stubs for quillmark."""
 
 from pathlib import Path
 from typing import Any

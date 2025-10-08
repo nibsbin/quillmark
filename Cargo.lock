@@ -1817,17 +1817,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pyquillmark"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "pyo3",
- "quillmark",
- "quillmark-core",
- "serde_yaml",
-]
-
-[[package]]
 name = "qcms"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1918,6 +1907,17 @@ dependencies = [
  "proptest",
  "quillmark-core",
  "quillmark-typst",
+]
+
+[[package]]
+name = "quillmark-python"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "pyo3",
+ "quillmark",
+ "quillmark-core",
+ "serde_yaml",
 ]
 
 [[package]]

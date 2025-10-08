@@ -1,8 +1,8 @@
-"""Basic example of using pyquillmark."""
+"""Basic example of using quillmark."""
 
 from pathlib import Path
 
-from pyquillmark import OutputFormat, ParsedDocument, Quill, Quillmark
+from quillmark import OutputFormat, ParsedDocument, Quill, Quillmark
 
 # Create engine
 engine = Quillmark()
