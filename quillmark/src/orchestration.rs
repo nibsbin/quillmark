@@ -330,7 +330,7 @@ pub struct Workflow {
 }
 
 impl Workflow {
-    /// Create a new Workflow with the specified backend and quill. Usually called via [`crate::orchestration::Quillmark::load`].
+    /// Create a new Workflow with the specified backend and quill.
     pub fn new(backend: Box<dyn Backend>, quill: Quill) -> Result<Self, RenderError> {
         // Since Quill::from_path() now automatically validates, we don't need to validate again
         Ok(Self {
