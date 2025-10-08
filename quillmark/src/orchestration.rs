@@ -235,7 +235,7 @@ impl Quillmark {
     pub fn workflow_from_parsed(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError> {
         let quill_name = parsed.quill_tag().ok_or_else(|| {
             RenderError::Other(
-                "No quill tag found in parsed document. Use !quill directive in markdown.".into(),
+                "No QUILL field found in parsed document. Add `QUILL: <name>` to the markdown frontmatter.".into(),
             )
         })?;
         self.workflow_from_quill_name(quill_name)

@@ -61,9 +61,9 @@ const quillObj = {
 // Register Quill
 engine.registerQuill('my-quill', quillObj);
 
-// Render markdown with !quill directive
+// Render markdown with QUILL frontmatter field
 const markdown = `---
-!quill my-quill
+QUILL: my-quill
 ---
 
 # Hi`;

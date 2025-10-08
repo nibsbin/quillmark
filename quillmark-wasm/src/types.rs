@@ -164,7 +164,7 @@ pub struct RenderOptions {
     pub format: Option<OutputFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub assets: Option<std::collections::HashMap<String, Vec<u8>>>,
-    /// Optional quill name that overrides or fills in for the markdown's !quill directive
+    /// Optional quill name that overrides or fills in for the markdown's QUILL frontmatter field
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quill_name: Option<String>,
 }

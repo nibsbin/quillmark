@@ -132,7 +132,7 @@ impl Quillmark {
     /// Render markdown to final artifacts (PDF, SVG, TXT)
     ///
     /// Uses the Quill specified in options.quill_name if provided,
-    /// otherwise infers it from the markdown's `!quill` directive.
+    /// otherwise infers it from the markdown's `QUILL` frontmatter field.
     #[wasm_bindgen]
     pub fn render(&mut self, markdown: &str, options: JsValue) -> Result<JsValue, JsValue> {
         let opts: RenderOptions = if options.is_undefined() || options.is_null() {
@@ -160,7 +160,7 @@ impl Quillmark {
 
         // Determine which workflow to use
         let mut workflow = if let Some(quill_name) = opts.quill_name {
-            // Use explicitly provided quill name (overrides !quill directive)
+            // Use explicitly provided quill name (overrides QUILL frontmatter field)
             self.inner
                 .workflow_from_quill_name(&quill_name)
                 .map_err(|e| {
@@ -172,13 +172,13 @@ impl Quillmark {
                     .to_js_value()
                 })?
         } else {
-            // Infer workflow from parsed document (uses !quill directive)
+            // Infer workflow from parsed document (uses QUILL frontmatter field)
             self.inner.workflow_from_parsed(&parsed).map_err(|e| {
                 QuillmarkError::new(
                     format!("Failed to infer Quill from markdown: {}", e),
                     None,
                     Some(
-                        "Add a '!quill <name>' directive in your markdown or specify quillName in options"
+                        "Add a 'QUILL: <name>' field in your markdown frontmatter or specify quillName in options"
                             .to_string(),
                     ),
                 )

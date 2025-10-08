@@ -138,7 +138,7 @@ let parsed = ParsedDocument::from_markdown(markdown)?;
 
 // Load workflow by name or from parsed document
 let workflow = engine.workflow_from_quill_name("my-quill")?;
-let workflow = engine.workflow_from_parsed(&parsed)?;  // Auto-detects from !quill tag
+let workflow = engine.workflow_from_parsed(&parsed)?;  // Auto-detects from QUILL frontmatter field
 let workflow = engine.workflow_from_quill(&quill)?;    // Also accepts Quill reference
 ```
 

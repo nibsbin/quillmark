@@ -46,9 +46,9 @@ Options:
 - `--quill-path <QUILL_DIR>` - Path to the quill directory (required)
 - `--output <OUTPUT_PDF>` - Output PDF file path (default: `output.pdf`)
 
-### Quill Tag Validation
+### Quill Validation
 
-If your markdown includes a `!quill` tag in the frontmatter, the CLI will warn you if it doesn't match the quill loaded from `--quill-path`. The quill specified by `--quill-path` is always used as the authoritative source.
+If your markdown includes a `QUILL` field in the frontmatter, the CLI will warn you if it doesn't match the quill loaded from `--quill-path`. The quill specified by `--quill-path` is always used as the authoritative source.
 
 Example warning:
 ```
@@ -84,12 +84,12 @@ This creates `output.pdf` using the specified quill.
 quillmark-cli my-memo.md --quill-path ./my-quill --output my-memo.pdf
 ```
 
-#### Example 3: With Quill Tag (Validation)
+#### Example 3: With QUILL Field (Validation)
 
 Create `document.md`:
 ```markdown
 ---
-!quill usaf_memo
+QUILL: usaf_memo
 from: HQ AFGSC/A3TW
 to: ALL MAJCOM UNITS
 subject: Test
