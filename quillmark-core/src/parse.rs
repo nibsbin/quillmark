@@ -47,7 +47,7 @@
 //! # Products
 //!
 //! ---
-//! !products
+//! !scope products
 //! name: Widget
 //! price: 19.99
 //! ---
@@ -136,7 +136,8 @@ struct MetadataBlock {
     start: usize, // Position of opening "---"
     end: usize,   // Position after closing "---\n"
     yaml_content: String,
-    tag: Option<String>, // Tag directive if present
+    tag: Option<String>, // Tag directive if present (for !scope directives)
+    quill_name: Option<String>, // Quill name if !quill directive present
 }
 
 /// Validate tag name follows pattern [a-z_][a-z0-9_]*
@@ -257,10 +258,11 @@ fn find_metadata_blocks(
                 }
 
                 // Extract tag directive if present
-                let (tag, yaml_content) = if content.starts_with('!') {
+                // New format: !scope {field} or !quill {quill_name}
+                let (tag, quill_name, yaml_content) = if content.starts_with('!') {
                     if let Some(newline_pos) = content.find(|c| c == '\n' || c == '\r') {
-                        let tag_line = &content[1..newline_pos];
-                        // Skip newline(s) after tag
+                        let directive_line = &content[1..newline_pos];
+                        // Skip newline(s) after directive
                         let yaml_start = if content[newline_pos..].starts_with("\r\n") {
                             newline_pos + 2
                         } else {
@@ -271,38 +273,142 @@ fn find_metadata_blocks(
                         } else {
                             ""
                         };
-                        (Some(tag_line.trim().to_string()), yaml.to_string())
+
+                        // Parse directive: "!scope field" or "!quill name"
+                        let directive_parts: Vec<&str> =
+                            directive_line.trim().split_whitespace().collect();
+
+                        if directive_parts.is_empty() {
+                            return Err("Empty tag directive".into());
+                        }
+
+                        match directive_parts[0] {
+                            "scope" => {
+                                // !scope field_name
+                                if directive_parts.len() != 2 {
+                                    return Err(format!(
+                                        "Invalid scope directive: expected '!scope field_name', got '!{}'",
+                                        directive_line
+                                    )
+                                    .into());
+                                }
+                                let field_name = directive_parts[1];
+                                if !is_valid_tag_name(field_name) {
+                                    return Err(format!(
+                                        "Invalid field name '{}': must match pattern [a-z_][a-z0-9_]*",
+                                        field_name
+                                    )
+                                    .into());
+                                }
+                                if field_name == BODY_FIELD {
+                                    return Err(format!(
+                                        "Cannot use reserved field name '{}' as scope directive",
+                                        BODY_FIELD
+                                    )
+                                    .into());
+                                }
+                                (Some(field_name.to_string()), None, yaml.to_string())
+                            }
+                            "quill" => {
+                                // !quill quill_name
+                                if directive_parts.len() != 2 {
+                                    return Err(format!(
+                                        "Invalid quill directive: expected '!quill quill_name', got '!{}'",
+                                        directive_line
+                                    )
+                                    .into());
+                                }
+                                let quill = directive_parts[1];
+                                if !is_valid_tag_name(quill) {
+                                    return Err(format!(
+                                        "Invalid quill name '{}': must match pattern [a-z_][a-z0-9_]*",
+                                        quill
+                                    )
+                                    .into());
+                                }
+                                (None, Some(quill.to_string()), yaml.to_string())
+                            }
+                            _ => {
+                                return Err(format!(
+                                    "Invalid directive '{}': expected 'scope' or 'quill'",
+                                    directive_parts[0]
+                                )
+                                .into());
+                            }
+                        }
                     } else {
                         // Tag directive with no YAML content (entire content is just tag)
-                        (Some(content[1..].trim().to_string()), String::new())
+                        let directive_line = content[1..].trim();
+                        let directive_parts: Vec<&str> =
+                            directive_line.split_whitespace().collect();
+
+                        if directive_parts.is_empty() {
+                            return Err("Empty tag directive".into());
+                        }
+
+                        match directive_parts[0] {
+                            "scope" => {
+                                if directive_parts.len() != 2 {
+                                    return Err(format!(
+                                        "Invalid scope directive: expected '!scope field_name', got '!{}'",
+                                        directive_line
+                                    )
+                                    .into());
+                                }
+                                let field_name = directive_parts[1];
+                                if !is_valid_tag_name(field_name) {
+                                    return Err(format!(
+                                        "Invalid field name '{}': must match pattern [a-z_][a-z0-9_]*",
+                                        field_name
+                                    )
+                                    .into());
+                                }
+                                if field_name == BODY_FIELD {
+                                    return Err(format!(
+                                        "Cannot use reserved field name '{}' as scope directive",
+                                        BODY_FIELD
+                                    )
+                                    .into());
+                                }
+                                (Some(field_name.to_string()), None, String::new())
+                            }
+                            "quill" => {
+                                if directive_parts.len() != 2 {
+                                    return Err(format!(
+                                        "Invalid quill directive: expected '!quill quill_name', got '!{}'",
+                                        directive_line
+                                    )
+                                    .into());
+                                }
+                                let quill = directive_parts[1];
+                                if !is_valid_tag_name(quill) {
+                                    return Err(format!(
+                                        "Invalid quill name '{}': must match pattern [a-z_][a-z0-9_]*",
+                                        quill
+                                    )
+                                    .into());
+                                }
+                                (None, Some(quill.to_string()), String::new())
+                            }
+                            _ => {
+                                return Err(format!(
+                                    "Invalid directive '{}': expected 'scope' or 'quill'",
+                                    directive_parts[0]
+                                )
+                                .into());
+                            }
+                        }
                     }
                 } else {
-                    (None, content.to_string())
+                    (None, None, content.to_string())
                 };
-
-                // Validate tag name if present
-                if let Some(ref tag_name) = tag {
-                    if !is_valid_tag_name(tag_name) {
-                        return Err(format!(
-                            "Invalid tag name '{}': must match pattern [a-z_][a-z0-9_]*",
-                            tag_name
-                        )
-                        .into());
-                    }
-                    if tag_name == BODY_FIELD {
-                        return Err(format!(
-                            "Cannot use reserved field name '{}' as tag directive",
-                            BODY_FIELD
-                        )
-                        .into());
-                    }
-                }
 
                 blocks.push(MetadataBlock {
                     start: abs_pos,
                     end: abs_closing_pos + closing_len, // After closing delimiter
                     yaml_content,
                     tag,
+                    quill_name,
                 });
 
                 pos = abs_closing_pos + closing_len;
@@ -353,10 +459,20 @@ pub fn decompose(
     let mut tagged_attributes: HashMap<String, Vec<serde_yaml::Value>> = HashMap::new();
     let mut has_global_frontmatter = false;
     let mut global_frontmatter_index: Option<usize> = None;
+    let mut quill_name: Option<String> = None;
 
-    // First pass: identify global frontmatter and validate
+    // First pass: identify global frontmatter, quill directive, and validate
     for (idx, block) in blocks.iter().enumerate() {
-        if block.tag.is_none() {
+        // Check for quill directive
+        if let Some(ref name) = block.quill_name {
+            if quill_name.is_some() {
+                return Err("Multiple quill directives found: only one allowed".into());
+            }
+            quill_name = Some(name.clone());
+        }
+
+        // Check for global frontmatter (no tag and no quill directive)
+        if block.tag.is_none() && block.quill_name.is_none() {
             if has_global_frontmatter {
                 return Err(
                     "Multiple global frontmatter blocks found: only one untagged block allowed"
@@ -394,6 +510,31 @@ pub fn decompose(
         }
 
         fields.extend(yaml_fields);
+    }
+
+    // Process blocks with quill directives
+    for block in &blocks {
+        if block.quill_name.is_some() {
+            // Quill directive blocks can have YAML content (becomes part of frontmatter)
+            if !block.yaml_content.is_empty() {
+                let yaml_fields: HashMap<String, serde_yaml::Value> =
+                    serde_yaml::from_str(&block.yaml_content)
+                        .map_err(|e| format!("Invalid YAML in quill block: {}", e))?;
+
+                // Check for conflicts with existing fields
+                for key in yaml_fields.keys() {
+                    if fields.contains_key(key) {
+                        return Err(format!(
+                            "Name collision: quill block field '{}' conflicts with existing field",
+                            key
+                        )
+                        .into());
+                    }
+                }
+
+                fields.extend(yaml_fields);
+            }
+        }
     }
 
     // Parse tagged blocks
@@ -445,11 +586,18 @@ pub fn decompose(
     }
 
     // Extract global body
-    let (body_start, body_end) = if let Some(idx) = global_frontmatter_index {
-        // Global body starts after frontmatter
+    // Body starts after global frontmatter or quill block (whichever comes first)
+    // Body ends at the first scope block or EOF
+    let first_non_scope_block_idx = blocks
+        .iter()
+        .position(|b| b.tag.is_none() && b.quill_name.is_none())
+        .or_else(|| blocks.iter().position(|b| b.quill_name.is_some()));
+
+    let (body_start, body_end) = if let Some(idx) = first_non_scope_block_idx {
+        // Body starts after the first non-scope block (global frontmatter or quill)
         let start = blocks[idx].end;
 
-        // Global body ends at the first tagged block after the frontmatter, or EOF
+        // Body ends at the first scope block after this, or EOF
         let end = blocks
             .iter()
             .skip(idx + 1)
@@ -459,7 +607,7 @@ pub fn decompose(
 
         (start, end)
     } else {
-        // No global frontmatter - body is everything before the first tagged block
+        // No global frontmatter or quill block - body is everything before the first scope block
         let end = blocks
             .iter()
             .find(|b| b.tag.is_some())
@@ -483,22 +631,9 @@ pub fn decompose(
 
     let mut parsed = ParsedDocument::new(fields);
 
-    // Extract quill tag if present
-    if let Some(quill_items) = parsed.fields.get(QUILL_TAG) {
-        if let Some(quill_array) = quill_items.as_sequence() {
-            if let Some(first_item) = quill_array.first() {
-                if let Some(quill_map) = first_item.as_mapping() {
-                    // Look for a "name" field in the quill block
-                    if let Some(name_value) =
-                        quill_map.get(&serde_yaml::Value::String("name".to_string()))
-                    {
-                        if let Some(name_str) = name_value.as_str() {
-                            parsed.quill_tag = Some(name_str.to_string());
-                        }
-                    }
-                }
-            }
-        }
+    // Set quill tag if present
+    if let Some(name) = quill_name {
+        parsed.quill_tag = Some(name);
     }
 
     Ok(parsed)
@@ -612,7 +747,7 @@ title: Main Document
 Main body content.
 
 ---
-!items
+!scope items
 name: Item 1
 ---
 
@@ -649,7 +784,7 @@ Body of item 1."#;
     #[test]
     fn test_multiple_tagged_blocks() {
         let markdown = r#"---
-!items
+!scope items
 name: Item 1
 tags: [a, b]
 ---
@@ -657,7 +792,7 @@ tags: [a, b]
 First item body.
 
 ---
-!items
+!scope items
 name: Item 2
 tags: [c, d]
 ---
@@ -700,14 +835,14 @@ author: John Doe
 Global body.
 
 ---
-!sections
+!scope sections
 title: Section 1
 ---
 
 Section 1 content.
 
 ---
-!sections
+!scope sections
 title: Section 2
 ---
 
@@ -725,7 +860,7 @@ Section 2 content."#;
     #[test]
     fn test_empty_tagged_metadata() {
         let markdown = r#"---
-!items
+!scope items
 ---
 
 Body without metadata."#;
@@ -748,7 +883,7 @@ Body without metadata."#;
     #[test]
     fn test_tagged_block_without_body() {
         let markdown = r#"---
-!items
+!scope items
 name: Item
 ---"#;
 
@@ -776,7 +911,7 @@ items: "global value"
 Body
 
 ---
-!items
+!scope items
 name: Item
 ---
 
@@ -790,7 +925,7 @@ Item body"#;
     #[test]
     fn test_reserved_field_name() {
         let markdown = r#"---
-!body
+!scope body
 content: Test
 ---"#;
 
@@ -802,13 +937,16 @@ content: Test
     #[test]
     fn test_invalid_tag_syntax() {
         let markdown = r#"---
-!Invalid-Name
+!scope Invalid-Name
 title: Test
 ---"#;
 
         let result = decompose(markdown);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid tag name"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid field name"));
     }
 
     #[test]
@@ -836,14 +974,14 @@ More body"#;
     #[test]
     fn test_adjacent_blocks_different_tags() {
         let markdown = r#"---
-!items
+!scope items
 name: Item 1
 ---
 
 Item 1 body
 
 ---
-!sections
+!scope sections
 title: Section 1
 ---
 
@@ -864,21 +1002,21 @@ Section 1 body"#;
     #[test]
     fn test_order_preservation() {
         let markdown = r#"---
-!items
+!scope items
 id: 1
 ---
 
 First
 
 ---
-!items
+!scope items
 id: 2
 ---
 
 Second
 
 ---
-!items
+!scope items
 id: 3
 ---
 
@@ -911,7 +1049,7 @@ date: 2024-01-01
 This is the main catalog description.
 
 ---
-!products
+!scope products
 name: Widget A
 price: 19.99
 sku: WID-001
@@ -920,7 +1058,7 @@ sku: WID-001
 The **Widget A** is our most popular product.
 
 ---
-!products
+!scope products
 name: Gadget B
 price: 29.99
 sku: GAD-002
@@ -929,7 +1067,7 @@ sku: GAD-002
 The **Gadget B** is perfect for professionals.
 
 ---
-!reviews
+!scope reviews
 product: Widget A
 rating: 5
 ---
@@ -937,7 +1075,7 @@ rating: 5
 "Excellent product! Highly recommended."
 
 ---
-!reviews
+!scope reviews
 product: Gadget B
 rating: 4
 ---
@@ -1009,6 +1147,142 @@ rating: 4
 
         // Total fields: title, author, date, body, products, reviews = 6
         assert_eq!(doc.fields().len(), 6);
+    }
+
+    #[test]
+    fn test_quill_directive() {
+        let markdown = r#"---
+!quill usaf_memo
+memo_for: [ORG/SYMBOL]
+memo_from: [ORG/SYMBOL]
+---
+
+This is the memo body."#;
+
+        let doc = decompose(markdown).unwrap();
+
+        // Verify quill tag is set
+        assert_eq!(doc.quill_tag(), Some("usaf_memo"));
+
+        // Verify fields from quill block become frontmatter
+        assert_eq!(
+            doc.get_field("memo_for").unwrap().as_sequence().unwrap()[0]
+                .as_str()
+                .unwrap(),
+            "ORG/SYMBOL"
+        );
+
+        // Verify body
+        assert_eq!(doc.body(), Some("\nThis is the memo body."));
+    }
+
+    #[test]
+    fn test_quill_with_scope_blocks() {
+        let markdown = r#"---
+!quill document
+title: Test Document
+---
+
+Main body.
+
+---
+!scope sections
+name: Section 1
+---
+
+Section 1 body."#;
+
+        let doc = decompose(markdown).unwrap();
+
+        // Verify quill tag
+        assert_eq!(doc.quill_tag(), Some("document"));
+
+        // Verify global field from quill block
+        assert_eq!(
+            doc.get_field("title").unwrap().as_str().unwrap(),
+            "Test Document"
+        );
+
+        // Verify scope blocks work
+        let sections = doc.get_field("sections").unwrap().as_sequence().unwrap();
+        assert_eq!(sections.len(), 1);
+
+        // Verify body
+        assert_eq!(doc.body(), Some("\nMain body.\n\n"));
+    }
+
+    #[test]
+    fn test_multiple_quill_directives_error() {
+        let markdown = r#"---
+!quill first
+---
+
+---
+!quill second
+---"#;
+
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Multiple quill directives"));
+    }
+
+    #[test]
+    fn test_invalid_quill_name() {
+        let markdown = r#"---
+!quill Invalid-Name
+---"#;
+
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid quill name"));
+    }
+
+    #[test]
+    fn test_quill_directive_wrong_format() {
+        let markdown = r#"---
+!quill
+---"#;
+
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid quill directive"));
+    }
+
+    #[test]
+    fn test_scope_directive_wrong_format() {
+        let markdown = r#"---
+!scope
+---"#;
+
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid scope directive"));
+    }
+
+    #[test]
+    fn test_unknown_directive() {
+        let markdown = r#"---
+!unknown test
+---"#;
+
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid directive"));
     }
 }
 #[cfg(test)]
