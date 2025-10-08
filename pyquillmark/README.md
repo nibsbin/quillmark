@@ -80,11 +80,10 @@ Typical workflow with `uv`:
 # create a venv and activate it
 uv venv
 
-# install build tools into the venv
-uv pip install --upgrade pip setuptools wheel
-uv pip install 'maturin>=1.7,<2.0'
+# Build in debug mode (faster, suitable for development)
+uv pip install -e ".[dev]"
 
-# develop-install the package (compiles and installs into the uv venv)
+# Build in release mode (slower, suitable for production)
 uv run python -m maturin develop --release
 
 # run the test suite
@@ -93,7 +92,4 @@ uv run pytest
 # run mypy and ruff checks (project recommends these)
 uv run mypy python/pyquillmark
 uv run ruff check python/
-```
-
-`uv` is optional — the regular venv + pip commands above are equivalent. Use `uv` if you prefer shorter, reproducible commands and to match the rest of this repository's Python design guidance.
-
+```w
