@@ -2,7 +2,7 @@
 
 > **Status**: Design Phase  
 > **Package Name**: `pyquillmark`  
-> **Target**: Python 3.9+  
+> **Target**: Python 3.10+  
 
 ## Executive Summary
 
@@ -700,13 +700,13 @@ description = "Python bindings for Quillmark - template-first Markdown rendering
 authors = [{ name = "Quillmark Contributors" }]
 readme = "README.md"
 license = { text = "Apache-2.0" }
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -739,7 +739,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.10"
 strict = true
 
 [tool.ruff]
@@ -786,7 +786,7 @@ maturin develop
 maturin build --release
 
 # Build wheels for multiple Python versions
-maturin build --release --interpreter python3.9 python3.10 python3.11 python3.12
+maturin build --release --interpreter python3.10 python3.10 python3.11 python3.12
 
 # Build and publish to PyPI
 maturin publish
@@ -915,7 +915,7 @@ def test_end_to_end_render(test_quill_path):
 
 **Using `abi3`:**
 - Build wheels with `abi3-py39` for forward compatibility
-- Single wheel works across Python 3.9-3.13
+- Single wheel works across Python 3.10-3.13
 
 ### CI/CD Pipeline
 
@@ -937,7 +937,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ['3.9', '3.10', '3.11', '3.12']
+        python-version: ['3.10', '3.10', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -970,7 +970,7 @@ jobs:
         run: |
           uv venv
           uv pip install maturin
-          maturin build --release --interpreter python3.9 python3.10 python3.11 python3.12
+          maturin build --release --interpreter python3.10 python3.10 python3.11 python3.12
       
       - uses: actions/upload-artifact@v4
         with:
