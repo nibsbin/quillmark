@@ -130,13 +130,11 @@ impl Quillmark {
     }
 
     /// Render markdown to final artifacts (PDF, SVG, TXT)
+    ///
+    /// Uses the Quill specified in options.quill_name if provided,
+    /// otherwise infers it from the markdown's `!quill` directive.
     #[wasm_bindgen]
-    pub fn render(
-        &mut self,
-        quill_name: &str,
-        markdown: &str,
-        options: JsValue,
-    ) -> Result<JsValue, JsValue> {
+    pub fn render(&mut self, markdown: &str, options: JsValue) -> Result<JsValue, JsValue> {
         let opts: RenderOptions = if options.is_undefined() || options.is_null() {
             RenderOptions::default()
         } else {
@@ -160,17 +158,33 @@ impl Quillmark {
             .to_js_value()
         })?;
 
-        let mut workflow = self
-            .inner
-            .workflow_from_quill_name(quill_name)
-            .map_err(|e| {
+        // Determine which workflow to use
+        let mut workflow = if let Some(quill_name) = opts.quill_name {
+            // Use explicitly provided quill name (overrides !quill directive)
+            self.inner
+                .workflow_from_quill_name(&quill_name)
+                .map_err(|e| {
+                    QuillmarkError::new(
+                        format!("Quill '{}' not found: {}", quill_name, e),
+                        None,
+                        Some("Use registerQuill() before rendering".to_string()),
+                    )
+                    .to_js_value()
+                })?
+        } else {
+            // Infer workflow from parsed document (uses !quill directive)
+            self.inner.workflow_from_parsed(&parsed).map_err(|e| {
                 QuillmarkError::new(
-                    format!("Quill '{}' not found: {}", quill_name, e),
+                    format!("Failed to infer Quill from markdown: {}", e),
                     None,
-                    Some("Use registerQuill() before rendering".to_string()),
+                    Some(
+                        "Add a '!quill <name>' directive in your markdown or specify quillName in options"
+                            .to_string(),
+                    ),
                 )
                 .to_js_value()
-            })?;
+            })?
+        };
 
         // Add assets if provided
         if let Some(assets) = opts.assets {

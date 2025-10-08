@@ -201,7 +201,8 @@ class Quillmark {
   renderGlue(quillName: string, markdown: string): string;
 
   /// Render markdown to final artifacts (PDF, SVG, TXT)
-  render(quillName: string, markdown: string, options?: RenderOptions): RenderResult;
+  /// Uses options.quillName if provided, otherwise infers from the markdown's !quill directive
+  render(markdown: string, options?: RenderOptions): RenderResult;
 
   /// List registered Quill names
   listQuills(): string[];
@@ -217,6 +218,7 @@ class Quillmark {
 interface RenderOptions {
   format?: 'pdf' | 'svg' | 'txt';
   assets?: Record<string, Uint8Array>;
+  quillName?: string;  // Optional: overrides or fills in for the markdown's !quill directive
 }
 
 interface RenderResult {
@@ -340,10 +342,41 @@ try {
    - Quill not found
    - Invalid render options
    - Memory allocation failures
+   - Missing `!quill` directive when using `render()` without `quillName` option
 
 ---
 
 ## Usage Examples
+
+### Quill Selection Methods
+
+Quillmark provides two ways to specify which Quill to use for rendering:
+
+1. **Inferred from Markdown**: Uses the `!quill` directive in the markdown frontmatter
+2. **Explicit Selection via Options**: Pass `quillName` in the `RenderOptions` to override or fill in for the markdown's `!quill` directive
+
+#### Using !quill Directive
+
+Add a `!quill` directive to your markdown frontmatter to specify which registered Quill to use:
+
+```markdown
+---
+!quill simple-letter
+title: "My Document"
+---
+
+# Content here
+```
+
+This allows the markdown to be self-contained and portable - it knows which template to use.
+
+#### Using quillName Option
+
+Pass `quillName` in options to explicitly specify the Quill, which will override any `!quill` directive in the markdown:
+
+```typescript
+const result = engine.render(markdown, { quillName: 'simple-letter' });
+```
 
 ### Basic Usage
 
@@ -367,8 +400,9 @@ const quillJson = {
 
 engine.registerQuill('simple-letter', quillJson);
 
-// Render markdown
+// Render markdown with !quill directive
 const markdown = `---
+!quill simple-letter
 title: "My Letter"
 ---
 
@@ -376,7 +410,7 @@ title: "My Letter"
 
 This is a simple letter.`;
 
-const result = engine.render('simple-letter', markdown);
+const result = engine.render(markdown);
 
 // Access the PDF bytes
 const pdfArtifact = result.artifacts.find(a => a.format === 'pdf');
@@ -388,13 +422,35 @@ if (pdfArtifact) {
 }
 ```
 
+### Using quillName Option (Explicit Quill Selection)
+
+```typescript
+// When you want to override the !quill directive or markdown doesn't have one
+const markdownWithoutQuill = `---
+title: "My Letter"
+---
+
+# Hello World
+
+This is a simple letter.`;
+
+const result = engine.render(markdownWithoutQuill, { quillName: 'simple-letter' });
+```
+
 ### With Custom Assets
 
 ```typescript
 // Load custom font
 const fontBytes = await fetch('/fonts/custom-font.ttf').then(r => r.arrayBuffer());
 
-const result = engine.render('my-quill', markdown, {
+const markdown = `---
+!quill my-quill
+---
+
+# Document with custom font
+`;
+
+const result = engine.render(markdown, {
   format: 'pdf',
   assets: {
     'custom-font.ttf': new Uint8Array(fontBytes)
@@ -406,9 +462,16 @@ const result = engine.render('my-quill', markdown, {
 
 ```typescript
 // Render to multiple formats
-const pdfResult = engine.render('my-quill', markdown, { format: 'pdf' });
-const svgResult = engine.render('my-quill', markdown, { format: 'svg' });
-const txtResult = engine.render('my-quill', markdown, { format: 'txt' });
+const markdown = `---
+!quill my-quill
+---
+
+# My Document
+`;
+
+const pdfResult = engine.render(markdown, { format: 'pdf' });
+const svgResult = engine.render(markdown, { format: 'svg' });
+const txtResult = engine.render(markdown, { format: 'txt' });
 ```
 
 ### Debugging with Template Source
@@ -420,7 +483,7 @@ try {
   console.log('Generated template:', glueSource);
   
   // Then render normally
-  const result = engine.render('my-quill', markdown);
+  const result = engine.render(markdown);
 } catch (error) {
   console.error('Template generation failed:', error);
 }
@@ -485,7 +548,7 @@ npm install @quillmark-test/wasm-web      # For direct browser
 
 ```typescript
 const start = performance.now();
-const result = engine.render('my-quill', markdown);
+const result = engine.render(markdown);
 const renderTime = performance.now() - start;
 
 console.log(`Render took ${renderTime}ms (WASM reported: ${result.renderTimeMs}ms)`);
