@@ -23,7 +23,7 @@
 //!
 //! 1. Create an engine with [`Quillmark::new`]
 //! 2. Register quills with [`Quillmark::register_quill()`]
-//! 3. Load workflows with [`Quillmark::load()`]
+//! 3. Load workflows with [`Quillmark::workflow_from_quill_name()`] or [`Quillmark::workflow_from_parsed()`]
 //! 4. Render documents using the workflow
 //!
 //! ## Examples
@@ -40,28 +40,28 @@
 //! let quill = Quill::from_path("path/to/quill").unwrap();
 //! engine.register_quill(quill);
 //!
-//! // Step 3: Load workflow by quill name
-//! let workflow = engine.load("my-quill").unwrap();
-//!
-//! // Step 4: Parse and render markdown
+//! // Step 3: Parse markdown
 //! let markdown = "# Hello";
 //! let parsed = ParsedDocument::from_markdown(markdown).unwrap();
+//!
+//! // Step 4: Load workflow by quill name and render
+//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap();
 //! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
 //!
 //! ### Loading by Reference
 //!
 //! ```no_run
-//! # use quillmark::{Quillmark, Quill};
+//! # use quillmark::{Quillmark, Quill, ParsedDocument};
 //! # let mut engine = Quillmark::new();
 //! let quill = Quill::from_path("path/to/quill").unwrap();
 //! engine.register_quill(quill.clone());
 //!
 //! // Load by name
-//! let workflow1 = engine.load("my-quill").unwrap();
+//! let workflow1 = engine.workflow_from_quill_name("my-quill").unwrap();
 //!
 //! // Load by object (doesn't need to be registered)
-//! let workflow2 = engine.load(&quill).unwrap();
+//! let workflow2 = engine.workflow_from_quill(&quill).unwrap();
 //! ```
 //!
 //! ### Inspecting Engine State
@@ -87,9 +87,9 @@
 //!
 //! The workflow supports rendering at three levels:
 //!
-//! 1. **Full render** ([`Workflow::render()`]) - Parse Markdown → Compose with template → Compile to artifacts
+//! 1. **Full render** ([`Workflow::render()`]) - Compose with template → Compile to artifacts (parsing done separately)
 //! 2. **Content render** ([`Workflow::render_source()`]) - Skip parsing, render pre-composed content
-//! 3. **Glue only** ([`Workflow::process_glue()`]) - Parse and compose, return template output
+//! 3. **Glue only** ([`Workflow::process_glue_parsed()`]) - Compose from parsed document, return template output
 //!
 //! ## Examples
 //!
@@ -100,7 +100,7 @@
 //! # let mut engine = Quillmark::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
-//! let workflow = engine.load("my-quill").unwrap();
+//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap();
 //!
 //! let markdown = r#"---
 //! title: "My Document"
@@ -125,7 +125,7 @@
 //! # engine.register_quill(quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
-//! let workflow = engine.load("my-quill").unwrap()
+//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap()
 //!     .with_asset("logo.png", vec![/* PNG bytes */]).unwrap()
 //!     .with_asset("chart.svg", vec![/* SVG bytes */]).unwrap();
 //!
@@ -141,7 +141,7 @@
 //! # engine.register_quill(quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
-//! let workflow = engine.load("my-quill").unwrap()
+//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap()
 //!     .with_font("custom-font.ttf", vec![/* TTF bytes */]).unwrap()
 //!     .with_font("another-font.otf", vec![/* OTF bytes */]).unwrap();
 //!
@@ -155,7 +155,7 @@
 //! # let mut engine = Quillmark::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
-//! let workflow = engine.load("my-quill").unwrap();
+//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap();
 //!
 //! println!("Backend: {}", workflow.backend_id());
 //! println!("Quill: {}", workflow.quill_name());
