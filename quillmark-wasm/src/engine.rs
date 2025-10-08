@@ -130,8 +130,78 @@ impl Quillmark {
     }
 
     /// Render markdown to final artifacts (PDF, SVG, TXT)
+    ///
+    /// Infers the Quill to use from the markdown's `!quill` directive.
     #[wasm_bindgen]
-    pub fn render(
+    pub fn render(&mut self, markdown: &str, options: JsValue) -> Result<JsValue, JsValue> {
+        let opts: RenderOptions = if options.is_undefined() || options.is_null() {
+            RenderOptions::default()
+        } else {
+            serde_wasm_bindgen::from_value(options).map_err(|e| {
+                QuillmarkError::new(
+                    format!("Invalid render options: {}", e),
+                    None,
+                    Some("Check that format is 'pdf', 'svg', or 'txt'".to_string()),
+                )
+                .to_js_value()
+            })?
+        };
+
+        // Parse markdown first
+        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
+            QuillmarkError::new(
+                format!("Failed to parse markdown: {}", e),
+                None,
+                Some("Check markdown syntax and YAML frontmatter".to_string()),
+            )
+            .to_js_value()
+        })?;
+
+        // Infer workflow from parsed document (uses !quill directive)
+        let mut workflow = self.inner.workflow_from_parsed(&parsed).map_err(|e| {
+            QuillmarkError::new(
+                format!("Failed to infer Quill from markdown: {}", e),
+                None,
+                Some(
+                    "Add a '!quill <name>' directive in your markdown or use renderWithQuill()"
+                        .to_string(),
+                ),
+            )
+            .to_js_value()
+        })?;
+
+        // Add assets if provided
+        if let Some(assets) = opts.assets {
+            for (filename, bytes) in assets {
+                workflow = workflow.with_asset(filename, bytes).map_err(|e| {
+                    QuillmarkError::new(format!("Failed to add asset: {}", e), None, None)
+                        .to_js_value()
+                })?;
+            }
+        }
+
+        let start = now_ms();
+
+        let output_format = opts.format.map(|f| f.into());
+        let result = workflow
+            .render(&parsed, output_format)
+            .map_err(|e| QuillmarkError::from(e).to_js_value())?;
+
+        let render_result = RenderResult {
+            artifacts: result.artifacts.into_iter().map(Into::into).collect(),
+            warnings: result.warnings.into_iter().map(Into::into).collect(),
+            render_time_ms: now_ms() - start,
+        };
+
+        serde_wasm_bindgen::to_value(&render_result).map_err(|e| {
+            QuillmarkError::new(format!("Failed to serialize result: {}", e), None, None)
+                .to_js_value()
+        })
+    }
+
+    /// Render markdown to final artifacts with an explicitly specified Quill
+    #[wasm_bindgen(js_name = renderWithQuill)]
+    pub fn render_with_quill(
         &mut self,
         quill_name: &str,
         markdown: &str,
