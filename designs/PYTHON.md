@@ -1,180 +1,271 @@
-# Python Library Design for Quillmark
+# Python Package Design for Quillmark
+
+> **Status**: Design Phase  
+> **Package Name**: `pyquillmark`  
+> **Target**: Python 3.9+  
 
 ## Executive Summary
 
-This document outlines the design and implementation plan for `pyquillmark`, a Python library that provides Pythonic access to Quillmark's rendering functionality. The library will use PyO3 for Rust-Python bindings, maturin for building, and uv for development and dependency management.
+This document outlines the design for `pyquillmark`, a Python package that exposes the Quillmark rendering engine to Python applications. The package uses PyO3 for Rust-Python bindings and maturin for building and distributing binary wheels to PyPI.
+
+**Design Goals:**
+- Mirror the public API of the `quillmark` Rust crate
+- Provide Pythonic interfaces following Python conventions
+- Minimize overhead through efficient PyO3 bindings
+- Support cross-platform distribution via PyPI wheels
+- Use modern Python tooling (uv, maturin, ruff)
+
+**Non-Goals:**
+- Exposing low-level `quillmark-core` internals
+- Supporting custom backend implementations in Python
+- Async/streaming APIs (v1.0)
 
 ---
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Architecture](#architecture)
+1. [Architecture](#architecture)
+2. [Package Structure](#package-structure)
 3. [Python API Design](#python-api-design)
-4. [Rust-Python Bindings Strategy](#rust-python-bindings-strategy)
-5. [Compilation and Build Process](#compilation-and-build-process)
+4. [PyO3 Bindings Implementation](#pyo3-bindings-implementation)
+5. [Build Configuration](#build-configuration)
 6. [Development Workflow](#development-workflow)
-7. [CI/CD Pipeline](#cicd-pipeline)
-8. [Packaging and Distribution](#packaging-and-distribution)
-9. [Testing Strategy](#testing-strategy)
-10. [Documentation](#documentation)
-11. [Implementation Roadmap](#implementation-roadmap)
-
----
-
-## Overview
-
-### Goals
-
-- **Pythonic API**: Expose Quillmark's high-level API (`Quillmark` and `Workflow`) with Python idioms
-- **Type Safety**: Leverage Python type hints and runtime type checking
-- **Performance**: Minimal overhead through efficient PyO3 bindings
-- **Developer Experience**: Modern tooling with `uv` for fast dependency management
-- **Cross-Platform**: Support Linux, macOS, and Windows with pre-built wheels
-
-### Non-Goals (DO NOTS)
-
-- Expose low-level `quillmark-core` internals (keep focused on high-level API)
-- Support custom backend implementation in Python (Rust only)
-- Replicate all Rust-specific features (e.g., trait implementations)
+7. [Testing Strategy](#testing-strategy)
+8. [Distribution & Packaging](#distribution--packaging)
+9. [Documentation](#documentation)
+10. [Implementation Roadmap](#implementation-roadmap)
 
 ---
 
 ## Architecture
 
-### Component Structure
+### Design Principles
+
+1. **API Mirroring**: The Python API closely mirrors the Rust `quillmark` crate's public API
+2. **Pythonic Idioms**: Use Python naming conventions, error handling, and patterns
+3. **Zero-Copy**: Leverage PyO3's efficient memory management where possible
+4. **Type Safety**: Provide comprehensive type hints for all public APIs
+5. **Error Context**: Map Rust errors to Python exceptions with rich diagnostic information
+
+### Component Diagram
+
+```
+┌─────────────────────────────────────────┐
+│         Python Application              │
+└──────────────┬──────────────────────────┘
+               │ import pyquillmark
+               ▼
+┌─────────────────────────────────────────┐
+│       pyquillmark (Python Layer)        │
+│  - Type hints & stubs                   │
+│  - Python-friendly wrappers             │
+│  - Exception hierarchy                  │
+└──────────────┬──────────────────────────┘
+               │ PyO3 FFI
+               ▼
+┌─────────────────────────────────────────┐
+│    _pyquillmark (Native Extension)      │
+│  - PyO3 #[pyclass] wrappers             │
+│  - Rust→Python type conversions         │
+│  - Error mapping                        │
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+┌─────────────────────────────────────────┐
+│         quillmark (Rust Crate)          │
+│  - Quillmark engine                     │
+│  - Workflow orchestration               │
+│  - Backend compilation                  │
+└─────────────────────────────────────────┘
+```
+
+---
+
+## Package Structure
 
 ```
 pyquillmark/
 ├── src/
-│   └── lib.rs                 # PyO3 bindings root
+│   ├── lib.rs              # PyO3 module entry point
+│   ├── engine.rs           # Quillmark engine wrapper
+│   ├── workflow.rs         # Workflow wrapper
+│   ├── quill.rs            # Quill wrapper
+│   ├── types.rs            # Output types (RenderResult, Artifact)
+│   ├── enums.rs            # Enums (OutputFormat, Severity)
+│   ├── errors.rs           # Exception definitions
+│   └── conversions.rs      # Rust↔Python conversions
 ├── python/
 │   └── pyquillmark/
-│       ├── __init__.py        # Public API exports
-│       ├── types.py           # Type hints and enums
-│       ├── errors.py          # Exception hierarchy
-│       └── utils.py           # Helper utilities
+│       ├── __init__.py     # Public API exports
+│       ├── __init__.pyi    # Type stubs
+│       └── py.typed        # PEP 561 marker
 ├── tests/
-│   ├── test_engine.py         # Engine tests
-│   ├── test_workflow.py       # Workflow tests
-│   └── fixtures/              # Test quills and markdown
+│   ├── test_engine.py
+│   ├── test_workflow.py
+│   ├── test_quill.py
+│   ├── test_render.py
+│   └── fixtures/           # Test quills
 ├── examples/
-│   ├── basic_usage.py
+│   ├── basic.py
 │   ├── dynamic_assets.py
-│   └── batch_rendering.py
-├── Cargo.toml                 # Rust dependencies
-├── pyproject.toml             # Python project config (PEP 621)
+│   └── batch.py
+├── Cargo.toml              # Rust dependencies
+├── pyproject.toml          # Python project config
 ├── README.md
-└── docs/
-    ├── installation.md
-    ├── quickstart.md
-    └── api.md
+└── .gitignore
 ```
-
-### Design Principles
-
-1. **Mirror Rust API Structure**: Maintain conceptual mapping to Rust crate
-2. **Pythonic Idioms**: Use Python conventions (snake_case, context managers, iterators)
-3. **Error Handling**: Map Rust errors to Python exceptions with rich context
-4. **Memory Management**: Leverage PyO3's automatic memory management
-5. **Zero-Copy Where Possible**: Use bytes/memoryview for binary data
 
 ---
 
 ## Python API Design
 
+The Python API mirrors the Rust `quillmark` crate's public API with Pythonic conventions.
+
 ### Core Classes
 
-#### 1. `Quillmark` (Engine)
+#### 1. `Quillmark` - High-Level Engine
 
-High-level engine for managing backends and quills.
+The main orchestration engine for managing backends and quills.
 
 ```python
-from pyquillmark import Quillmark, Quill, OutputFormat
+from pyquillmark import Quillmark
 
-# Create engine with auto-registered backends
+# Create engine (auto-registers backends)
 engine = Quillmark()
 
-# Register quills
-quill = Quill.from_path("path/to/quill")
-engine.register_quill(quill)
+# Query registered backends and quills
+backends = engine.registered_backends()  # -> list[str]
+quills = engine.registered_quills()      # -> list[str]
+```
 
-# Get registered backends and quills
-backends = engine.registered_backends()  # -> List[str]
-quills = engine.registered_quills()      # -> List[str]
-
-# Load workflow by name or object
-workflow = engine.workflow_from_quill_name("my-quill")  # by name
-workflow = engine.workflow_from_quill(quill)            # by object
+**Constructor:**
+```python
+def __init__() -> None:
+    """Create engine with auto-registered backends based on enabled features."""
 ```
 
 **Methods:**
-- `__init__() -> None`: Create engine with auto-registered backends
-- `register_quill(quill: Quill) -> None`: Register a quill template
-- `load(quill_ref: Union[str, Quill]) -> Workflow`: Load workflow
-- `registered_backends() -> List[str]`: List registered backend IDs
-- `registered_quills() -> List[str]`: List registered quill names
+```python
+def register_quill(quill: Quill) -> None:
+    """Register a quill template with the engine."""
+
+def workflow_from_quill_name(name: str) -> Workflow:
+    """Load workflow by quill name (must be registered).
+    
+    Raises:
+        QuillmarkError: If quill is not registered or backend unavailable
+    """
+
+def workflow_from_quill(quill: Quill) -> Workflow:
+    """Load workflow from quill object (doesn't need to be registered)."""
+
+def workflow_from_parsed(parsed: ParsedDocument) -> Workflow:
+    """Load workflow from parsed document with QUILL field.
+    
+    Raises:
+        QuillmarkError: If document lacks QUILL field
+    """
+
+def registered_backends() -> list[str]:
+    """Get list of registered backend IDs."""
+
+def registered_quills() -> list[str]:
+    """Get list of registered quill names."""
+```
 
 ---
 
-#### 2. `Workflow` (Render Execution)
+#### 2. `Workflow` - Rendering Pipeline
 
-Sealed workflow for rendering markdown to various formats.
+Sealed workflow for executing the render pipeline.
 
 ```python
-from pyquillmark import Workflow, Quill, OutputFormat
+from pyquillmark import Workflow, OutputFormat
 
-# Create workflow directly
-backend = "typst"  # or get from engine
-quill = Quill.from_path("path/to/quill")
-workflow = Workflow(backend, quill)
+workflow = engine.workflow_from_quill_name("my-quill")
 
-# Render markdown
-result = workflow.render(
-    markdown="# Hello\n\nWorld",
-    format=OutputFormat.PDF
-)
+# Basic rendering
+parsed = ParsedDocument.from_markdown(markdown)
+result = workflow.render(parsed, OutputFormat.PDF)
 
-# Access artifacts
-for artifact in result.artifacts:
-    with open(f"output.{artifact.format.extension}", "wb") as f:
-        f.write(artifact.bytes)
-
-# Dynamic assets (builder pattern via method chaining)
+# Dynamic assets (builder pattern)
 workflow_with_assets = (
     workflow
     .with_asset("chart.png", chart_bytes)
     .with_asset("data.csv", csv_bytes)
 )
 
-result = workflow_with_assets.render(markdown, OutputFormat.PDF)
-
-# Process glue (intermediate representation)
-glue_output = workflow.process_glue(markdown)
-
-# Query workflow properties
-backend_id = workflow.backend_id()           # -> str
-formats = workflow.supported_formats()       # -> List[OutputFormat]
-quill_name = workflow.quill_name()           # -> str
+# Query properties
+backend_id = workflow.backend_id()        # -> str
+formats = workflow.supported_formats()    # -> list[OutputFormat]
+quill_name = workflow.quill_name()        # -> str
 ```
 
 **Methods:**
-- `__init__(backend: str, quill: Quill) -> None`: Create workflow
-- `render(markdown: str, format: Optional[OutputFormat] = None) -> RenderResult`: Render markdown
-- `render_source(content: str, format: Optional[OutputFormat] = None) -> RenderResult`: Render pre-processed content
-- `process_glue(markdown: str) -> str`: Process markdown through glue template
-- `with_asset(filename: str, contents: bytes) -> Workflow`: Add dynamic asset (returns new instance)
-- `with_assets(assets: Dict[str, bytes]) -> Workflow`: Add multiple assets
-- `clear_assets() -> Workflow`: Remove all dynamic assets
-- `backend_id() -> str`: Get backend identifier
-- `supported_formats() -> List[OutputFormat]`: Get supported output formats
-- `quill_name() -> str`: Get quill name
+```python
+def render(parsed: ParsedDocument, format: OutputFormat | None = None) -> RenderResult:
+    """Render parsed document to artifacts.
+    
+    Args:
+        parsed: Parsed markdown document
+        format: Output format (defaults to first supported format)
+    
+    Returns:
+        RenderResult with artifacts and warnings
+    
+    Raises:
+        TemplateError: If template composition fails
+        CompilationError: If backend compilation fails
+    """
+
+def render_source(content: str, format: OutputFormat | None = None) -> RenderResult:
+    """Render pre-composed content (skip template processing)."""
+
+def process_glue(markdown: str) -> str:
+    """Process markdown through glue template, return composed output."""
+
+def process_glue_parsed(parsed: ParsedDocument) -> str:
+    """Process parsed document through glue template."""
+
+def with_asset(filename: str, contents: bytes) -> Workflow:
+    """Add dynamic asset (returns new workflow instance)."""
+
+def with_assets(assets: dict[str, bytes]) -> Workflow:
+    """Add multiple dynamic assets."""
+
+def clear_assets() -> Workflow:
+    """Remove all dynamic assets."""
+
+def with_font(filename: str, contents: bytes) -> Workflow:
+    """Add dynamic font."""
+
+def with_fonts(fonts: dict[str, bytes]) -> Workflow:
+    """Add multiple dynamic fonts."""
+
+def clear_fonts() -> Workflow:
+    """Remove all dynamic fonts."""
+
+def backend_id() -> str:
+    """Get backend identifier."""
+
+def supported_formats() -> list[OutputFormat]:
+    """Get supported output formats."""
+
+def quill_name() -> str:
+    """Get quill name."""
+
+def dynamic_asset_names() -> list[str]:
+    """Get list of dynamic asset filenames."""
+
+def dynamic_font_names() -> list[str]:
+    """Get list of dynamic font filenames."""
+```
 
 ---
 
-#### 3. `Quill` (Template Bundle)
+#### 3. `Quill` - Template Bundle
 
-Represents a quill template bundle.
+Represents a quill template bundle loaded from the filesystem.
 
 ```python
 from pyquillmark import Quill
@@ -186,79 +277,154 @@ quill = Quill.from_path("path/to/quill")
 name = quill.name                    # -> str
 backend = quill.backend              # -> str
 glue_template = quill.glue_template  # -> str
-metadata = quill.metadata            # -> Dict[str, Any]
+metadata = quill.metadata            # -> dict[str, Any]
+```
 
-# Validation (automatic on load, can be called explicitly)
-quill.validate()
+**Static Methods:**
+```python
+@staticmethod
+def from_path(path: str | Path) -> Quill:
+    """Load quill from filesystem path.
+    
+    Raises:
+        QuillmarkError: If path doesn't exist or quill is invalid
+    """
 ```
 
 **Properties:**
-- `name: str`: Quill name from Quill.toml
-- `backend: str`: Backend identifier
-- `glue_template: str`: Template content
-- `metadata: Dict[str, Any]`: Quill metadata from Quill.toml
+```python
+@property
+def name() -> str:
+    """Quill name from Quill.toml"""
 
-**Methods:**
-- `from_path(path: Union[str, Path]) -> Quill`: Load quill from filesystem
-- `validate() -> None`: Validate quill structure (raises on error)
+@property
+def backend() -> str:
+    """Backend identifier"""
+
+@property
+def glue_template() -> str:
+    """Template content"""
+
+@property
+def metadata() -> dict[str, Any]:
+    """Quill metadata from Quill.toml"""
+```
 
 ---
 
-#### 4. `RenderResult` (Output Container)
+#### 4. `ParsedDocument` - Parsed Markdown
+
+Represents a parsed markdown document with frontmatter.
+
+```python
+from pyquillmark import ParsedDocument
+
+# Parse markdown
+parsed = ParsedDocument.from_markdown(markdown)
+
+# Access fields
+body = parsed.body()                        # -> str
+title = parsed.get_field("title")           # -> Any | None
+fields = parsed.fields()                    # -> dict[str, Any]
+quill_tag = parsed.quill_tag()              # -> str | None
+```
+
+**Static Methods:**
+```python
+@staticmethod
+def from_markdown(markdown: str) -> ParsedDocument:
+    """Parse markdown with YAML frontmatter.
+    
+    Raises:
+        ParseError: If YAML frontmatter is invalid
+    """
+```
+
+**Methods:**
+```python
+def body() -> str:
+    """Get document body content."""
+
+def get_field(key: str) -> Any | None:
+    """Get frontmatter field value."""
+
+def fields() -> dict[str, Any]:
+    """Get all frontmatter fields."""
+
+def quill_tag() -> str | None:
+    """Get QUILL field value if present."""
+```
+
+---
+
+#### 5. `RenderResult` - Output Container
 
 Container for rendered artifacts and diagnostics.
 
 ```python
-result = workflow.render(markdown, OutputFormat.PDF)
+result = workflow.render(parsed, OutputFormat.PDF)
 
 # Access artifacts
 for artifact in result.artifacts:
-    print(f"Format: {artifact.format}")
+    print(f"Format: {artifact.output_format}")
     print(f"Size: {len(artifact.bytes)} bytes")
-    # artifact.bytes is a bytes object
+    artifact.save("output.pdf")
 
-# Access warnings
+# Check warnings
 for warning in result.warnings:
     print(f"{warning.severity}: {warning.message}")
-    if warning.location:
-        print(f"  at {warning.location.file}:{warning.location.line}")
 ```
 
 **Properties:**
-- `artifacts: List[Artifact]`: Rendered output artifacts
-- `warnings: List[Diagnostic]`: Non-fatal warnings
+```python
+@property
+def artifacts() -> list[Artifact]:
+    """Rendered output artifacts"""
+
+@property
+def warnings() -> list[Diagnostic]:
+    """Non-fatal warnings"""
+```
 
 ---
 
-#### 5. `Artifact` (Output Artifact)
+#### 6. `Artifact` - Single Output
 
-Single rendered artifact.
+Single rendered artifact with format metadata.
 
 ```python
 artifact = result.artifacts[0]
 
-# Access properties
-data = artifact.bytes          # -> bytes
-format = artifact.format       # -> OutputFormat
+# Access data
+data = artifact.bytes           # -> bytes
+fmt = artifact.output_format    # -> OutputFormat
 
-# Helper methods
-artifact.save("output.pdf")    # Save to file
-extension = artifact.extension # -> str (e.g., "pdf")
+# Save to file
+artifact.save("output.pdf")
 ```
 
 **Properties:**
-- `bytes: bytes`: Artifact data
-- `format: OutputFormat`: Output format
+```python
+@property
+def bytes() -> bytes:
+    """Artifact binary data"""
+
+@property
+def output_format() -> OutputFormat:
+    """Output format"""
+```
 
 **Methods:**
-- `save(path: Union[str, Path]) -> None`: Save artifact to file
-- `extension() -> str`: Get file extension for format
+```python
+def save(path: str | Path) -> None:
+    """Save artifact to file."""
+```
 
 ---
 
-### Enums and Types
+### Enums
 
-#### `OutputFormat` (Enum)
+#### `OutputFormat`
 
 ```python
 from pyquillmark import OutputFormat
@@ -267,15 +433,9 @@ from pyquillmark import OutputFormat
 OutputFormat.PDF
 OutputFormat.SVG
 OutputFormat.TXT
-
-# Get extension
-ext = OutputFormat.PDF.extension  # -> "pdf"
-
-# String conversion
-str(OutputFormat.PDF)  # -> "pdf"
 ```
 
-#### `Severity` (Enum)
+#### `Severity`
 
 ```python
 from pyquillmark import Severity
@@ -287,30 +447,54 @@ Severity.NOTE
 
 ---
 
+### Supporting Types
+
+#### `Diagnostic`
+
+```python
+@dataclass
+class Diagnostic:
+    severity: Severity
+    message: str
+    code: str | None = None
+    primary: Location | None = None
+    related: list[Location] = field(default_factory=list)
+    hint: str | None = None
+```
+
+#### `Location`
+
+```python
+@dataclass
+class Location:
+    file: str
+    line: int
+    col: int
+```
+
+---
+
 ### Error Handling
 
-Python-native exception hierarchy mapping Rust errors:
+Python exception hierarchy mapping Rust errors:
 
 ```python
 from pyquillmark import (
-    QuillmarkError,           # Base exception
-    EngineCreationError,      # Engine initialization failed
-    InvalidFrontmatterError,  # YAML parsing failed
-    TemplateError,            # Template rendering failed
-    CompilationError,         # Backend compilation failed
-    FormatNotSupportedError,  # Unsupported output format
-    UnsupportedBackendError,  # Backend not available
-    DynamicAssetError,        # Dynamic asset collision
+    QuillmarkError,        # Base exception
+    ParseError,            # YAML parsing failed
+    TemplateError,         # Template rendering failed
+    CompilationError,      # Backend compilation failed
 )
 
 try:
-    result = workflow.render(markdown, OutputFormat.PDF)
+    result = workflow.render(parsed, OutputFormat.PDF)
 except CompilationError as e:
     print(f"Compilation failed: {e}")
-    for diagnostic in e.diagnostics:
-        print(f"  {diagnostic.severity}: {diagnostic.message}")
-        if diagnostic.location:
-            print(f"    at {diagnostic.location.file}:{diagnostic.location.line}")
+    for diag in e.diagnostics:
+        print(f"  {diag.severity}: {diag.message}")
+        if diag.primary:
+            loc = diag.primary
+            print(f"    at {loc.file}:{loc.line}:{loc.col}")
 except QuillmarkError as e:
     print(f"Error: {e}")
 ```
@@ -318,88 +502,65 @@ except QuillmarkError as e:
 **Exception Hierarchy:**
 ```
 QuillmarkError (base)
-├── EngineCreationError
-├── InvalidFrontmatterError
+├── ParseError
 ├── TemplateError
-├── CompilationError
-├── FormatNotSupportedError
-├── UnsupportedBackendError
-└── DynamicAssetError
+└── CompilationError
 ```
 
-All exceptions include:
-- `message: str`: Error message
-- `diagnostic: Optional[Diagnostic]`: Structured diagnostic (where applicable)
-- `diagnostics: List[Diagnostic]`: Multiple diagnostics (CompilationError only)
+**Exception Attributes:**
+- `QuillmarkError.message: str` - Error message
+- `ParseError.diagnostic: Diagnostic` - Structured diagnostic
+- `TemplateError.diagnostic: Diagnostic` - Structured diagnostic
+- `CompilationError.diagnostics: list[Diagnostic]` - Multiple diagnostics
 
 ---
 
-### Additional Types
+## PyO3 Bindings Implementation
 
-#### `Diagnostic` (Dataclass)
+### Module Structure
 
-```python
-@dataclass
-class Diagnostic:
-    severity: Severity
-    message: str
-    code: Optional[str] = None
-    location: Optional[Location] = None
-    related: List[Location] = field(default_factory=list)
-    hint: Optional[str] = None
-```
-
-#### `Location` (Dataclass)
-
-```python
-@dataclass
-class Location:
-    file: str
-    line: int
-    column: int
-```
-
----
-
-## Rust-Python Bindings Strategy
-
-### PyO3 Implementation
-
-#### 1. Module Structure (`src/lib.rs`)
-
+**`src/lib.rs`:**
 ```rust
 use pyo3::prelude::*;
 
 #[pymodule]
-fn pyquillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _pyquillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register classes
     m.add_class::<PyQuillmark>()?;
     m.add_class::<PyWorkflow>()?;
     m.add_class::<PyQuill>()?;
+    m.add_class::<PyParsedDocument>()?;
     m.add_class::<PyRenderResult>()?;
     m.add_class::<PyArtifact>()?;
+    m.add_class::<PyDiagnostic>()?;
+    m.add_class::<PyLocation>()?;
     
     // Register enums
     m.add_class::<PyOutputFormat>()?;
     m.add_class::<PySeverity>()?;
     
     // Register exceptions
-    m.add("QuillmarkError", m.py().get_type_bound::<PyQuillmarkError>())?;
-    m.add("CompilationError", m.py().get_type_bound::<PyCompilationError>())?;
-    // ... other exceptions
+    m.add("QuillmarkError", m.py().get_type_bound::<QuillmarkError>())?;
+    m.add("ParseError", m.py().get_type_bound::<ParseError>())?;
+    m.add("TemplateError", m.py().get_type_bound::<TemplateError>())?;
+    m.add("CompilationError", m.py().get_type_bound::<CompilationError>())?;
     
     Ok(())
 }
 ```
 
-#### 2. Wrapper Classes
+### Wrapper Pattern
 
-Each Python-exposed class wraps the corresponding Rust type:
+Each Python class wraps the corresponding Rust type:
 
+**`src/engine.rs`:**
 ```rust
+use pyo3::prelude::*;
+use quillmark::Quillmark;
+
 #[pyclass(name = "Quillmark")]
-struct PyQuillmark {
-    inner: quillmark::Quillmark,
+pub struct PyQuillmark {
+    inner: Quillmark,
 }
 
 #[pymethods]
@@ -407,7 +568,7 @@ impl PyQuillmark {
     #[new]
     fn new() -> Self {
         Self {
-            inner: quillmark::Quillmark::new(),
+            inner: Quillmark::new(),
         }
     }
     
@@ -415,113 +576,117 @@ impl PyQuillmark {
         self.inner.register_quill(quill.inner.clone());
     }
     
-    fn workflow_from_quill(&self, quill_ref: QuillRefWrapper) -> PyResult<PyWorkflow> {
-        let workflow = self.inner.workflow_from_quill(quill_ref.to_rust())
-            .map_err(|e| PyErr::from(e))?;
+    fn workflow_from_quill_name(&self, name: &str) -> PyResult<PyWorkflow> {
+        let workflow = self.inner.workflow_from_quill_name(name)
+            .map_err(convert_render_error)?;
         Ok(PyWorkflow { inner: workflow })
     }
     
     fn registered_backends(&self) -> Vec<String> {
         self.inner.registered_backends()
-            .into_iter()
+            .iter()
             .map(|s| s.to_string())
             .collect()
     }
     
     fn registered_quills(&self) -> Vec<String> {
         self.inner.registered_quills()
-            .into_iter()
+            .iter()
             .map(|s| s.to_string())
             .collect()
     }
 }
 ```
 
-#### 3. Type Conversions
+### Error Mapping
 
-**Union Types** (for flexible APIs):
+**`src/errors.rs`:**
 ```rust
-use pyo3::types::{PyString, PyAny};
+use pyo3::prelude::*;
+use pyo3::create_exception;
+use pyo3::exceptions::PyException;
+use quillmark_core::RenderError;
 
-enum QuillRefWrapper {
-    Name(String),
-    Object(PyQuill),
+// Base exception
+create_exception!(_pyquillmark, QuillmarkError, PyException);
+
+// Specific exceptions
+create_exception!(_pyquillmark, ParseError, QuillmarkError);
+create_exception!(_pyquillmark, TemplateError, QuillmarkError);
+create_exception!(_pyquillmark, CompilationError, QuillmarkError);
+
+pub fn convert_render_error(err: RenderError) -> PyErr {
+    match err {
+        RenderError::InvalidFrontmatter { diag, .. } => {
+            ParseError::new_err(diag.message.clone())
+        }
+        RenderError::TemplateFailed { diag, .. } => {
+            TemplateError::new_err(diag.message.clone())
+        }
+        RenderError::CompilationFailed(count, diags) => {
+            CompilationError::new_err(format!(
+                "Compilation failed with {} error(s)",
+                count
+            ))
+        }
+        _ => QuillmarkError::new_err(err.to_string()),
+    }
+}
+```
+
+### Type Conversions
+
+**Enum Conversions (`src/enums.rs`):**
+```rust
+use pyo3::prelude::*;
+use quillmark_core::{OutputFormat, Severity};
+
+#[pyclass(name = "OutputFormat")]
+#[derive(Clone, Copy)]
+pub enum PyOutputFormat {
+    PDF,
+    SVG,
+    TXT,
 }
 
-impl<'py> FromPyObject<'py> for QuillRefWrapper {
-    fn extract_bound(obj: &Bound<'py, PyAny>) -> PyResult<Self> {
-        if let Ok(s) = obj.extract::<String>() {
-            Ok(QuillRefWrapper::Name(s))
-        } else if let Ok(q) = obj.extract::<Py<PyQuill>>() {
-            Ok(QuillRefWrapper::Object(q.borrow(obj.py()).clone()))
-        } else {
-            Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-                "Expected str or Quill"
-            ))
+impl From<PyOutputFormat> for OutputFormat {
+    fn from(val: PyOutputFormat) -> Self {
+        match val {
+            PyOutputFormat::PDF => OutputFormat::Pdf,
+            PyOutputFormat::SVG => OutputFormat::Svg,
+            PyOutputFormat::TXT => OutputFormat::Txt,
+        }
+    }
+}
+
+impl From<OutputFormat> for PyOutputFormat {
+    fn from(val: OutputFormat) -> Self {
+        match val {
+            OutputFormat::Pdf => PyOutputFormat::PDF,
+            OutputFormat::Svg => PyOutputFormat::SVG,
+            OutputFormat::Txt => PyOutputFormat::TXT,
         }
     }
 }
 ```
 
-**Bytes Handling**:
+**Bytes Handling:**
 ```rust
 #[pymethods]
 impl PyArtifact {
     #[getter]
     fn bytes(&self, py: Python) -> PyObject {
-        // Zero-copy view when possible
+        // Zero-copy view of bytes
         PyBytes::new_bound(py, &self.inner.bytes).into()
-    }
-}
-```
-
-#### 4. Error Mapping
-
-```rust
-use pyo3::exceptions;
-use pyo3::create_exception;
-
-// Base exception
-create_exception!(pyquillmark, QuillmarkError, exceptions::PyException);
-
-// Specific exceptions
-create_exception!(pyquillmark, CompilationError, QuillmarkError);
-create_exception!(pyquillmark, TemplateError, QuillmarkError);
-// ... others
-
-impl From<quillmark::RenderError> for PyErr {
-    fn from(err: quillmark::RenderError) -> PyErr {
-        match err {
-            quillmark::RenderError::CompilationFailed(count, diags) => {
-                let py_diags: Vec<PyDiagnostic> = diags.into_iter()
-                    .map(|d| d.into())
-                    .collect();
-                
-                PyCompilationError::new_err((
-                    format!("Compilation failed with {} error(s)", count),
-                    py_diags,
-                ))
-            }
-            quillmark::RenderError::TemplateFailed { diag, .. } => {
-                PyTemplateError::new_err((
-                    diag.message.clone(),
-                    PyDiagnostic::from(diag),
-                ))
-            }
-            // ... other variants
-            _ => QuillmarkError::new_err(err.to_string()),
-        }
     }
 }
 ```
 
 ---
 
-## Compilation and Build Process
+## Build Configuration
 
-### Maturin Configuration
-
-`pyproject.toml`:
+### `pyproject.toml`
 
 ```toml
 [build-system]
@@ -531,10 +696,8 @@ build-backend = "maturin"
 [project]
 name = "pyquillmark"
 version = "0.1.0"
-description = "Python bindings for Quillmark - a template-first Markdown rendering system"
-authors = [
-    { name = "Quillmark Contributors" }
-]
+description = "Python bindings for Quillmark - template-first Markdown rendering"
+authors = [{ name = "Quillmark Contributors" }]
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.9"
@@ -556,27 +719,19 @@ keywords = ["markdown", "pdf", "typst", "rendering", "templates"]
 [project.urls]
 Homepage = "https://github.com/nibsbin/quillmark"
 Repository = "https://github.com/nibsbin/quillmark"
-Documentation = "https://pyquillmark.readthedocs.io"
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "pytest-cov>=4.1",
+    "pytest-cov>=5.0",
     "mypy>=1.8",
     "ruff>=0.3",
-    "black>=24.0",
-]
-docs = [
-    "sphinx>=7.0",
-    "sphinx-rtd-theme>=2.0",
 ]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "pyquillmark._pyquillmark"
-
-# Build both pure-Python stub files and native extension
 include = ["python/pyquillmark/**/*.py", "python/pyquillmark/py.typed"]
 
 [tool.pytest.ini_options]
@@ -586,32 +741,27 @@ python_files = ["test_*.py"]
 [tool.mypy]
 python_version = "3.9"
 strict = true
-warn_return_any = true
-warn_unused_configs = true
 
 [tool.ruff]
 line-length = 100
 target-version = "py39"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "A", "C4", "DTZ", "T10", "EM", "ISC", "ICN", "PIE", "PT", "Q", "RSE", "RET", "SIM", "ARG", "PTH", "ERA", "PD", "PGH", "PL", "TRY", "NPY", "RUF"]
-ignore = ["ISC001"]  # Conflicts with formatter
-
-[tool.black]
-line-length = 100
-target-version = ["py39"]
+select = ["E", "F", "W", "I", "N", "UP"]
 ```
 
-`Cargo.toml`:
+### `Cargo.toml`
 
 ```toml
 [package]
 name = "pyquillmark"
 version = "0.1.0"
 edition = "2021"
+description = "Python bindings for Quillmark"
+license = "Apache-2.0"
 
 [lib]
-name = "pyquillmark"
+name = "_pyquillmark"
 crate-type = ["cdylib"]
 
 [dependencies]
@@ -619,41 +769,34 @@ pyo3 = { version = "0.22", features = ["extension-module", "abi3-py39"] }
 quillmark = { path = "../quillmark", features = ["typst"] }
 quillmark-core = { path = "../quillmark-core" }
 
-[features]
-default = []
-extension-module = ["pyo3/extension-module"]
-
 [profile.release]
 lto = true
 codegen-units = 1
 strip = true
+opt-level = "z"
 ```
 
 ### Build Commands
 
 ```bash
-# Development build (fast, debug symbols)
+# Development build (fast, installs in current venv)
 maturin develop
 
-# Release build with optimizations
+# Release build
 maturin build --release
 
-# Build wheels for distribution
-maturin build --release --strip
-
-# Build for multiple Python versions
+# Build wheels for multiple Python versions
 maturin build --release --interpreter python3.9 python3.10 python3.11 python3.12
+
+# Build and publish to PyPI
+maturin publish
 ```
 
 ---
 
 ## Development Workflow
 
-### Using `uv` Package Manager
-
-`uv` provides fast, reliable Python package management with Rust-powered performance.
-
-#### Setup
+### Setup with `uv`
 
 ```bash
 # Install uv
@@ -666,24 +809,19 @@ uv venv
 source .venv/bin/activate  # Linux/macOS
 .venv\Scripts\activate     # Windows
 
-# Install project in development mode
-uv pip install -e ".[dev]"
-
-# Install and build with maturin
+# Install maturin
 uv pip install maturin
+
+# Build and install in development mode
 maturin develop
+
+# Install dev dependencies
+uv pip install -e ".[dev]"
 ```
 
-#### Daily Workflow
+### Daily Development
 
 ```bash
-# Install dependencies
-uv pip install -r requirements-dev.txt
-
-# Update dependencies
-uv pip compile pyproject.toml -o requirements.txt
-uv pip compile pyproject.toml --extra dev -o requirements-dev.txt
-
 # Run tests
 uv run pytest
 
@@ -694,256 +832,9 @@ uv run mypy python/pyquillmark
 uv run ruff check python/
 uv run ruff format python/
 
-# Build documentation
-uv run sphinx-build docs docs/_build
-```
-
-#### Lock File Management
-
-```bash
-# Generate lock file (deterministic builds)
-uv pip compile pyproject.toml --generate-hashes -o requirements.lock
-
-# Install from lock file
-uv pip sync requirements.lock
-```
-
----
-
-## CI/CD Pipeline
-
-### GitHub Actions Workflow
-
-`.github/workflows/python.yml`:
-
-```yaml
-name: Python Package CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  release:
-    types: [published]
-
-jobs:
-  lint:
-    name: Lint and Type Check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          
-      - name: Install dependencies
-        run: |
-          uv venv
-          source .venv/bin/activate
-          uv pip install -e ".[dev]"
-          
-      - name: Lint with ruff
-        run: |
-          source .venv/bin/activate
-          ruff check python/
-          
-      - name: Format check with ruff
-        run: |
-          source .venv/bin/activate
-          ruff format --check python/
-          
-      - name: Type check with mypy
-        run: |
-          source .venv/bin/activate
-          mypy python/pyquillmark
-
-  test:
-    name: Test on ${{ matrix.os }} - Python ${{ matrix.python-version }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python-version: ['3.9', '3.10', '3.11', '3.12']
-        
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-          
-      - name: Cache Rust dependencies
-        uses: Swatinem/rust-cache@v2
-        
-      - name: Install dependencies and build
-        run: |
-          uv venv
-          source .venv/bin/activate || .venv\Scripts\activate
-          uv pip install maturin
-          uv pip install -e ".[dev]"
-          maturin develop --release
-          
-      - name: Run tests
-        run: |
-          source .venv/bin/activate || .venv\Scripts\activate
-          pytest --cov=pyquillmark --cov-report=xml --cov-report=term
-          
-      - name: Upload coverage
-        uses: codecov/codecov-action@v4
-        with:
-          file: ./coverage.xml
-          flags: ${{ matrix.os }}-py${{ matrix.python-version }}
-
-  build-wheels:
-    name: Build wheels on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    if: github.event_name == 'release'
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          
-      - name: Build wheels
-        run: |
-          uv venv
-          source .venv/bin/activate || .venv\Scripts\activate
-          uv pip install maturin
-          maturin build --release --strip --interpreter python3.9 python3.10 python3.11 python3.12
-          
-      - name: Upload wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-${{ matrix.os }}
-          path: target/wheels/*.whl
-
-  publish:
-    name: Publish to PyPI
-    needs: [lint, test, build-wheels]
-    runs-on: ubuntu-latest
-    if: github.event_name == 'release'
-    
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Download wheels
-        uses: actions/download-artifact@v4
-        with:
-          pattern: wheels-*
-          merge-multiple: true
-          path: dist/
-          
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-        
-      - name: Publish to PyPI
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          uv venv
-          source .venv/bin/activate
-          uv pip install maturin
-          maturin upload dist/*.whl
-```
-
-### Release Workflow
-
-`.github/workflows/release.yml`:
-
-```yaml
-name: Release
-
-on:
-  push:
-    tags:
-      - 'v*'
-
-jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-```
-
----
-
-## Packaging and Distribution
-
-### PyPI Distribution
-
-#### Package Metadata
-
-The package will be distributed as:
-- **Source distribution (sdist)**: For platforms without pre-built wheels
-- **Binary wheels**: Pre-built for major platforms (Linux, macOS, Windows) × Python versions (3.9-3.12)
-
-#### Wheel Naming Convention
-
-```
-pyquillmark-0.1.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
-pyquillmark-0.1.0-cp39-abi3-macosx_10_12_x86_64.whl
-pyquillmark-0.1.0-cp39-abi3-win_amd64.whl
-```
-
-Using `abi3` allows a single wheel to work across Python versions.
-
-#### Installation
-
-```bash
-# From PyPI (when published)
-pip install pyquillmark
-uv pip install pyquillmark
-
-# With development dependencies
-pip install pyquillmark[dev]
-uv pip install "pyquillmark[dev]"
-
-# From source
-git clone https://github.com/nibsbin/quillmark.git
-cd quillmark/pyquillmark
-uv pip install maturin
+# Rebuild after Rust changes
 maturin develop
 ```
-
-### Version Management
-
-- Follow Semantic Versioning (SemVer): `MAJOR.MINOR.PATCH`
-- Keep Python package version in sync with Rust crate
-- Use git tags for releases: `v0.1.0`
 
 ---
 
@@ -953,30 +844,23 @@ maturin develop
 
 ```
 tests/
-├── conftest.py                # Shared fixtures
-├── test_engine.py             # Quillmark engine tests
-├── test_workflow.py           # Workflow tests
-├── test_quill.py              # Quill loading tests
-├── test_render.py             # End-to-end rendering tests
-├── test_errors.py             # Error handling tests
-├── test_dynamic_assets.py     # Dynamic asset tests
-├── test_types.py              # Type conversions tests
+├── conftest.py              # Shared fixtures
+├── test_engine.py           # Engine tests
+├── test_workflow.py         # Workflow tests
+├── test_quill.py            # Quill loading tests
+├── test_render.py           # End-to-end rendering
+├── test_errors.py           # Error handling
 └── fixtures/
-    ├── test-quill/
-    │   ├── Quill.toml
-    │   └── glue.typ
-    ├── sample.md
-    └── test_data/
+    └── test-quill/          # Test quill bundles
 ```
 
-### Test Categories
+### Test Examples
 
-#### 1. Unit Tests
-
-Test individual components in isolation:
-
+**`tests/test_engine.py`:**
 ```python
-# test_engine.py
+import pytest
+from pyquillmark import Quillmark, Quill
+
 def test_engine_creation():
     engine = Quillmark()
     assert "typst" in engine.registered_backends()
@@ -989,156 +873,212 @@ def test_register_quill(tmp_path):
     assert quill.name in engine.registered_quills()
 ```
 
-#### 2. Integration Tests
-
-Test component interactions:
-
+**`tests/test_workflow.py`:**
 ```python
-# test_workflow.py
-def test_end_to_end_render(tmp_path):
+from pyquillmark import Quillmark, ParsedDocument, OutputFormat
+
+def test_end_to_end_render(test_quill_path):
     engine = Quillmark()
-    quill = create_test_quill(tmp_path)
+    quill = Quill.from_path(test_quill_path)
     engine.register_quill(quill)
     
     workflow = engine.workflow_from_quill_name(quill.name)
-    result = workflow.render("# Hello\n\nWorld", OutputFormat.PDF)
+    parsed = ParsedDocument.from_markdown("# Hello\n\nWorld")
+    result = workflow.render(parsed, OutputFormat.PDF)
     
     assert len(result.artifacts) == 1
-    assert result.artifacts[0].format == OutputFormat.PDF
+    assert result.artifacts[0].output_format == OutputFormat.PDF
     assert len(result.artifacts[0].bytes) > 0
-```
-
-#### 3. Error Handling Tests
-
-```python
-# test_errors.py
-def test_compilation_error():
-    workflow = create_workflow()
-    with pytest.raises(CompilationError) as exc_info:
-        workflow.render("{{ invalid template }}", OutputFormat.PDF)
-    
-    assert len(exc_info.value.diagnostics) > 0
-    assert exc_info.value.diagnostics[0].severity == Severity.ERROR
-```
-
-#### 4. Type Tests (with mypy)
-
-```python
-# test_types.py
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    # Type-only tests for mypy
-    reveal_type(engine.workflow_from_quill_name("quill"))  # Should be Workflow
-    reveal_type(workflow.render("md"))  # Should be RenderResult
 ```
 
 ### Coverage Goals
 
-- Overall: 90%+
-- Core API: 95%+
-- Error paths: 85%+
+- Overall: 85%+
+- Core API: 90%+
+- Error paths: 80%+
 
-### Test Execution
+---
+
+## Distribution & Packaging
+
+### PyPI Distribution Strategy
+
+**Wheel Types:**
+1. **Binary wheels** for major platforms (built via CI):
+   - `manylinux_2_17_x86_64` (Linux x86_64)
+   - `manylinux_2_17_aarch64` (Linux ARM64)
+   - `macosx_10_12_x86_64` (macOS Intel)
+   - `macosx_11_0_arm64` (macOS Apple Silicon)
+   - `win_amd64` (Windows x86_64)
+
+2. **Source distribution (sdist)** as fallback
+
+**Using `abi3`:**
+- Build wheels with `abi3-py39` for forward compatibility
+- Single wheel works across Python 3.9-3.13
+
+### CI/CD Pipeline
+
+**`.github/workflows/python.yml`:**
+```yaml
+name: Python Package CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ['3.9', '3.10', '3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v3
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      
+      - name: Install dependencies
+        run: |
+          uv venv
+          uv pip install maturin pytest
+          maturin develop
+      
+      - name: Run tests
+        run: uv run pytest
+
+  build-wheels:
+    runs-on: ${{ matrix.os }}
+    if: github.event_name == 'release'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v3
+      
+      - name: Build wheels
+        run: |
+          uv venv
+          uv pip install maturin
+          maturin build --release --interpreter python3.9 python3.10 python3.11 python3.12
+      
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: target/wheels/*.whl
+
+  publish:
+    needs: [test, build-wheels]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist/
+      
+      - uses: astral-sh/setup-uv@v3
+      
+      - name: Publish to PyPI
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          uv pip install maturin
+          maturin upload dist/*.whl
+```
+
+### Installation
 
 ```bash
-# Run all tests
-uv run pytest
+# From PyPI (when published)
+pip install pyquillmark
+uv pip install pyquillmark
 
-# Run with coverage
-uv run pytest --cov=pyquillmark --cov-report=html
+# With dev dependencies
+pip install pyquillmark[dev]
 
-# Run specific test file
-uv run pytest tests/test_workflow.py
-
-# Run with verbose output
-uv run pytest -v
-
-# Run type checks
-uv run mypy python/pyquillmark
+# From source
+git clone https://github.com/nibsbin/quillmark.git
+cd quillmark/pyquillmark
+maturin develop
 ```
 
 ---
 
 ## Documentation
 
-### Documentation Structure
+### Documentation Strategy
 
-```
-docs/
-├── index.rst                  # Main documentation page
-├── installation.md            # Installation instructions
-├── quickstart.md              # Getting started guide
-├── user_guide/
-│   ├── engine.md              # Engine usage
-│   ├── workflows.md           # Workflow usage
-│   ├── quills.md              # Working with quills
-│   ├── dynamic_assets.md      # Dynamic assets
-│   └── error_handling.md      # Error handling
-├── api/
-│   ├── index.rst              # API reference index
-│   ├── engine.rst             # Quillmark class
-│   ├── workflow.rst           # Workflow class
-│   ├── types.rst              # Types and enums
-│   └── errors.rst             # Exceptions
-├── examples/
-│   ├── basic.md               # Basic usage examples
-│   ├── advanced.md            # Advanced patterns
-│   └── batch.md               # Batch processing
-└── development/
-    ├── contributing.md        # Contribution guide
-    ├── building.md            # Building from source
-    └── testing.md             # Testing guide
-```
+Use standard Python docstrings with type hints. Documentation is primarily inline.
 
-### Documentation Tools
-
-- **Sphinx**: Documentation generator
-- **sphinx-rtd-theme**: ReadTheDocs theme
-- **autodoc**: Auto-generate from docstrings
-- **napoleon**: Google/NumPy style docstrings
-
-### Docstring Style
-
-Use Google-style docstrings:
-
+**Example:**
 ```python
 def render(
     self,
-    markdown: str,
-    format: Optional[OutputFormat] = None
+    parsed: ParsedDocument,
+    format: OutputFormat | None = None
 ) -> RenderResult:
-    """Render markdown to specified output format.
+    """Render parsed document to output artifacts.
     
     Args:
-        markdown: Markdown content with optional YAML frontmatter
+        parsed: Parsed markdown document with frontmatter
         format: Output format (defaults to first supported format)
-        
+    
     Returns:
         RenderResult containing artifacts and warnings
-        
+    
     Raises:
-        TemplateError: If template rendering fails
+        TemplateError: If template composition fails
         CompilationError: If backend compilation fails
-        
+    
     Example:
+        >>> engine = Quillmark()
+        >>> quill = Quill.from_path("my-quill")
+        >>> engine.register_quill(quill)
         >>> workflow = engine.workflow_from_quill_name("my-quill")
-        >>> result = workflow.render("# Hello", OutputFormat.PDF)
+        >>> parsed = ParsedDocument.from_markdown("# Hello")
+        >>> result = workflow.render(parsed, OutputFormat.PDF)
         >>> result.artifacts[0].save("output.pdf")
     """
 ```
 
-### Building Documentation
+### Type Stubs
 
-```bash
-# Install documentation dependencies
-uv pip install -e ".[docs]"
+**`python/pyquillmark/__init__.pyi`:**
+```python
+from typing import Any
+from pathlib import Path
 
-# Build HTML documentation
-uv run sphinx-build docs docs/_build/html
+class Quillmark:
+    def __init__(self) -> None: ...
+    def register_quill(self, quill: Quill) -> None: ...
+    def workflow_from_quill_name(self, name: str) -> Workflow: ...
+    def workflow_from_quill(self, quill: Quill) -> Workflow: ...
+    def registered_backends(self) -> list[str]: ...
+    def registered_quills(self) -> list[str]: ...
 
-# Serve locally
-python -m http.server -d docs/_build/html 8000
+class Workflow:
+    def render(
+        self,
+        parsed: ParsedDocument,
+        format: OutputFormat | None = None
+    ) -> RenderResult: ...
+    def with_asset(self, filename: str, contents: bytes) -> Workflow: ...
+    def backend_id(self) -> str: ...
+    # ... other methods
+
+# ... other types
 ```
 
 ---
@@ -1146,194 +1086,69 @@ python -m http.server -d docs/_build/html 8000
 ## Implementation Roadmap
 
 ### Phase 1: Foundation (Week 1-2)
+- [ ] Set up `pyquillmark/` directory structure
+- [ ] Configure `pyproject.toml` and `Cargo.toml`
+- [ ] Implement basic PyO3 module structure (`lib.rs`)
+- [ ] Create error exception hierarchy
+- [ ] Implement `PyQuillmark` wrapper
+- [ ] Verify `maturin develop` works
+- [ ] Basic smoke test
 
-- [ ] **1.1** Set up project structure (`pyquillmark/` directory)
-- [ ] **1.2** Configure `pyproject.toml` and `Cargo.toml`
-- [ ] **1.3** Implement basic PyO3 bindings for core types
-  - [ ] `PyQuillmark` wrapper
-  - [ ] `PyWorkflow` wrapper
-  - [ ] `PyQuill` wrapper
-- [ ] **1.4** Implement error mapping (Rust → Python exceptions)
-- [ ] **1.5** Basic type conversions (enums, structs)
-- [ ] **1.6** Set up `uv` development environment
-- [ ] **1.7** Create minimal test suite
-- [ ] **1.8** Verify `maturin develop` works
-
-**Deliverable**: Basic working Python bindings that can create an engine and load a quill
+**Deliverable**: Minimal working package that can create an engine
 
 ### Phase 2: Core API (Week 3-4)
+- [ ] Implement `PyWorkflow` wrapper
+- [ ] Implement `PyQuill` wrapper
+- [ ] Implement `PyParsedDocument` wrapper
+- [ ] Implement output types (`PyRenderResult`, `PyArtifact`)
+- [ ] Implement enum conversions (`PyOutputFormat`, `PySeverity`)
+- [ ] Add comprehensive unit tests
+- [ ] Type hints and stubs
 
-- [ ] **2.1** Complete `Quillmark` class implementation
-  - [ ] `register_quill()`
-  - [ ] `load()` with QuillRef support
-  - [ ] `registered_backends()` / `registered_quills()`
-- [ ] **2.2** Complete `Workflow` class implementation
-  - [ ] `render()`
-  - [ ] `render_source()`
-  - [ ] `process_glue()`
-  - [ ] Property getters
-- [ ] **2.3** Implement `Quill` class
-  - [ ] `from_path()`
-  - [ ] Property access
-  - [ ] Validation
-- [ ] **2.4** Implement output types
-  - [ ] `RenderResult`
-  - [ ] `Artifact` with `save()` method
-  - [ ] `Diagnostic` and `Location`
-- [ ] **2.5** Complete error hierarchy
-- [ ] **2.6** Add comprehensive unit tests
-- [ ] **2.7** Type hints and stubs
+**Deliverable**: Full API parity with Rust crate
 
-**Deliverable**: Full API parity with Rust crate's high-level API
+### Phase 3: Dynamic Assets & Polish (Week 5)
+- [ ] Implement dynamic asset support (`with_asset`, `with_font`)
+- [ ] Optimize memory handling (zero-copy where possible)
+- [ ] Integration tests
+- [ ] Error handling tests
 
-### Phase 3: Dynamic Assets & Advanced Features (Week 5)
+**Deliverable**: Feature-complete package
 
-- [ ] **3.1** Implement dynamic asset support
-  - [ ] `with_asset()` builder method
-  - [ ] `with_assets()` batch method
-  - [ ] `clear_assets()`
-  - [ ] Collision detection
-- [ ] **3.2** Memory optimization
-  - [ ] Zero-copy bytes handling
-  - [ ] Efficient string conversions
-- [ ] **3.3** Add integration tests
-- [ ] **3.4** Performance benchmarks
+### Phase 4: Distribution (Week 6)
+- [ ] Set up GitHub Actions CI/CD
+- [ ] Configure multi-platform wheel building
+- [ ] Test PyPI publishing (test.pypi.org)
+- [ ] Documentation review
+- [ ] Example scripts
 
-**Deliverable**: Feature-complete Python library
+**Deliverable**: Production-ready package
 
-### Phase 4: Build & CI/CD (Week 6)
+### Phase 5: Release (Week 7)
+- [ ] Final testing on all platforms
+- [ ] Version 0.1.0 release
+- [ ] Publish to PyPI
+- [ ] Update main repository README
 
-- [ ] **4.1** Set up GitHub Actions workflows
-  - [ ] Linting and type checking
-  - [ ] Multi-platform testing (Linux, macOS, Windows)
-  - [ ] Multi-version testing (Python 3.9-3.12)
-- [ ] **4.2** Configure wheel building
-  - [ ] manylinux wheels
-  - [ ] macOS universal2 wheels
-  - [ ] Windows wheels
-- [ ] **4.3** Set up PyPI publishing
-  - [ ] Test PyPI deployment
-  - [ ] Production PyPI deployment
-- [ ] **4.4** Coverage reporting (Codecov)
-- [ ] **4.5** Release automation
-
-**Deliverable**: Automated CI/CD pipeline
-
-### Phase 5: Documentation & Examples (Week 7)
-
-- [ ] **5.1** Write comprehensive docstrings
-- [ ] **5.2** Set up Sphinx documentation
-- [ ] **5.3** Write user guide
-  - [ ] Installation
-  - [ ] Quickstart
-  - [ ] Detailed usage guides
-- [ ] **5.4** API reference documentation
-- [ ] **5.5** Create examples
-  - [ ] Basic usage
-  - [ ] Dynamic assets
-  - [ ] Batch processing
-  - [ ] Error handling
-- [ ] **5.6** README.md for PyPI
-- [ ] **5.7** Deploy documentation (ReadTheDocs)
-
-**Deliverable**: Complete documentation
-
-### Phase 6: Polish & Release (Week 8)
-
-- [ ] **6.1** Performance optimization
-- [ ] **6.2** Final testing on all platforms
-- [ ] **6.3** Security audit
-- [ ] **6.4** License compliance check
-- [ ] **6.5** Version 0.1.0 release
-  - [ ] Git tag
-  - [ ] GitHub release
-  - [ ] PyPI publish
-- [ ] **6.6** Announcement and promotion
-
-**Deliverable**: Public v0.1.0 release on PyPI
+**Deliverable**: Public release
 
 ---
 
-## Development Guidelines
+## Example Usage
 
-### Code Style
-
-- **Python**: Follow PEP 8, use `ruff` for linting and formatting
-- **Rust**: Follow Rust conventions, use `rustfmt` and `clippy`
-- **Type Hints**: All public APIs must have type hints
-- **Docstrings**: All public APIs must have docstrings
-
-### Performance Considerations
-
-1. **Minimize Python-Rust crossings**: Batch operations when possible
-2. **Zero-copy when possible**: Use `PyBytes` and memoryview
-3. **GIL management**: Release GIL for CPU-intensive operations
-4. **Lazy evaluation**: Defer expensive operations until needed
-
-### Security
-
-1. **Input validation**: Validate all inputs from Python side
-2. **Path traversal**: Sanitize file paths
-3. **Memory safety**: Leverage Rust's safety guarantees
-4. **Dependency auditing**: Regular `cargo audit` and `pip-audit`
-
-### Compatibility
-
-- **Python versions**: Support 3.9+ (current stable releases)
-- **Platforms**: Linux (x86_64, aarch64), macOS (x86_64, arm64), Windows (x86_64)
-- **Rust version**: MSRV 1.70+ (aligned with PyO3)
-
----
-
-## Future Enhancements
-
-### Post-v0.1.0 Roadmap
-
-1. **Performance Optimizations**
-   - Parallel rendering for batch operations
-   - Caching compiled templates
-   - Memory pooling for artifacts
-
-2. **Enhanced Type Safety**
-   - Runtime type validation with Pydantic
-   - Stricter type stubs
-
-3. **Additional APIs**
-   - Async/await support (`async def render()`)
-   - Streaming output for large documents
-   - Progress callbacks
-
-4. **Developer Experience**
-   - CLI tool for common operations
-   - Jupyter notebook integration
-   - VS Code extension
-
-5. **Extended Backend Support**
-   - When new backends are added to Rust crate, expose in Python
-
----
-
-## Appendix
-
-### A. Example Workflows
-
-#### Basic Usage Example
-
-`examples/basic_usage.py`:
+### Basic Rendering
 
 ```python
-from pyquillmark import Quillmark, OutputFormat
+from pyquillmark import Quillmark, Quill, ParsedDocument, OutputFormat
 
 # Create engine
 engine = Quillmark()
 
-# Load quill
-from pyquillmark import Quill
+# Load and register quill
 quill = Quill.from_path("quills/letter")
 engine.register_quill(quill)
 
-# Render
-workflow = engine.workflow_from_quill_name("letter")
+# Parse markdown
 markdown = """---
 title: Hello World
 author: Alice
@@ -1344,88 +1159,85 @@ author: Alice
 This is a **test** document.
 """
 
-result = workflow.render(markdown, OutputFormat.PDF)
+parsed = ParsedDocument.from_markdown(markdown)
+
+# Create workflow and render
+workflow = engine.workflow_from_quill_name("letter")
+result = workflow.render(parsed, OutputFormat.PDF)
 
 # Save output
 result.artifacts[0].save("output.pdf")
 print(f"Generated {len(result.artifacts[0].bytes)} bytes")
 ```
 
-#### Dynamic Assets Example
-
-`examples/dynamic_assets.py`:
+### Dynamic Assets
 
 ```python
-from pyquillmark import Quillmark, OutputFormat
-import matplotlib.pyplot as plt
-from io import BytesIO
+from pyquillmark import Quillmark, OutputFormat, ParsedDocument
+from pathlib import Path
 
-# Generate chart
-fig, ax = plt.subplots()
-ax.plot([1, 2, 3, 4], [1, 4, 2, 3])
+# Load chart image
+chart_bytes = Path("chart.png").read_bytes()
 
-chart_buffer = BytesIO()
-fig.savefig(chart_buffer, format='png')
-chart_bytes = chart_buffer.getvalue()
-
-# Render with dynamic asset
+# Create workflow with dynamic asset
 engine = Quillmark()
 workflow = engine.workflow_from_quill_name("report")
 
-result = (
-    workflow
-    .with_asset("chart.png", chart_bytes)
-    .render(markdown, OutputFormat.PDF)
-)
+workflow_with_asset = workflow.with_asset("chart.png", chart_bytes)
+
+parsed = ParsedDocument.from_markdown("# Report\n\n![Chart](chart.png)")
+result = workflow_with_asset.render(parsed, OutputFormat.PDF)
 
 result.artifacts[0].save("report.pdf")
 ```
 
-#### Batch Processing Example
-
-`examples/batch_rendering.py`:
+### Batch Processing
 
 ```python
-from pyquillmark import Quillmark, OutputFormat
+from pyquillmark import Quillmark, OutputFormat, ParsedDocument
 from pathlib import Path
 import concurrent.futures
 
 engine = Quillmark()
 workflow = engine.workflow_from_quill_name("letter")
 
-markdown_files = Path("documents").glob("*.md")
-
-def render_document(md_file):
+def render_document(md_file: Path) -> Path:
     content = md_file.read_text()
-    result = workflow.render(content, OutputFormat.PDF)
+    parsed = ParsedDocument.from_markdown(content)
+    result = workflow.render(parsed, OutputFormat.PDF)
+    
     output_path = md_file.with_suffix('.pdf')
     result.artifacts[0].save(output_path)
     return output_path
 
-# Parallel rendering
+markdown_files = Path("documents").glob("*.md")
+
 with concurrent.futures.ThreadPoolExecutor() as executor:
     outputs = list(executor.map(render_document, markdown_files))
 
 print(f"Rendered {len(outputs)} documents")
 ```
 
-### B. Migration from Rust
+---
 
-For existing Rust users, the Python API closely mirrors the Rust API:
+## Migration from Rust
+
+For Rust users, the Python API closely mirrors the Rust API:
 
 | Rust | Python | Notes |
 |------|--------|-------|
 | `Quillmark::new()` | `Quillmark()` | Constructor syntax |
 | `engine.register_quill(quill)` | `engine.register_quill(quill)` | Same |
 | `engine.workflow_from_quill_name("name")?` | `engine.workflow_from_quill_name("name")` | Exceptions vs Results |
-| `workflow.render(md, Some(fmt))?` | `workflow.render(md, fmt)` | Optional args are None |
-| `result.artifacts` | `result.artifacts` | Same field access |
-| `artifact.bytes` | `artifact.bytes` | Returns Python bytes |
-| `OutputFormat::Pdf` | `OutputFormat.PDF` | Enum naming convention |
+| `workflow.render(&parsed, Some(fmt))?` | `workflow.render(parsed, fmt)` | Optional = None |
+| `result.artifacts[0].bytes` | `result.artifacts[0].bytes` | Returns Python bytes |
+| `OutputFormat::Pdf` | `OutputFormat.PDF` | Naming convention |
 
-### C. Glossary
+---
 
-- **Quill**: A template bundle containing glue template, assets, and configuration
+## Glossary
+
+- **Quill**: Template bundle containing glue template, assets, and configuration
 - **Glue**: Backend-specific template file (e.g., `.typ` for Typst)
 - **Workflow**: Configured rendering pipeline with backend and quill
 - **Artifact**: Rendered output bytes with format metadata
@@ -1434,6 +1246,6 @@ For existing Rust users, the Python API closely mirrors the Rust API:
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2024  
-**Status**: Planning/Design Phase
+**Document Version**: 2.0  
+**Last Updated**: 2025  
+**Status**: Design Phase
