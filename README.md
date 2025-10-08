@@ -26,7 +26,7 @@ cargo add quillmark
 ## Quick Start
 
 ```rust
-use quillmark::{Quillmark, OutputFormat};
+use quillmark::{Quillmark, OutputFormat, ParsedDocument};
 use quillmark_core::Quill;
 
 // Create engine with Typst backend
@@ -36,10 +36,13 @@ let mut engine = Quillmark::new();
 let quill = Quill::from_path("path/to/quill")?;
 engine.register_quill(quill);
 
-// Render markdown to PDF
-let workflow = engine.load("quill_name")?;
+// Parse markdown once
 let markdown = "---\ntitle: Example\n---\n\n# Hello World";
-let result = workflow.render(markdown, OutputFormat::Pdf)?;
+let parsed = ParsedDocument::from_markdown(markdown)?;
+
+// Load workflow and render to PDF
+let workflow = engine.workflow_from_quill_name("quill_name")?;
+let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
 
 // Access the generated PDF
 let pdf_bytes = &result.artifacts[0].bytes;

@@ -36,7 +36,7 @@
 //! let parsed = ParsedDocument::from_markdown(markdown).unwrap();
 //!
 //! // Create a workflow and render
-//! let workflow = engine.load("my-quill").unwrap();
+//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap();
 //! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //!
 //! // Access the rendered artifacts
@@ -56,7 +56,7 @@
 //! # engine.register_quill(quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
-//! let workflow = engine.load("my-quill").unwrap()
+//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap()
 //!     .with_asset("chart.png", vec![/* image bytes */]).unwrap()
 //!     .with_asset("data.csv", vec![/* csv bytes */]).unwrap();
 //!

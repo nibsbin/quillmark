@@ -27,7 +27,9 @@ pub fn demo(
     let parsed = quillmark::ParsedDocument::from_markdown(&markdown)?;
 
     let engine = quillmark::Quillmark::new();
-    let mut workflow = engine.load(&quill).expect("Failed to load workflow");
+    let mut workflow = engine
+        .workflow_from_quill(&quill)
+        .expect("Failed to load workflow");
 
     if let Some(assets) = &asset_resources {
         let full_assets: Vec<(String, Vec<u8>)> = assets

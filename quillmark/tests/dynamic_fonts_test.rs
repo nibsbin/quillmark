@@ -9,7 +9,7 @@ fn test_with_font_basic() {
     let font_data = vec![1, 2, 3, 4, 5];
     engine.register_quill(quill);
 
-    let workflow = engine.load("taro").unwrap();
+    let workflow = engine.workflow_from_quill_name("taro").unwrap();
     let workflow = workflow
         .with_font("custom.ttf", font_data.clone())
         .expect("Should add font");
@@ -23,7 +23,7 @@ fn test_with_font_collision() {
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
-    let workflow = engine.load("taro").unwrap();
+    let workflow = engine.workflow_from_quill_name("taro").unwrap();
     let workflow = workflow
         .with_font("custom.ttf", vec![1, 2, 3])
         .expect("Should add first font");
@@ -48,7 +48,7 @@ fn test_with_fonts_multiple() {
         ("font3.woff".to_string(), vec![7, 8, 9]),
     ];
 
-    let workflow = engine.load("taro").unwrap();
+    let workflow = engine.workflow_from_quill_name("taro").unwrap();
     let workflow = workflow
         .with_fonts(fonts)
         .expect("Should add multiple fonts");
@@ -62,7 +62,7 @@ fn test_clear_fonts() {
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
-    let workflow = engine.load("taro").unwrap();
+    let workflow = engine.workflow_from_quill_name("taro").unwrap();
     let workflow = workflow
         .with_font("font1.ttf", vec![1, 2, 3])
         .expect("Should add first font")
@@ -86,7 +86,7 @@ fn test_with_font_and_asset_together() {
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
-    let workflow = engine.load("taro").unwrap();
+    let workflow = engine.workflow_from_quill_name("taro").unwrap();
     let workflow = workflow
         .with_asset("chart.png", vec![1, 2, 3])
         .expect("Should add asset")
@@ -102,7 +102,7 @@ fn test_dynamic_font_names() {
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
-    let workflow = engine.load("taro").unwrap();
+    let workflow = engine.workflow_from_quill_name("taro").unwrap();
     let workflow = workflow
         .with_font("font1.ttf", vec![1, 2, 3])
         .expect("Should add first font")
@@ -127,7 +127,7 @@ fn test_with_real_font_file() {
     let font_path = resource_path("usaf_memo/assets/DejaVuSansMono.ttf");
     let font_data = fs::read(&font_path).expect("Should read font file");
 
-    let workflow = engine.load("taro").unwrap();
+    let workflow = engine.workflow_from_quill_name("taro").unwrap();
     let workflow = workflow
         .with_font("DejaVuSansMono.ttf", font_data)
         .expect("Should add real font");
