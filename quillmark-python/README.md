@@ -1,5 +1,3 @@
-title: Hello World
-author: Alice
 # Quillmark — Python bindings for Quillmark
 
 Compact docs and canonical developer workflow.
@@ -92,4 +90,4 @@ uv run pytest
 # run mypy and ruff checks (project recommends these)
 uv run mypy python/quillmark
 uv run ruff check python/
-```w
+```
