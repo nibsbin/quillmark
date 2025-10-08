@@ -22,31 +22,49 @@ cargo install --path .
 
 ## Usage
 
+The simplest usage is to specify the markdown file and include the quill path in the frontmatter:
+
 ```bash
-quillmark-cli --quill <QUILL_DIR> --markdown <MARKDOWN_FILE> --output <OUTPUT_PDF>
+quillmark-cli <MARKDOWN_FILE>
 ```
 
-### Arguments
+The markdown file should include a `quill` field in its frontmatter:
 
-- `--quill <QUILL_DIR>` - Path to the quill directory containing the template
-- `--markdown <MARKDOWN_FILE>` - Path to the markdown file to render
+```markdown
+---
+quill: path/to/quill
+title: My Document
+---
+
+Document content...
+```
+
+### Command-Line Options
+
+```bash
+quillmark-cli [OPTIONS] <MARKDOWN>
+
+Arguments:
+  <MARKDOWN>  Path to the markdown file to render
+
+Options:
+  -q, --quill <QUILL>    Path to the quill directory (optional override)
+  -o, --output <OUTPUT>  Output PDF file path [default: output.pdf]
+  -h, --help             Print help
+```
+
+- `<MARKDOWN>` - Path to the markdown file to render (required)
+- `--quill <QUILL_DIR>` - Optional path to override the quill specified in frontmatter
 - `--output <OUTPUT_PDF>` - Output PDF file path (default: `output.pdf`)
 
 ### Examples
 
-#### Example 1: Render a USAF Memo
-
-```bash
-# Using the usaf_memo quill from fixtures
-quillmark-cli \
-  --quill ./quillmark-fixtures/resources/usaf_memo \
-  --markdown ./my-memo.md \
-  --output ./my-memo.pdf
-```
+#### Example 1: Simple Usage with Frontmatter
 
 Create `my-memo.md`:
 ```markdown
 ---
+quill: ./quillmark-fixtures/resources/usaf_memo
 from: HQ AFGSC/A3TW
 to: ALL MAJCOM UNITS
 subject: Test Memorandum
@@ -56,19 +74,32 @@ date: 2024-01-15
 This is the body of the memorandum.
 ```
 
-#### Example 2: Render with a Simple Quill
+Render it:
+```bash
+quillmark-cli my-memo.md
+```
+
+This creates `output.pdf` using the quill specified in the frontmatter.
+
+#### Example 2: With Custom Output Path
 
 ```bash
-# Using the taro quill (simpler, no external packages)
-quillmark-cli \
-  --quill ./quillmark-fixtures/resources/taro \
-  --markdown ./simple-doc.md \
-  --output ./simple-doc.pdf
+quillmark-cli my-memo.md --output my-memo.pdf
 ```
+
+#### Example 3: Override Quill with Flag
+
+```bash
+# Use a different quill than specified in frontmatter
+quillmark-cli my-memo.md --quill ./path/to/different-quill --output test.pdf
+```
+
+#### Example 4: Complete Example
 
 Create `simple-doc.md`:
 ```markdown
 ---
+quill: ./quillmark-fixtures/resources/taro
 author: John Doe
 ice_cream: Chocolate
 title: My Document
@@ -77,14 +108,9 @@ title: My Document
 This is a simple document.
 ```
 
-#### Example 3: Testing Your Own Quill
-
+Render it:
 ```bash
-# Test your custom quill during development
-quillmark-cli \
-  --quill ./path/to/my-quill \
-  --markdown ./test.md \
-  --output ./test.pdf
+quillmark-cli simple-doc.md --output simple-doc.pdf
 ```
 
 ## Features
