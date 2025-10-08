@@ -1,4 +1,4 @@
-use quillmark::{OutputFormat, Quill, Workflow};
+use quillmark::{OutputFormat, ParsedDocument, Quill, Workflow};
 use quillmark_fixtures::resource_path;
 use quillmark_typst::TypstBackend;
 use std::fs;
@@ -14,6 +14,9 @@ fn test_with_existing_fixture() {
     let markdown =
         fs::read_to_string(&sample_markdown_path).expect("Failed to read sample markdown");
 
+    // Parse markdown
+    let parsed = ParsedDocument::from_markdown(&markdown).expect("Failed to parse markdown");
+
     // Create engine
     let backend = Box::new(TypstBackend::default());
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
@@ -23,7 +26,7 @@ fn test_with_existing_fixture() {
 
     // Test rendering
     let result = engine
-        .render(&markdown, Some(OutputFormat::Pdf))
+        .render(&parsed, Some(OutputFormat::Pdf))
         .expect("Failed to render");
 
     assert!(!result.artifacts.is_empty());

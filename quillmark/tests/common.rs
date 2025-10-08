@@ -22,6 +22,10 @@ pub fn demo(
         .as_ref()
         .ok_or("Quill does not have a markdown template")?
         .clone();
+
+    // Parse the markdown once
+    let parsed = quillmark::ParsedDocument::from_markdown(&markdown)?;
+
     let engine = quillmark::Quillmark::new();
     let mut workflow = engine.load(&quill).expect("Failed to load workflow");
 
@@ -39,7 +43,7 @@ pub fn demo(
     }
 
     // process glue
-    let glued = workflow.process_glue(&markdown)?;
+    let glued = workflow.process_glue_parsed(&parsed)?;
 
     // write outputs
     let glued_bytes = glued.into_bytes();
@@ -51,7 +55,7 @@ pub fn demo(
     );
 
     // render output
-    let rendered = workflow.render(&markdown, Some(quillmark_core::OutputFormat::Pdf))?;
+    let rendered = workflow.render(&parsed, Some(quillmark_core::OutputFormat::Pdf))?;
     let output_bytes = rendered.artifacts[0].bytes.clone();
 
     write_example_output(render_output, &output_bytes)?;

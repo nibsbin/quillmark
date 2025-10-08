@@ -31,7 +31,7 @@
 //! ### Basic Usage
 //!
 //! ```no_run
-//! use quillmark::{Quillmark, Quill, OutputFormat};
+//! use quillmark::{Quillmark, Quill, OutputFormat, ParsedDocument};
 //!
 //! // Step 1: Create engine with auto-registered backends
 //! let mut engine = Quillmark::new();
@@ -43,8 +43,10 @@
 //! // Step 3: Load workflow by quill name
 //! let workflow = engine.load("my-quill").unwrap();
 //!
-//! // Step 4: Render markdown
-//! let result = workflow.render("# Hello", Some(OutputFormat::Pdf)).unwrap();
+//! // Step 4: Parse and render markdown
+//! let markdown = "# Hello";
+//! let parsed = ParsedDocument::from_markdown(markdown).unwrap();
+//! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
 //!
 //! ### Loading by Reference
@@ -94,7 +96,7 @@
 //! ### Basic Rendering
 //!
 //! ```no_run
-//! # use quillmark::{Quillmark, OutputFormat};
+//! # use quillmark::{Quillmark, OutputFormat, ParsedDocument};
 //! # let mut engine = Quillmark::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
@@ -110,35 +112,40 @@
 //! This is my document.
 //! "#;
 //!
-//! let result = workflow.render(markdown, Some(OutputFormat::Pdf)).unwrap();
+//! let parsed = ParsedDocument::from_markdown(markdown).unwrap();
+//! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
 //!
 //! ### Dynamic Assets (Builder Pattern)
 //!
 //! ```no_run
-//! # use quillmark::{Quillmark, OutputFormat};
+//! # use quillmark::{Quillmark, OutputFormat, ParsedDocument};
 //! # let mut engine = Quillmark::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
+//! # let markdown = "# Report";
+//! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
 //! let workflow = engine.load("my-quill").unwrap()
 //!     .with_asset("logo.png", vec![/* PNG bytes */]).unwrap()
 //!     .with_asset("chart.svg", vec![/* SVG bytes */]).unwrap();
 //!
-//! let result = workflow.render("# Report", Some(OutputFormat::Pdf)).unwrap();
+//! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
 //!
 //! ### Dynamic Fonts (Builder Pattern)
 //!
 //! ```no_run
-//! # use quillmark::{Quillmark, OutputFormat};
+//! # use quillmark::{Quillmark, OutputFormat, ParsedDocument};
 //! # let mut engine = Quillmark::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
+//! # let markdown = "# Report";
+//! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
 //! let workflow = engine.load("my-quill").unwrap()
 //!     .with_font("custom-font.ttf", vec![/* TTF bytes */]).unwrap()
 //!     .with_font("another-font.otf", vec![/* OTF bytes */]).unwrap();
 //!
-//! let result = workflow.render("# Report", Some(OutputFormat::Pdf)).unwrap();
+//! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
 //!
 //! ### Inspecting Workflow Properties
@@ -156,7 +163,8 @@
 //! ```
 
 use quillmark_core::{
-    decompose, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions, RenderResult,
+    decompose, Backend, Glue, OutputFormat, ParsedDocument, Quill, RenderError, RenderOptions,
+    RenderResult,
 };
 use std::collections::HashMap;
 
@@ -225,6 +233,24 @@ impl Quillmark {
 
     /// Load a workflow by quill name or object reference. See [module docs](self) for examples.
     pub fn load<'a>(&self, quill_ref: impl Into<QuillRef<'a>>) -> Result<Workflow, RenderError> {
+        self.workflow_from_quill(quill_ref)
+    }
+
+    /// Load a workflow from a parsed document that contains a quill tag
+    pub fn workflow_from_parsed(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError> {
+        let quill_name = parsed.quill_tag().ok_or_else(|| {
+            RenderError::Other(
+                "No quill tag found in parsed document. Use !quill directive in markdown.".into(),
+            )
+        })?;
+        self.workflow_from_quill_name(quill_name)
+    }
+
+    /// Load a workflow by quill reference (name or object)
+    pub fn workflow_from_quill<'a>(
+        &self,
+        quill_ref: impl Into<QuillRef<'a>>,
+    ) -> Result<Workflow, RenderError> {
         let quill_ref = quill_ref.into();
 
         // Get the quill reference based on the parameter type
@@ -265,6 +291,11 @@ impl Quillmark {
         let quill_clone = quill.clone();
 
         Workflow::new(backend_clone, quill_clone)
+    }
+
+    /// Load a workflow by quill name
+    pub fn workflow_from_quill_name(&self, name: &str) -> Result<Workflow, RenderError> {
+        self.workflow_from_quill(name)
     }
 
     /// Helper method to clone a backend (trait object cloning workaround)
@@ -318,10 +349,10 @@ impl Workflow {
     /// Render Markdown with YAML frontmatter to output artifacts. See [module docs](self) for examples.
     pub fn render(
         &self,
-        markdown: &str,
+        parsed: &ParsedDocument,
         format: Option<OutputFormat>,
     ) -> Result<RenderResult, RenderError> {
-        let glue_output = self.process_glue(markdown)?;
+        let glue_output = self.process_glue_parsed(parsed)?;
 
         // Prepare quill with dynamic assets
         let prepared_quill = self.prepare_quill_with_assets();
@@ -380,10 +411,15 @@ impl Workflow {
             source: Some(anyhow::anyhow!(e)),
         })?;
 
+        self.process_glue_parsed(&parsed_doc)
+    }
+
+    /// Process a parsed document through the glue template without compilation
+    pub fn process_glue_parsed(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
         let mut glue = Glue::new(self.quill.glue_template.clone());
         self.backend.register_filters(&mut glue);
         let glue_output = glue
-            .compose(parsed_doc.fields().clone())
+            .compose(parsed.fields().clone())
             .map_err(|e| RenderError::from(e))?;
         Ok(glue_output)
     }

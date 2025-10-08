@@ -257,6 +257,43 @@ impl Diagnostic {
     }
 }
 
+/// Error type for parsing operations
+#[derive(thiserror::Error, Debug)]
+pub enum ParseError {
+    /// Input too large
+    #[error("Input too large: {size} bytes (max: {max} bytes)")]
+    InputTooLarge {
+        /// Actual size
+        size: usize,
+        /// Maximum allowed size
+        max: usize,
+    },
+
+    /// YAML parsing error
+    #[error("YAML parsing error: {0}")]
+    YamlError(#[from] serde_yaml::Error),
+
+    /// Invalid YAML structure
+    #[error("Invalid YAML structure: {0}")]
+    InvalidStructure(String),
+
+    /// Other parsing errors
+    #[error("{0}")]
+    Other(String),
+}
+
+impl From<Box<dyn std::error::Error + Send + Sync>> for ParseError {
+    fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        ParseError::Other(err.to_string())
+    }
+}
+
+impl From<String> for ParseError {
+    fn from(msg: String) -> Self {
+        ParseError::Other(msg)
+    }
+}
+
 /// Main error type for rendering operations
 #[derive(thiserror::Error, Debug)]
 pub enum RenderError {
