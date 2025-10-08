@@ -33,6 +33,9 @@
 //!
 //! - [`convert`] - Markdown to Typst conversion utilities
 //! - [`compile`] - Typst to PDF/SVG compilation functions
+//!
+//! Note: The `error_mapping` module provides internal utilities for converting Typst
+//! diagnostics to Quillmark diagnostics and is not part of the public API.
 
 pub mod compile;
 pub mod convert;

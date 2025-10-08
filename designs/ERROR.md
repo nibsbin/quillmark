@@ -497,9 +497,8 @@ If you have code that relied on the old error handling:
 ## References
 
 - **DESIGN.md** - Overall architecture and error handling patterns
-- **quillmark-core/docs/errors.md** - API documentation for error types
 - Implementation files:
-  - `quillmark-core/src/error.rs` - Core error types
+  - `quillmark-core/src/error.rs` - Core error types with API documentation
   - `quillmark-typst/src/error_mapping.rs` - Typst error mapping
   - `quillmark-typst/src/compile.rs` - Compilation error handling
 
