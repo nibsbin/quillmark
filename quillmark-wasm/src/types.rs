@@ -255,7 +255,7 @@ mod tests {
         // Test deserialization
         let options_from_json: RenderOptions = serde_json::from_str(r#"{"format":"svg"}"#).unwrap();
         assert_eq!(options_from_json.format, Some(OutputFormat::Svg));
-        
+
         // Test with quill_name
         let options_with_quill = RenderOptions {
             format: Some(OutputFormat::Pdf),
@@ -264,10 +264,13 @@ mod tests {
         };
         let json_with_quill = serde_json::to_string(&options_with_quill).unwrap();
         assert!(json_with_quill.contains("\"quillName\":\"test_quill\""));
-        
+
         // Test deserialization with quill_name
-        let options_from_json_with_quill: RenderOptions = 
+        let options_from_json_with_quill: RenderOptions =
             serde_json::from_str(r#"{"format":"pdf","quillName":"my_quill"}"#).unwrap();
-        assert_eq!(options_from_json_with_quill.quill_name, Some("my_quill".to_string()));
+        assert_eq!(
+            options_from_json_with_quill.quill_name,
+            Some("my_quill".to_string())
+        );
     }
 }
