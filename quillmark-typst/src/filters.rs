@@ -54,22 +54,26 @@ pub fn lines_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<
         )
     })?;
 
-    let arr = jv.as_array().ok_or_else(|| {
-        err(
-            ErrorKind::InvalidOperation,
-            format!("Value is not an array of strings: got {}", jv),
-        )
-    })?;
-
-    let mut items = Vec::with_capacity(arr.len());
-    for el in arr {
-        let s = el.as_str().ok_or_else(|| {
-            err(
-                ErrorKind::InvalidOperation,
-                format!("Element is not a string: got {}", el),
-            )
-        })?;
+    // Accept either an array of strings or a single string (coerce to one-element array)
+    let mut items = Vec::new();
+    if let Some(arr) = jv.as_array() {
+        items.reserve(arr.len());
+        for el in arr {
+            let s = el.as_str().ok_or_else(|| {
+                err(
+                    ErrorKind::InvalidOperation,
+                    format!("Element is not a string: got {}", el),
+                )
+            })?;
+            items.push(s.to_owned());
+        }
+    } else if let Some(s) = jv.as_str() {
         items.push(s.to_owned());
+    } else {
+        return Err(err(
+            ErrorKind::InvalidOperation,
+            format!("Value is not an array of strings or a string: got {}", jv),
+        ));
     }
 
     let json_str = json::to_string(&items).map_err(|e| {
