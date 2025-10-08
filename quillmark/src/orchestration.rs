@@ -116,7 +116,7 @@
 //! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
 //!
-//! ### Dynamic Assets (Builder Pattern)
+//! ### Dynamic Assets
 //!
 //! ```no_run
 //! # use quillmark::{Quillmark, OutputFormat, ParsedDocument};
@@ -125,14 +125,14 @@
 //! # engine.register_quill(quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
-//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap()
-//!     .with_asset("logo.png", vec![/* PNG bytes */]).unwrap()
-//!     .with_asset("chart.svg", vec![/* SVG bytes */]).unwrap();
+//! let mut workflow = engine.workflow_from_quill_name("my-quill").unwrap();
+//! workflow.add_asset("logo.png", vec![/* PNG bytes */]).unwrap();
+//! workflow.add_asset("chart.svg", vec![/* SVG bytes */]).unwrap();
 //!
 //! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
 //!
-//! ### Dynamic Fonts (Builder Pattern)
+//! ### Dynamic Fonts
 //!
 //! ```no_run
 //! # use quillmark::{Quillmark, OutputFormat, ParsedDocument};
@@ -141,9 +141,9 @@
 //! # engine.register_quill(quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
-//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap()
-//!     .with_font("custom-font.ttf", vec![/* TTF bytes */]).unwrap()
-//!     .with_font("another-font.otf", vec![/* OTF bytes */]).unwrap();
+//! let mut workflow = engine.workflow_from_quill_name("my-quill").unwrap();
+//! workflow.add_font("custom-font.ttf", vec![/* TTF bytes */]).unwrap();
+//! workflow.add_font("another-font.otf", vec![/* OTF bytes */]).unwrap();
 //!
 //! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
@@ -437,17 +437,17 @@ impl Workflow {
     /// Return the list of dynamic asset filenames currently stored in the workflow.
     ///
     /// This is primarily a debugging helper so callers (for example wasm bindings)
-    /// can inspect which assets have been added via `with_asset` / `with_assets`.
+    /// can inspect which assets have been added via `add_asset` / `add_assets`.
     pub fn dynamic_asset_names(&self) -> Vec<String> {
         self.dynamic_assets.keys().cloned().collect()
     }
 
-    /// Add a dynamic asset to the workflow (builder pattern). See [module docs](self) for examples.
-    pub fn with_asset(
-        mut self,
+    /// Add a dynamic asset to the workflow. See [module docs](self) for examples.
+    pub fn add_asset(
+        &mut self,
         filename: impl Into<String>,
         contents: impl Into<Vec<u8>>,
-    ) -> Result<Self, RenderError> {
+    ) -> Result<(), RenderError> {
         let filename = filename.into();
 
         // Check for collision
@@ -462,40 +462,39 @@ impl Workflow {
         }
 
         self.dynamic_assets.insert(filename, contents.into());
-        Ok(self)
+        Ok(())
     }
 
-    /// Add multiple dynamic assets at once (builder pattern).
-    pub fn with_assets(
-        mut self,
+    /// Add multiple dynamic assets at once.
+    pub fn add_assets(
+        &mut self,
         assets: impl IntoIterator<Item = (String, Vec<u8>)>,
-    ) -> Result<Self, RenderError> {
+    ) -> Result<(), RenderError> {
         for (filename, contents) in assets {
-            self = self.with_asset(filename, contents)?;
+            self.add_asset(filename, contents)?;
         }
-        Ok(self)
+        Ok(())
     }
 
-    /// Clear all dynamic assets from the workflow (builder pattern).
-    pub fn clear_assets(mut self) -> Self {
+    /// Clear all dynamic assets from the workflow.
+    pub fn clear_assets(&mut self) {
         self.dynamic_assets.clear();
-        self
     }
 
     /// Return the list of dynamic font filenames currently stored in the workflow.
     ///
     /// This is primarily a debugging helper so callers (for example wasm bindings)
-    /// can inspect which fonts have been added via `with_font` / `with_fonts`.
+    /// can inspect which fonts have been added via `add_font` / `add_fonts`.
     pub fn dynamic_font_names(&self) -> Vec<String> {
         self.dynamic_fonts.keys().cloned().collect()
     }
 
-    /// Add a dynamic font to the workflow (builder pattern). Fonts are saved to assets/ with DYNAMIC_FONT__ prefix.
-    pub fn with_font(
-        mut self,
+    /// Add a dynamic font to the workflow. Fonts are saved to assets/ with DYNAMIC_FONT__ prefix.
+    pub fn add_font(
+        &mut self,
         filename: impl Into<String>,
         contents: impl Into<Vec<u8>>,
-    ) -> Result<Self, RenderError> {
+    ) -> Result<(), RenderError> {
         let filename = filename.into();
 
         // Check for collision
@@ -510,24 +509,23 @@ impl Workflow {
         }
 
         self.dynamic_fonts.insert(filename, contents.into());
-        Ok(self)
+        Ok(())
     }
 
-    /// Add multiple dynamic fonts at once (builder pattern).
-    pub fn with_fonts(
-        mut self,
+    /// Add multiple dynamic fonts at once.
+    pub fn add_fonts(
+        &mut self,
         fonts: impl IntoIterator<Item = (String, Vec<u8>)>,
-    ) -> Result<Self, RenderError> {
+    ) -> Result<(), RenderError> {
         for (filename, contents) in fonts {
-            self = self.with_font(filename, contents)?;
+            self.add_font(filename, contents)?;
         }
-        Ok(self)
+        Ok(())
     }
 
-    /// Clear all dynamic fonts from the workflow (builder pattern).
-    pub fn clear_fonts(mut self) -> Self {
+    /// Clear all dynamic fonts from the workflow.
+    pub fn clear_fonts(&mut self) {
         self.dynamic_fonts.clear();
-        self
     }
 
     /// Internal method to prepare a quill with dynamic assets and fonts
