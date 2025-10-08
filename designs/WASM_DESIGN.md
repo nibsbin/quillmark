@@ -201,7 +201,7 @@ class Quillmark {
   renderGlue(quillName: string, markdown: string): string;
 
   /// Render markdown to final artifacts (PDF, SVG, TXT)
-  /// Uses options.quillName if provided, otherwise infers from the markdown's !quill directive
+  /// Uses options.quillName if provided, otherwise infers from the markdown's QUILL frontmatter field
   render(markdown: string, options?: RenderOptions): RenderResult;
 
   /// List registered Quill names
@@ -218,7 +218,7 @@ class Quillmark {
 interface RenderOptions {
   format?: 'pdf' | 'svg' | 'txt';
   assets?: Record<string, Uint8Array>;
-  quillName?: string;  // Optional: overrides or fills in for the markdown's !quill directive
+  quillName?: string;  // Optional: overrides or fills in for the markdown's QUILL frontmatter field
 }
 
 interface RenderResult {
@@ -342,7 +342,7 @@ try {
    - Quill not found
    - Invalid render options
    - Memory allocation failures
-   - Missing `!quill` directive when using `render()` without `quillName` option
+   - Missing `QUILL: <quill_name>` frontmatter field when using `render()` without `quillName` option
 
 ---
 
@@ -352,16 +352,16 @@ try {
 
 Quillmark provides two ways to specify which Quill to use for rendering:
 
-1. **Inferred from Markdown**: Uses the `!quill` directive in the markdown frontmatter
-2. **Explicit Selection via Options**: Pass `quillName` in the `RenderOptions` to override or fill in for the markdown's `!quill` directive
+1. **Inferred from Markdown**: Uses the `QUILL` frontmatter field in the markdown
+2. **Explicit Selection via Options**: Pass `quillName` in the `RenderOptions` to override or fill in for the markdown's `QUILL` frontmatter field
 
-#### Using !quill Directive
+#### Using the QUILL frontmatter field
 
-Add a `!quill` directive to your markdown frontmatter to specify which registered Quill to use:
+Add a `QUILL` field to your markdown frontmatter to specify which registered Quill to use:
 
 ```markdown
 ---
-!quill simple-letter
+QUILL: simple-letter
 title: "My Document"
 ---
 
@@ -372,7 +372,7 @@ This allows the markdown to be self-contained and portable - it knows which temp
 
 #### Using quillName Option
 
-Pass `quillName` in options to explicitly specify the Quill, which will override any `!quill` directive in the markdown:
+Pass `quillName` in options to explicitly specify the Quill, which will override any `QUILL` frontmatter field in the markdown:
 
 ```typescript
 const result = engine.render(markdown, { quillName: 'simple-letter' });
@@ -400,9 +400,9 @@ const quillJson = {
 
 engine.registerQuill('simple-letter', quillJson);
 
-// Render markdown with !quill directive
+// Render markdown with QUILL frontmatter field
 const markdown = `---
-!quill simple-letter
+QUILL: simple-letter
 title: "My Letter"
 ---
 
@@ -425,7 +425,7 @@ if (pdfArtifact) {
 ### Using quillName Option (Explicit Quill Selection)
 
 ```typescript
-// When you want to override the !quill directive or markdown doesn't have one
+// When you want to override the QUILL frontmatter field or markdown doesn't have one
 const markdownWithoutQuill = `---
 title: "My Letter"
 ---
@@ -444,7 +444,7 @@ const result = engine.render(markdownWithoutQuill, { quillName: 'simple-letter' 
 const fontBytes = await fetch('/fonts/custom-font.ttf').then(r => r.arrayBuffer());
 
 const markdown = `---
-!quill my-quill
+QUILL: my-quill
 ---
 
 # Document with custom font
@@ -463,7 +463,7 @@ const result = engine.render(markdown, {
 ```typescript
 // Render to multiple formats
 const markdown = `---
-!quill my-quill
+QUILL: my-quill
 ---
 
 # My Document
@@ -478,7 +478,7 @@ const txtResult = engine.render(markdown, { format: 'txt' });
 
 ```typescript
 const markdown = `---
-!quill my-quill
+QUILL: my-quill
 title: "Test Document"
 ---
 
