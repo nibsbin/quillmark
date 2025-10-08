@@ -1,54 +1,99 @@
-# PyQuillmark - Python Bindings for Quillmark
+title: Hello World
+author: Alice
+# PyQuillmark — Python bindings for Quillmark
 
-Python bindings for [Quillmark](https://github.com/nibsbin/quillmark), a template-first Markdown rendering system.
+Compact docs and canonical developer workflow.
 
-## Installation
+Installation
+------------
 
 ```bash
 pip install pyquillmark
 ```
 
-## Quick Start
+Quick start
+-----------
 
 ```python
-from pyquillmark import Quillmark, Quill, ParsedDocument, OutputFormat
+from pyquillmark import Quillmark, ParsedDocument, OutputFormat
 
-# Create engine
 engine = Quillmark()
-
-# Load and register quill
-quill = Quill.from_path("path/to/quill")
-engine.register_quill(quill)
-
-# Parse markdown
-markdown = """---
-title: Hello World
-author: Alice
----
-
-# Introduction
-
-This is a **test** document.
-"""
-
-parsed = ParsedDocument.from_markdown(markdown)
-
-# Create workflow and render
+parsed = ParsedDocument.from_markdown("# Hello")
 workflow = engine.workflow_from_quill_name("my-quill")
-result = workflow.render(parsed, OutputFormat.PDF)
-
-# Save output
-result.artifacts[0].save("output.pdf")
+workflow.render(parsed, OutputFormat.PDF).artifacts[0].save("out.pdf")
 ```
 
-## Features
+Development (opinionated)
+-------------------------
 
-- Template-first Markdown rendering
-- PDF and SVG output via Typst backend
-- Dynamic asset and font support
-- Python 3.10+ support
-- Type hints included
+This repository standardizes on `uv` for local development (https://astral.sh/uv). Use the commands below on macOS (zsh).
 
-## License
+Install uv (one-time):
+
+```zsh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Canonical flow:
+
+```zsh
+# create the uv-managed venv
+uv venv
+
+# install developer extras (includes maturin, pytest, mypy, ruff)
+uv pip install -e "[dev]"
+
+# Change to release for production builds
+# uv pip install -e ".[dev]" --release
+
+# develop-install (compile + install into the venv)
+uv run python -m maturin develop
+
+# run tests
+uv run pytest
+```
+
+Notes
+- `maturin` builds the PyO3 extension; `uv` manages the virtualenv and command execution.
+- Ensure Rust (rustup) and macOS command-line tools are installed when building.
+
+License
+-------
 
 Apache-2.0
+
+
+Building
+---------------------
+
+If you prefer an opinionated, reproducible Python workflow the project designs recommend `uv` (https://astral.sh/uv). `uv` provides a small wrapper for creating venvs and running common commands. These commands are equivalent to the venv/maturin flow above but shorter.
+
+Install uv (one-time):
+
+```zsh
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+Typical workflow with `uv`:
+
+```zsh
+# create a venv and activate it
+uv venv
+
+# install build tools into the venv
+uv pip install --upgrade pip setuptools wheel
+uv pip install 'maturin>=1.7,<2.0'
+
+# develop-install the package (compiles and installs into the uv venv)
+uv run python -m maturin develop --release
+
+# run the test suite
+uv run pytest
+
+# run mypy and ruff checks (project recommends these)
+uv run mypy python/pyquillmark
+uv run ruff check python/
+```
+
+`uv` is optional — the regular venv + pip commands above are equivalent. Use `uv` if you prefer shorter, reproducible commands and to match the rest of this repository's Python design guidance.
+

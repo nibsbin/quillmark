@@ -13,8 +13,8 @@ crate-type = ["cdylib"]
 pyo3 = { version = "0.22", features = ["extension-module", "abi3-py310"] }
 quillmark = { path = "../quillmark", features = ["typst"] }
 quillmark-core = { path = "../quillmark-core" }
-anyhow = "1.0"
-serde_yaml = "0.9"
+anyhow = {workspace = true}
+serde_yaml = {workspace = true}
 
 [profile.release]
 lto = true

@@ -34,6 +34,7 @@ dev = [
     "pytest-cov>=5.0",
     "mypy>=1.8",
     "ruff>=0.3",
+    "maturin>=1.7,<2.0",
 ]
 
 [tool.maturin]
