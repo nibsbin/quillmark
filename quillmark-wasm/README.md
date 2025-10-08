@@ -28,7 +28,7 @@ wasm-pack build --target nodejs --scope quillmark
 bash scripts/build-wasm.sh
 ```
 
-This will create `pkg-bundler/`, `pkg-nodejs/`, and `pkg-web/` directories with the compiled WASM modules for each target.
+This will create a `pkg/bundler/` directory with the compiled WASM module for the bundler target.
 
 ## Installation
 
@@ -45,7 +45,7 @@ a JSON string describing the Quill when creating `Quill` instances.
 Minimal example:
 
 ```typescript
-import { Quillmark, Quill, OutputFormat } from '@quillmark-test/wasm';
+import { Quillmark } from '@quillmark-test/wasm';
 
 // Create engine
 const engine = new Quillmark();
@@ -58,24 +58,34 @@ const quillObj = {
   }
 };
 
-// Create Quill from in-memory object
-const quill = Quill.fromJson(JSON.stringify(quillObj));
+// Register Quill
+engine.registerQuill('my-quill', quillObj);
 
-// Register and render
-engine.registerQuill('my-quill', quill);
-const result = engine.render('my-quill', '# Hi', { format: OutputFormat.Pdf });
+// Render markdown with !quill directive
+const markdown = `---
+!quill my-quill
+---
+
+# Hi`;
+
+const result = engine.render(markdown, { format: 'pdf' });
+
+// Access the PDF bytes
+const pdfArtifact = result.artifacts.find(a => a.format === 'pdf');
+if (pdfArtifact) {
+  const blob = new Blob([pdfArtifact.bytes], { type: pdfArtifact.mimeType });
+  const url = URL.createObjectURL(blob);
+  window.open(url);
+}
 ```
 
 ## API
 
-The WASM API closely mirrors the Rust API, with these main classes:
+The WASM API provides a single main class:
 
-- `Quillmark` - Main engine for managing Quills and workflows
-- `Quill` - Represents a Quill template bundle
-- `Workflow` - Rendering workflow for a specific Quill
-- `QuillmarkError` - Error type with rich diagnostics
+- `Quillmark` - Main engine for managing Quills and rendering markdown
 
-See `designs/WASM_API.md` in the repository for the complete API specification.
+See `designs/WASM_DESIGN.md` in the repository for the complete API specification.
 
 ## Design Principles
 
@@ -101,15 +111,17 @@ This means a few concrete rules you should follow when calling into the WASM mod
 ## Current Status
 
 Core API is implemented:
-- ✅ `Quillmark` - Engine management
-- ✅ `Quill.fromJson()` - Create Quills from JSON-serialized folder structure
-- ✅ `Workflow.render()` - Synchronous rendering to PDF/SVG
-- ✅ `Workflow.withAsset()` - Dynamic asset injection
+- ✅ `Quillmark` - Engine management with `new Quillmark()` constructor
+- ✅ `registerQuill()` - Register Quills from JSON objects or strings
+- ✅ `render()` - Synchronous rendering to PDF/SVG/TXT
+- ✅ Dynamic asset injection via `RenderOptions.assets`
 - ✅ Rich error diagnostics
+- ✅ `renderGlue()` - Debug template source generation
+- ✅ `listQuills()` and `unregisterQuill()` - Memory management
 
 Not implemented (by design):
-- ❌ `Quill.fromZip()`, `fromUrl()`, `fromPath()` - JavaScript handles I/O and folder serialization
-- ❌ Progress callbacks - rendering is instant
+- ❌ File I/O methods - JavaScript handles all I/O operations
+- ❌ Progress callbacks - rendering is fast enough to be synchronous
 - ❌ Streaming APIs - unnecessary for fast operations
 
 ## License

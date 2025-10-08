@@ -2,7 +2,7 @@
 
 > **Status**: Implemented - Production Ready
 >
-> This document defines the complete WebAssembly API for Quillmark, providing JavaScript/TypeScript bindings for browser, Node.js, and bundler environments.
+> This document defines the complete WebAssembly API for Quillmark, providing JavaScript/TypeScript bindings primarily for bundler environments (webpack, rollup, vite, etc.).
 
 ---
 
@@ -190,7 +190,7 @@ The main WASM interface provides a single class for all operations:
 ```typescript
 class Quillmark {
   /// Create a new Quillmark engine
-  static create(): Quillmark;
+  constructor();
 
   /// Register a Quill template bundle
   /// Accepts either a JSON string or a JavaScript object representing the Quill file tree
@@ -381,10 +381,10 @@ const result = engine.render(markdown, { quillName: 'simple-letter' });
 ### Basic Usage
 
 ```typescript
-import { Quillmark } from '@quillmark/wasm';
+import { Quillmark } from '@quillmark-test/wasm';
 
 // Create engine
-const engine = Quillmark.create();
+const engine = new Quillmark();
 
 // Register a simple Quill
 const quillJson = {
@@ -498,28 +498,25 @@ The WASM module is built for three targets with separate packages:
 ### Build Commands
 
 ```bash
-# Build all targets
+# Build for bundler target (current implementation)
 bash scripts/build-wasm.sh
 
-# Individual targets
-wasm-pack build --target bundler --scope quillmark  # pkg-bundler/
-wasm-pack build --target nodejs --scope quillmark   # pkg-nodejs/
-wasm-pack build --target web --scope quillmark      # pkg-web/
+# Or build directly with wasm-pack
+wasm-pack build quillmark-wasm --target bundler --out-dir "../pkg/bundler" --scope quillmark-test
 ```
 
 ### NPM Packages
 
-- **Bundler Target** (`pkg-bundler/`): For webpack, rollup, vite, etc.
-- **Node.js Target** (`pkg-nodejs/`): For server-side Node.js applications  
-- **Web Target** (`pkg-web/`): For direct browser usage without bundler
+Currently, only the **Bundler Target** is built and distributed:
+- **`@quillmark-test/wasm`**: For webpack, rollup, vite, and other bundlers
+
+**Note**: Node.js and Web targets can be built using wasm-pack directly if needed, but are not currently part of the standard build process.
 
 ### Installation
 
 ```bash
-# Choose appropriate package for your environment
-npm install @quillmark-test/wasm-bundler  # For bundlers
-npm install @quillmark-test/wasm-nodejs   # For Node.js
-npm install @quillmark-test/wasm-web      # For direct browser
+npm install @quillmark-test/wasm
+```
 ```
 
 ---
