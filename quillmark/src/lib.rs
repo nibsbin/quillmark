@@ -47,7 +47,7 @@
 //!
 //! ## Dynamic Assets
 //!
-//! Workflows support adding runtime assets through a builder pattern:
+//! Workflows support adding runtime assets:
 //!
 //! ```no_run
 //! # use quillmark::{Quillmark, Quill, OutputFormat, ParsedDocument};
@@ -56,9 +56,9 @@
 //! # engine.register_quill(quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
-//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap()
-//!     .with_asset("chart.png", vec![/* image bytes */]).unwrap()
-//!     .with_asset("data.csv", vec![/* csv bytes */]).unwrap();
+//! let mut workflow = engine.workflow_from_quill_name("my-quill").unwrap();
+//! workflow.add_asset("chart.png", vec![/* image bytes */]).unwrap();
+//! workflow.add_asset("data.csv", vec![/* csv bytes */]).unwrap();
 //!
 //! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
