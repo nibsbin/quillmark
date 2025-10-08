@@ -477,6 +477,14 @@ const txtResult = engine.render(markdown, { format: 'txt' });
 ### Debugging with Template Source
 
 ```typescript
+const markdown = `---
+!quill my-quill
+title: "Test Document"
+---
+
+# Content
+`;
+
 try {
   // Get the generated template source for debugging
   const glueSource = engine.renderGlue('my-quill', markdown);
