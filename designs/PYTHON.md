@@ -104,8 +104,8 @@ backends = engine.registered_backends()  # -> List[str]
 quills = engine.registered_quills()      # -> List[str]
 
 # Load workflow by name or object
-workflow = engine.load("my-quill")       # by name
-workflow = engine.load(quill)            # by object
+workflow = engine.workflow_from_quill_name("my-quill")  # by name
+workflow = engine.workflow_from_quill(quill)            # by object
 ```
 
 **Methods:**
@@ -415,8 +415,8 @@ impl PyQuillmark {
         self.inner.register_quill(quill.inner.clone());
     }
     
-    fn load(&self, quill_ref: QuillRefWrapper) -> PyResult<PyWorkflow> {
-        let workflow = self.inner.load(quill_ref.to_rust())
+    fn workflow_from_quill(&self, quill_ref: QuillRefWrapper) -> PyResult<PyWorkflow> {
+        let workflow = self.inner.workflow_from_quill(quill_ref.to_rust())
             .map_err(|e| PyErr::from(e))?;
         Ok(PyWorkflow { inner: workflow })
     }
@@ -1000,7 +1000,7 @@ def test_end_to_end_render(tmp_path):
     quill = create_test_quill(tmp_path)
     engine.register_quill(quill)
     
-    workflow = engine.load(quill.name)
+    workflow = engine.workflow_from_quill_name(quill.name)
     result = workflow.render("# Hello\n\nWorld", OutputFormat.PDF)
     
     assert len(result.artifacts) == 1
@@ -1029,7 +1029,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     # Type-only tests for mypy
-    reveal_type(engine.load("quill"))  # Should be Workflow
+    reveal_type(engine.workflow_from_quill_name("quill"))  # Should be Workflow
     reveal_type(workflow.render("md"))  # Should be RenderResult
 ```
 
@@ -1122,7 +1122,7 @@ def render(
         CompilationError: If backend compilation fails
         
     Example:
-        >>> workflow = engine.load("my-quill")
+        >>> workflow = engine.workflow_from_quill_name("my-quill")
         >>> result = workflow.render("# Hello", OutputFormat.PDF)
         >>> result.artifacts[0].save("output.pdf")
     """
@@ -1333,7 +1333,7 @@ quill = Quill.from_path("quills/letter")
 engine.register_quill(quill)
 
 # Render
-workflow = engine.load("letter")
+workflow = engine.workflow_from_quill_name("letter")
 markdown = """---
 title: Hello World
 author: Alice
@@ -1370,7 +1370,7 @@ chart_bytes = chart_buffer.getvalue()
 
 # Render with dynamic asset
 engine = Quillmark()
-workflow = engine.load("report")
+workflow = engine.workflow_from_quill_name("report")
 
 result = (
     workflow
@@ -1391,7 +1391,7 @@ from pathlib import Path
 import concurrent.futures
 
 engine = Quillmark()
-workflow = engine.load("letter")
+workflow = engine.workflow_from_quill_name("letter")
 
 markdown_files = Path("documents").glob("*.md")
 
@@ -1417,7 +1417,7 @@ For existing Rust users, the Python API closely mirrors the Rust API:
 |------|--------|-------|
 | `Quillmark::new()` | `Quillmark()` | Constructor syntax |
 | `engine.register_quill(quill)` | `engine.register_quill(quill)` | Same |
-| `engine.load("name")?` | `engine.load("name")` | Exceptions vs Results |
+| `engine.workflow_from_quill_name("name")?` | `engine.workflow_from_quill_name("name")` | Exceptions vs Results |
 | `workflow.render(md, Some(fmt))?` | `workflow.render(md, fmt)` | Optional args are None |
 | `result.artifacts` | `result.artifacts` | Same field access |
 | `artifact.bytes` | `artifact.bytes` | Returns Python bytes |

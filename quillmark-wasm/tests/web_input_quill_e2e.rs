@@ -49,7 +49,9 @@ fn test_process_web_input_quill_from_json() {
 
     let mut engine = quillmark::Quillmark::new();
     engine.register_quill(quill_core.clone());
-    let workflow = engine.load(&quill_core).expect("failed to load workflow");
+    let workflow = engine
+        .workflow_from_quill(&quill_core)
+        .expect("failed to load workflow");
     let render_result = workflow.render(&parsed, None).expect("render failed");
 
     // Determine the workspace fixtures output directory (from crate manifest dir)

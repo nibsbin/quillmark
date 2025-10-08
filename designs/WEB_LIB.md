@@ -439,7 +439,7 @@ async function main() {
   engine.registerQuill(quill);
 
   // Create workflow
-  const workflow = engine.load('my-quill');
+  const workflow = engine.workflowFromQuillName('my-quill');
 
   // Render markdown
   const markdown = `---
@@ -1094,7 +1094,7 @@ describe('Basic Rendering', () => {
   });
 
   it('should render markdown to PDF', async () => {
-    const workflow = engine.load('simple-quill');
+    const workflow = engine.workflowFromQuillName('simple-quill');
     const markdown = '---\ntitle: Test\n---\n\n# Hello';
     
     const result = await workflow.render(markdown, OutputFormat.Pdf);
@@ -1106,7 +1106,7 @@ describe('Basic Rendering', () => {
   });
 
   it('should handle errors gracefully', async () => {
-    const workflow = engine.load('simple-quill');
+    const workflow = engine.workflowFromQuillName('simple-quill');
     const invalidMarkdown = '---\ninvalid: yaml: content\n---';
     
     await expect(
@@ -1147,7 +1147,7 @@ async function renderDocument(
   const quill = await Quill.fromPath(quillPath);
   engine.registerQuill(quill);
   
-  const workflow = engine.load(quill.name);
+  const workflow = engine.workflowFromQuillName(quill.name);
   const markdown = readFileSync(markdownPath, 'utf-8');
   
   const result = await workflow.render(markdown, OutputFormat.Pdf);

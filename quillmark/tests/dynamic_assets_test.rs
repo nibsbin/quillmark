@@ -8,7 +8,7 @@ fn test_with_asset_basic() {
     let taro_picture = std::fs::read(resource_path("taro.png")).unwrap();
     engine.register_quill(quill);
 
-    let workflow = engine.load("taro").unwrap();
+    let workflow = engine.workflow_from_quill_name("taro").unwrap();
     let workflow = workflow
         .with_asset("taro.png", taro_picture.to_vec())
         .expect("Should add asset");
@@ -22,7 +22,7 @@ fn test_with_asset_collision() {
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
-    let workflow = engine.load("taro").unwrap();
+    let workflow = engine.workflow_from_quill_name("taro").unwrap();
     let workflow = workflow
         .with_asset("taro.png", vec![1, 2, 3])
         .expect("Should add first asset");
@@ -47,7 +47,7 @@ fn test_with_assets_multiple() {
         ("data.csv".to_string(), vec![7, 8, 9]),
     ];
 
-    let workflow = engine.load("taro").unwrap();
+    let workflow = engine.workflow_from_quill_name("taro").unwrap();
     let workflow = workflow
         .with_assets(assets)
         .expect("Should add multiple assets");
@@ -61,7 +61,7 @@ fn test_clear_assets() {
     let quill = Quill::from_path(resource_path("taro")).unwrap();
     engine.register_quill(quill);
 
-    let workflow = engine.load("taro").unwrap();
+    let workflow = engine.workflow_from_quill_name("taro").unwrap();
     let workflow = workflow
         .with_asset("taro.png", vec![1, 2, 3])
         .expect("Should add first asset")

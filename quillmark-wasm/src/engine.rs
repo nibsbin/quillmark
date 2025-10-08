@@ -112,14 +112,17 @@ impl Quillmark {
             .to_js_value()
         })?;
 
-        let workflow = self.inner.load(quill_name).map_err(|e| {
-            QuillmarkError::new(
-                format!("Quill '{}' not found: {}", quill_name, e),
-                None,
-                Some("Use registerQuill() before rendering".to_string()),
-            )
-            .to_js_value()
-        })?;
+        let workflow = self
+            .inner
+            .workflow_from_quill_name(quill_name)
+            .map_err(|e| {
+                QuillmarkError::new(
+                    format!("Quill '{}' not found: {}", quill_name, e),
+                    None,
+                    Some("Use registerQuill() before rendering".to_string()),
+                )
+                .to_js_value()
+            })?;
 
         workflow
             .process_glue_parsed(&parsed)
@@ -157,14 +160,17 @@ impl Quillmark {
             .to_js_value()
         })?;
 
-        let mut workflow = self.inner.load(quill_name).map_err(|e| {
-            QuillmarkError::new(
-                format!("Quill '{}' not found: {}", quill_name, e),
-                None,
-                Some("Use registerQuill() before rendering".to_string()),
-            )
-            .to_js_value()
-        })?;
+        let mut workflow = self
+            .inner
+            .workflow_from_quill_name(quill_name)
+            .map_err(|e| {
+                QuillmarkError::new(
+                    format!("Quill '{}' not found: {}", quill_name, e),
+                    None,
+                    Some("Use registerQuill() before rendering".to_string()),
+                )
+                .to_js_value()
+            })?;
 
         // Add assets if provided
         if let Some(assets) = opts.assets {

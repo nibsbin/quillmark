@@ -231,11 +231,6 @@ impl Quillmark {
         self.quills.insert(name, quill);
     }
 
-    /// Load a workflow by quill name or object reference. See [module docs](self) for examples.
-    pub fn load<'a>(&self, quill_ref: impl Into<QuillRef<'a>>) -> Result<Workflow, RenderError> {
-        self.workflow_from_quill(quill_ref)
-    }
-
     /// Load a workflow from a parsed document that contains a quill tag
     pub fn workflow_from_parsed(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError> {
         let quill_name = parsed.quill_tag().ok_or_else(|| {

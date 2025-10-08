@@ -67,7 +67,7 @@ fn test_quill_engine_get_workflow() {
 
     // Load workflow by quill name using new load() method
     let workflow = engine
-        .load("my-test-quill")
+        .workflow_from_quill_name("my-test-quill")
         .expect("Failed to load workflow");
 
     // Verify workflow properties
@@ -81,7 +81,7 @@ fn test_quill_engine_workflow_not_found() {
     let engine = Quillmark::new();
 
     // Try to load workflow for non-existent quill
-    let result = engine.load("non-existent");
+    let result = engine.workflow_from_quill_name("non-existent");
 
     assert!(result.is_err());
     match result {
@@ -112,7 +112,7 @@ fn test_quill_engine_backend_not_found() {
     engine.register_quill(quill);
 
     // Try to load workflow with non-existent backend
-    let result = engine.load("bad-backend-quill");
+    let result = engine.workflow_from_quill_name("bad-backend-quill");
 
     assert!(result.is_err());
     match result {
@@ -154,7 +154,7 @@ _By {{ author | String(default="Unknown") }}_
 
     // Load workflow and render
     let workflow = engine
-        .load("my-test-quill")
+        .workflow_from_quill_name("my-test-quill")
         .expect("Failed to load workflow");
 
     let markdown = r#"---
@@ -202,7 +202,9 @@ fn test_quill_engine_load_with_quill_object() {
     engine.register_quill(quill.clone());
 
     // Load workflow by passing Quill object directly
-    let workflow = engine.load(&quill).expect("Failed to load workflow");
+    let workflow = engine
+        .workflow_from_quill(&quill)
+        .expect("Failed to load workflow");
 
     // Verify workflow properties
     assert_eq!(workflow.quill_name(), "my-test-quill");
@@ -235,14 +237,14 @@ fn test_quill_engine_load_with_different_string_types() {
 
     // Test with &str
     let workflow1 = engine
-        .load("my-test-quill")
+        .workflow_from_quill_name("my-test-quill")
         .expect("Failed to load with &str");
     assert_eq!(workflow1.quill_name(), "my-test-quill");
 
     // Test with &String
     let quill_name = String::from("my-test-quill");
     let workflow2 = engine
-        .load(&quill_name)
+        .workflow_from_quill_name(&quill_name)
         .expect("Failed to load with &String");
     assert_eq!(workflow2.quill_name(), "my-test-quill");
 }
