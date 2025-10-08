@@ -1,6 +1,8 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict};
-use quillmark::{Quillmark, Quill, Workflow, ParsedDocument, RenderResult, Diagnostic, Location, OutputFormat};
+use quillmark::{
+    Diagnostic, Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderResult, Workflow,
+};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -21,38 +23,46 @@ impl PyQuillmark {
             inner: Quillmark::new(),
         }
     }
-    
+
     fn register_quill(&mut self, quill: &PyQuill) {
         self.inner.register_quill(quill.inner.clone());
     }
-    
+
     fn workflow_from_quill_name(&self, name: &str) -> PyResult<PyWorkflow> {
-        let workflow = self.inner.workflow_from_quill_name(name)
+        let workflow = self
+            .inner
+            .workflow_from_quill_name(name)
             .map_err(convert_render_error)?;
         Ok(PyWorkflow { inner: workflow })
     }
-    
+
     fn workflow_from_quill(&self, quill: &PyQuill) -> PyResult<PyWorkflow> {
-        let workflow = self.inner.workflow_from_quill(&quill.inner)
+        let workflow = self
+            .inner
+            .workflow_from_quill(&quill.inner)
             .map_err(convert_render_error)?;
         Ok(PyWorkflow { inner: workflow })
     }
-    
+
     fn workflow_from_parsed(&self, parsed: &PyParsedDocument) -> PyResult<PyWorkflow> {
-        let workflow = self.inner.workflow_from_parsed(&parsed.inner)
+        let workflow = self
+            .inner
+            .workflow_from_parsed(&parsed.inner)
             .map_err(convert_render_error)?;
         Ok(PyWorkflow { inner: workflow })
     }
-    
+
     fn registered_backends(&self) -> Vec<String> {
-        self.inner.registered_backends()
+        self.inner
+            .registered_backends()
             .iter()
             .map(|s| s.to_string())
             .collect()
     }
-    
+
     fn registered_quills(&self) -> Vec<String> {
-        self.inner.registered_quills()
+        self.inner
+            .registered_quills()
             .iter()
             .map(|s| s.to_string())
             .collect()
@@ -74,11 +84,13 @@ impl PyWorkflow {
         format: Option<PyOutputFormat>,
     ) -> PyResult<PyRenderResult> {
         let rust_format = format.map(|f| f.into());
-        let result = self.inner.render(&parsed.inner, rust_format)
+        let result = self
+            .inner
+            .render(&parsed.inner, rust_format)
             .map_err(convert_render_error)?;
         Ok(PyRenderResult { inner: result })
     }
-    
+
     #[pyo3(signature = (content, format=None))]
     fn render_source(
         &self,
@@ -86,21 +98,25 @@ impl PyWorkflow {
         format: Option<PyOutputFormat>,
     ) -> PyResult<PyRenderResult> {
         let rust_format = format.map(|f| f.into());
-        let result = self.inner.render_source(content, rust_format)
+        let result = self
+            .inner
+            .render_source(content, rust_format)
             .map_err(convert_render_error)?;
         Ok(PyRenderResult { inner: result })
     }
-    
+
     fn process_glue(&self, markdown: &str) -> PyResult<String> {
-        self.inner.process_glue(markdown)
+        self.inner
+            .process_glue(markdown)
             .map_err(convert_render_error)
     }
-    
+
     fn process_glue_parsed(&self, parsed: &PyParsedDocument) -> PyResult<String> {
-        self.inner.process_glue_parsed(&parsed.inner)
+        self.inner
+            .process_glue_parsed(&parsed.inner)
             .map_err(convert_render_error)
     }
-    
+
     // Note: Builder pattern methods are not fully supported in Python bindings
     // due to Workflow not implementing Clone. For now, these are placeholder methods.
     fn with_asset(&self, _filename: String, _contents: Vec<u8>) -> PyResult<()> {
@@ -109,56 +125,57 @@ impl PyWorkflow {
              Create a new workflow instead."
         ))
     }
-    
+
     fn with_assets(&self, _assets: HashMap<String, Vec<u8>>) -> PyResult<()> {
         Err(PyErr::new::<crate::errors::QuillmarkError, _>(
-            "Builder pattern methods are not yet supported in Python bindings"
+            "Builder pattern methods are not yet supported in Python bindings",
         ))
     }
-    
+
     fn clear_assets(&self) -> PyResult<()> {
         Err(PyErr::new::<crate::errors::QuillmarkError, _>(
-            "Builder pattern methods are not yet supported in Python bindings"
+            "Builder pattern methods are not yet supported in Python bindings",
         ))
     }
-    
+
     fn with_font(&self, _filename: String, _contents: Vec<u8>) -> PyResult<()> {
         Err(PyErr::new::<crate::errors::QuillmarkError, _>(
-            "Builder pattern methods are not yet supported in Python bindings"
+            "Builder pattern methods are not yet supported in Python bindings",
         ))
     }
-    
+
     fn with_fonts(&self, _fonts: HashMap<String, Vec<u8>>) -> PyResult<()> {
         Err(PyErr::new::<crate::errors::QuillmarkError, _>(
-            "Builder pattern methods are not yet supported in Python bindings"
+            "Builder pattern methods are not yet supported in Python bindings",
         ))
     }
-    
+
     fn clear_fonts(&self) -> PyResult<()> {
         Err(PyErr::new::<crate::errors::QuillmarkError, _>(
-            "Builder pattern methods are not yet supported in Python bindings"
+            "Builder pattern methods are not yet supported in Python bindings",
         ))
     }
-    
+
     fn backend_id(&self) -> &str {
         self.inner.backend_id()
     }
-    
+
     fn supported_formats(&self) -> Vec<PyOutputFormat> {
-        self.inner.supported_formats()
+        self.inner
+            .supported_formats()
             .iter()
             .map(|f| (*f).into())
             .collect()
     }
-    
+
     fn quill_name(&self) -> &str {
         self.inner.quill_name()
     }
-    
+
     fn dynamic_asset_names(&self) -> Vec<String> {
         self.inner.dynamic_asset_names()
     }
-    
+
     fn dynamic_font_names(&self) -> Vec<String> {
         self.inner.dynamic_font_names()
     }
@@ -179,24 +196,26 @@ impl PyQuill {
             .map_err(|e| PyErr::new::<crate::errors::QuillmarkError, _>(e.to_string()))?;
         Ok(PyQuill { inner: quill })
     }
-    
+
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
-    
+
     #[getter]
     fn backend(&self) -> Option<String> {
-        self.inner.metadata.get("backend")
+        self.inner
+            .metadata
+            .get("backend")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string())
     }
-    
+
     #[getter]
     fn glue_template(&self) -> &str {
         &self.inner.glue_template
     }
-    
+
     #[getter]
     fn metadata(&self, py: Python) -> PyResult<PyObject> {
         // Convert serde_yaml::Value to Python dict
@@ -222,18 +241,18 @@ impl PyParsedDocument {
             .map_err(|e| PyErr::new::<crate::errors::ParseError, _>(e.to_string()))?;
         Ok(PyParsedDocument { inner: parsed })
     }
-    
+
     fn body(&self) -> Option<&str> {
         self.inner.body()
     }
-    
+
     fn get_field(&self, key: &str, py: Python) -> PyResult<Option<PyObject>> {
         match self.inner.get_field(key) {
             Some(value) => Ok(Some(yaml_value_to_py(py, value)?)),
             None => Ok(None),
         }
     }
-    
+
     fn fields(&self, py: Python) -> PyResult<PyObject> {
         let dict = PyDict::new_bound(py);
         for (key, value) in self.inner.fields() {
@@ -241,7 +260,7 @@ impl PyParsedDocument {
         }
         Ok(dict.into())
     }
-    
+
     fn quill_tag(&self) -> Option<&str> {
         self.inner.quill_tag()
     }
@@ -257,14 +276,21 @@ pub struct PyRenderResult {
 impl PyRenderResult {
     #[getter]
     fn artifacts(&self) -> Vec<PyArtifact> {
-        self.inner.artifacts.iter()
-            .map(|a| PyArtifact { inner: a.bytes.clone(), output_format: a.output_format })
+        self.inner
+            .artifacts
+            .iter()
+            .map(|a| PyArtifact {
+                inner: a.bytes.clone(),
+                output_format: a.output_format,
+            })
             .collect()
     }
-    
+
     #[getter]
     fn warnings(&self) -> Vec<PyDiagnostic> {
-        self.inner.warnings.iter()
+        self.inner
+            .warnings
+            .iter()
             .map(|d| PyDiagnostic { inner: d.clone() })
             .collect()
     }
@@ -284,17 +310,19 @@ impl PyArtifact {
     fn bytes<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
         PyBytes::new_bound(py, &self.inner)
     }
-    
+
     #[getter]
     fn output_format(&self) -> PyOutputFormat {
         self.output_format.into()
     }
-    
+
     fn save(&self, path: String) -> PyResult<()> {
-        std::fs::write(&path, &self.inner)
-            .map_err(|e| PyErr::new::<crate::errors::QuillmarkError, _>(
-                format!("Failed to save artifact to {}: {}", path, e)
+        std::fs::write(&path, &self.inner).map_err(|e| {
+            PyErr::new::<crate::errors::QuillmarkError, _>(format!(
+                "Failed to save artifact to {}: {}",
+                path, e
             ))
+        })
     }
 }
 
@@ -311,22 +339,25 @@ impl PyDiagnostic {
     fn severity(&self) -> PySeverity {
         self.inner.severity.into()
     }
-    
+
     #[getter]
     fn message(&self) -> &str {
         &self.inner.message
     }
-    
+
     #[getter]
     fn code(&self) -> Option<&str> {
         self.inner.code.as_deref()
     }
-    
+
     #[getter]
     fn primary(&self) -> Option<PyLocation> {
-        self.inner.primary.as_ref().map(|l| PyLocation { inner: l.clone() })
+        self.inner
+            .primary
+            .as_ref()
+            .map(|l| PyLocation { inner: l.clone() })
     }
-    
+
     #[getter]
     fn hint(&self) -> Option<&str> {
         self.inner.hint.as_deref()
@@ -346,12 +377,12 @@ impl PyLocation {
     fn file(&self) -> &str {
         &self.inner.file
     }
-    
+
     #[getter]
     fn line(&self) -> usize {
         self.inner.line as usize
     }
-    
+
     #[getter]
     fn col(&self) -> usize {
         self.inner.col as usize
@@ -389,8 +420,6 @@ fn yaml_value_to_py(py: Python, value: &serde_yaml::Value) -> PyResult<PyObject>
             }
             Ok(dict.into())
         }
-        serde_yaml::Value::Tagged(tagged) => {
-            yaml_value_to_py(py, &tagged.value)
-        }
+        serde_yaml::Value::Tagged(tagged) => yaml_value_to_py(py, &tagged.value),
     }
 }

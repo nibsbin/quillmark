@@ -13,17 +13,10 @@ create_exception!(_pyquillmark, CompilationError, QuillmarkError);
 
 pub fn convert_render_error(err: RenderError) -> PyErr {
     match err {
-        RenderError::InvalidFrontmatter { diag, .. } => {
-            ParseError::new_err(diag.message.clone())
-        }
-        RenderError::TemplateFailed { diag, .. } => {
-            TemplateError::new_err(diag.message.clone())
-        }
+        RenderError::InvalidFrontmatter { diag, .. } => ParseError::new_err(diag.message.clone()),
+        RenderError::TemplateFailed { diag, .. } => TemplateError::new_err(diag.message.clone()),
         RenderError::CompilationFailed(count, _diags) => {
-            CompilationError::new_err(format!(
-                "Compilation failed with {} error(s)",
-                count
-            ))
+            CompilationError::new_err(format!("Compilation failed with {} error(s)", count))
         }
         RenderError::DynamicAssetCollision { filename, message } => {
             QuillmarkError::new_err(format!("Asset collision ({}): {}", filename, message))
@@ -41,12 +34,8 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::UnsupportedBackend(backend) => {
             QuillmarkError::new_err(format!("Unsupported backend: {}", backend))
         }
-        RenderError::Internal(err) => {
-            QuillmarkError::new_err(format!("Internal error: {}", err))
-        }
-        RenderError::Template(err) => {
-            TemplateError::new_err(err.to_string())
-        }
+        RenderError::Internal(err) => QuillmarkError::new_err(format!("Internal error: {}", err)),
+        RenderError::Template(err) => TemplateError::new_err(err.to_string()),
         _ => QuillmarkError::new_err(err.to_string()),
     }
 }
