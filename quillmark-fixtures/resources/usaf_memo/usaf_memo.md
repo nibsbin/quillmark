@@ -1,4 +1,5 @@
 ---
+QUILL: usaf_memo
 memo_for:
   - ORG/SYMBOL
 memo_from:
