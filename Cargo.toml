@@ -5,13 +5,14 @@ members = [
     "quillmark-typst",
     "quillmark-fixtures",
     "quillmark-wasm",
-    "quillmark-fuzz", "quillmark-cli",
+    "quillmark-fuzz",
+    "quillmark-cli",
 ]
+# The default members to include when running `cargo build` or `cargo test` in the workspace root.
 default-members = [
     "quillmark-core",
     "quillmark",
     "quillmark-typst",
-    "quillmark-fixtures",
     "quillmark-wasm",
 ]
 resolver = "2"
