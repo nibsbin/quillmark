@@ -1,7 +1,7 @@
 use std::fs;
 use tempfile::TempDir;
 
-use quillmark::{OutputFormat, Quill, Quillmark};
+use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark};
 
 #[test]
 fn test_quill_engine_creation() {
@@ -167,8 +167,10 @@ author: Test Author
 This is a test document with some **bold** text.
 "#;
 
+    let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
+
     let result = workflow
-        .render(markdown, Some(OutputFormat::Pdf))
+        .render(&parsed, Some(OutputFormat::Pdf))
         .expect("Failed to render");
 
     assert!(!result.artifacts.is_empty());

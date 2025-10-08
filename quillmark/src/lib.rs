@@ -22,7 +22,7 @@
 //! ## Quick Start
 //!
 //! ```no_run
-//! use quillmark::{Quillmark, Quill, OutputFormat};
+//! use quillmark::{Quillmark, Quill, OutputFormat, ParsedDocument};
 //!
 //! // Create engine with auto-registered backends
 //! let mut engine = Quillmark::new();
@@ -31,12 +31,13 @@
 //! let quill = Quill::from_path("path/to/quill").unwrap();
 //! engine.register_quill(quill);
 //!
-//! // Create a workflow and render markdown
+//! // Parse markdown
+//! let markdown = "---\ntitle: Hello\n---\n# Hello World";
+//! let parsed = ParsedDocument::from_markdown(markdown).unwrap();
+//!
+//! // Create a workflow and render
 //! let workflow = engine.load("my-quill").unwrap();
-//! let result = workflow.render(
-//!     "---\ntitle: Hello\n---\n# Hello World",
-//!     Some(OutputFormat::Pdf)
-//! ).unwrap();
+//! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //!
 //! // Access the rendered artifacts
 //! for artifact in result.artifacts {
@@ -49,15 +50,17 @@
 //! Workflows support adding runtime assets through a builder pattern:
 //!
 //! ```no_run
-//! # use quillmark::{Quillmark, Quill, OutputFormat};
+//! # use quillmark::{Quillmark, Quill, OutputFormat, ParsedDocument};
 //! # let mut engine = Quillmark::new();
 //! # let quill = Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
+//! # let markdown = "# Report";
+//! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
 //! let workflow = engine.load("my-quill").unwrap()
 //!     .with_asset("chart.png", vec![/* image bytes */]).unwrap()
 //!     .with_asset("data.csv", vec![/* csv bytes */]).unwrap();
 //!
-//! let result = workflow.render("# Report", Some(OutputFormat::Pdf)).unwrap();
+//! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
 //!
 //! ## Features
@@ -70,8 +73,8 @@
 
 // Re-export all core types for convenience
 pub use quillmark_core::{
-    decompose, Artifact, Backend, Diagnostic, Glue, Location, OutputFormat, ParsedDocument, Quill,
-    RenderError, RenderResult, Severity, TemplateError, BODY_FIELD,
+    decompose, Artifact, Backend, Diagnostic, Glue, Location, OutputFormat, ParseError,
+    ParsedDocument, Quill, RenderError, RenderResult, Severity, TemplateError, BODY_FIELD,
 };
 
 // Declare orchestration module

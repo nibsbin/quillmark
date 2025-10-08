@@ -102,6 +102,16 @@ impl Quillmark {
     /// Returns template source code (Typst, LaTeX, etc.)
     #[wasm_bindgen(js_name = renderGlue)]
     pub fn render_glue(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
+        // Parse markdown first
+        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
+            QuillmarkError::new(
+                format!("Failed to parse markdown: {}", e),
+                None,
+                Some("Check markdown syntax and YAML frontmatter".to_string()),
+            )
+            .to_js_value()
+        })?;
+
         let workflow = self.inner.load(quill_name).map_err(|e| {
             QuillmarkError::new(
                 format!("Quill '{}' not found: {}", quill_name, e),
@@ -112,7 +122,7 @@ impl Quillmark {
         })?;
 
         workflow
-            .process_glue(markdown)
+            .process_glue_parsed(&parsed)
             .map_err(|e| QuillmarkError::from(e).to_js_value())
     }
 
@@ -137,6 +147,16 @@ impl Quillmark {
             })?
         };
 
+        // Parse markdown first
+        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
+            QuillmarkError::new(
+                format!("Failed to parse markdown: {}", e),
+                None,
+                Some("Check markdown syntax and YAML frontmatter".to_string()),
+            )
+            .to_js_value()
+        })?;
+
         let mut workflow = self.inner.load(quill_name).map_err(|e| {
             QuillmarkError::new(
                 format!("Quill '{}' not found: {}", quill_name, e),
@@ -160,7 +180,7 @@ impl Quillmark {
 
         let output_format = opts.format.map(|f| f.into());
         let result = workflow
-            .render(markdown, output_format)
+            .render(&parsed, output_format)
             .map_err(|e| QuillmarkError::from(e).to_js_value())?;
 
         let render_result = RenderResult {

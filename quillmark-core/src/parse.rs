@@ -86,16 +86,33 @@ use std::collections::HashMap;
 /// The field name used to store the document body
 pub const BODY_FIELD: &str = "body";
 
+/// Reserved tag name for quill specification
+pub const QUILL_TAG: &str = "quill";
+
 /// A parsed markdown document with frontmatter
 #[derive(Debug, Clone)]
 pub struct ParsedDocument {
     fields: HashMap<String, serde_yaml::Value>,
+    quill_tag: Option<String>,
 }
 
 impl ParsedDocument {
     /// Create a new ParsedDocument with the given fields
     pub fn new(fields: HashMap<String, serde_yaml::Value>) -> Self {
-        Self { fields }
+        Self {
+            fields,
+            quill_tag: None,
+        }
+    }
+
+    /// Create a ParsedDocument from markdown string
+    pub fn from_markdown(markdown: &str) -> Result<Self, crate::error::ParseError> {
+        decompose(markdown).map_err(|e| crate::error::ParseError::from(e))
+    }
+
+    /// Get the quill tag if specified (from !quill directive)
+    pub fn quill_tag(&self) -> Option<&str> {
+        self.quill_tag.as_deref()
     }
 
     /// Get the document body
@@ -464,7 +481,27 @@ pub fn decompose(
         fields.insert(tag_name, serde_yaml::Value::Sequence(items));
     }
 
-    Ok(ParsedDocument::new(fields))
+    let mut parsed = ParsedDocument::new(fields);
+
+    // Extract quill tag if present
+    if let Some(quill_items) = parsed.fields.get(QUILL_TAG) {
+        if let Some(quill_array) = quill_items.as_sequence() {
+            if let Some(first_item) = quill_array.first() {
+                if let Some(quill_map) = first_item.as_mapping() {
+                    // Look for a "name" field in the quill block
+                    if let Some(name_value) =
+                        quill_map.get(&serde_yaml::Value::String("name".to_string()))
+                    {
+                        if let Some(name_str) = name_value.as_str() {
+                            parsed.quill_tag = Some(name_str.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(parsed)
 }
 
 #[cfg(test)]
