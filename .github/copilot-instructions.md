@@ -34,6 +34,16 @@ Before committing, ALWAYS run `cargo fmt` to ensure consistent formatting.
 When working with WASM, install the wasm target with `rustup target add wasm32-unknown-unknown`
 and use `scripts/build-wasm.sh` to build all targets.
 
+## Submodules
+
+This repository uses git submodules. **ALWAYS** initialize submodules when working in a fresh clone:
+
+```bash
+git submodule update --init --recursive
+```
+
+The `tonguetoquill-collection` submodule provides a centralized collection of quill templates and markdown templates for reference.
+
 ## Extended YAML Metadata (Non-Obvious)
 
 Supports **inline metadata sections** with SCOPE/QUILL keys:
