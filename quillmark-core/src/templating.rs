@@ -18,7 +18,7 @@
 //! ### Basic Template Rendering
 //!
 //! ```no_run
-//! use quillmark_core::Glue;
+//! use quillmark_core::{Glue, QuillValue};
 //! use std::collections::HashMap;
 //!
 //! let template = r#"
@@ -34,8 +34,8 @@
 //! // glue.register_filter("Content", content_filter);
 //!
 //! let mut context = HashMap::new();
-//! context.insert("title".to_string(), serde_yaml::Value::String("My Doc".into()));
-//! context.insert("body".to_string(), serde_yaml::Value::String("Content".into()));
+//! context.insert("title".to_string(), QuillValue::from_json(serde_json::json!("My Doc")));
+//! context.insert("body".to_string(), QuillValue::from_json(serde_json::json!("Content")));
 //!
 //! let output = glue.compose(context).unwrap();
 //! ```
@@ -87,7 +87,8 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 
 use minijinja::{Environment, Error as MjError};
-use serde_yaml;
+
+use crate::value::QuillValue;
 
 /// Error types for template rendering
 #[derive(thiserror::Error, Debug)]
@@ -143,10 +144,10 @@ impl Glue {
     /// Compose template with context from markdown decomposition
     pub fn compose(
         &mut self,
-        context: HashMap<String, serde_yaml::Value>,
+        context: HashMap<String, QuillValue>,
     ) -> Result<String, TemplateError> {
-        // Convert YAML values to MiniJinja values
-        let context = convert_yaml_to_minijinja(context)?;
+        // Convert QuillValue to MiniJinja values
+        let context = convert_quillvalue_to_minijinja(context)?;
 
         // Create a new environment for this render
         let mut env = Environment::new();
@@ -181,71 +182,18 @@ impl Glue {
     }
 }
 
-/// Convert YAML values to MiniJinja values
-fn convert_yaml_to_minijinja(
-    yaml: HashMap<String, serde_yaml::Value>,
+/// Convert QuillValue map to MiniJinja values
+fn convert_quillvalue_to_minijinja(
+    fields: HashMap<String, QuillValue>,
 ) -> Result<HashMap<String, minijinja::value::Value>, TemplateError> {
     let mut result = HashMap::new();
 
-    for (key, value) in yaml {
-        let minijinja_value = yaml_to_minijinja_value(value)?;
+    for (key, value) in fields {
+        let minijinja_value = value.to_minijinja().map_err(|e| {
+            TemplateError::FilterError(format!("Failed to convert QuillValue to MiniJinja: {}", e))
+        })?;
         result.insert(key, minijinja_value);
     }
-
-    Ok(result)
-}
-
-/// Convert a single YAML value to a MiniJinja value
-fn yaml_to_minijinja_value(
-    value: serde_yaml::Value,
-) -> Result<minijinja::value::Value, TemplateError> {
-    use minijinja::value::Value as MjValue;
-    use serde_yaml::Value as YamlValue;
-
-    let result = match value {
-        YamlValue::Null => MjValue::from(()),
-        YamlValue::Bool(b) => MjValue::from(b),
-        YamlValue::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                MjValue::from(i)
-            } else if let Some(u) = n.as_u64() {
-                MjValue::from(u)
-            } else if let Some(f) = n.as_f64() {
-                MjValue::from(f)
-            } else {
-                return Err(TemplateError::FilterError(
-                    "Invalid number in YAML".to_string(),
-                ));
-            }
-        }
-        YamlValue::String(s) => MjValue::from(s),
-        YamlValue::Sequence(seq) => {
-            let mut vec = Vec::new();
-            for item in seq {
-                vec.push(yaml_to_minijinja_value(item)?);
-            }
-            MjValue::from(vec)
-        }
-        YamlValue::Mapping(map) => {
-            let mut obj = std::collections::BTreeMap::new();
-            for (k, v) in map {
-                let key = match k {
-                    YamlValue::String(s) => s,
-                    _ => {
-                        return Err(TemplateError::FilterError(
-                            "Non-string key in YAML mapping".to_string(),
-                        ))
-                    }
-                };
-                obj.insert(key, yaml_to_minijinja_value(v)?);
-            }
-            MjValue::from_object(obj)
-        }
-        YamlValue::Tagged(tagged) => {
-            // For tagged values, just use the value part
-            yaml_to_minijinja_value(tagged.value)?
-        }
-    };
 
     Ok(result)
 }
@@ -267,11 +215,11 @@ mod tests {
         let mut context = HashMap::new();
         context.insert(
             "name".to_string(),
-            serde_yaml::Value::String("World".to_string()),
+            QuillValue::from_json(serde_json::Value::String("World".to_string())),
         );
         context.insert(
             "body".to_string(),
-            serde_yaml::Value::String("Hello content".to_string()),
+            QuillValue::from_json(serde_json::Value::String("Hello content".to_string())),
         );
 
         let result = glue.compose(context).unwrap();
@@ -285,11 +233,11 @@ mod tests {
         let mut context = HashMap::new();
         context.insert(
             "letterhead_title".to_string(),
-            serde_yaml::Value::String("TEST VALUE".to_string()),
+            QuillValue::from_json(serde_json::Value::String("TEST VALUE".to_string())),
         );
         context.insert(
             "body".to_string(),
-            serde_yaml::Value::String("body".to_string()),
+            QuillValue::from_json(serde_json::Value::String("body".to_string())),
         );
 
         let result = glue.compose(context).unwrap();
@@ -303,11 +251,11 @@ mod tests {
         let mut context = HashMap::new();
         context.insert(
             "letterhead_title".to_string(),
-            serde_yaml::Value::String("DASHED".to_string()),
+            QuillValue::from_json(serde_json::Value::String("DASHED".to_string())),
         );
         context.insert(
             "body".to_string(),
-            serde_yaml::Value::String("body".to_string()),
+            QuillValue::from_json(serde_json::Value::String("body".to_string())),
         );
 
         let result = glue.compose(context).unwrap();
@@ -328,7 +276,7 @@ mod tests {
         // For testing purposes, we'll just ensure the mechanism works
         context.insert(
             "content".to_string(),
-            serde_yaml::Value::String("test".to_string()),
+            QuillValue::from_json(serde_json::Value::String("test".to_string())),
         );
 
         let result = glue.compose(context);
