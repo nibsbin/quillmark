@@ -227,7 +227,7 @@ async function buildQuillFromUpload(files: File[]): Promise<object> {
 
 ### Metadata Storage
 
-Metadata is stored in the `Quill` struct as `HashMap<String, serde_yaml::Value>`, extracted from the `[Quill]` section of `Quill.toml`. All metadata from the TOML is preserved and can include standard fields like `name`, `backend`, `glue`, `template`, as well as custom fields.
+Metadata is stored in the `Quill` struct as `HashMap<String, serde_yaml::Value>`, extracted from the `[Quill]` section of `Quill.toml`. All metadata from the TOML is preserved and can include standard fields like `name`, `backend`, `glue`, `example`, as well as custom fields.
 
 ### Quill.toml Structure
 
@@ -236,7 +236,7 @@ Metadata is stored in the `Quill` struct as `HashMap<String, serde_yaml::Value>`
 name = "my-quill"
 backend = "typst"
 glue = "glue.typ"
-template = "template.md"  # optional
+example = "template.md"  # optional
 description = "A beautiful template"  # optional
 version = "1.0.0"  # optional
 author = "John Doe"  # optional
