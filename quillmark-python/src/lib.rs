@@ -14,7 +14,7 @@ pub use types::{
 };
 
 #[pymodule]
-fn _pyquillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _quillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register classes
     m.add_class::<PyQuillmark>()?;
     m.add_class::<PyWorkflow>()?;

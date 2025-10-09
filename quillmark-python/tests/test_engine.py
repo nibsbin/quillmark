@@ -2,7 +2,7 @@
 
 import pytest
 
-from pyquillmark import Quill, Quillmark
+from quillmark import Quill, Quillmark
 
 
 def test_engine_creation():

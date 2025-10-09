@@ -1,4 +1,4 @@
-"""Shared test fixtures for pyquillmark tests."""
+"""Shared test fixtures for quillmark tests."""
 
 import tempfile
 from pathlib import Path

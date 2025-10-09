@@ -2,7 +2,7 @@
 
 import pytest
 
-from pyquillmark import OutputFormat, ParsedDocument, Quill, Quillmark
+from quillmark import OutputFormat, ParsedDocument, Quill, Quillmark
 
 
 def test_end_to_end_render(test_quill_dir, simple_markdown):

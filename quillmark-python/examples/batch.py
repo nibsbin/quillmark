@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from pyquillmark import OutputFormat, ParsedDocument, Quillmark
+from quillmark import OutputFormat, ParsedDocument, Quillmark
 
 # Create engine
 engine = Quillmark()
@@ -11,7 +11,7 @@ engine = Quillmark()
 quill_path = Path("path/to/quill")
 
 if quill_path.exists():
-    from pyquillmark import Quill
+    from quillmark import Quill
     
     quill = Quill.from_path(str(quill_path))
     engine.register_quill(quill)

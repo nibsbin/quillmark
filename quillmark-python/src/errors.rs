@@ -4,12 +4,12 @@ use pyo3::prelude::*;
 use quillmark_core::RenderError;
 
 // Base exception
-create_exception!(_pyquillmark, QuillmarkError, PyException);
+create_exception!(_quillmark, QuillmarkError, PyException);
 
 // Specific exceptions
-create_exception!(_pyquillmark, ParseError, QuillmarkError);
-create_exception!(_pyquillmark, TemplateError, QuillmarkError);
-create_exception!(_pyquillmark, CompilationError, QuillmarkError);
+create_exception!(_quillmark, ParseError, QuillmarkError);
+create_exception!(_quillmark, TemplateError, QuillmarkError);
+create_exception!(_quillmark, CompilationError, QuillmarkError);
 
 pub fn convert_render_error(err: RenderError) -> PyErr {
     match err {
