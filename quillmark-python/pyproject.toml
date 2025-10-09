@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "quillmark"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Python bindings for Quillmark - template-first Markdown rendering"
 authors = [{ name = "Quillmark Contributors" }]
 readme = "README.md"
