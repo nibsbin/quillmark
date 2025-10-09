@@ -136,9 +136,10 @@ impl Quill {
         // Convert the field_schemas HashMap to a JS object
         let js_obj = js_sys::Object::new();
 
-        for (field_name, schema_value) in &self.inner.field_schemas {
-            // Convert serde_yaml::Value to serde_json::Value for serialization
-            let json_value = serde_json::to_value(schema_value).map_err(|e| {
+        for (field_name, schema) in &self.inner.field_schemas {
+            // Convert FieldSchema to YAML value then to JSON for serialization
+            let yaml_value = schema.to_yaml_value();
+            let json_value = serde_json::to_value(&yaml_value).map_err(|e| {
                 QuillmarkError::new(
                     format!("Failed to convert field schema '{}': {}", field_name, e),
                     None,

@@ -3,6 +3,7 @@ name = "taro"
 backend = "typst"
 glue = "glue.typ"
 example = "taro.md"
+description = "Taro template for documents"
 
 [fields]
 author = {description = "Author of document", required = true}

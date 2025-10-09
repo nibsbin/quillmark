@@ -238,8 +238,10 @@ impl PyQuill {
     fn field_schemas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         // Convert field_schemas to Python dict
         let dict = PyDict::new(py);
-        for (key, value) in &self.inner.field_schemas {
-            dict.set_item(key, yaml_value_to_py(py, value)?)?;
+        for (key, schema) in &self.inner.field_schemas {
+            // Convert FieldSchema to YAML value, then to Python
+            let yaml_value = schema.to_yaml_value();
+            dict.set_item(key, yaml_value_to_py(py, &yaml_value)?)?;
         }
         Ok(dict)
     }

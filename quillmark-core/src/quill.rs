@@ -4,6 +4,111 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
+/// Schema definition for a template field
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldSchema {
+    /// Field type hint (e.g., "string", "number", "boolean", "object", "array")
+    pub r#type: Option<String>,
+    /// Whether the field is required
+    pub required: bool,
+    /// Description of the field
+    pub description: String,
+    /// Example value for the field
+    pub example: Option<serde_yaml::Value>,
+    /// Default value for the field
+    pub default: Option<serde_yaml::Value>,
+}
+
+impl FieldSchema {
+    /// Create a new FieldSchema with default values
+    pub fn new(description: String) -> Self {
+        Self {
+            r#type: None,
+            required: false,
+            description,
+            example: None,
+            default: None,
+        }
+    }
+
+    /// Parse a FieldSchema from a serde_yaml::Value
+    pub fn from_yaml_value(value: &serde_yaml::Value) -> Result<Self, String> {
+        let mapping = value
+            .as_mapping()
+            .ok_or_else(|| "Field schema must be a mapping/object".to_string())?;
+
+        let description = mapping
+            .get(&serde_yaml::Value::String("description".to_string()))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let required = mapping
+            .get(&serde_yaml::Value::String("required".to_string()))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let field_type = mapping
+            .get(&serde_yaml::Value::String("type".to_string()))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let example = mapping
+            .get(&serde_yaml::Value::String("example".to_string()))
+            .cloned();
+
+        let default = mapping
+            .get(&serde_yaml::Value::String("default".to_string()))
+            .cloned();
+
+        Ok(Self {
+            r#type: field_type,
+            required,
+            description,
+            example,
+            default,
+        })
+    }
+
+    /// Convert the FieldSchema to a serde_yaml::Value for serialization
+    pub fn to_yaml_value(&self) -> serde_yaml::Value {
+        let mut map = serde_yaml::Mapping::new();
+
+        map.insert(
+            serde_yaml::Value::String("description".to_string()),
+            serde_yaml::Value::String(self.description.clone()),
+        );
+
+        map.insert(
+            serde_yaml::Value::String("required".to_string()),
+            serde_yaml::Value::Bool(self.required),
+        );
+
+        if let Some(ref field_type) = self.r#type {
+            map.insert(
+                serde_yaml::Value::String("type".to_string()),
+                serde_yaml::Value::String(field_type.clone()),
+            );
+        }
+
+        if let Some(ref example) = self.example {
+            map.insert(
+                serde_yaml::Value::String("example".to_string()),
+                example.clone(),
+            );
+        }
+
+        if let Some(ref default) = self.default {
+            map.insert(
+                serde_yaml::Value::String("default".to_string()),
+                default.clone(),
+            );
+        }
+
+        serde_yaml::Value::Mapping(map)
+    }
+}
+
 /// A node in the file tree structure
 #[derive(Debug, Clone)]
 pub enum FileTreeNode {
@@ -276,12 +381,14 @@ pub struct Quill {
     pub metadata: HashMap<String, serde_yaml::Value>,
     /// Name of the quill
     pub name: String,
+    /// Backend identifier (e.g., "typst")
+    pub backend: String,
     /// Glue template file name
     pub glue_file: String,
     /// Markdown template content (optional)
     pub example: Option<String>,
     /// Field schema documentation (optional)
-    pub field_schemas: HashMap<String, serde_yaml::Value>,
+    pub field_schemas: HashMap<String, FieldSchema>,
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }
@@ -360,6 +467,7 @@ impl Quill {
         let mut glue_file = "glue.typ".to_string(); // default
         let mut template_file: Option<String> = None;
         let mut quill_name = default_name.unwrap_or_else(|| "unnamed".to_string());
+        let mut backend = String::new();
         let mut field_schemas = HashMap::new();
 
         // Extract fields from [Quill] section
@@ -370,6 +478,7 @@ impl Quill {
             }
 
             if let Some(backend_val) = quill_section.get("backend").and_then(|v| v.as_str()) {
+                backend = backend_val.to_string();
                 match Self::toml_to_yaml_value(&toml::Value::String(backend_val.to_string())) {
                     Ok(yaml_value) => {
                         metadata.insert("backend".to_string(), yaml_value);
@@ -386,6 +495,16 @@ impl Quill {
 
             if let Some(example_val) = quill_section.get("example").and_then(|v| v.as_str()) {
                 template_file = Some(example_val.to_string());
+            }
+
+            // Validate that description is present and non-empty (required field)
+            let description = quill_section
+                .get("description")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing required 'description' field in [Quill] section")?;
+
+            if description.trim().is_empty() {
+                return Err("'description' field in [Quill] section cannot be empty".into());
             }
 
             // Add other fields to metadata (excluding special fields and version)
@@ -431,9 +550,17 @@ impl Quill {
             if let toml::Value::Table(fields_table) = fields_section {
                 for (field_name, field_schema) in fields_table {
                     match Self::toml_to_yaml_value(field_schema) {
-                        Ok(yaml_value) => {
-                            field_schemas.insert(field_name.clone(), yaml_value);
-                        }
+                        Ok(yaml_value) => match FieldSchema::from_yaml_value(&yaml_value) {
+                            Ok(schema) => {
+                                field_schemas.insert(field_name.clone(), schema);
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "Warning: Failed to parse field schema '{}': {}",
+                                    field_name, e
+                                );
+                            }
+                        },
                         Err(e) => {
                             eprintln!(
                                 "Warning: Failed to convert field schema '{}': {}",
@@ -474,6 +601,7 @@ impl Quill {
             glue_template: template_content,
             metadata,
             name: quill_name,
+            backend,
             glue_file,
             example: template_content_opt,
             field_schemas,
@@ -794,7 +922,7 @@ node_modules/
         // Create test files
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
@@ -837,7 +965,7 @@ node_modules/
         // Create test files
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
@@ -864,7 +992,7 @@ node_modules/
         // Create test directory structure
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("glue.typ"), "template").unwrap();
@@ -949,6 +1077,7 @@ author = "Test Author"
 name = "test-quill"
 backend = "typst"
 glue = "glue.typ"
+description = "Test quill for packages"
 
 [typst]
 packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
@@ -976,6 +1105,7 @@ name = "test-with-template"
 backend = "typst"
 glue = "glue.typ"
 example = "example.md"
+description = "Test quill with template"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
         fs::write(quill_dir.join("glue.typ"), "glue content").unwrap();
@@ -1008,6 +1138,7 @@ example = "example.md"
 name = "test-without-template"
 backend = "typst"
 glue = "glue.typ"
+description = "Test quill without template"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
         fs::write(quill_dir.join("glue.typ"), "glue content").unwrap();
@@ -1073,6 +1204,7 @@ name = "test-tree-template"
 backend = "typst"
 glue = "glue.typ"
 example = "template.md"
+description = "Test tree with template"
 "#;
         root_files.insert(
             "Quill.toml".to_string(),
@@ -1116,7 +1248,7 @@ example = "template.md"
             },
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill from JSON\"\n"
                 },
                 "glue.typ": {
                     "contents": "= Test Glue\n\nThis is test content."
@@ -1140,7 +1272,7 @@ example = "template.md"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10]
+                    "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 32, 61, 32, 34, 84, 101, 115, 116, 32, 113, 117, 105, 108, 108, 34, 10]
                 },
                 "glue.typ": {
                     "contents": "test glue"
@@ -1177,7 +1309,7 @@ example = "template.md"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test tree JSON\"\n"
                 },
                 "glue.typ": {
                     "contents": "= Test Glue\n\nTree structure content."
@@ -1198,7 +1330,7 @@ example = "template.md"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Nested test\"\n"
                 },
                 "glue.typ": {
                     "contents": "glue"
@@ -1234,7 +1366,7 @@ example = "template.md"
             "Quill.toml".to_string(),
             FileTreeNode::File {
                 contents:
-                    b"[Quill]\nname = \"direct-tree\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    b"[Quill]\nname = \"direct-tree\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Direct tree test\"\n"
                         .to_vec(),
             },
         );
@@ -1278,7 +1410,7 @@ example = "template.md"
             },
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"toml-name\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    "contents": "[Quill]\nname = \"toml-name\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"TOML name test\"\n"
                 },
                 "glue.typ": {
                     "contents": "= glue"
@@ -1298,7 +1430,7 @@ example = "template.md"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"empty-dir-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    "contents": "[Quill]\nname = \"empty-dir-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Empty directory test\"\n"
                 },
                 "glue.typ": {
                     "contents": "glue"
@@ -1321,7 +1453,7 @@ example = "template.md"
         root_files.insert(
             "Quill.toml".to_string(),
             FileTreeNode::File {
-                contents: b"[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                contents: b"[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n"
                     .to_vec(),
             },
         );
@@ -1428,6 +1560,7 @@ name = "taro"
 backend = "typst"
 glue = "glue.typ"
 example = "taro.md"
+description = "Test template for field schemas"
 
 [fields]
 author = {description = "Author of document", required = true}
@@ -1471,60 +1604,78 @@ title = {description = "title of document", required = true}
 
         // Verify author field schema
         let author_schema = quill.field_schemas.get("author").unwrap();
-        let author_map = author_schema.as_mapping().unwrap();
-        assert_eq!(
-            author_map
-                .get(&serde_yaml::Value::String("description".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "Author of document"
-        );
-        assert_eq!(
-            author_map
-                .get(&serde_yaml::Value::String("required".to_string()))
-                .unwrap()
-                .as_bool()
-                .unwrap(),
-            true
-        );
+        assert_eq!(author_schema.description, "Author of document");
+        assert_eq!(author_schema.required, true);
 
         // Verify ice_cream field schema (no required field, should default to false)
         let ice_cream_schema = quill.field_schemas.get("ice_cream").unwrap();
-        let ice_cream_map = ice_cream_schema.as_mapping().unwrap();
-        assert_eq!(
-            ice_cream_map
-                .get(&serde_yaml::Value::String("description".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "favorite ice cream flavor"
-        );
-        // Check that required is not set (or set to false)
-        let required_value = ice_cream_map.get(&serde_yaml::Value::String("required".to_string()));
-        // Either required is not present, or if present it should be false
-        if let Some(req_val) = required_value {
-            assert_eq!(req_val.as_bool().unwrap_or(false), false);
-        }
+        assert_eq!(ice_cream_schema.description, "favorite ice cream flavor");
+        assert_eq!(ice_cream_schema.required, false);
 
         // Verify title field schema
         let title_schema = quill.field_schemas.get("title").unwrap();
-        let title_map = title_schema.as_mapping().unwrap();
+        assert_eq!(title_schema.description, "title of document");
+        assert_eq!(title_schema.required, true);
+    }
+
+    #[test]
+    fn test_field_schema_struct() {
+        // Test creating FieldSchema with minimal fields
+        let schema1 = FieldSchema::new("Test description".to_string());
+        assert_eq!(schema1.description, "Test description");
+        assert_eq!(schema1.required, false);
+        assert_eq!(schema1.r#type, None);
+        assert_eq!(schema1.example, None);
+        assert_eq!(schema1.default, None);
+
+        // Test parsing FieldSchema from YAML with all fields
+        let yaml_str = r#"
+description: "Full field schema"
+required: true
+type: "string"
+example: "Example value"
+default: "Default value"
+"#;
+        let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml_str).unwrap();
+        let schema2 = FieldSchema::from_yaml_value(&yaml_value).unwrap();
+        assert_eq!(schema2.description, "Full field schema");
+        assert_eq!(schema2.required, true);
+        assert_eq!(schema2.r#type, Some("string".to_string()));
         assert_eq!(
-            title_map
+            schema2.example,
+            Some(serde_yaml::Value::String("Example value".to_string()))
+        );
+        assert_eq!(
+            schema2.default,
+            Some(serde_yaml::Value::String("Default value".to_string()))
+        );
+
+        // Test converting FieldSchema back to YAML
+        let yaml_value = schema2.to_yaml_value();
+        let mapping = yaml_value.as_mapping().unwrap();
+        assert_eq!(
+            mapping
                 .get(&serde_yaml::Value::String("description".to_string()))
                 .unwrap()
                 .as_str()
                 .unwrap(),
-            "title of document"
+            "Full field schema"
         );
         assert_eq!(
-            title_map
+            mapping
                 .get(&serde_yaml::Value::String("required".to_string()))
                 .unwrap()
                 .as_bool()
                 .unwrap(),
             true
+        );
+        assert_eq!(
+            mapping
+                .get(&serde_yaml::Value::String("type".to_string()))
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "string"
         );
     }
 }
