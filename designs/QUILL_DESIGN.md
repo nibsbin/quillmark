@@ -60,6 +60,9 @@ pub struct Quill {
     /// Markdown template content (optional)
     pub template: Option<String>,
 
+    /// Field schema documentation from [fields] section (optional)
+    pub field_schemas: HashMap<String, serde_yaml::Value>,
+
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }
@@ -87,7 +90,7 @@ pub struct Quill {
 
 ### Standard Format
 
-The JSON format MUST have a root object with a `files` key. The optional `metadata` key provides additional metadata that overrides defaults extracted from `Quill.toml`.
+The JSON format MUST have a root object with a `files` key. The optional `metadata` key provides a default name that will be used if `Quill.toml` does not specify one.
 
 ```json
 {
@@ -103,15 +106,12 @@ The JSON format MUST have a root object with a `files` key. The optional `metada
 
 ### With Optional Metadata
 
+The optional `metadata` object in JSON provides a `default_name` when constructing a Quill. However, the name from `Quill.toml` always takes precedence if present.
+
 ```json
 {
   "metadata": {
-    "name": "my-quill",
-    "version": "1.0.0",
-    "description": "A beautiful letter template",
-    "author": "John Doe",
-    "license": "MIT",
-    "tags": ["letter", "professional"]
+    "name": "my-quill"
   },
   "files": {
     "Quill.toml": { "contents": "..." },
@@ -122,6 +122,8 @@ The JSON format MUST have a root object with a `files` key. The optional `metada
   }
 }
 ```
+
+**Note**: Only the `name` field in the JSON `metadata` object is currently used (as a default). Other fields like `version`, `description`, `author`, `license`, and `tags` should be specified in `Quill.toml` instead.
 
 ### Node Types
 
@@ -223,57 +225,57 @@ async function buildQuillFromUpload(files: File[]): Promise<object> {
 
 ## Metadata Handling
 
-### Metadata Schema
+### Metadata Storage
 
-```rust
-pub struct QuillMetadata {
-    /// Quill name (required)
-    pub name: String,
+Metadata is stored in the `Quill` struct as `HashMap<String, serde_yaml::Value>`, extracted from the `[Quill]` section of `Quill.toml`. All metadata from the TOML is preserved and can include standard fields like `name`, `backend`, `glue`, `template`, as well as custom fields.
 
-  
-    /// Semantic version (optional)
-    pub version: Option<String>,
+### Quill.toml Structure
 
-    /// Human-readable description (optional)
-    pub description: Option<String>,
+```toml
+[Quill]
+name = "my-quill"
+backend = "typst"
+glue = "glue.typ"
+template = "template.md"  # optional
+description = "A beautiful template"  # optional
+version = "1.0.0"  # optional
+author = "John Doe"  # optional
+# ... any custom metadata fields
 
-    /// Author name(s) (optional)
-    pub author: Option<String>,
-
-    /// License identifier (optional)
-    pub license: Option<String>,
-
-    /// Tags for categorization (optional)
-    pub tags: Vec<String>,
-
-    /// Custom metadata (extensibility)
-    pub custom: HashMap<String, serde_json::Value>,
-}
+[fields]
+# Field schemas for template variables
+author = { description = "Author of document", required = true }
+title = { description = "Document title", required = true }
+ice_cream = { description = "Favorite ice cream flavor" }
 ```
+
+The `[fields]` section is optional and provides schema documentation for template variables. These are stored separately in `Quill.field_schemas`.
 
 ### Metadata Priority (Highest to Lowest)
 
-1. **JSON `metadata` object** - Explicit overrides in JSON
-2. **Quill.toml `[Quill]` section** - Metadata from Quill.toml
-3. **Function arguments** - `default_name` passed to constructors
-4. **Defaults** - Sensible defaults
+1. **Quill.toml `[Quill]` section** - Metadata from Quill.toml takes precedence
+2. **Function arguments** - `default_name` passed to constructors (only used if Quill.toml doesn't specify a name)
+3. **JSON `metadata` object** - Provides default_name for `from_json` constructor
+4. **Defaults** - Fallback value "unnamed"
+
+**Note**: The JSON `metadata.name` field is used as the `default_name` argument when calling `from_tree`, but the name from `Quill.toml` always takes precedence if present.
 
 ### Example Priority Resolution
 
 ```json
 {
   "metadata": {
-    "name": "override-name"  // Highest priority
+    "name": "override-name"  // Used as default_name
   },
   "files": {
     "Quill.toml": {
-      "contents": "[Quill]\nname = \"toml-name\"\n..."  // Medium priority
+      "contents": "[Quill]\nname = \"toml-name\"\n..."  // Takes precedence
     }
   }
 }
 ```
 
-Result: `name = "override-name"`
+Result: `name = "toml-name"` (Quill.toml wins)
 
 ---
 
