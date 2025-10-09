@@ -220,6 +220,11 @@ impl PyQuill {
     }
 
     #[getter]
+    fn example(&self) -> Option<String> {
+        self.inner.example.clone()
+    }
+
+    #[getter]
     fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         // Convert serde_yaml::Value to Python dict
         let dict = PyDict::new(py);
