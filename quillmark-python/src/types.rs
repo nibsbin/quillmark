@@ -225,6 +225,16 @@ impl PyQuill {
         }
         Ok(dict.into())
     }
+
+    #[getter]
+    fn field_schemas(&self, py: Python) -> PyResult<PyObject> {
+        // Convert field_schemas to Python dict
+        let dict = PyDict::new_bound(py);
+        for (key, value) in &self.inner.field_schemas {
+            dict.set_item(key, yaml_value_to_py(py, value)?)?;
+        }
+        Ok(dict.into())
+    }
 }
 
 // ParsedDocument wrapper
