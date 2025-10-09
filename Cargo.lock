@@ -1853,7 +1853,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "quillmark-core",
@@ -1867,7 +1867,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-cli"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "clap",
@@ -1878,7 +1878,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-core"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "minijinja",
@@ -1892,7 +1892,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fixtures"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "quillmark",
  "quillmark-typst",
@@ -1900,7 +1900,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fuzz"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "proptest",
  "quillmark-core",
@@ -1909,7 +1909,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-python"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "pyo3",
@@ -1920,7 +1920,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-typst"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1942,7 +1942,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-wasm"
-version = "0.1.6"
+version = "0.1.7"
 dependencies = [
  "console_error_panic_hook",
  "getrandom 0.2.16",
