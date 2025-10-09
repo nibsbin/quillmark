@@ -1015,8 +1015,7 @@ glue = "glue.typ"
         // Load quill
         let quill = Quill::from_path(quill_dir).unwrap();
 
-        // Test that template fields are None
-        assert_eq!(quill.template_file, None);
+        // Test that example fields are None
         assert_eq!(quill.example, None);
 
         // Test that glue template is still loaded
@@ -1105,7 +1104,6 @@ example = "template.md"
         let quill = Quill::from_tree(root, None).unwrap();
 
         // Validate template is loaded
-        assert_eq!(quill.template_file, Some("template.md".to_string()));
         assert_eq!(quill.example, Some(template_content.to_string()));
     }
 
