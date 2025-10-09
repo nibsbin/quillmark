@@ -137,18 +137,11 @@ impl Quill {
         let js_obj = js_sys::Object::new();
 
         for (field_name, schema) in &self.inner.field_schemas {
-            // Convert FieldSchema to YAML value then to JSON for serialization
-            let yaml_value = schema.to_yaml_value();
-            let json_value = serde_json::to_value(&yaml_value).map_err(|e| {
-                QuillmarkError::new(
-                    format!("Failed to convert field schema '{}': {}", field_name, e),
-                    None,
-                    None,
-                )
-                .to_js_value()
-            })?;
+            // Convert FieldSchema to QuillValue then to JSON for serialization
+            let quill_value = schema.to_quill_value();
+            let json_value = quill_value.as_json();
 
-            let js_value = serde_wasm_bindgen::to_value(&json_value).map_err(|e| {
+            let js_value = serde_wasm_bindgen::to_value(json_value).map_err(|e| {
                 QuillmarkError::new(
                     format!("Failed to serialize field schema '{}': {}", field_name, e),
                     None,
