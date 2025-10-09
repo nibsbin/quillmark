@@ -64,7 +64,7 @@ High-level data flow:
 ### `quillmark-core` (foundations)
 
 * Types: `Backend`, `Artifact`, `OutputFormat`
-* Parsing: `ParsedDocument` with `from_markdown()` constructor (internal `decompose` function)
+* Parsing: `ParsedDocument` with `from_markdown()` constructor; `decompose()` function for direct parsing
 * Templating: `Glue` + stable `filter_api`
 * Template model: `Quill` (+ `Quill.toml`)
 * **Errors & Diagnostics:** `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
