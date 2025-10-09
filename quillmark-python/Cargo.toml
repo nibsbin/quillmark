@@ -14,5 +14,4 @@ pyo3 = { version = "~0.26", features = ["extension-module", "abi3-py310"] }
 quillmark = { path = "../quillmark", features = ["typst"] }
 quillmark-core = { path = "../quillmark-core" }
 anyhow = {workspace = true}
-serde_yaml = {workspace = true}
 serde_json = {workspace = true}
