@@ -1,0 +1,3 @@
+[submodule "tonguetoquill-collection"]
+	path = tonguetoquill-collection
+	url = https://github.com/nibsbin/tonguetoquill-collection.git
