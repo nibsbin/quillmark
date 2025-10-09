@@ -18,7 +18,7 @@ pub fn demo(
 
     // Load the markdown template from the quill
     let markdown = quill
-        .template
+        .example
         .as_ref()
         .ok_or("Quill does not have a markdown template")?
         .clone();
