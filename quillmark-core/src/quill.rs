@@ -475,7 +475,6 @@ impl Quill {
             metadata,
             name: quill_name,
             glue_file,
-            template_file,
             example: template_content_opt,
             field_schemas,
             files: root,
@@ -989,14 +988,11 @@ example = "example.md"
         // Load quill
         let quill = Quill::from_path(quill_dir).unwrap();
 
-        // Test that template file name is set
-        assert_eq!(quill.template_file, Some("example.md".to_string()));
-
-        // Test that template content is loaded
+        // Test that example content is loaded and includes some the text
         assert!(quill.example.is_some());
-        let template = quill.example.unwrap();
-        assert!(template.contains("title: Test"));
-        assert!(template.contains("This is a test template"));
+        let example = quill.example.unwrap();
+        assert!(example.contains("title: Test"));
+        assert!(example.contains("This is a test template"));
 
         // Test that glue template is still loaded
         assert_eq!(quill.glue_template, "glue content");
