@@ -1,2 +1,5 @@
 [alias]
 doc-workspace = "doc --no-deps -p quillmark-core -p quillmark -p quillmark-typst"
+
+[build]
+rustflags = ["--check-cfg=cfg(feature, values(\"gil-refs\"))"]

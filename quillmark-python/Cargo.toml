@@ -10,14 +10,8 @@ name = "_quillmark"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.22", features = ["extension-module", "abi3-py310"] }
+pyo3 = { version = "~0.26", features = ["extension-module", "abi3-py310"] }
 quillmark = { path = "../quillmark", features = ["typst"] }
 quillmark-core = { path = "../quillmark-core" }
 anyhow = {workspace = true}
 serde_yaml = {workspace = true}
-
-[profile.release]
-lto = true
-codegen-units = 1
-strip = true
-opt-level = "z"
