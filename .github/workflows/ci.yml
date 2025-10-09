@@ -81,7 +81,7 @@ jobs:
       - name: Build docs
         env:
           RUSTDOCFLAGS: -Dwarnings
-        run: cargo doc --no-deps --all-features --locked
+        run: cargo doc --no-deps --locked
 
   wasm:
     runs-on: ubuntu-latest
