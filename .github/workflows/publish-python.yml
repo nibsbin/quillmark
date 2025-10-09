@@ -42,7 +42,7 @@ jobs:
           uv venv
           uv pip install maturin pytest
           cd quillmark-python
-          uv run maturin develop
+          uv run python -m maturin develop
           uv run pytest
 
   build-wheels:
@@ -70,7 +70,7 @@ jobs:
           uv venv
           uv pip install maturin
           cd quillmark-python
-          uv run maturin build --release --interpreter python3.10 python3.11 python3.12
+          uv run python -m maturin build --release --interpreter python3.10 python3.11 python3.12
       
       - name: Upload wheels
         uses: actions/upload-artifact@v4
@@ -99,7 +99,7 @@ jobs:
         run: |
           uv venv
           uv pip install maturin
-          uv run maturin upload dist/*.whl
+          uv run python -m maturin upload dist/*.whl
       
       - name: Publish summary
         if: success()
