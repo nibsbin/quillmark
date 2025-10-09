@@ -33,10 +33,7 @@ fn _quillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("QuillmarkError", m.py().get_type::<QuillmarkError>())?;
     m.add("ParseError", m.py().get_type::<ParseError>())?;
     m.add("TemplateError", m.py().get_type::<TemplateError>())?;
-    m.add(
-        "CompilationError",
-        m.py().get_type::<CompilationError>(),
-    )?;
+    m.add("CompilationError", m.py().get_type::<CompilationError>())?;
 
     Ok(())
 }
