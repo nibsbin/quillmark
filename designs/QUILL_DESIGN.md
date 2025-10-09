@@ -384,10 +384,12 @@ pub fn from_json(json_str: &str) -> Result<Self, QuillError> {
     let obj = json.as_object()
         .ok_or_else(|| QuillError::InvalidJson("Root must be an object".to_string()))?;
 
-    // Extract metadata (optional)
-    let metadata = obj.get("metadata")
-        .map(QuillMetadata::from_json)
-        .transpose()?;
+    // Extract default_name from metadata (optional)
+    let default_name = obj
+        .get("metadata")
+        .and_then(|m| m.get("name"))
+        .and_then(|v| v.as_str())
+        .map(String::from);
 
     // Extract files (required)
     let files_obj = obj.get("files")
@@ -402,11 +404,8 @@ pub fn from_json(json_str: &str) -> Result<Self, QuillError> {
 
     let root = FileTreeNode::Directory { files: root_files };
 
-  // Create Quill from tree
-  Self::from_tree(
-    root,
-    metadata.as_ref().map(|m| m.name.clone()),
-  )
+    // Create Quill from tree
+    Self::from_tree(root, default_name)
 }
 ```
 
@@ -522,8 +521,8 @@ No magic. No heuristics.
 
 ```typescript
 class Quill {
-    /// Create from files object
-    static fromFiles(files: object, metadata?: QuillMetadata): Quill;
+    /// Create from files object (with optional metadata)
+    static fromFiles(filesObj: object): Quill;
 
     /// Create from JSON string
     static fromJson(json: string): Quill;
@@ -533,6 +532,9 @@ class Quill {
 
     /// Get metadata
     getMetadata(): QuillMetadata;
+
+    /// Get field schemas as a JS object
+    getFieldSchemas(): Record<string, any>;
 
     /// List all files (recursive paths)
     listFiles(): string[];
@@ -550,15 +552,18 @@ class Quill {
 interface QuillMetadata {
     name: string;
     version?: string;
+    backend?: string;
     description?: string;
     author?: string;
     license?: string;
     tags?: string[];
-    custom?: Record<string, any>;
 }
 ```
 
-**Note:** `fromFiles` in WASM converts JS object to JSON internally, then calls Rust `from_json`.
+**Note:** 
+- `fromFiles` accepts an object with the same structure as the JSON format (with `files` and optional `metadata` keys)
+- `getMetadata()` extracts fields from the Quill.toml metadata HashMap and returns them as a structured object
+- `getFieldSchemas()` returns the parsed [fields] section from Quill.toml
 
 ---
 
