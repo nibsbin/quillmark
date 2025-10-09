@@ -27,7 +27,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: pyquillmark
+          workspaces: quillmark-python
       
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
@@ -41,7 +41,7 @@ jobs:
         run: |
           uv venv
           uv pip install maturin pytest
-          cd pyquillmark
+          cd quillmark-python
           uv run maturin develop
           uv run pytest
 
@@ -60,7 +60,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: pyquillmark
+          workspaces: quillmark-python
       
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
@@ -69,14 +69,14 @@ jobs:
         run: |
           uv venv
           uv pip install maturin
-          cd pyquillmark
+          cd quillmark-python
           uv run maturin build --release --interpreter python3.10 python3.11 python3.12
       
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
-          path: pyquillmark/target/wheels/*.whl
+          path: quillmark-python/target/wheels/*.whl
 
   publish:
     needs: [test, build-wheels]
