@@ -1,6 +1,10 @@
 use proptest::prelude::*;
 use quillmark_typst::convert::{escape_markup, escape_string, mark_to_typst};
 
+// Typst special characters that need escaping in markup context (excluding backslash)
+// These correspond to the characters escaped in the escape_markup function
+const TYPST_SPECIAL_CHARS: &[char] = &['*', '_', '`', '#', '[', ']', '$', '<', '>', '@'];
+
 // Security-focused tests for escape_string
 #[test]
 fn test_escape_string_security_attack_vectors() {
@@ -88,8 +92,7 @@ proptest! {
     fn fuzz_escape_markup_typst_chars_escaped(s in "\\PC*") {
         let escaped = escape_markup(&s);
         // For each Typst special character in the input, verify it's escaped in output
-        let special_chars = ['*', '_', '#', '[', ']', '$', '<', '>', '@'];
-        for &ch in &special_chars {
+        for &ch in TYPST_SPECIAL_CHARS {
             if s.contains(ch) {
                 // The escaped version should contain the escaped form
                 let escaped_form = format!("\\{}", ch);
@@ -109,8 +112,7 @@ proptest! {
         let input_backslashes = s.matches('\\').count();
 
         // Count other special chars that will be escaped (each adds one backslash)
-        let special_chars = ['*', '_', '`', '#', '[', ']', '$', '<', '>', '@'];
-        let special_count: usize = special_chars.iter()
+        let special_count: usize = TYPST_SPECIAL_CHARS.iter()
             .map(|&ch| s.matches(ch).count())
             .sum();
 
