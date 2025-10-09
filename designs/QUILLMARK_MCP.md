@@ -164,12 +164,12 @@ Get detailed information about a specific Quill template, including its frontmat
 {
   "name": "appreciated_letter",
   "backend": "typst",
-  "metadata": {
-    "description": "Professional business letter template",
-    "author": "Quillmark Contributors",
-    "version": "1.0.0",
-    "tags": ["letter", "professional"]
-  },
+  "glue": "glue.typ",
+  "template": "appreciated_letter.md",
+  "description": "Professional business letter template",
+  "author": "Quillmark Contributors",
+  "version": "1.0.0",
+  "tags": ["letter", "professional"],
   "frontmatter_fields": {
     "sender": {
       "type": "string",
@@ -209,8 +209,10 @@ Get detailed information about a specific Quill template, including its frontmat
 **Implementation Note:** The frontmatter schema is derived by:
 1. Loading the Quill's glue template
 2. Parsing MiniJinja template variables (e.g., `{{ sender | String }}`)
-3. Optionally reading from a schema file if present in the Quill
-4. Extracting examples from the default template markdown file
+3. Optionally reading from the `[fields]` section in `Quill.toml` if present
+4. Extracting examples from the default template markdown file (specified in the `template` field of `Quill.toml`)
+
+**Note on Metadata Structure:** According to [QUILL_DESIGN.md](QUILL_DESIGN.md), all metadata fields (name, backend, glue, template, description, author, version, tags, etc.) are stored in the `[Quill]` section of `Quill.toml` as a flat HashMap, not as a nested object. Custom metadata fields are also supported and preserved.
 
 **Use Case:** AI model helps user understand what fields to include in their markdown frontmatter.
 
@@ -426,11 +428,26 @@ class Location:
 
 ### QuillInfo
 
+Represents information about a Quill template. Note that metadata fields are flattened at the top level, matching the structure from `[Quill]` section in Quill.toml (see [QUILL_DESIGN.md](QUILL_DESIGN.md)).
+
 ```python
 class QuillInfo:
+    # Core fields (always present)
     name: str
     backend: str
-    metadata: dict[str, Any]
+    glue: str
+    
+    # Optional metadata fields from [Quill] section
+    template: str | None
+    description: str | None
+    author: str | None
+    version: str | None
+    tags: list[str] | None
+    
+    # Additional custom metadata fields (preserved as-is)
+    # Any other fields from [Quill] section are included in the output
+    
+    # Schema information
     frontmatter_fields: dict[str, FieldSchema]
     supported_formats: list[str]
 ```
@@ -587,13 +604,17 @@ Extract frontmatter schema from a Quill:
 
 ```python
 def extract_schema(quill: Quill) -> dict[str, FieldSchema]:
-    """Extract frontmatter schema from Quill glue template and example."""
+    """Extract frontmatter schema from Quill glue template and [fields] section.
+    
+    According to QUILL_DESIGN.md, field schemas are stored in the optional
+    [fields] section of Quill.toml, accessed via quill.field_schemas.
+    """
     
     # 1. Parse glue template for MiniJinja variables
     glue_content = quill.glue_template
     variables = extract_template_variables(glue_content)
     
-    # 2. Read example template if available
+    # 2. Read example template if available (from 'template' field in metadata)
     template_path = quill.metadata.get("template")
     examples = {}
     if template_path:
@@ -601,20 +622,20 @@ def extract_schema(quill: Quill) -> dict[str, FieldSchema]:
         parsed = ParsedDocument.from_markdown(example_content)
         examples = parsed.fields()
     
-    # 3. Check for optional schema.json
-    schema_override = {}
-    if quill.has_file("schema.json"):
-        schema_override = json.loads(quill.get_file("schema.json"))
+    # 3. Read field schemas from [fields] section in Quill.toml
+    # This is stored in quill.field_schemas as HashMap<String, serde_yaml::Value>
+    field_schemas = quill.field_schemas or {}
     
     # 4. Merge and create FieldSchema objects
     schema = {}
     for var_name, var_info in variables.items():
+        field_def = field_schemas.get(var_name, {})
         schema[var_name] = FieldSchema(
             type=infer_type(var_info, examples.get(var_name)),
-            required=var_name not in schema_override.get("optional", []),
-            description=schema_override.get(var_name, {}).get("description", ""),
+            required=field_def.get("required", True),  # Default to required
+            description=field_def.get("description", ""),
             example=examples.get(var_name),
-            default=schema_override.get(var_name, {}).get("default")
+            default=field_def.get("default")
         )
     
     return schema
@@ -627,7 +648,11 @@ The `quillmark` Python package exposes the following classes and exceptions:
 **Core Classes:**
 - `Quillmark` - Engine for managing backends and quills
 - `Workflow` - Render execution API
-- `Quill` - Template bundle representation
+- `Quill` - Template bundle representation (see [QUILL_DESIGN.md](QUILL_DESIGN.md) for structure details)
+  - `quill.metadata` - HashMap of metadata from `[Quill]` section in Quill.toml (name, backend, glue, template, description, etc.)
+  - `quill.field_schemas` - HashMap from `[fields]` section in Quill.toml (optional)
+  - `quill.glue_template` - Glue template content
+  - `quill.template` - Markdown template content (if specified)
 - `ParsedDocument` - Parsed markdown with frontmatter
 - `RenderResult` - Rendering output with artifacts and warnings
 - `Artifact` - Individual output file (PDF, SVG, etc.)
@@ -905,7 +930,7 @@ Dear Joe...
 
 ### Phase 2 Features
 
-- **Custom Schema Files**: Support `schema.json` in Quill directories for explicit field definitions
+- **Enhanced Field Schema Support**: Leverage the `[fields]` section in Quill.toml for richer field definitions (see [QUILL_DESIGN.md](QUILL_DESIGN.md))
 - **Multi-format Rendering**: Return both PDF and SVG in single render call
 - **Template Snippets**: Get partial templates for specific document sections
 - **Asset Management**: Tools to list and retrieve Quill assets
@@ -970,6 +995,15 @@ Dear Joe...
 ---
 
 ## Changelog
+
+### 2025-01-09 - Consistency Update with QUILL_DESIGN.md
+- Updated `get_quill_info` output to flatten metadata fields at top level (matching `[Quill]` section structure)
+- Updated schema extraction to reference `[fields]` section from Quill.toml instead of schema.json
+- Added explicit documentation about Quill structure from QUILL_DESIGN.md
+- Updated Python API Surface to document `quill.metadata` and `quill.field_schemas` structure
+- Updated QuillInfo data model to match flattened metadata structure
+- Removed schema.json references in favor of `[fields]` section in Quill.toml
+- Added cross-references to QUILL_DESIGN.md throughout the document
 
 ### 2024-10-09 - Consistency Update
 - Updated to reflect Extended YAML Metadata Standard (SCOPE/QUILL keys)
