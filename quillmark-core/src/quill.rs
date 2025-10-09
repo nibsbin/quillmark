@@ -278,10 +278,8 @@ pub struct Quill {
     pub name: String,
     /// Glue template file name
     pub glue_file: String,
-    /// Markdown template file name (optional)
-    pub template_file: Option<String>,
     /// Markdown template content (optional)
-    pub template: Option<String>,
+    pub example: Option<String>,
     /// Field schema documentation (optional)
     pub field_schemas: HashMap<String, serde_yaml::Value>,
     /// In-memory file system (tree structure)
@@ -478,7 +476,7 @@ impl Quill {
             name: quill_name,
             glue_file,
             template_file,
-            template: template_content_opt,
+            example: template_content_opt,
             field_schemas,
             files: root,
         };
@@ -995,8 +993,8 @@ example = "example.md"
         assert_eq!(quill.template_file, Some("example.md".to_string()));
 
         // Test that template content is loaded
-        assert!(quill.template.is_some());
-        let template = quill.template.unwrap();
+        assert!(quill.example.is_some());
+        let template = quill.example.unwrap();
         assert!(template.contains("title: Test"));
         assert!(template.contains("This is a test template"));
 
@@ -1023,7 +1021,7 @@ glue = "glue.typ"
 
         // Test that template fields are None
         assert_eq!(quill.template_file, None);
-        assert_eq!(quill.template, None);
+        assert_eq!(quill.example, None);
 
         // Test that glue template is still loaded
         assert_eq!(quill.glue_template, "glue content");
@@ -1112,7 +1110,7 @@ example = "template.md"
 
         // Validate template is loaded
         assert_eq!(quill.template_file, Some("template.md".to_string()));
-        assert_eq!(quill.template, Some(template_content.to_string()));
+        assert_eq!(quill.example, Some(template_content.to_string()));
     }
 
     #[test]
