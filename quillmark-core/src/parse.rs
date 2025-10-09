@@ -83,6 +83,8 @@
 
 use std::collections::HashMap;
 
+use crate::value::QuillValue;
+
 /// The field name used to store the document body
 pub const BODY_FIELD: &str = "body";
 
@@ -92,13 +94,13 @@ pub const QUILL_TAG: &str = "quill";
 /// A parsed markdown document with frontmatter
 #[derive(Debug, Clone)]
 pub struct ParsedDocument {
-    fields: HashMap<String, serde_yaml::Value>,
+    fields: HashMap<String, QuillValue>,
     quill_tag: Option<String>,
 }
 
 impl ParsedDocument {
     /// Create a new ParsedDocument with the given fields
-    pub fn new(fields: HashMap<String, serde_yaml::Value>) -> Self {
+    pub fn new(fields: HashMap<String, QuillValue>) -> Self {
         Self {
             fields,
             quill_tag: None,
@@ -121,12 +123,12 @@ impl ParsedDocument {
     }
 
     /// Get a specific field
-    pub fn get_field(&self, name: &str) -> Option<&serde_yaml::Value> {
+    pub fn get_field(&self, name: &str) -> Option<&QuillValue> {
         self.fields.get(name)
     }
 
     /// Get all fields (including body)
-    pub fn fields(&self) -> &HashMap<String, serde_yaml::Value> {
+    pub fn fields(&self) -> &HashMap<String, QuillValue> {
         &self.fields
     }
 }
@@ -394,7 +396,7 @@ pub fn decompose(
         // No metadata blocks, entire content is body
         fields.insert(
             BODY_FIELD.to_string(),
-            serde_yaml::Value::String(markdown.to_string()),
+            QuillValue::from_json(serde_json::Value::String(markdown.to_string())),
         );
         return Ok(ParsedDocument::new(fields));
     }
@@ -453,7 +455,10 @@ pub fn decompose(
             }
         }
 
-        fields.extend(yaml_fields);
+        // Convert YAML values to QuillValue at boundary
+        for (key, value) in yaml_fields {
+            fields.insert(key, QuillValue::from_yaml(value)?);
+        }
     }
 
     // Process blocks with quill directives
@@ -476,7 +481,10 @@ pub fn decompose(
                     }
                 }
 
-                fields.extend(yaml_fields);
+                // Convert YAML values to QuillValue at boundary
+                for (key, value) in yaml_fields {
+                    fields.insert(key, QuillValue::from_yaml(value)?);
+                }
             }
         }
     }
@@ -565,12 +573,13 @@ pub fn decompose(
 
     fields.insert(
         BODY_FIELD.to_string(),
-        serde_yaml::Value::String(global_body.to_string()),
+        QuillValue::from_json(serde_json::Value::String(global_body.to_string())),
     );
 
-    // Add all tagged collections to fields
+    // Add all tagged collections to fields (convert to QuillValue)
     for (tag_name, items) in tagged_attributes {
-        fields.insert(tag_name, serde_yaml::Value::Sequence(items));
+        let quill_value = QuillValue::from_yaml(serde_yaml::Value::Sequence(items))?;
+        fields.insert(tag_name, quill_value);
     }
 
     let mut parsed = ParsedDocument::new(fields);
@@ -708,19 +717,10 @@ Body of item 1."#;
         let items = doc.get_field("items").unwrap().as_sequence().unwrap();
         assert_eq!(items.len(), 1);
 
-        let item = items[0].as_mapping().unwrap();
+        let item = items[0].as_object().unwrap();
+        assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
         assert_eq!(
-            item.get(&serde_yaml::Value::String("name".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "Item 1"
-        );
-        assert_eq!(
-            item.get(&serde_yaml::Value::String("body".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
+            item.get("body").unwrap().as_str().unwrap(),
             "\nBody of item 1."
         );
     }
@@ -748,25 +748,11 @@ Second item body."#;
         let items = doc.get_field("items").unwrap().as_sequence().unwrap();
         assert_eq!(items.len(), 2);
 
-        let item1 = items[0].as_mapping().unwrap();
-        assert_eq!(
-            item1
-                .get(&serde_yaml::Value::String("name".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "Item 1"
-        );
+        let item1 = items[0].as_object().unwrap();
+        assert_eq!(item1.get("name").unwrap().as_str().unwrap(), "Item 1");
 
-        let item2 = items[1].as_mapping().unwrap();
-        assert_eq!(
-            item2
-                .get(&serde_yaml::Value::String("name".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "Item 2"
-        );
+        let item2 = items[1].as_object().unwrap();
+        assert_eq!(item2.get("name").unwrap().as_str().unwrap(), "Item 2");
     }
 
     #[test]
@@ -814,12 +800,9 @@ Body without metadata."#;
         let items = doc.get_field("items").unwrap().as_sequence().unwrap();
         assert_eq!(items.len(), 1);
 
-        let item = items[0].as_mapping().unwrap();
+        let item = items[0].as_object().unwrap();
         assert_eq!(
-            item.get(&serde_yaml::Value::String("body".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
+            item.get("body").unwrap().as_str().unwrap(),
             "\nBody without metadata."
         );
     }
@@ -836,14 +819,8 @@ name: Item
         let items = doc.get_field("items").unwrap().as_sequence().unwrap();
         assert_eq!(items.len(), 1);
 
-        let item = items[0].as_mapping().unwrap();
-        assert_eq!(
-            item.get(&serde_yaml::Value::String("body".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            ""
-        );
+        let item = items[0].as_object().unwrap();
+        assert_eq!(item.get("body").unwrap().as_str().unwrap(), "");
     }
 
     #[test]
@@ -972,12 +949,8 @@ Third"#;
         assert_eq!(items.len(), 3);
 
         for (i, item) in items.iter().enumerate() {
-            let mapping = item.as_mapping().unwrap();
-            let id = mapping
-                .get(&serde_yaml::Value::String("id".to_string()))
-                .unwrap()
-                .as_i64()
-                .unwrap();
+            let mapping = item.as_object().unwrap();
+            let id = mapping.get("id").unwrap().as_i64().unwrap();
             assert_eq!(id, (i + 1) as i64);
         }
     }
@@ -1049,45 +1022,20 @@ rating: 4
         let products = doc.get_field("products").unwrap().as_sequence().unwrap();
         assert_eq!(products.len(), 2);
 
-        let product1 = products[0].as_mapping().unwrap();
-        assert_eq!(
-            product1
-                .get(&serde_yaml::Value::String("name".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "Widget A"
-        );
-        assert_eq!(
-            product1
-                .get(&serde_yaml::Value::String("price".to_string()))
-                .unwrap()
-                .as_f64()
-                .unwrap(),
-            19.99
-        );
+        let product1 = products[0].as_object().unwrap();
+        assert_eq!(product1.get("name").unwrap().as_str().unwrap(), "Widget A");
+        assert_eq!(product1.get("price").unwrap().as_f64().unwrap(), 19.99);
 
         // Verify reviews collection
         let reviews = doc.get_field("reviews").unwrap().as_sequence().unwrap();
         assert_eq!(reviews.len(), 2);
 
-        let review1 = reviews[0].as_mapping().unwrap();
+        let review1 = reviews[0].as_object().unwrap();
         assert_eq!(
-            review1
-                .get(&serde_yaml::Value::String("product".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
+            review1.get("product").unwrap().as_str().unwrap(),
             "Widget A"
         );
-        assert_eq!(
-            review1
-                .get(&serde_yaml::Value::String("rating".to_string()))
-                .unwrap()
-                .as_i64()
-                .unwrap(),
-            5
-        );
+        assert_eq!(review1.get("rating").unwrap().as_i64().unwrap(), 5);
 
         // Total fields: title, author, date, body, products, reviews = 6
         assert_eq!(doc.fields().len(), 6);
@@ -1266,13 +1214,9 @@ mod demo_file_test {
         assert_eq!(use_cases.len(), 2);
 
         // Check first feature
-        let feature1 = features[0].as_mapping().unwrap();
+        let feature1 = features[0].as_object().unwrap();
         assert_eq!(
-            feature1
-                .get(&serde_yaml::Value::String("name".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
+            feature1.get("name").unwrap().as_str().unwrap(),
             "Tag Directives"
         );
     }

@@ -226,10 +226,10 @@ impl PyQuill {
 
     #[getter]
     fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        // Convert serde_yaml::Value to Python dict
+        // Convert QuillValue to Python dict
         let dict = PyDict::new(py);
         for (key, value) in &self.inner.metadata {
-            dict.set_item(key, yaml_value_to_py(py, value)?)?;
+            dict.set_item(key, quillvalue_to_py(py, value)?)?;
         }
         Ok(dict)
     }
@@ -239,9 +239,9 @@ impl PyQuill {
         // Convert field_schemas to Python dict
         let dict = PyDict::new(py);
         for (key, schema) in &self.inner.field_schemas {
-            // Convert FieldSchema to YAML value, then to Python
-            let yaml_value = schema.to_yaml_value();
-            dict.set_item(key, yaml_value_to_py(py, &yaml_value)?)?;
+            // Convert FieldSchema to QuillValue, then to Python
+            let quill_value = schema.to_quill_value();
+            dict.set_item(key, quillvalue_to_py(py, &quill_value)?)?;
         }
         Ok(dict)
     }
@@ -268,7 +268,7 @@ impl PyParsedDocument {
 
     fn get_field<'py>(&self, key: &str, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
         match self.inner.get_field(key) {
-            Some(value) => Ok(Some(yaml_value_to_py(py, value)?)),
+            Some(value) => Ok(Some(quillvalue_to_py(py, value)?)),
             None => Ok(None),
         }
     }
@@ -276,7 +276,7 @@ impl PyParsedDocument {
     fn fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         for (key, value) in self.inner.fields() {
-            dict.set_item(key, yaml_value_to_py(py, value)?)?;
+            dict.set_item(key, quillvalue_to_py(py, value)?)?;
         }
         Ok(dict)
     }
@@ -409,45 +409,46 @@ impl PyLocation {
     }
 }
 
-// Helper function to convert YAML values to Python objects
-fn yaml_value_to_py<'py>(
+// Helper function to convert QuillValue (backed by JSON) to Python objects
+fn quillvalue_to_py<'py>(
     py: Python<'py>,
-    value: &serde_yaml::Value,
+    value: &quillmark_core::QuillValue,
 ) -> PyResult<Bound<'py, PyAny>> {
-    match value {
-        // ✅ This yields a By-Value Bound<'py, PyAny> (no refs involved)
-        serde_yaml::Value::Null => py.None().into_bound_py_any(py),
+    json_to_py(py, value.as_json())
+}
 
-        // keep existing conversions:
-        serde_yaml::Value::Bool(b) => b.into_bound_py_any(py),
-        serde_yaml::Value::Number(n) => {
+// Helper function to convert JSON values to Python objects
+fn json_to_py<'py>(py: Python<'py>, value: &serde_json::Value) -> PyResult<Bound<'py, PyAny>> {
+    match value {
+        serde_json::Value::Null => py.None().into_bound_py_any(py),
+        serde_json::Value::Bool(b) => b.into_bound_py_any(py),
+        serde_json::Value::Number(n) => {
             if let Some(i) = n.as_i64() {
                 i.into_bound_py_any(py)
+            } else if let Some(u) = n.as_u64() {
+                u.into_bound_py_any(py)
             } else if let Some(f) = n.as_f64() {
                 f.into_bound_py_any(py)
             } else {
                 py.None().into_bound_py_any(py)
             }
         }
-        serde_yaml::Value::String(s) => s.as_str().into_bound_py_any(py),
-        serde_yaml::Value::Sequence(seq) => {
+        serde_json::Value::String(s) => s.as_str().into_bound_py_any(py),
+        serde_json::Value::Array(arr) => {
             let list = pyo3::types::PyList::empty(py);
-            for item in seq {
-                let val = yaml_value_to_py(py, item)?;
+            for item in arr {
+                let val = json_to_py(py, item)?;
                 list.append(val)?;
             }
             Ok(list.into_any())
         }
-        serde_yaml::Value::Mapping(map) => {
+        serde_json::Value::Object(map) => {
             let dict = pyo3::types::PyDict::new(py);
-            for (k, v) in map {
-                if let serde_yaml::Value::String(key) = k {
-                    let val = yaml_value_to_py(py, v)?;
-                    dict.set_item(key, val)?;
-                }
+            for (key, val) in map {
+                let py_val = json_to_py(py, val)?;
+                dict.set_item(key, py_val)?;
             }
             Ok(dict.into_any())
         }
-        serde_yaml::Value::Tagged(tagged) => yaml_value_to_py(py, &tagged.value),
     }
 }

@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
+use crate::value::QuillValue;
+
 /// Schema definition for a template field
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldSchema {
@@ -14,9 +16,9 @@ pub struct FieldSchema {
     /// Description of the field
     pub description: String,
     /// Example value for the field
-    pub example: Option<serde_yaml::Value>,
+    pub example: Option<QuillValue>,
     /// Default value for the field
-    pub default: Option<serde_yaml::Value>,
+    pub default: Option<QuillValue>,
 }
 
 impl FieldSchema {
@@ -31,35 +33,31 @@ impl FieldSchema {
         }
     }
 
-    /// Parse a FieldSchema from a serde_yaml::Value
-    pub fn from_yaml_value(value: &serde_yaml::Value) -> Result<Self, String> {
-        let mapping = value
-            .as_mapping()
-            .ok_or_else(|| "Field schema must be a mapping/object".to_string())?;
+    /// Parse a FieldSchema from a QuillValue
+    pub fn from_quill_value(value: &QuillValue) -> Result<Self, String> {
+        let obj = value
+            .as_object()
+            .ok_or_else(|| "Field schema must be an object".to_string())?;
 
-        let description = mapping
-            .get(&serde_yaml::Value::String("description".to_string()))
+        let description = obj
+            .get("description")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
 
-        let required = mapping
-            .get(&serde_yaml::Value::String("required".to_string()))
+        let required = obj
+            .get("required")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
-        let field_type = mapping
-            .get(&serde_yaml::Value::String("type".to_string()))
+        let field_type = obj
+            .get("type")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let example = mapping
-            .get(&serde_yaml::Value::String("example".to_string()))
-            .cloned();
+        let example = obj.get("example").map(|v| QuillValue::from_json(v.clone()));
 
-        let default = mapping
-            .get(&serde_yaml::Value::String("default".to_string()))
-            .cloned();
+        let default = obj.get("default").map(|v| QuillValue::from_json(v.clone()));
 
         Ok(Self {
             r#type: field_type,
@@ -70,42 +68,36 @@ impl FieldSchema {
         })
     }
 
-    /// Convert the FieldSchema to a serde_yaml::Value for serialization
-    pub fn to_yaml_value(&self) -> serde_yaml::Value {
-        let mut map = serde_yaml::Mapping::new();
+    /// Convert the FieldSchema to a QuillValue for serialization
+    pub fn to_quill_value(&self) -> QuillValue {
+        let mut map = serde_json::Map::new();
 
         map.insert(
-            serde_yaml::Value::String("description".to_string()),
-            serde_yaml::Value::String(self.description.clone()),
+            "description".to_string(),
+            serde_json::Value::String(self.description.clone()),
         );
 
         map.insert(
-            serde_yaml::Value::String("required".to_string()),
-            serde_yaml::Value::Bool(self.required),
+            "required".to_string(),
+            serde_json::Value::Bool(self.required),
         );
 
         if let Some(ref field_type) = self.r#type {
             map.insert(
-                serde_yaml::Value::String("type".to_string()),
-                serde_yaml::Value::String(field_type.clone()),
+                "type".to_string(),
+                serde_json::Value::String(field_type.clone()),
             );
         }
 
         if let Some(ref example) = self.example {
-            map.insert(
-                serde_yaml::Value::String("example".to_string()),
-                example.clone(),
-            );
+            map.insert("example".to_string(), example.as_json().clone());
         }
 
         if let Some(ref default) = self.default {
-            map.insert(
-                serde_yaml::Value::String("default".to_string()),
-                default.clone(),
-            );
+            map.insert("default".to_string(), default.as_json().clone());
         }
 
-        serde_yaml::Value::Mapping(map)
+        QuillValue::from_json(serde_json::Value::Object(map))
     }
 }
 
@@ -378,7 +370,7 @@ pub struct Quill {
     /// The template content
     pub glue_template: String,
     /// Quill-specific metadata
-    pub metadata: HashMap<String, serde_yaml::Value>,
+    pub metadata: HashMap<String, QuillValue>,
     /// Name of the quill
     pub name: String,
     /// Backend identifier (e.g., "typst")
@@ -479,9 +471,9 @@ impl Quill {
 
             if let Some(backend_val) = quill_section.get("backend").and_then(|v| v.as_str()) {
                 backend = backend_val.to_string();
-                match Self::toml_to_yaml_value(&toml::Value::String(backend_val.to_string())) {
-                    Ok(yaml_value) => {
-                        metadata.insert("backend".to_string(), yaml_value);
+                match QuillValue::from_toml(&toml::Value::String(backend_val.to_string())) {
+                    Ok(quill_value) => {
+                        metadata.insert("backend".to_string(), quill_value);
                     }
                     Err(e) => {
                         eprintln!("Warning: Failed to convert backend field: {}", e);
@@ -516,9 +508,9 @@ impl Quill {
                         && key != "example"
                         && key != "version"
                     {
-                        match Self::toml_to_yaml_value(value) {
-                            Ok(yaml_value) => {
-                                metadata.insert(key.clone(), yaml_value);
+                        match QuillValue::from_toml(value) {
+                            Ok(quill_value) => {
+                                metadata.insert(key.clone(), quill_value);
                             }
                             Err(e) => {
                                 eprintln!("Warning: Failed to convert field '{}': {}", key, e);
@@ -533,9 +525,9 @@ impl Quill {
         if let Some(typst_section) = quill_toml.get("typst") {
             if let toml::Value::Table(table) = typst_section {
                 for (key, value) in table {
-                    match Self::toml_to_yaml_value(value) {
-                        Ok(yaml_value) => {
-                            metadata.insert(format!("typst_{}", key), yaml_value);
+                    match QuillValue::from_toml(value) {
+                        Ok(quill_value) => {
+                            metadata.insert(format!("typst_{}", key), quill_value);
                         }
                         Err(e) => {
                             eprintln!("Warning: Failed to convert typst field '{}': {}", key, e);
@@ -549,8 +541,8 @@ impl Quill {
         if let Some(fields_section) = quill_toml.get("fields") {
             if let toml::Value::Table(fields_table) = fields_section {
                 for (field_name, field_schema) in fields_table {
-                    match Self::toml_to_yaml_value(field_schema) {
-                        Ok(yaml_value) => match FieldSchema::from_yaml_value(&yaml_value) {
+                    match QuillValue::from_toml(field_schema) {
+                        Ok(quill_value) => match FieldSchema::from_quill_value(&quill_value) {
                             Ok(schema) => {
                                 field_schemas.insert(field_name.clone(), schema);
                             }
@@ -704,22 +696,13 @@ impl Quill {
         Ok(FileTreeNode::Directory { files })
     }
 
-    /// Convert TOML value to YAML value
-    pub fn toml_to_yaml_value(
-        toml_val: &toml::Value,
-    ) -> Result<serde_yaml::Value, Box<dyn StdError + Send + Sync>> {
-        let json_val = serde_json::to_value(toml_val)?;
-        let yaml_val = serde_yaml::to_value(json_val)?;
-        Ok(yaml_val)
-    }
-
     /// Get the list of typst packages to download, if specified in Quill.toml
     pub fn typst_packages(&self) -> Vec<String> {
         self.metadata
             .get("typst_packages")
-            .and_then(|v| v.as_sequence())
-            .map(|seq| {
-                seq.iter()
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
                     .filter_map(|v| v.as_str().map(|s| s.to_string()))
                     .collect()
             })
@@ -1637,45 +1620,28 @@ example: "Example value"
 default: "Default value"
 "#;
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml_str).unwrap();
-        let schema2 = FieldSchema::from_yaml_value(&yaml_value).unwrap();
+        let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
+        let schema2 = FieldSchema::from_quill_value(&quill_value).unwrap();
         assert_eq!(schema2.description, "Full field schema");
         assert_eq!(schema2.required, true);
         assert_eq!(schema2.r#type, Some("string".to_string()));
         assert_eq!(
-            schema2.example,
-            Some(serde_yaml::Value::String("Example value".to_string()))
+            schema2.example.as_ref().and_then(|v| v.as_str()),
+            Some("Example value")
         );
         assert_eq!(
-            schema2.default,
-            Some(serde_yaml::Value::String("Default value".to_string()))
+            schema2.default.as_ref().and_then(|v| v.as_str()),
+            Some("Default value")
         );
 
-        // Test converting FieldSchema back to YAML
-        let yaml_value = schema2.to_yaml_value();
-        let mapping = yaml_value.as_mapping().unwrap();
+        // Test converting FieldSchema back to QuillValue
+        let quill_value = schema2.to_quill_value();
+        let obj = quill_value.as_object().unwrap();
         assert_eq!(
-            mapping
-                .get(&serde_yaml::Value::String("description".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
+            obj.get("description").unwrap().as_str().unwrap(),
             "Full field schema"
         );
-        assert_eq!(
-            mapping
-                .get(&serde_yaml::Value::String("required".to_string()))
-                .unwrap()
-                .as_bool()
-                .unwrap(),
-            true
-        );
-        assert_eq!(
-            mapping
-                .get(&serde_yaml::Value::String("type".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "string"
-        );
+        assert_eq!(obj.get("required").unwrap().as_bool().unwrap(), true);
+        assert_eq!(obj.get("type").unwrap().as_str().unwrap(), "string");
     }
 }

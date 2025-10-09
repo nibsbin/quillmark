@@ -46,7 +46,7 @@ pub struct Quill {
     pub glue_template: String,
 
     /// Quill-specific metadata from Quill.toml
-    pub metadata: HashMap<String, serde_yaml::Value>,  
+    pub metadata: HashMap<String, QuillValue>,  
 
     /// Name of the quill
     pub name: String,
@@ -61,7 +61,7 @@ pub struct Quill {
     pub template: Option<String>,
 
     /// Field schema documentation from [fields] section (optional)
-    pub field_schemas: HashMap<String, serde_yaml::Value>,
+    pub field_schemas: HashMap<String, FieldSchema>,
 
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
@@ -227,7 +227,7 @@ async function buildQuillFromUpload(files: File[]): Promise<object> {
 
 ### Metadata Storage
 
-Metadata is stored in the `Quill` struct as `HashMap<String, serde_yaml::Value>`, extracted from the `[Quill]` section of `Quill.toml`. All metadata from the TOML is preserved and can include standard fields like `name`, `backend`, `glue`, `example`, as well as custom fields.
+Metadata is stored in the `Quill` struct as `HashMap<String, QuillValue>`, extracted from the `[Quill]` section of `Quill.toml`. TOML values are converted to `QuillValue` at the parsing boundary. All metadata from the TOML is preserved and can include standard fields like `name`, `backend`, `glue`, `example`, as well as custom fields.
 
 ### Quill.toml Structure
 

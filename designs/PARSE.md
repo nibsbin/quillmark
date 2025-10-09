@@ -22,7 +22,7 @@ Quillmark uses a **frontmatter-aware markdown parser** that separates YAML metad
 
 The parser decomposes markdown documents into two distinct components:
 
-- **Frontmatter fields**: YAML key-value pairs accessible via `HashMap<String, serde_yaml::Value>`
+- **Frontmatter fields**: YAML key-value pairs converted to `QuillValue` and accessible via `HashMap<String, QuillValue>`
 - **Body content**: Raw markdown text stored under the reserved `BODY_FIELD` constant
 
 This separation allows:
@@ -53,7 +53,7 @@ Only YAML frontmatter is supported - no TOML or JSON alternatives. This constrai
 
 ```rust
 pub struct ParsedDocument {
-    fields: HashMap<String, serde_yaml::Value>,
+    fields: HashMap<String, QuillValue>,
 }
 ```
 
@@ -63,11 +63,12 @@ pub struct ParsedDocument {
 - Single `HashMap` stores all document data uniformly
 - Body is stored under special `BODY_FIELD = "body"` constant
 - Private fields enforce access through validated methods
+- YAML is parsed and immediately converted to `QuillValue` at the boundary
 
 **Public API:**
 - `new(fields)` - Constructor accepting pre-populated field map
 - `body()` - Returns `Option<&str>` for document body
-- `get_field(name)` - Returns `Option<&serde_yaml::Value>` for any field
+- `get_field(name)` - Returns `Option<&QuillValue>` for any field
 - `fields()` - Returns reference to entire field map
 
 ### BODY_FIELD Constant
@@ -217,9 +218,10 @@ Body
 ```
 
 **Behavior**: Full YAML support including:
-- Nested maps (accessed via `serde_yaml::Value` API)
+- Nested maps (accessed via `QuillValue` API, backed by JSON)
 - Sequences/arrays
 - All YAML scalar types (strings, numbers, booleans)
+- YAML is converted to JSON at the parsing boundary for uniform handling
 
 ### 5. Line Ending Considerations
 
@@ -763,16 +765,17 @@ This approach maintains backward compatibility while providing clear disambiguat
 #### Extended ParsedDocument
 
 ```rust
-// Conceptual structure (not implemented)
+// Conceptual structure
 pub struct ParsedDocument {
-    fields: HashMap<String, serde_yaml::Value>,
+    fields: HashMap<String, QuillValue>,
 }
 ```
 
 **Internal representation:**
 - Global fields and arrays stored in same `HashMap`
-- Scoped collections represented as `serde_yaml::Value::Sequence`
-- Each array element is a `serde_yaml::Value::Mapping` with fields + body
+- Scoped collections represented as JSON arrays (via `QuillValue`)
+- Each array element is a JSON object with fields + body
+- YAML is converted to `QuillValue` at the parsing boundary
 
 **Access patterns:**
 ```rust

@@ -1802,7 +1802,7 @@ dependencies = [
  "pyo3",
  "quillmark",
  "quillmark-core",
- "serde_yaml",
+ "serde_json",
 ]
 
 [[package]]

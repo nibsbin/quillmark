@@ -59,3 +59,6 @@ pub use types::{Artifact, OutputFormat, RenderOptions};
 
 pub mod quill;
 pub use quill::{FieldSchema, FileTreeNode, Quill, QuillIgnore};
+
+pub mod value;
+pub use value::QuillValue;
