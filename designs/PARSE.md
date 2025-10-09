@@ -8,8 +8,8 @@ Quillmark uses a **frontmatter-aware markdown parser** that separates YAML metad
 
 **Key capabilities:**
 - Parse YAML frontmatter delimited by `---` markers
-- **NEW**: Support inline metadata sections with tag directives (Extended YAML Metadata Standard)
-- **NEW**: Aggregate tagged blocks into collections (arrays of objects)
+- **NEW**: Support inline metadata sections with SCOPE/QUILL keys (Extended YAML Metadata Standard)
+- **NEW**: Aggregate scoped blocks into collections (arrays of objects)
 - Extract frontmatter fields into a structured `HashMap`
 - Preserve markdown body content separately
 - Robust error handling with descriptive messages
@@ -101,10 +101,11 @@ pub fn decompose(
    - Check if opening `---` is followed by content → metadata block (parse)
    - Validate contiguity (no blank lines within YAML content)
 
-3. **Tag directive extraction**
-   - If first line after opening `---` starts with `!` → tagged block
-   - Extract tag name and validate pattern `[a-z_][a-z0-9_]*`
-   - If no tag directive → global frontmatter
+3. **Scope/Quill key extraction**
+   - Parse YAML content to check for special keys `SCOPE` or `QUILL`
+   - If `SCOPE` key present → tagged block (value becomes collection name)
+   - If `QUILL` key present → quill specification block
+   - If neither present → global frontmatter
 
 4. **YAML parsing**
    - Parse YAML content with `serde_yaml::from_str`
@@ -135,18 +136,18 @@ pub fn decompose(
 
 **`find_metadata_blocks()`**
 
-Scans the document and returns a list of all metadata blocks with their positions, content, and optional tag directives.
+Scans the document and returns a list of all metadata blocks with their positions, content, and optional scope/quill keys.
 
 **Key logic:**
 - Pattern matching for `---\n` and `---\r\n`
 - Blank line detection (opening `---` followed by `\n` or `\r\n` → horizontal rule)
 - Contiguity validation (content between delimiters must have no blank lines)
 - End-of-file delimiter support (closing `---` at EOF without trailing newline)
-- Tag directive parsing (first line starting with `!`)
+- SCOPE/QUILL key extraction from parsed YAML
 
 **`is_valid_tag_name()`**
 
-Validates tag names against the pattern `[a-z_][a-z0-9_]*`:
+Validates scope names against the pattern `[a-z_][a-z0-9_]*`:
 - Must start with lowercase letter or underscore
 - Remaining chars must be lowercase letters, digits, or underscores
 
@@ -155,13 +156,14 @@ Validates tag names against the pattern `[a-z_][a-z0-9_]*`:
 The implementation provides specific, actionable error messages:
 
 - `"Invalid YAML frontmatter: {error}"` - YAML parser rejected frontmatter
-- `"Invalid YAML in tagged block '{tag}': {error}"` - YAML parser rejected tagged block
+- `"Invalid YAML in scoped block '{scope}': {error}"` - YAML parser rejected scoped block
 - `"Frontmatter started but not closed with ---"` - Missing closing delimiter
-- `"Multiple global frontmatter blocks found: only one untagged block allowed"` - Duplicate frontmatter
-- `"Invalid tag name '{name}': must match pattern [a-z_][a-z0-9_]*"` - Invalid tag syntax
-- `"Cannot use reserved field name '{name}' as tag directive"` - Protected field name
-- `"Name collision: global field '{name}' conflicts with tagged attribute"` - Field/tag conflict
-- `"Name collision: tagged attribute '{name}' conflicts with global field"` - Tag/field conflict
+- `"Multiple global frontmatter blocks found: only one block without SCOPE allowed"` - Duplicate frontmatter
+- `"Invalid scope name '{name}': must match pattern [a-z_][a-z0-9_]*"` - Invalid scope syntax
+- `"Cannot use reserved field name '{name}' as SCOPE value"` - Protected field name
+- `"Name collision: global field '{name}' conflicts with scoped attribute"` - Field/scope conflict
+- `"Name collision: scoped attribute '{name}' conflicts with global field"` - Scope/field conflict
+- `"Cannot specify both QUILL and SCOPE in the same block"` - Conflicting special keys
 
 ## Edge Cases and Behavior
 
@@ -304,23 +306,23 @@ The test suite in `parse.rs` provides comprehensive coverage:
 - `test_complex_yaml_frontmatter` - Nested structures and arrays
 
 ### 2. Extended Metadata Standard Cases
-- `test_basic_tagged_block` - Single tagged block with metadata and body
-- `test_multiple_tagged_blocks` - Multiple blocks with same tag (array creation)
-- `test_mixed_global_and_tagged` - Global frontmatter combined with tagged blocks
-- `test_empty_tagged_metadata` - Tagged block with no YAML fields
-- `test_tagged_block_without_body` - Tagged block with no body content
+- `test_basic_tagged_block` - Single scoped block with metadata and body
+- `test_multiple_tagged_blocks` - Multiple blocks with same SCOPE (array creation)
+- `test_mixed_global_and_tagged` - Global frontmatter combined with scoped blocks
+- `test_empty_tagged_metadata` - Scoped block with no YAML fields
+- `test_tagged_block_without_body` - Scoped block with no body content
 - `test_adjacent_blocks_different_tags` - Multiple different collections
 - `test_order_preservation` - Verify array maintains document order
-- `test_complex_yaml_in_tagged_block` - Nested YAML within tagged blocks
+- `test_complex_yaml_in_tagged_block` - Nested YAML within scoped blocks
 
 ### 3. Error Cases
 - `test_invalid_yaml` - Malformed YAML syntax in frontmatter
-- `test_invalid_yaml_in_tagged_block` - Malformed YAML in tagged block
+- `test_invalid_yaml_in_tagged_block` - Malformed YAML in scoped block
 - `test_unclosed_frontmatter` - Missing closing delimiter
-- `test_multiple_global_frontmatter_blocks` - Multiple untagged blocks (error)
-- `test_name_collision_global_and_tagged` - Field/tag name conflicts
-- `test_reserved_field_name` - Using `body` as tag directive
-- `test_invalid_tag_syntax` - Invalid tag names (uppercase, hyphens, etc.)
+- `test_multiple_global_frontmatter_blocks` - Multiple blocks without SCOPE (error)
+- `test_name_collision_global_and_tagged` - Field/scope name conflicts
+- `test_reserved_field_name` - Using `body` as SCOPE value
+- `test_invalid_tag_syntax` - Invalid scope names (uppercase, hyphens, etc.)
 
 ### 4. Horizontal Rule Disambiguation Cases
 - `test_horizontal_rule_disambiguation` - `---` with blank line before it in body
@@ -417,7 +419,7 @@ The current single-frontmatter design limits documents to a flat metadata struct
 
 ### Design Overview
 
-The extended standard allows metadata blocks to appear anywhere in the document using a **tag directive** syntax:
+The extended standard allows metadata blocks to appear anywhere in the document using **SCOPE** and **QUILL** special keys:
 
 ```markdown
 ---
@@ -428,7 +430,7 @@ author: John Doe
 This is the main document body.
 
 ---
-!sub_documents
+SCOPE: sub_documents
 title: First Sub-Document
 tags: [example, demo]
 ---
@@ -436,7 +438,7 @@ tags: [example, demo]
 Body of the *first sub-document* with **markdown formatting**.
 
 ---
-!sub_documents
+SCOPE: sub_documents
 title: Second Sub-Document
 tags: [test]
 ---
@@ -468,14 +470,15 @@ Body of the second sub-document.
 
 ### Syntax Specification
 
-#### 1. Tag Directive Format
+#### 1. SCOPE/QUILL Key Format
 
 **Grammar:**
 ```
-metadata_block ::= "---" NEWLINE tag_directive? yaml_content "---" NEWLINE body_content
-tag_directive ::= "!" attribute_name NEWLINE
-attribute_name ::= [a-z_][a-z0-9_]*
+metadata_block ::= "---" NEWLINE yaml_content "---" NEWLINE body_content
 yaml_content ::= (yaml_line NEWLINE)+  // No blank lines allowed
+scope_key ::= "SCOPE: " scope_name
+quill_key ::= "QUILL: " quill_name
+scope_name ::= [a-z_][a-z0-9_]*
 ```
 
 **Disambiguation from markdown horizontal rules:**
@@ -484,17 +487,20 @@ yaml_content ::= (yaml_line NEWLINE)+  // No blank lines allowed
 - This ensures clear distinction between YAML metadata and markdown syntax
 
 **Rules:**
-- Tag directive MUST appear on the first line after opening `---`
-- Tag directive MUST start with `!` followed by the attribute name
-- Attribute name MUST be a valid YAML key (lowercase letters, digits, underscores)
-- Attribute name MUST NOT be a reserved field (e.g., `body`)
-- If no tag directive is present, the block is treated as global frontmatter
-- YAML metadata blocks (both frontmatter and tagged) are parsed with identical rules and rigor
-- Frontmatter fields are stored in global scope; tagged fields are stored in arrays under the tag name
+- The YAML content is parsed normally
+- If a `SCOPE` key is found in the parsed YAML, the block becomes a scoped collection item
+- If a `QUILL` key is found, it specifies which quill template to use
+- A block MUST NOT contain both `SCOPE` and `QUILL` keys
+- Scope name MUST be a valid identifier (lowercase letters, digits, underscores)
+- Scope name MUST NOT be a reserved field (e.g., `body`)
+- If neither `SCOPE` nor `QUILL` is present, the block is treated as global frontmatter
+- YAML metadata blocks (both frontmatter and scoped) are parsed with identical rules and rigor
+- Frontmatter fields are stored in global scope; scoped fields are stored in arrays under the scope name
+- The `SCOPE` and `QUILL` keys are removed from the final metadata after processing
 
 #### 2. Body Content Extraction
 
-For tagged metadata blocks:
+For scoped metadata blocks:
 - **Body starts**: Immediately after the closing `---` delimiter
 - **Body ends**: At the start of the next metadata block OR end of document
 - **Body trimming**: Leading/trailing whitespace handling follows same rules as global body
@@ -503,7 +509,7 @@ For tagged metadata blocks:
 
 ```markdown
 ---
-!items
+SCOPE: items
 name: Item 1
 ---
 
@@ -511,7 +517,7 @@ Content for item 1.
 Next paragraph.
 
 ---
-!items
+SCOPE: items
 name: Item 2
 ---
 
@@ -524,14 +530,14 @@ Item 2 body: `"Content for item 2."`
 #### 3. Collection Semantics
 
 **Array aggregation:**
-- All tagged blocks with the same attribute name are collected into an array
+- All scoped blocks with the same scope name are collected into an array
 - Array preserves document order
 - Each entry is an object containing metadata fields + body
 
-**Global vs. tagged:**
-- First block without tag directive → global frontmatter
-- Subsequent untagged blocks → error (only one global frontmatter allowed)
-- Tagged blocks can appear before or after global frontmatter body
+**Global vs. scoped:**
+- First block without SCOPE/QUILL key → global frontmatter
+- Subsequent blocks without SCOPE/QUILL → error (only one global frontmatter allowed)
+- Scoped blocks can appear before or after global frontmatter body
 
 ### Parsing Algorithm
 
@@ -539,22 +545,23 @@ Item 2 body: `"Content for item 2."`
 
 1. **Scan document for all `---` delimiters**
    - Track positions of opening/closing pairs
-   - Identify tag directives
    - Check for contiguity: validate no blank lines between opening `---` and closing `---`
    - Distinguish metadata blocks from horizontal rules (metadata blocks are contiguous)
 
 2. **Parse global frontmatter** (if present)
-   - First contiguous block without tag directive
-   - Extract YAML fields into global map with same parsing rules as tagged blocks
+   - First contiguous block without SCOPE/QUILL key
+   - Extract YAML fields into global map
    - Extract body up to next metadata block (or EOF)
 
-3. **Parse tagged metadata blocks**
-   - For each tagged block:
+3. **Parse scoped metadata blocks**
+   - For each block:
      - Verify block is contiguous (no blank lines in YAML content)
-     - Extract attribute name from tag directive
-     - Parse YAML content with same rigor as frontmatter YAML
+     - Parse YAML content
+     - Check for SCOPE or QUILL key
+     - Extract scope name from SCOPE value
+     - Remove SCOPE/QUILL key from the metadata
      - Extract body content up to next block
-     - Append to array under attribute name
+     - Append to array under scope name
 
 4. **Assemble final structure**
    - Merge global fields with tagged arrays
@@ -578,13 +585,13 @@ author: Second
 More body
 ```
 
-**Behavior**: ERROR - Only one untagged frontmatter block allowed.
+**Behavior**: ERROR - Only one block without SCOPE/QUILL allowed.
 
-#### 2. Empty Tagged Block
+#### 2. Empty Scoped Block
 
 ```markdown
 ---
-!items
+SCOPE: items
 ---
 
 Body content
@@ -592,11 +599,11 @@ Body content
 
 **Behavior**: Valid - creates entry with empty metadata and specified body.
 
-#### 3. Tagged Block Without Body
+#### 3. Scoped Block Without Body
 
 ```markdown
 ---
-!items
+SCOPE: items
 name: Item
 ---
 ```
@@ -613,49 +620,49 @@ items: "global value"
 Body
 
 ---
-!items
+SCOPE: items
 name: Sub-item
 ---
 
 Sub-body
 ```
 
-**Behavior**: ERROR - Tagged attribute name conflicts with global field.
+**Behavior**: ERROR - Scoped attribute name conflicts with global field.
 
 #### 5. Reserved Field Names
 
 ```markdown
 ---
-!body
+SCOPE: body
 content: Test
 ---
 ```
 
-**Behavior**: ERROR - Cannot use reserved field name `body` as tag directive.
+**Behavior**: ERROR - Cannot use reserved field name `body` as SCOPE value.
 
-#### 6. Invalid Tag Syntax
+#### 6. Invalid Scope Syntax
 
 ```markdown
 ---
-!Invalid-Name
+SCOPE: Invalid-Name
 title: Test
 ---
 ```
 
-**Behavior**: ERROR - Tag names must follow `[a-z_][a-z0-9_]*` pattern.
+**Behavior**: ERROR - Scope names must follow `[a-z_][a-z0-9_]*` pattern.
 
-#### 7. Nested Tagged Blocks
+#### 7. Nested Scoped Blocks
 
 ```markdown
 ---
-!outer
+SCOPE: outer
 title: Outer
 ---
 
 Body with nested:
 
 ---
-!inner
+SCOPE: inner
 title: Inner
 ---
 ```
@@ -686,7 +693,7 @@ More body content
 **Valid metadata block (contiguous):**
 ```markdown
 ---
-!items
+SCOPE: items
 name: Product
 price: 99.99
 ---
@@ -697,7 +704,7 @@ Body for this item
 ```markdown
 ---
 
-!items
+SCOPE: items
 name: Product
 ---
 ```
@@ -732,7 +739,7 @@ Introduction paragraph.
 This uses asterisks for a horizontal rule.
 
 ---
-!sections
+SCOPE: sections
 title: Section 1
 ---
 
@@ -742,7 +749,7 @@ ___
 Another horizontal rule using underscores.
 
 ---
-!sections  
+SCOPE: sections  
 title: Section 2
 ---
 
@@ -764,7 +771,7 @@ pub struct ParsedDocument {
 
 **Internal representation:**
 - Global fields and arrays stored in same `HashMap`
-- Tagged collections represented as `serde_yaml::Value::Sequence`
+- Scoped collections represented as `serde_yaml::Value::Sequence`
 - Each array element is a `serde_yaml::Value::Mapping` with fields + body
 
 **Access patterns:**
@@ -772,7 +779,7 @@ pub struct ParsedDocument {
 // Access global field
 doc.get_field("title")
 
-// Access tagged collection
+// Access scoped collection
 doc.get_field("sub_documents")
     .and_then(|v| v.as_sequence())
     
@@ -789,13 +796,13 @@ if let Some(seq) = doc.get_field("items").and_then(|v| v.as_sequence()) {
 
 **Guarantees:**
 - Documents with only global frontmatter parse identically
-- No tag directive means no behavior change
+- No SCOPE/QUILL keys means no behavior change
 - Existing ParsedDocument API remains unchanged
 
 **Migration path:**
 - Old documents continue to work without modification
-- New documents can opt-in by using tag directives
-- Templates can check for presence of tagged arrays with `get_field()`
+- New documents can opt-in by using SCOPE/QUILL keys
+- Templates can check for presence of scoped arrays with `get_field()`
 
 ### Performance Considerations
 
@@ -811,18 +818,18 @@ if let Some(seq) = doc.get_field("items").and_then(|v| v.as_sequence()) {
 ### Security Considerations
 
 **Potential issues:**
-1. **Deep nesting**: While not structurally nested, many tagged blocks could create large arrays
+1. **Deep nesting**: While not structurally nested, many scoped blocks could create large arrays
    - **Mitigation**: Add configurable limit on array size per attribute
 
-2. **Tag name injection**: Malicious tag names could conflict with template variables
-   - **Mitigation**: Strict validation of tag names (already in spec)
+2. **Scope name injection**: Malicious scope names could conflict with template variables
+   - **Mitigation**: Strict validation of scope names (already in spec)
 
-3. **Body content isolation**: Tagged bodies might contain metadata-like syntax
+3. **Body content isolation**: Scoped bodies might contain metadata-like syntax
    - **Mitigation**: Bodies are treated as opaque strings (no recursive parsing)
 
 ### Template Integration
 
-Templates can leverage tagged collections using standard iteration:
+Templates can leverage scoped collections using standard iteration:
 
 ```typst
 // Typst template example
@@ -840,18 +847,18 @@ Templates can leverage tagged collections using standard iteration:
 
 When implementing, the following test cases must be covered:
 
-1. **Basic tagged block**: Single tag directive with metadata and body
-2. **Multiple instances**: Same tag directive used multiple times
-3. **Mixed global and tagged**: Global frontmatter + tagged blocks
-4. **Empty metadata**: Tagged block with no YAML fields
-5. **Empty body**: Tagged block with no body content
-6. **Adjacent blocks**: Back-to-back tagged blocks with different tags
+1. **Basic scoped block**: Single SCOPE key with metadata and body
+2. **Multiple instances**: Same SCOPE key used multiple times
+3. **Mixed global and scoped**: Global frontmatter + scoped blocks
+4. **Empty metadata**: Scoped block with no YAML fields
+5. **Empty body**: Scoped block with no body content
+6. **Adjacent blocks**: Back-to-back scoped blocks with different scopes
 7. **Order preservation**: Verify array maintains document order
-8. **Error: multiple global**: Second untagged block should fail
-9. **Error: name collision**: Tagged name conflicts with global field
-10. **Error: reserved name**: Using `body` as tag directive
-11. **Error: invalid syntax**: Malformed tag directives
-12. **Complex YAML**: Nested structures within tagged metadata
+8. **Error: multiple global**: Second block without SCOPE/QUILL should fail
+9. **Error: name collision**: Scope name conflicts with global field
+10. **Error: reserved name**: Using `body` as SCOPE value
+11. **Error: invalid syntax**: Malformed scope names
+12. **Complex YAML**: Nested structures within scoped metadata
 13. **Cross-platform**: Line ending variations (`\n` vs `\r\n`)
 14. **Horizontal rule disambiguation**: `---` with blank line before it in body is horizontal rule, not metadata
 15. **Non-contiguous block**: Blank line between opening `---` and YAML content should error or be treated as horizontal rule
@@ -859,19 +866,19 @@ When implementing, the following test cases must be covered:
 
 ### Open Design Questions
 
-1. **Hierarchical nesting**: Should tagged blocks support parent-child relationships?
+1. **Hierarchical nesting**: Should scoped blocks support parent-child relationships?
    - Current design: No nesting, all collections are flat
-   - Alternative: Allow `!parent.child` syntax for nested structures
+   - Alternative: Allow dotted scope names for nested structures
 
-2. **Body concatenation**: Should adjacent same-tag blocks merge bodies?
+2. **Body concatenation**: Should adjacent same-scope blocks merge bodies?
    - Current design: No, each creates separate array entry
    - Alternative: Concatenate bodies if metadata is identical
 
-3. **Global body placement**: Where does global body end when tagged blocks present?
-   - Current design: Up to first tagged block
+3. **Global body placement**: Where does global body end when scoped blocks present?
+   - Current design: Up to first scoped block
    - Alternative: Only content before first `---` after frontmatter
 
-4. **Type coercion**: Should single tagged block create array or object?
+4. **Type coercion**: Should single scoped block create array or object?
    - Current design: Always creates array for consistency
    - Alternative: Single item → object, multiple → array
 

@@ -64,7 +64,7 @@ High-level data flow:
 ### `quillmark-core` (foundations)
 
 * Types: `Backend`, `Artifact`, `OutputFormat`
-* Parsing: `ParsedDocument` with `from_markdown()` constructor (internal `decompose` function)
+* Parsing: `ParsedDocument` with `from_markdown()` constructor; `decompose()` function for direct parsing
 * Templating: `Glue` + stable `filter_api`
 * Template model: `Quill` (+ `Quill.toml`)
 * **Errors & Diagnostics:** `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
@@ -460,28 +460,32 @@ Quillmark supports advanced markdown parsing with both traditional frontmatter a
 
 ### Extended YAML Metadata Standard (Implemented)
 
-The parser now supports **inline metadata sections** throughout documents using tag directives:
+The parser now supports **inline metadata sections** throughout documents using SCOPE/QUILL keys:
 
-* **Tag Directive Syntax**: Use `!attribute_name` after opening `---` to create collections
-* **Collection Aggregation**: Multiple blocks with same tag → array of objects
+* **SCOPE/QUILL Keys**: Use `SCOPE: attribute_name` or `QUILL: quill_name` within YAML to create collections or specify templates
+* **Collection Aggregation**: Multiple blocks with same SCOPE → array of objects
 * **Horizontal Rule Disambiguation**: Smart detection distinguishes metadata blocks from markdown `---` horizontal rules
 * **Contiguity Validation**: Metadata blocks must be contiguous (no blank lines within YAML content)
-* **Validation**: Tag names match `[a-z_][a-z0-9_]*` pattern; reserved name protection; name collision detection
+* **Validation**: Scope names match `[a-z_][a-z0-9_]*` pattern; reserved name protection; name collision detection
 
 **Grammar:**
 ```
-metadata_block ::= "---" NEWLINE tag_directive? yaml_content "---" NEWLINE body_content
-tag_directive ::= "!" attribute_name NEWLINE
-attribute_name ::= [a-z_][a-z0-9_]*
+metadata_block ::= "---" NEWLINE yaml_content "---" NEWLINE body_content
 yaml_content ::= (yaml_line NEWLINE)+  // No blank lines allowed
+scope_key ::= "SCOPE: " scope_name
+quill_key ::= "QUILL: " quill_name
+scope_name ::= [a-z_][a-z0-9_]*
 ```
 
 **Key Rules:**
-* Tag directive MUST appear on first line after opening `---` (if present)
-* If no tag directive, block is treated as global frontmatter
+* The YAML content is parsed normally
+* If a `SCOPE` key is found, the block becomes a scoped collection item
+* If a `QUILL` key is found, it specifies which quill template to use
+* If neither key is present, block is treated as global frontmatter
 * Metadata blocks MUST be contiguous - `---` followed by blank line is treated as horizontal rule
-* YAML parsing uses same rigor for both frontmatter and tagged blocks
+* YAML parsing uses same rigor for both frontmatter and scoped blocks
 * Body content preserves all whitespace (including leading/trailing)
+* The `SCOPE` and `QUILL` keys are removed from the final metadata after processing
 
 **Example:**
 
@@ -492,7 +496,7 @@ title: Product Catalog
 Main description.
 
 ---
-!products
+SCOPE: products
 name: Widget
 price: 19.99
 ---
@@ -502,13 +506,13 @@ Widget description.
 Parses to structured data with a `products` array containing objects with metadata fields and body content.
 
 **Collection Semantics:**
-* All tagged blocks with the same attribute name → aggregated into array
+* All scoped blocks with the same scope name → aggregated into array
 * Array preserves document order
 * Each entry is an object containing metadata fields + `body` field
 * Global frontmatter fields stored at top level
-* Only one global frontmatter block allowed (subsequent untagged blocks error)
+* Only one global frontmatter block allowed (subsequent blocks without SCOPE/QUILL error)
 
-**Error posture:** Fail-fast for malformed YAML to prevent silent data corruption; clear error messages for invalid tag syntax or name collisions.
+**Error posture:** Fail-fast for malformed YAML to prevent silent data corruption; clear error messages for invalid scope syntax or name collisions.
 
 **See `designs/PARSE.md` for comprehensive documentation of the Extended YAML Metadata Standard.**
 
@@ -844,11 +848,18 @@ pub enum RenderError {
 ```rust
 impl From<minijinja::Error> for RenderError {
     fn from(e: minijinja::Error) -> Self {
-        let loc = e.line().map(|line| Location {
-            file: e.name().unwrap_or("template").to_string(),
-            line: line as u32,
-            col: 0, // MiniJinja doesn't provide column info
+        // Extract location with proper range information
+        let loc = e.line().map(|line| {
+            Location {
+                file: e.name().unwrap_or("template").to_string(),
+                line: line as u32,
+                // MiniJinja provides range, extract approximate column
+                col: e.range().map(|r| r.start as u32).unwrap_or(0),
+            }
         });
+
+        // Generate helpful hints based on error kind
+        let hint = generate_minijinja_hint(&e);
 
         let diag = Diagnostic {
             severity: Severity::Error,
@@ -856,7 +867,7 @@ impl From<minijinja::Error> for RenderError {
             message: e.to_string(),
             primary: loc,
             related: vec![],
-            hint: None,
+            hint,
         };
 
         RenderError::TemplateFailed { source: e, diag }
