@@ -68,13 +68,6 @@ impl FieldSchema {
         })
     }
 
-    /// Parse a FieldSchema from a serde_yaml::Value (for backwards compatibility during migration)
-    pub fn from_yaml_value(value: &serde_yaml::Value) -> Result<Self, String> {
-        let quill_value = QuillValue::from_yaml(value.clone())
-            .map_err(|e| format!("Failed to convert YAML to QuillValue: {}", e))?;
-        Self::from_quill_value(&quill_value)
-    }
-
     /// Convert the FieldSchema to a QuillValue for serialization
     pub fn to_quill_value(&self) -> QuillValue {
         let mut map = serde_json::Map::new();
@@ -105,12 +98,6 @@ impl FieldSchema {
         }
 
         QuillValue::from_json(serde_json::Value::Object(map))
-    }
-
-    /// Convert the FieldSchema to a serde_yaml::Value for serialization (for backwards compatibility)
-    pub fn to_yaml_value(&self) -> serde_yaml::Value {
-        let quill_value = self.to_quill_value();
-        serde_yaml::to_value(quill_value.as_json()).unwrap_or(serde_yaml::Value::Null)
     }
 }
 
@@ -1633,7 +1620,8 @@ example: "Example value"
 default: "Default value"
 "#;
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml_str).unwrap();
-        let schema2 = FieldSchema::from_yaml_value(&yaml_value).unwrap();
+        let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
+        let schema2 = FieldSchema::from_quill_value(&quill_value).unwrap();
         assert_eq!(schema2.description, "Full field schema");
         assert_eq!(schema2.required, true);
         assert_eq!(schema2.r#type, Some("string".to_string()));
@@ -1646,32 +1634,14 @@ default: "Default value"
             Some("Default value")
         );
 
-        // Test converting FieldSchema back to YAML
-        let yaml_value = schema2.to_yaml_value();
-        let mapping = yaml_value.as_mapping().unwrap();
+        // Test converting FieldSchema back to QuillValue
+        let quill_value = schema2.to_quill_value();
+        let obj = quill_value.as_object().unwrap();
         assert_eq!(
-            mapping
-                .get(&serde_yaml::Value::String("description".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
+            obj.get("description").unwrap().as_str().unwrap(),
             "Full field schema"
         );
-        assert_eq!(
-            mapping
-                .get(&serde_yaml::Value::String("required".to_string()))
-                .unwrap()
-                .as_bool()
-                .unwrap(),
-            true
-        );
-        assert_eq!(
-            mapping
-                .get(&serde_yaml::Value::String("type".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "string"
-        );
+        assert_eq!(obj.get("required").unwrap().as_bool().unwrap(), true);
+        assert_eq!(obj.get("type").unwrap().as_str().unwrap(), "string");
     }
 }

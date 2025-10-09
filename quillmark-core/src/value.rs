@@ -27,12 +27,6 @@ impl QuillValue {
         Ok(QuillValue(json_val))
     }
 
-    /// Create a QuillValue from a YAML value reference (avoids clone)
-    pub fn from_yaml_ref(yaml_val: &serde_yaml::Value) -> Result<Self, serde_json::Error> {
-        let json_val = serde_json::to_value(yaml_val)?;
-        Ok(QuillValue(json_val))
-    }
-
     /// Convert to a MiniJinja value for templating
     pub fn to_minijinja(&self) -> Result<MjValue, String> {
         json_to_minijinja(&self.0)

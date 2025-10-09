@@ -452,15 +452,3 @@ fn json_to_py<'py>(py: Python<'py>, value: &serde_json::Value) -> PyResult<Bound
         }
     }
 }
-
-// Legacy helper function - now delegates to quillvalue_to_py
-// Kept for backwards compatibility during migration
-fn yaml_value_to_py<'py>(
-    py: Python<'py>,
-    value: &serde_yaml::Value,
-) -> PyResult<Bound<'py, PyAny>> {
-    // Convert YAML to QuillValue using reference method (no clone)
-    let quill_value = quillmark_core::QuillValue::from_yaml_ref(value)
-        .map_err(|e| PyErr::new::<crate::errors::QuillmarkError, _>(e.to_string()))?;
-    quillvalue_to_py(py, &quill_value)
-}
