@@ -726,17 +726,16 @@ Which one would you like to use?"
 ---
 QUILL: appreciated_letter
 sender: Jane Smith, Universal Exports, 1 Heavy Plaza, Morristown, NJ 07964
-recipient: Mr. John Doe
-123 Main Street
-Springfield, IL 62701
+recipient: |
+    Mr. John Doe
+    123 Main Street
+    Springfield, IL 62701
 date: Morristown, June 9th, 2023
-subject: Revision of our Procurement Contract
+subject: Revision of our Producrement Contract
 name: Jane Smith, Regional Director
 ---
 
-Dear Mr. Doe,
-
-I am writing to inform you...
+Dear Joe...
 ```
 
 **AI Model's Tool Call:**
