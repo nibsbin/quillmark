@@ -212,7 +212,7 @@ Get detailed information about a specific Quill template, including its frontmat
 3. Optionally reading from the `[fields]` section in `Quill.toml` if present
 4. Extracting examples from the default template markdown file (specified in the `template` field of `Quill.toml`)
 
-**Note on Metadata Structure:** According to [QUILL_DESIGN.md](QUILL_DESIGN.md), all metadata fields (name, backend, glue, template, description, author, version, tags, etc.) are stored in the `[Quill]` section of `Quill.toml` as a flat HashMap, not as a nested object. Custom metadata fields are also supported and preserved.
+**Note on Metadata Structure:** According to [QUILL_DESIGN.md](https://github.com/nibsbin/quillmark/blob/main/designs/QUILL_DESIGN.md), all metadata fields (name, backend, glue, template, description, author, version, tags, etc.) are stored in the `[Quill]` section of `Quill.toml` as a flat HashMap, not as a nested object. Custom metadata fields are also supported and preserved.
 
 **Use Case:** AI model helps user understand what fields to include in their markdown frontmatter.
 
@@ -307,7 +307,7 @@ Key features:
 - **Horizontal rule disambiguation**: `---` preceded by blank line is a horizontal rule, not metadata
 - Each scoped block contains metadata fields plus a `body` field
 - Collections preserve document order
-- See [PARSE.md](PARSE.md) for complete documentation
+- See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) for complete documentation
 
 **Success Output:**
 ```json
@@ -428,7 +428,7 @@ class Location:
 
 ### QuillInfo
 
-Represents information about a Quill template. Note that metadata fields are flattened at the top level, matching the structure from `[Quill]` section in Quill.toml (see [QUILL_DESIGN.md](QUILL_DESIGN.md)).
+Represents information about a Quill template. Note that metadata fields are flattened at the top level, matching the structure from `[Quill]` section in Quill.toml (see [QUILL_DESIGN.md](https://github.com/nibsbin/quillmark/blob/main/designs/QUILL_DESIGN.md)).
 
 ```python
 class QuillInfo:
@@ -517,7 +517,7 @@ Lean on the rendering engine's diagnostics.
 - **Server Framework**: MCP server implementation
 - **Serialization**: `pydantic` for data validation and JSON schema
 
-### Project Structure
+### (Rough Draft) Project Structure
 
 ```
 quillmark-mcp/
@@ -950,12 +950,12 @@ Dear Joe...
 ## References
 
 - **MCP Specification**: https://spec.modelcontextprotocol.io/
-- **Quillmark Architecture**: See [DESIGN.md](DESIGN.md) - Complete architecture and core design principles
-- **Parsing & Extended YAML**: See [PARSE.md](PARSE.md) - Detailed parsing and Extended YAML Metadata Standard documentation
-- **Quillmark Python Package**: See `https://github.com/nibsbin/quillmark/blob/main/quillmark-python/README.md`
-- **Python API Design**: See `https://github.com/nibsbin/quillmark/blob/main/designs/PYTHON.md`
-- **Error Handling**: See [ERROR.md](ERROR.md) - Error handling system documentation and implementation guide
-- **Quill Structure**: See `https://github.com/nibsbin/quillmark/blob/main/designs/QUILL_DESIGN.md`
+- **Quillmark Architecture**: See [DESIGN.md](https://github.com/nibsbin/quillmark/blob/main/designs/DESIGN.md) - Complete architecture and core design principles
+- **Parsing & Extended YAML**: See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) - Detailed parsing and Extended YAML Metadata Standard documentation
+- **Quillmark Python Package**: See [README.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-python/README.md)
+- **Python API Design**: See [PYTHON.md](https://github.com/nibsbin/quillmark/blob/main/designs/PYTHON.md)
+- **Error Handling**: See [ERROR.md](https://github.com/nibsbin/quillmark/blob/main/designs/ERROR.md) - Error handling system documentation and implementation guide
+- **Quill Structure**: See [QUILL_DESIGN.md](https://github.com/nibsbin/quillmark/blob/main/designs/QUILL_DESIGN.md)
 
 ---
 
