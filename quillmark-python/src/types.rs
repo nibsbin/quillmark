@@ -2,8 +2,8 @@
 use pyo3::conversion::IntoPyObjectExt;
 use pyo3::prelude::*; // PyResult, Python, etc.
 use pyo3::pycell::PyRef; // PyRef
-use pyo3::types::{PyDict, PyList}; // PyDict, PyList
-use pyo3::{Bound, Py, PyAny}; // Bound, PyAny, Py // into_bound_py_any
+use pyo3::types::PyDict; // PyDict
+use pyo3::{Bound, PyAny}; // Bound, PyAny
 
 use quillmark::{
     Diagnostic, Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderResult, Workflow,

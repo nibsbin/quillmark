@@ -36,18 +36,18 @@ and use `scripts/build-wasm.sh` to build all targets.
 
 ## Extended YAML Metadata (Non-Obvious)
 
-Supports **inline metadata sections** with tag directives:
+Supports **inline metadata sections** with SCOPE/QUILL keys:
 
 ```markdown
 ---
-!products
+SCOPE: products
 name: Widget
 ---
 Description here.
 ```
 
 Creates `products` array with metadata + `body` field. Rules:
-- Tag `!name` on first line after `---`
+- Use `SCOPE: name` or `QUILL: name` as YAML keys
 - Blocks must be contiguous (no blank lines)
 - `---` + blank line = horizontal rule (NOT metadata)
 
