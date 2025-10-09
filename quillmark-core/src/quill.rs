@@ -386,8 +386,8 @@ impl Quill {
                 glue_file = glue_val.to_string();
             }
 
-            if let Some(template_val) = quill_section.get("template").and_then(|v| v.as_str()) {
-                template_file = Some(template_val.to_string());
+            if let Some(example_val) = quill_section.get("example").and_then(|v| v.as_str()) {
+                template_file = Some(example_val.to_string());
             }
 
             // Add other fields to metadata (excluding special fields and version)
@@ -396,7 +396,7 @@ impl Quill {
                     if key != "name"
                         && key != "backend"
                         && key != "glue"
-                        && key != "template"
+                        && key != "example"
                         && key != "version"
                     {
                         match Self::toml_to_yaml_value(value) {
@@ -973,12 +973,12 @@ packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
         let temp_dir = TempDir::new().unwrap();
         let quill_dir = temp_dir.path();
 
-        // Create test files with template specified
+        // Create test files with example specified
         let toml_content = r#"[Quill]
 name = "test-with-template"
 backend = "typst"
 glue = "glue.typ"
-template = "example.md"
+example = "example.md"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
         fs::write(quill_dir.join("glue.typ"), "glue content").unwrap();
@@ -1009,7 +1009,7 @@ template = "example.md"
         let temp_dir = TempDir::new().unwrap();
         let quill_dir = temp_dir.path();
 
-        // Create test files without template specified
+        // Create test files without example specified
         let toml_content = r#"[Quill]
 name = "test-without-template"
 backend = "typst"
@@ -1074,12 +1074,12 @@ description = "A test quill from tree"
     fn test_from_tree_with_template() {
         let mut root_files = HashMap::new();
 
-        // Add Quill.toml with template specified
+        // Add Quill.toml with example specified
         let quill_toml = r#"[Quill]
 name = "test-tree-template"
 backend = "typst"
 glue = "glue.typ"
-template = "template.md"
+example = "template.md"
 "#;
         root_files.insert(
             "Quill.toml".to_string(),
@@ -1435,7 +1435,7 @@ template = "template.md"
 name = "taro"
 backend = "typst"
 glue = "glue.typ"
-template = "taro.md"
+example = "taro.md"
 
 [fields]
 author = {description = "Author of document", required = true}

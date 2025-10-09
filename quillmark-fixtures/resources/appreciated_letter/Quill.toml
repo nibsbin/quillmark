@@ -2,7 +2,7 @@
 name = "appreeciated_letter"
 backend = "typst"
 glue = "glue.typ"
-template = "appreciated_letter.md"
+example = "appreciated_letter.md"
 
 [typst]
 packages = ["@preview/appreciated-letter:0.1.0"]
