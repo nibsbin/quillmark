@@ -493,6 +493,16 @@ impl Quill {
                 template_file = Some(example_val.to_string());
             }
 
+            // Validate that description is present and non-empty (required field)
+            let description = quill_section
+                .get("description")
+                .and_then(|v| v.as_str())
+                .ok_or("Missing required 'description' field in [Quill] section")?;
+
+            if description.trim().is_empty() {
+                return Err("'description' field in [Quill] section cannot be empty".into());
+            }
+
             // Add other fields to metadata (excluding special fields and version)
             if let toml::Value::Table(table) = quill_section {
                 for (key, value) in table {
@@ -907,7 +917,7 @@ node_modules/
         // Create test files
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
@@ -950,7 +960,7 @@ node_modules/
         // Create test files
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
@@ -977,7 +987,7 @@ node_modules/
         // Create test directory structure
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("glue.typ"), "template").unwrap();
@@ -1062,6 +1072,7 @@ author = "Test Author"
 name = "test-quill"
 backend = "typst"
 glue = "glue.typ"
+description = "Test quill for packages"
 
 [typst]
 packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
@@ -1089,6 +1100,7 @@ name = "test-with-template"
 backend = "typst"
 glue = "glue.typ"
 example = "example.md"
+description = "Test quill with template"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
         fs::write(quill_dir.join("glue.typ"), "glue content").unwrap();
@@ -1121,6 +1133,7 @@ example = "example.md"
 name = "test-without-template"
 backend = "typst"
 glue = "glue.typ"
+description = "Test quill without template"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
         fs::write(quill_dir.join("glue.typ"), "glue content").unwrap();
@@ -1186,6 +1199,7 @@ name = "test-tree-template"
 backend = "typst"
 glue = "glue.typ"
 example = "template.md"
+description = "Test tree with template"
 "#;
         root_files.insert(
             "Quill.toml".to_string(),
@@ -1229,7 +1243,7 @@ example = "template.md"
             },
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill from JSON\"\n"
                 },
                 "glue.typ": {
                     "contents": "= Test Glue\n\nThis is test content."
@@ -1253,7 +1267,7 @@ example = "template.md"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10]
+                    "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 32, 61, 32, 34, 84, 101, 115, 116, 32, 113, 117, 105, 108, 108, 34, 10]
                 },
                 "glue.typ": {
                     "contents": "test glue"
@@ -1290,7 +1304,7 @@ example = "template.md"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test tree JSON\"\n"
                 },
                 "glue.typ": {
                     "contents": "= Test Glue\n\nTree structure content."
@@ -1311,7 +1325,7 @@ example = "template.md"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Nested test\"\n"
                 },
                 "glue.typ": {
                     "contents": "glue"
@@ -1347,7 +1361,7 @@ example = "template.md"
             "Quill.toml".to_string(),
             FileTreeNode::File {
                 contents:
-                    b"[Quill]\nname = \"direct-tree\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    b"[Quill]\nname = \"direct-tree\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Direct tree test\"\n"
                         .to_vec(),
             },
         );
@@ -1391,7 +1405,7 @@ example = "template.md"
             },
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"toml-name\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    "contents": "[Quill]\nname = \"toml-name\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"TOML name test\"\n"
                 },
                 "glue.typ": {
                     "contents": "= glue"
@@ -1411,7 +1425,7 @@ example = "template.md"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"empty-dir-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                    "contents": "[Quill]\nname = \"empty-dir-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Empty directory test\"\n"
                 },
                 "glue.typ": {
                     "contents": "glue"
@@ -1434,7 +1448,7 @@ example = "template.md"
         root_files.insert(
             "Quill.toml".to_string(),
             FileTreeNode::File {
-                contents: b"[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n"
+                contents: b"[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n"
                     .to_vec(),
             },
         );
@@ -1541,6 +1555,7 @@ name = "taro"
 backend = "typst"
 glue = "glue.typ"
 example = "taro.md"
+description = "Test template for field schemas"
 
 [fields]
 author = {description = "Author of document", required = true}

@@ -3,6 +3,7 @@ name = "usaf_memo"
 backend = "typst"
 glue = "glue.typ"
 example = "usaf_memo.md"
+description = "U.S. Air Force memorandum template"
 
 [fields]
 letterhead_title = { description = "Title in letterhead", required = false }
