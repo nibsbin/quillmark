@@ -34,9 +34,9 @@
 
 **Core structs** (all backed by `QuillValue`):
 - `Quill.metadata`: `HashMap<String, serde_yaml::Value>` → `HashMap<String, QuillValue>`
-- `Quill.field_schemas`: `HashMap<String, serde_yaml::Value>` → `HashMap<String, QuillValue>`
+- `Quill.field_schemas`: `HashMap<String, serde_yaml::Value>` → `HashMap<String, FieldSchema>` (FieldSchema contains QuillValue fields)
 - `ParsedDocument.fields`: `HashMap<String, serde_yaml::Value>` → `HashMap<String, QuillValue>`
-- Any `FieldSchema` types using values
+- `FieldSchema.example` and `FieldSchema.default`: `Option<serde_yaml::Value>` → `Option<QuillValue>`
 
 **Conversion points** (deserialize at boundaries):
 - `Quill::from_path()`: Parse TOML → convert to `QuillValue` immediately

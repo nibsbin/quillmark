@@ -204,7 +204,7 @@ See `designs/QUILL_DESIGN.md` for full design rationale.
 
 ```rust
 pub struct ParsedDocument {
-    fields: HashMap<String, serde_yaml::Value>,  // private - access via methods
+    fields: HashMap<String, QuillValue>,  // private - access via methods
 }
 ```
 
@@ -415,7 +415,7 @@ let artifacts = backend.compile(&glue_source, &prepared_quill, &opts)?; // Step 
 
 ##### Dict Filter (`dict_filter`)
 
-* **YAML→JSON**: Convert `serde_yaml::Value` to `serde_json::Value`
+* **Value conversion**: Uses `QuillValue` which is already backed by `serde_json::Value`
 * **Typst embedding**: Wrap in `json(bytes("..."))` for Typst evaluation
 * **Escaping**: Use `escape_string()` on serialized JSON
 
@@ -452,11 +452,11 @@ Quillmark supports advanced markdown parsing with both traditional frontmatter a
 * **Frontmatter:** YAML delimited by `---` … `---` at the top of the document.
 * **Process:**
 
-  1. Detect frontmatter block; parse to `HashMap<String, serde_yaml::Value>`
+  1. Detect frontmatter block; parse YAML and convert to `HashMap<String, QuillValue>`
   2. Store the remainder as body under `BODY_FIELD`
   3. Validate YAML syntax with fail-fast error reporting
   4. Preserve all body whitespace (including leading/trailing)
-* **Policy:** YAML-only input; no TOML frontmatter. Backends can convert via filters.
+* **Policy:** YAML-only input; no TOML frontmatter. Values are converted to `QuillValue` at the parsing boundary.
 
 ### Extended YAML Metadata Standard (Implemented)
 
@@ -555,9 +555,9 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Error> {
 
 #### ParsedDocument Structure
 
-* **Fields storage**: Single `HashMap<String, serde_yaml::Value>` for both frontmatter and body
+* **Fields storage**: Single `HashMap<String, QuillValue>` for both frontmatter and body
 * **Body access**: Special field `BODY_FIELD = "body"` - use constants to avoid typos
-* **YAML value types**: Support strings, numbers, arrays, objects via `serde_yaml::Value`
+* **Value types**: Support strings, numbers, arrays, objects via `QuillValue` (backed by `serde_json::Value`)
 
 ---
 

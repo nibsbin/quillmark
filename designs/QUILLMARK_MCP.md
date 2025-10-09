@@ -623,7 +623,7 @@ def extract_schema(quill: Quill) -> dict[str, FieldSchema]:
         examples = parsed.fields()
     
     # 3. Read field schemas from [fields] section in Quill.toml
-    # This is stored in quill.field_schemas as HashMap<String, serde_yaml::Value>
+    # This is stored in quill.field_schemas as HashMap<String, FieldSchema>
     field_schemas = quill.field_schemas or {}
     
     # 4. Merge and create FieldSchema objects
