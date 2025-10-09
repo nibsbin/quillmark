@@ -647,11 +647,11 @@ def format_error_for_mcp(error: QuillmarkError) -> dict:
 
 ### Example 2: User Has Rendering Error
 
-**User provides markdown:**
+**User provides markdown with a typo:**
 ```markdown
 ---
 sender: John Doe
-recepient: Jane Smith
+recepient: Jane Smith  # Typo: should be "recipient"
 ---
 
 Dear Jane,
@@ -838,7 +838,7 @@ Which one would you like to use?"
 
 ## Changelog
 
-### 2024-01-XX - Initial Design
+### 2024-10-09 - Initial Design
 - Created comprehensive design document
 - Defined all MCP tools and their signatures
 - Established error handling patterns
