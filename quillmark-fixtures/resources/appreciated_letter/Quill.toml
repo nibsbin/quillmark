@@ -3,6 +3,7 @@ name = "appreeciated_letter"
 backend = "typst"
 glue = "glue.typ"
 example = "appreciated_letter.md"
+description = "Professional letter template with appreciation styling"
 
 [typst]
 packages = ["@preview/appreciated-letter:0.1.0"]

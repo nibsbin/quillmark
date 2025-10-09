@@ -95,7 +95,7 @@ The JSON format MUST have a root object with a `files` key. The optional `metada
 ```json
 {
   "files": {
-    "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n" },
+    "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"My beautiful template\"\n" },
     "glue.typ": { "contents": "= Template\n\n{{ body }}" },
     "assets": {
       "logo.png": { "contents": [137, 80, 78, 71, ...] }
@@ -169,7 +169,7 @@ The optional `metadata` object in JSON provides a `default_name` when constructi
 // Minimal example
 const quill = {
   files: {
-    "Quill.toml": { contents: "[Quill]\nname = \"my-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n" },
+    "Quill.toml": { contents: "[Quill]\nname = \"my-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"My quill template\"\n" },
     "glue.typ": { contents: "= Template\n\n{{ body }}" }
   }
 };
@@ -236,8 +236,8 @@ Metadata is stored in the `Quill` struct as `HashMap<String, serde_yaml::Value>`
 name = "my-quill"
 backend = "typst"
 glue = "glue.typ"
+description = "A beautiful template"  # required
 example = "template.md"  # optional
-description = "A beautiful template"  # optional
 version = "1.0.0"  # optional
 author = "John Doe"  # optional
 # ... any custom metadata fields
@@ -249,7 +249,7 @@ title = { description = "Document title", required = true }
 ice_cream = { description = "Favorite ice cream flavor" }
 ```
 
-The `[fields]` section is optional and provides schema documentation for template variables. These are stored separately in `Quill.field_schemas`.
+The `description` field is required in the `[Quill]` section. The `[fields]` section is optional and provides schema documentation for template variables. These are stored separately in `Quill.field_schemas`.
 
 ### Metadata Priority (Highest to Lowest)
 
