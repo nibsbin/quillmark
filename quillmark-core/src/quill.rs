@@ -55,13 +55,9 @@ impl FieldSchema {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let example = obj
-            .get("example")
-            .map(|v| QuillValue::from_json(v.clone()));
+        let example = obj.get("example").map(|v| QuillValue::from_json(v.clone()));
 
-        let default = obj
-            .get("default")
-            .map(|v| QuillValue::from_json(v.clone()));
+        let default = obj.get("default").map(|v| QuillValue::from_json(v.clone()));
 
         Ok(Self {
             r#type: field_type,
@@ -101,17 +97,11 @@ impl FieldSchema {
         }
 
         if let Some(ref example) = self.example {
-            map.insert(
-                "example".to_string(),
-                example.as_json().clone(),
-            );
+            map.insert("example".to_string(), example.as_json().clone());
         }
 
         if let Some(ref default) = self.default {
-            map.insert(
-                "default".to_string(),
-                default.as_json().clone(),
-            );
+            map.insert("default".to_string(), default.as_json().clone());
         }
 
         QuillValue::from_json(serde_json::Value::Object(map))
@@ -120,8 +110,7 @@ impl FieldSchema {
     /// Convert the FieldSchema to a serde_yaml::Value for serialization (for backwards compatibility)
     pub fn to_yaml_value(&self) -> serde_yaml::Value {
         let quill_value = self.to_quill_value();
-        serde_yaml::to_value(quill_value.as_json())
-            .unwrap_or(serde_yaml::Value::Null)
+        serde_yaml::to_value(quill_value.as_json()).unwrap_or(serde_yaml::Value::Null)
     }
 }
 

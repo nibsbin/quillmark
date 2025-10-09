@@ -718,18 +718,9 @@ Body of item 1."#;
         assert_eq!(items.len(), 1);
 
         let item = items[0].as_object().unwrap();
+        assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
         assert_eq!(
-            item.get("name")
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "Item 1"
-        );
-        assert_eq!(
-            item.get("body")
-                .unwrap()
-                .as_str()
-                .unwrap(),
+            item.get("body").unwrap().as_str().unwrap(),
             "\nBody of item 1."
         );
     }
@@ -758,24 +749,10 @@ Second item body."#;
         assert_eq!(items.len(), 2);
 
         let item1 = items[0].as_object().unwrap();
-        assert_eq!(
-            item1
-                .get("name")
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "Item 1"
-        );
+        assert_eq!(item1.get("name").unwrap().as_str().unwrap(), "Item 1");
 
         let item2 = items[1].as_object().unwrap();
-        assert_eq!(
-            item2
-                .get("name")
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "Item 2"
-        );
+        assert_eq!(item2.get("name").unwrap().as_str().unwrap(), "Item 2");
     }
 
     #[test]
@@ -825,10 +802,7 @@ Body without metadata."#;
 
         let item = items[0].as_object().unwrap();
         assert_eq!(
-            item.get("body")
-                .unwrap()
-                .as_str()
-                .unwrap(),
+            item.get("body").unwrap().as_str().unwrap(),
             "\nBody without metadata."
         );
     }
@@ -846,13 +820,7 @@ name: Item
         assert_eq!(items.len(), 1);
 
         let item = items[0].as_object().unwrap();
-        assert_eq!(
-            item.get("body")
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            ""
-        );
+        assert_eq!(item.get("body").unwrap().as_str().unwrap(), "");
     }
 
     #[test]
@@ -982,11 +950,7 @@ Third"#;
 
         for (i, item) in items.iter().enumerate() {
             let mapping = item.as_object().unwrap();
-            let id = mapping
-                .get("id")
-                .unwrap()
-                .as_i64()
-                .unwrap();
+            let id = mapping.get("id").unwrap().as_i64().unwrap();
             assert_eq!(id, (i + 1) as i64);
         }
     }
@@ -1059,22 +1023,8 @@ rating: 4
         assert_eq!(products.len(), 2);
 
         let product1 = products[0].as_object().unwrap();
-        assert_eq!(
-            product1
-                .get("name")
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "Widget A"
-        );
-        assert_eq!(
-            product1
-                .get("price")
-                .unwrap()
-                .as_f64()
-                .unwrap(),
-            19.99
-        );
+        assert_eq!(product1.get("name").unwrap().as_str().unwrap(), "Widget A");
+        assert_eq!(product1.get("price").unwrap().as_f64().unwrap(), 19.99);
 
         // Verify reviews collection
         let reviews = doc.get_field("reviews").unwrap().as_sequence().unwrap();
@@ -1082,21 +1032,10 @@ rating: 4
 
         let review1 = reviews[0].as_object().unwrap();
         assert_eq!(
-            review1
-                .get("product")
-                .unwrap()
-                .as_str()
-                .unwrap(),
+            review1.get("product").unwrap().as_str().unwrap(),
             "Widget A"
         );
-        assert_eq!(
-            review1
-                .get("rating")
-                .unwrap()
-                .as_i64()
-                .unwrap(),
-            5
-        );
+        assert_eq!(review1.get("rating").unwrap().as_i64().unwrap(), 5);
 
         // Total fields: title, author, date, body, products, reviews = 6
         assert_eq!(doc.fields().len(), 6);
@@ -1277,11 +1216,7 @@ mod demo_file_test {
         // Check first feature
         let feature1 = features[0].as_object().unwrap();
         assert_eq!(
-            feature1
-                .get("name")
-                .unwrap()
-                .as_str()
-                .unwrap(),
+            feature1.get("name").unwrap().as_str().unwrap(),
             "Tag Directives"
         );
     }

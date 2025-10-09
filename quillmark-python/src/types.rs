@@ -239,9 +239,9 @@ impl PyQuill {
         // Convert field_schemas to Python dict
         let dict = PyDict::new(py);
         for (key, schema) in &self.inner.field_schemas {
-            // Convert FieldSchema to YAML value, then to Python
-            let yaml_value = schema.to_yaml_value();
-            dict.set_item(key, yaml_value_to_py(py, &yaml_value)?)?;
+            // Convert FieldSchema to QuillValue, then to Python
+            let quill_value = schema.to_quill_value();
+            dict.set_item(key, quillvalue_to_py(py, &quill_value)?)?;
         }
         Ok(dict)
     }
@@ -418,10 +418,7 @@ fn quillvalue_to_py<'py>(
 }
 
 // Helper function to convert JSON values to Python objects
-fn json_to_py<'py>(
-    py: Python<'py>,
-    value: &serde_json::Value,
-) -> PyResult<Bound<'py, PyAny>> {
+fn json_to_py<'py>(py: Python<'py>, value: &serde_json::Value) -> PyResult<Bound<'py, PyAny>> {
     match value {
         serde_json::Value::Null => py.None().into_bound_py_any(py),
         serde_json::Value::Bool(b) => b.into_bound_py_any(py),
@@ -462,8 +459,8 @@ fn yaml_value_to_py<'py>(
     py: Python<'py>,
     value: &serde_yaml::Value,
 ) -> PyResult<Bound<'py, PyAny>> {
-    // Convert YAML to QuillValue, then to Python
-    let quill_value = quillmark_core::QuillValue::from_yaml(value.clone())
+    // Convert YAML to QuillValue using reference method (no clone)
+    let quill_value = quillmark_core::QuillValue::from_yaml_ref(value)
         .map_err(|e| PyErr::new::<crate::errors::QuillmarkError, _>(e.to_string()))?;
     quillvalue_to_py(py, &quill_value)
 }

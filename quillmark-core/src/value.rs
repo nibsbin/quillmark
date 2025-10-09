@@ -27,6 +27,12 @@ impl QuillValue {
         Ok(QuillValue(json_val))
     }
 
+    /// Create a QuillValue from a YAML value reference (avoids clone)
+    pub fn from_yaml_ref(yaml_val: &serde_yaml::Value) -> Result<Self, serde_json::Error> {
+        let json_val = serde_json::to_value(yaml_val)?;
+        Ok(QuillValue(json_val))
+    }
+
     /// Convert to a MiniJinja value for templating
     pub fn to_minijinja(&self) -> Result<MjValue, String> {
         json_to_minijinja(&self.0)
@@ -171,9 +177,18 @@ mod tests {
         let yaml_val: serde_yaml::Value = serde_yaml::from_str(yaml_str).unwrap();
         let quill_val = QuillValue::from_yaml(yaml_val).unwrap();
 
-        assert_eq!(quill_val.get("title").as_ref().and_then(|v| v.as_str()), Some("Test Document"));
-        assert_eq!(quill_val.get("author").as_ref().and_then(|v| v.as_str()), Some("John Doe"));
-        assert_eq!(quill_val.get("count").as_ref().and_then(|v| v.as_i64()), Some(42));
+        assert_eq!(
+            quill_val.get("title").as_ref().and_then(|v| v.as_str()),
+            Some("Test Document")
+        );
+        assert_eq!(
+            quill_val.get("author").as_ref().and_then(|v| v.as_str()),
+            Some("John Doe")
+        );
+        assert_eq!(
+            quill_val.get("count").as_ref().and_then(|v| v.as_i64()),
+            Some(42)
+        );
     }
 
     #[test]
@@ -216,10 +231,23 @@ mod tests {
             "items": [1, 2, 3]
         }));
 
-        assert_eq!(quill_val.get("name").as_ref().and_then(|v| v.as_str()), Some("test"));
-        assert_eq!(quill_val.get("count").as_ref().and_then(|v| v.as_i64()), Some(42));
-        assert_eq!(quill_val.get("active").as_ref().and_then(|v| v.as_bool()), Some(true));
-        assert!(quill_val.get("items").as_ref().and_then(|v| v.as_array()).is_some());
+        assert_eq!(
+            quill_val.get("name").as_ref().and_then(|v| v.as_str()),
+            Some("test")
+        );
+        assert_eq!(
+            quill_val.get("count").as_ref().and_then(|v| v.as_i64()),
+            Some(42)
+        );
+        assert_eq!(
+            quill_val.get("active").as_ref().and_then(|v| v.as_bool()),
+            Some(true)
+        );
+        assert!(quill_val
+            .get("items")
+            .as_ref()
+            .and_then(|v| v.as_array())
+            .is_some());
     }
 
     #[test]
