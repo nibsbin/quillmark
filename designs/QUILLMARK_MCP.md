@@ -21,6 +21,7 @@ This document outlines the design for `quillmark-mcp`, a Model Context Protocol 
 - Dynamic asset management beyond what's in registered Quills
 - Async streaming for long-running renders (renders are typically <100ms)
 - Custom backend implementations
+- Provide your own diagnostic system (use Quillmark's built-in diagnostics)
 
 ---
 
@@ -63,7 +64,7 @@ Provide AI models with the necessary context to assist users in writing markdown
 Enable AI models to render documents and help users fix errors:
 - Render markdown to PDF or SVG using a specific Quill
 - Return detailed error diagnostics with line/column information
-- Provide hints and suggestions for fixing common errors
+- Provide hints and suggestions from Quillmark's diagnostic system
 - Validate frontmatter structure before rendering
 
 ---
@@ -111,7 +112,6 @@ Enable AI models to render documents and help users fix errors:
 2. **Rich Diagnostics**: Leverage Quillmark's diagnostic system for helpful error messages
 3. **Stateless Operations**: Each tool call is independent (except for initial Quill registration)
 4. **JSON-Based**: All data exchanged via JSON for MCP compatibility
-5. **User-Friendly**: Error messages and hints designed for end-user consumption via AI assistant
 
 ---
 
@@ -255,9 +255,7 @@ Render a markdown document to PDF or SVG using a specified Quill.
 
 **Quill Name Resolution:**
 - If `quill_name` is provided, use that Quill for rendering
-- If `quill_name` is omitted, extract it from the markdown's frontmatter using the `QUILL:` directive
-- If both are provided and they differ, return an error
-- If neither is provided, return an error indicating missing Quill specification
+- If `quill_name` is omitted, the rendering engine will just use the `QUILL` YAML frontmatter field in the markdown and return an error if missing
 
 **Example with QUILL directive:**
 ```markdown
@@ -282,14 +280,6 @@ Letter content...
       "size_bytes": 45231
     }
   ],
-  "warnings": [
-    {
-      "severity": "WARNING",
-      "message": "Using default font because 'custom-font.ttf' not found",
-      "code": "missing_font",
-      "hint": "Add the font to the Quill's assets or use a system font"
-    }
-  ]
 }
 ```
 
@@ -333,12 +323,6 @@ Validate frontmatter against a Quill's schema without rendering.
 }
 ```
 
-**Quill Name Resolution:**
-- If `quill_name` is provided, use that Quill for validation
-- If `quill_name` is omitted, extract it from the markdown's frontmatter using the `QUILL:` directive
-- If both are provided and they differ, return an error
-- If neither is provided, return an error indicating missing Quill specification
-
 **Output:**
 ```json
 {
@@ -351,7 +335,6 @@ Validate frontmatter against a Quill's schema without rendering.
     "name": "Jane Smith, Regional Director"
   },
   "missing_required_fields": [],
-  "warnings": []
 }
 ```
 
@@ -386,7 +369,7 @@ Used across all error responses:
 
 ```python
 class Diagnostic:
-    severity: Literal["ERROR", "WARNING", "NOTE"]
+    severity: Literal["ERROR", "NOTE"]
     message: str
     code: str | None
     location: Location | None
@@ -431,13 +414,11 @@ class FieldSchema:
 ### Error Categories
 
 1. **Invalid Quill Name**: Quill not registered or doesn't exist
-2. **Missing Quill Specification**: Neither `quill_name` parameter nor `QUILL:` directive provided
-3. **Conflicting Quill Names**: Both `quill_name` parameter and `QUILL:` directive provided with different values
-4. **Parse Error**: YAML frontmatter is malformed
-5. **Validation Error**: Frontmatter fields don't match schema
-6. **Template Error**: MiniJinja template processing failed
-7. **Compilation Error**: Backend (Typst) compilation failed
-8. **System Error**: File I/O, permissions, or other system issues
+1. **Parse Error**: YAML frontmatter is malformed
+1. **Validation Error**: Frontmatter fields don't match schema
+1. **Template Error**: MiniJinja template processing failed
+1. **Compilation Error**: Backend (Typst) compilation failed
+1. **System Error**: File I/O, permissions, or other system issues
 
 ### Error Response Pattern
 
@@ -466,15 +447,7 @@ All errors follow this structure:
 
 ### Hint Generation Strategy
 
-Hints should be actionable and specific:
-
-- **Missing field**: "Add 'field_name: <value>' to your frontmatter"
-- **Type mismatch**: "Expected string but got number. Wrap the value in quotes."
-- **Typo in field name**: "Did you mean 'correct_name'? Check your field names."
-- **Template syntax**: "Check the template documentation for correct usage of this field"
-- **Missing asset**: "Add the file to your Quill's assets directory or use an alternative"
-- **Missing Quill specification**: "Either provide 'quill_name' parameter or add 'QUILL: <quill_name>' to your frontmatter"
-- **Conflicting Quill names**: "Remove the 'quill_name' parameter or the 'QUILL:' directive from frontmatter. Use only one."
+Lean on the rendering engine's diagnostics.
 
 ---
 
@@ -788,7 +761,6 @@ I am writing to inform you...
       "size_bytes": 45231
     }
   ],
-  "warnings": []
 }
 ```
 
@@ -872,10 +844,10 @@ I am writing to inform you...
 ## References
 
 - **MCP Specification**: https://spec.modelcontextprotocol.io/
-- **Quillmark Python Package**: See `quillmark-python/README.md`
-- **Python API Design**: See `designs/PYTHON.md`
-- **Error Handling**: See `designs/ERROR.md`
-- **Quill Structure**: See `designs/QUILL_DESIGN.md`
+- **Quillmark Python Package**: See `https://github.com/nibsbin/quillmark/blob/main/quillmark-python/README.md`
+- **Python API Design**: See `https://github.com/nibsbin/quillmark/blob/main/designs/PYTHON.md`
+- **Error Handling**: See `https://github.com/nibsbin/quillmark/blob/main/designs/ERROR.md`
+- **Quill Structure**: See `https://github.com/nibsbin/quillmark/blob/main/designs/QUILL_DESIGN.md`
 
 ---
 
