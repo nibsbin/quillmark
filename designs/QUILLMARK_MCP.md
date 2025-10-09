@@ -21,6 +21,7 @@ This document outlines the design for `quillmark-mcp`, a Model Context Protocol 
 - Dynamic asset management beyond what's in registered Quills
 - Async streaming for long-running renders (renders are typically <100ms)
 - Custom backend implementations
+- Provide your own diagnostic system (use Quillmark's built-in diagnostics)
 
 ---
 
@@ -63,7 +64,7 @@ Provide AI models with the necessary context to assist users in writing markdown
 Enable AI models to render documents and help users fix errors:
 - Render markdown to PDF or SVG using a specific Quill
 - Return detailed error diagnostics with line/column information
-- Provide hints and suggestions for fixing common errors
+- Provide hints and suggestions from Quillmark's diagnostic system
 - Validate frontmatter structure before rendering
 
 ---
@@ -111,7 +112,6 @@ Enable AI models to render documents and help users fix errors:
 2. **Rich Diagnostics**: Leverage Quillmark's diagnostic system for helpful error messages
 3. **Stateless Operations**: Each tool call is independent (except for initial Quill registration)
 4. **JSON-Based**: All data exchanged via JSON for MCP compatibility
-5. **User-Friendly**: Error messages and hints designed for end-user consumption via AI assistant
 
 ---
 
@@ -246,11 +246,26 @@ Render a markdown document to PDF or SVG using a specified Quill.
 **Input Parameters:**
 ```json
 {
-  "quill_name": string,        // Required
+  "quill_name": string,        // Optional - Quill name to use for rendering
   "markdown": string,          // Required - the markdown content with frontmatter
   "output_format": string,     // Optional - "PDF" or "SVG", defaults to "PDF"
   "validate_only": boolean     // Optional - if true, only validate without rendering
 }
+```
+
+**Quill Name Resolution:**
+- If `quill_name` is provided, use that Quill for rendering
+- If `quill_name` is omitted, the rendering engine will just use the `QUILL` YAML frontmatter field in the markdown and return an error if missing
+
+**Example with QUILL directive:**
+```markdown
+---
+QUILL: appreciated_letter
+sender: Jane Smith
+recipient: John Doe
+---
+
+Letter content...
 ```
 
 **Success Output:**
@@ -265,14 +280,6 @@ Render a markdown document to PDF or SVG using a specified Quill.
       "size_bytes": 45231
     }
   ],
-  "warnings": [
-    {
-      "severity": "WARNING",
-      "message": "Using default font because 'custom-font.ttf' not found",
-      "code": "missing_font",
-      "hint": "Add the font to the Quill's assets or use a system font"
-    }
-  ]
 }
 ```
 
@@ -311,7 +318,7 @@ Validate frontmatter against a Quill's schema without rendering.
 **Input Parameters:**
 ```json
 {
-  "quill_name": string,  // Required
+  "quill_name": string,  // Optional - Quill name for validation
   "markdown": string     // Required - can be just frontmatter or full document
 }
 ```
@@ -328,7 +335,6 @@ Validate frontmatter against a Quill's schema without rendering.
     "name": "Jane Smith, Regional Director"
   },
   "missing_required_fields": [],
-  "warnings": []
 }
 ```
 
@@ -363,7 +369,7 @@ Used across all error responses:
 
 ```python
 class Diagnostic:
-    severity: Literal["ERROR", "WARNING", "NOTE"]
+    severity: Literal["ERROR", "NOTE"]
     message: str
     code: str | None
     location: Location | None
@@ -408,11 +414,11 @@ class FieldSchema:
 ### Error Categories
 
 1. **Invalid Quill Name**: Quill not registered or doesn't exist
-2. **Parse Error**: YAML frontmatter is malformed
-3. **Validation Error**: Frontmatter fields don't match schema
-4. **Template Error**: MiniJinja template processing failed
-5. **Compilation Error**: Backend (Typst) compilation failed
-6. **System Error**: File I/O, permissions, or other system issues
+1. **Parse Error**: YAML frontmatter is malformed
+1. **Validation Error**: Frontmatter fields don't match schema
+1. **Template Error**: MiniJinja template processing failed
+1. **Compilation Error**: Backend (Typst) compilation failed
+1. **System Error**: File I/O, permissions, or other system issues
 
 ### Error Response Pattern
 
@@ -441,13 +447,7 @@ All errors follow this structure:
 
 ### Hint Generation Strategy
 
-Hints should be actionable and specific:
-
-- **Missing field**: "Add 'field_name: <value>' to your frontmatter"
-- **Type mismatch**: "Expected string but got number. Wrap the value in quotes."
-- **Typo in field name**: "Did you mean 'correct_name'? Check your field names."
-- **Template syntax**: "Check the template documentation for correct usage of this field"
-- **Missing asset**: "Add the file to your Quill's assets directory or use an alternative"
+Lean on the rendering engine's diagnostics.
 
 ---
 
@@ -636,10 +636,10 @@ def format_error_for_mcp(error: QuillmarkError) -> dict:
 
 1. Call `list_quills()` → discovers "appreciated_letter"
 2. Call `get_quill_info("appreciated_letter")` → learns required fields
-3. Call `get_quill_template("appreciated_letter")` → gets example template
-4. AI generates markdown based on user's needs
-5. Call `validate_frontmatter()` → checks if frontmatter is correct
-6. Call `render_document()` → produces PDF
+3. Call `get_quill_template("appreciated_letter")` → gets example template with `QUILL: appreciated_letter` directive
+4. AI generates markdown based on user's needs (includes `QUILL:` directive from template)
+5. Call `validate_frontmatter(markdown=...)` → checks if frontmatter is correct (no quill_name needed)
+6. Call `render_document(markdown=...)` → produces PDF (no quill_name needed)
 
 **AI Response:** "I've created a professional business letter for you and rendered it as a PDF. Here's the document..."
 
@@ -650,6 +650,7 @@ def format_error_for_mcp(error: QuillmarkError) -> dict:
 **User provides markdown with a typo:**
 ```markdown
 ---
+QUILL: appreciated_letter
 sender: John Doe
 recepient: Jane Smith  # Typo: should be "recipient"
 ---
@@ -660,7 +661,7 @@ Dear Jane,
 
 **AI Model's Tool Calls:**
 
-1. Call `render_document()` → returns error
+1. Call `render_document(markdown=...)` → returns error (note: no quill_name needed)
 
 **Error Response:**
 ```json
@@ -715,6 +716,55 @@ list_quills(include_metadata=True)
 2. **usaf_memo** - US Air Force memorandum template
 
 Which one would you like to use?"
+
+---
+
+### Example 4: Using QUILL Directive
+
+**User provides markdown with QUILL directive:**
+```markdown
+---
+QUILL: appreciated_letter
+sender: Jane Smith, Universal Exports, 1 Heavy Plaza, Morristown, NJ 07964
+recipient: Mr. John Doe
+123 Main Street
+Springfield, IL 62701
+date: Morristown, June 9th, 2023
+subject: Revision of our Procurement Contract
+name: Jane Smith, Regional Director
+---
+
+Dear Mr. Doe,
+
+I am writing to inform you...
+```
+
+**AI Model's Tool Call:**
+```json
+{
+  "markdown": "---\nQUILL: appreciated_letter\nsender: Jane Smith...",
+  "output_format": "PDF"
+}
+```
+
+**Note:** No `quill_name` parameter is needed because the markdown contains `QUILL: appreciated_letter` in the frontmatter.
+
+**Success Response:**
+```json
+{
+  "success": true,
+  "artifacts": [
+    {
+      "format": "PDF",
+      "bytes_base64": "JVBERi0xLjcKCjEgMCBvYmogICUg...",
+      "mime_type": "application/pdf",
+      "size_bytes": 45231
+    }
+  ],
+}
+```
+
+**AI Response:** "I've rendered your letter as a PDF using the 'appreciated_letter' template specified in your document."
 
 ---
 
@@ -794,10 +844,10 @@ Which one would you like to use?"
 ## References
 
 - **MCP Specification**: https://spec.modelcontextprotocol.io/
-- **Quillmark Python Package**: See `quillmark-python/README.md`
-- **Python API Design**: See `designs/PYTHON.md`
-- **Error Handling**: See `designs/ERROR.md`
-- **Quill Structure**: See `designs/QUILL_DESIGN.md`
+- **Quillmark Python Package**: See `https://github.com/nibsbin/quillmark/blob/main/quillmark-python/README.md`
+- **Python API Design**: See `https://github.com/nibsbin/quillmark/blob/main/designs/PYTHON.md`
+- **Error Handling**: See `https://github.com/nibsbin/quillmark/blob/main/designs/ERROR.md`
+- **Quill Structure**: See `https://github.com/nibsbin/quillmark/blob/main/designs/QUILL_DESIGN.md`
 
 ---
 
