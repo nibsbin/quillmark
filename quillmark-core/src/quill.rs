@@ -390,25 +390,6 @@ impl Quill {
                 template_file = Some(template_val.to_string());
             }
 
-            // Parse field schemas from [Quill.fields] subsection
-            if let Some(fields_section) = quill_section.get("fields") {
-                if let toml::Value::Table(fields_table) = fields_section {
-                    for (field_name, field_schema) in fields_table {
-                        match Self::toml_to_yaml_value(field_schema) {
-                            Ok(yaml_value) => {
-                                field_schemas.insert(field_name.clone(), yaml_value);
-                            }
-                            Err(e) => {
-                                eprintln!(
-                                    "Warning: Failed to convert field schema '{}': {}",
-                                    field_name, e
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-
             // Add other fields to metadata (excluding special fields and version)
             if let toml::Value::Table(table) = quill_section {
                 for (key, value) in table {
@@ -417,7 +398,6 @@ impl Quill {
                         && key != "glue"
                         && key != "template"
                         && key != "version"
-                        && key != "fields"
                     {
                         match Self::toml_to_yaml_value(value) {
                             Ok(yaml_value) => {
@@ -442,6 +422,25 @@ impl Quill {
                         }
                         Err(e) => {
                             eprintln!("Warning: Failed to convert typst field '{}': {}", key, e);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Parse field schemas from top-level [fields] section
+        if let Some(fields_section) = quill_toml.get("fields") {
+            if let toml::Value::Table(fields_table) = fields_section {
+                for (field_name, field_schema) in fields_table {
+                    match Self::toml_to_yaml_value(field_schema) {
+                        Ok(yaml_value) => {
+                            field_schemas.insert(field_name.clone(), yaml_value);
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "Warning: Failed to convert field schema '{}': {}",
+                                field_name, e
+                            );
                         }
                     }
                 }
@@ -1438,7 +1437,7 @@ backend = "typst"
 glue = "glue.typ"
 template = "taro.md"
 
-[Quill.fields]
+[fields]
 author = {description = "Author of document", required = true}
 ice_cream = {description = "favorite ice cream flavor"}
 title = {description = "title of document", required = true}
