@@ -1,5 +1,10 @@
-use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyModule};
+// Clean, non-duplicated imports
+use pyo3::conversion::IntoPyObjectExt;
+use pyo3::prelude::*; // PyResult, Python, etc.
+use pyo3::pycell::PyRef; // PyRef
+use pyo3::types::{PyDict, PyList}; // PyDict, PyList
+use pyo3::{Bound, Py, PyAny}; // Bound, PyAny, Py // into_bound_py_any
+
 use quillmark::{
     Diagnostic, Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderResult, Workflow,
 };
@@ -24,7 +29,7 @@ impl PyQuillmark {
         }
     }
 
-    fn register_quill(&mut self, quill: &PyQuill) {
+    fn register_quill(&mut self, quill: PyRef<PyQuill>) {
         self.inner.register_quill(quill.inner.clone());
     }
 
@@ -36,7 +41,7 @@ impl PyQuillmark {
         Ok(PyWorkflow { inner: workflow })
     }
 
-    fn workflow_from_quill(&self, quill: &PyQuill) -> PyResult<PyWorkflow> {
+    fn workflow_from_quill(&self, quill: PyRef<PyQuill>) -> PyResult<PyWorkflow> {
         let workflow = self
             .inner
             .workflow_from_quill(&quill.inner)
@@ -44,7 +49,7 @@ impl PyQuillmark {
         Ok(PyWorkflow { inner: workflow })
     }
 
-    fn workflow_from_parsed(&self, parsed: &PyParsedDocument) -> PyResult<PyWorkflow> {
+    fn workflow_from_parsed(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<PyWorkflow> {
         let workflow = self
             .inner
             .workflow_from_parsed(&parsed.inner)
@@ -80,7 +85,7 @@ impl PyWorkflow {
     #[pyo3(signature = (parsed, format=None))]
     fn render(
         &self,
-        parsed: &PyParsedDocument,
+        parsed: PyRef<PyParsedDocument>,
         format: Option<PyOutputFormat>,
     ) -> PyResult<PyRenderResult> {
         let rust_format = format.map(|f| f.into());
@@ -111,18 +116,16 @@ impl PyWorkflow {
             .map_err(convert_render_error)
     }
 
-    fn process_glue_parsed(&self, parsed: &PyParsedDocument) -> PyResult<String> {
+    fn process_glue_parsed(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<String> {
         self.inner
             .process_glue_parsed(&parsed.inner)
             .map_err(convert_render_error)
     }
 
-    // Note: Builder pattern methods are not fully supported in Python bindings
-    // due to Workflow not implementing Clone. For now, these are placeholder methods.
     fn with_asset(&self, _filename: String, _contents: Vec<u8>) -> PyResult<()> {
         Err(PyErr::new::<crate::errors::QuillmarkError, _>(
             "Builder pattern methods (with_asset, with_font, etc.) are not yet supported in Python bindings. \
-             Create a new workflow instead."
+             Create a new workflow instead.",
         ))
     }
 
@@ -217,13 +220,23 @@ impl PyQuill {
     }
 
     #[getter]
-    fn metadata(&self, py: Python) -> PyResult<Py<PyAny>> {
+    fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         // Convert serde_yaml::Value to Python dict
         let dict = PyDict::new(py);
         for (key, value) in &self.inner.metadata {
             dict.set_item(key, yaml_value_to_py(py, value)?)?;
         }
-        Ok(dict.into())
+        Ok(dict)
+    }
+
+    #[getter]
+    fn field_schemas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        // Convert field_schemas to Python dict
+        let dict = PyDict::new(py);
+        for (key, value) in &self.inner.field_schemas {
+            dict.set_item(key, yaml_value_to_py(py, value)?)?;
+        }
+        Ok(dict)
     }
 }
 
@@ -246,19 +259,19 @@ impl PyParsedDocument {
         self.inner.body()
     }
 
-    fn get_field(&self, key: &str, py: Python) -> PyResult<Option<Py<PyAny>>> {
+    fn get_field<'py>(&self, key: &str, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
         match self.inner.get_field(key) {
             Some(value) => Ok(Some(yaml_value_to_py(py, value)?)),
             None => Ok(None),
         }
     }
 
-    fn fields(&self, py: Python) -> PyResult<Py<PyAny>> {
+    fn fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         for (key, value) in self.inner.fields() {
             dict.set_item(key, yaml_value_to_py(py, value)?)?;
         }
-        Ok(dict.into())
+        Ok(dict)
     }
 
     fn quill_tag(&self) -> Option<&str> {
@@ -390,44 +403,43 @@ impl PyLocation {
 }
 
 // Helper function to convert YAML values to Python objects
-fn yaml_value_to_py(py: Python, value: &serde_yaml::Value) -> PyResult<Py<PyAny>> {
+fn yaml_value_to_py<'py>(
+    py: Python<'py>,
+    value: &serde_yaml::Value,
+) -> PyResult<Bound<'py, PyAny>> {
     match value {
-        serde_yaml::Value::Null => Ok(py.None().into()),
-        serde_yaml::Value::Bool(b) => {
-            let builtins = PyModule::import(py, "builtins")?;
-            Ok(builtins.getattr("bool")?.call1((*b,))?.into())
-        }
+        // ✅ This yields a By-Value Bound<'py, PyAny> (no refs involved)
+        serde_yaml::Value::Null => py.None().into_bound_py_any(py),
+
+        // keep existing conversions:
+        serde_yaml::Value::Bool(b) => b.into_bound_py_any(py),
         serde_yaml::Value::Number(n) => {
-            let builtins = PyModule::import(py, "builtins")?;
             if let Some(i) = n.as_i64() {
-                Ok(builtins.getattr("int")?.call1((i,))?.into())
+                i.into_bound_py_any(py)
             } else if let Some(f) = n.as_f64() {
-                Ok(builtins.getattr("float")?.call1((f,))?.into())
+                f.into_bound_py_any(py)
             } else {
-                Ok(py.None().into())
+                py.None().into_bound_py_any(py)
             }
         }
-        serde_yaml::Value::String(s) => {
-            let builtins = PyModule::import(py, "builtins")?;
-            Ok(builtins.getattr("str")?.call1((s.clone(),))?.into())
-        }
+        serde_yaml::Value::String(s) => s.as_str().into_bound_py_any(py),
         serde_yaml::Value::Sequence(seq) => {
-            let list = PyList::empty(py);
+            let list = pyo3::types::PyList::empty(py);
             for item in seq {
                 let val = yaml_value_to_py(py, item)?;
-                list.append(val.as_ref())?;
+                list.append(val)?;
             }
-            Ok(list.into())
+            Ok(list.into_any())
         }
         serde_yaml::Value::Mapping(map) => {
-            let dict = PyDict::new(py);
+            let dict = pyo3::types::PyDict::new(py);
             for (k, v) in map {
                 if let serde_yaml::Value::String(key) = k {
                     let val = yaml_value_to_py(py, v)?;
-                    dict.set_item(key, val.as_ref())?;
+                    dict.set_item(key, val)?;
                 }
             }
-            Ok(dict.into())
+            Ok(dict.into_any())
         }
         serde_yaml::Value::Tagged(tagged) => yaml_value_to_py(py, &tagged.value),
     }

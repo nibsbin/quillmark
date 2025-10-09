@@ -282,6 +282,8 @@ pub struct Quill {
     pub template_file: Option<String>,
     /// Markdown template content (optional)
     pub template: Option<String>,
+    /// Field schema documentation (optional)
+    pub field_schemas: HashMap<String, serde_yaml::Value>,
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }
@@ -360,6 +362,7 @@ impl Quill {
         let mut glue_file = "glue.typ".to_string(); // default
         let mut template_file: Option<String> = None;
         let mut quill_name = default_name.unwrap_or_else(|| "unnamed".to_string());
+        let mut field_schemas = HashMap::new();
 
         // Extract fields from [Quill] section
         if let Some(quill_section) = quill_toml.get("Quill") {
@@ -425,6 +428,25 @@ impl Quill {
             }
         }
 
+        // Parse field schemas from top-level [fields] section
+        if let Some(fields_section) = quill_toml.get("fields") {
+            if let toml::Value::Table(fields_table) = fields_section {
+                for (field_name, field_schema) in fields_table {
+                    match Self::toml_to_yaml_value(field_schema) {
+                        Ok(yaml_value) => {
+                            field_schemas.insert(field_name.clone(), yaml_value);
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "Warning: Failed to convert field schema '{}': {}",
+                                field_name, e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
         // Read the template content from glue file
         let glue_bytes = root
             .get_file(&glue_file)
@@ -457,6 +479,7 @@ impl Quill {
             glue_file,
             template_file,
             template: template_content_opt,
+            field_schemas,
             files: root,
         };
 
@@ -1401,5 +1424,115 @@ template = "template.md"
 
         let empty_subdirs = quill.list_subdirectories("empty");
         assert_eq!(empty_subdirs.len(), 0);
+    }
+
+    #[test]
+    fn test_field_schemas_parsing() {
+        let mut root_files = HashMap::new();
+
+        // Add Quill.toml with field schemas
+        let quill_toml = r#"[Quill]
+name = "taro"
+backend = "typst"
+glue = "glue.typ"
+template = "taro.md"
+
+[fields]
+author = {description = "Author of document", required = true}
+ice_cream = {description = "favorite ice cream flavor"}
+title = {description = "title of document", required = true}
+"#;
+        root_files.insert(
+            "Quill.toml".to_string(),
+            FileTreeNode::File {
+                contents: quill_toml.as_bytes().to_vec(),
+            },
+        );
+
+        // Add glue file
+        let glue_content = "= Test Template\n\nThis is a test.";
+        root_files.insert(
+            "glue.typ".to_string(),
+            FileTreeNode::File {
+                contents: glue_content.as_bytes().to_vec(),
+            },
+        );
+
+        // Add template file
+        root_files.insert(
+            "taro.md".to_string(),
+            FileTreeNode::File {
+                contents: b"# Template".to_vec(),
+            },
+        );
+
+        let root = FileTreeNode::Directory { files: root_files };
+
+        // Create Quill from tree
+        let quill = Quill::from_tree(root, Some("taro".to_string())).unwrap();
+
+        // Validate field schemas were parsed
+        assert_eq!(quill.field_schemas.len(), 3);
+        assert!(quill.field_schemas.contains_key("author"));
+        assert!(quill.field_schemas.contains_key("ice_cream"));
+        assert!(quill.field_schemas.contains_key("title"));
+
+        // Verify author field schema
+        let author_schema = quill.field_schemas.get("author").unwrap();
+        let author_map = author_schema.as_mapping().unwrap();
+        assert_eq!(
+            author_map
+                .get(&serde_yaml::Value::String("description".to_string()))
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "Author of document"
+        );
+        assert_eq!(
+            author_map
+                .get(&serde_yaml::Value::String("required".to_string()))
+                .unwrap()
+                .as_bool()
+                .unwrap(),
+            true
+        );
+
+        // Verify ice_cream field schema (no required field, should default to false)
+        let ice_cream_schema = quill.field_schemas.get("ice_cream").unwrap();
+        let ice_cream_map = ice_cream_schema.as_mapping().unwrap();
+        assert_eq!(
+            ice_cream_map
+                .get(&serde_yaml::Value::String("description".to_string()))
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "favorite ice cream flavor"
+        );
+        // Check that required is not set (or set to false)
+        let required_value = ice_cream_map.get(&serde_yaml::Value::String("required".to_string()));
+        // Either required is not present, or if present it should be false
+        if let Some(req_val) = required_value {
+            assert_eq!(req_val.as_bool().unwrap_or(false), false);
+        }
+
+        // Verify title field schema
+        let title_schema = quill.field_schemas.get("title").unwrap();
+        let title_map = title_schema.as_mapping().unwrap();
+        assert_eq!(
+            title_map
+                .get(&serde_yaml::Value::String("description".to_string()))
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "title of document"
+        );
+        assert_eq!(
+            title_map
+                .get(&serde_yaml::Value::String("required".to_string()))
+                .unwrap()
+                .as_bool()
+                .unwrap(),
+            true
+        );
     }
 }

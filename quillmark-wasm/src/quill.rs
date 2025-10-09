@@ -130,6 +130,47 @@ impl Quill {
         })
     }
 
+    /// Get field schemas as a JS object
+    #[wasm_bindgen(js_name = getFieldSchemas)]
+    pub fn get_field_schemas(&self) -> Result<JsValue, JsValue> {
+        // Convert the field_schemas HashMap to a JS object
+        let js_obj = js_sys::Object::new();
+
+        for (field_name, schema_value) in &self.inner.field_schemas {
+            // Convert serde_yaml::Value to serde_json::Value for serialization
+            let json_value = serde_json::to_value(schema_value).map_err(|e| {
+                QuillmarkError::new(
+                    format!("Failed to convert field schema '{}': {}", field_name, e),
+                    None,
+                    None,
+                )
+                .to_js_value()
+            })?;
+
+            let js_value = serde_wasm_bindgen::to_value(&json_value).map_err(|e| {
+                QuillmarkError::new(
+                    format!("Failed to serialize field schema '{}': {}", field_name, e),
+                    None,
+                    None,
+                )
+                .to_js_value()
+            })?;
+
+            js_sys::Reflect::set(&js_obj, &JsValue::from_str(field_name), &js_value).map_err(
+                |e| {
+                    QuillmarkError::new(
+                        format!("Failed to set field schema '{}': {:?}", field_name, e),
+                        None,
+                        None,
+                    )
+                    .to_js_value()
+                },
+            )?;
+        }
+
+        Ok(js_obj.into())
+    }
+
     /// List all files in the Quill (recursive paths)
     #[wasm_bindgen(js_name = listFiles)]
     pub fn list_files(&self) -> Vec<String> {
