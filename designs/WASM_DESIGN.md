@@ -71,7 +71,7 @@ The WASM API accepts Quills in a specific JSON format that represents the file s
 
 ### Standard Format
 
-The JSON format MUST have a root object with a `files` key. The optional `metadata` key provides additional metadata that overrides defaults extracted from `Quill.toml`.
+The JSON format MUST have a root object with a `files` key. The optional `metadata` key provides a default name that will be used if `Quill.toml` does not specify one.
 
 ```json
 {
@@ -85,17 +85,14 @@ The JSON format MUST have a root object with a `files` key. The optional `metada
 }
 ```
 
-### With Optional Metadata Override
+### With Optional Metadata
+
+The optional `metadata` object in JSON provides a `default_name` when constructing a Quill. However, the name from `Quill.toml` always takes precedence if present.
 
 ```json
 {
   "metadata": {
-    "name": "my-quill-override",
-    "version": "1.0.0",
-    "description": "A beautiful letter template",
-    "author": "John Doe",
-    "license": "MIT",
-    "tags": ["letter", "professional"]
+    "name": "my-quill-override"
   },
   "files": {
     "Quill.toml": { "contents": "..." },
@@ -103,6 +100,8 @@ The JSON format MUST have a root object with a `files` key. The optional `metada
   }
 }
 ```
+
+**Note**: Only the `name` field in the JSON `metadata` object is currently used (as a default). Other metadata fields like `version`, `description`, `author`, `license`, and `tags` should be specified in `Quill.toml` instead.
 
 ### Node Types
 
@@ -133,7 +132,7 @@ The JSON format MUST have a root object with a `files` key. The optional `metada
 
 1. Root MUST be an object with a `files` key
 2. The `files` value MUST be an object
-3. The `metadata` key is optional and overrides `Quill.toml` values
+3. The `metadata` key is optional and provides a default name (Quill.toml name takes precedence)
 4. File nodes MUST have a `contents` key with either:
    - A string (UTF-8 text content)
    - An array of numbers 0-255 (binary content)
