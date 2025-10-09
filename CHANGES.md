@@ -11,7 +11,7 @@ Field schemas returned by `quill.field_schemas` now have a standardized structur
 
 - `description` (str, required): Description of the field
 - `required` (bool): Whether the field is required (default: `false`)
-- `type` (str, optional): Type hint (e.g., "string", "number", "boolean", "object", "array")
+- `type` (str, optional): Type hint (e.g., "string", "number", "boolean", "object", "array"). May be `None` if not specified in the schema.
 - `example` (optional): Example value for the field
 - `default` (optional): Default value for the field
 
