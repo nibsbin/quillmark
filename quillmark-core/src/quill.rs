@@ -1511,7 +1511,10 @@ title = {description = "title of document", required = true}
         );
         // Check that required is not set (or set to false)
         let required_value = ice_cream_map.get(&serde_yaml::Value::String("required".to_string()));
-        assert!(required_value.is_none() || !required_value.unwrap().as_bool().unwrap_or(false));
+        // Either required is not present, or if present it should be false
+        if let Some(req_val) = required_value {
+            assert_eq!(req_val.as_bool().unwrap_or(false), false);
+        }
 
         // Verify title field schema
         let title_schema = quill.field_schemas.get("title").unwrap();
