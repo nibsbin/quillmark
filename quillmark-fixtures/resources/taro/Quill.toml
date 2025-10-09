@@ -3,3 +3,8 @@ name = "taro"
 backend = "typst"
 glue = "glue.typ"
 example = "taro.md"
+
+[fields]
+author = {description = "Author of document", required = true}
+ice_cream = {description = "favorite ice cream flavor"}
+title = {description = "title of document", required = true}
