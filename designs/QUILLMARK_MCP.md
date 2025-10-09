@@ -15,6 +15,7 @@ This document outlines the design for `quillmark-mcp`, a Model Context Protocol 
 - Enable rendering with comprehensive error diagnostics to help users fix issues
 - Support template discovery and exploration workflows
 - Use the existing `quillmark` PyPI package for all rendering operations
+- Support the Extended YAML Metadata Standard with SCOPE and QUILL keys for structured content
 
 **Non-Goals:**
 - Custom template creation or modification through MCP (v1.0)
@@ -58,6 +59,7 @@ Provide AI models with the necessary context to assist users in writing markdown
 - Field types, descriptions, and validation rules
 - Example values and formatting guidance
 - Template-specific markdown syntax and features
+- Extended YAML Metadata Standard capabilities (SCOPE for collections, QUILL for template selection)
 
 ### 3. Document Rendering & Validation
 
@@ -268,6 +270,43 @@ recipient: John Doe
 Letter content...
 ```
 
+**Extended YAML Metadata Standard:**
+
+Quillmark supports the Extended YAML Metadata Standard for structured content with collections. Documents can include multiple scoped blocks using the `SCOPE` key:
+
+```markdown
+---
+title: Product Catalog
+---
+
+Main document description.
+
+---
+SCOPE: products
+name: Widget
+price: 19.99
+---
+
+Widget description with *markdown formatting*.
+
+---
+SCOPE: products
+name: Gadget
+price: 29.99
+---
+
+Gadget description.
+```
+
+Key features:
+- **SCOPE key**: Creates collections (arrays) of structured content blocks
+- **QUILL key**: Specifies which quill template to use for rendering
+- **Contiguity requirement**: Metadata blocks must be contiguous (no blank lines within YAML content)
+- **Horizontal rule disambiguation**: `---` preceded by blank line is a horizontal rule, not metadata
+- Each scoped block contains metadata fields plus a `body` field
+- Collections preserve document order
+- See [PARSE.md](PARSE.md) for complete documentation
+
 **Success Output:**
 ```json
 {
@@ -369,7 +408,7 @@ Used across all error responses:
 
 ```python
 class Diagnostic:
-    severity: Literal["ERROR", "NOTE"]
+    severity: Literal["ERROR", "WARNING", "NOTE"]
     message: str
     code: str | None
     location: Location | None
@@ -581,6 +620,36 @@ def extract_schema(quill: Quill) -> dict[str, FieldSchema]:
     return schema
 ```
 
+### Python API Surface
+
+The `quillmark` Python package exposes the following classes and exceptions:
+
+**Core Classes:**
+- `Quillmark` - Engine for managing backends and quills
+- `Workflow` - Render execution API
+- `Quill` - Template bundle representation
+- `ParsedDocument` - Parsed markdown with frontmatter
+- `RenderResult` - Rendering output with artifacts and warnings
+- `Artifact` - Individual output file (PDF, SVG, etc.)
+- `Diagnostic` - Error/warning diagnostic with location
+- `Location` - File/line/column position
+
+**Enums:**
+- `OutputFormat` - PDF, SVG, etc.
+- `Severity` - ERROR, WARNING, NOTE
+
+**Exceptions:**
+- `QuillmarkError` - Base exception
+- `ParseError` - YAML parsing errors
+- `TemplateError` - Template processing errors
+- `CompilationError` - Backend compilation errors
+
+All classes are imported from the `quillmark` module:
+```python
+from quillmark import Quillmark, Workflow, Quill, ParsedDocument
+from quillmark import QuillmarkError, ParseError, TemplateError, CompilationError
+```
+
 ### Error Mapping
 
 Map Quillmark Python exceptions to MCP error responses:
@@ -588,7 +657,7 @@ Map Quillmark Python exceptions to MCP error responses:
 ```python
 from quillmark import QuillmarkError, ParseError, TemplateError, CompilationError
 
-def format_error_for_mcp(error: QuillmarkError) -> dict:
+def format_error_for_mcp(error: Exception) -> dict:
     """Convert Quillmark exception to MCP error response."""
     
     if isinstance(error, ParseError):
@@ -622,6 +691,17 @@ def format_error_for_mcp(error: QuillmarkError) -> dict:
             "error_message": str(error),
             "diagnostics": []
         }
+
+def extract_diagnostics(error: Exception) -> list[dict]:
+    """Extract diagnostics from Quillmark RenderResult or error context.
+    
+    Note: Diagnostics are available through RenderResult.warnings for successful
+    renders. For errors, diagnostic information should be accessed through the
+    error's context if available (implementation-specific).
+    """
+    # Implementation depends on how diagnostics are exposed in the Python API
+    # This is a placeholder for the actual implementation
+    return []
 ```
 
 ---
@@ -830,6 +910,8 @@ Dear Joe...
 - **Template Snippets**: Get partial templates for specific document sections
 - **Asset Management**: Tools to list and retrieve Quill assets
 - **Batch Rendering**: Render multiple documents in parallel
+- **Scoped Content Tools**: Tools to help AI models construct documents with SCOPE collections
+- **Dynamic Assets**: Support for runtime asset injection via Workflow API (note: currently not exposed in Python bindings)
 
 ### Phase 3 Features
 
@@ -843,9 +925,11 @@ Dear Joe...
 ## References
 
 - **MCP Specification**: https://spec.modelcontextprotocol.io/
+- **Quillmark Architecture**: See [DESIGN.md](DESIGN.md) - Complete architecture and core design principles
+- **Parsing & Extended YAML**: See [PARSE.md](PARSE.md) - Detailed parsing and Extended YAML Metadata Standard documentation
 - **Quillmark Python Package**: See `https://github.com/nibsbin/quillmark/blob/main/quillmark-python/README.md`
 - **Python API Design**: See `https://github.com/nibsbin/quillmark/blob/main/designs/PYTHON.md`
-- **Error Handling**: See `https://github.com/nibsbin/quillmark/blob/main/designs/ERROR.md`
+- **Error Handling**: See [ERROR.md](ERROR.md) - Error handling system documentation and implementation guide
 - **Quill Structure**: See `https://github.com/nibsbin/quillmark/blob/main/designs/QUILL_DESIGN.md`
 
 ---
@@ -886,6 +970,15 @@ Dear Joe...
 ---
 
 ## Changelog
+
+### 2024-10-09 - Consistency Update
+- Updated to reflect Extended YAML Metadata Standard (SCOPE/QUILL keys)
+- Added documentation for parsing contiguity requirements
+- Updated error handling to match current Python API
+- Added Python API surface documentation
+- Updated references to include DESIGN.md and PARSE.md
+- Clarified diagnostic severity levels (ERROR, WARNING, NOTE)
+- Added horizontal rule disambiguation documentation
 
 ### 2024-10-09 - Initial Design
 - Created comprehensive design document
