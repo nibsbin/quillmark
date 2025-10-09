@@ -1,4 +1,5 @@
 ---
+QUILL: appreciated_letter
 sender: Jane Smith, Universal Exports, 1 Heavy Plaza, Morristown, NJ 07964
 recipient: |
     Mr. John Doe
