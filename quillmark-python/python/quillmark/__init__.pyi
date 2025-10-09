@@ -167,10 +167,18 @@ class Quill:
     @property
     def glue_template(self) -> str:
         """Glue template content"""
+
+    @property
+    def example(self) -> str | None:
+        """Optional example template filename/content declared by the quill."""
     
     @property
     def metadata(self) -> dict[str, Any]:
         """Quill metadata from Quill.toml"""
+
+    @property
+    def field_schemas(self) -> dict[str, Any]:
+        """Field schema definitions declared by the quill (from Quill.toml)."""
 
 class ParsedDocument:
     """Parsed markdown document with frontmatter."""
