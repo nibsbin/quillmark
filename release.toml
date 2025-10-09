@@ -22,3 +22,11 @@ tag-message = "Release {{version}}"
 verify = true
 sign-commit = false
 sign-tag = false
+
+[[package]]
+name = "quillmark-python"
+# Skip cargo build/publish for Python package
+build = false
+publish = false
+# But still bump version and tag
+tag = true

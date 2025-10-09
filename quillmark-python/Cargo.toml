@@ -4,6 +4,7 @@ version = "0.1.6"
 edition = "2021"
 description = "Python bindings for Quillmark"
 license = "Apache-2.0"
+publish = false
 
 [lib]
 name = "_quillmark"
