@@ -39,9 +39,9 @@ jobs:
       
       - name: Install dependencies and run tests
         run: |
+          cd quillmark-python
           uv venv
           uv pip install maturin pytest
-          cd quillmark-python
           uv run python -m maturin develop
           uv run pytest
 
@@ -67,9 +67,9 @@ jobs:
       
       - name: Build wheels
         run: |
+          cd quillmark-python
           uv venv
           uv pip install maturin
-          cd quillmark-python
           uv run python -m maturin build --release --interpreter python3.10 python3.11 python3.12
       
       - name: Upload wheels

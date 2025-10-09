@@ -1,6 +1,10 @@
 use proptest::prelude::*;
 use quillmark_typst::convert::{escape_markup, escape_string, mark_to_typst};
 
+// Typst special characters that need escaping in markup context (excluding backslash)
+// These correspond to the characters escaped in the escape_markup function
+const TYPST_SPECIAL_CHARS: &[char] = &['*', '_', '`', '#', '[', ']', '$', '<', '>', '@'];
+
 // Security-focused tests for escape_string
 #[test]
 fn test_escape_string_security_attack_vectors() {
@@ -88,8 +92,7 @@ proptest! {
     fn fuzz_escape_markup_typst_chars_escaped(s in "\\PC*") {
         let escaped = escape_markup(&s);
         // For each Typst special character in the input, verify it's escaped in output
-        let special_chars = ['*', '_', '#', '[', ']', '$', '<', '>', '@'];
-        for &ch in &special_chars {
+        for &ch in TYPST_SPECIAL_CHARS {
             if s.contains(ch) {
                 // The escaped version should contain the escaped form
                 let escaped_form = format!("\\{}", ch);
@@ -103,17 +106,25 @@ proptest! {
     #[test]
     fn fuzz_escape_markup_backslash_first(s in "\\PC*") {
         let escaped = escape_markup(&s);
-        // Verify no double-escaping issues
-        // If input has backslash, it should become \\, not more
-        let _backslash_count = s.matches('\\').count();
-        let _escaped_backslash_count = escaped.matches("\\\\").count();
-        // Each input backslash should result in exactly one escaped backslash
-        // But we also need to account for backslashes used to escape other chars
-        // So we just verify the escaping is consistent and doesn't create invalid sequences
+        // Verify proper escaping of backslashes
+        // Each backslash in the input should be escaped to exactly two backslashes
+        // Count total backslashes in input
+        let input_backslashes = s.matches('\\').count();
 
-        // Verify no triple or quadruple backslashes (would indicate double-escaping)
-        assert!(!escaped.contains("\\\\\\\\\\\\"),
-            "Triple backslash found, possible double-escaping in: {}", escaped);
+        // Count other special chars that will be escaped (each adds one backslash)
+        let special_count: usize = TYPST_SPECIAL_CHARS.iter()
+            .map(|&ch| s.matches(ch).count())
+            .sum();
+
+        // Expected backslashes in output:
+        // - Each input backslash becomes 2 backslashes (input_backslashes * 2)
+        // - Each special char gets one escape backslash (special_count)
+        let expected_backslashes = input_backslashes * 2 + special_count;
+        let actual_backslashes = escaped.matches('\\').count();
+
+        assert_eq!(actual_backslashes, expected_backslashes,
+            "Backslash count mismatch for input {:?}: expected {}, got {}",
+            s, expected_backslashes, actual_backslashes);
     }
 
     #[test]
