@@ -30,12 +30,12 @@ fn _quillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySeverity>()?;
 
     // Register exceptions
-    m.add("QuillmarkError", m.py().get_type_bound::<QuillmarkError>())?;
-    m.add("ParseError", m.py().get_type_bound::<ParseError>())?;
-    m.add("TemplateError", m.py().get_type_bound::<TemplateError>())?;
+    m.add("QuillmarkError", m.py().get_type::<QuillmarkError>())?;
+    m.add("ParseError", m.py().get_type::<ParseError>())?;
+    m.add("TemplateError", m.py().get_type::<TemplateError>())?;
     m.add(
         "CompilationError",
-        m.py().get_type_bound::<CompilationError>(),
+        m.py().get_type::<CompilationError>(),
     )?;
 
     Ok(())

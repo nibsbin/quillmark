@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict};
+use pyo3::types::{PyDict, PyList, PyModule};
 use quillmark::{
     Diagnostic, Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderResult, Workflow,
 };
@@ -217,9 +217,9 @@ impl PyQuill {
     }
 
     #[getter]
-    fn metadata(&self, py: Python) -> PyResult<PyObject> {
+    fn metadata(&self, py: Python) -> PyResult<Py<PyAny>> {
         // Convert serde_yaml::Value to Python dict
-        let dict = PyDict::new_bound(py);
+        let dict = PyDict::new(py);
         for (key, value) in &self.inner.metadata {
             dict.set_item(key, yaml_value_to_py(py, value)?)?;
         }
@@ -246,15 +246,15 @@ impl PyParsedDocument {
         self.inner.body()
     }
 
-    fn get_field(&self, key: &str, py: Python) -> PyResult<Option<PyObject>> {
+    fn get_field(&self, key: &str, py: Python) -> PyResult<Option<Py<PyAny>>> {
         match self.inner.get_field(key) {
             Some(value) => Ok(Some(yaml_value_to_py(py, value)?)),
             None => Ok(None),
         }
     }
 
-    fn fields(&self, py: Python) -> PyResult<PyObject> {
-        let dict = PyDict::new_bound(py);
+    fn fields(&self, py: Python) -> PyResult<Py<PyAny>> {
+        let dict = PyDict::new(py);
         for (key, value) in self.inner.fields() {
             dict.set_item(key, yaml_value_to_py(py, value)?)?;
         }
@@ -307,8 +307,8 @@ pub struct PyArtifact {
 #[pymethods]
 impl PyArtifact {
     #[getter]
-    fn bytes<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
-        PyBytes::new_bound(py, &self.inner)
+    fn bytes(&self) -> Vec<u8> {
+        self.inner.clone()
     }
 
     #[getter]
@@ -390,32 +390,41 @@ impl PyLocation {
 }
 
 // Helper function to convert YAML values to Python objects
-fn yaml_value_to_py(py: Python, value: &serde_yaml::Value) -> PyResult<PyObject> {
+fn yaml_value_to_py(py: Python, value: &serde_yaml::Value) -> PyResult<Py<PyAny>> {
     match value {
-        serde_yaml::Value::Null => Ok(py.None()),
-        serde_yaml::Value::Bool(b) => Ok(b.to_object(py)),
+        serde_yaml::Value::Null => Ok(py.None().into()),
+        serde_yaml::Value::Bool(b) => {
+            let builtins = PyModule::import(py, "builtins")?;
+            Ok(builtins.getattr("bool")?.call1((*b,))?.into())
+        }
         serde_yaml::Value::Number(n) => {
+            let builtins = PyModule::import(py, "builtins")?;
             if let Some(i) = n.as_i64() {
-                Ok(i.to_object(py))
+                Ok(builtins.getattr("int")?.call1((i,))?.into())
             } else if let Some(f) = n.as_f64() {
-                Ok(f.to_object(py))
+                Ok(builtins.getattr("float")?.call1((f,))?.into())
             } else {
-                Ok(py.None())
+                Ok(py.None().into())
             }
         }
-        serde_yaml::Value::String(s) => Ok(s.to_object(py)),
+        serde_yaml::Value::String(s) => {
+            let builtins = PyModule::import(py, "builtins")?;
+            Ok(builtins.getattr("str")?.call1((s.clone(),))?.into())
+        }
         serde_yaml::Value::Sequence(seq) => {
-            let list = pyo3::types::PyList::empty_bound(py);
+            let list = PyList::empty(py);
             for item in seq {
-                list.append(yaml_value_to_py(py, item)?)?;
+                let val = yaml_value_to_py(py, item)?;
+                list.append(val.as_ref())?;
             }
             Ok(list.into())
         }
         serde_yaml::Value::Mapping(map) => {
-            let dict = PyDict::new_bound(py);
+            let dict = PyDict::new(py);
             for (k, v) in map {
                 if let serde_yaml::Value::String(key) = k {
-                    dict.set_item(key, yaml_value_to_py(py, v)?)?;
+                    let val = yaml_value_to_py(py, v)?;
+                    dict.set_item(key, val.as_ref())?;
                 }
             }
             Ok(dict.into())
