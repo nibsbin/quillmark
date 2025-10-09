@@ -15,6 +15,7 @@ default-members = [
     "quillmark",
     "quillmark-typst",
     "quillmark-wasm",
+    "quillmark-python"
 ]
 resolver = "2"
 
