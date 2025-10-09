@@ -4,6 +4,111 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
+/// Schema definition for a template field
+#[derive(Debug, Clone, PartialEq)]
+pub struct FieldSchema {
+    /// Field type hint (e.g., "string", "number", "boolean", "object", "array")
+    pub field_type: Option<String>,
+    /// Whether the field is required
+    pub required: bool,
+    /// Description of the field
+    pub description: String,
+    /// Example value for the field
+    pub example: Option<serde_yaml::Value>,
+    /// Default value for the field
+    pub default: Option<serde_yaml::Value>,
+}
+
+impl FieldSchema {
+    /// Create a new FieldSchema with default values
+    pub fn new(description: String) -> Self {
+        Self {
+            field_type: None,
+            required: false,
+            description,
+            example: None,
+            default: None,
+        }
+    }
+
+    /// Parse a FieldSchema from a serde_yaml::Value
+    pub fn from_yaml_value(value: &serde_yaml::Value) -> Result<Self, String> {
+        let mapping = value
+            .as_mapping()
+            .ok_or_else(|| "Field schema must be a mapping/object".to_string())?;
+
+        let description = mapping
+            .get(&serde_yaml::Value::String("description".to_string()))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let required = mapping
+            .get(&serde_yaml::Value::String("required".to_string()))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let field_type = mapping
+            .get(&serde_yaml::Value::String("type".to_string()))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let example = mapping
+            .get(&serde_yaml::Value::String("example".to_string()))
+            .cloned();
+
+        let default = mapping
+            .get(&serde_yaml::Value::String("default".to_string()))
+            .cloned();
+
+        Ok(Self {
+            field_type,
+            required,
+            description,
+            example,
+            default,
+        })
+    }
+
+    /// Convert the FieldSchema to a serde_yaml::Value for serialization
+    pub fn to_yaml_value(&self) -> serde_yaml::Value {
+        let mut map = serde_yaml::Mapping::new();
+
+        map.insert(
+            serde_yaml::Value::String("description".to_string()),
+            serde_yaml::Value::String(self.description.clone()),
+        );
+
+        map.insert(
+            serde_yaml::Value::String("required".to_string()),
+            serde_yaml::Value::Bool(self.required),
+        );
+
+        if let Some(ref field_type) = self.field_type {
+            map.insert(
+                serde_yaml::Value::String("type".to_string()),
+                serde_yaml::Value::String(field_type.clone()),
+            );
+        }
+
+        if let Some(ref example) = self.example {
+            map.insert(
+                serde_yaml::Value::String("example".to_string()),
+                example.clone(),
+            );
+        }
+
+        if let Some(ref default) = self.default {
+            map.insert(
+                serde_yaml::Value::String("default".to_string()),
+                default.clone(),
+            );
+        }
+
+        serde_yaml::Value::Mapping(map)
+    }
+}
+
 /// A node in the file tree structure
 #[derive(Debug, Clone)]
 pub enum FileTreeNode {
@@ -281,7 +386,7 @@ pub struct Quill {
     /// Markdown template content (optional)
     pub example: Option<String>,
     /// Field schema documentation (optional)
-    pub field_schemas: HashMap<String, serde_yaml::Value>,
+    pub field_schemas: HashMap<String, FieldSchema>,
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }
@@ -431,9 +536,17 @@ impl Quill {
             if let toml::Value::Table(fields_table) = fields_section {
                 for (field_name, field_schema) in fields_table {
                     match Self::toml_to_yaml_value(field_schema) {
-                        Ok(yaml_value) => {
-                            field_schemas.insert(field_name.clone(), yaml_value);
-                        }
+                        Ok(yaml_value) => match FieldSchema::from_yaml_value(&yaml_value) {
+                            Ok(schema) => {
+                                field_schemas.insert(field_name.clone(), schema);
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "Warning: Failed to parse field schema '{}': {}",
+                                    field_name, e
+                                );
+                            }
+                        },
                         Err(e) => {
                             eprintln!(
                                 "Warning: Failed to convert field schema '{}': {}",
@@ -1471,60 +1584,78 @@ title = {description = "title of document", required = true}
 
         // Verify author field schema
         let author_schema = quill.field_schemas.get("author").unwrap();
-        let author_map = author_schema.as_mapping().unwrap();
-        assert_eq!(
-            author_map
-                .get(&serde_yaml::Value::String("description".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "Author of document"
-        );
-        assert_eq!(
-            author_map
-                .get(&serde_yaml::Value::String("required".to_string()))
-                .unwrap()
-                .as_bool()
-                .unwrap(),
-            true
-        );
+        assert_eq!(author_schema.description, "Author of document");
+        assert_eq!(author_schema.required, true);
 
         // Verify ice_cream field schema (no required field, should default to false)
         let ice_cream_schema = quill.field_schemas.get("ice_cream").unwrap();
-        let ice_cream_map = ice_cream_schema.as_mapping().unwrap();
-        assert_eq!(
-            ice_cream_map
-                .get(&serde_yaml::Value::String("description".to_string()))
-                .unwrap()
-                .as_str()
-                .unwrap(),
-            "favorite ice cream flavor"
-        );
-        // Check that required is not set (or set to false)
-        let required_value = ice_cream_map.get(&serde_yaml::Value::String("required".to_string()));
-        // Either required is not present, or if present it should be false
-        if let Some(req_val) = required_value {
-            assert_eq!(req_val.as_bool().unwrap_or(false), false);
-        }
+        assert_eq!(ice_cream_schema.description, "favorite ice cream flavor");
+        assert_eq!(ice_cream_schema.required, false);
 
         // Verify title field schema
         let title_schema = quill.field_schemas.get("title").unwrap();
-        let title_map = title_schema.as_mapping().unwrap();
+        assert_eq!(title_schema.description, "title of document");
+        assert_eq!(title_schema.required, true);
+    }
+
+    #[test]
+    fn test_field_schema_struct() {
+        // Test creating FieldSchema with minimal fields
+        let schema1 = FieldSchema::new("Test description".to_string());
+        assert_eq!(schema1.description, "Test description");
+        assert_eq!(schema1.required, false);
+        assert_eq!(schema1.field_type, None);
+        assert_eq!(schema1.example, None);
+        assert_eq!(schema1.default, None);
+
+        // Test parsing FieldSchema from YAML with all fields
+        let yaml_str = r#"
+description: "Full field schema"
+required: true
+type: "string"
+example: "Example value"
+default: "Default value"
+"#;
+        let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml_str).unwrap();
+        let schema2 = FieldSchema::from_yaml_value(&yaml_value).unwrap();
+        assert_eq!(schema2.description, "Full field schema");
+        assert_eq!(schema2.required, true);
+        assert_eq!(schema2.field_type, Some("string".to_string()));
         assert_eq!(
-            title_map
+            schema2.example,
+            Some(serde_yaml::Value::String("Example value".to_string()))
+        );
+        assert_eq!(
+            schema2.default,
+            Some(serde_yaml::Value::String("Default value".to_string()))
+        );
+
+        // Test converting FieldSchema back to YAML
+        let yaml_value = schema2.to_yaml_value();
+        let mapping = yaml_value.as_mapping().unwrap();
+        assert_eq!(
+            mapping
                 .get(&serde_yaml::Value::String("description".to_string()))
                 .unwrap()
                 .as_str()
                 .unwrap(),
-            "title of document"
+            "Full field schema"
         );
         assert_eq!(
-            title_map
+            mapping
                 .get(&serde_yaml::Value::String("required".to_string()))
                 .unwrap()
                 .as_bool()
                 .unwrap(),
             true
+        );
+        assert_eq!(
+            mapping
+                .get(&serde_yaml::Value::String("type".to_string()))
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "string"
         );
     }
 }
