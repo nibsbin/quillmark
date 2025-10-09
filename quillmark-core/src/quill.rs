@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldSchema {
     /// Field type hint (e.g., "string", "number", "boolean", "object", "array")
-    pub field_type: Option<String>,
+    pub r#type: Option<String>,
     /// Whether the field is required
     pub required: bool,
     /// Description of the field
@@ -23,7 +23,7 @@ impl FieldSchema {
     /// Create a new FieldSchema with default values
     pub fn new(description: String) -> Self {
         Self {
-            field_type: None,
+            r#type: None,
             required: false,
             description,
             example: None,
@@ -62,7 +62,7 @@ impl FieldSchema {
             .cloned();
 
         Ok(Self {
-            field_type,
+            r#type: field_type,
             required,
             description,
             example,
@@ -84,7 +84,7 @@ impl FieldSchema {
             serde_yaml::Value::Bool(self.required),
         );
 
-        if let Some(ref field_type) = self.field_type {
+        if let Some(ref field_type) = self.r#type {
             map.insert(
                 serde_yaml::Value::String("type".to_string()),
                 serde_yaml::Value::String(field_type.clone()),
@@ -381,6 +381,8 @@ pub struct Quill {
     pub metadata: HashMap<String, serde_yaml::Value>,
     /// Name of the quill
     pub name: String,
+    /// Backend identifier (e.g., "typst")
+    pub backend: String,
     /// Glue template file name
     pub glue_file: String,
     /// Markdown template content (optional)
@@ -465,6 +467,7 @@ impl Quill {
         let mut glue_file = "glue.typ".to_string(); // default
         let mut template_file: Option<String> = None;
         let mut quill_name = default_name.unwrap_or_else(|| "unnamed".to_string());
+        let mut backend = String::new();
         let mut field_schemas = HashMap::new();
 
         // Extract fields from [Quill] section
@@ -475,6 +478,7 @@ impl Quill {
             }
 
             if let Some(backend_val) = quill_section.get("backend").and_then(|v| v.as_str()) {
+                backend = backend_val.to_string();
                 match Self::toml_to_yaml_value(&toml::Value::String(backend_val.to_string())) {
                     Ok(yaml_value) => {
                         metadata.insert("backend".to_string(), yaml_value);
@@ -597,6 +601,7 @@ impl Quill {
             glue_template: template_content,
             metadata,
             name: quill_name,
+            backend,
             glue_file,
             example: template_content_opt,
             field_schemas,
@@ -1619,7 +1624,7 @@ title = {description = "title of document", required = true}
         let schema1 = FieldSchema::new("Test description".to_string());
         assert_eq!(schema1.description, "Test description");
         assert_eq!(schema1.required, false);
-        assert_eq!(schema1.field_type, None);
+        assert_eq!(schema1.r#type, None);
         assert_eq!(schema1.example, None);
         assert_eq!(schema1.default, None);
 
@@ -1635,7 +1640,7 @@ default: "Default value"
         let schema2 = FieldSchema::from_yaml_value(&yaml_value).unwrap();
         assert_eq!(schema2.description, "Full field schema");
         assert_eq!(schema2.required, true);
-        assert_eq!(schema2.field_type, Some("string".to_string()));
+        assert_eq!(schema2.r#type, Some("string".to_string()));
         assert_eq!(
             schema2.example,
             Some(serde_yaml::Value::String("Example value".to_string()))
