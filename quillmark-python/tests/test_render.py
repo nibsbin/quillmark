@@ -11,7 +11,7 @@ def test_end_to_end_render(test_quill_dir, simple_markdown):
     quill = Quill.from_path(str(test_quill_dir))
     engine.register_quill(quill)
     
-    workflow = engine.workflow_from_quill_name("test-quill")
+    workflow = engine.workflow_from_quill_name("taro")
     parsed = ParsedDocument.from_markdown(simple_markdown)
     result = workflow.render(parsed, OutputFormat.PDF)
     
@@ -26,12 +26,12 @@ def test_process_glue(test_quill_dir, simple_markdown):
     quill = Quill.from_path(str(test_quill_dir))
     engine.register_quill(quill)
     
-    workflow = engine.workflow_from_quill_name("test-quill")
+    workflow = engine.workflow_from_quill_name("taro")
     parsed = ParsedDocument.from_markdown(simple_markdown)
     glue_output = workflow.process_glue_parsed(parsed)
     
-    assert "Test Document" in glue_output
-    assert "Hello World" in glue_output
+    assert "Test Author" in glue_output
+    assert "vanilla" in glue_output
 
 
 def test_save_artifact(test_quill_dir, simple_markdown, tmp_path):
@@ -40,7 +40,7 @@ def test_save_artifact(test_quill_dir, simple_markdown, tmp_path):
     quill = Quill.from_path(str(test_quill_dir))
     engine.register_quill(quill)
     
-    workflow = engine.workflow_from_quill_name("test-quill")
+    workflow = engine.workflow_from_quill_name("taro")
     parsed = ParsedDocument.from_markdown(simple_markdown)
     result = workflow.render(parsed, OutputFormat.PDF)
     

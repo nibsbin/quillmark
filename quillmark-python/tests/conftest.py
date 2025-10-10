@@ -1,49 +1,42 @@
 """Shared test fixtures for quillmark tests."""
 
-import tempfile
 from pathlib import Path
 
 import pytest
 
 
-@pytest.fixture
-def test_quill_dir(tmp_path):
-    """Create a test quill directory."""
-    quill_path = tmp_path / "test-quill"
-    quill_path.mkdir()
-    
-    # Create Quill.toml
-    (quill_path / "Quill.toml").write_text(
-        """[Quill]
-name = "test-quill"
-backend = "typst"
-glue = "glue.typ"
-"""
-    )
-    
-    # Create glue template - use simpler template without filters
-    (quill_path / "glue.typ").write_text(
-        """#set page(width: 100pt, height: 100pt)
-
-#text(size: 16pt, weight: "bold")[Test Document]
-
-Hello World
-
-This is a test document.
-"""
-    )
-    
-    return quill_path
+def _get_fixtures_path():
+    """Get the path to quillmark-fixtures/resources."""
+    # Navigate from quillmark-python/tests to workspace root, then to fixtures
+    test_dir = Path(__file__).parent
+    python_dir = test_dir.parent
+    workspace_root = python_dir.parent
+    fixtures_path = workspace_root / "quillmark-fixtures" / "resources"
+    return fixtures_path
 
 
 @pytest.fixture
-def simple_markdown():
-    """Return simple test markdown."""
+def fixtures_path():
+    """Provide path to quillmark-fixtures/resources."""
+    return _get_fixtures_path()
+
+
+@pytest.fixture
+def test_quill_dir(fixtures_path):
+    """Return path to the taro quill template from fixtures."""
+    return fixtures_path / "taro"
+
+
+@pytest.fixture
+def simple_markdown(fixtures_path):
+    """Return simple test markdown compatible with taro template."""
     return """---
+author: Test Author
+ice_cream: vanilla
 title: Test Document
 ---
 
-# Hello World
+# Sample Document
 
-This is a test document.
+This is a **bold** statement with *emphasis* and some `inline code`.
 """

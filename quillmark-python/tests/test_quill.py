@@ -8,9 +8,9 @@ from quillmark import Quill, QuillmarkError
 def test_load_quill(test_quill_dir):
     """Test loading a quill from path."""
     quill = Quill.from_path(str(test_quill_dir))
-    assert quill.name == "test-quill"
+    assert quill.name == "taro"
     assert quill.backend == "typst"
-    assert "Test Document" in quill.glue_template
+    assert "author" in quill.glue_template
 
 
 def test_load_nonexistent_quill(tmp_path):

@@ -108,3 +108,4 @@ htmlcov/
 # Allow the repository-level target/ (if you want to keep workspace target) but ignore crate-local
 # (Note: top-level repo target is not ignored by this file)
 # (If you set CARGO_TARGET_DIR to the workspace root, adjust accordingly.)
+.venv

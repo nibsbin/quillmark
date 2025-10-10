@@ -9,7 +9,7 @@ def test_parse_markdown(simple_markdown):
     """Test parsing markdown with frontmatter."""
     parsed = ParsedDocument.from_markdown(simple_markdown)
     assert parsed.get_field("title") == "Test Document"
-    assert "Hello World" in parsed.body()
+    assert "Sample Document" in parsed.body()
 
 
 def test_parse_invalid_yaml():
