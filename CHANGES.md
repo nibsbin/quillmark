@@ -2,7 +2,7 @@
 
 This document summarizes the API changes for Python consumers since version 0.1.14 (commit 6a99057).
 
-## Version 0.1.15+ (unreleased)
+## Version 0.1.15+
 
 ### 🔄 Breaking Changes
 
