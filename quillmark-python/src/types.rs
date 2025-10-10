@@ -158,11 +158,12 @@ impl PyWorkflow {
             "Builder pattern methods are not yet supported in Python bindings",
         ))
     }
-
+    #[getter]
     fn backend_id(&self) -> &str {
         self.inner.backend_id()
     }
 
+    #[getter]
     fn supported_formats(&self) -> Vec<PyOutputFormat> {
         self.inner
             .supported_formats()
@@ -171,6 +172,7 @@ impl PyWorkflow {
             .collect()
     }
 
+    #[getter]
     fn quill_name(&self) -> &str {
         self.inner.quill_name()
     }
@@ -273,6 +275,7 @@ impl PyParsedDocument {
         }
     }
 
+    #[getter]
     fn fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
         for (key, value) in self.inner.fields() {

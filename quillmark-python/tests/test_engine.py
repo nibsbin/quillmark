@@ -27,8 +27,8 @@ def test_workflow_from_quill_name(taro_quill_dir):
     engine.register_quill(quill)
     
     workflow = engine.workflow_from_quill_name(quill.name)
-    assert workflow.quill_name() == quill.name
-    assert workflow.backend_id() == quill.backend
+    assert workflow.quill_name == quill.name
+    assert workflow.backend_id == quill.backend
 
 
 def test_workflow_from_quill(taro_quill_dir):
@@ -37,5 +37,5 @@ def test_workflow_from_quill(taro_quill_dir):
     quill = Quill.from_path(str(taro_quill_dir))
     
     workflow = engine.workflow_from_quill(quill)
-    assert workflow.quill_name() == quill.name
-    assert workflow.backend_id() == quill.backend
+    assert workflow.quill_name == quill.name
+    assert workflow.backend_id == quill.backend

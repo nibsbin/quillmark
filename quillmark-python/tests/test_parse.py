@@ -27,7 +27,7 @@ Content
 def test_fields_access(taro_md):
     """Test accessing all fields."""
     parsed = ParsedDocument.from_markdown(taro_md)
-    fields = parsed.fields()
+    fields = parsed.fields
     assert "title" in fields
     assert "Ice Cream" in fields["title"]
     assert "body" in fields
