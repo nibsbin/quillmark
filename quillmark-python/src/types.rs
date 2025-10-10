@@ -208,12 +208,12 @@ impl PyQuill {
     }
 
     #[getter]
-    fn backend(&self) -> Option<String> {
+    fn backend(&self) -> &str {
         self.inner
             .metadata
             .get("backend")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
+            .unwrap_or_default()
     }
 
     #[getter]
