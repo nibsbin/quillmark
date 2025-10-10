@@ -1042,7 +1042,7 @@ rating: 4
     }
 
     #[test]
-    fn test_quill_directive() {
+    fn taro_quill_directive() {
         let markdown = r#"---
 QUILL: usaf_memo
 memo_for: [ORG/SYMBOL]
