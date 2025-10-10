@@ -7,8 +7,8 @@ from quillmark import OutputFormat, ParsedDocument, Quillmark
 # Create engine
 engine = Quillmark()
 
-# Example quill path
-quill_path = Path("path/to/quill")
+# Load quill from fixtures (taro template)
+quill_path = Path(__file__).parent.parent.parent / "quillmark-fixtures" / "resources" / "taro"
 
 if quill_path.exists():
     from quillmark import Quill

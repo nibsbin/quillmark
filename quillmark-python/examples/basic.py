@@ -7,17 +7,18 @@ from quillmark import OutputFormat, ParsedDocument, Quill, Quillmark
 # Create engine
 engine = Quillmark()
 
-# Load and register quill
-# Note: Replace with actual path to a quill
-quill_path = Path("path/to/quill")
+# Load and register quill from fixtures
+# This example uses the taro template from quillmark-fixtures
+quill_path = Path(__file__).parent.parent.parent / "quillmark-fixtures" / "resources" / "taro"
 if quill_path.exists():
     quill = Quill.from_path(str(quill_path))
     engine.register_quill(quill)
 
-    # Parse markdown
+    # Parse markdown compatible with taro template
     markdown = """---
-title: Hello World
 author: Alice
+ice_cream: chocolate
+title: Hello World
 ---
 
 # Introduction
