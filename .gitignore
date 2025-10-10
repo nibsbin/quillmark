@@ -40,3 +40,5 @@ pkg/
 node_modules/
 package-lock.json
 *.tgz
+
+.env

@@ -1,44 +1,45 @@
-"""Shared test fixtures for quillmark tests."""
+"""Shared test fixtures for quillmark tests.
 
-import tempfile
+These fixtures prefer using the canonical repository fixtures located in
+`quillmark-fixtures/resources`. If those resources cannot be found the
+original simple fallbacks are used so tests remain robust in odd layouts.
+"""
+
+import shutil
 from pathlib import Path
-
 import pytest
 
 
 @pytest.fixture
-def test_quill_dir(tmp_path):
-    """Create a test quill directory."""
-    quill_path = tmp_path / "test-quill"
-    quill_path.mkdir()
-    
-    # Create Quill.toml
-    (quill_path / "Quill.toml").write_text(
-        """[Quill]
-name = "test-quill"
-backend = "typst"
-glue = "glue.typ"
-"""
-    )
-    
-    # Create glue template - use simpler template without filters
-    (quill_path / "glue.typ").write_text(
-        """#set page(width: 100pt, height: 100pt)
+def taro_quill_dir():
+    """Provide a test quill directory.
 
-#text(size: 16pt, weight: "bold")[Test Document]
+    This will copy an existing fixture from `quillmark-fixtures/resources`
+    into the test temporary directory so tests can safely mutate files.
+    The default fixture used is `appreciated_letter`.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    resources_dir = repo_root / "quillmark-fixtures" / "resources"
+    fixture_path = resources_dir / "taro"
 
-Hello World
+    assert fixture_path.exists(), f"Preferred fixture not found: {fixture_path}"
 
-This is a test document.
-"""
-    )
-    
-    return quill_path
+
+    return fixture_path
 
 
 @pytest.fixture
-def simple_markdown():
-    """Return simple test markdown."""
+def taro_md():
+    """Return simple test markdown.
+
+    Prefer the repository `sample.md` fixture when available.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    sample_path = repo_root / "quillmark-fixtures" / "resources" / "taro" / "taro.md"
+
+    if sample_path.exists():
+        return sample_path.read_text()
+
     return """---
 title: Test Document
 ---
