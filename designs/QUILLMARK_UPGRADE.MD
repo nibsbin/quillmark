@@ -58,6 +58,32 @@ description = "A template description"  # Now required
 glue = "template.typ"
 ```
 
+### ⚠️ API Limitations
+
+#### Builder Pattern Methods Not Supported
+The Python bindings do not support builder pattern methods for adding assets and fonts to workflows. These methods will raise a `QuillmarkError`:
+
+**Not available**:
+```python
+workflow.with_asset("image.png", image_bytes)  # ❌ Raises QuillmarkError
+workflow.with_assets(assets_dict)              # ❌ Raises QuillmarkError
+workflow.clear_assets()                        # ❌ Raises QuillmarkError
+workflow.with_font("font.ttf", font_bytes)     # ❌ Raises QuillmarkError
+workflow.with_fonts(fonts_dict)                # ❌ Raises QuillmarkError
+workflow.clear_fonts()                         # ❌ Raises QuillmarkError
+```
+
+**Workaround**: If you need to add dynamic assets or fonts, you'll need to work with the Rust API directly or wait for future Python binding support. The underlying Rust API supports `add_asset()`, `add_assets()`, `clear_assets()`, `add_font()`, `add_fonts()`, and `clear_fonts()` methods.
+
+**Note**: The corresponding inspection methods ARE available:
+```python
+# Get list of dynamic asset filenames
+asset_names = workflow.dynamic_asset_names()  # ✅ Works
+
+# Get list of dynamic font filenames  
+font_names = workflow.dynamic_font_names()    # ✅ Works
+```
+
 ### 🔧 Internal Changes
 
 These changes should be transparent to Python users but are worth noting:
@@ -86,6 +112,13 @@ value = parsed.get_field("large_number")  # Works correctly for u64 values
 2. If you access field schemas, be aware they now have a standardized structure
 3. If you create Quill templates, add a `description` field to your `Quill.toml` files
 
+**What's NOT supported in Python**:
+- Builder pattern methods: `with_asset()`, `with_assets()`, `clear_assets()`, `with_font()`, `with_fonts()`, `clear_fonts()`
+- These methods exist in the Rust API but are not yet available in Python bindings
+
+**What IS supported**:
+- Inspection methods: `dynamic_asset_names()`, `dynamic_font_names()` to check what assets/fonts are loaded
+
 **What's backwards compatible**:
 - All other Quill properties (`name`, `glue_template`, `example`, `metadata`)
 - ParsedDocument API (`from_markdown()`, `body()`, `get_field()`, `fields()`, `quill_tag()`)
@@ -99,3 +132,4 @@ value = parsed.get_field("large_number")  # Works correctly for u64 values
 - [ ] Replace references to `field_type` with `type` in field schema access
 - [ ] Update Quill.toml files to include required `description` field
 - [ ] Test with edge cases involving large numbers or complex data structures
+- [ ] Be aware that builder pattern methods (`with_asset`, `with_font`, etc.) are not available in Python
