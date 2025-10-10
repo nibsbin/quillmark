@@ -73,7 +73,9 @@ workflow.with_fonts(fonts_dict)                # ❌ Raises QuillmarkError
 workflow.clear_fonts()                         # ❌ Raises QuillmarkError
 ```
 
-**Workaround**: If you need to add dynamic assets or fonts, you'll need to work with the Rust API directly or wait for future Python binding support. The underlying Rust API supports `add_asset()`, `add_assets()`, `clear_assets()`, `add_font()`, `add_fonts()`, and `clear_fonts()` methods.
+**Workaround**: If you need to add dynamic assets or fonts, you'll need to work with the Rust API directly or wait for future Python binding support. 
+
+**Note on naming**: The Python methods use `with_*` naming (builder pattern style), but they're not implemented. The underlying Rust API uses different method names: `add_asset()`, `add_assets()`, `clear_assets()`, `add_font()`, `add_fonts()`, and `clear_fonts()`.
 
 **Note**: The corresponding inspection methods ARE available:
 ```python
