@@ -2,6 +2,8 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
+const MIN_PDF_SIZE: usize = 1000;
+
 #[test]
 fn test_cli_renders_pdf() {
     let quill_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -32,7 +34,11 @@ fn test_cli_renders_pdf() {
     assert!(pdf_path.exists(), "PDF file should be created");
 
     let pdf_content = fs::read(&pdf_path).unwrap();
-    assert!(pdf_content.len() > 1000, "PDF should have content");
+    assert!(
+        pdf_content.len() > MIN_PDF_SIZE,
+        "PDF should have substantial content (>{} bytes)",
+        MIN_PDF_SIZE
+    );
     assert!(
         pdf_content.starts_with(b"%PDF"),
         "File should be a valid PDF"
@@ -64,13 +70,15 @@ fn test_cli_nonexistent_quill() {
     let temp_markdown = temp_dir.path().join("test.md");
     fs::write(&temp_markdown, "# Test").unwrap();
 
+    let nonexistent_quill = temp_dir.path().join("nonexistent_quill");
+
     let binary_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .unwrap()
         .join("target/debug/quillmark-cli");
 
     let output = Command::new(&binary_path)
-        .arg("/nonexistent/quill/path")
+        .arg(&nonexistent_quill)
         .arg(&temp_markdown)
         .output()
         .expect("Failed to execute CLI");
