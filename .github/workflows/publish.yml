@@ -108,7 +108,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Publish workspace crates (no verification)
-        run: cargo publish --workspace --locked --no-verify
+        run: cargo publish --locked --no-verify
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 

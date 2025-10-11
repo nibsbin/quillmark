@@ -171,6 +171,21 @@ impl QuillWorld {
             }
         }
 
+        // Also look in packages/*/fonts/ for package fonts
+        let package_font_paths = quill.find_files("packages/*/fonts/*");
+        for font_path in package_font_paths {
+            if let Some(ext) = font_path.extension() {
+                if matches!(
+                    ext.to_string_lossy().to_lowercase().as_str(),
+                    "ttf" | "otf" | "woff" | "woff2"
+                ) {
+                    if let Some(contents) = quill.get_file(&font_path) {
+                        font_data.push(contents.to_vec());
+                    }
+                }
+            }
+        }
+
         // Also look in assets/ root for dynamic fonts (DYNAMIC_FONT__*)
         let asset_paths = quill.find_files("assets/*");
         for asset_path in asset_paths {
