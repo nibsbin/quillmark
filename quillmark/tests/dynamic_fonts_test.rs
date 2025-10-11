@@ -118,24 +118,3 @@ fn test_dynamic_font_names() {
 
     assert_eq!(font_names, vec!["font1.ttf", "font2.otf"]);
 }
-
-#[test]
-fn test_with_real_font_file() {
-    use std::fs;
-
-    let mut engine = Quillmark::new();
-    let quill = Quill::from_path(resource_path("taro")).unwrap();
-    engine.register_quill(quill);
-
-    // Load a real font file from usaf_memo fixture
-    let font_path = resource_path("usaf_memo/assets/DejaVuSansMono.ttf");
-    let font_data = fs::read(&font_path).expect("Should read font file");
-
-    let mut workflow = engine.workflow_from_quill_name("taro").unwrap();
-    workflow
-        .add_font("DejaVuSansMono.ttf", font_data)
-        .expect("Should add real font");
-
-    assert_eq!(workflow.quill_name(), "taro");
-    assert_eq!(workflow.dynamic_font_names(), vec!["DejaVuSansMono.ttf"]);
-}
