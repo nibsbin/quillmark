@@ -779,13 +779,19 @@ impl Quill {
             .collect()
     }
 
-    /// Get all files matching a pattern (supports simple wildcards)
+    /// Get all files matching a pattern (supports glob-style wildcards)
     pub fn find_files<P: AsRef<Path>>(&self, pattern: P) -> Vec<PathBuf> {
         let pattern_str = pattern.as_ref().to_string_lossy();
         let mut matches = Vec::new();
 
+        // Compile the glob pattern
+        let glob_pattern = match glob::Pattern::new(&pattern_str) {
+            Ok(pat) => pat,
+            Err(_) => return matches, // Invalid pattern returns empty results
+        };
+
         // Recursively search the tree for matching files
-        self.find_files_recursive(&self.files, Path::new(""), &pattern_str, &mut matches);
+        self.find_files_recursive(&self.files, Path::new(""), &glob_pattern, &mut matches);
 
         matches.sort();
         matches
@@ -796,13 +802,13 @@ impl Quill {
         &self,
         node: &FileTreeNode,
         current_path: &Path,
-        pattern: &str,
+        pattern: &glob::Pattern,
         matches: &mut Vec<PathBuf>,
     ) {
         match node {
             FileTreeNode::File { .. } => {
                 let path_str = current_path.to_string_lossy();
-                if self.matches_simple_pattern(pattern, &path_str) {
+                if pattern.matches(&path_str) {
                     matches.push(current_path.to_path_buf());
                 }
             }
@@ -817,37 +823,6 @@ impl Quill {
                 }
             }
         }
-    }
-
-    /// Simple pattern matching helper
-    fn matches_simple_pattern(&self, pattern: &str, path: &str) -> bool {
-        if pattern == "*" {
-            return true;
-        }
-
-        if !pattern.contains('*') {
-            return path == pattern;
-        }
-
-        // Handle directory/* patterns
-        if pattern.ends_with("/*") {
-            let dir_pattern = &pattern[..pattern.len() - 2];
-            return path.starts_with(&format!("{}/", dir_pattern));
-        }
-
-        let parts: Vec<&str> = pattern.split('*').collect();
-        if parts.len() == 2 {
-            let (prefix, suffix) = (parts[0], parts[1]);
-            if prefix.is_empty() {
-                return path.ends_with(suffix);
-            } else if suffix.is_empty() {
-                return path.starts_with(prefix);
-            } else {
-                return path.starts_with(prefix) && path.ends_with(suffix);
-            }
-        }
-
-        false
     }
 }
 
