@@ -9,6 +9,7 @@ license = "Apache-2.0"
 documentation = "https://docs.rs/quillmark-core"
 homepage = "https://github.com/nibsbin/quillmark"
 repository = "https://github.com/nibsbin/quillmark"
+publish = false
 
 [dependencies]
 serde = { workspace = true }
