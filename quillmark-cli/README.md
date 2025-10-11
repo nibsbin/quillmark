@@ -15,7 +15,7 @@ The binary will be available at `target/release/quillmark-cli`.
 ## Usage
 
 ```bash
-quillmark-cli <quill_path> <markdown_file>
+quillmark-cli [--output-glue] <quill_path> <markdown_file>
 ```
 
 ### Arguments
@@ -23,18 +23,27 @@ quillmark-cli <quill_path> <markdown_file>
 - `<quill_path>` - Path to the quill template directory
 - `<markdown_file>` - Path to the markdown file to render
 
+### Options
+
+- `--output-glue` - Also output the rendered/composed glue template
+
 ### Output
 
 The CLI generates a PDF file with the same name as the markdown file, in the same directory.
 For example, if you render `document.md`, the output will be `document.pdf`.
 
-## Example
+With `--output-glue`, the CLI also generates the intermediate glue template file as `document.glue.typ`.
+
+## Examples
 
 ```bash
 # Render a markdown file using the taro quill template
 quillmark-cli quillmark-fixtures/resources/taro my-document.md
+# This creates my-document.pdf in the current directory
 
-# This will create my-document.pdf in the current directory
+# Also output the composed glue template
+quillmark-cli --output-glue quillmark-fixtures/resources/taro my-document.md
+# This creates both my-document.pdf and my-document.glue.typ
 ```
 
 ## Error Handling
