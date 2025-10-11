@@ -1764,6 +1764,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "quillmark-cli"
+version = "0.1.18"
+dependencies = [
+ "anyhow",
+ "quillmark",
+ "quillmark-core",
+ "tempfile",
+]
+
+[[package]]
 name = "quillmark-core"
 version = "0.1.18"
 dependencies = [
