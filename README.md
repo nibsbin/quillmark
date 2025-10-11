@@ -17,11 +17,29 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
 
 ## Installation
 
+### Library
+
 Add Quillmark to your `Cargo.toml`:
 
 ```bash
 cargo add quillmark
 ```
+
+### Command-Line Tool
+
+Install the CLI tool:
+
+```bash
+cargo install --path quillmark-cli
+```
+
+Or use it directly:
+
+```bash
+quillmark-cli <quill_path> <markdown_file>
+```
+
+See [quillmark-cli/README.md](quillmark-cli/README.md) for CLI documentation.
 
 ## Quick Start
 
@@ -50,12 +68,28 @@ let pdf_bytes = &result.artifacts[0].bytes;
 
 ## Examples
 
+### Library Examples
+
 Run the included examples:
 
 ```bash
 cargo run --example appreciated_letter
 cargo run --example usaf_memo
 cargo run --example taro
+```
+
+### CLI Examples
+
+Render a markdown file using a quill template:
+
+```bash
+quillmark-cli quillmark-fixtures/resources/taro document.md
+```
+
+Specify a custom output path:
+
+```bash
+quillmark-cli quillmark-fixtures/resources/taro document.md -o output.pdf
 ```
 
 ## Documentation
@@ -71,6 +105,7 @@ This workspace contains:
 - **quillmark-core** - Core parsing, templating, and backend traits
 - **quillmark** - High-level orchestration API
 - **quillmark-typst** - Typst backend for PDF/SVG output
+- **quillmark-cli** - Command-line interface for rendering
 - **quillmark-fixtures** - Test fixtures and utilities
 
 ## License
