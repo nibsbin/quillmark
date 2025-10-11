@@ -10,6 +10,7 @@ memo_from:
 subject: Comply without pain -- markdown to official memola
 signature_block:
   - FIRST M. LAST, Rank, USSF
+footer_tag_line: Aim High
 ---
 
 Write your paragraphs here. Separate them with two new lines.

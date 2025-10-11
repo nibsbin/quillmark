@@ -3,13 +3,12 @@ name = "usaf_memo"
 backend = "typst"
 glue = "glue.typ"
 example = "usaf_memo.md"
-description = "U.S. Air Force memorandum template"
+description = "Typesetted USAF Official Memorandum"
 
 [fields]
-letterhead_title = { description = "Title in letterhead", required = false }
-letterhead_caption = { description = "Caption in letterhead", required = false }
-#letterhead_seal = { description = "Path to seal image", required = true }
-date = { description = "Date of memo (YYYY-MM-DD); defaults to today", required = false }
+letterhead_title = { description = "Title in letterhead" }
+letterhead_caption = { description = "Caption in letterhead"}
+date = { description = "Date of memo (YYYY-MM-DD); defaults to today"}
 memo_for = { description = "To whom the memo is addressed (multiline)", required = true }
 memo_from = { description = "From whom the memo is sent (multiline)", required = true }
 subject = { description = "Subject of the memo", required = true }

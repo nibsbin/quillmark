@@ -5,7 +5,7 @@
   // Letterhead configuration
   letterhead-title: {{ letterhead_title | String(default="letterhead-title") }},
   letterhead-caption: {{ letterhead_caption | Lines(default=["letterhead-caption"]) }},
-  letterhead-seal: image("assets/dod_seal.gif"),
+  letterhead-seal: image("assets/dow_seal.png"),
 
   // Frontmatter
   date: {{ date | Date }},
@@ -20,24 +20,29 @@
   subject: {{ subject | String(default="subject") }},
 
   // Optional references
-  {%- if references is defined -%}
+  {% if references is defined %}
   references: {{ references | Lines }},
-  {%- endif -%}
+  {% endif %}
 
-  {%- if cc is defined -%}
+  {% if cc is defined %}
   cc: {{ cc | Lines }},
-  {%- endif -%}
+  {% endif %}
 
-  // //Optional distribution
-  {%- if distribution is defined -%}
+  // Optional distribution
+  {% if distribution is defined %}
   distribution: {{ distribution | Lines }},
-  {%- endif -%}
+  {% endif %}
 
-  // // Optional attachments
-  {%- if attachments is defined -%}
+  // Optional attachments
+  {% if attachments is defined %}
   attachments: {{ attachments | Lines }},
-  {%- endif -%}
-  
+  {% endif %}
+
+  // Optional footer tag line
+  {% if footer_tag_line is defined %}
+  footer-tag-line: {{ footer_tag_line | String(default="asdf") }},
+  {% endif %}
+
   // Signature block
   signature-block: {{ signature_block | Lines(default=["signature_block"]) }},
 )

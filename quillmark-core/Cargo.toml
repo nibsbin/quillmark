@@ -19,6 +19,7 @@ toml = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 minijinja = { workspace = true }
+glob = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
