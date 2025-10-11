@@ -6,6 +6,7 @@ description = "WebAssembly bindings for quillmark"
 license = "Apache-2.0"
 repository = "https://github.com/nibsbin/quillmark"
 readme = "README.md"
+publish = false
 
 [lib]
 crate-type = ["cdylib", "rlib"]

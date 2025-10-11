@@ -692,6 +692,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "glob"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
+
+[[package]]
 name = "half"
 version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1751,7 +1757,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "anyhow",
  "quillmark-core",
@@ -1775,9 +1781,10 @@ dependencies = [
 
 [[package]]
 name = "quillmark-core"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "anyhow",
+ "glob",
  "minijinja",
  "serde",
  "serde_json",
@@ -1789,7 +1796,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fixtures"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "quillmark",
  "quillmark-typst",
@@ -1797,7 +1804,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fuzz"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "proptest",
  "quillmark-core",
@@ -1806,7 +1813,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-python"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "anyhow",
  "pyo3",
@@ -1817,7 +1824,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-typst"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1839,7 +1846,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-wasm"
-version = "0.1.18"
+version = "0.1.20"
 dependencies = [
  "console_error_panic_hook",
  "getrandom 0.2.16",

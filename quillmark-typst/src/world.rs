@@ -172,7 +172,7 @@ impl QuillWorld {
         }
 
         // Also look in packages/*/fonts/ for package fonts
-        let package_font_paths = quill.find_files("packages/*/fonts/*");
+        let package_font_paths = quill.find_files("packages/**");
         for font_path in package_font_paths {
             if let Some(ext) = font_path.extension() {
                 if matches!(
