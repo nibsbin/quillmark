@@ -50,10 +50,7 @@ output as JSON instead of being processed through a template.
 
     println!("Quill name: {}", quill.name);
     println!("Glue file: {:?}", quill.glue_file);
-    println!(
-        "Glue template empty: {}",
-        quill.glue_template.is_empty()
-    );
+    println!("Glue template empty: {}", quill.glue_template.is_empty());
     println!();
 
     engine.register_quill(quill);

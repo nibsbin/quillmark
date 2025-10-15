@@ -3,6 +3,7 @@ members = [
     "quillmark-core",
     "quillmark",
     "quillmark-typst",
+    "quillmark-acroform",
     "quillmark-fixtures",
     "quillmark-wasm",
     "quillmark-fuzz",
@@ -13,6 +14,7 @@ default-members = [
     "quillmark-core",
     "quillmark",
     "quillmark-typst",
+    "quillmark-acroform",
     "quillmark-wasm",
 ]
 resolver = "2"
@@ -49,11 +51,15 @@ typst-pdf = "0.13.1"
 typst-svg = "0.13.1"
 dirs = "6.0"
 
+# AcroForm backend dependencies
+acroform = "0.0.8"
+
 
 
 # Intra-project dependencies
 quillmark-core = { version = "0.1.20", path = "quillmark-core" }
 quillmark-typst = { version = "0.1.20", path = "quillmark-typst", default-features = false }
+quillmark-acroform = { version = "0.1.20", path = "quillmark-acroform" }
 quillmark = { version = "0.1.20", path = "quillmark", default-features = false }
 
 # Test and dev dependencies
