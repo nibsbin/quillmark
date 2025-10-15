@@ -221,6 +221,11 @@ impl Quillmark {
             engine.register_backend(Box::new(quillmark_typst::TypstBackend::default()));
         }
 
+        #[cfg(feature = "acroform")]
+        {
+            engine.register_backend(Box::new(quillmark_acroform::AcroformBackend::default()));
+        }
+
         engine
     }
 
