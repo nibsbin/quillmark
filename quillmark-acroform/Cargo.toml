@@ -20,3 +20,4 @@ acroform = "0.0.8"
 [dev-dependencies]
 tempfile = { workspace = true }
 quillmark-fixtures = { workspace = true }
+quillmark = { workspace = true, features = ["acroform"] }

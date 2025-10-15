@@ -31,8 +31,8 @@
 //! // let workflow = Workflow::new(Box::new(backend), quill);
 //! ```
 
-use quillmark_core::{Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions};
 use acroform::{AcroFormDocument, FieldValue};
+use quillmark_core::{Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions};
 use std::collections::HashMap;
 
 /// AcroForm backend implementation for Quillmark.
@@ -75,37 +75,29 @@ impl Backend for AcroformBackend {
 
         // Parse the JSON context from glue_content
         let context: serde_json::Value = serde_json::from_str(glue_content).map_err(|e| {
-            RenderError::Other(
-                format!("Failed to parse JSON context: {}", e).into(),
-            )
+            RenderError::Other(format!("Failed to parse JSON context: {}", e).into())
         })?;
 
         // Read form.pdf from the quill's file system
-        let form_pdf_bytes = quill
-            .files
-            .get_file("form.pdf")
-            .ok_or_else(|| {
-                RenderError::Other(
-                    format!("form.pdf not found in quill '{}'", quill.name).into(),
-                )
-            })?;
+        let form_pdf_bytes = quill.files.get_file("form.pdf").ok_or_else(|| {
+            RenderError::Other(format!("form.pdf not found in quill '{}'", quill.name).into())
+        })?;
 
         // Write the PDF to a temporary file so acroform can load it
         let temp_dir = std::env::temp_dir();
-        let temp_input_path = temp_dir.join(format!("quillmark_acroform_input_{}.pdf", std::process::id()));
+        let temp_input_path = temp_dir.join(format!(
+            "quillmark_acroform_input_{}.pdf",
+            std::process::id()
+        ));
         std::fs::write(&temp_input_path, form_pdf_bytes).map_err(|e| {
-            RenderError::Other(
-                format!("Failed to write temporary input PDF: {}", e).into(),
-            )
+            RenderError::Other(format!("Failed to write temporary input PDF: {}", e).into())
         })?;
 
         // Load the PDF form using acroform
         let mut doc = AcroFormDocument::from_pdf(&temp_input_path).map_err(|e| {
             // Clean up temp file
             let _ = std::fs::remove_file(&temp_input_path);
-            RenderError::Other(
-                format!("Failed to load PDF form: {}", e).into(),
-            )
+            RenderError::Other(format!("Failed to load PDF form: {}", e).into())
         })?;
 
         // Clean up temp input file
@@ -116,9 +108,7 @@ impl Backend for AcroformBackend {
 
         // Get all form fields
         let fields = doc.fields().map_err(|e| {
-            RenderError::Other(
-                format!("Failed to get PDF form fields: {}", e).into(),
-            )
+            RenderError::Other(format!("Failed to get PDF form fields: {}", e).into())
         })?;
 
         // Prepare values to fill
@@ -139,7 +129,8 @@ impl Backend for AcroformBackend {
                     Ok(rendered_value) => {
                         // Only update if the rendered value is different from the original
                         if rendered_value != field_value_str {
-                            values_to_fill.insert(field.name.clone(), FieldValue::Text(rendered_value));
+                            values_to_fill
+                                .insert(field.name.clone(), FieldValue::Text(rendered_value));
                         }
                     }
                     Err(_e) => {
@@ -151,20 +142,18 @@ impl Backend for AcroformBackend {
         }
 
         // Write filled PDF to a temporary output file
-        let temp_output_path = temp_dir.join(format!("quillmark_acroform_output_{}.pdf", std::process::id()));
-        doc.fill_and_save(values_to_fill, &temp_output_path).map_err(|e| {
-            RenderError::Other(
-                format!("Failed to save filled PDF: {}", e).into(),
-            )
-        })?;
+        let temp_output_path = temp_dir.join(format!(
+            "quillmark_acroform_output_{}.pdf",
+            std::process::id()
+        ));
+        doc.fill_and_save(values_to_fill, &temp_output_path)
+            .map_err(|e| RenderError::Other(format!("Failed to save filled PDF: {}", e).into()))?;
 
         // Read the output PDF as bytes
         let output_bytes = std::fs::read(&temp_output_path).map_err(|e| {
             // Clean up temp file
             let _ = std::fs::remove_file(&temp_output_path);
-            RenderError::Other(
-                format!("Failed to read filled PDF: {}", e).into(),
-            )
+            RenderError::Other(format!("Failed to read filled PDF: {}", e).into())
         })?;
 
         // Clean up temp output file

@@ -2096,6 +2096,7 @@ version = "0.1.20"
 dependencies = [
  "acroform",
  "minijinja",
+ "quillmark",
  "quillmark-core",
  "quillmark-fixtures",
  "serde_json",
