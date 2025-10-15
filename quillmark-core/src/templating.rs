@@ -121,31 +121,52 @@ type FilterFn = fn(
     filter_api::Kwargs,
 ) -> Result<filter_api::Value, MjError>;
 
-/// Glue class for template rendering - provides interface for backends to interact with templates
-pub struct Glue {
+/// Trait for glue engines that compose context into output
+pub trait GlueEngine {
+    /// Register a filter with the engine
+    fn register_filter(&mut self, name: &str, func: FilterFn);
+
+    /// Compose context from markdown decomposition into output
+    fn compose(&mut self, context: HashMap<String, QuillValue>) -> Result<String, TemplateError>;
+}
+
+/// Template-based glue engine using MiniJinja
+pub struct TemplateGlue {
     template: String,
     filters: HashMap<String, FilterFn>,
 }
 
-impl Glue {
-    /// Create a new Glue instance with a template string
+/// JSON-based glue engine that outputs context as JSON
+pub struct JsonGlue {
+    filters: HashMap<String, FilterFn>,
+}
+
+/// Glue type that can be either template-based or JSON-based
+pub enum Glue {
+    /// Template-based glue using MiniJinja
+    Template(TemplateGlue),
+    /// JSON-based glue that outputs context as JSON
+    Json(JsonGlue),
+}
+
+impl TemplateGlue {
+    /// Create a new TemplateGlue instance with a template string
     pub fn new(template: String) -> Self {
         Self {
             template,
             filters: HashMap::new(),
         }
     }
+}
 
+impl GlueEngine for TemplateGlue {
     /// Register a filter with the template environment
-    pub fn register_filter(&mut self, name: &str, func: FilterFn) {
+    fn register_filter(&mut self, name: &str, func: FilterFn) {
         self.filters.insert(name.to_string(), func);
     }
 
     /// Compose template with context from markdown decomposition
-    pub fn compose(
-        &mut self,
-        context: HashMap<String, QuillValue>,
-    ) -> Result<String, TemplateError> {
+    fn compose(&mut self, context: HashMap<String, QuillValue>) -> Result<String, TemplateError> {
         // Convert QuillValue to MiniJinja values
         let context = convert_quillvalue_to_minijinja(context)?;
 
@@ -179,6 +200,80 @@ impl Glue {
         }
 
         Ok(result)
+    }
+}
+
+impl JsonGlue {
+    /// Create a new JsonGlue instance
+    pub fn new() -> Self {
+        Self {
+            filters: HashMap::new(),
+        }
+    }
+}
+
+impl GlueEngine for JsonGlue {
+    /// Register a filter with the JSON glue (ignored for JSON output)
+    fn register_filter(&mut self, name: &str, func: FilterFn) {
+        // Store filters even though they're not used for JSON output
+        // This maintains consistency with the trait interface
+        self.filters.insert(name.to_string(), func);
+    }
+
+    /// Compose context into JSON output
+    fn compose(&mut self, context: HashMap<String, QuillValue>) -> Result<String, TemplateError> {
+        // Convert context to JSON
+        let mut json_map = serde_json::Map::new();
+        for (key, value) in context {
+            json_map.insert(key, value.as_json().clone());
+        }
+
+        let json_value = serde_json::Value::Object(json_map);
+        let result = serde_json::to_string_pretty(&json_value).map_err(|e| {
+            TemplateError::FilterError(format!("Failed to serialize to JSON: {}", e))
+        })?;
+
+        // Check output size limit
+        if result.len() > crate::error::MAX_TEMPLATE_OUTPUT {
+            return Err(TemplateError::FilterError(format!(
+                "JSON output too large: {} bytes (max: {} bytes)",
+                result.len(),
+                crate::error::MAX_TEMPLATE_OUTPUT
+            )));
+        }
+
+        Ok(result)
+    }
+}
+
+impl Glue {
+    /// Create a new template-based Glue instance
+    pub fn new(template: String) -> Self {
+        Glue::Template(TemplateGlue::new(template))
+    }
+
+    /// Create a new JSON-based Glue instance
+    pub fn new_json() -> Self {
+        Glue::Json(JsonGlue::new())
+    }
+
+    /// Register a filter with the glue engine
+    pub fn register_filter(&mut self, name: &str, func: FilterFn) {
+        match self {
+            Glue::Template(engine) => engine.register_filter(name, func),
+            Glue::Json(engine) => engine.register_filter(name, func),
+        }
+    }
+
+    /// Compose context into output
+    pub fn compose(
+        &mut self,
+        context: HashMap<String, QuillValue>,
+    ) -> Result<String, TemplateError> {
+        match self {
+            Glue::Template(engine) => engine.compose(context),
+            Glue::Json(engine) => engine.compose(context),
+        }
     }
 }
 
@@ -282,5 +377,79 @@ mod tests {
         let result = glue.compose(context);
         // This should succeed as it's well under the limit
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_json_glue_basic() {
+        let mut glue = Glue::new_json();
+        let mut context = HashMap::new();
+        context.insert(
+            "name".to_string(),
+            QuillValue::from_json(serde_json::Value::String("World".to_string())),
+        );
+        context.insert(
+            "body".to_string(),
+            QuillValue::from_json(serde_json::Value::String("Hello content".to_string())),
+        );
+
+        let result = glue.compose(context).unwrap();
+
+        // Parse the result as JSON to verify it's valid
+        let json: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(json["name"], "World");
+        assert_eq!(json["body"], "Hello content");
+    }
+
+    #[test]
+    fn test_json_glue_with_nested_data() {
+        let mut glue = Glue::new_json();
+        let mut context = HashMap::new();
+
+        // Add nested object
+        let nested_obj = serde_json::json!({
+            "first": "John",
+            "last": "Doe"
+        });
+        context.insert("author".to_string(), QuillValue::from_json(nested_obj));
+
+        // Add array
+        let tags = serde_json::json!(["tag1", "tag2", "tag3"]);
+        context.insert("tags".to_string(), QuillValue::from_json(tags));
+
+        let result = glue.compose(context).unwrap();
+
+        // Parse the result as JSON to verify structure
+        let json: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(json["author"]["first"], "John");
+        assert_eq!(json["author"]["last"], "Doe");
+        assert_eq!(json["tags"][0], "tag1");
+        assert_eq!(json["tags"].as_array().unwrap().len(), 3);
+    }
+
+    #[test]
+    fn test_json_glue_filter_registration() {
+        // Test that filters can be registered (even though they're not used)
+        let mut glue = Glue::new_json();
+
+        fn dummy_filter(
+            _state: &filter_api::State,
+            value: filter_api::Value,
+            _kwargs: filter_api::Kwargs,
+        ) -> Result<filter_api::Value, MjError> {
+            Ok(value)
+        }
+
+        // Should not panic
+        glue.register_filter("dummy", dummy_filter);
+
+        let mut context = HashMap::new();
+        context.insert(
+            "test".to_string(),
+            QuillValue::from_json(serde_json::Value::String("value".to_string())),
+        );
+
+        let result = glue.compose(context).unwrap();
+        let json: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(json["test"], "value");
     }
 }
