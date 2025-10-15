@@ -411,7 +411,13 @@ impl Workflow {
 
     /// Process a parsed document through the glue template without compilation
     pub fn process_glue_parsed(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
-        let mut glue = Glue::new(self.quill.glue_template.clone());
+        // Create appropriate glue based on whether template is provided
+        let mut glue = if self.quill.glue_template.is_empty() {
+            Glue::new_json()
+        } else {
+            Glue::new(self.quill.glue_template.clone())
+        };
+
         self.backend.register_filters(&mut glue);
         let glue_output = glue
             .compose(parsed.fields().clone())
