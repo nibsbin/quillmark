@@ -2,6 +2,7 @@ use quillmark::{OutputFormat, ParsedDocument, Quill, Workflow};
 use quillmark_fixtures::resource_path;
 use quillmark_typst::TypstBackend;
 use std::fs;
+use std::sync::Arc;
 
 #[test]
 fn test_with_existing_fixture() {
@@ -18,7 +19,7 @@ fn test_with_existing_fixture() {
     let parsed = ParsedDocument::from_markdown(&markdown).expect("Failed to parse markdown");
 
     // Create engine
-    let backend = Box::new(TypstBackend::default());
+    let backend = Arc::new(TypstBackend::default());
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     let engine = Workflow::new(backend, quill).expect("Failed to create engine");
 
