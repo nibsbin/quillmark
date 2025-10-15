@@ -33,6 +33,9 @@ Instead of relying on quillmark-core’s templating, quillmark-acroform will use
 
 ## Considerations
 
+- For your backend compile implementation, expect a JSON string for glue_content input.
+- If you need any dependencies like `serde_json`, pin them in the workspace `Cargo.toml`.
+
 ## Resources
 
 - See the `quillmark-typst` crate for an example of backend implementation.
