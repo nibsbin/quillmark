@@ -167,6 +167,7 @@ use quillmark_core::{
     RenderResult,
 };
 use std::collections::HashMap;
+use std::sync::Arc;
 
 /// Ergonomic reference to a Quill by name or object.
 pub enum QuillRef<'a> {
@@ -202,27 +203,53 @@ impl<'a> From<&'a std::borrow::Cow<'a, str>> for QuillRef<'a> {
 
 /// High-level engine for orchestrating backends and quills. See [module docs](self) for usage patterns.
 pub struct Quillmark {
-    backends: HashMap<String, Box<dyn Backend>>,
+    backends: HashMap<String, Arc<dyn Backend>>,
     quills: HashMap<String, Quill>,
 }
 
 impl Quillmark {
     /// Create a new Quillmark with auto-registered backends based on enabled features.
     pub fn new() -> Self {
-        #[allow(unused_mut)]
-        let mut backends: HashMap<String, Box<dyn Backend>> = HashMap::new();
+        let mut engine = Self {
+            backends: HashMap::new(),
+            quills: HashMap::new(),
+        };
 
         // Auto-register backends based on enabled features
         #[cfg(feature = "typst")]
         {
-            let backend = Box::new(quillmark_typst::TypstBackend::default());
-            backends.insert(backend.id().to_string(), backend);
+            engine.register_backend(Box::new(quillmark_typst::TypstBackend::default()));
         }
 
-        Self {
-            backends,
-            quills: HashMap::new(),
-        }
+        engine
+    }
+
+    /// Register a backend with the engine.
+    ///
+    /// This method allows registering custom backends or explicitly registering
+    /// feature-integrated backends. The backend is registered by its ID.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use quillmark::Quillmark;
+    /// # use quillmark_core::Backend;
+    /// # struct CustomBackend;
+    /// # impl Backend for CustomBackend {
+    /// #     fn id(&self) -> &'static str { "custom" }
+    /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
+    /// #     fn glue_type(&self) -> &'static str { ".custom" }
+    /// #     fn register_filters(&self, _: &mut quillmark_core::Glue) {}
+    /// #     fn compile(&self, _: &str, _: &quillmark_core::Quill, _: &quillmark_core::RenderOptions) -> Result<Vec<quillmark_core::Artifact>, quillmark_core::RenderError> { Ok(vec![]) }
+    /// # }
+    ///
+    /// let mut engine = Quillmark::new();
+    /// let custom_backend = Box::new(CustomBackend);
+    /// engine.register_backend(custom_backend);
+    /// ```
+    pub fn register_backend(&mut self, backend: Box<dyn Backend>) {
+        let id = backend.id().to_string();
+        self.backends.insert(id, Arc::from(backend));
     }
 
     /// Register a quill template with the engine by name.
@@ -280,9 +307,8 @@ impl Quillmark {
             )
         })?;
 
-        // Clone the backend and quill for the workflow
-        // Note: We need to box clone the backend trait object
-        let backend_clone = self.clone_backend(backend.as_ref());
+        // Clone the Arc reference to the backend and the quill for the workflow
+        let backend_clone = Arc::clone(backend);
         let quill_clone = quill.clone();
 
         Workflow::new(backend_clone, quill_clone)
@@ -291,17 +317,6 @@ impl Quillmark {
     /// Load a workflow by quill name
     pub fn workflow_from_quill_name(&self, name: &str) -> Result<Workflow, RenderError> {
         self.workflow_from_quill(name)
-    }
-
-    /// Helper method to clone a backend (trait object cloning workaround)
-    fn clone_backend(&self, backend: &dyn Backend) -> Box<dyn Backend> {
-        // For each backend, we need to instantiate a new one
-        // This is a workaround since we can't clone trait objects directly
-        match backend.id() {
-            #[cfg(feature = "typst")]
-            "typst" => Box::new(quillmark_typst::TypstBackend::default()),
-            _ => panic!("Unknown backend: {}", backend.id()),
-        }
     }
 
     /// Get a list of registered backend IDs.
@@ -323,7 +338,7 @@ impl Default for Quillmark {
 
 /// Sealed workflow for rendering Markdown documents. See [module docs](self) for usage patterns.
 pub struct Workflow {
-    backend: Box<dyn Backend>,
+    backend: Arc<dyn Backend>,
     quill: Quill,
     dynamic_assets: HashMap<String, Vec<u8>>,
     dynamic_fonts: HashMap<String, Vec<u8>>,
@@ -331,7 +346,7 @@ pub struct Workflow {
 
 impl Workflow {
     /// Create a new Workflow with the specified backend and quill.
-    pub fn new(backend: Box<dyn Backend>, quill: Quill) -> Result<Self, RenderError> {
+    pub fn new(backend: Arc<dyn Backend>, quill: Quill) -> Result<Self, RenderError> {
         // Since Quill::from_path() now automatically validates, we don't need to validate again
         Ok(Self {
             backend,
