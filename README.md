@@ -11,7 +11,9 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
 
 - **Template-first design**: Quill templates control structure and styling, Markdown provides content
 - **YAML frontmatter support**: Extended YAML metadata with inline sections
-- **Multiple backends**: PDF and SVG output via Typst backend
+- **Multiple backends**: 
+  - PDF and SVG output via Typst backend
+  - PDF form filling via AcroForm backend
 - **Structured error handling**: Clear diagnostics with source locations
 - **Dynamic asset loading**: Fonts, images, and packages resolved at runtime
 
@@ -71,6 +73,7 @@ This workspace contains:
 - **quillmark-core** - Core parsing, templating, and backend traits
 - **quillmark** - High-level orchestration API
 - **quillmark-typst** - Typst backend for PDF/SVG output
+- **quillmark-acroform** - AcroForm backend for PDF form filling
 - **quillmark-fixtures** - Test fixtures and utilities
 
 ## License

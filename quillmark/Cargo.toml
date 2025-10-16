@@ -13,6 +13,7 @@ repository = "https://github.com/nibsbin/quillmark"
 [dependencies]
 quillmark-core = { workspace = true }
 quillmark-typst = { workspace = true, optional = true }
+quillmark-acroform = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_yaml = { workspace = true }
 thiserror = { workspace = true }
@@ -22,8 +23,10 @@ anyhow = { workspace = true }
 tempfile = { workspace = true }
 quillmark-typst = { workspace = true }
 quillmark-fixtures = { workspace = true }
+serde_json = { workspace = true }
 
 [features]
-default = ["typst"]
+default = ["typst","acroform"]
 typst = ["dep:quillmark-typst"]
+acroform = ["dep:quillmark-acroform"]
 
