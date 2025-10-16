@@ -88,7 +88,8 @@ impl Backend for AcroformBackend {
             .map_err(|e| RenderError::Other(format!("Failed to load PDF form: {}", e).into()))?;
 
         // Create a MiniJinja environment for rendering field values
-        let env = minijinja::Environment::new();
+        let mut env = minijinja::Environment::new();
+        env.set_undefined_behavior(minijinja::UndefinedBehavior::Chainable);
 
         // Get all form fields
         let fields = doc.fields().map_err(|e| {
@@ -154,5 +155,44 @@ mod tests {
         assert_eq!(backend.id(), "acroform");
         assert_eq!(backend.glue_type(), ".json");
         assert!(backend.supported_formats().contains(&OutputFormat::Pdf));
+    }
+
+    #[test]
+    fn test_undefined_behavior_with_minijinja() {
+        // Test that Chainable undefined behavior returns empty strings
+        let mut env = minijinja::Environment::new();
+        env.set_undefined_behavior(minijinja::UndefinedBehavior::Chainable);
+
+        let context = serde_json::json!({
+            "items": [
+                {"name": "first"},
+                {"name": "second"}
+            ],
+            "existing_key": "value"
+        });
+
+        // Test missing dictionary key
+        let result = env.render_str("{{missing_key}}", &context);
+        assert_eq!(result.unwrap(), "", "Missing key should render as empty string");
+
+        // Test out-of-bounds array access
+        let result = env.render_str("{{items[10].name}}", &context);
+        assert_eq!(
+            result.unwrap(),
+            "",
+            "Out of bounds array access should render as empty string"
+        );
+
+        // Test nested missing property on undefined
+        let result = env.render_str("{{items[10].name.nested}}", &context);
+        assert_eq!(
+            result.unwrap(),
+            "",
+            "Chained access on undefined should render as empty string"
+        );
+
+        // Test valid access still works
+        let result = env.render_str("{{items[0].name}}", &context);
+        assert_eq!(result.unwrap(), "first", "Valid access should work normally");
     }
 }
