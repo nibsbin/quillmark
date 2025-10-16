@@ -173,7 +173,11 @@ mod tests {
 
         // Test missing dictionary key
         let result = env.render_str("{{missing_key}}", &context);
-        assert_eq!(result.unwrap(), "", "Missing key should render as empty string");
+        assert_eq!(
+            result.unwrap(),
+            "",
+            "Missing key should render as empty string"
+        );
 
         // Test out-of-bounds array access
         let result = env.render_str("{{items[10].name}}", &context);
@@ -193,6 +197,10 @@ mod tests {
 
         // Test valid access still works
         let result = env.render_str("{{items[0].name}}", &context);
-        assert_eq!(result.unwrap(), "first", "Valid access should work normally");
+        assert_eq!(
+            result.unwrap(),
+            "first",
+            "Valid access should work normally"
+        );
     }
 }
