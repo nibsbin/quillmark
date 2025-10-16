@@ -606,11 +606,12 @@ pub fn decompose(
                 let quill_value = QuillValue::from_json(serde_json::Value::Array(merged_array));
                 fields.insert(tag_name, quill_value);
             } else {
-                // This should not happen due to earlier validation
-                unreachable!(
+                // This should not happen due to earlier validation, but handle it gracefully
+                return Err(format!(
                     "Internal error: field '{}' exists but is not an array",
                     tag_name
-                );
+                )
+                .into());
             }
         } else {
             // No existing field, just create a new sequence
