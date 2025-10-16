@@ -52,7 +52,7 @@ pub fn demo(
     write_example_output(glue_output, &glued_bytes)?;
 
     println!(
-        "Glue outputted to:: {}",
+        "Glue outputted to: {}",
         example_output_dir().join(glue_output).display()
     );
 
