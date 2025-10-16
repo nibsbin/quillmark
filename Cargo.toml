@@ -3,6 +3,7 @@ members = [
     "quillmark-core",
     "quillmark",
     "quillmark-typst",
+    "quillmark-acroform",
     "quillmark-fixtures",
     "quillmark-wasm",
     "quillmark-fuzz",
@@ -54,6 +55,7 @@ dirs = "6.0"
 # Intra-project dependencies
 quillmark-core = { version = "0.1.20", path = "quillmark-core" }
 quillmark-typst = { version = "0.1.20", path = "quillmark-typst", default-features = false }
+quillmark-acroform = { version = "0.1.20", path = "quillmark-acroform" }
 quillmark = { version = "0.1.20", path = "quillmark", default-features = false }
 
 # Test and dev dependencies
