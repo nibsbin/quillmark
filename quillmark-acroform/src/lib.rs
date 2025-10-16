@@ -13,10 +13,44 @@
 //! ## Workflow
 //!
 //! 1. Read PDF form from quill's `form.pdf` file
-//! 2. Extract field names and current values from the PDF form
-//! 3. For each field, render the field value as a MiniJinja template with the JSON context
-//! 4. Write the rendered values back to the PDF form
-//! 5. Return the filled PDF as bytes
+//! 2. Extract field names, current values, and tooltips from the PDF form
+//! 3. For each field:
+//!    - If the field has a tooltip with template metadata (format: `description__{{template}}`),
+//!      use the template part after `__` as the value to render
+//!    - Otherwise, fall back to using the field's current value as a template
+//! 4. Render the template with the JSON context using MiniJinja
+//! 5. Write the rendered values back to the PDF form
+//! 6. Return the filled PDF as bytes
+//!
+//! ## Tooltip Template Metadata
+//!
+//! The acroform library (v0.0.12+) extracts tooltips from PDF form fields. This backend
+//! supports a special format for tooltips that includes template expressions:
+//!
+//! ```text
+//! Description text__{{template.expression}}
+//! ```
+//!
+//! The `__` (double underscore) separator splits the tooltip into:
+//! - A human-readable description (before `__`)
+//! - A MiniJinja template expression (after `__`)
+//!
+//! When a field has a tooltip with this format, the template expression is used to
+//! determine the field's value, taking priority over the field's current value.
+//!
+//! ### Example
+//!
+//! If a PDF field has tooltip: `The name of the customer__{{customer.firstname}} {{customer.lastname}}`
+//! and the JSON context contains:
+//! ```json
+//! {
+//!   "customer": {
+//!     "firstname": "John",
+//!     "lastname": "Doe"
+//!   }
+//! }
+//! ```
+//! The field will be filled with: `John Doe`
 //!
 //! ## Example Usage
 //!
@@ -100,20 +134,54 @@ impl Backend for AcroformBackend {
         let mut values_to_fill = HashMap::new();
 
         for field in fields {
-            // Get the current field value (which may contain a template)
-            if let Some(field_value) = &field.current_value {
+            // Check if the field has a tooltip with template metadata
+            let template_to_render = if let Some(tooltip) = &field.tooltip {
+                // Check if tooltip contains "__" separator for template metadata
+                if let Some(separator_pos) = tooltip.find("__") {
+                    // Extract the template part after "__"
+                    let template_part = &tooltip[separator_pos + 2..];
+                    if !template_part.trim().is_empty() {
+                        Some(template_part.to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // Track if we're using a tooltip template (to determine update strategy)
+            let using_tooltip_template = template_to_render.is_some();
+
+            // Determine what to render: tooltip template or field value
+            let render_source = if let Some(template) = template_to_render {
+                // Use the tooltip template
+                Some(template)
+            } else if let Some(field_value) = &field.current_value {
+                // Fall back to the current field value (which may contain a template)
                 let field_value_str = match field_value {
                     FieldValue::Text(s) => s.clone(),
                     FieldValue::Boolean(b) => if *b { "true" } else { "false" }.to_string(),
                     FieldValue::Choice(s) => s.clone(),
                     FieldValue::Integer(i) => i.to_string(),
                 };
+                Some(field_value_str)
+            } else {
+                None
+            };
 
-                // Try to render the field value as a template
-                match env.render_str(&field_value_str, &context) {
+            // Render the template if we have a source
+            if let Some(source) = render_source {
+                // Try to render the template
+                match env.render_str(&source, &context) {
                     Ok(rendered_value) => {
-                        // Only update if the rendered value is different from the original
-                        if rendered_value != field_value_str {
+                        // Always update with rendered value from tooltip template
+                        // For field values, only update if different from original
+                        let should_update = using_tooltip_template || rendered_value != source;
+
+                        if should_update {
                             values_to_fill
                                 .insert(field.name.clone(), FieldValue::Text(rendered_value));
                         }
