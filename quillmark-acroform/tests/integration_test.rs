@@ -132,3 +132,266 @@ fn test_undefined_values_render_as_empty_string() {
     // Check that missing dictionary key renders as empty string
     // (If there was a field like {{missing_key}}, it should be empty too)
 }
+
+#[test]
+fn test_string_none_encoding() {
+    use acroform::{AcroFormDocument, FieldValue};
+    use std::collections::HashMap;
+
+    // Create a simple test with the actual form
+    let form_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../quillmark-fixtures/resources/usaf_form_8/form.pdf"
+    );
+    let pdf_bytes = std::fs::read(form_path).expect("Failed to read PDF file");
+    let mut doc = AcroFormDocument::from_bytes(pdf_bytes).expect("Failed to load PDF");
+
+    // Fill with a simple value that contains "None"
+    let mut values = HashMap::new();
+    values.insert(
+        "topmostSubform[0].Page1[0].P[0].ReqFld1[0]".to_string(),
+        FieldValue::Text("None".to_string()),
+    );
+
+    // Fill the form
+    let output = doc.fill(values).expect("Failed to fill PDF");
+
+    // Read back the filled form
+    let filled_doc = AcroFormDocument::from_bytes(output.clone()).expect("Failed to load filled PDF");
+    let fields = filled_doc.fields().expect("Failed to get fields");
+
+    for field in fields {
+        if field.name == "topmostSubform[0].Page1[0].P[0].ReqFld1[0]" {
+            println!("Field name: {}", field.name);
+            println!("Field value: {:?}", field.current_value);
+            if let Some(FieldValue::Text(text)) = field.current_value {
+                println!("Text value: {}", text);
+                println!("Bytes: {:?}", text.as_bytes());
+                println!(
+                    "Hex: {}",
+                    text.as_bytes()
+                        .iter()
+                        .map(|b| format!("{:02x}", b))
+                        .collect::<String>()
+                );
+                
+                // Check if it contains box drawing characters
+                if text.contains('╜') || text.contains('╚') {
+                    panic!("Text contains box drawing characters! Got: {}", text);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn test_string_none_via_minijinja() {
+    use acroform::{AcroFormDocument, FieldValue};
+    use std::collections::HashMap;
+
+    // Create a simple test with the actual form
+    let form_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../quillmark-fixtures/resources/usaf_form_8/form.pdf"
+    );
+    let pdf_bytes = std::fs::read(form_path).expect("Failed to read PDF file");
+    let mut doc = AcroFormDocument::from_bytes(pdf_bytes).expect("Failed to load PDF");
+
+    // Create a MiniJinja environment
+    let mut env = minijinja::Environment::new();
+    env.set_undefined_behavior(minijinja::UndefinedBehavior::Chainable);
+    
+    // Create a context with a value of "None"
+    let context = serde_json::json!({
+        "test_value": "None"
+    });
+    
+    // Render the template "{{test_value}}"
+    let rendered = env.render_str("{{test_value}}", &context).expect("Failed to render");
+    
+    println!("Rendered value: {}", rendered);
+    println!("Rendered bytes: {:?}", rendered.as_bytes());
+    println!(
+        "Rendered hex: {}",
+        rendered.as_bytes()
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>()
+    );
+
+    // Fill with the rendered value
+    let mut values = HashMap::new();
+    values.insert(
+        "topmostSubform[0].Page1[0].P[0].ReqFld1[0]".to_string(),
+        FieldValue::Text(rendered.clone()),
+    );
+
+    // Fill the form
+    let output = doc.fill(values).expect("Failed to fill PDF");
+
+    // Read back the filled form
+    let filled_doc = AcroFormDocument::from_bytes(output.clone()).expect("Failed to load filled PDF");
+    let fields = filled_doc.fields().expect("Failed to get fields");
+
+    for field in fields {
+        if field.name == "topmostSubform[0].Page1[0].P[0].ReqFld1[0]" {
+            println!("Field name: {}", field.name);
+            println!("Field value: {:?}", field.current_value);
+            if let Some(FieldValue::Text(text)) = field.current_value {
+                println!("Text value: {}", text);
+                println!("Text bytes: {:?}", text.as_bytes());
+                println!(
+                    "Text hex: {}",
+                    text.as_bytes()
+                        .iter()
+                        .map(|b| format!("{:02x}", b))
+                        .collect::<String>()
+                );
+                
+                // Check if it contains box drawing characters
+                if text.contains('╜') || text.contains('╚') {
+                    panic!("Text contains box drawing characters! Got: {}", text);
+                }
+                
+                assert_eq!(text, "None", "Text should be 'None' but got '{}'", text);
+            }
+        }
+    }
+}
+
+#[test]
+fn test_backend_with_none_string_value() {
+    use quillmark_core::{Backend, OutputFormat, Quill, RenderOptions};
+
+    let backend = AcroformBackend::default();
+    let quill_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../quillmark-fixtures/resources/usaf_form_8"
+    );
+    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+
+    // JSON context with a "None" string value in addi_comments
+    // The field in the PDF is: {{examiner_remarks.addi_comments}}
+    let json_context = r#"{
+        "examiner_remarks": {
+            "addi_comments": "None"
+        }
+    }"#;
+
+    let opts = RenderOptions {
+        output_format: Some(OutputFormat::Pdf),
+    };
+
+    let result = backend.compile(json_context, &quill, &opts);
+    assert!(result.is_ok(), "Compilation failed: {:?}", result.err());
+
+    let artifacts = result.unwrap();
+    assert_eq!(artifacts.len(), 1);
+
+    // Load the resulting PDF and check the field value
+    use acroform::AcroFormDocument;
+    let filled_doc = AcroFormDocument::from_bytes(artifacts[0].bytes.clone())
+        .expect("Failed to load filled PDF");
+    let fields = filled_doc.fields().expect("Failed to get fields");
+    
+    // Find the EvalRemarks field which contains the addi_comments template
+    for field in fields {
+        if field.name == "topmostSubform[0].Page2[0].EvalRemarks[0]" {
+            println!("Field name: {}", field.name);
+            if let Some(acroform::FieldValue::Text(text)) = &field.current_value {
+                println!("Field text value: {}", text);
+                println!("Field text bytes: {:?}", text.as_bytes());
+                println!(
+                    "Field text hex: {}",
+                    text.as_bytes()
+                        .iter()
+                        .map(|b| format!("{:02x}", b))
+                        .collect::<String>()
+                );
+                
+                // Check if it contains box drawing characters
+                if text.contains('╜') || text.contains('╚') {
+                    panic!("Text contains box drawing characters! Got: {}", text);
+                }
+                
+                // The text should contain "None" as the addi_comments value
+                assert!(text.contains("None"), "Text should contain 'None'");
+            }
+        }
+    }
+}
+
+#[test]
+fn test_string_none_with_newline_via_minijinja() {
+    use acroform::{AcroFormDocument, FieldValue};
+    use std::collections::HashMap;
+
+    // Create a simple test with the actual form
+    let form_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../quillmark-fixtures/resources/usaf_form_8/form.pdf"
+    );
+    let pdf_bytes = std::fs::read(form_path).expect("Failed to read PDF file");
+    let mut doc = AcroFormDocument::from_bytes(pdf_bytes).expect("Failed to load PDF");
+
+    // Create a MiniJinja environment
+    let mut env = minijinja::Environment::new();
+    env.set_undefined_behavior(minijinja::UndefinedBehavior::Chainable);
+    
+    // Create a context with a value of "None"
+    let context = serde_json::json!({
+        "test_value": "None"
+    });
+    
+    // Render the template "{{test_value}}\n" (with newline as in the actual PDF)
+    let rendered = env.render_str("{{test_value}}\n", &context).expect("Failed to render");
+    
+    println!("Rendered value: {}", rendered);
+    println!("Rendered bytes: {:?}", rendered.as_bytes());
+    println!(
+        "Rendered hex: {}",
+        rendered.as_bytes()
+            .iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>()
+    );
+
+    // Fill with the rendered value
+    let mut values = HashMap::new();
+    values.insert(
+        "topmostSubform[0].Page1[0].P[0].ReqFld1[0]".to_string(),
+        FieldValue::Text(rendered.clone()),
+    );
+
+    // Fill the form
+    let output = doc.fill(values).expect("Failed to fill PDF");
+
+    // Read back the filled form
+    let filled_doc = AcroFormDocument::from_bytes(output.clone()).expect("Failed to load filled PDF");
+    let fields = filled_doc.fields().expect("Failed to get fields");
+
+    for field in fields {
+        if field.name == "topmostSubform[0].Page1[0].P[0].ReqFld1[0]" {
+            println!("Field name: {}", field.name);
+            println!("Field value: {:?}", field.current_value);
+            if let Some(FieldValue::Text(text)) = field.current_value {
+                println!("Text value: {}", text);
+                println!("Text bytes: {:?}", text.as_bytes());
+                println!(
+                    "Text hex: {}",
+                    text.as_bytes()
+                        .iter()
+                        .map(|b| format!("{:02x}", b))
+                        .collect::<String>()
+                );
+                
+                // Check if it contains box drawing characters
+                if text.contains('╜') || text.contains('╚') {
+                    panic!("Text contains box drawing characters! Got: {}", text);
+                }
+                
+                assert_eq!(text, "None\n", "Text should be 'None\\n' but got '{}'", text);
+            }
+        }
+    }
+}
