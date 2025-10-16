@@ -68,12 +68,13 @@ impl Backend for AcroformBackend {
             // Extract template from tooltip (format: "description__{{template}}")
             let template_to_render = field.tooltip.as_ref().and_then(|tooltip| {
                 tooltip.find("__").and_then(|pos| {
-                    let template_part = &tooltip[pos + 2..];
-                    if template_part.trim().is_empty() {
-                        None
-                    } else {
-                        Some(template_part.to_string())
-                    }
+                    tooltip.get(pos + 2..).and_then(|template_part| {
+                        if template_part.trim().is_empty() {
+                            None
+                        } else {
+                            Some(template_part.to_string())
+                        }
+                    })
                 })
             });
 
