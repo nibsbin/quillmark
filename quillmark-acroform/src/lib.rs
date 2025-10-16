@@ -13,10 +13,44 @@
 //! ## Workflow
 //!
 //! 1. Read PDF form from quill's `form.pdf` file
-//! 2. Extract field names and current values from the PDF form
-//! 3. For each field, render the field value as a MiniJinja template with the JSON context
-//! 4. Write the rendered values back to the PDF form
-//! 5. Return the filled PDF as bytes
+//! 2. Extract field names, current values, and tooltips from the PDF form
+//! 3. For each field:
+//!    - If the field has a tooltip with template metadata (format: `description__{{template}}`),
+//!      use the template part after `__` as the value to render
+//!    - Otherwise, fall back to using the field's current value as a template
+//! 4. Render the template with the JSON context using MiniJinja
+//! 5. Write the rendered values back to the PDF form
+//! 6. Return the filled PDF as bytes
+//!
+//! ## Tooltip Template Metadata
+//!
+//! The acroform library (v0.0.12+) extracts tooltips from PDF form fields. This backend
+//! supports a special format for tooltips that includes template expressions:
+//!
+//! ```text
+//! Description text__{{template.expression}}
+//! ```
+//!
+//! The `__` (double underscore) separator splits the tooltip into:
+//! - A human-readable description (before `__`)
+//! - A MiniJinja template expression (after `__`)
+//!
+//! When a field has a tooltip with this format, the template expression is used to
+//! determine the field's value, taking priority over the field's current value.
+//!
+//! ### Example
+//!
+//! If a PDF field has tooltip: `The name of the customer__{{customer.firstname}} {{customer.lastname}}`
+//! and the JSON context contains:
+//! ```json
+//! {
+//!   "customer": {
+//!     "firstname": "John",
+//!     "lastname": "Doe"
+//!   }
+//! }
+//! ```
+//! The field will be filled with: `John Doe`
 //!
 //! ## Example Usage
 //!
