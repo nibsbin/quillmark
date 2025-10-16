@@ -20,7 +20,6 @@ use wasm_bindgen::prelude::*;
 
 mod engine;
 mod error;
-mod quill;
 mod types;
 
 pub use engine::Quillmark;

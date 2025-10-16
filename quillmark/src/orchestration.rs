@@ -218,12 +218,12 @@ impl Quillmark {
         // Auto-register backends based on enabled features
         #[cfg(feature = "typst")]
         {
-            engine.register_backend(Box::new(quillmark_typst::TypstBackend::default()));
+            engine.register_backend(Box::new(quillmark_typst::TypstBackend));
         }
 
         #[cfg(feature = "acroform")]
         {
-            engine.register_backend(Box::new(quillmark_acroform::AcroformBackend::default()));
+            engine.register_backend(Box::new(quillmark_acroform::AcroformBackend));
         }
 
         engine
@@ -394,20 +394,18 @@ impl Workflow {
         format: Option<OutputFormat>,
         quill: &Quill,
     ) -> Result<RenderResult, RenderError> {
-        // Compile using backend
         let format = if format.is_some() {
             format
         } else {
             // Default to first supported format if none specified
             let supported = self.backend.supported_formats();
             if !supported.is_empty() {
-                println!("Defaulting to output format: {:?}", supported[0]);
                 Some(supported[0])
             } else {
                 None
             }
         };
-        // Compile using backend
+
         let render_opts = RenderOptions {
             output_format: format,
         };
@@ -441,7 +439,7 @@ impl Workflow {
         self.backend.register_filters(&mut glue);
         let glue_output = glue
             .compose(parsed.fields().clone())
-            .map_err(|e| RenderError::from(e))?;
+            .map_err(RenderError::from)?;
         Ok(glue_output)
     }
 

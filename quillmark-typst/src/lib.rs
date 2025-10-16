@@ -97,8 +97,6 @@ impl Backend for TypstBackend {
             });
         }
 
-        println!("Typst backend compiling for quill: {}", quill.name);
-
         match format {
             OutputFormat::Pdf => {
                 let bytes = compile::compile_to_pdf(quill, glued_content)?;
