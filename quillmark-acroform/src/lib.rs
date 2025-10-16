@@ -43,10 +43,29 @@ impl Backend for AcroformBackend {
                 format,
             });
         }
-
-        let context: serde_json::Value = serde_json::from_str(glue_content).map_err(|e| {
+        let mut context: serde_json::Value = serde_json::from_str(glue_content).map_err(|e| {
             RenderError::Other(format!("Failed to parse JSON context: {}", e).into())
         })?;
+
+        // Replace all null values with empty strings
+        fn replace_nulls_with_empty(value: &mut serde_json::Value) {
+            match value {
+                serde_json::Value::Null => *value = serde_json::Value::String(String::new()),
+                serde_json::Value::Object(map) => {
+                    for v in map.values_mut() {
+                        replace_nulls_with_empty(v);
+                    }
+                }
+                serde_json::Value::Array(arr) => {
+                    for v in arr.iter_mut() {
+                        replace_nulls_with_empty(v);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        replace_nulls_with_empty(&mut context);
 
         let form_pdf_bytes = quill.files.get_file("form.pdf").ok_or_else(|| {
             RenderError::Other(format!("form.pdf not found in quill '{}'", quill.name).into())
