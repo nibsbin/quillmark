@@ -40,7 +40,6 @@ use quillmark_core::{Quill, RenderError};
 
 /// Compiles a Typst document to PDF format.
 pub fn compile_to_pdf(quill: &Quill, glued_content: &str) -> Result<Vec<u8>, RenderError> {
-    println!("Using quill: {}", quill.name);
     let world = QuillWorld::new(quill, glued_content).map_err(|e| {
         RenderError::Internal(anyhow::anyhow!("Failed to create Typst world: {}", e))
     })?;
@@ -78,10 +77,7 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
     } = typst::compile::<PagedDocument>(world);
 
     match output {
-        Ok(doc) => {
-            // TODO: Capture and propagate warnings to RenderResult
-            Ok(doc)
-        }
+        Ok(doc) => Ok(doc),
         Err(errors) => {
             let diagnostics = map_typst_errors(&errors, world);
             Err(RenderError::CompilationFailed(

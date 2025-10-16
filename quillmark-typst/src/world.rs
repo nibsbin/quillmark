@@ -60,17 +60,10 @@ impl QuillWorld {
             const ROBOTO_BYTES: &[u8] =
                 include_bytes!("../assets/RobotoCondensed-VariableFont_wght.ttf");
             let roboto_bytes = Bytes::new(ROBOTO_BYTES.to_vec());
-            let mut embedded_parsed = 0usize;
             for font in Font::iter(roboto_bytes) {
                 book.push(font.info().clone());
-                // keep a Font handle so the underlying data lives long enough
                 fonts.push(font);
-                embedded_parsed += 1;
             }
-            println!(
-                "quillmark-typst: embed-default-font active -> parsed {} embedded font face(s)",
-                embedded_parsed
-            );
         }
 
         // Load fonts from the quill's in-memory assets FIRST and add to the book
@@ -85,12 +78,6 @@ impl QuillWorld {
                 fonts.push(font);
             }
         }
-        let assets_added = fonts.len().saturating_sub(before_assets);
-        println!(
-            "quillmark-typst: loaded {} font face(s) from quill assets (total asset handles: {})",
-            assets_added,
-            fonts.len()
-        );
 
         // Now initialize FontSearcher for system fonts (lazy loading)
         // These will be added AFTER asset fonts in the book
@@ -104,13 +91,6 @@ impl QuillWorld {
             system_font_index += 1;
         }
         let font_slots = searcher_fonts.fonts;
-
-        // Diagnostic: report system slot count and final asset/font counts
-        println!(
-            "quillmark-typst: system font slots discovered: {}, total parsed asset font handles: {}",
-            font_slots.len(),
-            fonts.len()
-        );
 
         // Error if no fonts are available at all
         if fonts.is_empty() && font_slots.is_empty() {
@@ -239,8 +219,6 @@ impl QuillWorld {
             return Ok(());
         }
 
-        println!("Downloading external packages specified in Quill.toml");
-
         // Create a package storage for downloading packages
         let downloader = Downloader::new("quillmark/0.1.0");
         let cache_dir = dirs::cache_dir().map(|d| d.join(DEFAULT_PACKAGES_SUBDIR));
@@ -250,22 +228,13 @@ impl QuillWorld {
 
         // Parse and download each package
         for package_str in packages_list {
-            println!("Processing package: {}", package_str);
-
             // Parse package spec from string (e.g., "@preview/bubble:0.2.2")
             match package_str.parse::<PackageSpec>() {
                 Ok(spec) => {
-                    println!(
-                        "Downloading package: {}:{}:{}",
-                        spec.namespace, spec.name, spec.version
-                    );
-
                     // Download/prepare the package
                     let mut progress = ProgressSink;
                     match storage.prepare_package(&spec, &mut progress) {
                         Ok(package_dir) => {
-                            println!("Package downloaded to: {:?}", package_dir);
-
                             // Load the package files from the downloaded directory
                             Self::load_package_from_filesystem(
                                 &package_dir,
@@ -313,11 +282,6 @@ impl QuillWorld {
             "lib.typ".to_string()
         };
 
-        println!(
-            "Loading package files from filesystem for {}:{}",
-            spec.name, spec.version
-        );
-
         // Recursively load all files from the package directory
         Self::load_package_files_recursive(package_dir, package_dir, sources, binaries, &spec)?;
 
@@ -325,13 +289,8 @@ impl QuillWorld {
         let entrypoint_path = VirtualPath::new(&entrypoint);
         let entrypoint_file_id = FileId::new(Some(spec.clone()), entrypoint_path);
 
-        if sources.contains_key(&entrypoint_file_id) {
-            println!(
-                "Package {}:{} loaded successfully with entrypoint {}",
-                spec.name, spec.version, entrypoint
-            );
-        } else {
-            println!(
+        if !sources.contains_key(&entrypoint_file_id) {
+            eprintln!(
                 "Warning: Entrypoint {} not found for package {}:{}",
                 entrypoint, spec.name, spec.version
             );
@@ -396,8 +355,6 @@ impl QuillWorld {
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        println!("Loading packages from quill's in-memory file system");
-
         // Get all subdirectories in packages/
         let package_dirs = quill.list_directories("packages");
 
@@ -407,8 +364,6 @@ impl QuillWorld {
                 .and_then(|n| n.to_str())
                 .unwrap_or("unknown")
                 .to_string();
-
-            println!("Processing package directory: {}", package_name);
 
             // Look for typst.toml in this package
             let toml_path = package_dir.join("typst.toml");
@@ -424,11 +379,6 @@ impl QuillWorld {
                             })?,
                         };
 
-                        println!(
-                            "Loading package: {}:{} (namespace: {})",
-                            package_info.name, package_info.version, package_info.namespace
-                        );
-
                         // Load the package files with entrypoint awareness
                         Self::load_package_files_from_quill(
                             quill,
@@ -440,7 +390,7 @@ impl QuillWorld {
                         )?;
                     }
                     Err(e) => {
-                        println!(
+                        eprintln!(
                             "Warning: Failed to parse typst.toml for {}: {}",
                             package_name, e
                         );
@@ -449,10 +399,6 @@ impl QuillWorld {
                 }
             } else {
                 // Load as a simple package directory without typst.toml
-                println!(
-                    "No typst.toml found for {}, loading as local package",
-                    package_name
-                );
                 let spec = PackageSpec {
                     namespace: "local".into(),
                     name: package_name.into(),
@@ -517,13 +463,8 @@ impl QuillWorld {
             let entrypoint_path = VirtualPath::new(entrypoint_name);
             let entrypoint_file_id = FileId::new(Some(spec.clone()), entrypoint_path);
 
-            if sources.contains_key(&entrypoint_file_id) {
-                println!(
-                    "Package {} loaded successfully with entrypoint {}",
-                    spec.name, entrypoint_name
-                );
-            } else {
-                println!(
+            if !sources.contains_key(&entrypoint_file_id) {
+                eprintln!(
                     "Warning: Entrypoint {} not found for package {}",
                     entrypoint_name, spec.name
                 );
@@ -765,17 +706,6 @@ name = "minimal-package"
                 first_font.is_some(),
                 "Should be able to lazy-load a font when needed"
             );
-
-            println!(
-                "✓ Successfully using lazy font loading with {} font slots",
-                world.font_slots.len()
-            );
-        } else {
-            // If fonts are not empty, they came from assets, which is acceptable behavior
-            println!(
-                "✓ Found {} asset fonts, which is acceptable",
-                world.fonts.len()
-            );
         }
     }
 
@@ -819,13 +749,10 @@ name = "minimal-package"
         // Even with dummy font data (which won't parse as a real font),
         // the behavior should prioritize asset fonts first, then fall back to lazy loading
         // Since our dummy data won't parse as a font, it should fall back to lazy loading
-        if world.fonts.is_empty() && !world.font_slots.is_empty() {
-            println!("✓ Attempted asset font loading first, fell back to lazy loading (expected with dummy data)");
-        } else if !world.fonts.is_empty() {
-            println!("✓ Asset font loading succeeded (should not happen with dummy data, but acceptable)");
-        } else {
-            panic!("No fonts available at all - this should not happen");
-        }
+        assert!(
+            !world.fonts.is_empty() || !world.font_slots.is_empty(),
+            "Should have fonts available either from assets or lazy loading"
+        );
     }
 
     #[test]
@@ -842,7 +769,7 @@ name = "minimal-package"
             .join("usaf_memo");
 
         if !quill_path.exists() {
-            println!("Skipping test - usaf_memo fixture not found");
+            // Skip test if fixture not found
             return;
         }
 
@@ -870,11 +797,5 @@ name = "minimal-package"
                 system_font_index
             );
         }
-
-        println!(
-            "✓ Asset fonts have priority: {} asset fonts, {} system font slots",
-            world.fonts.len(),
-            world.font_slots.len()
-        );
     }
 }
