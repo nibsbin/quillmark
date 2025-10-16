@@ -10,23 +10,10 @@ use typst_kit::fonts::{FontSearcher, FontSlot};
 
 use quillmark_core::Quill;
 
-/// Typst World implementation for dynamic quill loading
+/// Typst World implementation for dynamic quill loading.
 ///
-/// This implementation provides efficient dynamic package loading for the Quill system.
-/// Key improvements over previous hardcoded solutions:
-///
-/// - **Dynamic Package Discovery**: Automatically discovers packages in the quill's packages directory
-/// - **Proper Virtual Path Handling**: Maintains directory structure in virtual file system (e.g., src/lib.typ)
-/// - **Entrypoint Support**: Reads typst.toml files to respect package entrypoint configurations
-/// - **Namespace Handling**: Supports @preview and custom namespaces for package imports
-/// - **Asset Management**: Correctly loads assets with proper virtual paths (e.g., assets/image.gif)
-/// - **Error Handling**: Provides clear error messages for missing packages or files
-///
-/// Usage:
-/// - Place packages in `{quill}/packages/{package-name}/` directories  
-/// - Each package should have a `typst.toml` with package metadata including entrypoint
-/// - Assets go in `{quill}/assets/` and are accessible as `assets/filename`
-/// - Package files maintain their directory structure in the virtual file system
+/// Provides dynamic package discovery, virtual path handling, and asset management.
+/// Packages are loaded from `{quill}/packages/` and assets from `{quill}/assets/`.
 pub struct QuillWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
@@ -66,9 +53,7 @@ impl QuillWorld {
             }
         }
 
-        // Load fonts from the quill's in-memory assets FIRST and add to the book
-        // These are loaded eagerly as they are part of the template
-        // Adding them first ensures their indices in the book match the font() method
+        // Load fonts from quill assets first (eagerly loaded)
         let font_data_list = Self::load_fonts_from_quill(quill)?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
@@ -78,12 +63,10 @@ impl QuillWorld {
             }
         }
 
-        // Now initialize FontSearcher for system fonts (lazy loading)
-        // These will be added AFTER asset fonts in the book
+        // Initialize system fonts (lazy loaded)
         let searcher_fonts = FontSearcher::new().include_system_fonts(true).search();
 
-        // Add system fonts to the book after asset fonts
-        // Copy all FontInfo entries from the system font book
+        // Add system font info to book after asset fonts
         let mut system_font_index = 0;
         while let Some(font_info) = searcher_fonts.book.info(system_font_index) {
             book.push(font_info.clone());
@@ -91,26 +74,23 @@ impl QuillWorld {
         }
         let font_slots = searcher_fonts.fonts;
 
-        // Error if no fonts are available at all
+        // Error if no fonts available
         if fonts.is_empty() && font_slots.is_empty() {
-            return Err(
-                format!(
-                    "No fonts found: neither quill assets nor system fonts are available. asset_faces={}, system_slots={}",
-                    fonts.len(),
-                    font_slots.len()
-                )
-                .into(),
-            );
+            return Err(format!(
+                "No fonts found: asset_faces={}, system_slots={}",
+                fonts.len(),
+                font_slots.len()
+            )
+            .into());
         }
 
-        // Load assets from the quill's in-memory file system
+        // Load assets from quill's in-memory file system
         Self::load_assets_from_quill(quill, &mut binaries)?;
 
-        // Load packages from the quill's in-memory file system (embedded packages)
+        // Load packages from quill's in-memory file system
         Self::load_packages_from_quill(quill, &mut sources, &mut binaries)?;
 
-        // Download and load external packages specified in Quill.toml [typst] section
-        // These are loaded AFTER embedded packages so they dominate/override if there's a collision
+        // Download and load external packages from Quill.toml
         #[cfg(feature = "native")]
         Self::download_and_load_external_packages(quill, &mut sources, &mut binaries)?;
 
@@ -129,7 +109,7 @@ impl QuillWorld {
         })
     }
 
-    /// Load fonts from the quill's in-memory file system
+    /// Loads fonts from quill's in-memory file system.
     fn load_fonts_from_quill(
         quill: &Quill,
     ) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
@@ -183,7 +163,7 @@ impl QuillWorld {
         Ok(font_data)
     }
 
-    /// Load assets from the quill's in-memory file system
+    /// Loads assets from quill's in-memory file system.
     fn load_assets_from_quill(
         quill: &Quill,
         binaries: &mut HashMap<FileId, Bytes>,
@@ -203,7 +183,7 @@ impl QuillWorld {
         Ok(())
     }
 
-    /// Download and load external packages specified in Quill.toml [typst] section
+    /// Downloads and loads external packages from Quill.toml.
     #[cfg(feature = "native")]
     fn download_and_load_external_packages(
         quill: &Quill,
@@ -259,7 +239,7 @@ impl QuillWorld {
         Ok(())
     }
 
-    /// Load a package from the filesystem (for downloaded packages)
+    /// Loads a package from the filesystem (for downloaded packages).
     #[cfg(feature = "native")]
     fn load_package_from_filesystem(
         package_dir: &Path,
@@ -298,7 +278,7 @@ impl QuillWorld {
         Ok(())
     }
 
-    /// Recursively load files from a package directory on the filesystem
+    /// Recursively loads files from a package directory.
     #[cfg(feature = "native")]
     fn load_package_files_recursive(
         current_dir: &Path,
@@ -348,7 +328,7 @@ impl QuillWorld {
         Ok(())
     }
 
-    /// Load packages from the quill's in-memory file system
+    /// Loads packages from quill's in-memory file system.
     fn load_packages_from_quill(
         quill: &Quill,
         sources: &mut HashMap<FileId, Source>,
@@ -418,7 +398,7 @@ impl QuillWorld {
         Ok(())
     }
 
-    /// Load files from a package directory in quill's in-memory file system
+    /// Loads files from a package directory in quill's in-memory file system.
     fn load_package_files_from_quill(
         quill: &Quill,
         package_dir: &Path,
