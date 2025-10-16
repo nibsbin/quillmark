@@ -189,6 +189,8 @@ impl Backend for AcroformBackend {
                                     FieldValue::Text(_) => FieldValue::Text(rendered_value),
                                     FieldValue::Boolean(_) => {
                                         // Parse boolean from string (case-insensitive)
+                                        // Only "true" (case-insensitive) is treated as true;
+                                        // everything else is false (KISS principle)
                                         let bool_val =
                                             rendered_value.trim().to_lowercase() == "true";
                                         FieldValue::Boolean(bool_val)
@@ -196,6 +198,7 @@ impl Backend for AcroformBackend {
                                     FieldValue::Choice(_) => FieldValue::Choice(rendered_value),
                                     FieldValue::Integer(_) => {
                                         // Parse integer from string, fallback to 0 if parse fails
+                                        // This prevents crashes but may mask data issues (KISS principle)
                                         let int_val =
                                             rendered_value.trim().parse::<i32>().unwrap_or(0);
                                         FieldValue::Integer(int_val)
