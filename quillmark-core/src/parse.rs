@@ -448,7 +448,7 @@ pub fn decompose(
             if let Some(ref tag) = other_block.tag {
                 if let Some(global_value) = yaml_fields.get(tag) {
                     // Check if the global value is an array
-                    if !global_value.is_sequence() {
+                    if global_value.as_sequence().is_none() {
                         return Err(format!(
                             "Name collision: global field '{}' conflicts with tagged attribute",
                             tag
@@ -499,7 +499,7 @@ pub fn decompose(
             // Check if this conflicts with global fields
             // Exception: if the global field is an array, allow it (we'll merge later)
             if let Some(existing_value) = fields.get(tag_name) {
-                if !existing_value.as_array().is_some() {
+                if existing_value.as_array().is_none() {
                     return Err(format!(
                         "Name collision: tagged attribute '{}' conflicts with global field",
                         tag_name
@@ -589,29 +589,28 @@ pub fn decompose(
         if let Some(existing_value) = fields.get(&tag_name) {
             // The existing value must be an array (checked earlier)
             if let Some(existing_array) = existing_value.as_array() {
-                // Convert existing array to YAML values, then append new items
-                let mut merged_items: Vec<serde_yaml::Value> = Vec::new();
+                // Convert new items from YAML to JSON
+                let new_items_json: Vec<serde_json::Value> = items
+                    .into_iter()
+                    .map(|yaml_val| {
+                        serde_json::to_value(&yaml_val)
+                            .map_err(|e| format!("Failed to convert YAML to JSON: {}", e))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
 
-                // Add existing items first
-                for json_val in existing_array {
-                    let yaml_val = serde_yaml::to_value(json_val)
-                        .map_err(|e| format!("Failed to convert existing array item: {}", e))?;
-                    merged_items.push(yaml_val);
-                }
+                // Combine existing and new items
+                let mut merged_array = existing_array.clone();
+                merged_array.extend(new_items_json);
 
-                // Add new items
-                merged_items.extend(items);
-
-                // Convert merged sequence to QuillValue
-                let quill_value = QuillValue::from_yaml(serde_yaml::Value::Sequence(merged_items))?;
+                // Create QuillValue from merged JSON array
+                let quill_value = QuillValue::from_json(serde_json::Value::Array(merged_array));
                 fields.insert(tag_name, quill_value);
             } else {
                 // This should not happen due to earlier validation
-                return Err(format!(
+                unreachable!(
                     "Internal error: field '{}' exists but is not an array",
                     tag_name
-                )
-                .into());
+                );
             }
         } else {
             // No existing field, just create a new sequence
