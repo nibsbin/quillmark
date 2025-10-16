@@ -182,8 +182,31 @@ impl Backend for AcroformBackend {
                         let should_update = using_tooltip_template || rendered_value != source;
 
                         if should_update {
-                            values_to_fill
-                                .insert(field.name.clone(), FieldValue::Text(rendered_value));
+                            // Convert rendered string to appropriate FieldValue type
+                            // based on the original field type (with reasonable coercions)
+                            let new_value = if let Some(original_value) = &field.current_value {
+                                match original_value {
+                                    FieldValue::Text(_) => FieldValue::Text(rendered_value),
+                                    FieldValue::Boolean(_) => {
+                                        // Parse boolean from string (case-insensitive)
+                                        let bool_val =
+                                            rendered_value.trim().to_lowercase() == "true";
+                                        FieldValue::Boolean(bool_val)
+                                    }
+                                    FieldValue::Choice(_) => FieldValue::Choice(rendered_value),
+                                    FieldValue::Integer(_) => {
+                                        // Parse integer from string, fallback to 0 if parse fails
+                                        let int_val =
+                                            rendered_value.trim().parse::<i32>().unwrap_or(0);
+                                        FieldValue::Integer(int_val)
+                                    }
+                                }
+                            } else {
+                                // No original value, default to Text
+                                FieldValue::Text(rendered_value)
+                            };
+
+                            values_to_fill.insert(field.name.clone(), new_value);
                         }
                     }
                     Err(_e) => {
@@ -270,5 +293,45 @@ mod tests {
             "first",
             "Valid access should work normally"
         );
+    }
+
+    #[test]
+    fn test_boolean_parsing() {
+        // Test that boolean values are parsed correctly
+        let mut env = minijinja::Environment::new();
+        env.set_undefined_behavior(minijinja::UndefinedBehavior::Chainable);
+
+        let context = serde_json::json!({
+            "enabled": true,
+            "disabled": false
+        });
+
+        // Test true
+        let result = env.render_str("{{enabled}}", &context).unwrap();
+        assert_eq!(result.trim().to_lowercase(), "true");
+
+        // Test false
+        let result = env.render_str("{{disabled}}", &context).unwrap();
+        assert_eq!(result.trim().to_lowercase(), "false");
+    }
+
+    #[test]
+    fn test_integer_parsing() {
+        // Test that integer values are parsed correctly
+        let mut env = minijinja::Environment::new();
+        env.set_undefined_behavior(minijinja::UndefinedBehavior::Chainable);
+
+        let context = serde_json::json!({
+            "count": 42,
+            "negative": -10
+        });
+
+        // Test positive integer
+        let result = env.render_str("{{count}}", &context).unwrap();
+        assert_eq!(result.trim().parse::<i32>().unwrap(), 42);
+
+        // Test negative integer
+        let result = env.render_str("{{negative}}", &context).unwrap();
+        assert_eq!(result.trim().parse::<i32>().unwrap(), -10);
     }
 }

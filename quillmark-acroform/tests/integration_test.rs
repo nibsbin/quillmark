@@ -145,9 +145,10 @@ fn test_tooltip_template_parsing() {
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 
     // JSON context that matches the tooltip template
+    // Note: MbrRestct is a Button field, so we use simple values like "On" or "Off"
     let json_context = r#"{
         "other": {
-            "eq": "Test Equipment"
+            "restrictions": "On"
         }
     }"#;
 
@@ -168,21 +169,22 @@ fn test_tooltip_template_parsing() {
 
     let fields = filled_doc.fields().expect("Failed to get fields");
 
-    // Find the field with the tooltip template
+    // Find the field with the tooltip template (MbrRestct has tooltip: MbrRestct__{{other.restrictions}})
     let field_with_tooltip = fields
         .iter()
-        .find(|f| f.name == "topmostSubform[0].Page1[0].P[0].MbrExceptionQual[0]")
+        .find(|f| f.name == "P[0].Page1[0].topmostSubform[0].MbrRestct[0]")
         .expect("Field not found");
 
     // Verify the field value was rendered from the tooltip template
-    if let Some(FieldValue::Text(val)) = &field_with_tooltip.current_value {
+    // This is a Choice field (Button type), so the value should be FieldValue::Choice
+    if let Some(FieldValue::Choice(val)) = &field_with_tooltip.current_value {
         assert_eq!(
-            val, "Test Equipment",
+            val, "On",
             "Field should be filled with rendered tooltip template"
         );
     } else {
         panic!(
-            "Expected Text field value, got: {:?}",
+            "Expected Choice field value, got: {:?}",
             field_with_tooltip.current_value
         );
     }
@@ -243,6 +245,70 @@ backend = "acroform"
 }
 
 #[test]
+fn test_field_type_preservation() {
+    use quillmark_core::{Backend, OutputFormat, Quill, RenderOptions};
+
+    let backend = AcroformBackend::default();
+    let quill_path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../quillmark-fixtures/resources/usaf_form_8"
+    );
+    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+
+    // Create a context with various field types
+    let json_context = r#"{
+        "name": "John Doe",
+        "grade": "O-3",
+        "dod_id": 1234567890,
+        "other": {
+            "restrictions": "On"
+        }
+    }"#;
+
+    let opts = RenderOptions {
+        output_format: Some(OutputFormat::Pdf),
+    };
+
+    let result = backend.compile(json_context, &quill, &opts);
+    assert!(result.is_ok(), "Compilation failed: {:?}", result.err());
+
+    let artifacts = result.unwrap();
+    assert_eq!(artifacts.len(), 1);
+
+    // Load the resulting PDF and verify field types are preserved
+    let filled_doc = AcroFormDocument::from_bytes(artifacts[0].bytes.clone())
+        .expect("Failed to load filled PDF");
+
+    let fields = filled_doc.fields().expect("Failed to get fields");
+
+    // Text field should remain Text
+    let name_field = fields
+        .iter()
+        .find(|f| f.name == "P[0].Page1[0].topmostSubform[0].MbrName[1]");
+    if let Some(field) = name_field {
+        assert!(
+            matches!(field.current_value, Some(FieldValue::Text(_))),
+            "Text field should preserve Text type"
+        );
+    }
+
+    // Choice field should remain Choice
+    let restrictions_field = fields
+        .iter()
+        .find(|f| f.name == "P[0].Page1[0].topmostSubform[0].MbrRestct[0]");
+    if let Some(field) = restrictions_field {
+        if let Some(FieldValue::Choice(val)) = &field.current_value {
+            assert_eq!(
+                val, "On",
+                "Choice field should be filled with correct value"
+            );
+        } else {
+            panic!("Expected Choice field type, got: {:?}", field.current_value);
+        }
+    }
+}
+
+#[test]
 fn test_empty_tooltip_template_uses_field_value() {
     // Test that if tooltip has "__" but nothing after it, we fall back to field value
     use quillmark_core::{Backend, OutputFormat, Quill, RenderOptions};
@@ -283,7 +349,7 @@ fn test_tooltip_template_with_complex_expression() {
             "lastname": "Doe"
         },
         "other": {
-            "eq": "F-16"
+            "restrictions": "Off"
         }
     }"#;
 
@@ -311,16 +377,17 @@ fn test_tooltip_template_with_complex_expression() {
 
     let fields = filled_doc.fields().expect("Failed to get fields");
 
-    // The field with tooltip "MbrExceptionQual__{{other.eq}}" should have
-    // its value set to "F-16" from the context
+    // The field with tooltip "MbrRestct__{{other.restrictions}}" should have
+    // its value set to "Off" from the context
+    // This is a Choice field (Button type), so the value should be FieldValue::Choice
     let field_with_tooltip = fields
         .iter()
-        .find(|f| f.name == "topmostSubform[0].Page1[0].P[0].MbrExceptionQual[0]")
+        .find(|f| f.name == "P[0].Page1[0].topmostSubform[0].MbrRestct[0]")
         .expect("Field not found");
 
-    if let Some(FieldValue::Text(val)) = &field_with_tooltip.current_value {
+    if let Some(FieldValue::Choice(val)) = &field_with_tooltip.current_value {
         assert_eq!(
-            val, "F-16",
+            val, "Off",
             "Field should be filled with value from tooltip template"
         );
     }
