@@ -1,75 +1,15 @@
-//! # AcroForm Backend for Quillmark
+//! AcroForm backend for Quillmark that fills PDF form fields with templated values.
 //!
-//! This crate provides an AcroForm backend implementation that fills PDF form fields
-//! with values rendered from YAML context using MiniJinja templates.
-//!
-//! ## Overview
-//!
-//! The primary entry point is the [`AcroformBackend`] struct, which implements the
-//! [`Backend`] trait from `quillmark-core`. Instead of relying on quillmark-core's
-//! templating for glue composition, this backend directly uses MiniJinja to render
-//! form field values with Jinja-style templating expressions.
-//!
-//! ## Workflow
-//!
-//! 1. Read PDF form from quill's `form.pdf` file
-//! 2. Extract field names, current values, and tooltips from the PDF form
-//! 3. For each field:
-//!    - If the field has a tooltip with template metadata (format: `description__{{template}}`),
-//!      use the template part after `__` as the value to render
-//!    - Otherwise, fall back to using the field's current value as a template
-//! 4. Render the template with the JSON context using MiniJinja
-//! 5. Write the rendered values back to the PDF form
-//! 6. Return the filled PDF as bytes
-//!
-//! ## Tooltip Template Metadata
-//!
-//! The acroform library (v0.0.12+) extracts tooltips from PDF form fields. This backend
-//! supports a special format for tooltips that includes template expressions:
-//!
-//! ```text
-//! Description text__{{template.expression}}
-//! ```
-//!
-//! The `__` (double underscore) separator splits the tooltip into:
-//! - A human-readable description (before `__`)
-//! - A MiniJinja template expression (after `__`)
-//!
-//! When a field has a tooltip with this format, the template expression is used to
-//! determine the field's value, taking priority over the field's current value.
-//!
-//! ### Example
-//!
-//! If a PDF field has tooltip: `The name of the customer__{{customer.firstname}} {{customer.lastname}}`
-//! and the JSON context contains:
-//! ```json
-//! {
-//!   "customer": {
-//!     "firstname": "John",
-//!     "lastname": "Doe"
-//!   }
-//! }
-//! ```
-//! The field will be filled with: `John Doe`
-//!
-//! ## Example Usage
-//!
-//! ```no_run
-//! use quillmark_acroform::AcroformBackend;
-//! use quillmark_core::{Backend, Quill, OutputFormat};
-//!
-//! let backend = AcroformBackend::default();
-//! let quill = Quill::from_path("path/to/quill").unwrap();
-//!
-//! // Use with Workflow API (recommended)
-//! // let workflow = Workflow::new(Box::new(backend), quill);
-//! ```
+//! This backend reads PDF forms, renders field values using MiniJinja templates,
+//! and returns filled PDFs. Fields can be templated via their current values or
+//! via tooltip metadata in the format: `description__{{template}}`.
 
 use acroform::{AcroFormDocument, FieldValue};
 use quillmark_core::{Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions};
 use std::collections::HashMap;
 
 /// AcroForm backend implementation for Quillmark.
+#[derive(Default)]
 pub struct AcroformBackend;
 
 impl Backend for AcroformBackend {
@@ -97,7 +37,6 @@ impl Backend for AcroformBackend {
     ) -> Result<Vec<Artifact>, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
 
-        // Check if format is supported
         if !self.supported_formats().contains(&format) {
             return Err(RenderError::FormatNotSupported {
                 backend: self.id().to_string(),
@@ -105,142 +44,96 @@ impl Backend for AcroformBackend {
             });
         }
 
-        println!("AcroForm backend compiling for quill: {}", quill.name);
-
-        // Parse the JSON context from glue_content
         let context: serde_json::Value = serde_json::from_str(glue_content).map_err(|e| {
             RenderError::Other(format!("Failed to parse JSON context: {}", e).into())
         })?;
 
-        // Read form.pdf from the quill's file system
         let form_pdf_bytes = quill.files.get_file("form.pdf").ok_or_else(|| {
             RenderError::Other(format!("form.pdf not found in quill '{}'", quill.name).into())
         })?;
 
-        // Load the PDF form directly from bytes (no temporary file needed)
         let mut doc = AcroFormDocument::from_bytes(form_pdf_bytes.to_vec())
             .map_err(|e| RenderError::Other(format!("Failed to load PDF form: {}", e).into()))?;
 
-        // Create a MiniJinja environment for rendering field values
         let mut env = minijinja::Environment::new();
         env.set_undefined_behavior(minijinja::UndefinedBehavior::Chainable);
 
-        // Get all form fields
         let fields = doc.fields().map_err(|e| {
             RenderError::Other(format!("Failed to get PDF form fields: {}", e).into())
         })?;
 
-        // Prepare values to fill
         let mut values_to_fill = HashMap::new();
 
         for field in fields {
-            // Check if the field has a tooltip with template metadata
-            let template_to_render = if let Some(tooltip) = &field.tooltip {
-                // Check if tooltip contains "__" separator for template metadata
-                if let Some(separator_pos) = tooltip.find("__") {
-                    // Extract the template part after "__"
-                    let template_part = &tooltip[separator_pos + 2..];
-                    if !template_part.trim().is_empty() {
-                        Some(template_part.to_string())
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            } else {
-                None
-            };
+            // Extract template from tooltip (format: "description__{{template}}")
+            let template_to_render = field.tooltip.as_ref().and_then(|tooltip| {
+                tooltip.find("__").and_then(|pos| {
+                    tooltip.get(pos + 2..).and_then(|template_part| {
+                        if template_part.trim().is_empty() {
+                            None
+                        } else {
+                            Some(template_part.to_string())
+                        }
+                    })
+                })
+            });
 
-            // Track if we're using a tooltip template (to determine update strategy)
             let using_tooltip_template = template_to_render.is_some();
 
             // Determine what to render: tooltip template or field value
-            let render_source = if let Some(template) = template_to_render {
-                // Use the tooltip template
-                Some(template)
-            } else if let Some(field_value) = &field.current_value {
-                // Fall back to the current field value (which may contain a template)
-                let field_value_str = match field_value {
-                    FieldValue::Text(s) => s.clone(),
-                    FieldValue::Boolean(b) => if *b { "true" } else { "false" }.to_string(),
-                    FieldValue::Choice(s) => s.clone(),
-                    FieldValue::Integer(i) => i.to_string(),
-                };
-                Some(field_value_str)
-            } else {
-                None
-            };
+            let render_source = template_to_render.or_else(|| {
+                field
+                    .current_value
+                    .as_ref()
+                    .map(|field_value| match field_value {
+                        FieldValue::Text(s) => s.clone(),
+                        FieldValue::Boolean(b) => if *b { "true" } else { "false" }.to_string(),
+                        FieldValue::Choice(s) => s.clone(),
+                        FieldValue::Integer(i) => i.to_string(),
+                    })
+            });
 
-            // Render the template if we have a source
             if let Some(source) = render_source {
-                // Try to render the template
-                match env.render_str(&source, &context) {
-                    Ok(rendered_value) => {
-                        // Always update with rendered value from tooltip template
-                        // For field values, only update if different from original
-                        let should_update = using_tooltip_template || rendered_value != source;
+                if let Ok(rendered_value) = env.render_str(&source, &context) {
+                    let should_update = using_tooltip_template || rendered_value != source;
 
-                        if should_update {
-                            // Convert rendered string to appropriate FieldValue type
-                            // based on the original field type (with reasonable coercions)
-                            let new_value = if let Some(original_value) = &field.current_value {
-                                match original_value {
-                                    FieldValue::Text(_) => FieldValue::Text(rendered_value),
-                                    FieldValue::Boolean(_) => {
-                                        // Try to parse as number first
-                                        let bool_val =
-                                            if let Ok(num) = rendered_value.trim().parse::<i32>() {
-                                                // Non-zero numbers become true, zero becomes false
-                                                num != 0
-                                            } else {
-                                                // Fall back to string parsing: only "true" (case-insensitive) is true
-                                                rendered_value.trim().to_lowercase() == "true"
-                                            };
-                                        FieldValue::Boolean(bool_val)
-                                    }
-                                    FieldValue::Choice(_) => {
-                                        // Convert true/false to 1/0
-                                        let choice_val =
-                                            match rendered_value.trim().to_lowercase().as_str() {
-                                                "true" => "1".to_string(),
-                                                "false" => "0".to_string(),
-                                                _ => rendered_value,
-                                            };
-                                        FieldValue::Choice(choice_val)
-                                    }
-                                    FieldValue::Integer(_) => {
-                                        // Convert true/false to 1/0, then parse as integer
-                                        let int_val = match rendered_value
-                                            .trim()
-                                            .to_lowercase()
-                                            .as_str()
-                                        {
-                                            "true" => 1,
-                                            "false" => 0,
-                                            _ => rendered_value.trim().parse::<i32>().unwrap_or(0),
-                                        };
-                                        FieldValue::Integer(int_val)
-                                    }
-                                }
-                            } else {
-                                // No original value, default to Text
-                                FieldValue::Text(rendered_value)
-                            };
-                            println!("Filling field '{}' with value: {:?}", field.name, new_value);
+                    if should_update {
+                        let new_value = match &field.current_value {
+                            Some(FieldValue::Text(_)) => FieldValue::Text(rendered_value),
+                            Some(FieldValue::Boolean(_)) => {
+                                let bool_val =
+                                    rendered_value.trim().parse::<i32>().ok().map_or_else(
+                                        || rendered_value.trim().to_lowercase() == "true",
+                                        |num| num != 0,
+                                    );
+                                FieldValue::Boolean(bool_val)
+                            }
+                            Some(FieldValue::Choice(_)) => {
+                                let choice_val = match rendered_value.trim().to_lowercase().as_str()
+                                {
+                                    "true" => "1".to_string(),
+                                    "false" => "0".to_string(),
+                                    _ => rendered_value,
+                                };
+                                FieldValue::Choice(choice_val)
+                            }
+                            Some(FieldValue::Integer(_)) => {
+                                let int_val = match rendered_value.trim().to_lowercase().as_str() {
+                                    "true" => 1,
+                                    "false" => 0,
+                                    _ => rendered_value.trim().parse::<i32>().unwrap_or(0),
+                                };
+                                FieldValue::Integer(int_val)
+                            }
+                            None => FieldValue::Text(rendered_value),
+                        };
 
-                            values_to_fill.insert(field.name.clone(), new_value);
-                        }
-                    }
-                    Err(_e) => {
-                        // If rendering fails, keep the original value
-                        // (it might not be a template)
+                        values_to_fill.insert(field.name.clone(), new_value);
                     }
                 }
             }
         }
 
-        // Fill the PDF form and get the result as bytes (in-memory)
         let output_bytes = doc
             .fill(values_to_fill)
             .map_err(|e| RenderError::Other(format!("Failed to fill PDF: {}", e).into()))?;
@@ -249,13 +142,6 @@ impl Backend for AcroformBackend {
             bytes: output_bytes,
             output_format: OutputFormat::Pdf,
         }])
-    }
-}
-
-impl Default for AcroformBackend {
-    /// Creates a new [`AcroformBackend`] instance.
-    fn default() -> Self {
-        Self
     }
 }
 
