@@ -152,6 +152,9 @@ impl Backend for AcroformBackend {
                 None
             };
 
+            // Track if we're using a tooltip template (to determine update strategy)
+            let using_tooltip_template = template_to_render.is_some();
+
             // Determine what to render: tooltip template or field value
             let render_source = if let Some(template) = template_to_render {
                 // Use the tooltip template
@@ -176,9 +179,7 @@ impl Backend for AcroformBackend {
                     Ok(rendered_value) => {
                         // Always update with rendered value from tooltip template
                         // For field values, only update if different from original
-                        let should_update = field.tooltip.is_some()
-                            && field.tooltip.as_ref().unwrap().find("__").is_some()
-                            || rendered_value != source;
+                        let should_update = using_tooltip_template || rendered_value != source;
 
                         if should_update {
                             values_to_fill
