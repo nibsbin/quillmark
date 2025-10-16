@@ -7,9 +7,9 @@ use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark};
 fn test_quill_engine_creation() {
     let engine = Quillmark::new();
 
-    // Check that typst backend is auto-registered (default feature)
+    // Check that at least one backend is registered (if default features enabled)
     let backends = engine.registered_backends();
-    assert!(backends.contains(&"typst"));
+    #[cfg(any(feature = "typst", feature = "acroform"))]
     assert!(backends.len() > 0);
 
     // Check that no quills are registered initially

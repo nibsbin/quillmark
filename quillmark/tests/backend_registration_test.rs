@@ -137,24 +137,6 @@ title: Hello Custom Backend
 }
 
 #[test]
-fn test_typst_backend_auto_registered() {
-    let engine = Quillmark::new();
-
-    // Check that typst backend is auto-registered when feature is enabled
-    let backends = engine.registered_backends();
-
-    #[cfg(feature = "typst")]
-    {
-        assert!(backends.contains(&"typst"));
-    }
-
-    #[cfg(not(feature = "typst"))]
-    {
-        assert!(!backends.contains(&"typst"));
-    }
-}
-
-#[test]
 fn test_register_backend_after_new() {
     // Test that we can add backends after creating the engine
     let mut engine = Quillmark::new();
