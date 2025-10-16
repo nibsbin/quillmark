@@ -31,9 +31,9 @@ eval_info:
     date: 3000-01-01
 # Section 4
 qual_level:
-  qualified: asdf
+  qualified: 
   unqualified: X
-  expiration: N/A
+  expiration: 
 # Section 5
 addi_training:
   due_dates: 3000-01-01
@@ -41,9 +41,9 @@ addi_training:
   certifying: Turanga Leela, Capt, Planet Express
 # Section 6
 other:
-  restrictions: X
-  exceptionally_qualified:
-  downgrade: X
+  restrictions: true
+  eq: false
+  downgrade: true
 # Section 7
 flight_examiner:
   name: Capt Turanga Leela
