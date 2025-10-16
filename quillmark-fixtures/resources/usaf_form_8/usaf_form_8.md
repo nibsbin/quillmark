@@ -73,7 +73,6 @@ examiner_remarks:
 reviewing_remarks: None
 final_remarks: None
 addi_reviews: “None”
-
 ---
 
 whatever
