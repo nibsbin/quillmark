@@ -10,9 +10,10 @@ use typst_kit::fonts::{FontSearcher, FontSlot};
 
 use quillmark_core::Quill;
 
-/// Typst World implementation for dynamic quill loading.
+/// Typst World implementation for quill-based compilation.
 ///
-/// Provides dynamic package discovery, virtual path handling, and asset management.
+/// Implements the Typst `World` trait to provide dynamic package loading,
+/// virtual path handling, and asset management for quill templates.
 /// Packages are loaded from `{quill}/packages/` and assets from `{quill}/assets/`.
 pub struct QuillWorld {
     library: LazyHash<Library>,
