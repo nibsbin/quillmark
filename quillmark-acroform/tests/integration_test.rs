@@ -8,7 +8,9 @@ fn test_usaf_form_8_fields() {
         "/../quillmark-fixtures/resources/usaf_form_8/form.pdf"
     );
 
-    let doc = AcroFormDocument::from_pdf(form_path).expect("Failed to load PDF");
+    // Read the PDF into memory and use from_bytes
+    let pdf_bytes = std::fs::read(form_path).expect("Failed to read PDF file");
+    let doc = AcroFormDocument::from_bytes(pdf_bytes).expect("Failed to load PDF");
 
     println!("Fields in the PDF:");
     for field in doc.fields().expect("Failed to get fields") {
