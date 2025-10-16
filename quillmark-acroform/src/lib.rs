@@ -83,25 +83,9 @@ impl Backend for AcroformBackend {
             RenderError::Other(format!("form.pdf not found in quill '{}'", quill.name).into())
         })?;
 
-        // Write the PDF to a temporary file so acroform can load it
-        let temp_dir = std::env::temp_dir();
-        let temp_input_path = temp_dir.join(format!(
-            "quillmark_acroform_input_{}.pdf",
-            std::process::id()
-        ));
-        std::fs::write(&temp_input_path, form_pdf_bytes).map_err(|e| {
-            RenderError::Other(format!("Failed to write temporary input PDF: {}", e).into())
-        })?;
-
-        // Load the PDF form using acroform
-        let mut doc = AcroFormDocument::from_pdf(&temp_input_path).map_err(|e| {
-            // Clean up temp file
-            let _ = std::fs::remove_file(&temp_input_path);
-            RenderError::Other(format!("Failed to load PDF form: {}", e).into())
-        })?;
-
-        // Clean up temp input file
-        let _ = std::fs::remove_file(&temp_input_path);
+        // Load the PDF form directly from bytes (no temporary file needed)
+        let mut doc = AcroFormDocument::from_bytes(form_pdf_bytes.to_vec())
+            .map_err(|e| RenderError::Other(format!("Failed to load PDF form: {}", e).into()))?;
 
         // Create a MiniJinja environment for rendering field values
         let env = minijinja::Environment::new();
@@ -141,23 +125,10 @@ impl Backend for AcroformBackend {
             }
         }
 
-        // Write filled PDF to a temporary output file
-        let temp_output_path = temp_dir.join(format!(
-            "quillmark_acroform_output_{}.pdf",
-            std::process::id()
-        ));
-        doc.fill_and_save(values_to_fill, &temp_output_path)
-            .map_err(|e| RenderError::Other(format!("Failed to save filled PDF: {}", e).into()))?;
-
-        // Read the output PDF as bytes
-        let output_bytes = std::fs::read(&temp_output_path).map_err(|e| {
-            // Clean up temp file
-            let _ = std::fs::remove_file(&temp_output_path);
-            RenderError::Other(format!("Failed to read filled PDF: {}", e).into())
-        })?;
-
-        // Clean up temp output file
-        let _ = std::fs::remove_file(&temp_output_path);
+        // Fill the PDF form and get the result as bytes (in-memory)
+        let output_bytes = doc
+            .fill(values_to_fill)
+            .map_err(|e| RenderError::Other(format!("Failed to fill PDF: {}", e).into()))?;
 
         Ok(vec![Artifact {
             bytes: output_bytes,
