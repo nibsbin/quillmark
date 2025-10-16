@@ -188,19 +188,38 @@ impl Backend for AcroformBackend {
                                 match original_value {
                                     FieldValue::Text(_) => FieldValue::Text(rendered_value),
                                     FieldValue::Boolean(_) => {
-                                        // Parse boolean from string (case-insensitive)
-                                        // Only "true" (case-insensitive) is treated as true;
-                                        // everything else is false (KISS principle)
+                                        // Try to parse as number first
                                         let bool_val =
-                                            rendered_value.trim().to_lowercase() == "true";
+                                            if let Ok(num) = rendered_value.trim().parse::<i32>() {
+                                                // Non-zero numbers become true, zero becomes false
+                                                num != 0
+                                            } else {
+                                                // Fall back to string parsing: only "true" (case-insensitive) is true
+                                                rendered_value.trim().to_lowercase() == "true"
+                                            };
                                         FieldValue::Boolean(bool_val)
                                     }
-                                    FieldValue::Choice(_) => FieldValue::Choice(rendered_value),
+                                    FieldValue::Choice(_) => {
+                                        // Convert true/false to 1/0
+                                        let choice_val =
+                                            match rendered_value.trim().to_lowercase().as_str() {
+                                                "true" => "1".to_string(),
+                                                "false" => "0".to_string(),
+                                                _ => rendered_value,
+                                            };
+                                        FieldValue::Choice(choice_val)
+                                    }
                                     FieldValue::Integer(_) => {
-                                        // Parse integer from string, fallback to 0 if parse fails
-                                        // This prevents crashes but may mask data issues (KISS principle)
-                                        let int_val =
-                                            rendered_value.trim().parse::<i32>().unwrap_or(0);
+                                        // Convert true/false to 1/0, then parse as integer
+                                        let int_val = match rendered_value
+                                            .trim()
+                                            .to_lowercase()
+                                            .as_str()
+                                        {
+                                            "true" => 1,
+                                            "false" => 0,
+                                            _ => rendered_value.trim().parse::<i32>().unwrap_or(0),
+                                        };
                                         FieldValue::Integer(int_val)
                                     }
                                 }
@@ -208,6 +227,7 @@ impl Backend for AcroformBackend {
                                 // No original value, default to Text
                                 FieldValue::Text(rendered_value)
                             };
+                            println!("Filling field '{}' with value: {:?}", field.name, new_value);
 
                             values_to_fill.insert(field.name.clone(), new_value);
                         }
