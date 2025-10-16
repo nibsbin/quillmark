@@ -4,18 +4,18 @@ version = 4
 
 [[package]]
 name = "acroform"
-version = "0.0.12"
+version = "0.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa9fe75ab38ce91470e7927f136a890b752ba60810c779067c7bade5838a5daa"
+checksum = "698031e3c3bbfc4512c922d2e289a1a26f7c03c359843f34ea4476322f688053"
 dependencies = [
  "acroform-pdf",
 ]
 
 [[package]]
 name = "acroform-pdf"
-version = "0.0.12"
+version = "0.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b2bfa7c092cca0894df4030e55191e1d890106523edb3a5c6adf6af9e1fe91b"
+checksum = "369a0e823d79634dd95f28f59679700461cc700fb7ed1ab21e8376da5328ae41"
 dependencies = [
  "acroform-pdf-derive",
  "aes",
@@ -41,9 +41,9 @@ dependencies = [
 
 [[package]]
 name = "acroform-pdf-derive"
-version = "0.0.12"
+version = "0.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8b0b58341f8e1a69be3980db62d81ba58252c7983436f01ba062d83db54ae3e"
+checksum = "05c796bae479bca02d87b03d0a59d19ecaded579dd91e4560ba9de3931532615"
 dependencies = [
  "proc-macro2",
  "quote",
