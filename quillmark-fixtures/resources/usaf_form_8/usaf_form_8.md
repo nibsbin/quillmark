@@ -36,7 +36,7 @@ qual_level:
   expiration: 
 # Section 5
 addi_training:
-  due_dates: 3000-01-01
+  due_dates: 
   completed_dates: 3000-01-01
   certifying: Turanga Leela, Capt, Planet Express
 # Section 6
@@ -48,18 +48,19 @@ other:
 flight_examiner:
   name: Capt Turanga Leela
   org: Planet Express
-  check.concur: X
+  concur: true
+  remarks: 1
 reviewing_officer:
   name: Hermes Conrad
   org: Planet Express
-  check.concur: X
+  check.not_concur: true
 final_officer:
   name: Professor Farnsworth
   org: Planet Express
-  check.concur: X
+  check.concur: true
 # Section 9
 comments:
-  restrictions: You are grounded
+  restrictions: You're fired
   #exceptionally_qualified:
 examiner_remarks:
   mission_description: Delivering packages to all points in the universe.
