@@ -70,7 +70,6 @@ impl QuillWorld {
         // These are loaded eagerly as they are part of the template
         // Adding them first ensures their indices in the book match the font() method
         let font_data_list = Self::load_fonts_from_quill(quill)?;
-        let before_assets = fonts.len();
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
             for font in Font::iter(font_bytes) {
@@ -542,7 +541,7 @@ impl World for QuillWorld {
             };
 
             let date = adjusted.date();
-            Datetime::from_ymd(date.year(), date.month() as u8, date.day() as u8)
+            Datetime::from_ymd(date.year(), date.month() as u8, date.day())
         }
 
         #[cfg(target_arch = "wasm32")]
