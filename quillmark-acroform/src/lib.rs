@@ -100,20 +100,53 @@ impl Backend for AcroformBackend {
         let mut values_to_fill = HashMap::new();
 
         for field in fields {
-            // Get the current field value (which may contain a template)
-            if let Some(field_value) = &field.current_value {
+            // Check if the field has a tooltip with template metadata
+            let template_to_render = if let Some(tooltip) = &field.tooltip {
+                // Check if tooltip contains "__" separator for template metadata
+                if let Some(separator_pos) = tooltip.find("__") {
+                    // Extract the template part after "__"
+                    let template_part = &tooltip[separator_pos + 2..];
+                    if !template_part.trim().is_empty() {
+                        Some(template_part.to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            // Determine what to render: tooltip template or field value
+            let render_source = if let Some(template) = template_to_render {
+                // Use the tooltip template
+                Some(template)
+            } else if let Some(field_value) = &field.current_value {
+                // Fall back to the current field value (which may contain a template)
                 let field_value_str = match field_value {
                     FieldValue::Text(s) => s.clone(),
                     FieldValue::Boolean(b) => if *b { "true" } else { "false" }.to_string(),
                     FieldValue::Choice(s) => s.clone(),
                     FieldValue::Integer(i) => i.to_string(),
                 };
+                Some(field_value_str)
+            } else {
+                None
+            };
 
-                // Try to render the field value as a template
-                match env.render_str(&field_value_str, &context) {
+            // Render the template if we have a source
+            if let Some(source) = render_source {
+                // Try to render the template
+                match env.render_str(&source, &context) {
                     Ok(rendered_value) => {
-                        // Only update if the rendered value is different from the original
-                        if rendered_value != field_value_str {
+                        // Always update with rendered value from tooltip template
+                        // For field values, only update if different from original
+                        let should_update = field.tooltip.is_some()
+                            && field.tooltip.as_ref().unwrap().find("__").is_some()
+                            || rendered_value != source;
+
+                        if should_update {
                             values_to_fill
                                 .insert(field.name.clone(), FieldValue::Text(rendered_value));
                         }
