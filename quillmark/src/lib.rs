@@ -86,7 +86,7 @@
 //! # }
 //!
 //! let mut engine = Quillmark::new();
-//! 
+//!
 //! // Register a custom backend
 //! let custom_backend = Box::new(MyCustomBackend);
 //! engine.register_backend(custom_backend);
