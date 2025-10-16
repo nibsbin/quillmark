@@ -443,14 +443,18 @@ pub fn decompose(
         };
 
         // Check that all tagged blocks don't conflict with global fields
+        // Exception: if the global field is an array, allow it (we'll merge later)
         for other_block in &blocks {
             if let Some(ref tag) = other_block.tag {
-                if yaml_fields.contains_key(tag) {
-                    return Err(format!(
-                        "Name collision: global field '{}' conflicts with tagged attribute",
-                        tag
-                    )
-                    .into());
+                if let Some(global_value) = yaml_fields.get(tag) {
+                    // Check if the global value is an array
+                    if !global_value.is_sequence() {
+                        return Err(format!(
+                            "Name collision: global field '{}' conflicts with tagged attribute",
+                            tag
+                        )
+                        .into());
+                    }
                 }
             }
         }
@@ -493,12 +497,15 @@ pub fn decompose(
     for (idx, block) in blocks.iter().enumerate() {
         if let Some(ref tag_name) = block.tag {
             // Check if this conflicts with global fields
-            if fields.contains_key(tag_name) {
-                return Err(format!(
-                    "Name collision: tagged attribute '{}' conflicts with global field",
-                    tag_name
-                )
-                .into());
+            // Exception: if the global field is an array, allow it (we'll merge later)
+            if let Some(existing_value) = fields.get(tag_name) {
+                if !existing_value.as_array().is_some() {
+                    return Err(format!(
+                        "Name collision: tagged attribute '{}' conflicts with global field",
+                        tag_name
+                    )
+                    .into());
+                }
             }
 
             // Parse YAML metadata
@@ -577,9 +584,40 @@ pub fn decompose(
     );
 
     // Add all tagged collections to fields (convert to QuillValue)
+    // If a field already exists and is an array, merge the new items into it
     for (tag_name, items) in tagged_attributes {
-        let quill_value = QuillValue::from_yaml(serde_yaml::Value::Sequence(items))?;
-        fields.insert(tag_name, quill_value);
+        if let Some(existing_value) = fields.get(&tag_name) {
+            // The existing value must be an array (checked earlier)
+            if let Some(existing_array) = existing_value.as_array() {
+                // Convert existing array to YAML values, then append new items
+                let mut merged_items: Vec<serde_yaml::Value> = Vec::new();
+
+                // Add existing items first
+                for json_val in existing_array {
+                    let yaml_val = serde_yaml::to_value(json_val)
+                        .map_err(|e| format!("Failed to convert existing array item: {}", e))?;
+                    merged_items.push(yaml_val);
+                }
+
+                // Add new items
+                merged_items.extend(items);
+
+                // Convert merged sequence to QuillValue
+                let quill_value = QuillValue::from_yaml(serde_yaml::Value::Sequence(merged_items))?;
+                fields.insert(tag_name, quill_value);
+            } else {
+                // This should not happen due to earlier validation
+                return Err(format!(
+                    "Internal error: field '{}' exists but is not an array",
+                    tag_name
+                )
+                .into());
+            }
+        } else {
+            // No existing field, just create a new sequence
+            let quill_value = QuillValue::from_yaml(serde_yaml::Value::Sequence(items))?;
+            fields.insert(tag_name, quill_value);
+        }
     }
 
     let mut parsed = ParsedDocument::new(fields);
@@ -841,6 +879,100 @@ Item body"#;
         let result = decompose(markdown);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("collision"));
+    }
+
+    #[test]
+    fn test_global_array_merged_with_scope() {
+        // When global frontmatter has an array field with the same name as a SCOPE,
+        // the SCOPE items should be added to the array
+        let markdown = r#"---
+items:
+  - name: Global Item 1
+    value: 100
+  - name: Global Item 2
+    value: 200
+---
+
+Global body
+
+---
+SCOPE: items
+name: Scope Item 1
+value: 300
+---
+
+Scope item 1 body
+
+---
+SCOPE: items
+name: Scope Item 2
+value: 400
+---
+
+Scope item 2 body"#;
+
+        let doc = decompose(markdown).unwrap();
+
+        // Verify the items array has all 4 items (2 from global + 2 from SCOPE)
+        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
+        assert_eq!(items.len(), 4);
+
+        // Verify first two items (from global array)
+        let item1 = items[0].as_object().unwrap();
+        assert_eq!(
+            item1.get("name").unwrap().as_str().unwrap(),
+            "Global Item 1"
+        );
+        assert_eq!(item1.get("value").unwrap().as_i64().unwrap(), 100);
+
+        let item2 = items[1].as_object().unwrap();
+        assert_eq!(
+            item2.get("name").unwrap().as_str().unwrap(),
+            "Global Item 2"
+        );
+        assert_eq!(item2.get("value").unwrap().as_i64().unwrap(), 200);
+
+        // Verify last two items (from SCOPE blocks)
+        let item3 = items[2].as_object().unwrap();
+        assert_eq!(item3.get("name").unwrap().as_str().unwrap(), "Scope Item 1");
+        assert_eq!(item3.get("value").unwrap().as_i64().unwrap(), 300);
+        assert_eq!(
+            item3.get("body").unwrap().as_str().unwrap(),
+            "\nScope item 1 body\n\n"
+        );
+
+        let item4 = items[3].as_object().unwrap();
+        assert_eq!(item4.get("name").unwrap().as_str().unwrap(), "Scope Item 2");
+        assert_eq!(item4.get("value").unwrap().as_i64().unwrap(), 400);
+        assert_eq!(
+            item4.get("body").unwrap().as_str().unwrap(),
+            "\nScope item 2 body"
+        );
+    }
+
+    #[test]
+    fn test_empty_global_array_with_scope() {
+        // Edge case: global frontmatter has an empty array
+        let markdown = r#"---
+items: []
+---
+
+Global body
+
+---
+SCOPE: items
+name: Item 1
+---
+
+Item 1 body"#;
+
+        let doc = decompose(markdown).unwrap();
+
+        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
+        assert_eq!(items.len(), 1);
+
+        let item = items[0].as_object().unwrap();
+        assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
     }
 
     #[test]
