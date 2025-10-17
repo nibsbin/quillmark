@@ -2078,6 +2078,7 @@ dependencies = [
 name = "quillmark"
 version = "0.1.22"
 dependencies = [
+ "acroform",
  "anyhow",
  "quillmark-acroform",
  "quillmark-core",
@@ -2096,7 +2097,6 @@ version = "0.1.22"
 dependencies = [
  "acroform",
  "minijinja",
- "quillmark",
  "quillmark-core",
  "quillmark-fixtures",
  "serde_json",

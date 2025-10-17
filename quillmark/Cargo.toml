@@ -24,6 +24,7 @@ tempfile = { workspace = true }
 quillmark-typst = { workspace = true }
 quillmark-fixtures = { workspace = true }
 serde_json = { workspace = true }
+acroform = { workspace = true }
 
 [features]
 default = ["typst","acroform"]

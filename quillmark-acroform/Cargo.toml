@@ -21,4 +21,3 @@ acroform = {workspace = true}
 [dev-dependencies]
 tempfile = { workspace = true }
 quillmark-fixtures = { workspace = true }
-quillmark = { workspace = true, features = ["acroform"] }
