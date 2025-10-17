@@ -247,6 +247,28 @@ impl PyQuill {
         }
         Ok(dict)
     }
+
+    fn supported_formats(&self) -> PyResult<Vec<PyOutputFormat>> {
+        // Get backend from metadata
+        let backend = self
+            .inner
+            .metadata
+            .get("backend")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                PyErr::new::<crate::errors::QuillmarkError, _>(
+                    "Quill metadata missing 'backend' field",
+                )
+            })?;
+
+        // Determine supported formats based on backend
+        let formats = match backend {
+            "typst" => vec![PyOutputFormat::PDF, PyOutputFormat::SVG],
+            _ => vec![],
+        };
+
+        Ok(formats)
+    }
 }
 
 // ParsedDocument wrapper

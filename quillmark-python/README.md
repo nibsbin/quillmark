@@ -1,30 +1,149 @@
 # Quillmark — Python bindings for Quillmark
 
-Compact docs and canonical developer workflow.
+Python bindings for the Quillmark template-first Markdown rendering engine.
 
-Installation
-------------
+## Installation
 
 ```bash
 pip install quillmark
 ```
 
-Quick start
------------
+## Quick Start
 
 ```python
-from quillmark import Quillmark, ParsedDocument, OutputFormat
+from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat
 
+# Create engine
 engine = Quillmark()
-parsed = ParsedDocument.from_markdown("# Hello")
-workflow = engine.workflow_from_quill_name("my-quill")
-workflow.render(parsed, OutputFormat.PDF).artifacts[0].save("out.pdf")
+
+# Load and register a quill
+quill = Quill.from_path("path/to/quill")
+engine.register_quill(quill)
+
+# Parse markdown
+markdown = """---
+QUILL: my_quill
+title: Hello World
+---
+
+# Hello
+
+This is a test document.
+"""
+parsed = ParsedDocument.from_markdown(markdown)
+
+# Create workflow and render
+workflow = engine.workflow_from_parsed(parsed)  # Infers quill from QUILL tag
+result = workflow.render(parsed, OutputFormat.PDF)
+
+# Save output
+result.artifacts[0].save("output.pdf")
 ```
 
-Development (opinionated)
--------------------------
+## API Overview
 
-This repository standardizes on `uv` for local development (https://astral.sh/uv). Use the commands below on macOS (zsh).
+The Python API provides opinionated visibility over the rendering workflow:
+
+1. **Load Quill** - Load template bundles from the filesystem
+2. **Parse Markdown** - Parse Markdown with YAML frontmatter into `ParsedDocument`
+3. **Inspect Quill** - Retrieve quill properties (metadata, field schemas, supported formats)
+4. **Create Workflow** - Build a rendering pipeline from quill or parsed document
+5. **Render** - Generate output artifacts with configurable options
+
+### Core Classes
+
+#### `Quillmark` - Engine
+
+Manages backends and quills.
+
+```python
+engine = Quillmark()
+engine.register_quill(quill)
+engine.registered_backends()  # ['typst']
+engine.registered_quills()    # ['my_quill']
+
+# Create workflows
+workflow = engine.workflow_from_parsed(parsed)     # Infer from QUILL tag
+workflow = engine.workflow_from_quill_name("name") # By name
+workflow = engine.workflow_from_quill(quill)       # By object
+```
+
+#### `Quill` - Template Bundle
+
+Represents a quill loaded from the filesystem.
+
+```python
+quill = Quill.from_path("path/to/quill")
+
+# Properties
+quill.name              # Quill name
+quill.backend           # Backend identifier (e.g., "typst")
+quill.glue_template     # Template content
+quill.example           # Example markdown content
+quill.metadata          # Quill metadata dict
+quill.field_schemas     # Field documentation dict
+quill.supported_formats()  # [OutputFormat.PDF, OutputFormat.SVG]
+```
+
+#### `ParsedDocument` - Parsed Markdown
+
+Represents parsed Markdown with frontmatter.
+
+```python
+parsed = ParsedDocument.from_markdown(markdown)
+
+parsed.body()           # Document body
+parsed.quill_tag()      # QUILL field value (if present)
+parsed.get_field(key)   # Get specific field
+parsed.fields           # All frontmatter fields
+```
+
+#### `Workflow` - Rendering Pipeline
+
+Sealed workflow for rendering.
+
+```python
+workflow = engine.workflow_from_quill_name("my_quill")
+
+# Render
+result = workflow.render(parsed, OutputFormat.PDF)
+
+# Query properties
+workflow.quill_name           # "my_quill"
+workflow.backend_id           # "typst"
+workflow.supported_formats    # [OutputFormat.PDF, OutputFormat.SVG]
+
+# Process glue only (no compilation)
+glue_output = workflow.process_glue_parsed(parsed)
+```
+
+#### `RenderResult` - Output Container
+
+Contains rendered artifacts and diagnostics.
+
+```python
+result = workflow.render(parsed, OutputFormat.PDF)
+
+for artifact in result.artifacts:
+    print(f"Format: {artifact.output_format}")
+    print(f"Size: {len(artifact.bytes)} bytes")
+    artifact.save("output.pdf")
+
+for warning in result.warnings:
+    print(f"{warning.severity}: {warning.message}")
+```
+
+## Examples
+
+See the [examples/](examples/) directory for complete examples:
+
+- [`workflow_demo.py`](examples/workflow_demo.py) - Full workflow demonstration
+- [`basic.py`](examples/basic.py) - Basic rendering example
+- [`batch.py`](examples/batch.py) - Batch processing example
+
+## Development
+
+This repository uses `uv` for local development (https://astral.sh/uv).
 
 Install uv (one-time):
 
@@ -32,62 +151,39 @@ Install uv (one-time):
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-Canonical flow:
+Canonical development flow:
 
 ```zsh
-# create the uv-managed venv
+# Create virtual environment
 uv venv
 
-# install developer extras (includes maturin, pytest, mypy, ruff)
+# Install developer extras (includes maturin, pytest, mypy, ruff)
 uv pip install -e "[dev]"
 
-# Change to release for production builds
-# uv pip install -e ".[dev]" --release
-
-# develop-install (compile + install into the venv)
+# Build and install (compile Rust + install into venv)
 uv run python -m maturin develop
 
-# run tests
+# Run tests
 uv run pytest
 ```
 
-Notes
-- `maturin` builds the PyO3 extension; `uv` manages the virtualenv and command execution.
-- Ensure Rust (rustup) and macOS command-line tools are installed when building.
+### Alternative: Without uv
 
-License
--------
+```bash
+# Create venv
+python3 -m venv venv
+source venv/bin/activate
+
+# Install dependencies
+pip install maturin pytest
+
+# Build and install
+maturin develop
+
+# Run tests
+pytest
+```
+
+## License
 
 Apache-2.0
-
-
-Building
----------------------
-
-If you prefer an opinionated, reproducible Python workflow the project designs recommend `uv` (https://astral.sh/uv). `uv` provides a small wrapper for creating venvs and running common commands. These commands are equivalent to the venv/maturin flow above but shorter.
-
-Install uv (one-time):
-
-```zsh
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Typical workflow with `uv`:
-
-```zsh
-# create a venv and activate it
-uv venv
-
-# Build in debug mode (faster, suitable for development)
-uv pip install -e ".[dev]"
-
-# Build in release mode (slower, suitable for production)
-uv run python -m maturin develop --release
-
-# run the test suite
-uv run pytest
-
-# run mypy and ruff checks (project recommends these)
-uv run mypy python/quillmark
-uv run ruff check python/
-```

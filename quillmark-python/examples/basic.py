@@ -7,9 +7,11 @@ from quillmark import OutputFormat, ParsedDocument, Quill, Quillmark
 # Create engine
 engine = Quillmark()
 
-# Load and register quill
-# Note: Replace with actual path to a quill
-quill_path = Path("path/to/quill")
+# Load and register quill (using taro fixture)
+script_dir = Path(__file__).parent
+repo_root = script_dir.parent.parent
+quill_path = repo_root / "quillmark-fixtures" / "resources" / "taro"
+
 if quill_path.exists():
     quill = Quill.from_path(str(quill_path))
     engine.register_quill(quill)
@@ -18,11 +20,12 @@ if quill_path.exists():
     markdown = """---
 title: Hello World
 author: Alice
+ice_cream: Chocolate
 ---
 
 # Introduction
 
-This is a **test** document.
+This is a **test** document about ice cream.
 """
 
     parsed = ParsedDocument.from_markdown(markdown)
@@ -32,7 +35,8 @@ This is a **test** document.
     result = workflow.render(parsed, OutputFormat.PDF)
 
     # Save output
-    output_path = Path("output.pdf")
+    import tempfile
+    output_path = Path(tempfile.gettempdir()) / "basic_example.pdf"
     result.artifacts[0].save(str(output_path))
     print(f"Generated {len(result.artifacts[0].bytes)} bytes to {output_path}")
 else:
