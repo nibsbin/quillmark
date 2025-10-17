@@ -26,6 +26,20 @@ wasm-pack build --target nodejs --scope quillmark
 bash scripts/build-wasm.sh
 ```
 
+## Testing
+
+Minimal smoke tests validate the core WASM functionality:
+
+```bash
+# Build WASM module first
+bash scripts/build-wasm.sh
+
+# Run tests
+cd quillmark-wasm
+npm install
+npm test
+```
+
 ## Usage
 
 ```typescript
