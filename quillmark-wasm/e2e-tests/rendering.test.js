@@ -11,7 +11,7 @@ import {
   LETTER_MARKDOWN,
   LETTER_QUILL_JSON,
 } from './fixtures/test-data.js';
-import { getField, toUint8Array, isPDF } from './test-helpers.js';
+import { getField, isPDF } from './test-helpers.js';
 
 describe('Quillmark WASM - Rendering Workflow', () => {
   describe('Complete workflow', () => {
