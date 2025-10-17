@@ -103,7 +103,7 @@ Additional methods for managing the engine and debugging:
 ```typescript
 {
   format?: 'pdf' | 'svg' | 'txt',  // Output format (default: 'pdf')
-  assets?: Record<string, Uint8Array>,  // Additional assets to inject (plain object)
+  assets?: Record<string, Uint8Array>,  // Additional assets to inject as plain object (not Map)
   quillName?: string  // Override quill_tag from ParsedDocument
 }
 ```
