@@ -1,110 +1,67 @@
-# Python virtualenvs# Python artifacts
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
 
-.venv/__pycache__/
-
-venv/*.py[cod]
-
-env/*$py.class
-
-ENV/*.so
-
-.Python
-
-# Python bytecodebuild/
-
-__pycache__/develop-eggs/
-
-*.py[cod]dist/
-
-*$py.classdownloads/
-
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
 eggs/
-
-# Distribution / packaging.eggs/
-
-build/lib/
-
-dist/lib64/
-
-*.egg-info/parts/
-
-*.eggsdist/
-
-.venv/  # duplicate but explicitvar/
-
-pip-wheel-metadata/wheels/
-
-*.whl*.egg-info/
-
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
 .installed.cfg
+*.egg
+MANIFEST
 
-# Maturin/Cargo / Rust build artifacts (local to this crate)*.egg
-
-target/MANIFEST
-
-**/target/
-
-/maturin-wheel-cache/# Virtual environments
-
-.maturin/venv/
-
+# Virtual environments
+venv/
 env/
+ENV/
+.venv/
 
-# Compiled extension modulesENV/
-
-*.so.venv
-
+# Compiled extension modules
+*.so
 *.dylib
+*.dll
+_pyquillmark*.so
 
-*.dll# PyCharm
-
-_pyquillmark*.so.idea/
-
-
-
-# Tests# VS Code
-
-.pytest_cache/.vscode/
-
-.pytest_cache
-
-.coverage# Rust
-
-htmlcov/target/
-
-Cargo.lock
-
-# Tool caches
-
-.mypy_cache/# Testing
-
-.ruff_cache/.pytest_cache/
-
-.sccache/.coverage
-
+# Testing
+.pytest_cache/
+.coverage
 htmlcov/
 
+# Rust
+target/
+**/target/
+Cargo.lock
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ruff
+.ruff_cache/
+
 # Editor/IDE
+.vscode/
+.idea/
+*.swp
+*.swo
 
-.vscode/# mypy
+# Maturin
+./maturin-wheel-cache/
+.maturin/
 
-.idea/.mypy_cache/
-
-*.swp.dmypy.json
-
-*.swodmypy.json
-
-
-
-# Misc# ruff
-
-*.log.ruff_cache/
-
+# Misc
+*.log
 *.tmp
 .DS_Store
-*.pyc
-*.so
-
-# Allow the repository-level target/ (if you want to keep workspace target) but ignore crate-local
-# (Note: top-level repo target is not ignored by this file)
-# (If you set CARGO_TARGET_DIR to the workspace root, adjust accordingly.)
