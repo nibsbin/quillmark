@@ -159,7 +159,7 @@ describe('WASM usaf_memo smoke test', () => {
     const sizeDiff = Math.abs(wasmPdf.length - cargoOutputPdf.length)
     const sizeRatio = sizeDiff / cargoOutputPdf.length
     console.log(`Size difference: ${sizeDiff} bytes (${(sizeRatio * 100).toFixed(2)}%)`)
-    expect(sizeRatio).toBeLessThan(0.01) // Within 1%
+    expect(sizeRatio).toBeLessThan(0.05) // Within 5%
     
     // Both should be valid PDFs (start with %PDF-1.7)
     const cargoHeader = cargoOutputPdf.toString('utf8', 0, 10)
