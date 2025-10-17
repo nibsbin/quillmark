@@ -7,8 +7,8 @@ allow-branch = ["main"]
 
 # Bump + tag + push, but DO NOT publish here
 publish = false
-tag = true
-push = true
+tag = false
+push = false
 push-remote = "origin"
 
 # Versioning + commits/tags
