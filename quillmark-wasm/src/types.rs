@@ -157,6 +157,8 @@ pub struct QuillMetadata {
 }
 
 /// Field schema for template fields
+///
+/// Describes the expected structure and constraints for a field in a Quill template.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FieldSchema {
@@ -183,6 +185,9 @@ impl From<quillmark_core::FieldSchema> for FieldSchema {
 }
 
 /// Shallow information about a registered Quill
+///
+/// This provides consumers with the necessary information to configure render options
+/// without exposing the entire Quill file tree.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuillInfo {
@@ -203,6 +208,9 @@ pub struct QuillInfo {
 }
 
 /// Parsed markdown document
+///
+/// Returned by `Quillmark.parseMarkdown()`. Contains the parsed YAML frontmatter
+/// fields and the optional quill tag from the QUILL field.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParsedDocument {

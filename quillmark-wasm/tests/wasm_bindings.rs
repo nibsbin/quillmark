@@ -29,7 +29,7 @@ This is a test document.
 "#;
 
     let parsed = Quillmark::parse_markdown(markdown).expect("parse_markdown failed");
-    
+
     // Verify it returns a JsValue (we can't easily inspect it without browser APIs)
     assert!(!parsed.is_undefined());
     assert!(!parsed.is_null());
@@ -70,7 +70,7 @@ This is a test.
 "#;
 
     let parsed = Quillmark::parse_markdown(markdown).expect("parse_markdown failed");
-    
+
     // Step 2: Create engine and register quill
     let mut engine = Quillmark::new();
     engine
