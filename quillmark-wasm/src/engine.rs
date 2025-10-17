@@ -4,6 +4,7 @@ use crate::error::QuillmarkError;
 use crate::types::{
     FieldSchema, OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult,
 };
+use serde::Serialize;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
@@ -71,14 +72,16 @@ impl Quillmark {
 
         let wasm_parsed = ParsedDocument { fields, quill_tag };
 
-        serde_wasm_bindgen::to_value(&wasm_parsed).map_err(|e| {
-            QuillmarkError::new(
-                format!("Failed to serialize ParsedDocument: {}", e),
-                None,
-                None,
-            )
-            .to_js_value()
-        })
+        wasm_parsed
+            .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+            .map_err(|e| {
+                QuillmarkError::new(
+                    format!("Failed to serialize ParsedDocument: {}", e),
+                    None,
+                    None,
+                )
+                .to_js_value()
+            })
     }
 
     /// Register a Quill template bundle
@@ -204,10 +207,12 @@ impl Quillmark {
             supported_formats,
         };
 
-        serde_wasm_bindgen::to_value(&quill_info).map_err(|e| {
-            QuillmarkError::new(format!("Failed to serialize QuillInfo: {}", e), None, None)
-                .to_js_value()
-        })
+        quill_info
+            .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+            .map_err(|e| {
+                QuillmarkError::new(format!("Failed to serialize QuillInfo: {}", e), None, None)
+                    .to_js_value()
+            })
     }
 
     /// Process markdown through template engine (debugging)
@@ -369,10 +374,12 @@ impl Quillmark {
             render_time_ms: now_ms() - start,
         };
 
-        serde_wasm_bindgen::to_value(&render_result).map_err(|e| {
-            QuillmarkError::new(format!("Failed to serialize result: {}", e), None, None)
-                .to_js_value()
-        })
+        render_result
+            .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
+            .map_err(|e| {
+                QuillmarkError::new(format!("Failed to serialize result: {}", e), None, None)
+                    .to_js_value()
+            })
     }
 
     /// List registered Quill names
