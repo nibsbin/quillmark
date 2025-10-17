@@ -49,10 +49,12 @@ describe('quillmark-wasm smoke tests', () => {
     
     expect(parsed).toBeDefined()
     expect(parsed.fields).toBeDefined()
-    // fields is a Map, not a plain object
-    expect(parsed.fields instanceof Map).toBe(true)
-    expect(parsed.fields.get('title')).toBe('Test Document')
-    expect(parsed.fields.get('author')).toBe('Test Author')
+    
+    // fields should be a plain object, not a Map
+    expect(parsed.fields instanceof Map).toBe(false)
+    expect(parsed.fields instanceof Object).toBe(true)
+    expect(parsed.fields.title).toBe('Test Document')
+    expect(parsed.fields.author).toBe('Test Author')
     expect(parsed.quillTag).toBe('test_quill')
   })
 
@@ -77,6 +79,12 @@ describe('quillmark-wasm smoke tests', () => {
     expect(info.name).toBe('test_quill')
     expect(info.backend).toBe('typst')
     expect(info.supportedFormats).toContain('pdf')
+    
+    // metadata and fieldSchemas should be plain objects, not Maps
+    expect(info.metadata instanceof Map).toBe(false)
+    expect(info.metadata instanceof Object).toBe(true)
+    expect(info.fieldSchemas instanceof Map).toBe(false)
+    expect(info.fieldSchemas instanceof Object).toBe(true)
   })
 
   it('should render glue template', () => {
@@ -168,5 +176,60 @@ this is not valid yaml
     engine.unregisterQuill('test_quill')
     
     expect(engine.listQuills()).not.toContain('test_quill')
+  })
+
+  it('should accept assets as plain JavaScript objects', () => {
+    const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
+    const engine = new Quillmark()
+    engine.registerQuill('test_quill', TEST_QUILL)
+    
+    // Assets should be passed as plain JavaScript objects with byte arrays
+    const assets = {
+      'logo.png': [137, 80, 78, 71],
+      'font.ttf': [0, 1, 2, 3]
+    }
+    
+    // This should not throw - assets is a plain object
+    const result = engine.render(parsed, { 
+      format: 'pdf',
+      assets: assets
+    })
+    
+    expect(result).toBeDefined()
+    expect(result.artifacts).toBeDefined()
+  })
+
+  it('should return all data as plain objects (comprehensive test)', () => {
+    // Step 1: Parse markdown - fields should be plain object
+    const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
+    expect(parsed.fields instanceof Map).toBe(false)
+    expect(parsed.fields instanceof Object).toBe(true)
+    expect(parsed.fields.title).toBe('Test Document')
+    expect(parsed.fields.author).toBe('Test Author')
+    
+    // Step 2: Register and get quill info - metadata and fieldSchemas should be plain objects
+    const engine = new Quillmark()
+    engine.registerQuill('test_quill', TEST_QUILL)
+    const info = engine.getQuillInfo('test_quill')
+    
+    expect(info.metadata instanceof Map).toBe(false)
+    expect(info.metadata instanceof Object).toBe(true)
+    expect(info.metadata.backend).toBe('typst')
+    
+    expect(info.fieldSchemas instanceof Map).toBe(false)
+    expect(info.fieldSchemas instanceof Object).toBe(true)
+    
+    // Step 3: Render with assets as plain object
+    const result = engine.render(parsed, {
+      format: 'pdf',
+      assets: {
+        'test.txt': [72, 101, 108, 108, 111]
+      }
+    })
+    
+    expect(result).toBeDefined()
+    expect(result.artifacts).toBeDefined()
+    expect(Array.isArray(result.warnings)).toBe(true)
+    expect(typeof result.renderTimeMs).toBe('number')
   })
 })
