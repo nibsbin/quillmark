@@ -33,10 +33,10 @@ eval_info:
 qual_level:
   qualified: 
   unqualified: X
-  expiration: 
+  expiration: 3000-01-01
 # Section 5
 addi_training:
-  due_dates: 
+  due_dates: 3000-01-01
   completed_dates: 3000-01-01
   certifying: Turanga Leela, Capt, Planet Express
 # Section 6
@@ -48,16 +48,16 @@ other:
 flight_examiner:
   name: Capt Turanga Leela
   org: Planet Express
-  concur: true
-  remarks: 1
+  concur: false
+  remarks: true
 reviewing_officer:
   name: Hermes Conrad
   org: Planet Express
-  check.not_concur: true
+  concur: false
 final_officer:
   name: Professor Farnsworth
   org: Planet Express
-  check.concur: true
+  concur: true
 # Section 9
 comments:
   restrictions: You're fired
