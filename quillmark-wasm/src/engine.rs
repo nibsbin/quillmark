@@ -4,6 +4,7 @@ use crate::error::QuillmarkError;
 use crate::types::{
     FieldSchema, OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult,
 };
+use serde::Serialize;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
@@ -71,7 +72,9 @@ impl Quillmark {
 
         let wasm_parsed = ParsedDocument { fields, quill_tag };
 
-        serde_wasm_bindgen::to_value(&wasm_parsed).map_err(|e| {
+        // Use a serializer that converts HashMaps to plain objects instead of ES6 Maps
+        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
+        wasm_parsed.serialize(&serializer).map_err(|e| {
             QuillmarkError::new(
                 format!("Failed to serialize ParsedDocument: {}", e),
                 None,
@@ -192,7 +195,9 @@ impl Quillmark {
             supported_formats,
         };
 
-        serde_wasm_bindgen::to_value(&quill_info).map_err(|e| {
+        // Use a serializer that converts HashMaps to plain objects instead of ES6 Maps
+        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
+        quill_info.serialize(&serializer).map_err(|e| {
             QuillmarkError::new(format!("Failed to serialize QuillInfo: {}", e), None, None)
                 .to_js_value()
         })
@@ -334,7 +339,9 @@ impl Quillmark {
             render_time_ms: now_ms() - start,
         };
 
-        serde_wasm_bindgen::to_value(&render_result).map_err(|e| {
+        // Use a serializer that converts HashMaps to plain objects instead of ES6 Maps
+        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
+        render_result.serialize(&serializer).map_err(|e| {
             QuillmarkError::new(format!("Failed to serialize result: {}", e), None, None)
                 .to_js_value()
         })
@@ -350,5 +357,122 @@ impl Quillmark {
     #[wasm_bindgen(js_name = unregisterQuill)]
     pub fn unregister_quill(&mut self, name: &str) {
         self.quills.remove(name);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    // Note: These tests verify the serialization behavior but can only be fully
+    // tested in a WASM environment. They are included here for documentation
+    // and can be run with wasm-bindgen-test.
+
+    #[test]
+    #[cfg(target_arch = "wasm32")]
+    fn test_quill_info_serialization_uses_plain_objects() {
+        use super::*;
+        use crate::types::{FieldSchema, QuillInfo};
+        use serde::Serialize;
+
+        // Create a QuillInfo with HashMap fields
+        let mut metadata = std::collections::HashMap::new();
+        metadata.insert("key1".to_string(), serde_json::json!("value1"));
+        metadata.insert("key2".to_string(), serde_json::json!(42));
+
+        let mut field_schemas = std::collections::HashMap::new();
+        field_schemas.insert(
+            "field1".to_string(),
+            FieldSchema {
+                r#type: Some("string".to_string()),
+                required: true,
+                description: "Test field".to_string(),
+                example: None,
+                default: None,
+            },
+        );
+
+        let quill_info = QuillInfo {
+            name: "test-quill".to_string(),
+            backend: "typst".to_string(),
+            metadata,
+            example: None,
+            field_schemas,
+            supported_formats: vec![OutputFormat::Pdf],
+        };
+
+        // Serialize using json_compatible serializer
+        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
+        let js_value = quill_info
+            .serialize(&serializer)
+            .expect("serialization failed");
+
+        // Convert to JSON string to verify structure
+        let json_string = js_sys::JSON::stringify(&js_value)
+            .expect("stringify failed")
+            .as_string()
+            .expect("as_string failed");
+
+        // Verify that the JSON contains object-style fields (not Map)
+        assert!(json_string.contains(r#""metadata""#));
+        assert!(json_string.contains(r#""key1":"value1""#));
+        assert!(json_string.contains(r#""fieldSchemas""#));
+        assert!(json_string.contains(r#""field1""#));
+
+        // Parse back to verify it's a valid JSON object structure
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json_string).expect("JSON parse failed");
+
+        // Verify metadata is an object (not an array which Map might serialize to)
+        assert!(parsed["metadata"].is_object());
+        assert_eq!(parsed["metadata"]["key1"], "value1");
+        assert_eq!(parsed["metadata"]["key2"], 42);
+
+        // Verify fieldSchemas is an object
+        assert!(parsed["fieldSchemas"].is_object());
+        assert!(parsed["fieldSchemas"]["field1"].is_object());
+    }
+
+    #[test]
+    #[cfg(target_arch = "wasm32")]
+    fn test_parsed_document_serialization_uses_plain_objects() {
+        use super::*;
+        use crate::types::ParsedDocument;
+        use serde::Serialize;
+
+        // Create a ParsedDocument with a fields object
+        let mut fields_map = serde_json::Map::new();
+        fields_map.insert("title".to_string(), serde_json::json!("Test Document"));
+        fields_map.insert("author".to_string(), serde_json::json!("Test Author"));
+        let fields = serde_json::Value::Object(fields_map);
+
+        let parsed_doc = ParsedDocument {
+            fields,
+            quill_tag: Some("test-quill".to_string()),
+        };
+
+        // Serialize using json_compatible serializer
+        let serializer = serde_wasm_bindgen::Serializer::json_compatible();
+        let js_value = parsed_doc
+            .serialize(&serializer)
+            .expect("serialization failed");
+
+        // Convert to JSON string to verify structure
+        let json_string = js_sys::JSON::stringify(&js_value)
+            .expect("stringify failed")
+            .as_string()
+            .expect("as_string failed");
+
+        // Verify that the JSON contains object-style fields
+        assert!(json_string.contains(r#""fields""#));
+        assert!(json_string.contains(r#""title":"Test Document""#));
+        assert!(json_string.contains(r#""quillTag":"test-quill""#));
+
+        // Parse back to verify it's a valid JSON object structure
+        let parsed: serde_json::Value =
+            serde_json::from_str(&json_string).expect("JSON parse failed");
+
+        // Verify fields is an object
+        assert!(parsed["fields"].is_object());
+        assert_eq!(parsed["fields"]["title"], "Test Document");
+        assert_eq!(parsed["fields"]["author"], "Test Author");
     }
 }
