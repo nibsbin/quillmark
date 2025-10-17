@@ -35,7 +35,8 @@ This is a **test** document about ice cream.
     result = workflow.render(parsed, OutputFormat.PDF)
 
     # Save output
-    output_path = Path("/tmp/basic_example.pdf")
+    import tempfile
+    output_path = Path(tempfile.gettempdir()) / "basic_example.pdf"
     result.artifacts[0].save(str(output_path))
     print(f"Generated {len(result.artifacts[0].bytes)} bytes to {output_path}")
 else:

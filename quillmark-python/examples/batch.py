@@ -29,9 +29,33 @@ if quill_path.exists():
         
         # Create sample markdown files
         sample_docs = [
-            ("doc1.md", "---\ntitle: First Document\nauthor: Alice\nice_cream: Vanilla\n---\n\n# Document 1\n\nThis is the first document."),
-            ("doc2.md", "---\ntitle: Second Document\nauthor: Bob\nice_cream: Chocolate\n---\n\n# Document 2\n\nThis is the second document."),
-            ("doc3.md", "---\ntitle: Third Document\nauthor: Carol\nice_cream: Strawberry\n---\n\n# Document 3\n\nThis is the third document."),
+            ("doc1.md", """---
+title: First Document
+author: Alice
+ice_cream: Vanilla
+---
+
+# Document 1
+
+This is the first document."""),
+            ("doc2.md", """---
+title: Second Document
+author: Bob
+ice_cream: Chocolate
+---
+
+# Document 2
+
+This is the second document."""),
+            ("doc3.md", """---
+title: Third Document
+author: Carol
+ice_cream: Strawberry
+---
+
+# Document 3
+
+This is the third document."""),
         ]
         
         for filename, content in sample_docs:
