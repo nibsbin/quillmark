@@ -14,6 +14,7 @@ default-members = [
     "quillmark-core",
     "quillmark",
     "quillmark-typst",
+    "quillmark-acroform",
     "quillmark-wasm",
 ]
 resolver = "2"
