@@ -1,4 +1,5 @@
 ---
+QUILL: usaf_form_8
 # Metadata
 examinee:
   last: Fry
@@ -74,20 +75,4 @@ examiner_remarks:
 reviewing_remarks: None
 final_remarks: None
 addi_reviews: None
----
-
-whatever
-
----
-# We can also append to arrays with scoped metadata
-SCOPE: requisite_info
-requisite: works for low pay
-date: 3000-01-01
-results: Q1
----
-
----
-SCOPE: eval_info
-evaluation: This man is a lazy, good-for-nothing, loafing...
-date: 3000-01-01
 ---
