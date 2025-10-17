@@ -42,7 +42,8 @@ npm test
 
 The test suite includes:
 - `basic.test.js` - Core WASM API functionality tests
-- `tests/usaf_memo.test.js` - Smoke test that verifies WASM PDF output is functionally identical to native cargo output for the `usaf_memo` example
+- `tests/usaf_memo.test.js` - Smoke test that verifies WASM PDF output is functionally identical to native cargo output for the `usaf_memo` example (Typst backend)
+- `tests/usaf_form_8.test.js` - Smoke test that verifies WASM PDF output is byte-for-byte identical to native cargo output for the `usaf_form_8` example (Acroform backend)
 
 ## Usage
 
