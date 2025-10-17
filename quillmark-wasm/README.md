@@ -82,6 +82,8 @@ The `Quillmark` class provides the following methods:
 
 ### Workflow Methods
 
+The main workflow for rendering documents:
+
 - `static parseMarkdown(markdown)` - Parse markdown into a ParsedDocument (Step 1)
 - `registerQuill(name, quillJson)` - Register a Quill template bundle from JSON (Step 2)
 - `getQuillInfo(name)` - Get shallow Quill metadata and configuration options (Step 3)
@@ -89,9 +91,11 @@ The `Quillmark` class provides the following methods:
 
 ### Utility Methods
 
+Additional methods for managing the engine and debugging:
+
 - `new Quillmark()` - Create a new engine instance
-- `renderGlue(quillName, markdown)` - Debug helper to generate template source
-- `listQuills()` - List registered Quill names
+- `renderGlue(quillName, markdown)` - Debug helper that processes markdown through the template engine and returns the intermediate template source code (e.g., Typst, LaTeX) without compiling to final artifacts. Useful for inspecting template output during development.
+- `listQuills()` - List all registered Quill names
 - `unregisterQuill(name)` - Unregister a Quill to free memory
 
 ### Render Options
