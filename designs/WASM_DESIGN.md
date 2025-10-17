@@ -286,7 +286,7 @@ All data crossing the JavaScript ↔ WebAssembly boundary uses JSON/serde-compat
 workflow.withAsset("logo.png", new Uint8Array([137, 80, 78, 71, ...]));
 ```
 
-**Collections**: `Vec<T>` ↔ JavaScript arrays, `HashMap<String, T>` ↔ plain objects or `Map`
+**Collections**: `Vec<T>` ↔ JavaScript arrays. For object types, we use `serde_json::Value` to ensure serialization as plain JavaScript objects `{}` rather than JavaScript `Map` objects.
 
 **Nullability**: `Option<T>` ↔ `value | null`
 

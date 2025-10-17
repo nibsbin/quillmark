@@ -195,14 +195,13 @@ pub struct QuillInfo {
     pub name: String,
     /// Backend ID (e.g., "typst")
     pub backend: String,
-    /// Quill metadata
-    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+    /// Quill metadata (plain JavaScript object)
+    pub metadata: serde_json::Value,
     /// Loaded example markdown (if available)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub example: Option<String>,
-    /// Field schemas
-    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty", default)]
-    pub field_schemas: std::collections::HashMap<String, FieldSchema>,
+    /// Field schemas (plain JavaScript object)
+    pub field_schemas: serde_json::Value,
     /// Supported output formats for this quill's backend
     pub supported_formats: Vec<OutputFormat>,
 }
@@ -228,7 +227,7 @@ pub struct RenderOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<OutputFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub assets: Option<std::collections::HashMap<String, Vec<u8>>>,
+    pub assets: Option<serde_json::Value>,
     /// Optional quill name that overrides or fills in for the markdown's QUILL frontmatter field
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quill_name: Option<String>,
@@ -337,5 +336,115 @@ mod tests {
             options_from_json_with_quill.quill_name,
             Some("my_quill".to_string())
         );
+    }
+
+    #[test]
+    fn test_render_options_with_assets() {
+        // Test that assets field can be deserialized from JSON object
+        let json = r#"{
+            "format": "pdf",
+            "assets": {
+                "logo.png": [137, 80, 78, 71],
+                "font.ttf": [0, 1, 2, 3]
+            }
+        }"#;
+
+        let options: RenderOptions = serde_json::from_str(json).unwrap();
+        assert_eq!(options.format, Some(OutputFormat::Pdf));
+        assert!(options.assets.is_some());
+
+        // Verify assets is a JSON object
+        let assets = options.assets.unwrap();
+        assert!(assets.is_object());
+        let assets_obj = assets.as_object().unwrap();
+        assert_eq!(assets_obj.len(), 2);
+        assert!(assets_obj.contains_key("logo.png"));
+        assert!(assets_obj.contains_key("font.ttf"));
+
+        // Verify asset values are arrays
+        let logo_bytes = assets_obj.get("logo.png").unwrap().as_array().unwrap();
+        assert_eq!(logo_bytes.len(), 4);
+        assert_eq!(logo_bytes[0].as_u64().unwrap(), 137);
+    }
+
+    #[test]
+    fn test_quill_info_plain_objects() {
+        // Test that QuillInfo metadata and field_schemas are serde_json::Value objects
+        let mut metadata_obj = serde_json::Map::new();
+        metadata_obj.insert("key1".to_string(), serde_json::json!("value1"));
+        metadata_obj.insert("key2".to_string(), serde_json::json!(42));
+
+        let mut field_schemas_obj = serde_json::Map::new();
+        field_schemas_obj.insert(
+            "title".to_string(),
+            serde_json::json!({
+                "type": "string",
+                "required": true,
+                "description": "Document title"
+            }),
+        );
+
+        let quill_info = QuillInfo {
+            name: "test-quill".to_string(),
+            backend: "typst".to_string(),
+            metadata: serde_json::Value::Object(metadata_obj),
+            example: None,
+            field_schemas: serde_json::Value::Object(field_schemas_obj),
+            supported_formats: vec![OutputFormat::Pdf, OutputFormat::Svg],
+        };
+
+        // Serialize to JSON and verify structure
+        let json = serde_json::to_value(&quill_info).unwrap();
+        assert!(json.is_object());
+
+        let obj = json.as_object().unwrap();
+        assert_eq!(obj.get("name").unwrap().as_str().unwrap(), "test-quill");
+        assert_eq!(obj.get("backend").unwrap().as_str().unwrap(), "typst");
+
+        // Verify metadata is an object (not a Map)
+        let metadata = obj.get("metadata").unwrap();
+        assert!(metadata.is_object());
+        let metadata_obj = metadata.as_object().unwrap();
+        assert_eq!(
+            metadata_obj.get("key1").unwrap().as_str().unwrap(),
+            "value1"
+        );
+        assert_eq!(metadata_obj.get("key2").unwrap().as_u64().unwrap(), 42);
+
+        // Verify field_schemas is an object (not a Map)
+        let field_schemas = obj.get("fieldSchemas").unwrap();
+        assert!(field_schemas.is_object());
+        let field_schemas_obj = field_schemas.as_object().unwrap();
+        assert!(field_schemas_obj.contains_key("title"));
+    }
+
+    #[test]
+    fn test_parsed_document_fields_is_object() {
+        // Test that ParsedDocument fields is a plain JSON object
+        let mut fields_obj = serde_json::Map::new();
+        fields_obj.insert("title".to_string(), serde_json::json!("My Document"));
+        fields_obj.insert("author".to_string(), serde_json::json!("Alice"));
+
+        let parsed_doc = ParsedDocument {
+            fields: serde_json::Value::Object(fields_obj),
+            quill_tag: Some("test-quill".to_string()),
+        };
+
+        // Serialize and verify structure
+        let json = serde_json::to_value(&parsed_doc).unwrap();
+        assert!(json.is_object());
+
+        let obj = json.as_object().unwrap();
+        assert_eq!(obj.get("quillTag").unwrap().as_str().unwrap(), "test-quill");
+
+        // Verify fields is an object (not a Map)
+        let fields = obj.get("fields").unwrap();
+        assert!(fields.is_object());
+        let fields_obj = fields.as_object().unwrap();
+        assert_eq!(
+            fields_obj.get("title").unwrap().as_str().unwrap(),
+            "My Document"
+        );
+        assert_eq!(fields_obj.get("author").unwrap().as_str().unwrap(), "Alice");
     }
 }

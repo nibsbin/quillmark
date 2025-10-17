@@ -170,25 +170,37 @@ impl Quillmark {
             .map(|&f| f.into())
             .collect();
 
-        // Convert metadata to JSON
-        let mut metadata_json = std::collections::HashMap::new();
+        // Convert metadata to serde_json::Value (plain JavaScript object)
+        let mut metadata_obj = serde_json::Map::new();
         for (key, value) in &quill.metadata {
-            metadata_json.insert(key.clone(), value.as_json().clone());
+            metadata_obj.insert(key.clone(), value.as_json().clone());
         }
+        let metadata_json = serde_json::Value::Object(metadata_obj);
 
-        // Convert field schemas
-        let field_schemas: std::collections::HashMap<String, FieldSchema> = quill
-            .field_schemas
-            .iter()
-            .map(|(k, v)| (k.clone(), v.clone().into()))
-            .collect();
+        // Convert field schemas to serde_json::Value (plain JavaScript object)
+        let mut field_schemas_obj = serde_json::Map::new();
+        for (key, value) in &quill.field_schemas {
+            let field_schema: FieldSchema = value.clone().into();
+            field_schemas_obj.insert(
+                key.clone(),
+                serde_json::to_value(&field_schema).map_err(|e| {
+                    QuillmarkError::new(
+                        format!("Failed to serialize field schema: {}", e),
+                        None,
+                        None,
+                    )
+                    .to_js_value()
+                })?,
+            );
+        }
+        let field_schemas_json = serde_json::Value::Object(field_schemas_obj);
 
         let quill_info = QuillInfo {
             name: quill.name.clone(),
             backend: backend_id.clone(),
             metadata: metadata_json,
             example: quill.example.clone(),
-            field_schemas,
+            field_schemas: field_schemas_json,
             supported_formats,
         };
 
@@ -312,12 +324,35 @@ impl Quillmark {
         };
 
         // Add assets if provided
-        if let Some(assets) = opts.assets {
-            for (filename, bytes) in assets {
-                workflow.add_asset(filename, bytes).map_err(|e| {
-                    QuillmarkError::new(format!("Failed to add asset: {}", e), None, None)
-                        .to_js_value()
-                })?;
+        if let Some(assets_json) = opts.assets {
+            // assets is now a serde_json::Value representing a plain JavaScript object
+            // We need to convert it to an iterator of (filename, bytes)
+            if let serde_json::Value::Object(assets_map) = assets_json {
+                for (filename, value) in assets_map {
+                    // Extract bytes from the value
+                    // Bytes can be either an array of numbers or a Uint8Array
+                    let bytes = if let Some(arr) = value.as_array() {
+                        // Array of numbers [0, 1, 2, ...]
+                        arr.iter()
+                            .filter_map(|v| v.as_u64().map(|n| n as u8))
+                            .collect::<Vec<u8>>()
+                    } else {
+                        return Err(QuillmarkError::new(
+                            format!(
+                                "Invalid asset format for '{}': expected byte array",
+                                filename
+                            ),
+                            None,
+                            Some("Assets should be Uint8Array or array of numbers".to_string()),
+                        )
+                        .to_js_value());
+                    };
+
+                    workflow.add_asset(filename, bytes).map_err(|e| {
+                        QuillmarkError::new(format!("Failed to add asset: {}", e), None, None)
+                            .to_js_value()
+                    })?;
+                }
             }
         }
 

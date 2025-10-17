@@ -103,7 +103,7 @@ Additional methods for managing the engine and debugging:
 ```typescript
 {
   format?: 'pdf' | 'svg' | 'txt',  // Output format (default: 'pdf')
-  assets?: Map<string, Uint8Array>,  // Additional assets to inject
+  assets?: Record<string, Uint8Array>,  // Additional assets to inject as plain object (not Map)
   quillName?: string  // Override quill_tag from ParsedDocument
 }
 ```
@@ -140,7 +140,7 @@ Data crossing the JavaScript ↔ WebAssembly boundary:
 
 - **Enums**: Serialized as lowercase strings (`"pdf"`, `"svg"`, `"txt"`)
 - **Binary data**: `Vec<u8>` maps to `Uint8Array`
-- **Collections**: `Vec<T>` maps to JS arrays; `HashMap<String, T>` maps to JS objects
+- **Collections**: `Vec<T>` maps to JS arrays; object types use plain JS objects `{}`
 - **Option**: `Option<T>` maps to `T | null`
 - **Errors**: Thrown as exceptions with `QuillmarkError` containing diagnostics
 
