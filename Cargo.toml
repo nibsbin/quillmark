@@ -19,7 +19,7 @@ default-members = [
 resolver = "2"
 
 [workspace.package]
-version = "0.1.22"
+version = "0.1.23"
 edition = "2021"
 include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
 readme = "README.md"
@@ -54,10 +54,10 @@ dirs = "6.0"
 acroform = "0.0.16"
 
 # Intra-project dependencies
-quillmark-core = { version = "0.1.22", path = "quillmark-core" }
-quillmark-typst = { version = "0.1.22", path = "quillmark-typst", default-features = false }
-quillmark-acroform = { version = "0.1.22", path = "quillmark-acroform" }
-quillmark = { version = "0.1.22", path = "quillmark", default-features = false }
+quillmark-core = { version = "0.1.23", path = "quillmark-core" }
+quillmark-typst = { version = "0.1.23", path = "quillmark-typst", default-features = false }
+quillmark-acroform = { version = "0.1.23", path = "quillmark-acroform" }
+quillmark = { version = "0.1.23", path = "quillmark", default-features = false }
 
 # Test and dev dependencies
 tempfile = "~3.23"
