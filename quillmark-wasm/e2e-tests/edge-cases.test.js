@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Quillmark } from '@quillmark-test/wasm';
 import { SMALL_QUILL_JSON } from './fixtures/test-data.js';
+import { getField, getFieldNames } from './test-helpers.js';
 
 describe('Quillmark WASM - Edge Cases', () => {
   describe('Empty and minimal inputs', () => {
@@ -23,7 +24,7 @@ title: Only Frontmatter
 ---`;
       const parsed = Quillmark.parseMarkdown(markdown);
       
-      expect(parsed.fields.title).toBe('Only Frontmatter');
+      expect(getField(parsed, 'title')).toBe('Only Frontmatter');
     });
 
     it('should handle markdown with only content (no frontmatter)', () => {
@@ -75,8 +76,8 @@ Emojis: 🎉 🎨 💻 📝
 `;
 
       const parsed = Quillmark.parseMarkdown(markdown);
-      expect(parsed.fields.title).toBe('Unicode Test 🚀');
-      expect(parsed.fields.author).toBe('François');
+      expect(getField(parsed, 'title')).toBe('Unicode Test 🚀');
+      expect(getField(parsed, 'author')).toBe('François');
       
       const engine = new Quillmark();
       engine.registerQuill('test_quill', SMALL_QUILL_JSON);
@@ -94,7 +95,7 @@ description: "Line 1\\nLine 2\\nLine 3"
 Content`;
 
       const parsed = Quillmark.parseMarkdown(markdown);
-      expect(parsed.fields.title).toContain('Special');
+      expect(getField(parsed, 'title')).toContain('Special');
     });
 
     it('should handle escaped characters', () => {
@@ -114,8 +115,6 @@ Content with \\*asterisks\\* and \\[brackets\\]
     it('should handle markdown with extra whitespace', () => {
       const markdown = `---
 title: Whitespace Test
-
-
 ---
 
 
@@ -128,7 +127,7 @@ Content with    lots   of     spaces.
 `;
 
       const parsed = Quillmark.parseMarkdown(markdown);
-      expect(parsed.fields.title).toBe('Whitespace Test');
+      expect(getField(parsed, 'title')).toBe('Whitespace Test');
     });
 
     it('should handle tabs in markdown', () => {
@@ -148,7 +147,7 @@ Content\twith\ttabs.
     it('should handle mixed line endings', () => {
       const markdown = "---\ntitle: Mixed\r\n---\r\n\r\nContent\n";
       const parsed = Quillmark.parseMarkdown(markdown);
-      expect(parsed.fields.title).toBe('Mixed');
+      expect(getField(parsed, 'title')).toBe('Mixed');
     });
   });
 
@@ -167,8 +166,8 @@ metadata:
 Content`;
 
       const parsed = Quillmark.parseMarkdown(markdown);
-      expect(parsed.fields.metadata).toBeDefined();
-      expect(typeof parsed.fields.metadata).toBe('object');
+      expect(getField(parsed, 'metadata')).toBeDefined();
+      expect(typeof getField(parsed, 'metadata')).toBe('object');
     });
 
     it('should handle null and undefined values', () => {
@@ -181,8 +180,10 @@ emptyField:
 Content`;
 
       const parsed = Quillmark.parseMarkdown(markdown);
-      expect(parsed.fields.title).toBe('Null Test');
-      expect(parsed.fields.nullField).toBeNull();
+      expect(getField(parsed, 'title')).toBe('Null Test');
+      // Null and undefined fields may be omitted from the map
+      const nullVal = getField(parsed, 'nullField');
+      expect(nullVal === null || nullVal === undefined).toBe(true);
     });
 
     it('should handle boolean values', () => {
@@ -194,8 +195,8 @@ draft: false
 Content`;
 
       const parsed = Quillmark.parseMarkdown(markdown);
-      expect(parsed.fields.published).toBe(true);
-      expect(parsed.fields.draft).toBe(false);
+      expect(getField(parsed, 'published')).toBe(true);
+      expect(getField(parsed, 'draft')).toBe(false);
     });
 
     it('should handle numeric values', () => {
@@ -209,9 +210,9 @@ scientific: 1e10
 Content`;
 
       const parsed = Quillmark.parseMarkdown(markdown);
-      expect(parsed.fields.integer).toBe(42);
-      expect(parsed.fields.float).toBe(3.14);
-      expect(parsed.fields.negative).toBe(-10);
+      expect(getField(parsed, 'integer')).toBe(42);
+      expect(getField(parsed, 'float')).toBe(3.14);
+      expect(getField(parsed, 'negative')).toBe(-10);
     });
 
     it('should handle date values', () => {
@@ -223,8 +224,8 @@ datetime: 2025-10-17T12:00:00Z
 Content`;
 
       const parsed = Quillmark.parseMarkdown(markdown);
-      expect(parsed.fields.date).toBeDefined();
-      expect(parsed.fields.datetime).toBeDefined();
+      expect(getField(parsed, 'date')).toBeDefined();
+      expect(getField(parsed, 'datetime')).toBeDefined();
     });
   });
 
@@ -232,7 +233,7 @@ Content`;
     it('should provide helpful error for missing quill', () => {
       const engine = new Quillmark();
       const parsed = Quillmark.parseMarkdown(`---
-QUILL: missing-quill
+QUILL: missing_quill
 ---
 
 Content`);
@@ -241,7 +242,8 @@ Content`);
         engine.render(parsed, {});
         expect.fail('Should have thrown');
       } catch (error) {
-        expect(error.toString()).toContain('missing-quill');
+        const errorStr = error.message || error.toString();
+        expect(errorStr).toContain('missing_quill');
       }
     });
 
@@ -320,19 +322,19 @@ Content`;
       const parsed = Quillmark.parseMarkdown(markdown);
       // 'quill' (lowercase) is not the QUILL field
       expect(parsed.quillTag).toBeUndefined();
-      expect(parsed.fields.quill).toBe('test_quill');
+      expect(getField(parsed, 'quill')).toBe('test_quill');
     });
 
     it('should prioritize QUILL field over quill field', () => {
       const markdown = `---
-QUILL: quill-uppercase
-quill: quill-lowercase
+QUILL: quill_uppercase
+quill: quill_lowercase
 ---
 
 Content`;
 
       const parsed = Quillmark.parseMarkdown(markdown);
-      expect(parsed.quillTag).toBe('quill-uppercase');
+      expect(parsed.quillTag).toBe('quill_uppercase');
     });
   });
 

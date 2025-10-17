@@ -151,6 +151,30 @@ Data crossing the JavaScript ↔ WebAssembly boundary:
 - **Synchronous Operations**: Rendering is fast enough (<100ms typically)
 - **No File System Abstractions**: JavaScript prepares all data
 
+## Testing
+
+### Rust Unit Tests
+
+```bash
+cargo test --package quillmark-wasm
+```
+
+### End-to-End Tests
+
+Comprehensive Vite-based end-to-end tests are available in `e2e-tests/`:
+
+```bash
+# Build WASM first
+bash scripts/build-wasm.sh
+
+# Run e2e tests
+cd quillmark-wasm/e2e-tests
+npm install
+npm test
+```
+
+See `e2e-tests/README.md` for more details.
+
 ## License
 
 Licensed under the Apache License, Version 2.0.

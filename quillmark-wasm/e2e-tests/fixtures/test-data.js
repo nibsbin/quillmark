@@ -71,17 +71,10 @@ description = "Letter template for e2e tests"
     },
     'glue.typ': {
       contents: `#set page(paper: "us-letter")
-#set text(font: "New Computer Modern", size: 11pt)
 
-#if "title" in metadata {
-  text(size: 16pt, weight: "bold")[#metadata.title]
-  v(1em)
-}
+= {{ title }}
 
-#if "author" in metadata {
-  text(style: "italic")[#metadata.author]
-  v(1em)
-}
+_{{ author }}_
 
 {{ body | Content }}
 `,
