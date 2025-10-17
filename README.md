@@ -7,6 +7,8 @@
 
 A template-first Markdown rendering system that converts Markdown with YAML frontmatter into PDF, SVG, and other output formats.
 
+**UNDER DEVELOPMENT**
+
 ## Features
 
 - **Template-first design**: Quill templates control structure and styling, Markdown provides content
