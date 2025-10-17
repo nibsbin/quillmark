@@ -27,6 +27,7 @@ out/
 output*.pdf
 output*.svg
 **/out/
+**/output/
 examples/output/
 examples/converted/
 **/.DS_Store
