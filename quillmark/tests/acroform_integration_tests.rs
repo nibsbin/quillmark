@@ -1,10 +1,11 @@
-use acroform::{AcroFormDocument, FieldValue};
-use quillmark_acroform::AcroformBackend;
-use std::collections::HashMap;
 
-#[cfg_attr(not(feature = "acroform"), ignore)]
+
+#[cfg(test)]
+#[cfg(feature = "acroform")]
 mod tests {
-    use super::*;
+    use acroform::{AcroFormDocument, FieldValue};
+    use quillmark_acroform::AcroformBackend;
+    use std::collections::HashMap;
 
     #[test]
     fn test_backend_compilation() {
