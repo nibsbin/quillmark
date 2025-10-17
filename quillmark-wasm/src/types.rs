@@ -156,6 +156,63 @@ pub struct QuillMetadata {
     pub tags: Vec<String>,
 }
 
+/// Field schema for template fields
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FieldSchema {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub r#type: Option<String>,
+    pub required: bool,
+    pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub example: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<serde_json::Value>,
+}
+
+impl From<quillmark_core::FieldSchema> for FieldSchema {
+    fn from(schema: quillmark_core::FieldSchema) -> Self {
+        FieldSchema {
+            r#type: schema.r#type,
+            required: schema.required,
+            description: schema.description,
+            example: schema.example.map(|v| v.as_json().clone()),
+            default: schema.default.map(|v| v.as_json().clone()),
+        }
+    }
+}
+
+/// Shallow information about a registered Quill
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuillInfo {
+    /// Quill name
+    pub name: String,
+    /// Backend ID (e.g., "typst")
+    pub backend: String,
+    /// Quill metadata
+    pub metadata: std::collections::HashMap<String, serde_json::Value>,
+    /// Loaded example markdown (if available)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub example: Option<String>,
+    /// Field schemas
+    #[serde(skip_serializing_if = "std::collections::HashMap::is_empty", default)]
+    pub field_schemas: std::collections::HashMap<String, FieldSchema>,
+    /// Supported output formats for this quill's backend
+    pub supported_formats: Vec<OutputFormat>,
+}
+
+/// Parsed markdown document
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParsedDocument {
+    /// YAML frontmatter fields
+    pub fields: serde_json::Value,
+    /// The quill tag from QUILL field (if present)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quill_tag: Option<String>,
+}
+
 /// Options for rendering
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

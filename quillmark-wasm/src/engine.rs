@@ -1,7 +1,9 @@
 //! Quillmark WASM Engine - Simplified API
 
 use crate::error::QuillmarkError;
-use crate::types::{RenderOptions, RenderResult};
+use crate::types::{
+    FieldSchema, OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult,
+};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
@@ -40,6 +42,43 @@ impl Quillmark {
             inner: quillmark::Quillmark::new(),
             quills: HashMap::new(),
         }
+    }
+
+    /// Parse markdown into a ParsedDocument
+    ///
+    /// This is the first step in the workflow. The returned ParsedDocument contains
+    /// the parsed YAML frontmatter fields and the quill_tag (if QUILL field is present).
+    #[wasm_bindgen(js_name = parseMarkdown)]
+    pub fn parse_markdown(markdown: &str) -> Result<JsValue, JsValue> {
+        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
+            QuillmarkError::new(
+                format!("Failed to parse markdown: {}", e),
+                None,
+                Some("Check markdown syntax and YAML frontmatter".to_string()),
+            )
+            .to_js_value()
+        })?;
+
+        // Convert to WASM type
+        let quill_tag = parsed.quill_tag().map(|s| s.to_string());
+
+        // Convert fields HashMap to JSON
+        let mut fields_obj = serde_json::Map::new();
+        for (key, value) in parsed.fields() {
+            fields_obj.insert(key.clone(), value.as_json().clone());
+        }
+        let fields = serde_json::Value::Object(fields_obj);
+
+        let wasm_parsed = ParsedDocument { fields, quill_tag };
+
+        serde_wasm_bindgen::to_value(&wasm_parsed).map_err(|e| {
+            QuillmarkError::new(
+                format!("Failed to serialize ParsedDocument: {}", e),
+                None,
+                None,
+            )
+            .to_js_value()
+        })
     }
 
     /// Register a Quill template bundle
@@ -97,6 +136,68 @@ impl Quillmark {
         Ok(())
     }
 
+    /// Get shallow information about a registered Quill
+    ///
+    /// This returns metadata, backend info, field schemas, and supported formats
+    /// that consumers need to configure render options for the next step.
+    #[wasm_bindgen(js_name = getQuillInfo)]
+    pub fn get_quill_info(&self, name: &str) -> Result<JsValue, JsValue> {
+        let quill = self.quills.get(name).ok_or_else(|| {
+            QuillmarkError::new(
+                format!("Quill '{}' not registered", name),
+                None,
+                Some("Use registerQuill() before getting quill info".to_string()),
+            )
+            .to_js_value()
+        })?;
+
+        // Get backend ID
+        let backend_id = &quill.backend;
+
+        // Create workflow to get supported formats
+        let workflow = self.inner.workflow_from_quill_name(name).map_err(|e| {
+            QuillmarkError::new(
+                format!("Failed to create workflow for quill '{}': {}", name, e),
+                None,
+                None,
+            )
+            .to_js_value()
+        })?;
+
+        let supported_formats: Vec<OutputFormat> = workflow
+            .supported_formats()
+            .iter()
+            .map(|&f| f.into())
+            .collect();
+
+        // Convert metadata to JSON
+        let mut metadata_json = std::collections::HashMap::new();
+        for (key, value) in &quill.metadata {
+            metadata_json.insert(key.clone(), value.as_json().clone());
+        }
+
+        // Convert field schemas
+        let field_schemas: std::collections::HashMap<String, FieldSchema> = quill
+            .field_schemas
+            .iter()
+            .map(|(k, v)| (k.clone(), v.clone().into()))
+            .collect();
+
+        let quill_info = QuillInfo {
+            name: quill.name.clone(),
+            backend: backend_id.clone(),
+            metadata: metadata_json,
+            example: quill.example.clone(),
+            field_schemas,
+            supported_formats,
+        };
+
+        serde_wasm_bindgen::to_value(&quill_info).map_err(|e| {
+            QuillmarkError::new(format!("Failed to serialize QuillInfo: {}", e), None, None)
+                .to_js_value()
+        })
+    }
+
     /// Process markdown through template engine (debugging)
     ///
     /// Returns template source code (Typst, LaTeX, etc.)
@@ -129,12 +230,37 @@ impl Quillmark {
             .map_err(|e| QuillmarkError::from(e).to_js_value())
     }
 
-    /// Render markdown to final artifacts (PDF, SVG, TXT)
+    /// Render a ParsedDocument to final artifacts (PDF, SVG, TXT)
     ///
     /// Uses the Quill specified in options.quill_name if provided,
-    /// otherwise infers it from the markdown's `QUILL` frontmatter field.
+    /// otherwise infers it from the ParsedDocument's quill_tag field.
     #[wasm_bindgen]
-    pub fn render(&mut self, markdown: &str, options: JsValue) -> Result<JsValue, JsValue> {
+    pub fn render(&mut self, parsed_doc: JsValue, options: JsValue) -> Result<JsValue, JsValue> {
+        // Parse the ParsedDocument from JsValue
+        let parsed_wasm: ParsedDocument =
+            serde_wasm_bindgen::from_value(parsed_doc).map_err(|e| {
+                QuillmarkError::new(
+                    format!("Invalid ParsedDocument: {}", e),
+                    None,
+                    Some("Ensure you pass a valid ParsedDocument from parseMarkdown()".to_string()),
+                )
+                .to_js_value()
+            })?;
+
+        // Reconstruct a core ParsedDocument from the WASM type
+        // Convert JSON value to HashMap<String, QuillValue>
+        let fields_json = parsed_wasm.fields;
+        let mut fields = std::collections::HashMap::new();
+
+        if let serde_json::Value::Object(obj) = fields_json {
+            for (key, value) in obj {
+                fields.insert(key, quillmark_core::value::QuillValue::from_json(value));
+            }
+        }
+
+        let parsed =
+            quillmark_core::ParsedDocument::with_quill_tag(fields, parsed_wasm.quill_tag.clone());
+
         let opts: RenderOptions = if options.is_undefined() || options.is_null() {
             RenderOptions::default()
         } else {
@@ -148,19 +274,9 @@ impl Quillmark {
             })?
         };
 
-        // Parse markdown first
-        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
-            QuillmarkError::new(
-                format!("Failed to parse markdown: {}", e),
-                None,
-                Some("Check markdown syntax and YAML frontmatter".to_string()),
-            )
-            .to_js_value()
-        })?;
-
         // Determine which workflow to use
         let mut workflow = if let Some(quill_name) = opts.quill_name {
-            // Use explicitly provided quill name (overrides QUILL frontmatter field)
+            // Use explicitly provided quill name (overrides quill_tag field)
             self.inner
                 .workflow_from_quill_name(&quill_name)
                 .map_err(|e| {
@@ -171,19 +287,28 @@ impl Quillmark {
                     )
                     .to_js_value()
                 })?
+        } else if let Some(quill_tag) = parsed_wasm.quill_tag {
+            // Use quill_tag from parsed document
+            self.inner
+                .workflow_from_quill_name(&quill_tag)
+                .map_err(|e| {
+                    QuillmarkError::new(
+                        format!("Quill '{}' from QUILL field not found: {}", quill_tag, e),
+                        None,
+                        Some("Use registerQuill() before rendering".to_string()),
+                    )
+                    .to_js_value()
+                })?
         } else {
-            // Infer workflow from parsed document (uses QUILL frontmatter field)
-            self.inner.workflow_from_parsed(&parsed).map_err(|e| {
-                QuillmarkError::new(
-                    format!("Failed to infer Quill from markdown: {}", e),
-                    None,
-                    Some(
-                        "Add a 'QUILL: <name>' field in your markdown frontmatter or specify quillName in options"
-                            .to_string(),
-                    ),
-                )
-                .to_js_value()
-            })?
+            return Err(QuillmarkError::new(
+                "No quill specified".to_string(),
+                None,
+                Some(
+                    "Either add a 'QUILL: <name>' field in your markdown frontmatter or specify quillName in options"
+                        .to_string(),
+                ),
+            )
+            .to_js_value());
         };
 
         // Add assets if provided
