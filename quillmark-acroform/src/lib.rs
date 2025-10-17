@@ -114,7 +114,13 @@ impl Backend for AcroformBackend {
 
             if let Some(source) = render_source {
                 if let Ok(rendered_value) = env.render_str(&source, &context) {
-                    let should_update = using_tooltip_template || rendered_value != source;
+                    // Determine if we should update the field:
+                    // 1. If using a tooltip template, always update (explicit override)
+                    // 2. If the rendered value differs from the source AND is non-empty, update
+                    // 3. Otherwise, skip (prevents filling fields with blank strings when data is missing)
+                    let is_non_empty = !rendered_value.trim().is_empty();
+                    let should_update =
+                        using_tooltip_template || (rendered_value != source && is_non_empty);
 
                     if should_update {
                         let new_value = match &field.current_value {
