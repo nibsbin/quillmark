@@ -40,6 +40,10 @@ npm install
 npm test
 ```
 
+The test suite includes:
+- `basic.test.js` - Core WASM API functionality tests
+- `tests/usaf_memo.test.js` - Smoke test that verifies WASM PDF output is functionally identical to native cargo output for the `usaf_memo` example
+
 ## Usage
 
 ```typescript
