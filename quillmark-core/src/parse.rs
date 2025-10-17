@@ -107,6 +107,11 @@ impl ParsedDocument {
         }
     }
 
+    /// Create a ParsedDocument from fields and optional quill tag
+    pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: Option<String>) -> Self {
+        Self { fields, quill_tag }
+    }
+
     /// Create a ParsedDocument from markdown string
     pub fn from_markdown(markdown: &str) -> Result<Self, crate::error::ParseError> {
         decompose(markdown).map_err(|e| crate::error::ParseError::from(e))
