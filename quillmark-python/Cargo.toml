@@ -3,7 +3,7 @@ name = "quillmark-python"
 version.workspace = true
 edition.workspace = true
 description = "Python bindings for Quillmark"
-license = "Apache-2.0"
+license.workspace = true
 publish = false
 
 [lib]
