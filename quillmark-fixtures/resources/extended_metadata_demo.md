@@ -55,7 +55,7 @@ Ideal for content-heavy sites where each item needs its own metadata (price, cat
 ## Technical Details
 
 - **Tag pattern**: `[a-z_][a-z0-9_]*`
-- **Contiguity**: No blank lines within metadata blocks
-- **Horizontal rules**: Preceded by blank line = horizontal rule
+- **Blank lines**: Allowed within metadata blocks
+- **Horizontal rules**: `---` with blank lines both above and below
 - **Reserved names**: Cannot use `body` as tag directive
 - **Collections**: Same tag name creates array of objects
