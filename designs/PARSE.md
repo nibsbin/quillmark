@@ -98,9 +98,9 @@ pub fn decompose(
    - Distinguish metadata blocks from horizontal rules via blank line detection
 
 2. **Block classification**
-   - Check if opening `---` is followed by blank line → horizontal rule (skip)
-   - Check if opening `---` is followed by content → metadata block (parse)
-   - Validate contiguity (no blank lines within YAML content)
+   - Check if `---` has blank lines both above AND below → horizontal rule (skip)
+   - Check if opening `---` is followed by non-blank line → metadata block (parse)
+   - Blank lines are allowed within YAML content
 
 3. **Scope/Quill key extraction**
    - Parse YAML content to check for special keys `SCOPE` or `QUILL`
@@ -141,8 +141,8 @@ Scans the document and returns a list of all metadata blocks with their position
 
 **Key logic:**
 - Pattern matching for `---\n` and `---\r\n`
-- Blank line detection (opening `---` followed by `\n` or `\r\n` → horizontal rule)
-- Contiguity validation (content between delimiters must have no blank lines)
+- Horizontal rule detection (`---` with blank lines both above AND below)
+- YAML blocks allow blank lines within the content
 - End-of-file delimiter support (closing `---` at EOF without trailing newline)
 - SCOPE/QUILL key extraction from parsed YAML
 
@@ -477,19 +477,21 @@ Body of the second sub-document.
 **Grammar:**
 ```
 metadata_block ::= "---" NEWLINE yaml_content "---" NEWLINE body_content
-yaml_content ::= (yaml_line NEWLINE)+  // No blank lines allowed
+yaml_content ::= (yaml_line NEWLINE)*  // Blank lines are allowed
 scope_key ::= "SCOPE: " scope_name
 quill_key ::= "QUILL: " quill_name
 scope_name ::= [a-z_][a-z0-9_]*
 ```
 
 **Disambiguation from markdown horizontal rules:**
-- Metadata blocks MUST be contiguous (no blank lines between opening `---` and closing `---`)
-- `---` preceded by blank line in body content is treated as horizontal rule, not metadata delimiter
-- This ensures clear distinction between YAML metadata and markdown syntax
+- A `---` is treated as a horizontal rule if it has blank lines both above AND below it
+- `---` followed by a non-blank line (when outside a YAML block) starts a metadata block
+- When inside a YAML block, the next `---` closes the block
+- This allows blank lines within YAML metadata while still supporting horizontal rules
 
 **Rules:**
 - The YAML content is parsed normally
+- Blank lines are allowed within YAML metadata blocks
 - If a `SCOPE` key is found in the parsed YAML, the block becomes a scoped collection item
 - If a `QUILL` key is found, it specifies which quill template to use
 - A block MUST NOT contain both `SCOPE` and `QUILL` keys
@@ -547,18 +549,19 @@ Item 2 body: `"Content for item 2."`
 
 1. **Scan document for all `---` delimiters**
    - Track positions of opening/closing pairs
-   - Check for contiguity: validate no blank lines between opening `---` and closing `---`
-   - Distinguish metadata blocks from horizontal rules (metadata blocks are contiguous)
+   - Distinguish horizontal rules from metadata blocks:
+     - `---` with blank lines above AND below = horizontal rule
+     - `---` followed by non-blank line = starts metadata block
+     - When in metadata block, next `---` = closes block
 
 2. **Parse global frontmatter** (if present)
-   - First contiguous block without SCOPE/QUILL key
+   - First block without SCOPE/QUILL key
    - Extract YAML fields into global map
    - Extract body up to next metadata block (or EOF)
 
 3. **Parse scoped metadata blocks**
    - For each block:
-     - Verify block is contiguous (no blank lines in YAML content)
-     - Parse YAML content
+     - Parse YAML content (blank lines allowed)
      - Check for SCOPE or QUILL key
      - Extract scope name from SCOPE value
      - Remove SCOPE/QUILL key from the metadata
@@ -675,9 +678,9 @@ title: Inner
 
 The `---` delimiter is also valid markdown syntax for a horizontal rule. To disambiguate YAML metadata blocks from horizontal rules in body content, the following rules apply:
 
-**Requirement: Contiguous YAML blocks**
+**Horizontal Rule Detection**
 
-YAML metadata blocks MUST be **contiguous** - no blank lines are allowed between the opening `---` and the closing `---`. This distinguishes metadata blocks from horizontal rules.
+A `---` is treated as a horizontal rule if and only if it has blank lines both above AND below it.
 
 ```markdown
 ---
@@ -687,39 +690,31 @@ title: Global
 Body content
 
 --- 
-This is a horizontal rule (has blank line before it)
+This is a horizontal rule (has blank lines above and below)
 
 More body content
 ```
 
-**Valid metadata block (contiguous):**
+**Valid metadata block (blank lines within YAML are allowed):**
 ```markdown
 ---
 SCOPE: items
 name: Product
+
 price: 99.99
 ---
 Body for this item
 ```
 
-**NOT a metadata block (has blank line, treated as horizontal rule + text):**
-```markdown
----
-
-SCOPE: items
-name: Product
----
-```
-
 **Parsing behavior:**
-- **Opening `---` followed by blank line**: Treated as horizontal rule in body content (not a metadata block)
-- **Opening `---` followed by content**: Parsed as YAML metadata block
-- **`---` preceded by blank line in body**: Treated as horizontal rule (not closing delimiter)
+- **`---` with blank lines both above AND below**: Treated as horizontal rule in body content
+- **`---` followed by non-blank line (when outside YAML block)**: Opens a YAML metadata block
+- **`---` when inside an open YAML block**: Closes the YAML metadata block (blank lines allowed within)
 
 This rule ensures:
-1. Metadata blocks are always recognized by their contiguous structure
-2. Users can still use `---` horizontal rules in body content by adding a blank line before them
-3. No ambiguity exists between metadata delimiters and markdown syntax
+1. Metadata blocks can contain blank lines for better YAML readability
+2. Users can still use `---` horizontal rules in body content by ensuring blank lines above and below
+3. Clear distinction between metadata delimiters and markdown syntax
 
 **Alternative horizontal rule syntaxes:**
 
@@ -863,8 +858,8 @@ When implementing, the following test cases must be covered:
 11. **Error: invalid syntax**: Malformed scope names
 12. **Complex YAML**: Nested structures within scoped metadata
 13. **Cross-platform**: Line ending variations (`\n` vs `\r\n`)
-14. **Horizontal rule disambiguation**: `---` with blank line before it in body is horizontal rule, not metadata
-15. **Non-contiguous block**: Blank line between opening `---` and YAML content should error or be treated as horizontal rule
+14. **Horizontal rule disambiguation**: `---` with blank lines above and below is horizontal rule
+15. **Blank lines in YAML**: Blank lines are allowed within YAML metadata blocks
 16. **Alternative horizontal rules**: Verify `***` and `___` work as horizontal rules in body content
 
 ### Open Design Questions

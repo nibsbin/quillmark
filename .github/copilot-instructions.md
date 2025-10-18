@@ -48,8 +48,10 @@ Description here.
 
 Creates `products` array with metadata + `body` field. Rules:
 - Use `SCOPE: name` or `QUILL: name` as YAML keys
-- Blocks must be contiguous (no blank lines)
-- `---` + blank line = horizontal rule (NOT metadata)
+- Blank lines are allowed within YAML blocks
+- `---` with blank lines above AND below = horizontal rule (NOT metadata)
+- `---` followed by non-blank line = starts metadata block
+- When in open block, next `---` = closes block
 
 See `designs/PARSE.md`.
 

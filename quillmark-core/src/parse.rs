@@ -191,7 +191,18 @@ fn find_metadata_blocks(
             let abs_pos = pos + delimiter_pos;
             let content_start = abs_pos + delimiter_len; // After "---\n" or "---\r\n"
 
-            // Check if opening --- is followed by a blank line (horizontal rule, not metadata)
+            // Check if this --- is a horizontal rule (blank lines above AND below)
+            let preceded_by_blank = if abs_pos > 0 {
+                // Check if there's a blank line before the ---
+                let before = &markdown[..abs_pos];
+                before.ends_with("\n\n")
+                    || before.ends_with("\r\n\r\n")
+                    || before.ends_with("\n\r\n")
+                    || before.ends_with("\r\n\n")
+            } else {
+                false
+            };
+
             let followed_by_blank = if content_start < markdown.len() {
                 markdown[content_start..].starts_with('\n')
                     || markdown[content_start..].starts_with("\r\n")
@@ -199,13 +210,23 @@ fn find_metadata_blocks(
                 false
             };
 
-            if followed_by_blank {
+            // Horizontal rule: blank lines both above and below
+            if preceded_by_blank && followed_by_blank {
                 // This is a horizontal rule in the body, skip it
                 pos = abs_pos + 3; // Skip past "---"
                 continue;
             }
 
-            // Found potential metadata block opening
+            // Check if followed by non-blank line (or if we're at document start)
+            // This starts a metadata block
+            if followed_by_blank {
+                // --- followed by blank line but NOT preceded by blank line
+                // This is NOT a metadata block opening, skip it
+                pos = abs_pos + 3;
+                continue;
+            }
+
+            // Found potential metadata block opening (followed by non-blank line)
             // Look for closing "\n---\n" or "\r\n---\r\n" etc., OR "\n---" / "\r\n---" at end of document
             let rest = &markdown[content_start..];
 
@@ -250,18 +271,6 @@ fn find_metadata_blocks(
                         crate::error::MAX_YAML_SIZE
                     )
                     .into());
-                }
-
-                // Check if the block is contiguous (no blank lines in the YAML content)
-                if content.contains("\n\n") || content.contains("\r\n\r\n") {
-                    // Not a contiguous block
-                    if abs_pos == 0 {
-                        // Started at beginning but has blank lines - this is an error
-                        return Err("Frontmatter started but not closed with ---".into());
-                    }
-                    // Otherwise treat as horizontal rule in body
-                    pos = abs_pos + 3;
-                    continue;
                 }
 
                 // Parse YAML content to check for reserved keys (QUILL, SCOPE)
@@ -1313,6 +1322,141 @@ SCOPE: items
             .unwrap_err()
             .to_string()
             .contains("Cannot specify both QUILL and SCOPE"));
+    }
+
+    #[test]
+    fn test_blank_lines_in_frontmatter() {
+        // New parsing standard: blank lines are allowed within YAML blocks
+        let markdown = r#"---
+title: Test Document
+author: Test Author
+
+description: This has a blank line above it
+tags:
+  - one
+  - two
+---
+
+# Hello World
+
+This is the body."#;
+
+        let doc = decompose(markdown).unwrap();
+
+        assert_eq!(doc.body(), Some("\n# Hello World\n\nThis is the body."));
+        assert_eq!(
+            doc.get_field("title").unwrap().as_str().unwrap(),
+            "Test Document"
+        );
+        assert_eq!(
+            doc.get_field("author").unwrap().as_str().unwrap(),
+            "Test Author"
+        );
+        assert_eq!(
+            doc.get_field("description").unwrap().as_str().unwrap(),
+            "This has a blank line above it"
+        );
+
+        let tags = doc.get_field("tags").unwrap().as_sequence().unwrap();
+        assert_eq!(tags.len(), 2);
+    }
+
+    #[test]
+    fn test_blank_lines_in_scope_blocks() {
+        // Blank lines should be allowed in SCOPE blocks too
+        let markdown = r#"---
+SCOPE: items
+name: Item 1
+
+price: 19.99
+
+tags:
+  - electronics
+  - gadgets
+---
+
+Body of item 1."#;
+
+        let doc = decompose(markdown).unwrap();
+
+        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
+        assert_eq!(items.len(), 1);
+
+        let item = items[0].as_object().unwrap();
+        assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
+        assert_eq!(item.get("price").unwrap().as_f64().unwrap(), 19.99);
+
+        let tags = item.get("tags").unwrap().as_array().unwrap();
+        assert_eq!(tags.len(), 2);
+    }
+
+    #[test]
+    fn test_horizontal_rule_with_blank_lines_above_and_below() {
+        // Horizontal rule: blank lines both above AND below the ---
+        let markdown = r#"---
+title: Test
+---
+
+First paragraph.
+
+---
+
+Second paragraph."#;
+
+        let doc = decompose(markdown).unwrap();
+
+        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
+
+        // The body should contain the horizontal rule (---) as part of the content
+        let body = doc.body().unwrap();
+        assert!(body.contains("First paragraph."));
+        assert!(body.contains("---"));
+        assert!(body.contains("Second paragraph."));
+    }
+
+    #[test]
+    fn test_horizontal_rule_not_preceded_by_blank() {
+        // --- not preceded by blank line but followed by blank line is NOT a horizontal rule
+        // It's also NOT a valid metadata block opening (since it's followed by blank)
+        let markdown = r#"---
+title: Test
+---
+
+First paragraph.
+---
+
+Second paragraph."#;
+
+        let doc = decompose(markdown).unwrap();
+
+        let body = doc.body().unwrap();
+        // The second --- should be in the body as text (not a horizontal rule since no blank above)
+        assert!(body.contains("---"));
+    }
+
+    #[test]
+    fn test_multiple_blank_lines_in_yaml() {
+        // Multiple blank lines should also be allowed
+        let markdown = r#"---
+title: Test
+
+
+author: John Doe
+
+
+version: 1.0
+---
+
+Body content."#;
+
+        let doc = decompose(markdown).unwrap();
+
+        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
+        assert_eq!(
+            doc.get_field("author").unwrap().as_str().unwrap(),
+            "John Doe"
+        );
+        assert_eq!(doc.get_field("version").unwrap().as_f64().unwrap(), 1.0);
     }
 }
 #[cfg(test)]
