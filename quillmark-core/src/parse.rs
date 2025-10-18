@@ -195,10 +195,7 @@ fn find_metadata_blocks(
             let preceded_by_blank = if abs_pos > 0 {
                 // Check if there's a blank line before the ---
                 let before = &markdown[..abs_pos];
-                before.ends_with("\n\n")
-                    || before.ends_with("\r\n\r\n")
-                    || before.ends_with("\n\r\n")
-                    || before.ends_with("\r\n\n")
+                before.ends_with("\n\n") || before.ends_with("\r\n\r\n")
             } else {
                 false
             };
