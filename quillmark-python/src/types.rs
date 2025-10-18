@@ -339,6 +339,15 @@ impl PyRenderResult {
             .map(|d| PyDiagnostic { inner: d.clone() })
             .collect()
     }
+
+    #[getter]
+    fn output_format(&self) -> &str {
+        match self.inner.output_format {
+            OutputFormat::Pdf => "pdf",
+            OutputFormat::Svg => "svg",
+            OutputFormat::Txt => "txt",
+        }
+    }
 }
 
 // Artifact wrapper

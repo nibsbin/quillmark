@@ -37,11 +37,11 @@
 //!
 //! ```no_run
 //! use quillmark_core::{RenderError, error::print_errors};
-//! # use quillmark_core::RenderResult;
+//! # use quillmark_core::{RenderResult, OutputFormat};
 //! # struct Workflow;
 //! # impl Workflow {
 //! #     fn render(&self, _: &str, _: Option<()>) -> Result<RenderResult, RenderError> {
-//! #         Ok(RenderResult::new(vec![]))
+//! #         Ok(RenderResult::new(vec![], OutputFormat::Pdf))
 //! #     }
 //! # }
 //! # let workflow = Workflow;
@@ -105,9 +105,9 @@
 //! ### Result with Warnings
 //!
 //! ```no_run
-//! # use quillmark_core::{RenderResult, Diagnostic, Severity};
+//! # use quillmark_core::{RenderResult, Diagnostic, Severity, OutputFormat};
 //! # let artifacts = vec![];
-//! let result = RenderResult::new(artifacts)
+//! let result = RenderResult::new(artifacts, OutputFormat::Pdf)
 //!     .with_warning(Diagnostic::new(
 //!         Severity::Warning,
 //!         "Deprecated field used".to_string(),
@@ -423,14 +423,17 @@ pub struct RenderResult {
     pub artifacts: Vec<crate::Artifact>,
     /// Non-fatal diagnostic messages
     pub warnings: Vec<Diagnostic>,
+    /// Output format that was produced
+    pub output_format: OutputFormat,
 }
 
 impl RenderResult {
-    /// Create a new result with artifacts
-    pub fn new(artifacts: Vec<crate::Artifact>) -> Self {
+    /// Create a new result with artifacts and output format
+    pub fn new(artifacts: Vec<crate::Artifact>, output_format: OutputFormat) -> Self {
         Self {
             artifacts,
             warnings: Vec::new(),
+            output_format,
         }
     }
 

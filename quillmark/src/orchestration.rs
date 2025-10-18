@@ -245,7 +245,9 @@ impl Quillmark {
     /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
     /// #     fn glue_type(&self) -> &'static str { ".custom" }
     /// #     fn register_filters(&self, _: &mut quillmark_core::Glue) {}
-    /// #     fn compile(&self, _: &str, _: &quillmark_core::Quill, _: &quillmark_core::RenderOptions) -> Result<Vec<quillmark_core::Artifact>, quillmark_core::RenderError> { Ok(vec![]) }
+    /// #     fn compile(&self, _: &str, _: &quillmark_core::Quill, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
+    /// #         Ok(quillmark_core::RenderResult::new(vec![], quillmark_core::OutputFormat::Txt))
+    /// #     }
     /// # }
     ///
     /// let mut engine = Quillmark::new();
@@ -410,8 +412,7 @@ impl Workflow {
             output_format: format,
         };
 
-        let artifacts = self.backend.compile(content, quill, &render_opts)?;
-        Ok(RenderResult::new(artifacts))
+        self.backend.compile(content, quill, &render_opts)
     }
 
     /// Process Markdown through the glue template without compilation, returning the composed output.

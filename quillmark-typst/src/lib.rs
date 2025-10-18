@@ -53,7 +53,9 @@ pub mod fuzz_utils {
 use filters::{
     asset_filter, content_filter, date_filter, dict_filter, lines_filter, string_filter,
 };
-use quillmark_core::{Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions};
+use quillmark_core::{
+    Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions, RenderResult,
+};
 
 /// Typst backend implementation for Quillmark.
 pub struct TypstBackend;
@@ -86,7 +88,7 @@ impl Backend for TypstBackend {
         glued_content: &str,
         quill: &Quill,
         opts: &RenderOptions,
-    ) -> Result<Vec<Artifact>, RenderError> {
+    ) -> Result<RenderResult, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
 
         // Check if format is supported
@@ -100,20 +102,22 @@ impl Backend for TypstBackend {
         match format {
             OutputFormat::Pdf => {
                 let bytes = compile::compile_to_pdf(quill, glued_content)?;
-                Ok(vec![Artifact {
+                let artifacts = vec![Artifact {
                     bytes,
                     output_format: OutputFormat::Pdf,
-                }])
+                }];
+                Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
             }
             OutputFormat::Svg => {
                 let svg_pages = compile::compile_to_svg(quill, glued_content)?;
-                Ok(svg_pages
+                let artifacts = svg_pages
                     .into_iter()
                     .map(|bytes| Artifact {
                         bytes,
                         output_format: OutputFormat::Svg,
                     })
-                    .collect())
+                    .collect();
+                Ok(RenderResult::new(artifacts, OutputFormat::Svg))
             }
             OutputFormat::Txt => Err(RenderError::FormatNotSupported {
                 backend: self.id().to_string(),

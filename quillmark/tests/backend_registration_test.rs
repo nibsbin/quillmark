@@ -1,5 +1,5 @@
 use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark, RenderError};
-use quillmark_core::{Artifact, Backend, Glue, RenderOptions};
+use quillmark_core::{Artifact, Backend, Glue, RenderOptions, RenderResult};
 use std::fs;
 use tempfile::TempDir;
 
@@ -30,12 +30,13 @@ impl Backend for MockBackend {
         glue_content: &str,
         _quill: &Quill,
         _opts: &RenderOptions,
-    ) -> Result<Vec<Artifact>, RenderError> {
+    ) -> Result<RenderResult, RenderError> {
         // Simple mock: just return the glue content as a text artifact
-        Ok(vec![Artifact {
+        let artifacts = vec![Artifact {
             bytes: glue_content.as_bytes().to_vec(),
             output_format: OutputFormat::Txt,
-        }])
+        }];
+        Ok(RenderResult::new(artifacts, OutputFormat::Txt))
     }
 }
 

@@ -371,6 +371,7 @@ impl Quillmark {
         let render_result = RenderResult {
             artifacts: result.artifacts.into_iter().map(Into::into).collect(),
             warnings: result.warnings.into_iter().map(Into::into).collect(),
+            output_format: result.output_format.into(),
             render_time_ms: now_ms() - start,
         };
 
