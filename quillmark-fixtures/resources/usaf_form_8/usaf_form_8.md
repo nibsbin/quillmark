@@ -88,7 +88,7 @@ examiner_remarks:
     
     And while we're on the subject, you smell like burning hair. I don't know what you're doing in your spare time, and honestly I don't want to know, but it's affecting the whole crew. Bender actually complained about a smell, Fry. *Bender*. A robot who stores week-old sandwiches in his chest cavity said you're making the ship uninhabitable. Whatever you're burning, stop burning it. Or at least shower afterwards.
     
-    Look, I'm sure you did your best, which is to say you failed miserably. I've tried to be patient. I've tried to work with your... limitations. But at this point, maybe you should stick to the one thing you're good at - nothing. Actually, scratch that. You're not even good at nothing. You somehow manage to make nothing worse just by being near it."
+    Look, I'm sure you did your best, which is to say you failed miserably. I've tried to be patient. I've tried to work with your... limitations. But at this point, maybe you should stick to the one thing you're good at - nothing. Actually, scratch that. You're not even good at nothing. You somehow manage to make nothing worse just by being near it.
   addi_training: You need to learn how to not be you
   addi_comments: None
 reviewing_remarks: None
