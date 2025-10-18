@@ -52,7 +52,7 @@ typst-svg = "0.13.1"
 dirs = "6.0"
 
 # AcroForm backend dependencies
-acroform = "0.0.16"
+acroform = "0.1.2"
 
 # Intra-project dependencies
 quillmark-core = { version = "0.2.1", path = "quillmark-core" }
