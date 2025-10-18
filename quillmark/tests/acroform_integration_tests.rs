@@ -3,7 +3,6 @@
 mod tests {
     use acroform::{AcroFormDocument, FieldValue};
     use quillmark_acroform::AcroformBackend;
-    use std::collections::HashMap;
 
     #[test]
     fn test_backend_compilation() {

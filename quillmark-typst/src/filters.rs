@@ -107,8 +107,6 @@ pub fn date_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<V
             // Use js-sys to get the current UTC date string on wasm targets.
             // We format as YYYY-MM-DD to match Iso8601::DEFAULT parsing expectations.
             use js_sys::Date;
-            use wasm_bindgen::JsValue;
-
             let d = Date::new_0();
             let year = d.get_utc_full_year() as i32;
             let month = (d.get_utc_month() as u8).saturating_add(1);
