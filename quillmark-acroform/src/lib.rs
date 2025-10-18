@@ -5,7 +5,9 @@
 //! via tooltip metadata in the format: `description__{{template}}`.
 
 use acroform::{AcroFormDocument, FieldValue};
-use quillmark_core::{Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions};
+use quillmark_core::{
+    Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions, RenderResult,
+};
 use std::collections::HashMap;
 
 /// AcroForm backend implementation for Quillmark.
@@ -34,7 +36,7 @@ impl Backend for AcroformBackend {
         glue_content: &str,
         quill: &Quill,
         opts: &RenderOptions,
-    ) -> Result<Vec<Artifact>, RenderError> {
+    ) -> Result<RenderResult, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
 
         if !self.supported_formats().contains(&format) {
@@ -160,10 +162,12 @@ impl Backend for AcroformBackend {
             .fill(values_to_fill)
             .map_err(|e| RenderError::Other(format!("Failed to fill PDF: {}", e).into()))?;
 
-        Ok(vec![Artifact {
+        let artifacts = vec![Artifact {
             bytes: output_bytes,
             output_format: OutputFormat::Pdf,
-        }])
+        }];
+
+        Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
     }
 }
 

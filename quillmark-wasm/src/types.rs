@@ -134,6 +134,7 @@ impl From<quillmark_core::Artifact> for Artifact {
 pub struct RenderResult {
     pub artifacts: Vec<Artifact>,
     pub warnings: Vec<Diagnostic>,
+    pub output_format: OutputFormat,
     pub render_time_ms: f64,
 }
 

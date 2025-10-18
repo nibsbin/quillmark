@@ -73,15 +73,16 @@
 //!
 //! ```no_run
 //! use quillmark::{Quillmark, Backend};
-//! # use quillmark_core::{Glue, OutputFormat, Quill, RenderOptions, Artifact, RenderError};
+//! # use quillmark_core::{Glue, OutputFormat, Quill, RenderOptions, Artifact, RenderError, RenderResult};
 //! # struct MyCustomBackend;
 //! # impl Backend for MyCustomBackend {
 //! #     fn id(&self) -> &'static str { "custom" }
 //! #     fn supported_formats(&self) -> &'static [OutputFormat] { &[OutputFormat::Txt] }
 //! #     fn glue_type(&self) -> &'static str { ".txt" }
 //! #     fn register_filters(&self, _glue: &mut Glue) {}
-//! #     fn compile(&self, content: &str, _quill: &Quill, _opts: &RenderOptions) -> Result<Vec<Artifact>, RenderError> {
-//! #         Ok(vec![Artifact { bytes: content.as_bytes().to_vec(), output_format: OutputFormat::Txt }])
+//! #     fn compile(&self, content: &str, _quill: &Quill, _opts: &RenderOptions) -> Result<RenderResult, RenderError> {
+//! #         let artifacts = vec![Artifact { bytes: content.as_bytes().to_vec(), output_format: OutputFormat::Txt }];
+//! #         Ok(RenderResult::new(artifacts, OutputFormat::Txt))
 //! #     }
 //! # }
 //!

@@ -20,7 +20,7 @@
 //!         glue_content: &str,
 //!         quill: &Quill,
 //!         opts: &RenderOptions,
-//!     ) -> Result<Vec<Artifact>, RenderError>;
+//!     ) -> Result<RenderResult, RenderError>;
 //! }
 //! ```
 //!
@@ -59,7 +59,7 @@
 //! Compile glue content into final artifacts.
 //!
 //! ```no_run
-//! # use quillmark_core::{Quill, RenderOptions, Artifact, OutputFormat, RenderError};
+//! # use quillmark_core::{Quill, RenderOptions, Artifact, OutputFormat, RenderError, RenderResult};
 //! # struct MyBackend;
 //! # impl MyBackend {
 //! fn compile(
@@ -67,18 +67,21 @@
 //!     glue_content: &str,
 //!     quill: &Quill,
 //!     opts: &RenderOptions,
-//! ) -> Result<Vec<Artifact>, RenderError> {
+//! ) -> Result<RenderResult, RenderError> {
 //!     // 1. Create compilation environment
 //!     // 2. Load assets from quill
 //!     // 3. Compile glue content
 //!     // 4. Handle errors and map to Diagnostics
-//!     // 5. Return artifacts
+//!     // 5. Return RenderResult with artifacts and output format
 //!     # let compiled_pdf = vec![];
+//!     # let format = OutputFormat::Pdf;
 //!     
-//!     Ok(vec![Artifact {
+//!     let artifacts = vec![Artifact {
 //!         bytes: compiled_pdf,
-//!         output_format: OutputFormat::Pdf,
-//!     }])
+//!         output_format: format,
+//!     }];
+//!     
+//!     Ok(RenderResult::new(artifacts, format))
 //! }
 //! # }
 //! ```
@@ -94,7 +97,7 @@
 
 use crate::error::RenderError;
 use crate::templating::Glue;
-use crate::{Artifact, OutputFormat, Quill, RenderOptions};
+use crate::{OutputFormat, Quill, RenderOptions};
 
 /// Backend trait for rendering different output formats
 pub trait Backend: Send + Sync {
@@ -116,5 +119,5 @@ pub trait Backend: Send + Sync {
         glue_content: &str,
         quill: &Quill,
         opts: &RenderOptions,
-    ) -> Result<Vec<Artifact>, RenderError>;
+    ) -> Result<crate::RenderResult, RenderError>;
 }
