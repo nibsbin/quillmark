@@ -25,10 +25,11 @@ mod tests {
         let result = backend.compile(json_context, &quill, &opts);
         assert!(result.is_ok(), "Compilation failed: {:?}", result.err());
 
-        let artifacts = result.unwrap();
-        assert_eq!(artifacts.len(), 1);
-        assert_eq!(artifacts[0].output_format, OutputFormat::Pdf);
-        assert!(!artifacts[0].bytes.is_empty());
+        let render_result = result.unwrap();
+        assert_eq!(render_result.artifacts.len(), 1);
+        assert_eq!(render_result.artifacts[0].output_format, OutputFormat::Pdf);
+        assert!(!render_result.artifacts[0].bytes.is_empty());
+        assert_eq!(render_result.output_format, OutputFormat::Pdf);
     }
 
     #[test]
@@ -56,10 +57,11 @@ mod tests {
         let result = backend.compile(json_context, &quill, &opts);
         assert!(result.is_ok(), "Compilation failed: {:?}", result.err());
 
-        let artifacts = result.unwrap();
-        assert_eq!(artifacts.len(), 1);
+        let render_result = result.unwrap();
+        assert_eq!(render_result.artifacts.len(), 1);
+        assert_eq!(render_result.output_format, OutputFormat::Pdf);
 
-        let filled_doc = AcroFormDocument::from_bytes(artifacts[0].bytes.clone())
+        let filled_doc = AcroFormDocument::from_bytes(render_result.artifacts[0].bytes.clone())
             .expect("Failed to load filled PDF");
 
         let fields = filled_doc.fields().expect("Failed to get fields");
