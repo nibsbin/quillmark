@@ -3,3 +3,6 @@ doc-workspace = "doc --no-deps -p quillmark-core -p quillmark -p quillmark-typst
 
 [build]
 rustflags = ["--check-cfg=cfg(feature, values(\"gil-refs\"))"]
+
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']
