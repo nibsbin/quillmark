@@ -41,8 +41,7 @@ jobs:
         run: |
           cd quillmark-python
           uv venv
-          uv pip install maturin pytest
-          uv run python -m maturin develop
+          uv pip install -e ".[dev]" 
           uv run pytest
 
   linux:
