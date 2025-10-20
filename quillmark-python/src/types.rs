@@ -8,7 +8,6 @@ use pyo3::{Bound, PyAny}; // Bound, PyAny
 use quillmark::{
     Diagnostic, Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderResult, Workflow,
 };
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 use crate::enums::{PyOutputFormat, PySeverity};
@@ -122,42 +121,6 @@ impl PyWorkflow {
             .map_err(convert_render_error)
     }
 
-    fn with_asset(&self, _filename: String, _contents: Vec<u8>) -> PyResult<()> {
-        Err(PyErr::new::<crate::errors::QuillmarkError, _>(
-            "Builder pattern methods (with_asset, with_font, etc.) are not yet supported in Python bindings. \
-             Create a new workflow instead.",
-        ))
-    }
-
-    fn with_assets(&self, _assets: HashMap<String, Vec<u8>>) -> PyResult<()> {
-        Err(PyErr::new::<crate::errors::QuillmarkError, _>(
-            "Builder pattern methods are not yet supported in Python bindings",
-        ))
-    }
-
-    fn clear_assets(&self) -> PyResult<()> {
-        Err(PyErr::new::<crate::errors::QuillmarkError, _>(
-            "Builder pattern methods are not yet supported in Python bindings",
-        ))
-    }
-
-    fn with_font(&self, _filename: String, _contents: Vec<u8>) -> PyResult<()> {
-        Err(PyErr::new::<crate::errors::QuillmarkError, _>(
-            "Builder pattern methods are not yet supported in Python bindings",
-        ))
-    }
-
-    fn with_fonts(&self, _fonts: HashMap<String, Vec<u8>>) -> PyResult<()> {
-        Err(PyErr::new::<crate::errors::QuillmarkError, _>(
-            "Builder pattern methods are not yet supported in Python bindings",
-        ))
-    }
-
-    fn clear_fonts(&self) -> PyResult<()> {
-        Err(PyErr::new::<crate::errors::QuillmarkError, _>(
-            "Builder pattern methods are not yet supported in Python bindings",
-        ))
-    }
     #[getter]
     fn backend_id(&self) -> &str {
         self.inner.backend_id()
@@ -175,14 +138,6 @@ impl PyWorkflow {
     #[getter]
     fn quill_name(&self) -> &str {
         self.inner.quill_name()
-    }
-
-    fn dynamic_asset_names(&self) -> Vec<String> {
-        self.inner.dynamic_asset_names()
-    }
-
-    fn dynamic_font_names(&self) -> Vec<String> {
-        self.inner.dynamic_font_names()
     }
 }
 
@@ -338,15 +293,6 @@ impl PyRenderResult {
             .iter()
             .map(|d| PyDiagnostic { inner: d.clone() })
             .collect()
-    }
-
-    #[getter]
-    fn output_format(&self) -> &str {
-        match self.inner.output_format {
-            OutputFormat::Pdf => "pdf",
-            OutputFormat::Svg => "svg",
-            OutputFormat::Txt => "txt",
-        }
     }
 }
 

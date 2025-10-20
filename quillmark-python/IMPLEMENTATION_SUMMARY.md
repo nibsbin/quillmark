@@ -129,6 +129,7 @@ As specified, the following are explicitly NOT exposed:
 - Low-level Workflow internals
 - Backend implementation details
 - Custom backend registration from Python
+- Dynamic asset/font injection (not yet implemented in Python bindings)
 
 ## Usage Example
 
@@ -167,6 +168,23 @@ result.artifacts[0].save("output.pdf")
 - This is considered a rewrite of the Python API
 - Maintains compatibility with existing Rust API design
 - Python 3.10+ required (abi3 support)
+
+## Breaking Changes (v0.4.1)
+
+The following breaking changes were made to remove legacy code and ensure consistency:
+
+1. **Removed unsupported builder methods** - The following methods have been removed from `Workflow`:
+   - `with_asset()`, `with_assets()`, `clear_assets()`
+   - `with_font()`, `with_fonts()`, `clear_fonts()`
+   - `dynamic_asset_names()`, `dynamic_font_names()`
+   
+   These methods were never properly implemented and always threw errors. Dynamic assets/fonts are not yet supported in Python bindings.
+
+2. **Removed redundant getter** - `RenderResult.output_format` has been removed. Use `artifact.output_format` on individual artifacts instead.
+
+3. **Type stub corrections** - Fixed type declarations to match actual implementation:
+   - `ParsedDocument.body()` now correctly returns `str | None` (was incorrectly documented as `str`)
+   - Various getters now correctly declared as properties in type stubs
 
 ## Documentation
 

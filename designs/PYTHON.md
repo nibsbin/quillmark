@@ -188,10 +188,6 @@ workflow = engine.workflow_from_quill_name("my-quill")
 parsed = ParsedDocument.from_markdown(markdown)
 result = workflow.render(parsed, OutputFormat.PDF)
 
-# Dynamic assets
-workflow.add_asset("chart.png", chart_bytes)
-workflow.add_asset("data.csv", csv_bytes)
-
 # Query properties
 backend_id = workflow.backend_id()        # -> str
 formats = workflow.supported_formats()    # -> list[OutputFormat]
@@ -224,24 +220,6 @@ def process_glue(markdown: str) -> str:
 def process_glue_parsed(parsed: ParsedDocument) -> str:
     """Process parsed document through glue template."""
 
-def add_asset(filename: str, contents: bytes) -> None:
-    """Add dynamic asset (mutates workflow)."""
-
-def add_assets(assets: dict[str, bytes]) -> None:
-    """Add multiple dynamic assets."""
-
-def clear_assets() -> None:
-    """Remove all dynamic assets."""
-
-def add_font(filename: str, contents: bytes) -> None:
-    """Add dynamic font."""
-
-def add_fonts(fonts: dict[str, bytes]) -> None:
-    """Add multiple dynamic fonts."""
-
-def clear_fonts() -> None:
-    """Remove all dynamic fonts."""
-
 def backend_id() -> str:
     """Get backend identifier."""
 
@@ -250,13 +228,9 @@ def supported_formats() -> list[OutputFormat]:
 
 def quill_name() -> str:
     """Get quill name."""
-
-def dynamic_asset_names() -> list[str]:
-    """Get list of dynamic asset filenames."""
-
-def dynamic_font_names() -> list[str]:
-    """Get list of dynamic font filenames."""
 ```
+
+**Note**: Dynamic asset and font injection methods are not currently supported in the Python bindings.
 
 ---
 
@@ -1104,13 +1078,14 @@ class Workflow:
 
 **Deliverable**: Full API parity with Rust crate
 
-### Phase 3: Dynamic Assets & Polish (Week 5)
-- [ ] Implement dynamic asset support (`with_asset`, `with_font`)
+### Phase 3: Polish & Testing (Week 5)
 - [ ] Optimize memory handling (zero-copy where possible)
 - [ ] Integration tests
 - [ ] Error handling tests
 
 **Deliverable**: Feature-complete package
+
+**Note**: Dynamic asset support (`with_asset`, `with_font`) is deferred to a future release.
 
 ### Phase 4: Distribution (Week 6)
 - [ ] Set up GitHub Actions CI/CD
@@ -1167,27 +1142,6 @@ result.artifacts[0].save("output.pdf")
 print(f"Generated {len(result.artifacts[0].bytes)} bytes")
 ```
 
-### Dynamic Assets
-
-```python
-from quillmark import Quillmark, OutputFormat, ParsedDocument
-from pathlib import Path
-
-# Load chart image
-chart_bytes = Path("chart.png").read_bytes()
-
-# Create workflow with dynamic asset
-engine = Quillmark()
-workflow = engine.workflow_from_quill_name("report")
-
-workflow.add_asset("chart.png", chart_bytes)
-
-parsed = ParsedDocument.from_markdown("# Report\n\n![Chart](chart.png)")
-result = workflow.render(parsed, OutputFormat.PDF)
-
-result.artifacts[0].save("report.pdf")
-```
-
 ### Batch Processing
 
 ```python
@@ -1239,7 +1193,6 @@ For Rust users, the Python API closely mirrors the Rust API:
 - **Workflow**: Configured rendering pipeline with backend and quill
 - **Artifact**: Rendered output bytes with format metadata
 - **Backend**: Rendering engine (e.g., Typst) that compiles glue to output
-- **Dynamic Asset**: Runtime-injected file accessible during rendering
 
 ---
 

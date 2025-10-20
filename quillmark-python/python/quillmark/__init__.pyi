@@ -78,7 +78,11 @@ class Quillmark:
         """Get list of registered quill names."""
 
 class Workflow:
-    """Sealed workflow for executing the render pipeline."""
+    """Sealed workflow for executing the render pipeline.
+    
+    Note: Dynamic asset and font injection is not currently supported in Python bindings.
+    Assets must be included in the quill bundle.
+    """
     
     def render(
         self,
@@ -112,38 +116,17 @@ class Workflow:
     def process_glue_parsed(self, parsed: ParsedDocument) -> str:
         """Process parsed document through glue template."""
     
-    def with_asset(self, filename: str, contents: bytes) -> Workflow:
-        """Add dynamic asset (returns new workflow instance)."""
-    
-    def with_assets(self, assets: dict[str, bytes]) -> Workflow:
-        """Add multiple dynamic assets."""
-    
-    def clear_assets(self) -> Workflow:
-        """Remove all dynamic assets."""
-    
-    def with_font(self, filename: str, contents: bytes) -> Workflow:
-        """Add dynamic font."""
-    
-    def with_fonts(self, fonts: dict[str, bytes]) -> Workflow:
-        """Add multiple dynamic fonts."""
-    
-    def clear_fonts(self) -> Workflow:
-        """Remove all dynamic fonts."""
-    
+    @property
     def backend_id(self) -> str:
         """Get backend identifier."""
     
+    @property
     def supported_formats(self) -> list[OutputFormat]:
         """Get supported output formats."""
     
+    @property
     def quill_name(self) -> str:
         """Get quill name."""
-    
-    def dynamic_asset_names(self) -> list[str]:
-        """Get list of dynamic asset filenames."""
-    
-    def dynamic_font_names(self) -> list[str]:
-        """Get list of dynamic font filenames."""
 
 class Quill:
     """Template bundle containing glue templates and assets."""
@@ -191,12 +174,13 @@ class ParsedDocument:
             ParseError: If YAML frontmatter is invalid
         """
     
-    def body(self) -> str:
+    def body(self) -> str | None:
         """Get document body content."""
     
     def get_field(self, key: str) -> Any | None:
         """Get frontmatter field value."""
     
+    @property
     def fields(self) -> dict[str, Any]:
         """Get all frontmatter fields."""
     
