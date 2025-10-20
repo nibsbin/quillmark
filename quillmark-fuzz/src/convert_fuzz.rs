@@ -55,6 +55,11 @@ fn test_escape_markup_security_attack_vectors() {
     let backslash_attack = "\\*";
     let escaped = escape_markup(backslash_attack);
     assert_eq!(escaped, "\\\\\\*");
+
+    // Test // (comment syntax) is escaped
+    let comment_attack = "// This could be a comment";
+    let escaped = escape_markup(comment_attack);
+    assert!(escaped.starts_with("\\/\\/"));
 }
 
 proptest! {
@@ -116,10 +121,14 @@ proptest! {
             .map(|&ch| s.matches(ch).count())
             .sum();
 
+        // Count // patterns that will be escaped (each // becomes \/\/, adding 2 backslashes)
+        let double_slash_count = s.matches("//").count();
+
         // Expected backslashes in output:
         // - Each input backslash becomes 2 backslashes (input_backslashes * 2)
         // - Each special char gets one escape backslash (special_count)
-        let expected_backslashes = input_backslashes * 2 + special_count;
+        // - Each // pattern gets 2 escape backslashes (double_slash_count * 2)
+        let expected_backslashes = input_backslashes * 2 + special_count + double_slash_count * 2;
         let actual_backslashes = escaped.matches('\\').count();
 
         assert_eq!(actual_backslashes, expected_backslashes,

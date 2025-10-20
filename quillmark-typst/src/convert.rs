@@ -49,6 +49,7 @@ pub enum ConversionError {
 /// Escapes text for safe use in Typst markup context.
 pub fn escape_markup(s: &str) -> String {
     s.replace('\\', "\\\\")
+        .replace("//", "\\/\\/")
         .replace('*', "\\*")
         .replace('_', "\\_")
         .replace('`', "\\`")
@@ -417,7 +418,7 @@ mod tests {
     fn test_link() {
         let markdown = "[Link text](https://example.com)";
         let typst = mark_to_typst(markdown).unwrap();
-        assert_eq!(typst, "#link(\"https://example.com\")[Link text]\n\n");
+        assert_eq!(typst, "#link(\"https:\\/\\/example.com\")[Link text]\n\n");
     }
 
     #[test]
@@ -426,7 +427,7 @@ mod tests {
         let typst = mark_to_typst(markdown).unwrap();
         assert_eq!(
             typst,
-            "Visit #link(\"https://example.com\")[our site] for more.\n\n"
+            "Visit #link(\"https:\\/\\/example.com\")[our site] for more.\n\n"
         );
     }
 
@@ -438,7 +439,7 @@ mod tests {
         // Lists end with extra newline per CONVERT.md examples
         assert_eq!(
             typst,
-            "A paragraph with *bold* and a #link(\"https://example.com\")[link].\n\nAnother paragraph with `inline code`.\n\n+ A list item\n+ Another item\n\n"
+            "A paragraph with *bold* and a #link(\"https:\\/\\/example.com\")[link].\n\nAnother paragraph with `inline code`.\n\n+ A list item\n+ Another item\n\n"
         );
     }
 

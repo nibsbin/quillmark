@@ -91,6 +91,7 @@ Escapes text content for safe use in Typst markup context. This function must be
 
 **Characters Escaped:**
 - `\` → `\\` (backslash - **must be first**)
+- `//` → `\/\/` (line comments)
 - `*` → `\*` (bold/strong markers)
 - `_` → `\_` (emphasis markers)
 - `` ` `` → ``\` `` (inline code markers)
