@@ -92,10 +92,10 @@ Represents parsed Markdown with frontmatter.
 ```python
 parsed = ParsedDocument.from_markdown(markdown)
 
-parsed.body()           # Document body
-parsed.quill_tag()      # QUILL field value (if present)
-parsed.get_field(key)   # Get specific field
-parsed.fields           # All frontmatter fields
+parsed.body()           # Document body (str | None)
+parsed.quill_tag()      # QUILL field value (str | None)
+parsed.get_field(key)   # Get specific field (Any | None)
+parsed.fields           # All frontmatter fields (dict)
 ```
 
 #### `Workflow` - Rendering Pipeline
