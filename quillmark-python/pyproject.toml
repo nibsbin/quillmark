@@ -31,7 +31,6 @@ Repository = "https://github.com/nibsbin/quillmark"
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
-    "pytest-cov>=5.0",
     "maturin>=1.7,<2.0",
 ]
 
