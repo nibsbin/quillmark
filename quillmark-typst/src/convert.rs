@@ -49,6 +49,7 @@ pub enum ConversionError {
 /// Escapes text for safe use in Typst markup context.
 pub fn escape_markup(s: &str) -> String {
     s.replace('\\', "\\\\")
+        .replace("//", "\\/\\/")
         .replace('*', "\\*")
         .replace('_', "\\_")
         .replace('`', "\\`")
@@ -417,7 +418,7 @@ mod tests {
     fn test_link() {
         let markdown = "[Link text](https://example.com)";
         let typst = mark_to_typst(markdown).unwrap();
-        assert_eq!(typst, "#link(\"https://example.com\")[Link text]\n\n");
+        assert_eq!(typst, "#link(\"https:\\/\\/example.com\")[Link text]\n\n");
     }
 
     #[test]
@@ -426,7 +427,7 @@ mod tests {
         let typst = mark_to_typst(markdown).unwrap();
         assert_eq!(
             typst,
-            "Visit #link(\"https://example.com\")[our site] for more.\n\n"
+            "Visit #link(\"https:\\/\\/example.com\")[our site] for more.\n\n"
         );
     }
 
@@ -438,7 +439,7 @@ mod tests {
         // Lists end with extra newline per CONVERT.md examples
         assert_eq!(
             typst,
-            "A paragraph with *bold* and a #link(\"https://example.com\")[link].\n\nAnother paragraph with `inline code`.\n\n+ A list item\n+ Another item\n\n"
+            "A paragraph with *bold* and a #link(\"https:\\/\\/example.com\")[link].\n\nAnother paragraph with `inline code`.\n\n+ A list item\n+ Another item\n\n"
         );
     }
 
@@ -607,5 +608,46 @@ mod tests {
         // This should succeed
         let result = mark_to_typst(&markdown);
         assert!(result.is_ok());
+    }
+
+    // Tests for // (comment syntax) escaping
+    #[test]
+    fn test_slash_comment_in_url() {
+        let markdown = "Check out https://example.com for more.";
+        let typst = mark_to_typst(markdown).unwrap();
+        // The // in https:// should be escaped to prevent it from being treated as a comment
+        assert!(typst.contains("https:\\/\\/example.com"));
+    }
+
+    #[test]
+    fn test_slash_comment_at_line_start() {
+        let markdown = "// This should not be a comment";
+        let typst = mark_to_typst(markdown).unwrap();
+        // // at the start of a line should be escaped
+        assert!(typst.contains("\\/\\/"));
+    }
+
+    #[test]
+    fn test_slash_comment_in_middle() {
+        let markdown = "Some text // with slashes in the middle";
+        let typst = mark_to_typst(markdown).unwrap();
+        // // in the middle of text should be escaped
+        assert!(typst.contains("text \\/\\/"));
+    }
+
+    #[test]
+    fn test_file_protocol() {
+        let markdown = "Use file://path/to/file protocol";
+        let typst = mark_to_typst(markdown).unwrap();
+        // file:// should be escaped
+        assert!(typst.contains("file:\\/\\/"));
+    }
+
+    #[test]
+    fn test_single_slash() {
+        let markdown = "Use path/to/file for the file";
+        let typst = mark_to_typst(markdown).unwrap();
+        // Single slashes should not be escaped (only // is a comment in Typst)
+        assert!(typst.contains("path/to/file"));
     }
 }
