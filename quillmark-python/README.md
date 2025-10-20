@@ -160,10 +160,7 @@ Canonical development flow:
 uv venv
 
 # Install developer extras (includes maturin, pytest, mypy, ruff)
-uv pip install -e "[dev]"
-
-# Build and install (compile Rust + install into venv)
-uv run python -m maturin develop
+uv pip install -e ".[dev]"
 
 # Run tests
 uv run pytest
