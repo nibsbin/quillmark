@@ -117,6 +117,8 @@ workflow.supported_formats    # [OutputFormat.PDF, OutputFormat.SVG]
 glue_output = workflow.process_glue_parsed(parsed)
 ```
 
+**Note**: Dynamic asset and font injection is not currently supported in Python bindings. Assets must be included in the quill bundle.
+
 #### `RenderResult` - Output Container
 
 Contains rendered artifacts and diagnostics.

@@ -129,6 +129,7 @@ As specified, the following are explicitly NOT exposed:
 - Low-level Workflow internals
 - Backend implementation details
 - Custom backend registration from Python
+- Dynamic asset/font injection (not yet implemented in Python bindings)
 
 ## Usage Example
 
