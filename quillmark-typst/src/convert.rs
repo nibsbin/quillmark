@@ -608,4 +608,45 @@ mod tests {
         let result = mark_to_typst(&markdown);
         assert!(result.is_ok());
     }
+
+    // Tests for // (comment syntax) escaping
+    #[test]
+    fn test_slash_comment_in_url() {
+        let markdown = "Check out https://example.com for more.";
+        let typst = mark_to_typst(markdown).unwrap();
+        // The // in https:// should be escaped to prevent it from being treated as a comment
+        assert!(typst.contains("https:\\/\\/example.com"));
+    }
+
+    #[test]
+    fn test_slash_comment_at_line_start() {
+        let markdown = "// This should not be a comment";
+        let typst = mark_to_typst(markdown).unwrap();
+        // // at the start of a line should be escaped
+        assert!(typst.contains("\\/\\/"));
+    }
+
+    #[test]
+    fn test_slash_comment_in_middle() {
+        let markdown = "Some text // with slashes in the middle";
+        let typst = mark_to_typst(markdown).unwrap();
+        // // in the middle of text should be escaped
+        assert!(typst.contains("text \\/\\/"));
+    }
+
+    #[test]
+    fn test_file_protocol() {
+        let markdown = "Use file://path/to/file protocol";
+        let typst = mark_to_typst(markdown).unwrap();
+        // file:// should be escaped
+        assert!(typst.contains("file:\\/\\/"));
+    }
+
+    #[test]
+    fn test_single_slash() {
+        let markdown = "Use path/to/file for the file";
+        let typst = mark_to_typst(markdown).unwrap();
+        // Single slashes should not be escaped (only // is a comment in Typst)
+        assert!(typst.contains("path/to/file"));
+    }
 }
