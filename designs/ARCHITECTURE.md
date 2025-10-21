@@ -101,394 +101,113 @@ High-level data flow:
 
 ## Core Interfaces and Structures
 
-> **Note:** The following sections provide high-level API signatures and design rationale. For detailed API documentation with comprehensive examples, error handling, and usage patterns, see the `quillmark` crate's rustdoc (available at docs.rs or via `cargo doc --open`).
+> **Note:** This section provides high-level architecture overview. For complete API documentation, see the rustdoc (available at docs.rs or via `cargo doc --open`).
 
 ### Quillmark (high-level engine API)
 
-```rust
-pub struct Quillmark {
-    backends: HashMap<String, Box<dyn Backend>>,
-    quills: HashMap<String, Quill>,
-}
+The `Quillmark` struct is the main entry point that manages:
+- Backend registration (auto-registered based on features)
+- Quill template registration
+- Workflow creation from quills or parsed documents
 
-impl Quillmark {
-    pub fn new() -> Self;
-    pub fn register_quill(&mut self, quill: Quill);
-    pub fn workflow_from_parsed(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError>;
-    pub fn workflow_from_quill<'a>(&self, quill_ref: impl Into<QuillRef<'a>>) -> Result<Workflow, RenderError>;
-    pub fn workflow_from_quill_name(&self, name: &str) -> Result<Workflow, RenderError>;
-    pub fn registered_backends(&self) -> Vec<&str>;
-    pub fn registered_quills(&self) -> Vec<&str>;
-}
-```
-
-**Usage pattern:**
-
-```rust
-// Create engine with auto-registered backends
-let mut engine = Quillmark::new();
-
-// Register quills
-let quill = Quill::from_path("path/to/quill")?;
-engine.register_quill(quill);
-
-// Parse markdown once
-let markdown = "---\ntitle: Example\n---\n\n# Content";
-let parsed = ParsedDocument::from_markdown(markdown)?;
-
-// Load workflow by name or from parsed document
-let workflow = engine.workflow_from_quill_name("my-quill")?;
-let workflow = engine.workflow_from_parsed(&parsed)?;  // Auto-detects from QUILL frontmatter field
-let workflow = engine.workflow_from_quill(&quill)?;    // Also accepts Quill reference
-```
+**Key methods:**
+- `new()` - Create engine with auto-registered backends
+- `register_quill()` - Add quill templates
+- `workflow_from_*()` - Create workflows for rendering
 
 ### Workflow (render execution API)
 
-```rust
-pub struct Workflow {
-    backend: Box<dyn Backend>,
-    quill: Quill,
-    dynamic_assets: HashMap<String, Vec<u8>>,
-}
+The `Workflow` struct orchestrates the rendering pipeline:
+- Holds backend and quill references
+- Manages dynamic assets
+- Executes the parse → template → compile pipeline
 
-impl Workflow {
-    pub fn new(backend: Box<dyn Backend>, quill: Quill) -> Result<Self, RenderError>;
-    pub fn render(&self, parsed: &ParsedDocument, format: Option<OutputFormat>) -> Result<RenderResult, RenderError>;
-    pub fn render_source(&self, content: &str, format: Option<OutputFormat>) -> Result<RenderResult, RenderError>;
-    pub fn process_glue_parsed(&self, parsed: &ParsedDocument) -> Result<String, RenderError>;
-    pub fn backend_id(&self) -> &str;
-    pub fn supported_formats(&self) -> &'static [OutputFormat];
-    pub fn quill_name(&self) -> &str;
-    
-    // Dynamic asset management
-    pub fn add_asset(&mut self, filename: impl Into<String>, contents: impl Into<Vec<u8>>) -> Result<(), RenderError>;
-    pub fn add_assets(&mut self, assets: impl IntoIterator<Item = (String, Vec<u8>)>) -> Result<(), RenderError>;
-    pub fn clear_assets(&mut self);
-}
-```
-
-**Dynamic Assets:** The `Workflow` supports adding runtime assets through mutation methods. Dynamic assets are prefixed with `DYNAMIC_ASSET__` and stored under `assets/` in the virtual file system, accessible via the `Asset` filter in templates.
-
-### QuillRef (ergonomic quill references)
-
-```rust
-pub enum QuillRef<'a> {
-    Name(&'a str),
-    Object(&'a Quill),
-}
-```
-
-Implements `From` for `&str`, `&String`, `&Quill`, and `&Cow<str>` for ergonomic API usage.
+**Key methods:**
+- `render()` - Full pipeline from parsed document to artifacts
+- `add_asset()` / `add_assets()` - Runtime asset injection
+- `backend_id()`, `supported_formats()` - Introspection
 
 ### Backend Trait (stable)
 
-```rust
-pub trait Backend: Send + Sync {
-    fn id(&self) -> &'static str;                       // e.g., "typst", "latex"
-    fn supported_formats(&self) -> &'static [OutputFormat];
-    fn glue_type(&self) -> &'static str;                // file extension, e.g., ".typ"
-    fn register_filters(&self, glue: &mut Glue);
-    fn compile(&self, glue_content: &str, quill: &Quill, opts: &RenderOptions)
-        -> Result<Vec<Artifact>, RenderError>;
-}
-```
+Backends implement output format support:
+- `id()` - Unique backend identifier
+- `supported_formats()` - Available output formats
+- `register_filters()` - Template filter registration
+- `compile()` - Glue content → final artifacts
 
-> **Note:** `RenderOptions` is internal to engine orchestration; public callers use the engine methods.
+### Core Types
 
-### Quill (template bundle)
-
-See `designs/QUILL_DESIGN.md` for full design rationale.
-
-
-### ParsedDocument
-
-```rust
-pub struct ParsedDocument {
-    fields: HashMap<String, QuillValue>,  // private - access via methods
-}
-```
-
-**Public API:** `new(fields)`, `from_markdown(markdown)`, `body()`, `get_field()`, `fields()`, `quill_tag()`; body is stored under reserved `BODY_FIELD` constant. The `from_markdown()` constructor parses markdown and extracts frontmatter and body in one step.
-
-### Glue (MiniJinja wrapper with stable filter API)
-
-```rust
-pub struct Glue {
-    env: Environment<'static>,
-    template: String,
-}
-```
-
-**Methods:** `new()`, `register_filter()`, `compose(context)`.
-
-**Filter ABI (stable surface):**
-
-```rust
-pub mod filter_api {
-    pub use minijinja::{Error, ErrorKind, State};
-    pub use minijinja::value::{Kwargs, Value};
-    pub trait DynFilter: Send + Sync + 'static {}
-    impl<T> DynFilter for T where T: Send + Sync + 'static {}
-}
-```
-
-#### Implementation Hints
-
-##### Glue Template Processing
-
-* **MiniJinja setup**: Create `Environment`
-* **Template compilation**: Parse template string once, reuse for multiple `compose()` calls
-* **Error propagation**: Convert MiniJinja errors to `TemplateError` with source context
-
-##### Filter Registration Best Practices
-
-* **Type safety**: Use `filter_api` types only - don't leak MiniJinja internals
-* **Error handling**: Return `filter_api::Error` with appropriate `ErrorKind`
-* **Documentation**: Each filter should handle null/missing values gracefully
-
-### Artifact & Output Format
-
-```rust
-pub struct Artifact { pub bytes: Vec<u8>, pub output_format: OutputFormat }
-```
-
-```rust
-pub struct RenderResult {
-    pub artifacts: Vec<Artifact>,
-    pub warnings: Vec<Diagnostic>,
-}
-```
+- `ParsedDocument` - Frontmatter + body from markdown
+- `Quill` - Template bundle (glue template + assets/packages)
+- `Diagnostic` - Structured error information with source chains
+- `RenderResult` - Output artifacts + warnings
+- `Artifact` - Output bytes + format type
 
 ---
 
 ## End-to-End Orchestration Workflow
 
-**Public usage (high-level Quillmark API):**
+The workflow follows a three-stage pipeline:
 
-```rust
-// Create engine with auto-registered backends (typst by default)
-let mut engine = Quillmark::new();
+1. **Parse** - Extract YAML frontmatter + body from markdown (`ParsedDocument::from_markdown()`)
+2. **Template** - Compose backend-specific glue via MiniJinja with registered filters
+3. **Compile** - Backend processes glue to generate output artifacts
 
-// Register quills
-let quill = Quill::from_path("path/to/quill")?;
-engine.register_quill(quill);
+**High-level flow:**
+- Engine manages backends and quills
+- Workflow orchestrates parse → template → compile
+- Backends register filters and handle compilation
+- Dynamic assets injected before compilation
 
-// Parse markdown once
-let markdown = "# Hello";
-let parsed = ParsedDocument::from_markdown(markdown)?;
+### Key Concepts
 
-// Load workflow and render
-let workflow = engine.workflow_from_quill_name("my-quill")?;
-let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
-for a in result.artifacts { /* write bytes */ }
-```
+**Backend Auto-Registration**: Backends are automatically registered based on enabled crate features (e.g., `typst` feature enables `TypstBackend`).
 
-**Public usage (direct Workflow API):**
+**Dynamic Assets**: Runtime assets are prefixed with `DYNAMIC_ASSET__` and injected into the quill's virtual file system before compilation, accessible via the `Asset` filter.
 
-```rust
-let backend = Box::new(TypstBackend::default());
-let quill = Quill::from_path("path/to/quill")?;
-let workflow = Workflow::new(backend, quill)?;
-
-let markdown = "# Hello";
-let parsed = ParsedDocument::from_markdown(markdown)?;
-let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
-```
-
-**Internal steps (encapsulated in Workflow::render):**
-
-1. **Parse Markdown**: Already done by caller via `ParsedDocument::from_markdown(markdown)` → YAML frontmatter + body.
-2. **Setup Glue**: `Glue::new(quill.glue_template)`; backend `register_filters(&mut glue)`.
-3. **Compose**: `glue.compose(parsed.fields().clone())` → backend-specific glue source.
-4. **Compile**: `backend.compile(&glue_src, &quill, &opts)` → `Vec<Artifact>` (PDF/SVG/TXT…).
-
-### Implementation Hints
-
-#### Quillmark Construction
-
-* **Auto-registration**: Backends are registered based on enabled crate features (e.g., `#[cfg(feature = "typst")]`)
-* **Backend storage**: Use `HashMap<String, Box<dyn Backend>>` keyed by backend ID
-* **Quill storage**: Use `HashMap<String, Quill>` keyed by quill name
-* **Clone workaround**: Trait objects can't clone directly - implement `clone_backend()` helper that matches on backend ID
-
-#### Workflow Construction (`Workflow::new`)
-
-* **Input change**: Now takes `Quill` object directly instead of `PathBuf` - quill loading moved to caller
-* **Backend validation**: Check `backend.id()` matches expected backend type
-* **No additional validation**: `Quill::from_path()` already validates, so no need to validate again
-
-#### Load Method Implementation
-
-* **QuillRef pattern**: Accept `impl Into<QuillRef<'a>>` for ergonomic API
-* **Name lookup**: Check `self.quills` HashMap when given a name
-* **Object reference**: Use provided Quill directly when given an object
-* **Backend resolution**: Extract backend ID from `quill.metadata.get("backend")`
-* **Cloning**: Clone both backend and quill for the new Workflow instance
-
-#### Orchestration Error Handling
-
-* **Step isolation**: Each step should handle its own errors and provide context
-* **Rollback strategy**: No partial state - either complete success or clean failure
-* **Context preservation**: Chain errors with source information through each step
-
-#### Performance Considerations
-
-* **Asset preloading**: Load fonts/assets once per engine instance
-* **Memory management**: Use references where possible, avoid unnecessary clones
-
-#### Workflow State Management
-
-```rust
-// Typical orchestration pattern (encapsulated in Workflow::render):
-// Parsing is done externally by caller via ParsedDocument::from_markdown()
-let mut glue = Glue::new(&quill.glue_template)?;        // Step 1a
-backend.register_filters(&mut glue);                    // Step 1b
-let glue_source = glue.compose(parsed.fields().clone())?; // Step 2
-let prepared_quill = self.prepare_quill_with_assets();  // Step 2.5: inject dynamic assets
-let artifacts = backend.compile(&glue_source, &prepared_quill, &opts)?; // Step 3
-```
-
-**Dynamic Asset Workflow**: Dynamic assets added via `with_asset()` are stored in the `Workflow` and injected into a cloned `Quill` during rendering. The `prepare_quill_with_assets()` method prefixes each filename with `DYNAMIC_ASSET__` and adds it to `assets/` in the quill's virtual file system, ensuring no collisions with static assets.
-
-#### Render Method Variants
-
-* **render()**: Full pipeline from parsed document to artifacts with optional format
-* **render_source()**: Skip parsing, compile pre-processed glue content
-* **process_glue_parsed()**: Extract just the glue composition step (ParsedDocument → glue source)
+**Error Handling**: All error paths provide structured `Diagnostic` information with source chains preserved through the `source` field.
 
 ---
 
 ## Template System Design
 
-* Engine uses **MiniJinja** with a **stable filter API** so backends do not directly depend on MiniJinja.
-* Backend-provided filters bridge YAML values → backend-native constructs.
+The template system uses **MiniJinja** with a **stable filter API** to keep backends decoupled from the template engine.
 
-**Common Filters**
+### Filter Architecture
 
-* **String**: escape/quote; `default=` kwarg; special handling for `none` sentinel
-* **Lines**: string array for multi-line embedding
-* **Date**: strict date parsing; produces datetime constructor for Typst
-* **Dict**: objects → JSON string; type validation
-* **Content**: Markdown body → backend markup (e.g., Typst) and inject with `eval()` as needed
-* **Asset**: transform dynamic asset filename to virtual path (e.g., `"chart.png"` → `"assets/DYNAMIC_ASSET__chart.png"`)
+Backends register custom filters via the stable `filter_api` module:
+- **String** - Escape/quote values with `default=` support
+- **Lines** - Array to multi-line string conversion
+- **Date** - Strict date parsing for backend datetime types
+- **Dict** - Objects to backend-native structures (e.g., JSON)
+- **Content** - Markdown body to backend markup
+- **Asset** - Transform dynamic asset filenames to virtual paths
 
-**Template usage example (Typst glue):**
-
-```typst
-{{ title | String(default="Untitled") }}
-{{ recipients | Lines }}
-{{ date | Date }}
-{{ metadata | Dict }}
-{{ body | Content }}
-#image({{ "chart.png" | Asset }}) // dynamic asset
-```
-
-### Implementation Hints
-
-#### Filter API Stability Pattern
-
-* **Abstraction layer**: Core exposes `filter_api` module re-exporting MiniJinja types
-* **Backend isolation**: Backends import only `quillmark_core::templating::filter_api`
-* **Key types**:
-
-  ```rust
-  use quillmark_core::templating::filter_api::{State, Value, Kwargs, Error, ErrorKind};
-
-  pub fn my_filter(_state: &State, value: Value, kwargs: Kwargs) -> Result<Value, Error>
-  ```
-
-#### Filter Implementation Patterns
-
-##### String Filter (`string_filter`)
-
-* **Default handling**: Check `kwargs_default()` for `default=` parameter
-* **Null coercion**: `value.is_null() || (string && empty)` → use default or `""`
-* **Sentinel values**: `"none"` string → return `none_value()` (unquoted Typst literal)
-* **Escaping**: Use `escape_string()` for quotes, newlines, control chars
-* **Output format**: Return quoted string `"escaped_content"`
-
-##### Lines Filter (`lines_filter`)
-
-* **Input validation**: Must be array, error if not
-* **Element conversion**: Convert each array element to string via `json_to_string_lossy()`
-* **JSON output**: Return compact JSON array of strings for template embedding
-
-##### Dict Filter (`dict_filter`)
-
-* **Value conversion**: Uses `QuillValue` which is already backed by `serde_json::Value`
-* **Typst embedding**: Wrap in `json(bytes("..."))` for Typst evaluation
-* **Escaping**: Use `escape_string()` on serialized JSON
-
-##### Content Filter (`content_filter`)
-
-* **Markdown conversion**: Apply `mark_to_typst()` to body content
-* **Eval wrapping**: Return `eval("typst_markup", mode: "markup")` for safe template injection
-* **Content type**: Treats input as markdown string, outputs Typst markup
-
-##### Asset Filter (`asset_filter`)
-
-* **Dynamic asset path**: Transform filename to prefixed path `assets/DYNAMIC_ASSET__{filename}`
-* **Security validation**: Reject filenames containing path separators (`/` or `\`)
-* **Output format**: Return quoted Typst string literal `"assets/DYNAMIC_ASSET__filename"`
-* **Usage**: Enables runtime asset injection via `Workflow.add_asset()` methods
-
-#### Value Conversion Helpers
-
-```rust
-// JSON ↔ MiniJinja Value bridge functions
-fn v_to_json(v: &Value) -> Json;          // MiniJinja → serde_json
-fn json_to_string_lossy(j: &Json) -> String;  // JSON → display string
-fn kwargs_default(kwargs: &Kwargs) -> Result<Option<Json>, Error>; // Extract default= param
-```
+Filters bridge YAML values to backend-specific constructs while maintaining a stable ABI.
 
 ---
 
 ## Parsing and Document Decomposition
 
-Quillmark supports advanced markdown parsing with both traditional frontmatter and the **Extended YAML Metadata Standard** for structured content organization.
+Quillmark supports advanced markdown parsing with the **Extended YAML Metadata Standard**.
 
-### Basic Frontmatter Parsing
+### Basic Frontmatter
 
-* **Frontmatter:** YAML delimited by `---` … `---` at the top of the document.
-* **Process:**
+- YAML delimited by `---` at document start
+- Converted to `HashMap<String, QuillValue>`
+- Body stored under reserved `BODY_FIELD` constant
+- Fail-fast error reporting for malformed YAML
 
-  1. Detect frontmatter block; parse YAML and convert to `HashMap<String, QuillValue>`
-  2. Store the remainder as body under `BODY_FIELD`
-  3. Validate YAML syntax with fail-fast error reporting
-  4. Preserve all body whitespace (including leading/trailing)
-* **Policy:** YAML-only input; no TOML frontmatter. Values are converted to `QuillValue` at the parsing boundary.
+### Extended YAML Metadata Standard
 
-### Extended YAML Metadata Standard (Implemented)
+Supports **inline metadata sections** using `SCOPE` and `QUILL` keys:
 
-The parser now supports **inline metadata sections** throughout documents using SCOPE/QUILL keys:
-
-* **SCOPE/QUILL Keys**: Use `SCOPE: attribute_name` or `QUILL: quill_name` within YAML to create collections or specify templates
-* **Collection Aggregation**: Multiple blocks with same SCOPE → array of objects
-* **Horizontal Rule Disambiguation**: Smart detection distinguishes metadata blocks from markdown `---` horizontal rules
-* **Contiguity Validation**: Metadata blocks must be contiguous (no blank lines within YAML content)
-* **Validation**: Scope names match `[a-z_][a-z0-9_]*` pattern; reserved name protection; name collision detection
-
-**Grammar:**
-```
-metadata_block ::= "---" NEWLINE yaml_content "---" NEWLINE body_content
-yaml_content ::= (yaml_line NEWLINE)+  // No blank lines allowed
-scope_key ::= "SCOPE: " scope_name
-quill_key ::= "QUILL: " quill_name
-scope_name ::= [a-z_][a-z0-9_]*
-```
-
-**Key Rules:**
-* The YAML content is parsed normally
-* If a `SCOPE` key is found, the block becomes a scoped collection item
-* If a `QUILL` key is found, it specifies which quill template to use
-* If neither key is present, block is treated as global frontmatter
-* Metadata blocks MUST be contiguous - `---` followed by blank line is treated as horizontal rule
-* YAML parsing uses same rigor for both frontmatter and scoped blocks
-* Body content preserves all whitespace (including leading/trailing)
-* The `SCOPE` and `QUILL` keys are removed from the final metadata after processing
+- **SCOPE**: Creates named collections (aggregates blocks into arrays)
+- **QUILL**: Specifies which template to use
+- **Horizontal rule disambiguation**: Smart detection distinguishes metadata from markdown
+- **Validation**: Scope names follow `[a-z_][a-z0-9_]*` pattern
 
 **Example:**
-
 ```markdown
 ---
 title: Product Catalog
@@ -498,36 +217,13 @@ Main description.
 ---
 SCOPE: products
 name: Widget
-price: 19.99
 ---
 Widget description.
 ```
 
-Parses to structured data with a `products` array containing objects with metadata fields and body content.
+Parses to: `{ title: "...", products: [{ name: "...", body: "..." }] }`
 
-**Collection Semantics:**
-* All scoped blocks with the same scope name → aggregated into array
-* Array preserves document order
-* Each entry is an object containing metadata fields + `body` field
-* Global frontmatter fields stored at top level
-* Only one global frontmatter block allowed (subsequent blocks without SCOPE/QUILL error)
-
-**Error posture:** Fail-fast for malformed YAML to prevent silent data corruption; clear error messages for invalid scope syntax or name collisions.
-
-**See `designs/PARSE.md` for comprehensive documentation of the Extended YAML Metadata Standard.**
-
-### Implementation Hints
-
-#### Frontmatter Detection (internal implementation)
-
-The internal implementation (accessed via `ParsedDocument::from_markdown()`) uses pattern matching for delimiter detection with full cross-platform support:
-
-* **Line ending support**: Checks both `"---\n"` and `"---\r\n"` for Windows/Unix compatibility
-* **Delimiter search**: Finds opening and closing delimiters using pattern matching
-* **Horizontal rule disambiguation**: 
-  - Opening `---` followed by blank line → treated as horizontal rule
-  - Opening `---` followed by content → treated as metadata block
-  - Metadata blocks must be contiguous (no blank lines within)
+**See `designs/PARSE.md` for complete specification.**
 * **Tag directive parsing**: Extracts `!tag_name` from first line after opening `---`
 * **Collection aggregation**: Groups tagged blocks into arrays under tag name
 * **Edge cases handled**:
@@ -642,107 +338,58 @@ let file_id = FileId::new(Some(spec.clone()), virtual_path);
 * **Search order**: `assets/fonts/` → `assets/` → system fonts
 * **Supported formats**: `.ttf`, `.otf`, `.woff`, `.woff2`
 * **Error handling**: If no fonts found, provide clear error message - Typst needs fonts for compilation
-* **Loading pattern**: 
-  * **Asset fonts**: Read font files to `Vec<u8>` and store eagerly in `FontBook` (unchanged behavior)
-  * **System fonts**: Use `typst-kit::fonts::FontSearcher` for lazy loading via `FontSlot` - fonts are only loaded into memory when actually accessed through the `font()` method
-  * **Memory efficiency**: System fonts are discovered but not pre-loaded, reducing memory footprint
+---
 
-##### Error Formatting (backend-internal)
+## Backend Architecture
 
-* Convert Typst `SourceDiagnostic` → core `Diagnostic` (see [Error Handling Patterns](#error-handling-patterns)).
+### Typst Backend
+
+The Typst backend implements PDF and SVG output:
+
+**Key Features:**
+- Markdown→Typst conversion with proper escaping
+- Dynamic package loading from `packages/` directory
+- Font and asset resolution from `assets/` directory
+- Runtime asset injection with `DYNAMIC_ASSET__` prefix
+- Structured error mapping with source locations
+
+**Filter Support:**
+- String, Lines, Date, Dict filters for data transformation
+- Content filter for Markdown→Typst conversion
+- Asset filter for dynamic asset path mapping
+
+**Compilation Environment (`QuillWorld`):**
+- Implements Typst `World` trait
+- Virtual file system for packages and assets
+- Line/column mapping for error diagnostics
 
 ---
 
 ## Package Management and Asset Handling
 
-**Quill template layout (opinionated):**
+### Quill Structure
 
 ```
 quill-template/
-├─ Quill.toml              # metadata; can override glue file name
-├─ glue.<ext>              # e.g., glue.typ
-├─ packages/               # backend packages (embedded in quill)
-│  └─ <pkg>/typst.toml …
-└─ assets/                 # fonts/, images/, data/
+├─ Quill.toml              # Metadata and configuration
+├─ glue.<ext>              # Template file (e.g., glue.typ)
+├─ packages/               # Backend packages
+└─ assets/                 # Fonts, images, data
 ```
 
-**Quill.toml structure:**
+### Package Loading
 
-```toml
-[Quill]
-name = "my-quill"
-backend = "typst"
-glue = "glue.typ"
+- External packages specified in `[backend].packages` are downloaded
+- Embedded packages in `packages/` directory are discovered
+- Virtual file system maintains directory structure
+- External packages override embedded ones on name collision
 
-[typst]
-packages = [
-    "@preview/bubble:0.2.2",
-    "@preview/other-package:1.0.0"
-]
-```
+### Asset Management
 
-The `[typst]` section is optional and allows specifying external packages to download:
-* **packages**: Array of package specifications in format `@namespace/name:version`
-* External packages are downloaded using typst-kit from the Typst package registry
-* Downloaded packages **dominate** (override) embedded packages if there's a name collision
-* Packages are cached locally for reuse
-
-**Package loading (algorithm):**
-
-1. **Download external packages** specified in `[typst].packages` from Quill.toml
-2. Load downloaded packages into the virtual file system
-3. Scan `packages/` recursively for embedded packages
-4. Parse `typst.toml` metadata for each package
-5. Build virtual paths; register namespace (`@preview`, `@local`, custom)
-6. Resolve entrypoints; load all package files preserving structure
-
-**Assets:**
-
-* Fonts: `.ttf`, `.otf`, `.woff`, `.woff2`
-* Binary assets: images/data as bytes
-* Recursive discovery; prefix-preserving virtual paths
-* **Dynamic assets**: Runtime-injected via `Workflow.with_asset()`, prefixed with `DYNAMIC_ASSET__` and accessible via `Asset` filter
-
-### Implementation Hints
-
-#### Package Discovery (`load_packages_recursive`)
-
-* **Directory scanning**: Use `std::fs::read_dir()` on `packages/` directory
-* **TOML parsing gotchas**:
-
-  * Required fields: `[package] name, version, entrypoint`
-  * Optional: `namespace` (defaults to `"local"`)
-  * Use `toml::from_str()` with proper error handling
-* **Version parsing**: `semver::Version::parse()` for proper semantic versioning
-* **Namespace handling**: Support `@preview`, `@local`, custom namespaces
-
-#### Virtual Path Management
-
-* **Critical pattern**: Preserve directory structure in virtual file system
-
-  ```rust
-  // Manual path construction for virtual paths (paths are relative):
-  let virtual_path = VirtualPath::new(&filename); // Forward slashes required
-  ```
-* **FileId creation**:
-
-  * Assets: `FileId::new(None, virtual_path)`
-  * Packages: `FileId::new(Some(package_spec), virtual_path)`
-
-#### Asset Loading Strategy
-
-* **Recursive traversal**: Use helper function to maintain virtual path hierarchy
-* **File type detection**: Check extensions for fonts vs binary assets
-* **Loading pattern**:
-
-  ```rust
-  let data = std::fs::read(&physical_path)?;
-  let file_id = FileId::new(None, virtual_path);
-  binaries.insert(file_id, Bytes::new(data));
-  ```
-* **Dynamic assets**: Added to quill at runtime via `Workflow.prepare_quill_with_assets()`, prefixed with `DYNAMIC_ASSET__` for collision avoidance with static assets
-
-#### Package File Loading
+- **Static assets**: Fonts (ttf, otf, woff) and images in `assets/`
+- **Dynamic assets**: Runtime-injected via `Workflow.add_asset()`
+  - Prefixed with `DYNAMIC_ASSET__` to avoid collisions
+  - Accessible via `Asset` filter in templates
 
 * **Entrypoint verification**: After loading all files, verify entrypoint exists
 * **Source vs Binary**: `.typ` files → `sources` HashMap, others → `binaries`
@@ -797,109 +444,49 @@ pub struct Diagnostic {
 }
 ```
 
-These types are used **everywhere** (templating, parsing, compilation). `RenderResult.warnings` uses the same `Diagnostic` type.
+---
 
-### Error enums (no premature stringification)
+## Error Handling Patterns
 
-```rust
-#[derive(thiserror::Error, Debug)]
-pub enum RenderError {
-    #[error("Engine creation failed")] 
-    EngineCreation { diag: Diagnostic, #[source] source: Option<anyhow::Error> },
+> **📋 Complete Documentation:** See [ERROR.md](ERROR.md) for comprehensive error handling documentation.
 
-    #[error("Invalid YAML frontmatter")] 
-    InvalidFrontmatter { diag: Diagnostic, #[source] source: Option<anyhow::Error> },
+### Core Error Types
 
-    #[error("Template rendering failed")] 
-    TemplateFailed { #[source] source: minijinja::Error, diag: Diagnostic },
+**Diagnostic** - Structured error information:
+- Severity level (Error, Warning, Note)
+- Error code for machine processing
+- Human-readable message
+- Source location (file, line, column)
+- Related locations for context
+- Helpful hints
+- **Source chain** - Preserves full error context via `source` field
 
-    #[error("Backend compilation failed with {0} error(s)")]
-    CompilationFailed(usize, Vec<Diagnostic>),
+**RenderError** - Main error enum:
+- Every variant contains `Diagnostic` payload(s)
+- `CompilationFailed` may contain multiple diagnostics
+- Extractable via `diagnostics()` method
+- Display impl uses diagnostic messages
 
-    #[error("{format:?} not supported by {backend}")]
-    FormatNotSupported { backend: String, format: OutputFormat },
+**SerializableDiagnostic** - For FFI boundaries:
+- Python and WASM compatible
+- Flattened source chain (list of strings)
+- Derived from `Diagnostic` via `From` trait
 
-    #[error("Unsupported backend: {0}")]
-    UnsupportedBackend(String),
+### Error Conversion Pattern
 
-    #[error("Dynamic asset collision: {filename}")]
-    DynamicAssetCollision { filename: String, message: String },
+External errors (MiniJinja, Typst, etc.) are converted to structured diagnostics:
 
-    #[error(transparent)]
-    Internal(#[from] anyhow::Error),
+1. Extract location information (file, line, column)
+2. Create `Diagnostic` with appropriate severity and code
+3. **Preserve original error** via `with_source()`
+4. Generate context-aware hints
+5. Wrap in appropriate `RenderError` variant
 
-    #[error("{0}")]
-    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
-
-    #[error("Template error: {0}")]
-    Template(#[from] crate::templating::TemplateError),
-}
-```
-
-> **Why this shape?**
->
-> * Callers can **enumerate** diagnostics and render UI links.
-> * We keep a human message via `Display` but never lose machine data.
-
-### Mapping external errors → `Diagnostic`
-
-**MiniJinja (templating):**
-
-```rust
-impl From<minijinja::Error> for RenderError {
-    fn from(e: minijinja::Error) -> Self {
-        // Extract location with proper range information
-        let loc = e.line().map(|line| {
-            Location {
-                file: e.name().unwrap_or("template").to_string(),
-                line: line as u32,
-                // MiniJinja provides range, extract approximate column
-                col: e.range().map(|r| r.start as u32).unwrap_or(0),
-            }
-        });
-
-        // Generate helpful hints based on error kind
-        let hint = generate_minijinja_hint(&e);
-
-        let diag = Diagnostic {
-            severity: Severity::Error,
-            code: Some(format!("minijinja::{:?}", e.kind())),
-            message: e.to_string(),
-            primary: loc,
-            related: vec![],
-            hint,
-        };
-
-        RenderError::TemplateFailed { source: e, diag }
-    }
-}
-```
-
-**Typst (backend):** convert each `SourceDiagnostic` into a `Diagnostic`:
-
-```rust
-fn map_typst(errors: &[SourceDiagnostic], world: &QuillWorld) -> Vec<Diagnostic> {
-    errors.iter().map(|e| {
-        let (file, line, col) = world.resolve_span(&e.span); // backend helper → (String,u32,u32)
-        Diagnostic {
-            severity: Severity::Error,
-            code: e.code.clone(),
-            message: e.message.clone(),
-            primary: Some(Location { file, line, col }),
-            related: e.trace.iter().filter_map(|s| world.resolve_span(s).ok())
-                          .map(|(f,l,c)| Location{file:f,line:l,col:c}).collect(),
-            hint: e.hints.get(0).cloned(),
-        }
-    }).collect()
-}
-```
-
-Then in `compile`:
-
-```rust
-let diags = map_typst(&errors, &world);
-return Err(RenderError::CompilationFailed(diags.len(), diags));
-```
+This ensures:
+- No information loss during error propagation
+- Full error chains for debugging
+- Machine-readable diagnostic data
+- Human-friendly error messages
 
 ### Source mapping policy (v1: comment anchors)
 
@@ -921,22 +508,26 @@ Provide a standard formatter for CLI/logging and a JSON mode for tooling:
 ```rust
 impl Diagnostic {
     pub fn fmt_pretty(&self) -> String { /* render code frame if available */ }
+    pub fn fmt_pretty_with_source(&self) -> String { /* includes source chain */ }
+    pub fn source_chain(&self) -> Vec<String> { /* extract error chain */ }
 }
 
 pub fn print_errors(err: &RenderError) {
     match err {
-        RenderError::CompilationFailed(_, diags) => {
+        RenderError::CompilationFailed { diags } => {
             for d in diags { eprintln!("{}", d.fmt_pretty()); }
         }
-        RenderError::TemplateFailed { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::InvalidFrontmatter { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::EngineCreation { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
-        _ => eprintln!("{err}")
+        RenderError::TemplateFailed { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::InvalidFrontmatter { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::EngineCreation { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::FormatNotSupported { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::UnsupportedBackend { diag } => eprintln!("{}", diag.fmt_pretty()),
+        // ... all other variants
     }
 }
 ```
 
-Expose `--json` (or a library method) returning `serde_json::Value` with the full error payload.
+Expose `--json` (or a library method) returning `serde_json::Value` with the full error payload using `SerializableDiagnostic`.
 
 ### Engine behavior
 
@@ -982,71 +573,40 @@ impl Backend for MyBackend {
 }
 ```
 
+---
+
+## Extension Points
+
+### New Backends
+
+To implement a new backend:
+
+1. Implement the `Backend` trait
+2. Define `id()`, `supported_formats()`, `glue_type()`
+3. Register filters via `register_filters()`
+4. Implement `compile()` for artifact generation
+5. Ship as separate crate depending on `quillmark-core`
+
+**Requirements:**
+- Thread-safe (`Send + Sync`)
+- Format validation in `compile()`
+- Structured error reporting via `Diagnostic`
+- Asset and package handling as needed
+
 ### Custom Filters
 
-* Register via `glue.register_filter(name, func)` using stable `filter_api`.
-* Example: YAML→backend-native structure converter.
-
-### Template Extensions
-
-* Backend-specific syntax and asset workflows are allowed behind filters/compile.
-* Multiple artifacts per render supported (e.g., multi-page SVGs).
-
-### Implementation Hints
-
-#### Backend Implementation Checklist
-
-* **Thread safety**: Ensure `Send + Sync` - no global mutable state
-* **Format validation**: Check `OutputFormat` against `supported_formats()` in `compile()`
-* **Resource handling**: Implement asset/package loading appropriate to your backend
-* **Error context**: Return meaningful diagnostics via `RenderError`
-
-#### Filter Registration Pattern
-
-```rust
-fn register_filters(&self, glue: &mut Glue) {
-    glue.register_filter("my_filter", my_filter_impl);
-    glue.register_filter("my_format", my_format_filter);
-    // Register backend-specific filters
-}
-```
-
-#### Compilation Implementation Strategy
-
-* **Input parsing**: Parse `glue_content` string (your backend's template format)
-* **Asset resolution**: Use `quill.assets_path()` and `quill.packages_path()`
-* **Multi-format support**: Return different `Artifact` instances based on requested format
-* **Error mapping**: Convert backend-native errors to `RenderError` with `Diagnostic`
-
-#### Asset Integration Patterns
-
-* **Font handling**: Load fonts from `quill.assets_path().join("fonts")`
-* **Image resources**: Resolve image paths relative to assets directory
-* **Package dependencies**: Scan `quill.packages_path()` for backend-specific packages
-* **Virtual paths**: Maintain consistent path mapping for template references
-
-#### Testing Strategy
-
-* **Unit tests**: Test filter functions independently with various input types
-* **Integration tests**: Test full `compile()` flow with sample quill templates
-* **Error cases**: Verify graceful handling of missing assets, invalid templates
-* **Format coverage**: Test each supported `OutputFormat` produces correct `Artifact`
+- Register via `glue.register_filter(name, func)`
+- Use stable `filter_api` types only
+- Return `Result<Value, Error>` for proper error handling
+- Document filter behavior and type requirements
 
 ---
 
 ## Key Design Decisions
 
-1. **Sealed Engine w/ Explicit Backend**
-   Simplifies usage; avoids global registries; deterministic selection.
-2. **Template-First, YAML-Only Frontmatter**
-   Reduces parsing complexity; backends may inject TOML/etc. via filters.
-3. **Dynamic Package Loading**
-   Runtime discovery enables user-provided packages and versions.
-4. **Filter-Based Data Transformation**
-   Backend-optimized transforms while keeping a stable templating ABI.
-5. **Unified Error Hierarchy**
-   Consistent, contextual errors across engine, templating, and backends.
-6. **Thread-Safe Design**
-   `Send + Sync` across core traits enables concurrent rendering.
-7. **Centralized Fixtures**
-   Dev resources isolated; standardized example outputs.
+1. **Sealed Engine w/ Explicit Backend** - Simplifies usage; deterministic selection
+2. **Template-First, YAML-Only Frontmatter** - Reduces parsing complexity
+3. **Dynamic Package Loading** - Runtime discovery of packages and versions
+4. **Filter-Based Data Transformation** - Stable templating ABI across backends
+5. **Unified Error Hierarchy** - Consistent diagnostics with source chains
+6. **Thread-Safe Design** - `Send + Sync` enables concurrent rendering

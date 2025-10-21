@@ -46,6 +46,7 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
         primary: location,
         related,
         hint,
+        source: None,
     }
 }
 

@@ -38,31 +38,78 @@ impl From<quillmark_core::RenderError> for QuillmarkError {
         use quillmark_core::RenderError;
 
         match error {
-            RenderError::CompilationFailed(count, diags) => QuillmarkError {
-                message: format!("Compilation failed with {} error(s)", count),
+            RenderError::CompilationFailed { diags } => QuillmarkError {
+                message: format!("Compilation failed with {} error(s)", diags.len()),
                 location: None,
                 hint: None,
                 diagnostics: Some(diags.into_iter().map(|d| d.into()).collect()),
             },
-            RenderError::TemplateFailed { diag, .. } => QuillmarkError {
+            RenderError::TemplateFailed { diag } => QuillmarkError {
                 message: diag.message.clone(),
                 location: diag.primary.map(|loc| loc.into()),
                 hint: diag.hint.clone(),
                 diagnostics: None,
             },
-            RenderError::InvalidFrontmatter { diag, .. } => QuillmarkError {
+            RenderError::InvalidFrontmatter { diag } => QuillmarkError {
                 message: diag.message.clone(),
                 location: diag.primary.map(|loc| loc.into()),
                 hint: diag.hint.clone(),
                 diagnostics: None,
             },
-            RenderError::EngineCreation { diag, .. } => QuillmarkError {
+            RenderError::EngineCreation { diag } => QuillmarkError {
                 message: diag.message.clone(),
                 location: diag.primary.map(|loc| loc.into()),
                 hint: diag.hint.clone(),
                 diagnostics: None,
             },
-            other => QuillmarkError::new(other.to_string(), None, None),
+            RenderError::FormatNotSupported { diag } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            RenderError::UnsupportedBackend { diag } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            RenderError::DynamicAssetCollision { diag } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            RenderError::DynamicFontCollision { diag } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            RenderError::InputTooLarge { diag } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            RenderError::YamlTooLarge { diag } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            RenderError::NestingTooDeep { diag } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            RenderError::OutputTooLarge { diag } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
         }
     }
 }

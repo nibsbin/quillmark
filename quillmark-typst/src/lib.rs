@@ -54,7 +54,8 @@ use filters::{
     asset_filter, content_filter, date_filter, dict_filter, lines_filter, string_filter,
 };
 use quillmark_core::{
-    Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions, RenderResult,
+    Artifact, Backend, Diagnostic, Glue, OutputFormat, Quill, RenderError, RenderOptions,
+    RenderResult, Severity,
 };
 
 /// Typst backend implementation for Quillmark.
@@ -94,8 +95,12 @@ impl Backend for TypstBackend {
         // Check if format is supported
         if !self.supported_formats().contains(&format) {
             return Err(RenderError::FormatNotSupported {
-                backend: self.id().to_string(),
-                format,
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    format!("{:?} not supported by {} backend", format, self.id()),
+                )
+                .with_code("backend::format_not_supported".to_string())
+                .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
             });
         }
 
@@ -120,8 +125,12 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Svg))
             }
             OutputFormat::Txt => Err(RenderError::FormatNotSupported {
-                backend: self.id().to_string(),
-                format: OutputFormat::Txt,
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    format!("Text output not supported by {} backend", self.id()),
+                )
+                .with_code("backend::format_not_supported".to_string())
+                .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
             }),
         }
     }

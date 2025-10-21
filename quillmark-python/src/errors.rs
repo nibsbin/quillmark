@@ -13,29 +13,37 @@ create_exception!(_quillmark, CompilationError, QuillmarkError);
 
 pub fn convert_render_error(err: RenderError) -> PyErr {
     match err {
-        RenderError::InvalidFrontmatter { diag, .. } => ParseError::new_err(diag.message.clone()),
-        RenderError::TemplateFailed { diag, .. } => TemplateError::new_err(diag.message.clone()),
-        RenderError::CompilationFailed(count, _diags) => {
-            CompilationError::new_err(format!("Compilation failed with {} error(s)", count))
+        RenderError::InvalidFrontmatter { diag } => ParseError::new_err(diag.message.clone()),
+        RenderError::TemplateFailed { diag } => TemplateError::new_err(diag.message.clone()),
+        RenderError::CompilationFailed { diags } => {
+            CompilationError::new_err(format!("Compilation failed with {} error(s)", diags.len()))
         }
-        RenderError::DynamicAssetCollision { filename, message } => {
-            QuillmarkError::new_err(format!("Asset collision ({}): {}", filename, message))
+        RenderError::DynamicAssetCollision { diag } => {
+            QuillmarkError::new_err(format!("Asset collision: {}", diag.message))
         }
-        RenderError::DynamicFontCollision { filename, message } => {
-            QuillmarkError::new_err(format!("Font collision ({}): {}", filename, message))
+        RenderError::DynamicFontCollision { diag } => {
+            QuillmarkError::new_err(format!("Font collision: {}", diag.message))
         }
-        RenderError::Other(msg) => QuillmarkError::new_err(msg.to_string()),
-        RenderError::EngineCreation { .. } => {
-            QuillmarkError::new_err("Engine creation failed".to_string())
+        RenderError::EngineCreation { diag } => {
+            QuillmarkError::new_err(format!("Engine creation failed: {}", diag.message))
         }
-        RenderError::FormatNotSupported { .. } => {
-            QuillmarkError::new_err("Format not supported".to_string())
+        RenderError::FormatNotSupported { diag } => {
+            QuillmarkError::new_err(format!("Format not supported: {}", diag.message))
         }
-        RenderError::UnsupportedBackend(backend) => {
-            QuillmarkError::new_err(format!("Unsupported backend: {}", backend))
+        RenderError::UnsupportedBackend { diag } => {
+            QuillmarkError::new_err(format!("Unsupported backend: {}", diag.message))
         }
-        RenderError::Internal(err) => QuillmarkError::new_err(format!("Internal error: {}", err)),
-        RenderError::Template(err) => TemplateError::new_err(err.to_string()),
-        _ => QuillmarkError::new_err(err.to_string()),
+        RenderError::InputTooLarge { diag } => {
+            QuillmarkError::new_err(format!("Input too large: {}", diag.message))
+        }
+        RenderError::YamlTooLarge { diag } => {
+            QuillmarkError::new_err(format!("YAML too large: {}", diag.message))
+        }
+        RenderError::NestingTooDeep { diag } => {
+            QuillmarkError::new_err(format!("Nesting too deep: {}", diag.message))
+        }
+        RenderError::OutputTooLarge { diag } => {
+            QuillmarkError::new_err(format!("Output too large: {}", diag.message))
+        }
     }
 }
