@@ -7,16 +7,22 @@
 **Workspace structure** (publish order `core` → `typst` → `quillmark`, synchronized versions):
 - `quillmark-core/` - Foundation (parsing, templating, Backend trait)
 - `quillmark-typst/` - Typst backend implementation
+- `quillmark-acroform/` - PDF Acroform backend implementation
 - `quillmark/` - Orchestration layer (Quillmark engine and workflows)
-- `quillmark-fixtures/` - Test resources (not published)
+- `quillmark-fixtures/` - Test resources
+- `quillmark-fuzz/` - Fuzzing tests
+- `quillmark-python/` - Python bindings
+- `quillmark-wasm/` - WASM bindings
 
-See `designs/DESIGN.md` for complete architecture.
+
+See `designs/ARCHITECTURE.md` for complete architecture.
 
 ## Documentation Strategy
 
 - Use standard in-line Rust doc comments (`///`)
 - Only create minimal examples for public APIs
 - Err on the side of brevity
+- Avoid documentation creep; keep docs focused and up-to-date
 
 ## Build & Test
 
@@ -34,7 +40,7 @@ Before committing, ALWAYS run `cargo fmt` to ensure consistent formatting.
 When working with WASM, install the wasm target with `rustup target add wasm32-unknown-unknown`
 and use `scripts/build-wasm.sh` to build all targets.
 
-## Extended YAML Metadata (Non-Obvious)
+## Extended YAML Metadata
 
 Supports **inline metadata sections** with SCOPE/QUILL keys:
 
@@ -45,13 +51,6 @@ name: Widget
 ---
 Description here.
 ```
-
-Creates `products` array with metadata + `body` field. Rules:
-- Use `SCOPE: name` or `QUILL: name` as YAML keys
-- Blank lines are allowed within YAML blocks
-- `---` with blank lines above AND below = horizontal rule (NOT metadata)
-- `---` followed by non-blank line = starts metadata block
-- When in open block, next `---` = closes block
 
 See `designs/PARSE.md`.
 
@@ -69,20 +68,11 @@ Common filters: `String`, `Lines`, `Date`, `Dict`, `Content`, `Asset` (prefixed 
 
 **Use `Diagnostic` everywhere** - never stringify prematurely:
 
-```rust
-pub struct Diagnostic {
-    pub severity: Severity,
-    pub message: String,
-    pub primary: Option<Location>, // File, line, column
-    pub hint: Option<String>,
-}
-```
-
 Map external errors (MiniJinja, Typst) to preserve context.
 
 ## Implmentation Philosophy
 
-- Do not worry about backwards compatibility. This is a new project.
+- Do not worry about backwards compatibility. This is pre-1.0 software.
 
 ## Reference
 
