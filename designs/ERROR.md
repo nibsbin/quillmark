@@ -452,8 +452,6 @@ If you have code that relied on the old error handling:
    - After: Actual column from `error.range()`
    - Migration: No code changes needed, just better output
 
-**All changes are backward compatible** - no breaking API changes.
-
 ---
 
 ## Future Improvements
