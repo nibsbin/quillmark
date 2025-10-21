@@ -83,6 +83,34 @@ pub enum RenderError {
 
 ## Error Source Mapping
 
+### Parsing (Markdown/YAML) ✅ Implemented
+
+**Location:** `quillmark-core/src/parse.rs`
+
+The `decompose()` function now returns `Result<ParsedDocument, Diagnostic>`:
+
+- ✅ All parsing errors converted to structured `Diagnostic` type
+- ✅ YAML parsing errors preserve location information via `yaml_error_to_diagnostic()`
+- ✅ Comprehensive error codes for different scenarios:
+  - `parse::yaml_too_large` - YAML block exceeds size limit
+  - `parse::input_too_large` - Input exceeds size limit
+  - `parse::invalid_quill_name` - Invalid quill name format
+  - `parse::invalid_field_name` - Invalid SCOPE field name
+  - `parse::reserved_field_name` - Reserved field name used
+  - `parse::unclosed_frontmatter` - Frontmatter not properly closed
+  - `parse::multiple_quill_directives` - Multiple QUILL directives found
+  - `parse::multiple_global_frontmatter` - Multiple global frontmatter blocks
+  - `parse::name_collision` - Field name conflicts
+  - `parse::yaml_conversion` - YAML to QuillValue conversion failed
+- ✅ Helpful hints for common errors
+- ✅ No more string-based or boxed errors in parsing
+
+**Example output:**
+```
+[ERROR] Invalid field name 'Invalid-Name': must match pattern [a-z_][a-z0-9_]* (parse::invalid_field_name)
+  hint: Choose a valid field name using lowercase letters, digits, and underscores
+```
+
 ### MiniJinja (Template Engine) ✅ Implemented
 
 **Location:** `quillmark-core/src/error.rs`
@@ -130,6 +158,45 @@ The `map_typst_errors()` function converts Typst `SourceDiagnostic` arrays to `D
 - `resolve_span_to_location()` extracts source text and calculates line/column from character offsets
 - Handles multi-file traces through Typst's `World` interface
 - Returns `Option<Location>` to gracefully handle unresolvable spans
+
+### AcroForm Backend ✅ Improved (2025)
+
+**Location:** `quillmark-acroform/src/lib.rs`
+
+Template rendering errors are now properly propagated:
+
+- ✅ Fixed silent failure when template rendering fails
+- ✅ Errors include structured diagnostic with `acroform::template` code
+- ✅ Helpful hint includes the failed template
+- ✅ Clear error messages with field name context
+
+**Before (silent failure):**
+```rust
+if let Ok(rendered_value) = env.render_str(&source, &context) {
+    // Success path
+}
+// Error path: silently skipped, field not filled
+```
+
+**After (proper error propagation):**
+```rust
+let rendered_value = match env.render_str(&source, &context) {
+    Ok(val) => val,
+    Err(e) => {
+        return Err(RenderError::TemplateFailed {
+            diag: Diagnostic {
+                severity: Severity::Error,
+                code: Some("acroform::template".to_string()),
+                message: format!("Failed to render template for field '{}': {}", field.name, e),
+                primary: None,
+                related: Vec::new(),
+                hint: Some(format!("Template: {}", source)),
+            },
+            source: e,
+        });
+    }
+};
+```
 
 ---
 
@@ -206,9 +273,33 @@ pub fn print_errors(err: &RenderError) {
    - Explicit handling of all error variants
    - Consistent formatting
 
+5. **Parsing Error Standardization** ✅ (2025)
+   - Removed `ParseError` enum in favor of direct `Diagnostic` usage
+   - All parsing errors now use structured diagnostics with error codes
+   - YAML errors preserve location information
+   - Added `yaml_error_to_diagnostic()` helper
+   - Comprehensive error codes for all parsing scenarios
+   - All 75 parsing tests passing
+
+6. **AcroForm Error Propagation** ✅ (2025)
+   - Fixed silent template rendering failures
+   - Template errors now propagate with structured diagnostics
+   - Added `acroform::template` error code
+   - Includes helpful hints with failed template
+   - All 4 AcroForm tests passing
+
+7. **Python Diagnostic Exposure** ✅ (2025)
+   - Python exceptions now expose full diagnostic information
+   - `ParseError` and `TemplateError` have `.diagnostic` attribute
+   - `CompilationError` has `.diagnostics` list attribute
+   - Python consumers can access error codes, locations, hints programmatically
+   - All tests passing
+
 **Testing:**
-- ✅ 47 unit tests passing
-- ✅ 14 integration tests passing
+- ✅ 75 unit tests in quillmark-core
+- ✅ 54 unit tests in quillmark-typst
+- ✅ 28 integration tests in quillmark
+- ✅ 4 tests in quillmark-acroform
 - ✅ Zero regressions
 
 ### ⚠️ Phase 2: Enhanced Features (Future)
@@ -327,6 +418,60 @@ println!("{}", diag.fmt_pretty());
 // [ERROR] Undefined variable (E001)
 //   --> template.typ:10:5
 //   hint: Check variable spelling
+```
+
+### Python Error Handling
+
+```python
+from quillmark import Quillmark, OutputFormat, ParseError, TemplateError, CompilationError
+
+engine = Quillmark()
+engine.register_quill(quill)
+
+try:
+    workflow = engine.workflow_from_quill_name("my-quill")
+    result = workflow.render(parsed, OutputFormat.PDF)
+    
+    # Process artifacts
+    for artifact in result.artifacts:
+        with open(f"output.{artifact.output_format}", "wb") as f:
+            f.write(artifact.bytes)
+    
+    # Check warnings
+    for warning in result.warnings:
+        print(f"[{warning.severity}] {warning.message}")
+        if warning.primary:
+            print(f"  at {warning.primary.file}:{warning.primary.line}:{warning.primary.col}")
+
+except ParseError as e:
+    print(f"Parse error: {e}")
+    if hasattr(e, 'diagnostic'):
+        diag = e.diagnostic
+        print(f"  Code: {diag.code}")
+        if diag.primary:
+            print(f"  Location: {diag.primary.file}:{diag.primary.line}:{diag.primary.col}")
+        if diag.hint:
+            print(f"  Hint: {diag.hint}")
+
+except TemplateError as e:
+    print(f"Template error: {e}")
+    if hasattr(e, 'diagnostic'):
+        diag = e.diagnostic
+        print(f"  Code: {diag.code}")
+        if diag.primary:
+            print(f"  Location: {diag.primary.file}:{diag.primary.line}:{diag.primary.col}")
+        if diag.hint:
+            print(f"  Hint: {diag.hint}")
+
+except CompilationError as e:
+    print(f"Compilation error: {e}")
+    if hasattr(e, 'diagnostics'):
+        for diag in e.diagnostics:
+            print(f"  [{diag.severity}] {diag.message} ({diag.code})")
+            if diag.primary:
+                print(f"    at {diag.primary.file}:{diag.primary.line}:{diag.primary.col}")
+            if diag.hint:
+                print(f"    hint: {diag.hint}")
 ```
 
 ---
