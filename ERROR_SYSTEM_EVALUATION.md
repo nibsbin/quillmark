@@ -50,7 +50,6 @@ Python Consumer
 
 1. **Comprehensive Diagnostic Structure**
    - `Diagnostic` type with severity, code, message, location, hints
-   - Support for primary and related locations (trace)
    - Serializable to JSON via serde
    - Pretty-printing support for human-readable output
 
@@ -185,7 +184,6 @@ Python Consumer
    ```
    - Maps Typst severity to Quillmark severity
    - Extracts file/line/column from Typst spans
-   - Maps trace to related locations
    - Preserves hints from Typst
 
 2. **Span Resolution**
@@ -300,11 +298,7 @@ Python Consumer
    - Exceptions have minimal info
    - No way to get diagnostics from caught exceptions
 
-4. **No Related Locations**
-   - `PyDiagnostic` doesn't expose `related` field
-   - Stack traces from Typst are lost
-
-5. **Type Conversion Issues**
+4. **Type Conversion Issues**
    - Line/col exposed as `usize` instead of `u32`
    - Minor inconsistency with Rust types
 
@@ -370,11 +364,7 @@ The WASM error structure includes an optional `diagnostics` field that preserves
    - Typst warnings are compiled but discarded
    - **Impact**: Missing helpful non-fatal information
 
-5. **Related Locations Not Exposed** (quillmark-python)
-   - Python bindings don't expose `Diagnostic.related`
-   - **Impact**: Stack traces from compilation lost
-
-6. **Generic Error Boxing** (quillmark-core)
+5. **Generic Error Boxing** (quillmark-core)
    - Some errors use generic boxed errors
    - **Impact**: Loss of structure for programmatic handling
 
@@ -540,24 +530,7 @@ for warning in warnings {
 }
 ```
 
-### 5. Expose Related Locations in Python
-
-```python
-# In quillmark-python/src/types.rs
-#[pymethods]
-impl PyDiagnostic {
-    #[getter]
-    fn related(&self) -> Vec<PyLocation> {
-        self.inner
-            .related
-            .iter()
-            .map(|l| PyLocation { inner: l.clone() })
-            .collect()
-    }
-}
-```
-
-### 6. Standardize on Diagnostic Type
+### 5. Standardize on Diagnostic Type
 
 Convert all error sources to use `Diagnostic`:
 
@@ -704,16 +677,12 @@ The WASM bindings are better than Python:
    - Add to RenderResult
    - Test warning propagation
 
-5. **Expose Related Locations in Python** (1-2 hours)
-   - Add `related` getter to PyDiagnostic
-   - Update documentation
-
-6. **Add Comprehensive Error Tests** (1-2 days)
+5. **Add Comprehensive Error Tests** (1-2 days)
    - Test each error scenario
    - Verify Python visibility
    - Document examples
 
-**Total Estimated Effort**: 3-5 days
+**Total Estimated Effort**: 3-4 days
 
 ---
 
