@@ -27,9 +27,11 @@
 //! - [`RenderError::FormatNotSupported`]: Requested format not supported
 //! - [`RenderError::UnsupportedBackend`]: Backend not registered
 //! - [`RenderError::DynamicAssetCollision`]: Asset filename collision
-//! - [`RenderError::Internal`]: Internal error
-//! - [`RenderError::Other`]: Other errors
-//! - [`RenderError::Template`]: Template error
+//! - [`RenderError::DynamicFontCollision`]: Font filename collision
+//! - [`RenderError::InputTooLarge`]: Input size limits exceeded
+//! - [`RenderError::YamlTooLarge`]: YAML size exceeded maximum
+//! - [`RenderError::NestingTooDeep`]: Nesting depth exceeded maximum
+//! - [`RenderError::OutputTooLarge`]: Template output exceeded maximum size
 //!
 //! ## Examples
 //!
