@@ -163,8 +163,8 @@
 //! ```
 
 use quillmark_core::{
-    decompose, Backend, Glue, OutputFormat, ParsedDocument, Quill, RenderError, RenderOptions,
-    RenderResult,
+    decompose, Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Quill, RenderError,
+    RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -268,9 +268,14 @@ impl Quillmark {
     /// Load a workflow from a parsed document that contains a quill tag
     pub fn workflow_from_parsed(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError> {
         let quill_name = parsed.quill_tag().ok_or_else(|| {
-            RenderError::Other(
-                "No QUILL field found in parsed document. Add `QUILL: <name>` to the markdown frontmatter.".into(),
-            )
+            RenderError::UnsupportedBackend {
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    "No QUILL field found in parsed document. Add `QUILL: <name>` to the markdown frontmatter.".to_string(),
+                )
+                .with_code("engine::missing_quill_tag".to_string())
+                .with_hint("Add QUILL: <name> to specify which quill template to use".to_string()),
+            }
         })?;
         self.workflow_from_quill_name(quill_name)
     }
@@ -286,9 +291,19 @@ impl Quillmark {
         let quill = match quill_ref {
             QuillRef::Name(name) => {
                 // Look up the quill by name
-                self.quills.get(name).ok_or_else(|| {
-                    RenderError::Other(format!("Quill '{}' not registered", name).into())
-                })?
+                self.quills
+                    .get(name)
+                    .ok_or_else(|| RenderError::UnsupportedBackend {
+                        diag: Diagnostic::new(
+                            Severity::Error,
+                            format!("Quill '{}' not registered", name),
+                        )
+                        .with_code("engine::quill_not_found".to_string())
+                        .with_hint(format!(
+                            "Available quills: {}",
+                            self.quills.keys().cloned().collect::<Vec<_>>().join(", ")
+                        )),
+                    })?
             }
             QuillRef::Object(quill) => {
                 // Use the provided quill directly
@@ -301,18 +316,32 @@ impl Quillmark {
             .metadata
             .get("backend")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                RenderError::Other(
-                    format!("Quill '{}' does not specify a backend", quill.name).into(),
+            .ok_or_else(|| RenderError::EngineCreation {
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    format!("Quill '{}' does not specify a backend", quill.name),
                 )
+                .with_code("engine::missing_backend".to_string())
+                .with_hint(
+                    "Add 'backend = \"typst\"' to the [Quill] section of Quill.toml".to_string(),
+                ),
             })?;
 
         // Get the backend by ID
-        let backend = self.backends.get(backend_id).ok_or_else(|| {
-            RenderError::Other(
-                format!("Backend '{}' not registered or not enabled", backend_id).into(),
-            )
-        })?;
+        let backend =
+            self.backends
+                .get(backend_id)
+                .ok_or_else(|| RenderError::UnsupportedBackend {
+                    diag: Diagnostic::new(
+                        Severity::Error,
+                        format!("Backend '{}' not registered or not enabled", backend_id),
+                    )
+                    .with_code("engine::backend_not_found".to_string())
+                    .with_hint(format!(
+                        "Available backends: {}",
+                        self.backends.keys().cloned().collect::<Vec<_>>().join(", ")
+                    )),
+                })?;
 
         // Clone the Arc reference to the backend and the quill for the workflow
         let backend_clone = Arc::clone(backend);
@@ -418,11 +447,8 @@ impl Workflow {
     /// Process Markdown through the glue template without compilation, returning the composed output.
     pub fn process_glue(&self, markdown: &str) -> Result<String, RenderError> {
         let parsed_doc = decompose(markdown).map_err(|e| RenderError::InvalidFrontmatter {
-            diag: quillmark_core::error::Diagnostic::new(
-                quillmark_core::error::Severity::Error,
-                format!("Failed to parse markdown: {}", e),
-            ),
-            source: Some(anyhow::anyhow!(e)),
+            diag: Diagnostic::new(Severity::Error, format!("Failed to parse markdown: {}", e))
+                .with_code("parse::decompose".to_string()),
         })?;
 
         self.process_glue_parsed(&parsed_doc)
@@ -438,9 +464,12 @@ impl Workflow {
         };
 
         self.backend.register_filters(&mut glue);
-        let glue_output = glue
-            .compose(parsed.fields().clone())
-            .map_err(RenderError::from)?;
+        let glue_output =
+            glue.compose(parsed.fields().clone())
+                .map_err(|e| RenderError::TemplateFailed {
+                    diag: Diagnostic::new(Severity::Error, e.to_string())
+                        .with_code("template::compose".to_string()),
+                })?;
         Ok(glue_output)
     }
 
@@ -478,11 +507,15 @@ impl Workflow {
         // Check for collision
         if self.dynamic_assets.contains_key(&filename) {
             return Err(RenderError::DynamicAssetCollision {
-                filename: filename.clone(),
-                message: format!(
-                    "Dynamic asset '{}' already exists. Each asset filename must be unique.",
-                    filename
-                ),
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    format!(
+                        "Dynamic asset '{}' already exists. Each asset filename must be unique.",
+                        filename
+                    ),
+                )
+                .with_code("workflow::asset_collision".to_string())
+                .with_hint("Use unique filenames for each dynamic asset".to_string()),
             });
         }
 
@@ -525,11 +558,15 @@ impl Workflow {
         // Check for collision
         if self.dynamic_fonts.contains_key(&filename) {
             return Err(RenderError::DynamicFontCollision {
-                filename: filename.clone(),
-                message: format!(
-                    "Dynamic font '{}' already exists. Each font filename must be unique.",
-                    filename
-                ),
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    format!(
+                        "Dynamic font '{}' already exists. Each font filename must be unique.",
+                        filename
+                    ),
+                )
+                .with_code("workflow::font_collision".to_string())
+                .with_hint("Use unique filenames for each dynamic font".to_string()),
             });
         }
 

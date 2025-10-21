@@ -85,10 +85,10 @@ fn test_quill_engine_workflow_not_found() {
 
     assert!(result.is_err());
     match result {
-        Err(quillmark::RenderError::Other(e)) => {
-            assert!(e.to_string().contains("not registered"));
+        Err(quillmark::RenderError::UnsupportedBackend { diag }) => {
+            assert!(diag.message.contains("not registered"));
         }
-        _ => panic!("Expected Other error with 'not registered' message"),
+        _ => panic!("Expected UnsupportedBackend error with 'not registered' message"),
     }
 }
 
@@ -116,12 +116,12 @@ fn test_quill_engine_backend_not_found() {
 
     assert!(result.is_err());
     match result {
-        Err(quillmark::RenderError::Other(e)) => {
+        Err(quillmark::RenderError::UnsupportedBackend { diag }) => {
             assert!(
-                e.to_string().contains("not registered") || e.to_string().contains("not enabled")
+                diag.message.contains("not registered") || diag.message.contains("not enabled")
             );
         }
-        _ => panic!("Expected Other error with backend not registered message"),
+        _ => panic!("Expected UnsupportedBackend error with backend not registered message"),
     }
 }
 

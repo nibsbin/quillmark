@@ -36,26 +36,43 @@ use typst_pdf::PdfOptions;
 
 use crate::error_mapping::map_typst_errors;
 use crate::world::QuillWorld;
-use quillmark_core::{Quill, RenderError};
+use quillmark_core::{Diagnostic, Quill, RenderError, Severity};
 
 /// Compiles a Typst document to PDF format.
 pub fn compile_to_pdf(quill: &Quill, glued_content: &str) -> Result<Vec<u8>, RenderError> {
-    let world = QuillWorld::new(quill, glued_content).map_err(|e| {
-        RenderError::Internal(anyhow::anyhow!("Failed to create Typst world: {}", e))
+    let world = QuillWorld::new(quill, glued_content).map_err(|e| RenderError::EngineCreation {
+        diag: Diagnostic::new(
+            Severity::Error,
+            format!("Failed to create Typst compilation environment: {}", e),
+        )
+        .with_code("typst::world_creation".to_string())
+        .with_source(e),
     })?;
 
     let document = compile_document(&world)?;
 
-    let pdf = typst_pdf::pdf(&document, &PdfOptions::default())
-        .map_err(|e| RenderError::Internal(anyhow::anyhow!("PDF generation failed: {:?}", e)))?;
+    let pdf = typst_pdf::pdf(&document, &PdfOptions::default()).map_err(|e| {
+        RenderError::CompilationFailed {
+            diags: vec![Diagnostic::new(
+                Severity::Error,
+                format!("PDF generation failed: {:?}", e),
+            )
+            .with_code("typst::pdf_generation".to_string())],
+        }
+    })?;
 
     Ok(pdf)
 }
 
 /// Compiles a Typst document to SVG format (one file per page).
 pub fn compile_to_svg(quill: &Quill, glued_content: &str) -> Result<Vec<Vec<u8>>, RenderError> {
-    let world = QuillWorld::new(quill, glued_content).map_err(|e| {
-        RenderError::Internal(anyhow::anyhow!("Failed to create Typst world: {}", e))
+    let world = QuillWorld::new(quill, glued_content).map_err(|e| RenderError::EngineCreation {
+        diag: Diagnostic::new(
+            Severity::Error,
+            format!("Failed to create Typst compilation environment: {}", e),
+        )
+        .with_code("typst::world_creation".to_string())
+        .with_source(e),
     })?;
 
     let document = compile_document(&world)?;
@@ -80,10 +97,7 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
         Ok(doc) => Ok(doc),
         Err(errors) => {
             let diagnostics = map_typst_errors(&errors, world);
-            Err(RenderError::CompilationFailed(
-                diagnostics.len(),
-                diagnostics,
-            ))
+            Err(RenderError::CompilationFailed { diags: diagnostics })
         }
     }
 }

@@ -6,7 +6,8 @@
 
 use acroform::{AcroFormDocument, FieldValue};
 use quillmark_core::{
-    Artifact, Backend, Glue, OutputFormat, Quill, RenderError, RenderOptions, RenderResult,
+    Artifact, Backend, Diagnostic, Glue, OutputFormat, Quill, RenderError, RenderOptions,
+    RenderResult, Severity,
 };
 use std::collections::HashMap;
 
@@ -41,13 +42,23 @@ impl Backend for AcroformBackend {
 
         if !self.supported_formats().contains(&format) {
             return Err(RenderError::FormatNotSupported {
-                backend: self.id().to_string(),
-                format,
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    format!("{:?} not supported by {} backend", format, self.id()),
+                )
+                .with_code("backend::format_not_supported".to_string())
+                .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
             });
         }
-        let mut context: serde_json::Value = serde_json::from_str(glue_content).map_err(|e| {
-            RenderError::Other(format!("Failed to parse JSON context: {}", e).into())
-        })?;
+        let mut context: serde_json::Value =
+            serde_json::from_str(glue_content).map_err(|e| RenderError::InvalidFrontmatter {
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    format!("Failed to parse JSON context: {}", e),
+                )
+                .with_code("acroform::json_parse".to_string())
+                .with_source(Box::new(e)),
+            })?;
 
         // Replace all null values with empty strings
         fn replace_nulls_with_empty(value: &mut serde_json::Value) {
@@ -69,18 +80,38 @@ impl Backend for AcroformBackend {
 
         replace_nulls_with_empty(&mut context);
 
-        let form_pdf_bytes = quill.files.get_file("form.pdf").ok_or_else(|| {
-            RenderError::Other(format!("form.pdf not found in quill '{}'", quill.name).into())
-        })?;
+        let form_pdf_bytes =
+            quill
+                .files
+                .get_file("form.pdf")
+                .ok_or_else(|| RenderError::EngineCreation {
+                    diag: Diagnostic::new(
+                        Severity::Error,
+                        format!("form.pdf not found in quill '{}'", quill.name),
+                    )
+                    .with_code("acroform::missing_form".to_string())
+                    .with_hint("Ensure form.pdf exists in the quill directory".to_string()),
+                })?;
 
-        let mut doc = AcroFormDocument::from_bytes(form_pdf_bytes.to_vec())
-            .map_err(|e| RenderError::Other(format!("Failed to load PDF form: {}", e).into()))?;
+        let mut doc = AcroFormDocument::from_bytes(form_pdf_bytes.to_vec()).map_err(|e| {
+            RenderError::EngineCreation {
+                diag: Diagnostic::new(Severity::Error, format!("Failed to load PDF form: {}", e))
+                    .with_code("acroform::load_failed".to_string())
+                    .with_hint(
+                        "Check that form.pdf is a valid PDF with AcroForm fields".to_string(),
+                    ),
+            }
+        })?;
 
         let mut env = minijinja::Environment::new();
         env.set_undefined_behavior(minijinja::UndefinedBehavior::Chainable);
 
-        let fields = doc.fields().map_err(|e| {
-            RenderError::Other(format!("Failed to get PDF form fields: {}", e).into())
+        let fields = doc.fields().map_err(|e| RenderError::EngineCreation {
+            diag: Diagnostic::new(
+                Severity::Error,
+                format!("Failed to get PDF form fields: {}", e),
+            )
+            .with_code("acroform::fields_failed".to_string()),
         })?;
 
         let mut values_to_fill = HashMap::new();
@@ -114,9 +145,9 @@ impl Backend for AcroformBackend {
                     })
             });
 
-            if let Some(source) = render_source {
+            if let Some(source) = &render_source {
                 if let Ok(rendered_value) = env.render_str(&source, &context) {
-                    let should_update = using_tooltip_template || rendered_value != source;
+                    let should_update = using_tooltip_template || &rendered_value != source;
 
                     if should_update {
                         let new_value = match &field.current_value {
@@ -158,9 +189,15 @@ impl Backend for AcroformBackend {
             }
         }
 
-        let output_bytes = doc
-            .fill(values_to_fill)
-            .map_err(|e| RenderError::Other(format!("Failed to fill PDF: {}", e).into()))?;
+        let output_bytes =
+            doc.fill(values_to_fill)
+                .map_err(|e| RenderError::CompilationFailed {
+                    diags: vec![Diagnostic::new(
+                        Severity::Error,
+                        format!("Failed to fill PDF: {}", e),
+                    )
+                    .with_code("acroform::fill_failed".to_string())],
+                })?;
 
         let artifacts = vec![Artifact {
             bytes: output_bytes,

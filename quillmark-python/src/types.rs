@@ -6,7 +6,8 @@ use pyo3::types::PyDict; // PyDict
 use pyo3::{Bound, PyAny}; // Bound, PyAny
 
 use quillmark::{
-    Diagnostic, Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderResult, Workflow,
+    Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderResult, SerializableDiagnostic,
+    Workflow,
 };
 use std::path::PathBuf;
 
@@ -291,7 +292,7 @@ impl PyRenderResult {
         self.inner
             .warnings
             .iter()
-            .map(|d| PyDiagnostic { inner: d.clone() })
+            .map(|d| PyDiagnostic { inner: d.into() })
             .collect()
     }
 }
@@ -330,7 +331,7 @@ impl PyArtifact {
 #[pyclass(name = "Diagnostic")]
 #[derive(Clone)]
 pub struct PyDiagnostic {
-    pub(crate) inner: Diagnostic,
+    pub(crate) inner: SerializableDiagnostic,
 }
 
 #[pymethods]
