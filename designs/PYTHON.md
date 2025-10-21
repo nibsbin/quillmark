@@ -587,21 +587,60 @@ create_exception!(_quillmark, TemplateError, QuillmarkError);
 create_exception!(_quillmark, CompilationError, QuillmarkError);
 
 pub fn convert_render_error(err: RenderError) -> PyErr {
-    match err {
-        RenderError::InvalidFrontmatter { diag, .. } => {
-            ParseError::new_err(diag.message.clone())
+    Python::with_gil(|py| match err {
+        RenderError::InvalidFrontmatter { diag } => {
+            let py_err = ParseError::new_err(diag.message.clone());
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
         }
-        RenderError::TemplateFailed { diag, .. } => {
-            TemplateError::new_err(diag.message.clone())
+        RenderError::TemplateFailed { diag } => {
+            let py_err = TemplateError::new_err(diag.message.clone());
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
         }
-        RenderError::CompilationFailed(count, diags) => {
-            CompilationError::new_err(format!(
+        RenderError::CompilationFailed { diags } => {
+            let py_err = CompilationError::new_err(format!(
                 "Compilation failed with {} error(s)",
-                count
-            ))
+                diags.len()
+            ));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diags: Vec<crate::types::PyDiagnostic> = diags
+                    .into_iter()
+                    .map(|d| crate::types::PyDiagnostic { inner: d.into() })
+                    .collect();
+                let _ = exc.setattr("diagnostics", py_diags);
+            }
+            py_err
         }
-        _ => QuillmarkError::new_err(err.to_string()),
-    }
+        _ => {
+            // All other errors map to QuillmarkError with diagnostic attached
+            match err {
+                RenderError::EngineCreation { diag }
+                | RenderError::FormatNotSupported { diag }
+                | RenderError::UnsupportedBackend { diag }
+                | RenderError::DynamicAssetCollision { diag }
+                | RenderError::DynamicFontCollision { diag }
+                | RenderError::InputTooLarge { diag }
+                | RenderError::YamlTooLarge { diag }
+                | RenderError::NestingTooDeep { diag }
+                | RenderError::OutputTooLarge { diag } => {
+                    let py_err = QuillmarkError::new_err(diag.message.clone());
+                    if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                        let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                        let _ = exc.setattr("diagnostic", py_diag);
+                    }
+                    py_err
+                }
+                _ => QuillmarkError::new_err("Unknown error".to_string()),
+            }
+        }
+    })
 }
 ```
 
