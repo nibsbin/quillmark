@@ -417,12 +417,9 @@ impl Workflow {
 
     /// Process Markdown through the glue template without compilation, returning the composed output.
     pub fn process_glue(&self, markdown: &str) -> Result<String, RenderError> {
-        let parsed_doc = decompose(markdown).map_err(|e| RenderError::InvalidFrontmatter {
-            diag: quillmark_core::error::Diagnostic::new(
-                quillmark_core::error::Severity::Error,
-                format!("Failed to parse markdown: {}", e),
-            ),
-            source: Some(anyhow::anyhow!(e)),
+        let parsed_doc = decompose(markdown).map_err(|diag| RenderError::InvalidFrontmatter {
+            diag,
+            source: None,
         })?;
 
         self.process_glue_parsed(&parsed_doc)

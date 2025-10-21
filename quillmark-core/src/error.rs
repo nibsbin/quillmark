@@ -181,6 +181,14 @@ pub struct Diagnostic {
     pub hint: Option<String>,
 }
 
+impl std::fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+impl std::error::Error for Diagnostic {}
+
 impl Diagnostic {
     /// Create a new diagnostic
     pub fn new(severity: Severity, message: String) -> Self {
@@ -257,40 +265,21 @@ impl Diagnostic {
     }
 }
 
-/// Error type for parsing operations
-#[derive(thiserror::Error, Debug)]
-pub enum ParseError {
-    /// Input too large
-    #[error("Input too large: {size} bytes (max: {max} bytes)")]
-    InputTooLarge {
-        /// Actual size
-        size: usize,
-        /// Maximum allowed size
-        max: usize,
-    },
+/// Convert serde_yaml errors to Diagnostic with location information
+pub fn yaml_error_to_diagnostic(err: serde_yaml::Error, context: &str) -> Diagnostic {
+    let location = err.location().map(|loc| Location {
+        file: "input.md".to_string(),
+        line: loc.line() as u32,
+        col: loc.column() as u32,
+    });
 
-    /// YAML parsing error
-    #[error("YAML parsing error: {0}")]
-    YamlError(#[from] serde_yaml::Error),
-
-    /// Invalid YAML structure
-    #[error("Invalid YAML structure: {0}")]
-    InvalidStructure(String),
-
-    /// Other parsing errors
-    #[error("{0}")]
-    Other(String),
-}
-
-impl From<Box<dyn std::error::Error + Send + Sync>> for ParseError {
-    fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
-        ParseError::Other(err.to_string())
-    }
-}
-
-impl From<String> for ParseError {
-    fn from(msg: String) -> Self {
-        ParseError::Other(msg)
+    Diagnostic {
+        severity: Severity::Error,
+        code: Some("yaml::parse_error".to_string()),
+        message: format!("YAML parsing error: {}", err),
+        primary: location,
+        related: Vec::new(),
+        hint: Some(format!("Check YAML syntax in: {}", context)),
     }
 }
 

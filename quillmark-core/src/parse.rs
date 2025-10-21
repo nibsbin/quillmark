@@ -83,6 +83,7 @@
 
 use std::collections::HashMap;
 
+use crate::error::{yaml_error_to_diagnostic, Diagnostic, Location, Severity};
 use crate::value::QuillValue;
 
 /// The field name used to store the document body
@@ -113,8 +114,8 @@ impl ParsedDocument {
     }
 
     /// Create a ParsedDocument from markdown string
-    pub fn from_markdown(markdown: &str) -> Result<Self, crate::error::ParseError> {
-        decompose(markdown).map_err(|e| crate::error::ParseError::from(e))
+    pub fn from_markdown(markdown: &str) -> Result<Self, Diagnostic> {
+        decompose(markdown)
     }
 
     /// Get the quill tag if specified (from QUILL key)
@@ -170,9 +171,7 @@ fn is_valid_tag_name(name: &str) -> bool {
 }
 
 /// Find all metadata blocks in the document
-fn find_metadata_blocks(
-    markdown: &str,
-) -> Result<Vec<MetadataBlock>, Box<dyn std::error::Error + Send + Sync>> {
+fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, Diagnostic> {
     let mut blocks = Vec::new();
     let mut pos = 0;
 
@@ -262,12 +261,16 @@ fn find_metadata_blocks(
 
                 // Check YAML size limit
                 if content.len() > crate::error::MAX_YAML_SIZE {
-                    return Err(format!(
-                        "YAML block too large: {} bytes (max: {} bytes)",
-                        content.len(),
-                        crate::error::MAX_YAML_SIZE
+                    return Err(Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "YAML block too large: {} bytes (max: {} bytes)",
+                            content.len(),
+                            crate::error::MAX_YAML_SIZE
+                        ),
                     )
-                    .into());
+                    .with_code("parse::yaml_too_large".to_string())
+                    .with_hint("Reduce the size of the YAML block or increase the limit".to_string()));
                 }
 
                 // Parse YAML content to check for reserved keys (QUILL, SCOPE)
@@ -284,62 +287,94 @@ fn find_metadata_blocks(
                                 let has_scope = mapping.contains_key(&scope_key);
 
                                 if has_quill && has_scope {
-                                    return Err(
-                                        "Cannot specify both QUILL and SCOPE in the same block"
-                                            .into(),
-                                    );
+                                    return Err(Diagnostic::new(
+                                        Severity::Error,
+                                        "Cannot specify both QUILL and SCOPE in the same block".to_string(),
+                                    )
+                                    .with_code("parse::conflicting_directives".to_string())
+                                    .with_hint("Use either QUILL or SCOPE, not both".to_string()));
                                 }
 
                                 if has_quill {
                                     // Extract quill name
                                     let quill_value = mapping.get(&quill_key).unwrap();
-                                    let quill_name_str = quill_value
-                                        .as_str()
-                                        .ok_or_else(|| "QUILL value must be a string")?;
+                                    let quill_name_str = quill_value.as_str().ok_or_else(|| {
+                                        Diagnostic::new(
+                                            Severity::Error,
+                                            "QUILL value must be a string".to_string(),
+                                        )
+                                        .with_code("parse::invalid_quill_value".to_string())
+                                    })?;
 
                                     if !is_valid_tag_name(quill_name_str) {
-                                        return Err(format!(
-                                            "Invalid quill name '{}': must match pattern [a-z_][a-z0-9_]*",
-                                            quill_name_str
+                                        return Err(Diagnostic::new(
+                                            Severity::Error,
+                                            format!(
+                                                "Invalid quill name '{}': must match pattern [a-z_][a-z0-9_]*",
+                                                quill_name_str
+                                            ),
                                         )
-                                        .into());
+                                        .with_code("parse::invalid_quill_name".to_string()));
                                     }
 
                                     // Remove QUILL from the YAML content for processing
                                     let mut new_mapping = mapping.clone();
                                     new_mapping.remove(&quill_key);
                                     let new_yaml = serde_yaml::to_string(&new_mapping)
-                                        .map_err(|e| format!("Failed to serialize YAML: {}", e))?;
+                                        .map_err(|e| {
+                                            Diagnostic::new(
+                                                Severity::Error,
+                                                format!("Failed to serialize YAML: {}", e),
+                                            )
+                                            .with_code("parse::yaml_serialization".to_string())
+                                        })?;
 
                                     (None, Some(quill_name_str.to_string()), new_yaml)
                                 } else if has_scope {
                                     // Extract scope field name
                                     let scope_value = mapping.get(&scope_key).unwrap();
-                                    let field_name = scope_value
-                                        .as_str()
-                                        .ok_or_else(|| "SCOPE value must be a string")?;
+                                    let field_name = scope_value.as_str().ok_or_else(|| {
+                                        Diagnostic::new(
+                                            Severity::Error,
+                                            "SCOPE value must be a string".to_string(),
+                                        )
+                                        .with_code("parse::invalid_scope_value".to_string())
+                                    })?;
 
                                     if !is_valid_tag_name(field_name) {
-                                        return Err(format!(
-                                            "Invalid field name '{}': must match pattern [a-z_][a-z0-9_]*",
-                                            field_name
+                                        return Err(Diagnostic::new(
+                                            Severity::Error,
+                                            format!(
+                                                "Invalid field name '{}': must match pattern [a-z_][a-z0-9_]*",
+                                                field_name
+                                            ),
                                         )
-                                        .into());
+                                        .with_code("parse::invalid_field_name".to_string()));
                                     }
 
                                     if field_name == BODY_FIELD {
-                                        return Err(format!(
-                                            "Cannot use reserved field name '{}' as SCOPE value",
-                                            BODY_FIELD
+                                        return Err(Diagnostic::new(
+                                            Severity::Error,
+                                            format!(
+                                                "Cannot use reserved field name '{}' as SCOPE value",
+                                                BODY_FIELD
+                                            ),
                                         )
-                                        .into());
+                                        .with_code("parse::reserved_field_name".to_string())
+                                        .with_hint("Choose a different field name".to_string()));
                                     }
 
                                     // Remove SCOPE from the YAML content for processing
                                     let mut new_mapping = mapping.clone();
                                     new_mapping.remove(&scope_key);
                                     let new_yaml = serde_yaml::to_string(&new_mapping)
-                                        .map_err(|e| format!("Failed to serialize YAML: {}", e))?;
+                                        .map_err(|e| {
+                                            Diagnostic::new(
+                                                Severity::Error,
+                                                format!("Failed to serialize YAML: {}", e),
+                                            )
+                                            .with_code("parse::yaml_serialization".to_string())
+                                        })?;
 
                                     (Some(field_name.to_string()), None, new_yaml)
                                 } else {
@@ -371,7 +406,17 @@ fn find_metadata_blocks(
                 pos = abs_closing_pos + closing_len;
             } else if abs_pos == 0 {
                 // Frontmatter started but not closed
-                return Err("Frontmatter started but not closed with ---".into());
+                return Err(Diagnostic::new(
+                    Severity::Error,
+                    "Frontmatter started but not closed with ---".to_string(),
+                )
+                .with_code("parse::unclosed_frontmatter".to_string())
+                .with_location(Location {
+                    file: "input.md".to_string(),
+                    line: 1,
+                    col: 1,
+                })
+                .with_hint("Add closing --- delimiter".to_string()));
             } else {
                 // Not a valid metadata block, skip this position
                 pos = abs_pos + 3;
@@ -385,17 +430,19 @@ fn find_metadata_blocks(
 }
 
 /// Decompose markdown into frontmatter fields and body
-pub fn decompose(
-    markdown: &str,
-) -> Result<ParsedDocument, Box<dyn std::error::Error + Send + Sync>> {
+pub fn decompose(markdown: &str) -> Result<ParsedDocument, Diagnostic> {
     // Check input size limit
     if markdown.len() > crate::error::MAX_INPUT_SIZE {
-        return Err(format!(
-            "Input too large: {} bytes (max: {} bytes)",
-            markdown.len(),
-            crate::error::MAX_INPUT_SIZE
+        return Err(Diagnostic::new(
+            Severity::Error,
+            format!(
+                "Input too large: {} bytes (max: {} bytes)",
+                markdown.len(),
+                crate::error::MAX_INPUT_SIZE
+            ),
         )
-        .into());
+        .with_code("parse::input_too_large".to_string())
+        .with_hint("Reduce input size or increase the limit".to_string()));
     }
 
     let mut fields = HashMap::new();
@@ -423,7 +470,11 @@ pub fn decompose(
         // Check for quill directive
         if let Some(ref name) = block.quill_name {
             if quill_name.is_some() {
-                return Err("Multiple quill directives found: only one allowed".into());
+                return Err(Diagnostic::new(
+                    Severity::Error,
+                    "Multiple quill directives found: only one allowed".to_string(),
+                )
+                .with_code("parse::multiple_quill_directives".to_string()));
             }
             quill_name = Some(name.clone());
         }
@@ -431,10 +482,13 @@ pub fn decompose(
         // Check for global frontmatter (no tag and no quill directive)
         if block.tag.is_none() && block.quill_name.is_none() {
             if has_global_frontmatter {
-                return Err(
+                return Err(Diagnostic::new(
+                    Severity::Error,
                     "Multiple global frontmatter blocks found: only one untagged block allowed"
-                        .into(),
-                );
+                        .to_string(),
+                )
+                .with_code("parse::multiple_global_frontmatter".to_string())
+                .with_hint("Combine all global fields into a single frontmatter block".to_string()));
             }
             has_global_frontmatter = true;
             global_frontmatter_index = Some(idx);
@@ -449,8 +503,9 @@ pub fn decompose(
         let yaml_fields: HashMap<String, serde_yaml::Value> = if block.yaml_content.is_empty() {
             HashMap::new()
         } else {
-            serde_yaml::from_str(&block.yaml_content)
-                .map_err(|e| format!("Invalid YAML frontmatter: {}", e))?
+            serde_yaml::from_str(&block.yaml_content).map_err(|e| {
+                yaml_error_to_diagnostic(e, "global frontmatter")
+            })?
         };
 
         // Check that all tagged blocks don't conflict with global fields
@@ -460,11 +515,15 @@ pub fn decompose(
                 if let Some(global_value) = yaml_fields.get(tag) {
                     // Check if the global value is an array
                     if global_value.as_sequence().is_none() {
-                        return Err(format!(
-                            "Name collision: global field '{}' conflicts with tagged attribute",
-                            tag
+                        return Err(Diagnostic::new(
+                            Severity::Error,
+                            format!(
+                                "Name collision: global field '{}' conflicts with tagged attribute",
+                                tag
+                            ),
                         )
-                        .into());
+                        .with_code("parse::name_collision".to_string())
+                        .with_hint(format!("Either rename the global field or the SCOPE tag '{}'", tag)));
                     }
                 }
             }
@@ -472,7 +531,10 @@ pub fn decompose(
 
         // Convert YAML values to QuillValue at boundary
         for (key, value) in yaml_fields {
-            fields.insert(key, QuillValue::from_yaml(value)?);
+            fields.insert(key, QuillValue::from_yaml(value).map_err(|e| {
+                Diagnostic::new(Severity::Error, format!("Failed to convert YAML value: {}", e))
+                    .with_code("parse::yaml_conversion".to_string())
+            })?);
         }
     }
 
@@ -482,23 +544,31 @@ pub fn decompose(
             // Quill directive blocks can have YAML content (becomes part of frontmatter)
             if !block.yaml_content.is_empty() {
                 let yaml_fields: HashMap<String, serde_yaml::Value> =
-                    serde_yaml::from_str(&block.yaml_content)
-                        .map_err(|e| format!("Invalid YAML in quill block: {}", e))?;
+                    serde_yaml::from_str(&block.yaml_content).map_err(|e| {
+                        yaml_error_to_diagnostic(e, "quill directive block")
+                    })?;
 
                 // Check for conflicts with existing fields
                 for key in yaml_fields.keys() {
                     if fields.contains_key(key) {
-                        return Err(format!(
-                            "Name collision: quill block field '{}' conflicts with existing field",
-                            key
+                        return Err(Diagnostic::new(
+                            Severity::Error,
+                            format!(
+                                "Name collision: quill block field '{}' conflicts with existing field",
+                                key
+                            ),
                         )
-                        .into());
+                        .with_code("parse::quill_field_collision".to_string())
+                        .with_hint(format!("Rename the field '{}' in the quill directive block", key)));
                     }
                 }
 
                 // Convert YAML values to QuillValue at boundary
                 for (key, value) in yaml_fields {
-                    fields.insert(key, QuillValue::from_yaml(value)?);
+                    fields.insert(key, QuillValue::from_yaml(value).map_err(|e| {
+                        Diagnostic::new(Severity::Error, format!("Failed to convert YAML value: {}", e))
+                            .with_code("parse::yaml_conversion".to_string())
+                    })?);
                 }
             }
         }
@@ -511,11 +581,15 @@ pub fn decompose(
             // Exception: if the global field is an array, allow it (we'll merge later)
             if let Some(existing_value) = fields.get(tag_name) {
                 if existing_value.as_array().is_none() {
-                    return Err(format!(
-                        "Name collision: tagged attribute '{}' conflicts with global field",
-                        tag_name
+                    return Err(Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "Name collision: tagged attribute '{}' conflicts with global field",
+                            tag_name
+                        ),
                     )
-                    .into());
+                    .with_code("parse::tag_field_collision".to_string())
+                    .with_hint(format!("Either rename the SCOPE tag or the global field '{}'", tag_name)));
                 }
             }
 
@@ -525,7 +599,9 @@ pub fn decompose(
                     HashMap::new()
                 } else {
                     serde_yaml::from_str(&block.yaml_content).map_err(|e| {
-                        format!("Invalid YAML in tagged block '{}': {}", tag_name, e)
+                        let mut diag = yaml_error_to_diagnostic(e, &format!("tagged block '{}'", tag_name));
+                        diag.hint = Some(format!("Check YAML syntax in SCOPE block '{}'", tag_name));
+                        diag
                     })?
                 };
 
@@ -545,7 +621,13 @@ pub fn decompose(
             );
 
             // Convert HashMap to serde_yaml::Value::Mapping
-            let item_value = serde_yaml::to_value(item_fields)?;
+            let item_value = serde_yaml::to_value(item_fields).map_err(|e| {
+                Diagnostic::new(
+                    Severity::Error,
+                    format!("Failed to convert item fields to YAML: {}", e),
+                )
+                .with_code("parse::item_serialization".to_string())
+            })?;
 
             // Add to collection
             tagged_attributes
@@ -604,8 +686,13 @@ pub fn decompose(
                 let new_items_json: Vec<serde_json::Value> = items
                     .into_iter()
                     .map(|yaml_val| {
-                        serde_json::to_value(&yaml_val)
-                            .map_err(|e| format!("Failed to convert YAML to JSON: {}", e))
+                        serde_json::to_value(&yaml_val).map_err(|e| {
+                            Diagnostic::new(
+                                Severity::Error,
+                                format!("Failed to convert YAML to JSON: {}", e),
+                            )
+                            .with_code("parse::yaml_to_json".to_string())
+                        })
                     })
                     .collect::<Result<Vec<_>, _>>()?;
 
@@ -618,15 +705,25 @@ pub fn decompose(
                 fields.insert(tag_name, quill_value);
             } else {
                 // This should not happen due to earlier validation, but handle it gracefully
-                return Err(format!(
-                    "Internal error: field '{}' exists but is not an array",
-                    tag_name
+                return Err(Diagnostic::new(
+                    Severity::Error,
+                    format!(
+                        "Internal error: field '{}' exists but is not an array",
+                        tag_name
+                    ),
                 )
-                .into());
+                .with_code("parse::internal_error".to_string()));
             }
         } else {
             // No existing field, just create a new sequence
-            let quill_value = QuillValue::from_yaml(serde_yaml::Value::Sequence(items))?;
+            let quill_value = QuillValue::from_yaml(serde_yaml::Value::Sequence(items))
+                .map_err(|e| {
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!("Failed to convert tagged items: {}", e),
+                    )
+                    .with_code("parse::tagged_items_conversion".to_string())
+                })?;
             fields.insert(tag_name, quill_value);
         }
     }
@@ -719,10 +816,8 @@ Content here."#;
 
         let result = decompose(markdown);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Invalid YAML frontmatter"));
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("YAML") || err_msg.contains("yaml"));
     }
 
     #[test]

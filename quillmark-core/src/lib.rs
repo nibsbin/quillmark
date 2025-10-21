@@ -52,7 +52,7 @@ pub mod backend;
 pub use backend::Backend;
 
 pub mod error;
-pub use error::{Diagnostic, Location, ParseError, RenderError, RenderResult, Severity};
+pub use error::{Diagnostic, Location, RenderError, RenderResult, Severity};
 
 pub mod types;
 pub use types::{Artifact, OutputFormat, RenderOptions};
