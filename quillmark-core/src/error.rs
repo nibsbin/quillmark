@@ -63,13 +63,13 @@
 //!         
 //!         // Match specific error types
 //!         match e {
-//!             RenderError::CompilationFailed(count, diags) => {
-//!                 eprintln!("Compilation failed with {} errors:", count);
+//!             RenderError::CompilationFailed { diags } => {
+//!                 eprintln!("Compilation failed with {} errors:", diags.len());
 //!                 for diag in diags {
 //!                     eprintln!("{}", diag.fmt_pretty());
 //!                 }
 //!             }
-//!             RenderError::InvalidFrontmatter { diag, .. } => {
+//!             RenderError::InvalidFrontmatter { diag } => {
 //!                 eprintln!("Frontmatter error: {}", diag.message);
 //!             }
 //!             _ => eprintln!("Error: {}", e),
@@ -143,7 +143,7 @@ pub const MAX_NESTING_DEPTH: usize = 100;
 pub const MAX_TEMPLATE_OUTPUT: usize = 50 * 1024 * 1024;
 
 /// Error severity levels
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Severity {
     /// Fatal error that prevents completion
     Error,
@@ -154,7 +154,7 @@ pub enum Severity {
 }
 
 /// Location information for diagnostics
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Location {
     /// Source file name (e.g., "glue.typ", "template.typ", "input.md")
     pub file: String,
@@ -165,7 +165,7 @@ pub struct Location {
 }
 
 /// Structured diagnostic information
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, serde::Serialize)]
 pub struct Diagnostic {
     /// Error severity level
     pub severity: Severity,
@@ -179,6 +179,11 @@ pub struct Diagnostic {
     pub related: Vec<Location>,
     /// Optional hint for fixing the error
     pub hint: Option<String>,
+    /// Source error that caused this diagnostic (for error chaining)
+    /// Note: This field is excluded from serialization as Error trait
+    /// objects cannot be serialized
+    #[serde(skip)]
+    pub source: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 
 impl Diagnostic {
@@ -191,6 +196,7 @@ impl Diagnostic {
             primary: None,
             related: Vec::new(),
             hint: None,
+            source: None,
         }
     }
 
@@ -216,6 +222,26 @@ impl Diagnostic {
     pub fn with_hint(mut self, hint: String) -> Self {
         self.hint = Some(hint);
         self
+    }
+
+    /// Set error source (chainable)
+    pub fn with_source(mut self, source: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        self.source = Some(source);
+        self
+    }
+
+    /// Get the source chain as a list of error messages
+    pub fn source_chain(&self) -> Vec<String> {
+        let mut chain = Vec::new();
+        let mut current_source = self
+            .source
+            .as_ref()
+            .map(|b| b.as_ref() as &dyn std::error::Error);
+        while let Some(err) = current_source {
+            chain.push(err.to_string());
+            current_source = err.source();
+        }
+        chain
     }
 
     /// Format diagnostic for pretty printing
@@ -254,6 +280,76 @@ impl Diagnostic {
         }
 
         result
+    }
+
+    /// Format diagnostic with source chain for debugging
+    pub fn fmt_pretty_with_source(&self) -> String {
+        let mut result = self.fmt_pretty();
+
+        for (i, cause) in self.source_chain().iter().enumerate() {
+            result.push_str(&format!("\n  cause {}: {}", i + 1, cause));
+        }
+
+        result
+    }
+}
+
+impl std::fmt::Display for Diagnostic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+/// Serializable diagnostic for cross-language boundaries
+///
+/// This type is used when diagnostics need to be serialized and sent across
+/// FFI boundaries (e.g., Python, WASM). Unlike `Diagnostic`, it does not
+/// contain the non-serializable `source` field, but instead includes a
+/// flattened `source_chain` for display purposes.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SerializableDiagnostic {
+    /// Error severity level
+    pub severity: Severity,
+    /// Optional error code (e.g., "E001", "typst::syntax")
+    pub code: Option<String>,
+    /// Human-readable error message
+    pub message: String,
+    /// Primary source location
+    pub primary: Option<Location>,
+    /// Related source locations for context
+    pub related: Vec<Location>,
+    /// Optional hint for fixing the error
+    pub hint: Option<String>,
+    /// Source chain as list of strings (for display purposes)
+    pub source_chain: Vec<String>,
+}
+
+impl From<Diagnostic> for SerializableDiagnostic {
+    fn from(diag: Diagnostic) -> Self {
+        let source_chain = diag.source_chain();
+        Self {
+            severity: diag.severity,
+            code: diag.code,
+            message: diag.message,
+            primary: diag.primary,
+            related: diag.related,
+            hint: diag.hint,
+            source_chain,
+        }
+    }
+}
+
+impl From<&Diagnostic> for SerializableDiagnostic {
+    fn from(diag: &Diagnostic) -> Self {
+        Self {
+            severity: diag.severity,
+            code: diag.code.clone(),
+            message: diag.message.clone(),
+            primary: diag.primary.clone(),
+            related: diag.related.clone(),
+            hint: diag.hint.clone(),
+            source_chain: diag.source_chain(),
+        }
     }
 }
 
@@ -298,122 +394,108 @@ impl From<String> for ParseError {
 #[derive(thiserror::Error, Debug)]
 pub enum RenderError {
     /// Failed to create rendering engine
-    #[error("Engine creation failed")]
+    #[error("{diag}")]
     EngineCreation {
         /// Diagnostic information
         diag: Diagnostic,
-        #[source]
-        /// Optional source error
-        source: Option<anyhow::Error>,
     },
 
     /// Invalid YAML frontmatter in markdown document
-    #[error("Invalid YAML frontmatter")]
+    #[error("{diag}")]
     InvalidFrontmatter {
         /// Diagnostic information
         diag: Diagnostic,
-        #[source]
-        /// Optional source error
-        source: Option<anyhow::Error>,
     },
 
     /// Template rendering failed
-    #[error("Template rendering failed")]
+    #[error("{diag}")]
     TemplateFailed {
-        #[source]
-        /// MiniJinja error
-        source: minijinja::Error,
         /// Diagnostic information
         diag: Diagnostic,
     },
 
     /// Backend compilation failed with one or more errors
-    #[error("Backend compilation failed with {0} error(s)")]
-    CompilationFailed(
-        /// Number of errors
-        usize,
+    #[error("Backend compilation failed with {} error(s)", diags.len())]
+    CompilationFailed {
         /// List of diagnostics
-        Vec<Diagnostic>,
-    ),
+        diags: Vec<Diagnostic>,
+    },
 
     /// Requested output format not supported by backend
-    #[error("{format:?} not supported by {backend}")]
+    #[error("{diag}")]
     FormatNotSupported {
-        /// Backend identifier
-        backend: String,
-        /// Requested format
-        format: OutputFormat,
+        /// Diagnostic information
+        diag: Diagnostic,
     },
 
     /// Backend not registered with engine
-    #[error("Unsupported backend: {0}")]
-    UnsupportedBackend(String),
+    #[error("{diag}")]
+    UnsupportedBackend {
+        /// Diagnostic information
+        diag: Diagnostic,
+    },
 
     /// Dynamic asset filename collision
-    #[error("Dynamic asset collision: {filename}")]
+    #[error("{diag}")]
     DynamicAssetCollision {
-        /// Filename that collided
-        filename: String,
-        /// Error message
-        message: String,
+        /// Diagnostic information
+        diag: Diagnostic,
     },
 
     /// Dynamic font filename collision
-    #[error("Dynamic font collision: {filename}")]
+    #[error("{diag}")]
     DynamicFontCollision {
-        /// Filename that collided
-        filename: String,
-        /// Error message
-        message: String,
+        /// Diagnostic information
+        diag: Diagnostic,
     },
 
-    /// Internal error (wraps anyhow::Error)
-    #[error(transparent)]
-    Internal(#[from] anyhow::Error),
-
-    /// Other errors (boxed trait object)
-    #[error("{0}")]
-    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
-
-    /// Template-related error
-    #[error("Template error: {0}")]
-    Template(#[from] crate::templating::TemplateError),
-
-    /// Input size exceeded maximum allowed
-    #[error("Input too large: {size} bytes (max: {max} bytes)")]
+    /// Input size limits exceeded
+    #[error("{diag}")]
     InputTooLarge {
-        /// Actual size
-        size: usize,
-        /// Maximum allowed size
-        max: usize,
+        /// Diagnostic information
+        diag: Diagnostic,
     },
 
     /// YAML size exceeded maximum allowed
-    #[error("YAML block too large: {size} bytes (max: {max} bytes)")]
+    #[error("{diag}")]
     YamlTooLarge {
-        /// Actual size
-        size: usize,
-        /// Maximum allowed size
-        max: usize,
+        /// Diagnostic information
+        diag: Diagnostic,
     },
 
     /// Nesting depth exceeded maximum allowed
-    #[error("Nesting too deep: {depth} levels (max: {max} levels)")]
+    #[error("{diag}")]
     NestingTooDeep {
-        /// Actual depth
-        depth: usize,
-        /// Maximum allowed depth
-        max: usize,
+        /// Diagnostic information
+        diag: Diagnostic,
     },
 
     /// Template output exceeded maximum size
-    #[error("Template output too large: {size} bytes (max: {max} bytes)")]
+    #[error("{diag}")]
     OutputTooLarge {
-        /// Actual size
-        size: usize,
-        /// Maximum allowed size
-        max: usize,
+        /// Diagnostic information
+        diag: Diagnostic,
     },
+}
+
+impl RenderError {
+    /// Extract all diagnostics from this error
+    pub fn diagnostics(&self) -> Vec<&Diagnostic> {
+        match self {
+            RenderError::CompilationFailed { diags } => diags.iter().collect(),
+            RenderError::EngineCreation { diag }
+            | RenderError::InvalidFrontmatter { diag }
+            | RenderError::TemplateFailed { diag }
+            | RenderError::FormatNotSupported { diag }
+            | RenderError::UnsupportedBackend { diag }
+            | RenderError::DynamicAssetCollision { diag }
+            | RenderError::DynamicFontCollision { diag }
+            | RenderError::InputTooLarge { diag }
+            | RenderError::YamlTooLarge { diag }
+            | RenderError::NestingTooDeep { diag }
+            | RenderError::OutputTooLarge { diag } => vec![diag],
+        }
+    }
 }
 
 /// Result type containing artifacts and warnings
@@ -448,28 +530,32 @@ impl RenderResult {
 impl From<minijinja::Error> for RenderError {
     fn from(e: minijinja::Error) -> Self {
         // Extract location with proper range information
-        let loc = e.line().map(|line| {
-            Location {
-                file: e.name().unwrap_or("template").to_string(),
-                line: line as u32,
-                // MiniJinja provides range, extract approximate column
-                col: e.range().map(|r| r.start as u32).unwrap_or(0),
-            }
+        let loc = e.line().map(|line| Location {
+            file: e.name().unwrap_or("template").to_string(),
+            line: line as u32,
+            // MiniJinja provides range, extract approximate column
+            col: e.range().map(|r| r.start as u32).unwrap_or(0),
         });
 
         // Generate helpful hints based on error kind
         let hint = generate_minijinja_hint(&e);
 
-        let diag = Diagnostic {
-            severity: Severity::Error,
-            code: Some(format!("minijinja::{:?}", e.kind())),
-            message: e.to_string(),
-            primary: loc,
-            related: vec![],
-            hint,
-        };
+        // Create diagnostic with source preservation
+        let mut diag = Diagnostic::new(Severity::Error, e.to_string())
+            .with_code(format!("minijinja::{:?}", e.kind()));
 
-        RenderError::TemplateFailed { source: e, diag }
+        if let Some(loc) = loc {
+            diag = diag.with_location(loc);
+        }
+
+        if let Some(hint) = hint {
+            diag = diag.with_hint(hint);
+        }
+
+        // Preserve the original error as source
+        diag = diag.with_source(Box::new(e));
+
+        RenderError::TemplateFailed { diag }
     }
 }
 
@@ -494,67 +580,21 @@ fn generate_minijinja_hint(e: &minijinja::Error) -> Option<String> {
 /// Helper to print structured errors
 pub fn print_errors(err: &RenderError) {
     match err {
-        RenderError::CompilationFailed(_, diags) => {
+        RenderError::CompilationFailed { diags } => {
             for d in diags {
                 eprintln!("{}", d.fmt_pretty());
             }
         }
-        RenderError::TemplateFailed { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::InvalidFrontmatter { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::EngineCreation { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::FormatNotSupported { backend, format } => {
-            eprintln!(
-                "[ERROR] Format {:?} not supported by {} backend",
-                format, backend
-            );
-        }
-        RenderError::UnsupportedBackend(name) => {
-            eprintln!("[ERROR] Unsupported backend: {}", name);
-        }
-        RenderError::DynamicAssetCollision { filename, message } => {
-            eprintln!(
-                "[ERROR] Dynamic asset collision: {}\n  {}",
-                filename, message
-            );
-        }
-        RenderError::DynamicFontCollision { filename, message } => {
-            eprintln!(
-                "[ERROR] Dynamic font collision: {}\n  {}",
-                filename, message
-            );
-        }
-        RenderError::Internal(e) => {
-            eprintln!("[ERROR] Internal error: {}", e);
-        }
-        RenderError::Template(e) => {
-            eprintln!("[ERROR] Template error: {}", e);
-        }
-        RenderError::Other(e) => {
-            eprintln!("[ERROR] {}", e);
-        }
-        RenderError::InputTooLarge { size, max } => {
-            eprintln!(
-                "[ERROR] Input too large: {} bytes (maximum: {} bytes)",
-                size, max
-            );
-        }
-        RenderError::YamlTooLarge { size, max } => {
-            eprintln!(
-                "[ERROR] YAML block too large: {} bytes (maximum: {} bytes)",
-                size, max
-            );
-        }
-        RenderError::NestingTooDeep { depth, max } => {
-            eprintln!(
-                "[ERROR] Nesting too deep: {} levels (maximum: {} levels)",
-                depth, max
-            );
-        }
-        RenderError::OutputTooLarge { size, max } => {
-            eprintln!(
-                "[ERROR] Template output too large: {} bytes (maximum: {} bytes)",
-                size, max
-            );
-        }
+        RenderError::TemplateFailed { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::InvalidFrontmatter { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::EngineCreation { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::FormatNotSupported { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::UnsupportedBackend { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::DynamicAssetCollision { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::DynamicFontCollision { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::InputTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::YamlTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::NestingTooDeep { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::OutputTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
     }
 }
