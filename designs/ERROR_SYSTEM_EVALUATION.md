@@ -336,7 +336,6 @@ The WASM error structure includes an optional `diagnostics` field that preserves
 #### Weaknesses ⚠️
 
 1. **No Additional Error Context**
-   - Could add workflow-level context to errors
    - Missing "which step failed" information
 
 ---
