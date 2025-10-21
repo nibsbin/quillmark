@@ -88,6 +88,17 @@ use crate::value::QuillValue;
 /// The field name used to store the document body
 pub const BODY_FIELD: &str = "body";
 
+/// Helper function to convert serde_yaml::Error with location extraction
+fn yaml_error_to_string(e: serde_yaml::Error, context: &str) -> String {
+    let mut msg = format!("{}: {}", context, e);
+
+    if let Some(loc) = e.location() {
+        msg.push_str(&format!(" at line {}, column {}", loc.line(), loc.column()));
+    }
+
+    msg
+}
+
 /// Reserved tag name for quill specification
 pub const QUILL_TAG: &str = "quill";
 
@@ -450,7 +461,7 @@ pub fn decompose(
             HashMap::new()
         } else {
             serde_yaml::from_str(&block.yaml_content)
-                .map_err(|e| format!("Invalid YAML frontmatter: {}", e))?
+                .map_err(|e| yaml_error_to_string(e, "Invalid YAML frontmatter"))?
         };
 
         // Check that all tagged blocks don't conflict with global fields
@@ -483,7 +494,7 @@ pub fn decompose(
             if !block.yaml_content.is_empty() {
                 let yaml_fields: HashMap<String, serde_yaml::Value> =
                     serde_yaml::from_str(&block.yaml_content)
-                        .map_err(|e| format!("Invalid YAML in quill block: {}", e))?;
+                        .map_err(|e| yaml_error_to_string(e, "Invalid YAML in quill block"))?;
 
                 // Check for conflicts with existing fields
                 for key in yaml_fields.keys() {
@@ -520,14 +531,16 @@ pub fn decompose(
             }
 
             // Parse YAML metadata
-            let mut item_fields: HashMap<String, serde_yaml::Value> =
-                if block.yaml_content.is_empty() {
-                    HashMap::new()
-                } else {
-                    serde_yaml::from_str(&block.yaml_content).map_err(|e| {
-                        format!("Invalid YAML in tagged block '{}': {}", tag_name, e)
-                    })?
-                };
+            let mut item_fields: HashMap<String, serde_yaml::Value> = if block
+                .yaml_content
+                .is_empty()
+            {
+                HashMap::new()
+            } else {
+                serde_yaml::from_str(&block.yaml_content).map_err(|e| {
+                    yaml_error_to_string(e, &format!("Invalid YAML in tagged block '{}'", tag_name))
+                })?
+            };
 
             // Extract body for this tagged block
             let body_start = block.end;
