@@ -122,7 +122,10 @@ impl Backend for AcroformBackend {
                             diag: quillmark_core::Diagnostic {
                                 severity: quillmark_core::Severity::Error,
                                 code: Some("acroform::template".to_string()),
-                                message: format!("Failed to render template for field '{}': {}", field.name, e),
+                                message: format!(
+                                    "Failed to render template for field '{}': {}",
+                                    field.name, e
+                                ),
                                 primary: None,
                                 related: Vec::new(),
                                 hint: Some(format!("Template: {}", source)),
@@ -138,16 +141,14 @@ impl Backend for AcroformBackend {
                     let new_value = match &field.current_value {
                         Some(FieldValue::Text(_)) => FieldValue::Text(rendered_value),
                         Some(FieldValue::Boolean(_)) => {
-                            let bool_val =
-                                rendered_value.trim().parse::<i32>().ok().map_or_else(
-                                    || rendered_value.trim().to_lowercase() == "true",
-                                    |num| num != 0,
-                                );
+                            let bool_val = rendered_value.trim().parse::<i32>().ok().map_or_else(
+                                || rendered_value.trim().to_lowercase() == "true",
+                                |num| num != 0,
+                            );
                             FieldValue::Boolean(bool_val)
                         }
                         Some(FieldValue::Choice(_)) => {
-                            let choice_val = match rendered_value.trim().to_lowercase().as_str()
-                            {
+                            let choice_val = match rendered_value.trim().to_lowercase().as_str() {
                                 "true" => "1".to_string(),
                                 "false" => "0".to_string(),
                                 _ => rendered_value,

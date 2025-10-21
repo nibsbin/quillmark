@@ -270,7 +270,9 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, Diagnostic
                         ),
                     )
                     .with_code("parse::yaml_too_large".to_string())
-                    .with_hint("Reduce the size of the YAML block or increase the limit".to_string()));
+                    .with_hint(
+                        "Reduce the size of the YAML block or increase the limit".to_string(),
+                    ));
                 }
 
                 // Parse YAML content to check for reserved keys (QUILL, SCOPE)
@@ -289,7 +291,8 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, Diagnostic
                                 if has_quill && has_scope {
                                     return Err(Diagnostic::new(
                                         Severity::Error,
-                                        "Cannot specify both QUILL and SCOPE in the same block".to_string(),
+                                        "Cannot specify both QUILL and SCOPE in the same block"
+                                            .to_string(),
                                     )
                                     .with_code("parse::conflicting_directives".to_string())
                                     .with_hint("Use either QUILL or SCOPE, not both".to_string()));
@@ -320,8 +323,8 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, Diagnostic
                                     // Remove QUILL from the YAML content for processing
                                     let mut new_mapping = mapping.clone();
                                     new_mapping.remove(&quill_key);
-                                    let new_yaml = serde_yaml::to_string(&new_mapping)
-                                        .map_err(|e| {
+                                    let new_yaml =
+                                        serde_yaml::to_string(&new_mapping).map_err(|e| {
                                             Diagnostic::new(
                                                 Severity::Error,
                                                 format!("Failed to serialize YAML: {}", e),
@@ -367,8 +370,8 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, Diagnostic
                                     // Remove SCOPE from the YAML content for processing
                                     let mut new_mapping = mapping.clone();
                                     new_mapping.remove(&scope_key);
-                                    let new_yaml = serde_yaml::to_string(&new_mapping)
-                                        .map_err(|e| {
+                                    let new_yaml =
+                                        serde_yaml::to_string(&new_mapping).map_err(|e| {
                                             Diagnostic::new(
                                                 Severity::Error,
                                                 format!("Failed to serialize YAML: {}", e),
@@ -488,7 +491,9 @@ pub fn decompose(markdown: &str) -> Result<ParsedDocument, Diagnostic> {
                         .to_string(),
                 )
                 .with_code("parse::multiple_global_frontmatter".to_string())
-                .with_hint("Combine all global fields into a single frontmatter block".to_string()));
+                .with_hint(
+                    "Combine all global fields into a single frontmatter block".to_string(),
+                ));
             }
             has_global_frontmatter = true;
             global_frontmatter_index = Some(idx);
@@ -503,9 +508,8 @@ pub fn decompose(markdown: &str) -> Result<ParsedDocument, Diagnostic> {
         let yaml_fields: HashMap<String, serde_yaml::Value> = if block.yaml_content.is_empty() {
             HashMap::new()
         } else {
-            serde_yaml::from_str(&block.yaml_content).map_err(|e| {
-                yaml_error_to_diagnostic(e, "global frontmatter")
-            })?
+            serde_yaml::from_str(&block.yaml_content)
+                .map_err(|e| yaml_error_to_diagnostic(e, "global frontmatter"))?
         };
 
         // Check that all tagged blocks don't conflict with global fields
@@ -523,7 +527,10 @@ pub fn decompose(markdown: &str) -> Result<ParsedDocument, Diagnostic> {
                             ),
                         )
                         .with_code("parse::name_collision".to_string())
-                        .with_hint(format!("Either rename the global field or the SCOPE tag '{}'", tag)));
+                        .with_hint(format!(
+                            "Either rename the global field or the SCOPE tag '{}'",
+                            tag
+                        )));
                     }
                 }
             }
@@ -531,10 +538,16 @@ pub fn decompose(markdown: &str) -> Result<ParsedDocument, Diagnostic> {
 
         // Convert YAML values to QuillValue at boundary
         for (key, value) in yaml_fields {
-            fields.insert(key, QuillValue::from_yaml(value).map_err(|e| {
-                Diagnostic::new(Severity::Error, format!("Failed to convert YAML value: {}", e))
+            fields.insert(
+                key,
+                QuillValue::from_yaml(value).map_err(|e| {
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!("Failed to convert YAML value: {}", e),
+                    )
                     .with_code("parse::yaml_conversion".to_string())
-            })?);
+                })?,
+            );
         }
     }
 
@@ -544,9 +557,8 @@ pub fn decompose(markdown: &str) -> Result<ParsedDocument, Diagnostic> {
             // Quill directive blocks can have YAML content (becomes part of frontmatter)
             if !block.yaml_content.is_empty() {
                 let yaml_fields: HashMap<String, serde_yaml::Value> =
-                    serde_yaml::from_str(&block.yaml_content).map_err(|e| {
-                        yaml_error_to_diagnostic(e, "quill directive block")
-                    })?;
+                    serde_yaml::from_str(&block.yaml_content)
+                        .map_err(|e| yaml_error_to_diagnostic(e, "quill directive block"))?;
 
                 // Check for conflicts with existing fields
                 for key in yaml_fields.keys() {
@@ -565,10 +577,16 @@ pub fn decompose(markdown: &str) -> Result<ParsedDocument, Diagnostic> {
 
                 // Convert YAML values to QuillValue at boundary
                 for (key, value) in yaml_fields {
-                    fields.insert(key, QuillValue::from_yaml(value).map_err(|e| {
-                        Diagnostic::new(Severity::Error, format!("Failed to convert YAML value: {}", e))
+                    fields.insert(
+                        key,
+                        QuillValue::from_yaml(value).map_err(|e| {
+                            Diagnostic::new(
+                                Severity::Error,
+                                format!("Failed to convert YAML value: {}", e),
+                            )
                             .with_code("parse::yaml_conversion".to_string())
-                    })?);
+                        })?,
+                    );
                 }
             }
         }
@@ -589,7 +607,10 @@ pub fn decompose(markdown: &str) -> Result<ParsedDocument, Diagnostic> {
                         ),
                     )
                     .with_code("parse::tag_field_collision".to_string())
-                    .with_hint(format!("Either rename the SCOPE tag or the global field '{}'", tag_name)));
+                    .with_hint(format!(
+                        "Either rename the SCOPE tag or the global field '{}'",
+                        tag_name
+                    )));
                 }
             }
 
@@ -599,8 +620,10 @@ pub fn decompose(markdown: &str) -> Result<ParsedDocument, Diagnostic> {
                     HashMap::new()
                 } else {
                     serde_yaml::from_str(&block.yaml_content).map_err(|e| {
-                        let mut diag = yaml_error_to_diagnostic(e, &format!("tagged block '{}'", tag_name));
-                        diag.hint = Some(format!("Check YAML syntax in SCOPE block '{}'", tag_name));
+                        let mut diag =
+                            yaml_error_to_diagnostic(e, &format!("tagged block '{}'", tag_name));
+                        diag.hint =
+                            Some(format!("Check YAML syntax in SCOPE block '{}'", tag_name));
                         diag
                     })?
                 };
@@ -716,8 +739,8 @@ pub fn decompose(markdown: &str) -> Result<ParsedDocument, Diagnostic> {
             }
         } else {
             // No existing field, just create a new sequence
-            let quill_value = QuillValue::from_yaml(serde_yaml::Value::Sequence(items))
-                .map_err(|e| {
+            let quill_value =
+                QuillValue::from_yaml(serde_yaml::Value::Sequence(items)).map_err(|e| {
                     Diagnostic::new(
                         Severity::Error,
                         format!("Failed to convert tagged items: {}", e),
