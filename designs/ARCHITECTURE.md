@@ -804,42 +804,76 @@ These types are used **everywhere** (templating, parsing, compilation). `RenderR
 ```rust
 #[derive(thiserror::Error, Debug)]
 pub enum RenderError {
-    #[error("Engine creation failed")] 
-    EngineCreation { diag: Diagnostic, #[source] source: Option<anyhow::Error> },
+    #[error("{diag}")]
+    EngineCreation { diag: Diagnostic },
 
-    #[error("Invalid YAML frontmatter")] 
-    InvalidFrontmatter { diag: Diagnostic, #[source] source: Option<anyhow::Error> },
+    #[error("{diag}")]
+    InvalidFrontmatter { diag: Diagnostic },
 
-    #[error("Template rendering failed")] 
-    TemplateFailed { #[source] source: minijinja::Error, diag: Diagnostic },
+    #[error("{diag}")]
+    TemplateFailed { diag: Diagnostic },
 
-    #[error("Backend compilation failed with {0} error(s)")]
-    CompilationFailed(usize, Vec<Diagnostic>),
+    #[error("Backend compilation failed with {} error(s)", diags.len())]
+    CompilationFailed { diags: Vec<Diagnostic> },
 
-    #[error("{format:?} not supported by {backend}")]
-    FormatNotSupported { backend: String, format: OutputFormat },
+    #[error("{diag}")]
+    FormatNotSupported { diag: Diagnostic },
 
-    #[error("Unsupported backend: {0}")]
-    UnsupportedBackend(String),
+    #[error("{diag}")]
+    UnsupportedBackend { diag: Diagnostic },
 
-    #[error("Dynamic asset collision: {filename}")]
-    DynamicAssetCollision { filename: String, message: String },
+    #[error("{diag}")]
+    DynamicAssetCollision { diag: Diagnostic },
 
-    #[error(transparent)]
-    Internal(#[from] anyhow::Error),
+    #[error("{diag}")]
+    DynamicFontCollision { diag: Diagnostic },
 
-    #[error("{0}")]
-    Other(#[from] Box<dyn std::error::Error + Send + Sync>),
+    #[error("{diag}")]
+    InputTooLarge { diag: Diagnostic },
 
-    #[error("Template error: {0}")]
-    Template(#[from] crate::templating::TemplateError),
+    #[error("{diag}")]
+    YamlTooLarge { diag: Diagnostic },
+
+    #[error("{diag}")]
+    NestingTooDeep { diag: Diagnostic },
+
+    #[error("{diag}")]
+    OutputTooLarge { diag: Diagnostic },
+}
+
+impl RenderError {
+    /// Extract all diagnostics from this error
+    pub fn diagnostics(&self) -> Vec<&Diagnostic> { /* ... */ }
 }
 ```
 
 > **Why this shape?**
 >
-> * Callers can **enumerate** diagnostics and render UI links.
-> * We keep a human message via `Display` but never lose machine data.
+> * Every variant carries structured `Diagnostic` with full context
+> * Callers can **enumerate** diagnostics and render UI links
+> * We keep a human message via `Display` but never lose machine data
+> * Error source chains preserved through `Diagnostic.source` field
+> * Consistent structure across all error types
+
+### SerializableDiagnostic for FFI
+
+For cross-language boundaries (Python, WASM), use `SerializableDiagnostic`:
+
+```rust
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct SerializableDiagnostic {
+    pub severity: Severity,
+    pub code: Option<String>,
+    pub message: String,
+    pub primary: Option<Location>,
+    pub related: Vec<Location>,
+    pub hint: Option<String>,
+    pub source_chain: Vec<String>, // Flattened error chain
+}
+
+impl From<Diagnostic> for SerializableDiagnostic { /* ... */ }
+impl From<&Diagnostic> for SerializableDiagnostic { /* ... */ }
+```
 
 ### Mapping external errors → `Diagnostic`
 
@@ -861,16 +895,22 @@ impl From<minijinja::Error> for RenderError {
         // Generate helpful hints based on error kind
         let hint = generate_minijinja_hint(&e);
 
-        let diag = Diagnostic {
-            severity: Severity::Error,
-            code: Some(format!("minijinja::{:?}", e.kind())),
-            message: e.to_string(),
-            primary: loc,
-            related: vec![],
-            hint,
-        };
+        // Create diagnostic with source preservation
+        let mut diag = Diagnostic::new(Severity::Error, e.to_string())
+            .with_code(format!("minijinja::{:?}", e.kind()));
 
-        RenderError::TemplateFailed { source: e, diag }
+        if let Some(loc) = loc {
+            diag = diag.with_location(loc);
+        }
+
+        if let Some(hint) = hint {
+            diag = diag.with_hint(hint);
+        }
+
+        // Preserve the original error as source
+        diag = diag.with_source(Box::new(e));
+
+        RenderError::TemplateFailed { diag }
     }
 }
 ```
@@ -889,6 +929,7 @@ fn map_typst(errors: &[SourceDiagnostic], world: &QuillWorld) -> Vec<Diagnostic>
             related: e.trace.iter().filter_map(|s| world.resolve_span(s).ok())
                           .map(|(f,l,c)| Location{file:f,line:l,col:c}).collect(),
             hint: e.hints.get(0).cloned(),
+            source: None, // Typst errors are leaf errors
         }
     }).collect()
 }
@@ -898,7 +939,7 @@ Then in `compile`:
 
 ```rust
 let diags = map_typst(&errors, &world);
-return Err(RenderError::CompilationFailed(diags.len(), diags));
+return Err(RenderError::CompilationFailed { diags });
 ```
 
 ### Source mapping policy (v1: comment anchors)
@@ -921,22 +962,26 @@ Provide a standard formatter for CLI/logging and a JSON mode for tooling:
 ```rust
 impl Diagnostic {
     pub fn fmt_pretty(&self) -> String { /* render code frame if available */ }
+    pub fn fmt_pretty_with_source(&self) -> String { /* includes source chain */ }
+    pub fn source_chain(&self) -> Vec<String> { /* extract error chain */ }
 }
 
 pub fn print_errors(err: &RenderError) {
     match err {
-        RenderError::CompilationFailed(_, diags) => {
+        RenderError::CompilationFailed { diags } => {
             for d in diags { eprintln!("{}", d.fmt_pretty()); }
         }
-        RenderError::TemplateFailed { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::InvalidFrontmatter { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::EngineCreation { diag, .. } => eprintln!("{}", diag.fmt_pretty()),
-        _ => eprintln!("{err}")
+        RenderError::TemplateFailed { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::InvalidFrontmatter { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::EngineCreation { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::FormatNotSupported { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::UnsupportedBackend { diag } => eprintln!("{}", diag.fmt_pretty()),
+        // ... all other variants
     }
 }
 ```
 
-Expose `--json` (or a library method) returning `serde_json::Value` with the full error payload.
+Expose `--json` (or a library method) returning `serde_json::Value` with the full error payload using `SerializableDiagnostic`.
 
 ### Engine behavior
 

@@ -1,19 +1,20 @@
 # Error Handling System Documentation
 
-**Status:** Implemented (Phase 1)  
-**Date:** 2024  
+**Status:** Phase 1 Complete  
+**Date:** 2025-10-21  
 **Scope:** quillmark, quillmark-core, quillmark-typst
 
 ---
 
 ## Overview
 
-Quillmark uses a **structured error handling strategy** that:
+Quillmark uses a **structured error handling strategy** based on Phase 1 of the diagnostic recommendation system that:
 
 * Preserves **line/column** and **source file** information where available
 * Keeps diagnostics **machine-readable** and **pretty-printable**
 * Avoids stringly-typed errors
 * Provides helpful hints for common error scenarios
+* **Maintains error source chains** through the `source` field
 
 This document describes the implemented error handling system and future improvement opportunities.
 
@@ -52,25 +53,46 @@ The system is built on three main types in `quillmark-core/src/error.rs`:
        pub primary: Option<Location>, // Main error location
        pub related: Vec<Location>,    // Trace/context locations
        pub hint: Option<String>,      // Helpful suggestion
+       pub source: Option<Box<dyn std::error::Error + Send + Sync>>, // Error chain
    }
    ```
 
+### SerializableDiagnostic
+
+For cross-language boundaries (Python, WASM), a serializable version is provided:
+
+```rust
+pub struct SerializableDiagnostic {
+    pub severity: Severity,
+    pub code: Option<String>,
+    pub message: String,
+    pub primary: Option<Location>,
+    pub related: Vec<Location>,
+    pub hint: Option<String>,
+    pub source_chain: Vec<String>, // Flattened error chain
+}
+```
+
+This type is used when diagnostics need to cross FFI boundaries and cannot include non-serializable trait objects.
+
 ### RenderError Enum
 
-All rendering errors are represented by the `RenderError` enum:
+All rendering errors are represented by the `RenderError` enum, with every variant now containing Diagnostic payloads:
 
 ```rust
 pub enum RenderError {
-    EngineCreation { diag: Diagnostic, source: Option<anyhow::Error> },
-    InvalidFrontmatter { diag: Diagnostic, source: Option<anyhow::Error> },
-    TemplateFailed { source: minijinja::Error, diag: Diagnostic },
-    CompilationFailed(usize, Vec<Diagnostic>),
-    FormatNotSupported { backend: String, format: OutputFormat },
-    UnsupportedBackend(String),
-    DynamicAssetCollision { filename: String, message: String },
-    Internal(anyhow::Error),
-    Other(Box<dyn std::error::Error + Send + Sync>),
-    Template(TemplateError),
+    EngineCreation { diag: Diagnostic },
+    InvalidFrontmatter { diag: Diagnostic },
+    TemplateFailed { diag: Diagnostic },
+    CompilationFailed { diags: Vec<Diagnostic> },
+    FormatNotSupported { diag: Diagnostic },
+    UnsupportedBackend { diag: Diagnostic },
+    DynamicAssetCollision { diag: Diagnostic },
+    DynamicFontCollision { diag: Diagnostic },
+    InputTooLarge { diag: Diagnostic },
+    YamlTooLarge { diag: Diagnostic },
+    NestingTooDeep { diag: Diagnostic },
+    OutputTooLarge { diag: Diagnostic },
 }
 ```
 
@@ -78,12 +100,13 @@ pub enum RenderError {
 - Callers can **enumerate** diagnostics and build UI/tooling integrations
 - Human-readable via `Display` trait
 - Machine data never lost through structured `Diagnostic` objects
+- Consistent error structure across all variants
 
 ---
 
 ## Error Source Mapping
 
-### MiniJinja (Template Engine) ✅ Implemented
+### MiniJinja (Template Engine) ✅ Implemented with Source Preservation
 
 **Location:** `quillmark-core/src/error.rs`
 
@@ -91,6 +114,7 @@ The `From<minijinja::Error> for RenderError` implementation:
 
 - ✅ Captures line number from `error.line()`
 - ✅ Captures column position from `error.range()`
+- ✅ **Preserves original error via `with_source()`**
 - ✅ Generates context-aware hints based on `error.kind()`:
   - `UndefinedError` → "Check variable spelling and ensure it's defined in frontmatter"
   - `InvalidOperation` → "Check that you're using the correct filter or operator for this type"
@@ -102,6 +126,7 @@ The `From<minijinja::Error> for RenderError` implementation:
 ```
 [ERROR] undefined variable 'name' (minijinja::UndefinedError) at template.typ:5:23
   hint: Check variable spelling and ensure it's defined in frontmatter
+  cause 1: original MiniJinja error details
 ```
 
 ### Typst (Backend Compiler) ✅ Implemented
@@ -183,33 +208,43 @@ pub fn print_errors(err: &RenderError) {
 
 ## Implementation Status
 
-### ✅ Phase 1: Critical Fixes (Implemented)
+### ✅ Phase 1: Core Diagnostic System (Complete)
 
-1. **Typst Error Mapping** ✅
-   - Created `error_mapping.rs` module
-   - Converts `SourceDiagnostic` → structured `Diagnostic`
-   - Proper span resolution to file/line/column
-   - Trace mapping for debugging
+1. **Source Chain Support** ✅
+   - Added optional `source` field to Diagnostic
+   - Implemented `with_source()` builder method
+   - Implemented `source_chain()` to extract error chain
+   - Implemented `fmt_pretty_with_source()` for debugging
 
-2. **Backend Safety** ✅
+2. **SerializableDiagnostic** ✅
+   - Created for cross-language boundaries (Python, WASM)
+   - Includes flattened `source_chain` instead of trait object
+   - Implements From<Diagnostic> and From<&Diagnostic>
+
+3. **Standardized Error Variants** ✅
+   - All RenderError variants now use Diagnostic payloads
+   - Removed legacy Internal, Other, and Template variants
+   - Consistent error structure across all error types
+
+4. **Backend Safety** ✅
    - Removed `.unwrap()` from PDF compilation
    - Changed return types to `Result<_, RenderError>`
-   - Proper error propagation via `RenderError::CompilationFailed`
+   - Proper error propagation via structured Diagnostics
 
-3. **MiniJinja Enhancement** ✅
-   - Column information now captured from `error.range()`
-   - Context-aware hint generation
-   - Error detail extraction
+5. **Error Preservation** ✅
+   - MiniJinja errors preserve source chain
+   - Typst errors properly converted to Diagnostics
+   - All error conversions maintain context
 
-4. **Error Printing** ✅
-   - Enhanced `fmt_pretty()` with trace locations
-   - Explicit handling of all error variants
-   - Consistent formatting
+6. **Cross-Language Support** ✅
+   - Python bindings updated to use SerializableDiagnostic
+   - WASM bindings updated to use SerializableDiagnostic
+   - Error information properly propagated across FFI
 
 **Testing:**
-- ✅ 47 unit tests passing
-- ✅ 14 integration tests passing
+- ✅ All 87 tests passing (54 unit + 33 integration/doc)
 - ✅ Zero regressions
+- ✅ Doc tests updated and passing
 
 ### ⚠️ Phase 2: Enhanced Features (Future)
 
@@ -504,26 +539,35 @@ If you have code that relied on the old error handling:
 
 ## Changelog
 
-### 2024 - Phase 1 Implementation
+### 2025-10-21 - Phase 1 Implementation (Complete)
 
 **Added:**
-- ✅ Typst error mapping module (`error_mapping.rs`)
-- ✅ MiniJinja column information capture
-- ✅ Context-aware hint generation
-- ✅ Trace location display in `fmt_pretty()`
-- ✅ Explicit handling for all error variants
+- ✅ Source chain support in Diagnostic
+- ✅ `with_source()` builder method
+- ✅ `source_chain()` helper method
+- ✅ `fmt_pretty_with_source()` method
+- ✅ SerializableDiagnostic for FFI boundaries
+- ✅ From<&Diagnostic> for SerializableDiagnostic
+
+**Changed:**
+- ✅ All RenderError variants now use Diagnostic payloads
+- ✅ Removed redundant fields from error variants (backend, format, filename, message)
+- ✅ MiniJinja error conversion preserves source chain
+- ✅ Python and WASM bindings use SerializableDiagnostic
+- ✅ Diagnostic no longer implements Clone (due to source field)
+
+**Removed:**
+- ✅ RenderError::Internal variant (replaced with appropriate specific variants)
+- ✅ RenderError::Other variant (replaced with appropriate specific variants)
+- ✅ RenderError::Template variant (replaced with TemplateFailed)
+- ✅ Legacy `source` field from error variants (now in Diagnostic)
 
 **Fixed:**
 - ✅ Removed `.unwrap()` panic risk from backend
 - ✅ Proper error propagation in PDF/SVG compilation
-- ✅ MiniJinja column was always 0 (now uses `error.range()`)
-
-**Improved:**
-- ✅ Error messages now include helpful hints
-- ✅ Trace locations shown for debugging
-- ✅ Consistent error formatting across all types
+- ✅ All error paths now have structured diagnostics
+- ✅ Tests updated to match new error structure
 
 **Testing:**
-- ✅ All 47 unit tests passing
-- ✅ All 14 integration tests passing
+- ✅ All 87 tests passing
 - ✅ Zero regressions
