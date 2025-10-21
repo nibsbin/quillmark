@@ -115,45 +115,60 @@ impl Backend for AcroformBackend {
             });
 
             if let Some(source) = render_source {
-                if let Ok(rendered_value) = env.render_str(&source, &context) {
-                    let should_update = using_tooltip_template || rendered_value != source;
-
-                    if should_update {
-                        let new_value = match &field.current_value {
-                            Some(FieldValue::Text(_)) => FieldValue::Text(rendered_value),
-                            Some(FieldValue::Boolean(_)) => {
-                                let bool_val =
-                                    rendered_value.trim().parse::<i32>().ok().map_or_else(
-                                        || rendered_value.trim().to_lowercase() == "true",
-                                        |num| num != 0,
-                                    );
-                                FieldValue::Boolean(bool_val)
-                            }
-                            Some(FieldValue::Choice(_)) => {
-                                let choice_val = match rendered_value.trim().to_lowercase().as_str()
-                                {
-                                    "true" => "1".to_string(),
-                                    "false" => "0".to_string(),
-                                    _ => rendered_value,
-                                };
-                                FieldValue::Choice(choice_val)
-                            }
-                            Some(FieldValue::Integer(_)) => {
-                                let int_val = match rendered_value.trim().to_lowercase().as_str() {
-                                    "true" => 1,
-                                    "false" => 0,
-                                    _ => rendered_value.trim().parse::<i32>().unwrap_or(0),
-                                };
-                                FieldValue::Integer(int_val)
-                            }
-                            None => FieldValue::Text(rendered_value),
-                        };
-                        println!(
-                            "Filling field '{}' with value '{:?}'\n",
-                            field.name, new_value
-                        );
-                        values_to_fill.insert(field.name.clone(), new_value);
+                let rendered_value = match env.render_str(&source, &context) {
+                    Ok(val) => val,
+                    Err(e) => {
+                        return Err(RenderError::TemplateFailed {
+                            diag: quillmark_core::Diagnostic {
+                                severity: quillmark_core::Severity::Error,
+                                code: Some("acroform::template".to_string()),
+                                message: format!("Failed to render template for field '{}': {}", field.name, e),
+                                primary: None,
+                                related: Vec::new(),
+                                hint: Some(format!("Template: {}", source)),
+                            },
+                            source: e,
+                        });
                     }
+                };
+
+                let should_update = using_tooltip_template || rendered_value != source;
+
+                if should_update {
+                    let new_value = match &field.current_value {
+                        Some(FieldValue::Text(_)) => FieldValue::Text(rendered_value),
+                        Some(FieldValue::Boolean(_)) => {
+                            let bool_val =
+                                rendered_value.trim().parse::<i32>().ok().map_or_else(
+                                    || rendered_value.trim().to_lowercase() == "true",
+                                    |num| num != 0,
+                                );
+                            FieldValue::Boolean(bool_val)
+                        }
+                        Some(FieldValue::Choice(_)) => {
+                            let choice_val = match rendered_value.trim().to_lowercase().as_str()
+                            {
+                                "true" => "1".to_string(),
+                                "false" => "0".to_string(),
+                                _ => rendered_value,
+                            };
+                            FieldValue::Choice(choice_val)
+                        }
+                        Some(FieldValue::Integer(_)) => {
+                            let int_val = match rendered_value.trim().to_lowercase().as_str() {
+                                "true" => 1,
+                                "false" => 0,
+                                _ => rendered_value.trim().parse::<i32>().unwrap_or(0),
+                            };
+                            FieldValue::Integer(int_val)
+                        }
+                        None => FieldValue::Text(rendered_value),
+                    };
+                    println!(
+                        "Filling field '{}' with value '{:?}'\n",
+                        field.name, new_value
+                    );
+                    values_to_fill.insert(field.name.clone(), new_value);
                 }
             }
         }
