@@ -78,7 +78,8 @@
 //! # impl Backend for MyCustomBackend {
 //! #     fn id(&self) -> &'static str { "custom" }
 //! #     fn supported_formats(&self) -> &'static [OutputFormat] { &[OutputFormat::Txt] }
-//! #     fn glue_type(&self) -> &'static str { ".txt" }
+//! #     fn glue_extension_types(&self) -> &'static [&'static str] { &[".txt"] }
+//! #     fn allow_auto_glue(&self) -> bool { true }
 //! #     fn register_filters(&self, _glue: &mut Glue) {}
 //! #     fn compile(&self, content: &str, _quill: &Quill, _opts: &RenderOptions) -> Result<RenderResult, RenderError> {
 //! #         let artifacts = vec![Artifact { bytes: content.as_bytes().to_vec(), output_format: OutputFormat::Txt }];

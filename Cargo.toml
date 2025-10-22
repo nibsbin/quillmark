@@ -42,6 +42,9 @@ glob = "0.3.3"
 # Templating
 minijinja = "~2.12"
 
+# Validation
+jsonschema = "0.18"
+
 # Typst backend dependencies
 fontdb = "0.21.0"
 pulldown-cmark = "0.13.0"

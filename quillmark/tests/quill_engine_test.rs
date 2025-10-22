@@ -34,7 +34,9 @@ fn test_quill_engine_register_quill() {
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     // Check that quill is registered
     let quills = engine.registered_quills();
@@ -63,7 +65,9 @@ fn test_quill_engine_get_workflow() {
     .expect("Failed to write glue.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     // Load workflow by quill name using new load() method
     let workflow = engine
@@ -109,19 +113,17 @@ fn test_quill_engine_backend_not_found() {
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill);
 
-    // Try to load workflow with non-existent backend
-    let result = engine.workflow_from_quill_name("bad-backend-quill");
+    // Try to register quill with non-existent backend - should fail now
+    let result = engine.register_quill(quill);
 
     assert!(result.is_err());
     match result {
-        Err(quillmark::RenderError::UnsupportedBackend { diag }) => {
-            assert!(
-                diag.message.contains("not registered") || diag.message.contains("not enabled")
-            );
+        Err(quillmark::RenderError::QuillConfig { diag }) => {
+            assert!(diag.message.contains("not registered"));
+            assert!(diag.code == Some("quill::backend_not_found".to_string()));
         }
-        _ => panic!("Expected UnsupportedBackend error with backend not registered message"),
+        _ => panic!("Expected QuillConfig error with backend not registered message"),
     }
 }
 
@@ -150,7 +152,9 @@ _By {{ author | String(default="Unknown") }}_
     fs::write(quill_path.join("glue.typ"), glue_template).expect("Failed to write glue.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     // Load workflow and render
     let workflow = engine
@@ -199,7 +203,9 @@ fn test_quill_engine_load_with_quill_object() {
     .expect("Failed to write glue.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill.clone());
+    engine
+        .register_quill(quill.clone())
+        .expect("Failed to register quill");
 
     // Load workflow by passing Quill object directly
     let workflow = engine
@@ -233,7 +239,9 @@ fn test_quill_engine_load_with_different_string_types() {
     .expect("Failed to write glue.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     // Test with &str
     let workflow1 = engine

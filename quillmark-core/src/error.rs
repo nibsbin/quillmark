@@ -454,6 +454,27 @@ pub enum RenderError {
         /// Diagnostic information
         diag: Diagnostic,
     },
+
+    /// Validation failed for parsed document
+    #[error("{diag}")]
+    ValidationFailed {
+        /// Diagnostic information
+        diag: Diagnostic,
+    },
+
+    /// Invalid schema definition
+    #[error("{diag}")]
+    InvalidSchema {
+        /// Diagnostic information
+        diag: Diagnostic,
+    },
+
+    /// Quill configuration error
+    #[error("{diag}")]
+    QuillConfig {
+        /// Diagnostic information
+        diag: Diagnostic,
+    },
 }
 
 impl RenderError {
@@ -471,7 +492,10 @@ impl RenderError {
             | RenderError::InputTooLarge { diag }
             | RenderError::YamlTooLarge { diag }
             | RenderError::NestingTooDeep { diag }
-            | RenderError::OutputTooLarge { diag } => vec![diag],
+            | RenderError::OutputTooLarge { diag }
+            | RenderError::ValidationFailed { diag }
+            | RenderError::InvalidSchema { diag }
+            | RenderError::QuillConfig { diag } => vec![diag],
         }
     }
 }
@@ -574,6 +598,9 @@ pub fn print_errors(err: &RenderError) {
         RenderError::YamlTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::NestingTooDeep { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::OutputTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::ValidationFailed { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::InvalidSchema { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::QuillConfig { diag } => eprintln!("{}", diag.fmt_pretty()),
     }
 }
 

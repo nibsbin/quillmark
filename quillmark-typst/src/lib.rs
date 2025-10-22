@@ -70,8 +70,12 @@ impl Backend for TypstBackend {
         &[OutputFormat::Pdf, OutputFormat::Svg]
     }
 
-    fn glue_type(&self) -> &'static str {
-        ".typ"
+    fn glue_extension_types(&self) -> &'static [&'static str] {
+        &[".typ"]
+    }
+
+    fn allow_auto_glue(&self) -> bool {
+        true
     }
 
     fn register_filters(&self, glue: &mut Glue) {
@@ -150,7 +154,8 @@ mod tests {
     fn test_backend_info() {
         let backend = TypstBackend::default();
         assert_eq!(backend.id(), "typst");
-        assert_eq!(backend.glue_type(), ".typ");
+        assert_eq!(backend.glue_extension_types(), &[".typ"]);
+        assert!(backend.allow_auto_glue());
         assert!(backend.supported_formats().contains(&OutputFormat::Pdf));
         assert!(backend.supported_formats().contains(&OutputFormat::Svg));
     }

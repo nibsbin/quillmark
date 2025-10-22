@@ -564,6 +564,34 @@ impl Quill {
             }
         }
 
+        // Validate json_schema file if specified
+        if let Some(quill_section) = quill_toml.get("Quill") {
+            if let Some(json_schema_path) =
+                quill_section.get("json_schema").and_then(|v| v.as_str())
+            {
+                // Check if file exists
+                let schema_bytes = root.get_file(json_schema_path).ok_or_else(|| {
+                    format!(
+                        "json_schema file '{}' not found in file tree",
+                        json_schema_path
+                    )
+                })?;
+
+                // Validate JSON syntax
+                serde_json::from_slice::<serde_json::Value>(schema_bytes).map_err(|e| {
+                    format!(
+                        "json_schema file '{}' is not valid JSON: {}",
+                        json_schema_path, e
+                    )
+                })?;
+
+                // Warn if fields are also defined
+                if !field_schemas.is_empty() {
+                    eprintln!("Warning: [fields] section is overridden by json_schema");
+                }
+            }
+        }
+
         // Read the template content from glue file (if specified)
         let template_content = if let Some(ref glue_file_name) = glue_file {
             let glue_bytes = root
