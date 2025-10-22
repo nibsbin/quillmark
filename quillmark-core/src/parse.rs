@@ -362,9 +362,7 @@ fn find_metadata_blocks(
 }
 
 /// Decompose markdown into frontmatter fields and body
-fn decompose(
-    markdown: &str,
-) -> Result<ParsedDocument, Box<dyn std::error::Error + Send + Sync>> {
+fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error + Send + Sync>> {
     // Check input size limit
     if markdown.len() > crate::error::MAX_INPUT_SIZE {
         return Err(format!(

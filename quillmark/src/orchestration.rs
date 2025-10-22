@@ -163,8 +163,8 @@
 //! ```
 
 use quillmark_core::{
-    Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Quill, RenderError,
-    RenderOptions, RenderResult, Severity,
+    Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Quill, RenderError, RenderOptions,
+    RenderResult, Severity,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
