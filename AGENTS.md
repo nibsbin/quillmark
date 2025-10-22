@@ -45,45 +45,12 @@ cargo doc --no-deps --workspace --all-features
 cargo run --example usaf_memo
 ```
 
-Tests: unit (in-file), integration (`tests/*.rs` with `common.rs`), doc (external `.md`), examples (use fixtures).
-
 Before committing, ALWAYS run `cargo fmt` to ensure consistent formatting.
 
-When working with WASM, install the wasm target with `rustup target add wasm32-unknown-unknown`
-and use `scripts/build-wasm.sh` to build all targets.
-
-## Extended YAML Metadata
-
-Supports **inline metadata sections** with SCOPE/QUILL keys:
-
-```markdown
----
-SCOPE: products
-name: Widget
----
-Description here.
-```
-
-See `designs/PARSE.md`.
-
-## Filter API (Stable Abstraction)
-
-**Never import MiniJinja directly** - use `quillmark_core::templating::filter_api`:
-
-```rust
-use quillmark_core::templating::filter_api::{State, Value, Kwargs, Error, ErrorKind};
-```
-
-Common filters: `String`, `Lines`, `Date`, `Dict`, `Content`, `Asset` (prefixed with `DYNAMIC_ASSET__`).
-
-## Error Handling
-
-**Use `Diagnostic` everywhere** - never stringify prematurely:
-
-Map external errors (MiniJinja, Typst) to preserve context.
+When working with WASM, install the wasm target with `rustup target add wasm32-unknown-unknown` and use `scripts/build-wasm.sh` to build all targets.
 
 ## Reference
 
-- `designs/` - Complete architecture, workflows, specs
+- `designs/` - Complete architecture, workflows, error strategy, specs
 - `CONTRIBUTING.md` - Documentation standards
 - `release.toml` - Release configuration
