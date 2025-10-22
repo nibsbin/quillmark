@@ -10,8 +10,8 @@ fn test_with_existing_fixture() {
     let quill_path = resource_path("usaf_memo");
     println!("Testing with fixture at: {:?}", quill_path);
 
-    // Load the sample frontmatter demo markdown
-    let sample_markdown_path = resource_path("frontmatter_demo.md");
+    // Load the example markdown for usaf_memo
+    let sample_markdown_path = quill_path.join("usaf_memo.md");
     let markdown =
         fs::read_to_string(&sample_markdown_path).expect("Failed to read sample markdown");
 

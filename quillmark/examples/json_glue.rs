@@ -53,7 +53,9 @@ output as JSON instead of being processed through a template.
     println!("Glue template empty: {}", quill.glue_template.is_empty());
     println!();
 
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     // Create workflow and process the glue
     let workflow = engine

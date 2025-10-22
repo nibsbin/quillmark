@@ -243,7 +243,8 @@ impl Quillmark {
     /// # impl Backend for CustomBackend {
     /// #     fn id(&self) -> &'static str { "custom" }
     /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
-    /// #     fn glue_type(&self) -> &'static str { ".custom" }
+    /// #     fn glue_extension_types(&self) -> &'static [&'static str] { &[".custom"] }
+    /// #     fn allow_auto_glue(&self) -> bool { true }
     /// #     fn register_filters(&self, _: &mut quillmark_core::Glue) {}
     /// #     fn compile(&self, _: &str, _: &quillmark_core::Quill, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
     /// #         Ok(quillmark_core::RenderResult::new(vec![], quillmark_core::OutputFormat::Txt))
@@ -260,9 +261,93 @@ impl Quillmark {
     }
 
     /// Register a quill template with the engine by name.
-    pub fn register_quill(&mut self, quill: Quill) {
+    ///
+    /// Validates the quill configuration against the registered backend, including:
+    /// - Backend exists and is registered
+    /// - Glue file extension matches backend requirements
+    /// - Auto-glue is allowed if no glue file is specified
+    /// - Quill name is unique
+    pub fn register_quill(&mut self, quill: Quill) -> Result<(), RenderError> {
         let name = quill.name.clone();
+
+        // Check name uniqueness
+        if self.quills.contains_key(&name) {
+            return Err(RenderError::QuillConfig {
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    format!("Quill '{}' is already registered", name),
+                )
+                .with_code("quill::name_collision".to_string())
+                .with_hint("Each quill must have a unique name".to_string()),
+            });
+        }
+
+        // Get backend
+        let backend_id = quill.backend.as_str();
+        let backend = self
+            .backends
+            .get(backend_id)
+            .ok_or_else(|| RenderError::QuillConfig {
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    format!(
+                        "Backend '{}' specified in quill '{}' is not registered",
+                        backend_id, name
+                    ),
+                )
+                .with_code("quill::backend_not_found".to_string())
+                .with_hint(format!(
+                    "Available backends: {}",
+                    self.backends.keys().cloned().collect::<Vec<_>>().join(", ")
+                )),
+            })?;
+
+        // Validate glue_file extension or auto_glue
+        if let Some(glue_file) = &quill.glue_file {
+            let extension = std::path::Path::new(glue_file)
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|e| format!(".{}", e))
+                .unwrap_or_default();
+
+            if !backend.glue_extension_types().contains(&extension.as_str()) {
+                return Err(RenderError::QuillConfig {
+                    diag: Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "Glue file '{}' has extension '{}' which is not supported by backend '{}'",
+                            glue_file, extension, backend_id
+                        ),
+                    )
+                    .with_code("quill::glue_extension_mismatch".to_string())
+                    .with_hint(format!(
+                        "Supported extensions for '{}' backend: {}",
+                        backend_id,
+                        backend.glue_extension_types().join(", ")
+                    )),
+                });
+            }
+        } else {
+            if !backend.allow_auto_glue() {
+                return Err(RenderError::QuillConfig {
+                    diag: Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "Backend '{}' does not support automatic glue generation, but quill '{}' does not specify a glue file",
+                            backend_id, name
+                        ),
+                    )
+                    .with_code("quill::auto_glue_not_allowed".to_string())
+                    .with_hint(format!(
+                        "Add a glue file with one of these extensions: {}",
+                        backend.glue_extension_types().join(", ")
+                    )),
+                });
+            }
+        }
+
         self.quills.insert(name, quill);
+        Ok(())
     }
 
     /// Load a workflow from a parsed document that contains a quill tag
@@ -446,6 +531,9 @@ impl Workflow {
 
     /// Process a parsed document through the glue template without compilation
     pub fn process_glue(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
+        // Validate document against schema
+        self.validate_document(parsed)?;
+
         // Create appropriate glue based on whether template is provided
         let mut glue = if self.quill.glue_template.is_empty() {
             Glue::new_json()
@@ -461,6 +549,79 @@ impl Workflow {
                         .with_code("template::compose".to_string()),
                 })?;
         Ok(glue_output)
+    }
+
+    /// Validate a ParsedDocument against the Quill's schema
+    ///
+    /// Validates the document's fields against the schema defined in the Quill.
+    /// The schema can come from either:
+    /// - A json_schema file specified in Quill.toml
+    /// - TOML `[fields]` section converted to JSON Schema
+    ///
+    /// If no schema is defined, this returns Ok(()).
+    pub fn validate(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
+        self.validate_document(parsed)
+    }
+
+    /// Internal validation method
+    fn validate_document(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
+        use quillmark_core::validation;
+
+        // Build or load JSON Schema
+        let json_schema = if let Some(schema_path) = self.quill.metadata.get("json_schema") {
+            // Load from quill files
+            let schema_path_str =
+                schema_path
+                    .as_str()
+                    .ok_or_else(|| RenderError::InvalidSchema {
+                        diag: Diagnostic::new(
+                            Severity::Error,
+                            "json_schema field in Quill.toml must be a string".to_string(),
+                        )
+                        .with_code("validation::invalid_schema_path".to_string()),
+                    })?;
+
+            let schema_bytes = self.quill.files.get_file(schema_path_str).ok_or_else(|| {
+                RenderError::InvalidSchema {
+                    diag: Diagnostic::new(
+                        Severity::Error,
+                        format!("json_schema file '{}' not found", schema_path_str),
+                    )
+                    .with_code("validation::schema_not_found".to_string()),
+                }
+            })?;
+
+            serde_json::from_slice(schema_bytes).map_err(|e| RenderError::InvalidSchema {
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    format!("Failed to parse json_schema file: {}", e),
+                )
+                .with_code("validation::schema_invalid".to_string())
+                .with_source(Box::new(e)),
+            })?
+        } else if !self.quill.field_schemas.is_empty() {
+            // Convert from TOML fields
+            validation::build_schema_from_fields(&self.quill.field_schemas)?
+        } else {
+            // No schema defined, skip validation
+            return Ok(());
+        };
+
+        // Validate document
+        match validation::validate_document(&json_schema, parsed.fields()) {
+            Ok(_) => Ok(()),
+            Err(errors) => {
+                let error_message = errors.join("\n");
+                Err(RenderError::ValidationFailed {
+                    diag: Diagnostic::new(Severity::Error, error_message)
+                        .with_code("validation::document_invalid".to_string())
+                        .with_hint(
+                            "Ensure all required fields are present and have correct types"
+                                .to_string(),
+                        ),
+                })
+            }
+        }
     }
 
     /// Get the backend identifier (e.g., "typst").

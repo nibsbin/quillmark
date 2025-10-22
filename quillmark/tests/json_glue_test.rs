@@ -22,7 +22,9 @@ fn test_json_glue_without_glue_file() {
     assert_eq!(quill.glue_file, None);
     assert_eq!(quill.glue_template, "");
 
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     let workflow = engine
         .workflow_from_quill_name("json-quill")
@@ -62,7 +64,9 @@ This is a test document.
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     let workflow = engine
         .workflow_from_quill_name("json-quill")
@@ -113,7 +117,9 @@ Content here.
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     let workflow = engine
         .workflow_from_quill_name("json-quill")
@@ -169,7 +175,9 @@ Content
     assert_eq!(quill.glue_file, Some("glue.typ".to_string()));
     assert!(!quill.glue_template.is_empty());
 
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     let workflow = engine
         .workflow_from_quill_name("template-quill")

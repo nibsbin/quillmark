@@ -17,8 +17,12 @@ impl Backend for MockBackend {
         &[OutputFormat::Txt]
     }
 
-    fn glue_type(&self) -> &'static str {
-        ".txt"
+    fn glue_extension_types(&self) -> &'static [&'static str] {
+        &[".txt"]
+    }
+
+    fn allow_auto_glue(&self) -> bool {
+        true
     }
 
     fn register_filters(&self, _glue: &mut Glue) {
@@ -108,7 +112,9 @@ fn test_workflow_with_custom_backend() {
         .expect("Failed to write glue.txt");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     // Load workflow using the custom backend
     let workflow = engine

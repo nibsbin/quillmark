@@ -29,8 +29,11 @@ impl PyQuillmark {
         }
     }
 
-    fn register_quill(&mut self, quill: PyRef<PyQuill>) {
-        self.inner.register_quill(quill.inner.clone());
+    fn register_quill(&mut self, quill: PyRef<PyQuill>) -> PyResult<()> {
+        self.inner
+            .register_quill(quill.inner.clone())
+            .map_err(convert_render_error)?;
+        Ok(())
     }
 
     fn workflow_from_quill_name(&self, name: &str) -> PyResult<PyWorkflow> {

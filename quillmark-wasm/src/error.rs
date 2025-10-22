@@ -110,6 +110,24 @@ impl From<quillmark_core::RenderError> for QuillmarkError {
                 hint: diag.hint.clone(),
                 diagnostics: None,
             },
+            RenderError::ValidationFailed { diag } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            RenderError::InvalidSchema { diag } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
+            RenderError::QuillConfig { diag } => QuillmarkError {
+                message: diag.message.clone(),
+                location: diag.primary.map(|loc| loc.into()),
+                hint: diag.hint.clone(),
+                diagnostics: None,
+            },
         }
     }
 }
