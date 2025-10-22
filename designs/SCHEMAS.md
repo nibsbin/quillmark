@@ -32,7 +32,7 @@ Quills encapsulate the metadata, configuration, and behavior for generating a sp
 
 ### Quill Field
 
-Developers should define the schema for ParsedDocument input within the `fields` dictionary. This schema will be used to validate the ParsedDocument.
+Developers can define the schema for ParsedDocument input within the `fields` dictionary. This schema will be used for ParsedDocument validation.
 
 - name -> str: This is the key; e.g. for the TOML section `[fields.title]`, the name would be "title".
 - description -> str: A description of the field.
