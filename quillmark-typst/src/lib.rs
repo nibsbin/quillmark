@@ -106,21 +106,15 @@ impl Backend for TypstBackend {
 
         match format {
             OutputFormat::Pdf => {
-                let (bytes, warnings) =
-                    compile::compile_to_pdf_with_warnings(quill, glued_content)?;
+                let bytes = compile::compile_to_pdf(quill, glued_content)?;
                 let artifacts = vec![Artifact {
                     bytes,
                     output_format: OutputFormat::Pdf,
                 }];
-                let mut result = RenderResult::new(artifacts, OutputFormat::Pdf);
-                for warning in warnings {
-                    result = result.with_warning(warning);
-                }
-                Ok(result)
+                Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
             }
             OutputFormat::Svg => {
-                let (svg_pages, warnings) =
-                    compile::compile_to_svg_with_warnings(quill, glued_content)?;
+                let svg_pages = compile::compile_to_svg(quill, glued_content)?;
                 let artifacts = svg_pages
                     .into_iter()
                     .map(|bytes| Artifact {
@@ -128,11 +122,7 @@ impl Backend for TypstBackend {
                         output_format: OutputFormat::Svg,
                     })
                     .collect();
-                let mut result = RenderResult::new(artifacts, OutputFormat::Svg);
-                for warning in warnings {
-                    result = result.with_warning(warning);
-                }
-                Ok(result)
+                Ok(RenderResult::new(artifacts, OutputFormat::Svg))
             }
             OutputFormat::Txt => Err(RenderError::FormatNotSupported {
                 diag: Diagnostic::new(

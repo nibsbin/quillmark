@@ -1,6 +1,6 @@
 # Diagnostic-Based Error System Recommendation
 
-**Status**: Phase 1 ✓ Complete | Phase 2 ✓ Complete | Phase 3 ✓ Complete  
+**Status**: Phase 1 ✓ Complete | Phase 2 ✓ Complete | Phase 3 Partial  
 **Created**: 2025-10-21  
 **Related**: [ERROR_SYSTEM_EVALUATION.md](ERROR_SYSTEM_EVALUATION.md), [ERROR.md](ERROR.md)
 
@@ -647,7 +647,7 @@ let rendered_value = env.render_str(&source, &context).map_err(|e| {
 
 ### Phase 3: Enhancement
 
-8. **Add warning system** ✓
+8. **Add warning system** (Reverted)
    - Expose Typst warnings
    - Populate RenderResult.warnings
    - Test warning propagation
