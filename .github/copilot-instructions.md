@@ -14,15 +14,23 @@
 - `quillmark-python/` - Python bindings
 - `quillmark-wasm/` - WASM bindings
 
-
 See `designs/ARCHITECTURE.md` for complete architecture.
 
-## Documentation Strategy
+## Code Documentation Strategy
 
 - Use standard in-line Rust doc comments (`///`)
 - Only create minimal examples for public APIs
 - Err on the side of brevity
 - Avoid documentation creep; keep docs focused and up-to-date
+
+## Design Document Philosophy
+All design documents in `designs/` should follow consistent principles:
+
+- High-level only - Focus on architecture, not implementation
+- Minimal code - Only essential examples, reference actual code
+- Medium detail - Enough to understand, not enough to implement
+- KISS - Keep it simple and maintainable
+- References - Point to actual implementation for details
 
 ## Implementation/Testing Strategy
 
@@ -34,7 +42,7 @@ See `designs/ARCHITECTURE.md` for complete architecture.
 cargo build --workspace --all-features
 cargo test --workspace --all-features
 cargo doc --no-deps --workspace --all-features
-cargo run --example appreciated_letter
+cargo run --example usaf_memo
 ```
 
 Tests: unit (in-file), integration (`tests/*.rs` with `common.rs`), doc (external `.md`), examples (use fixtures).
