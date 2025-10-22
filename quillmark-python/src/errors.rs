@@ -12,7 +12,7 @@ create_exception!(_quillmark, TemplateError, QuillmarkError);
 create_exception!(_quillmark, CompilationError, QuillmarkError);
 
 pub fn convert_render_error(err: RenderError) -> PyErr {
-    Python::with_gil(|py| match err {
+    Python::attach(|py| match err {
         RenderError::InvalidFrontmatter { diag } => {
             let py_err = ParseError::new_err(diag.message.clone());
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {

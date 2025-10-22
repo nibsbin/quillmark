@@ -576,3 +576,119 @@ pub fn print_errors(err: &RenderError) {
         RenderError::OutputTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_diagnostic_with_source_chain() {
+        let root_err = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
+        let diag = Diagnostic::new(Severity::Error, "Rendering failed".to_string())
+            .with_source(Box::new(root_err));
+
+        let chain = diag.source_chain();
+        assert_eq!(chain.len(), 1);
+        assert!(chain[0].contains("File not found"));
+    }
+
+    #[test]
+    fn test_diagnostic_serialization() {
+        let diag = Diagnostic::new(Severity::Error, "Test error".to_string())
+            .with_code("E001".to_string())
+            .with_location(Location {
+                file: "test.typ".to_string(),
+                line: 10,
+                col: 5,
+            });
+
+        let serializable: SerializableDiagnostic = diag.into();
+        let json = serde_json::to_string(&serializable).unwrap();
+        assert!(json.contains("Test error"));
+        assert!(json.contains("E001"));
+    }
+
+    #[test]
+    fn test_render_error_diagnostics_extraction() {
+        let diag1 = Diagnostic::new(Severity::Error, "Error 1".to_string());
+        let diag2 = Diagnostic::new(Severity::Error, "Error 2".to_string());
+
+        let err = RenderError::CompilationFailed {
+            diags: vec![diag1, diag2],
+        };
+
+        let diags = err.diagnostics();
+        assert_eq!(diags.len(), 2);
+    }
+
+    #[test]
+    fn test_diagnostic_fmt_pretty() {
+        let diag = Diagnostic::new(Severity::Warning, "Deprecated field used".to_string())
+            .with_code("W001".to_string())
+            .with_location(Location {
+                file: "input.md".to_string(),
+                line: 5,
+                col: 10,
+            })
+            .with_hint("Use the new field name instead".to_string());
+
+        let output = diag.fmt_pretty();
+        assert!(output.contains("[WARN]"));
+        assert!(output.contains("Deprecated field used"));
+        assert!(output.contains("W001"));
+        assert!(output.contains("input.md:5:10"));
+        assert!(output.contains("hint:"));
+    }
+
+    #[test]
+    fn test_diagnostic_fmt_pretty_with_source() {
+        let root_err = std::io::Error::new(std::io::ErrorKind::Other, "Underlying error");
+        let diag = Diagnostic::new(Severity::Error, "Top-level error".to_string())
+            .with_code("E002".to_string())
+            .with_source(Box::new(root_err));
+
+        let output = diag.fmt_pretty_with_source();
+        assert!(output.contains("[ERROR]"));
+        assert!(output.contains("Top-level error"));
+        assert!(output.contains("cause 1:"));
+        assert!(output.contains("Underlying error"));
+    }
+
+    #[test]
+    fn test_render_result_with_warnings() {
+        let artifacts = vec![];
+        let warning = Diagnostic::new(Severity::Warning, "Test warning".to_string());
+
+        let result = RenderResult::new(artifacts, OutputFormat::Pdf).with_warning(warning);
+
+        assert_eq!(result.warnings.len(), 1);
+        assert_eq!(result.warnings[0].message, "Test warning");
+    }
+
+    #[test]
+    fn test_minijinja_error_conversion() {
+        // Use undefined variable with strict mode to trigger an error
+        let template_str = "{{ undefined_var }}";
+        let mut env = minijinja::Environment::new();
+        env.set_undefined_behavior(minijinja::UndefinedBehavior::Strict);
+
+        let result = env.render_str(template_str, minijinja::context! {});
+        assert!(
+            result.is_err(),
+            "Expected rendering to fail with undefined variable"
+        );
+
+        let minijinja_err = result.unwrap_err();
+        let render_err: RenderError = minijinja_err.into();
+
+        match render_err {
+            RenderError::TemplateFailed { diag } => {
+                assert_eq!(diag.severity, Severity::Error);
+                assert!(diag.code.is_some());
+                assert!(diag.hint.is_some());
+                assert!(diag.source.is_some());
+            }
+            _ => panic!("Expected TemplateFailed error"),
+        }
+    }
+}
