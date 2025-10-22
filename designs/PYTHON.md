@@ -217,7 +217,7 @@ def render_processed(content: str, format: OutputFormat | None = None) -> Render
 def process_glue(markdown: str) -> str:
     """Process markdown through glue template, return composed output."""
 
-def process_glue_parsed(parsed: ParsedDocument) -> str:
+def process_glue(parsed: ParsedDocument) -> str:
     """Process parsed document through glue template."""
 
 def backend_id() -> str:

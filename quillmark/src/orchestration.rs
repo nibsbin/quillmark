@@ -89,7 +89,7 @@
 //!
 //! 1. **Full render** ([`Workflow::render()`]) - Compose with template → Compile to artifacts (parsing done separately)
 //! 2. **Content render** ([`Workflow::render_processed()`]) - Skip parsing, render pre-composed content
-//! 3. **Glue only** ([`Workflow::process_glue_parsed()`]) - Compose from parsed document, return template output
+//! 3. **Glue only** ([`Workflow::process_glue()`]) - Compose from parsed document, return template output
 //!
 //! ## Examples
 //!
@@ -398,7 +398,7 @@ impl Workflow {
         parsed: &ParsedDocument,
         format: Option<OutputFormat>,
     ) -> Result<RenderResult, RenderError> {
-        let glue_output = self.process_glue_parsed(parsed)?;
+        let glue_output = self.process_glue(parsed)?;
 
         // Prepare quill with dynamic assets
         let prepared_quill = self.prepare_quill_with_assets();
@@ -445,7 +445,7 @@ impl Workflow {
     }
 
     /// Process a parsed document through the glue template without compilation
-    pub fn process_glue_parsed(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
+    pub fn process_glue(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
         // Create appropriate glue based on whether template is provided
         let mut glue = if self.quill.glue_template.is_empty() {
             Glue::new_json()

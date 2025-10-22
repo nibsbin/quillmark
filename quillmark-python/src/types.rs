@@ -110,9 +110,9 @@ impl PyWorkflow {
         Ok(PyRenderResult { inner: result })
     }
 
-    fn process_glue_parsed(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<String> {
+    fn process_glue(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<String> {
         self.inner
-            .process_glue_parsed(&parsed.inner)
+            .process_glue(&parsed.inner)
             .map_err(convert_render_error)
     }
 

@@ -119,7 +119,7 @@ This is the content.
 }
 
 #[test]
-fn test_process_glue_parsed() {
+fn test_process_glue() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let quill_path = temp_dir.path().join("test-quill");
 
@@ -149,7 +149,7 @@ Some content
         .expect("Failed to load workflow");
 
     let glue = workflow
-        .process_glue_parsed(&parsed)
+        .process_glue(&parsed)
         .expect("Failed to process glue");
 
     assert!(glue.contains("Test Title"));

@@ -28,7 +28,7 @@ def test_process_glue(taro_quill_dir, taro_md):
     
     workflow = engine.workflow_from_quill_name("taro")
     parsed = ParsedDocument.from_markdown(taro_md)
-    glue_output = workflow.process_glue_parsed(parsed)
+    glue_output = workflow.process_glue(parsed)
     
     assert "nutty" in glue_output
     assert "earthy" in glue_output

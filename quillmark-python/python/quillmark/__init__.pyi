@@ -110,7 +110,7 @@ class Workflow:
     ) -> RenderResult:
         """Render pre-composed content (skip template processing)."""
     
-    def process_glue_parsed(self, parsed: ParsedDocument) -> str:
+    def process_glue(self, parsed: ParsedDocument) -> str:
         """Process parsed document through glue template."""
     
     @property
