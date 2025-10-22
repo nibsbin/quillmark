@@ -103,7 +103,7 @@ class Workflow:
             CompilationError: If backend compilation fails
         """
     
-    def render_source(
+    def render_processed(
         self,
         content: str,
         format: OutputFormat | None = None

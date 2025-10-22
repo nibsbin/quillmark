@@ -88,7 +88,7 @@
 //! The workflow supports rendering at three levels:
 //!
 //! 1. **Full render** ([`Workflow::render()`]) - Compose with template → Compile to artifacts (parsing done separately)
-//! 2. **Content render** ([`Workflow::render_source()`]) - Skip parsing, render pre-composed content
+//! 2. **Content render** ([`Workflow::render_processed()`]) - Skip parsing, render pre-composed content
 //! 3. **Glue only** ([`Workflow::process_glue_parsed()`]) - Compose from parsed document, return template output
 //!
 //! ## Examples
@@ -404,22 +404,22 @@ impl Workflow {
         let prepared_quill = self.prepare_quill_with_assets();
 
         // Pass prepared quill to backend
-        self.render_source_with_quill(&glue_output, format, &prepared_quill)
+        self.render_processed_with_quill(&glue_output, format, &prepared_quill)
     }
 
     /// Render pre-processed glue content, skipping parsing and template composition.
-    pub fn render_source(
+    pub fn render_processed(
         &self,
         content: &str,
         format: Option<OutputFormat>,
     ) -> Result<RenderResult, RenderError> {
         // Prepare quill with dynamic assets
         let prepared_quill = self.prepare_quill_with_assets();
-        self.render_source_with_quill(content, format, &prepared_quill)
+        self.render_processed_with_quill(content, format, &prepared_quill)
     }
 
     /// Internal method to render content with a specific quill
-    fn render_source_with_quill(
+    fn render_processed_with_quill(
         &self,
         content: &str,
         format: Option<OutputFormat>,
