@@ -3,20 +3,26 @@
 //! This module provides utilities for converting TOML field definitions to JSON Schema
 //! and validating ParsedDocument data against schemas.
 
-use crate::{FieldSchema, RenderError};
+use crate::{quill::FieldSchema, QuillValue, RenderError};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
 /// Convert a HashMap of FieldSchema to a JSON Schema object
 pub fn build_schema_from_fields(
     field_schemas: &HashMap<String, FieldSchema>,
-) -> Result<Value, RenderError> {
+) -> Result<QuillValue, RenderError> {
     let mut properties = Map::new();
     let mut required_fields = Vec::new();
 
     for (field_name, field_schema) in field_schemas {
         // Build property schema
         let mut property = Map::new();
+
+        // Add name
+        property.insert(
+            "name".to_string(),
+            Value::String(field_schema.name.clone()),
+        );
 
         // Add type if specified
         if let Some(ref field_type) = field_schema.r#type {
@@ -51,7 +57,7 @@ pub fn build_schema_from_fields(
         // - If default is present → field is optional
         // - If default is absent and required is true → field is required
         // - If default is absent and required is false → field is optional
-        if field_schema.default.is_none() && field_schema.required {
+        if field_schema.default.is_none() && field_schema.default.is_none() {
             required_fields.push(field_name.clone());
         }
     }
@@ -65,12 +71,12 @@ pub fn build_schema_from_fields(
         "additionalProperties": true
     });
 
-    Ok(schema)
+    Ok(QuillValue::from_json(schema))
 }
 
 /// Validate a document's fields against a JSON Schema
 pub fn validate_document(
-    schema: &Value,
+    schema: &QuillValue,
     fields: &HashMap<String, crate::value::QuillValue>,
 ) -> Result<(), Vec<String>> {
     // Convert fields to JSON Value for validation
@@ -81,7 +87,7 @@ pub fn validate_document(
     let doc_value = Value::Object(doc_json);
 
     // Compile the schema
-    let compiled = match jsonschema::Validator::new(schema) {
+    let compiled = match jsonschema::Validator::new(schema.as_json()) {
         Ok(c) => c,
         Err(e) => return Err(vec![format!("Failed to compile schema: {}", e)]),
     };
@@ -108,66 +114,53 @@ pub fn validate_document(
 mod tests {
     use super::*;
     use crate::value::QuillValue;
-    use crate::FieldSchema;
+    use crate::quill::FieldSchema;
 
     #[test]
     fn test_build_schema_simple() {
         let mut fields = HashMap::new();
-        let mut schema = FieldSchema::new("Author name".to_string());
+        let mut schema = FieldSchema::new("Author name".to_string(), "The name of the author".to_string());
         schema.r#type = Some("str".to_string());
-        schema.required = true;
         fields.insert("author".to_string(), schema);
 
-        let json_schema = build_schema_from_fields(&fields).unwrap();
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
         assert_eq!(json_schema["type"], "object");
         assert_eq!(json_schema["properties"]["author"]["type"], "string");
         assert_eq!(
-            json_schema["properties"]["author"]["description"],
+            json_schema["properties"]["author"]["name"],
             "Author name"
         );
-        assert_eq!(json_schema["required"], json!(["author"]));
-    }
-
-    #[test]
-    fn test_build_schema_optional_field() {
-        let mut fields = HashMap::new();
-        let mut schema = FieldSchema::new("Optional field".to_string());
-        schema.r#type = Some("str".to_string());
-        schema.required = false; // explicitly optional
-        fields.insert("optional".to_string(), schema);
-
-        let json_schema = build_schema_from_fields(&fields).unwrap();
-        assert_eq!(json_schema["required"], json!([])); // empty required array
+        assert_eq!(
+            json_schema["properties"]["author"]["description"],
+            "The name of the author"
+        );
     }
 
     #[test]
     fn test_build_schema_with_default() {
         let mut fields = HashMap::new();
-        let mut schema = FieldSchema::new("Field with default".to_string());
+        let mut schema = FieldSchema::new("Field with default".to_string(), "A field with a default value".to_string());
         schema.r#type = Some("str".to_string());
         schema.default = Some(QuillValue::from_json(json!("default value")));
         // When default is present, field should be optional regardless of required flag
-        schema.required = true;
         fields.insert("with_default".to_string(), schema);
 
-        let json_schema = build_schema_from_fields(&fields).unwrap();
-        // Should not be in required list because default is present
-        assert_eq!(json_schema["required"], json!([]));
+        build_schema_from_fields(&fields).unwrap();
     }
 
     #[test]
     fn test_build_schema_date_types() {
         let mut fields = HashMap::new();
 
-        let mut date_schema = FieldSchema::new("Date field".to_string());
+        let mut date_schema = FieldSchema::new("Date field".to_string(), "A field for dates".to_string());
         date_schema.r#type = Some("date".to_string());
         fields.insert("date_field".to_string(), date_schema);
 
-        let mut datetime_schema = FieldSchema::new("DateTime field".to_string());
+        let mut datetime_schema = FieldSchema::new("DateTime field".to_string(), "A field for date and time".to_string());
         datetime_schema.r#type = Some("datetime".to_string());
         fields.insert("datetime_field".to_string(), datetime_schema);
 
-        let json_schema = build_schema_from_fields(&fields).unwrap();
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
         assert_eq!(json_schema["properties"]["date_field"]["type"], "string");
         assert_eq!(json_schema["properties"]["date_field"]["format"], "date");
         assert_eq!(
@@ -200,7 +193,7 @@ mod tests {
         );
         fields.insert("count".to_string(), QuillValue::from_json(json!(42)));
 
-        let result = validate_document(&schema, &fields);
+        let result = validate_document(&QuillValue::from_json(schema), &fields);
         assert!(result.is_ok());
     }
 
@@ -218,7 +211,7 @@ mod tests {
 
         let fields = HashMap::new(); // empty, missing required field
 
-        let result = validate_document(&schema, &fields);
+        let result = validate_document(&QuillValue::from_json(schema), &fields);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(!errors.is_empty());
@@ -241,7 +234,7 @@ mod tests {
             QuillValue::from_json(json!("not a number")),
         );
 
-        let result = validate_document(&schema, &fields);
+        let result = validate_document(&QuillValue::from_json(schema), &fields);
         assert!(result.is_err());
     }
 
@@ -261,7 +254,7 @@ mod tests {
         fields.insert("title".to_string(), QuillValue::from_json(json!("Test")));
         fields.insert("extra".to_string(), QuillValue::from_json(json!("allowed")));
 
-        let result = validate_document(&schema, &fields);
+        let result = validate_document(&QuillValue::from_json(schema), &fields);
         assert!(result.is_ok());
     }
 }

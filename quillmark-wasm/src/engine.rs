@@ -2,7 +2,7 @@
 
 use crate::error::QuillmarkError;
 use crate::types::{
-    FieldSchema, OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult,
+    OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult,
 };
 use serde::Serialize;
 use std::collections::HashMap;
@@ -177,30 +177,12 @@ impl Quillmark {
         }
         let metadata_json = serde_json::Value::Object(metadata_obj);
 
-        // Convert field schemas to serde_json::Value (plain JavaScript object)
-        let mut field_schemas_obj = serde_json::Map::new();
-        for (key, value) in &quill.field_schemas {
-            let field_schema: FieldSchema = value.clone().into();
-            field_schemas_obj.insert(
-                key.clone(),
-                serde_json::to_value(&field_schema).map_err(|e| {
-                    QuillmarkError::new(
-                        format!("Failed to serialize field schema: {}", e),
-                        None,
-                        None,
-                    )
-                    .to_js_value()
-                })?,
-            );
-        }
-        let field_schemas_json = serde_json::Value::Object(field_schemas_obj);
-
         let quill_info = QuillInfo {
             name: quill.name.clone(),
             backend: backend_id.clone(),
             metadata: metadata_json,
             example: quill.example.clone(),
-            field_schemas: field_schemas_json,
+            field_schemas: quill.schema.clone().as_json().clone(),
             supported_formats,
         };
 

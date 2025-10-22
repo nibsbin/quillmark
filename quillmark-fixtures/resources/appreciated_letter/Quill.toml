@@ -9,8 +9,8 @@ description = "Professional letter template with appreciation styling"
 packages = ["@preview/appreciated-letter:0.1.0"]
 
 [fields]
-sender = { description = "Sender of letter", required = true }
-recipient = { description = "Recipient of letter", required = true }
-date = { description = "Date of letter", required = true }
-subject = { description = "Subject of letter", required = true }
-name = { description = "Name of sender", required = true }
+sender = { description = "Sender of letter" }
+recipient = { description = "Recipient of letter" }
+date = { description = "Date of letter" }
+subject = { description = "Subject of letter" }
+name = { description = "Name of sender" }

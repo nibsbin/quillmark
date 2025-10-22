@@ -6,14 +6,14 @@ example_file = "usaf_memo.md"
 description = "Typesetted USAF Official Memorandum"
 
 [fields]
-letterhead_title = { description = "Title in letterhead" }
-letterhead_caption = { description = "Caption in letterhead"}
-date = { description = "Date of memo (YYYY-MM-DD); defaults to today"}
-memo_for = { description = "To whom the memo is addressed (multiline)", required = true }
-memo_from = { description = "From whom the memo is sent (multiline)", required = true }
-subject = { description = "Subject of the memo", required = true }
-references = { description = "References for the memo (array)", required = false }
-cc = { description = "Carbon copy recipients (array)", required = false }
-distribution = { description = "Distribution list (array)", required = false }
-attachments = { description = "Attachments (array)", required = false }
-signature_block = { description = "Signature block (multiline)", required = true }
+letterhead_title = { description = "Title in letterhead" , default = "DEPARTMENT OF THE AIR FORCE"}
+letterhead_caption = { description = "Caption in letterhead" , default = "123 STARK INDUSTRIES"}
+date = { description = "Date of memo (YYYY-MM-DD); defaults to today", default = 0}
+memo_for = { description = "To whom the memo is addressed (multiline)" }
+memo_from = { description = "From whom the memo is sent (multiline)"}
+subject = { description = "Subject of the memo" }
+references = { description = "References for the memo (array)", default = []}
+cc = { description = "Carbon copy recipients (array)" , default = []}
+distribution = { description = "Distribution list (array)" , default = []}
+attachments = { description = "Attachments (array)" , default = []}
+signature_block = { description = "Signature block (multiline)" }

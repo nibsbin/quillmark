@@ -158,34 +158,6 @@ pub struct QuillMetadata {
     pub tags: Vec<String>,
 }
 
-/// Field schema for template fields
-///
-/// Describes the expected structure and constraints for a field in a Quill template.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FieldSchema {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub r#type: Option<String>,
-    pub required: bool,
-    pub description: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub example: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub default: Option<serde_json::Value>,
-}
-
-impl From<quillmark_core::FieldSchema> for FieldSchema {
-    fn from(schema: quillmark_core::FieldSchema) -> Self {
-        FieldSchema {
-            r#type: schema.r#type,
-            required: schema.required,
-            description: schema.description,
-            example: schema.example.map(|v| v.as_json().clone()),
-            default: schema.default.map(|v| v.as_json().clone()),
-        }
-    }
-}
-
 /// Shallow information about a registered Quill
 ///
 /// This provides consumers with the necessary information to configure render options

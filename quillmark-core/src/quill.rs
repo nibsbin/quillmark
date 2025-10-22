@@ -5,28 +5,28 @@ use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
 use crate::value::QuillValue;
+use crate::validation::build_schema_from_fields;
 
 /// Schema definition for a template field
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldSchema {
+    pub name: String,
     /// Field type hint (e.g., "string", "number", "boolean", "object", "array")
     pub r#type: Option<String>,
-    /// Whether the field is required
-    pub required: bool,
     /// Description of the field
     pub description: String,
-    /// Example value for the field
-    pub example: Option<QuillValue>,
     /// Default value for the field
     pub default: Option<QuillValue>,
+    /// Example value for the field
+    pub example: Option<QuillValue>,
 }
 
 impl FieldSchema {
     /// Create a new FieldSchema with default values
-    pub fn new(description: String) -> Self {
+    pub fn new(name: String, description: String) -> Self {
         Self {
+            name,
             r#type: None,
-            required: false,
             description,
             example: None,
             default: None,
@@ -34,21 +34,28 @@ impl FieldSchema {
     }
 
     /// Parse a FieldSchema from a QuillValue
-    pub fn from_quill_value(value: &QuillValue) -> Result<Self, String> {
+    pub fn from_quill_value(key: String, value: &QuillValue) -> Result<Self, String> {
         let obj = value
             .as_object()
             .ok_or_else(|| "Field schema must be an object".to_string())?;
 
+        //Ensure only known keys are present
+        for key in obj.keys() {
+            match key.as_str() {
+                "name" | "type" | "description" | "example" | "default" => {}
+                _ => {
+                    return Err(format!("Unknown key '{}' in field schema", key));
+                }
+            }
+        }
+
+        let name = key.clone();
+        
         let description = obj
             .get("description")
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-
-        let required = obj
-            .get("required")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
 
         let field_type = obj
             .get("type")
@@ -60,44 +67,12 @@ impl FieldSchema {
         let default = obj.get("default").map(|v| QuillValue::from_json(v.clone()));
 
         Ok(Self {
+            name: name,
             r#type: field_type,
-            required,
             description,
             example,
             default,
         })
-    }
-
-    /// Convert the FieldSchema to a QuillValue for serialization
-    pub fn to_quill_value(&self) -> QuillValue {
-        let mut map = serde_json::Map::new();
-
-        map.insert(
-            "description".to_string(),
-            serde_json::Value::String(self.description.clone()),
-        );
-
-        map.insert(
-            "required".to_string(),
-            serde_json::Value::Bool(self.required),
-        );
-
-        if let Some(ref field_type) = self.r#type {
-            map.insert(
-                "type".to_string(),
-                serde_json::Value::String(field_type.clone()),
-            );
-        }
-
-        if let Some(ref example) = self.example {
-            map.insert("example".to_string(), example.as_json().clone());
-        }
-
-        if let Some(ref default) = self.default {
-            map.insert("default".to_string(), default.as_json().clone());
-        }
-
-        QuillValue::from_json(serde_json::Value::Object(map))
     }
 }
 
@@ -377,9 +352,8 @@ pub struct Quill {
     pub glue: Option<String>,
     /// Markdown template content (optional)
     pub example: Option<String>,
-    /// Field schema documentation (optional)
-    pub field_schemas: HashMap<String, FieldSchema>,
-
+    /// Field JSON schema
+    pub schema: QuillValue,
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }
@@ -402,9 +376,9 @@ pub struct QuillConfig {
     /// Glue file
     pub glue_file: Option<String>,
     /// JSON schema file
-    pub json_schema: Option<String>,
+    pub json_schema_file: Option<String>,
     /// Field schemas
-    pub field_schemas: HashMap<String, FieldSchema>,
+    pub fields: HashMap<String, FieldSchema>,
 }
 
 impl Quill {
@@ -564,7 +538,7 @@ impl Quill {
             if let toml::Value::Table(fields_table) = fields_section {
                 for (field_name, field_schema) in fields_table {
                     match QuillValue::from_toml(field_schema) {
-                        Ok(quill_value) => match FieldSchema::from_quill_value(&quill_value) {
+                        Ok(quill_value) => match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
                             Ok(schema) => {
                                 field_schemas.insert(field_name.clone(), schema);
                             }
@@ -586,15 +560,15 @@ impl Quill {
             }
         }
 
-        // Validate json_schema file if specified
+        // Validate json_schema_file if specified
         if let Some(quill_section) = quill_toml.get("Quill") {
             if let Some(json_schema_path) =
-                quill_section.get("json_schema").and_then(|v| v.as_str())
+                quill_section.get("json_schema_file").and_then(|v| v.as_str())
             {
                 // Check if file exists
                 let schema_bytes = root.get_file(json_schema_path).ok_or_else(|| {
                     format!(
-                        "json_schema file '{}' not found in file tree",
+                        "json_schema_file '{}' not found in file tree",
                         json_schema_path
                     )
                 })?;
@@ -602,17 +576,25 @@ impl Quill {
                 // Validate JSON syntax
                 serde_json::from_slice::<serde_json::Value>(schema_bytes).map_err(|e| {
                     format!(
-                        "json_schema file '{}' is not valid JSON: {}",
+                        "json_schema_file '{}' is not valid JSON: {}",
                         json_schema_path, e
                     )
                 })?;
 
                 // Warn if fields are also defined
                 if !field_schemas.is_empty() {
-                    eprintln!("Warning: [fields] section is overridden by json_schema");
+                    eprintln!("Warning: [fields] section is overridden by json_schema_file");
                 }
             }
         }
+
+        // Build JSON schema from field schemas
+        let schema = build_schema_from_fields(&field_schemas).map_err(|e| {
+            format!(
+                "Failed to build JSON schema from field schemas: {}",
+                e
+            )
+        })?;
 
         // Read the glue content from glue file (if specified)
         let glue_content: Option<String> = if let Some(ref glue_file_name) = glue_file {
@@ -650,7 +632,7 @@ impl Quill {
             backend,
             glue: glue_content,
             example: example_content.into(),
-            field_schemas: field_schemas,
+            schema,
             files: root,
         };
 
@@ -1557,9 +1539,9 @@ example_file = "taro.md"
 description = "Test template for field schemas"
 
 [fields]
-author = {description = "Author of document", required = true}
+author = {description = "Author of document" }
 ice_cream = {description = "favorite ice cream flavor"}
-title = {description = "title of document", required = true}
+title = {description = "title of document" }
 "#;
         root_files.insert(
             "Quill.toml".to_string(),
@@ -1591,33 +1573,29 @@ title = {description = "title of document", required = true}
         let quill = Quill::from_tree(root, Some("taro".to_string())).unwrap();
 
         // Validate field schemas were parsed
-        assert_eq!(quill.field_schemas.len(), 3);
-        assert!(quill.field_schemas.contains_key("author"));
-        assert!(quill.field_schemas.contains_key("ice_cream"));
-        assert!(quill.field_schemas.contains_key("title"));
+        assert_eq!(quill.schema["properties"].as_object().unwrap().len(), 3);
+        assert!(quill.schema["properties"].as_object().unwrap().contains_key("author"));
+        assert!(quill.schema["properties"].as_object().unwrap().contains_key("ice_cream"));
+        assert!(quill.schema["properties"].as_object().unwrap().contains_key("title"));
 
         // Verify author field schema
-        let author_schema = quill.field_schemas.get("author").unwrap();
-        assert_eq!(author_schema.description, "Author of document");
-        assert_eq!(author_schema.required, true);
+        let author_schema = quill.schema["properties"]["author"].as_object().unwrap();
+        assert_eq!(author_schema["description"], "Author of document");
 
         // Verify ice_cream field schema (no required field, should default to false)
-        let ice_cream_schema = quill.field_schemas.get("ice_cream").unwrap();
-        assert_eq!(ice_cream_schema.description, "favorite ice cream flavor");
-        assert_eq!(ice_cream_schema.required, false);
+        let ice_cream_schema = quill.schema["properties"]["ice_cream"].as_object().unwrap();
+        assert_eq!(ice_cream_schema["description"], "favorite ice cream flavor");
 
         // Verify title field schema
-        let title_schema = quill.field_schemas.get("title").unwrap();
-        assert_eq!(title_schema.description, "title of document");
-        assert_eq!(title_schema.required, true);
+        let title_schema = quill.schema["properties"]["title"].as_object().unwrap();
+        assert_eq!(title_schema["description"], "title of document");
     }
 
     #[test]
     fn test_field_schema_struct() {
         // Test creating FieldSchema with minimal fields
-        let schema1 = FieldSchema::new("Test description".to_string());
+        let schema1 = FieldSchema::new("test_name".to_string(), "Test description".to_string());
         assert_eq!(schema1.description, "Test description");
-        assert_eq!(schema1.required, false);
         assert_eq!(schema1.r#type, None);
         assert_eq!(schema1.example, None);
         assert_eq!(schema1.default, None);
@@ -1625,16 +1603,15 @@ title = {description = "title of document", required = true}
         // Test parsing FieldSchema from YAML with all fields
         let yaml_str = r#"
 description: "Full field schema"
-required: true
 type: "string"
 example: "Example value"
 default: "Default value"
 "#;
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml_str).unwrap();
         let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
-        let schema2 = FieldSchema::from_quill_value(&quill_value).unwrap();
+        let schema2 = FieldSchema::from_quill_value("test_name".to_string(), &quill_value).unwrap();
+        assert_eq!(schema2.name, "test_name");
         assert_eq!(schema2.description, "Full field schema");
-        assert_eq!(schema2.required, true);
         assert_eq!(schema2.r#type, Some("string".to_string()));
         assert_eq!(
             schema2.example.as_ref().and_then(|v| v.as_str()),
@@ -1644,16 +1621,6 @@ default: "Default value"
             schema2.default.as_ref().and_then(|v| v.as_str()),
             Some("Default value")
         );
-
-        // Test converting FieldSchema back to QuillValue
-        let quill_value = schema2.to_quill_value();
-        let obj = quill_value.as_object().unwrap();
-        assert_eq!(
-            obj.get("description").unwrap().as_str().unwrap(),
-            "Full field schema"
-        );
-        assert_eq!(obj.get("required").unwrap().as_bool().unwrap(), true);
-        assert_eq!(obj.get("type").unwrap().as_str().unwrap(), "string");
     }
 
     #[test]
