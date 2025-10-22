@@ -673,12 +673,11 @@ let rendered_value = env.render_str(&source, &context).map_err(|e| {
    - Improve error codes
    - Add documentation links
 
-10. **Add comprehensive tests**
+10. **Add tests (KISS; just test core functionality)**
     - Test error conversion
     - Test diagnostic preservation
     - Test Python visibility
     - Test WASM serialization
-
 ---
 
 ## Testing Strategy
