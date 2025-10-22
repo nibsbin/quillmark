@@ -99,7 +99,7 @@ pub fn validate_document(
                 path
             };
             let message = format!("Validation error at {}: {}", path_display, error);
-            Err(vec![message])        
+            Err(vec![message])
         }
     }
 }
