@@ -12,38 +12,109 @@ create_exception!(_quillmark, TemplateError, QuillmarkError);
 create_exception!(_quillmark, CompilationError, QuillmarkError);
 
 pub fn convert_render_error(err: RenderError) -> PyErr {
-    match err {
-        RenderError::InvalidFrontmatter { diag } => ParseError::new_err(diag.message.clone()),
-        RenderError::TemplateFailed { diag } => TemplateError::new_err(diag.message.clone()),
+    Python::with_gil(|py| match err {
+        RenderError::InvalidFrontmatter { diag } => {
+            let py_err = ParseError::new_err(diag.message.clone());
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
+        }
+        RenderError::TemplateFailed { diag } => {
+            let py_err = TemplateError::new_err(diag.message.clone());
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
+        }
         RenderError::CompilationFailed { diags } => {
-            CompilationError::new_err(format!("Compilation failed with {} error(s)", diags.len()))
+            let py_err = CompilationError::new_err(format!(
+                "Compilation failed with {} error(s)",
+                diags.len()
+            ));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diags: Vec<crate::types::PyDiagnostic> = diags
+                    .into_iter()
+                    .map(|d| crate::types::PyDiagnostic { inner: d.into() })
+                    .collect();
+                let _ = exc.setattr("diagnostics", py_diags);
+            }
+            py_err
         }
         RenderError::DynamicAssetCollision { diag } => {
-            QuillmarkError::new_err(format!("Asset collision: {}", diag.message))
+            let py_err = QuillmarkError::new_err(format!("Asset collision: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
         }
         RenderError::DynamicFontCollision { diag } => {
-            QuillmarkError::new_err(format!("Font collision: {}", diag.message))
+            let py_err = QuillmarkError::new_err(format!("Font collision: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
         }
         RenderError::EngineCreation { diag } => {
-            QuillmarkError::new_err(format!("Engine creation failed: {}", diag.message))
+            let py_err =
+                QuillmarkError::new_err(format!("Engine creation failed: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
         }
         RenderError::FormatNotSupported { diag } => {
-            QuillmarkError::new_err(format!("Format not supported: {}", diag.message))
+            let py_err = QuillmarkError::new_err(format!("Format not supported: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
         }
         RenderError::UnsupportedBackend { diag } => {
-            QuillmarkError::new_err(format!("Unsupported backend: {}", diag.message))
+            let py_err = QuillmarkError::new_err(format!("Unsupported backend: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
         }
         RenderError::InputTooLarge { diag } => {
-            QuillmarkError::new_err(format!("Input too large: {}", diag.message))
+            let py_err = QuillmarkError::new_err(format!("Input too large: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
         }
         RenderError::YamlTooLarge { diag } => {
-            QuillmarkError::new_err(format!("YAML too large: {}", diag.message))
+            let py_err = QuillmarkError::new_err(format!("YAML too large: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
         }
         RenderError::NestingTooDeep { diag } => {
-            QuillmarkError::new_err(format!("Nesting too deep: {}", diag.message))
+            let py_err = QuillmarkError::new_err(format!("Nesting too deep: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
         }
         RenderError::OutputTooLarge { diag } => {
-            QuillmarkError::new_err(format!("Output too large: {}", diag.message))
+            let py_err = QuillmarkError::new_err(format!("Output too large: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
         }
-    }
+    })
 }
