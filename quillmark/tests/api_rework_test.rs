@@ -35,7 +35,7 @@ fn test_workflow_from_quill_name() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "{{ title }}").expect("Failed to write glue.typ");
@@ -61,7 +61,7 @@ fn test_workflow_from_quill() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "{{ title }}").expect("Failed to write glue.typ");
@@ -84,7 +84,7 @@ fn test_render_with_parsed_document() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
@@ -130,7 +130,7 @@ fn test_process_glue() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Title: {{ title }}").expect("Failed to write glue.typ");

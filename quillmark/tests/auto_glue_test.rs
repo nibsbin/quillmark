@@ -149,7 +149,7 @@ fn test_template_glue_still_works() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"template-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test template glue\"\n",
+        "[Quill]\nname = \"template-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test template glue\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(

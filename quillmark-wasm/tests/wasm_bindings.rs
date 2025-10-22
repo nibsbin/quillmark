@@ -8,7 +8,7 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 // A minimal JSON fixture that represents a very small quill
 const SMALL_QUILL_JSON: &str = r#"{
   "files": {
-    "Quill.toml": { "contents": "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill for WASM bindings\"\n" },
+    "Quill.toml": { "contents": "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill for WASM bindings\"\n" },
     "glue.typ": { "contents": "= Title\n\nThis is a test." },
     "content.md": { "contents": "---\ntitle: Test\n---\n\n# Hello" }
   }

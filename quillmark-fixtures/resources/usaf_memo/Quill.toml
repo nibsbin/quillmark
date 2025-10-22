@@ -1,8 +1,8 @@
 [Quill]
 name = "usaf_memo"
 backend = "typst"
-glue = "glue.typ"
-example = "usaf_memo.md"
+glue_file = "glue.typ"
+example_file = "usaf_memo.md"
 description = "Typesetted USAF Official Memorandum"
 
 [fields]

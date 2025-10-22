@@ -1,8 +1,8 @@
 [Quill]
 name = "taro"
 backend = "typst"
-glue = "glue.typ"
-example = "taro.md"
+glue_file = "glue.typ"
+example_file = "taro.md"
 description = "Taro template for documents"
 
 [fields]
