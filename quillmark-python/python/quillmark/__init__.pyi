@@ -103,17 +103,14 @@ class Workflow:
             CompilationError: If backend compilation fails
         """
     
-    def render_source(
+    def render_processed(
         self,
         content: str,
         format: OutputFormat | None = None
     ) -> RenderResult:
         """Render pre-composed content (skip template processing)."""
     
-    def process_glue(self, markdown: str) -> str:
-        """Process markdown through glue template, return composed output."""
-    
-    def process_glue_parsed(self, parsed: ParsedDocument) -> str:
+    def process_glue(self, parsed: ParsedDocument) -> str:
         """Process parsed document through glue template."""
     
     @property

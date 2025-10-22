@@ -61,7 +61,7 @@ output as JSON instead of being processed through a template.
         .expect("Failed to load workflow");
 
     let json_output = workflow
-        .process_glue_parsed(&parsed)
+        .process_glue(&parsed)
         .expect("Failed to process glue");
 
     println!("JSON Output:");

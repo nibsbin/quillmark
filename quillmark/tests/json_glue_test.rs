@@ -69,7 +69,7 @@ This is a test document.
         .expect("Failed to load workflow");
 
     let glue_output = workflow
-        .process_glue_parsed(&parsed)
+        .process_glue(&parsed)
         .expect("Failed to process glue");
 
     // Parse the output as JSON
@@ -120,7 +120,7 @@ Content here.
         .expect("Failed to load workflow");
 
     let glue_output = workflow
-        .process_glue_parsed(&parsed)
+        .process_glue(&parsed)
         .expect("Failed to process glue");
 
     // Parse the output as JSON
@@ -176,7 +176,7 @@ Content
         .expect("Failed to load workflow");
 
     let glue_output = workflow
-        .process_glue_parsed(&parsed)
+        .process_glue(&parsed)
         .expect("Failed to process glue");
 
     // Verify template output (not JSON)

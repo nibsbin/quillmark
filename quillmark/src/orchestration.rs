@@ -88,8 +88,8 @@
 //! The workflow supports rendering at three levels:
 //!
 //! 1. **Full render** ([`Workflow::render()`]) - Compose with template → Compile to artifacts (parsing done separately)
-//! 2. **Content render** ([`Workflow::render_source()`]) - Skip parsing, render pre-composed content
-//! 3. **Glue only** ([`Workflow::process_glue_parsed()`]) - Compose from parsed document, return template output
+//! 2. **Content render** ([`Workflow::render_processed()`]) - Skip parsing, render pre-composed content
+//! 3. **Glue only** ([`Workflow::process_glue()`]) - Compose from parsed document, return template output
 //!
 //! ## Examples
 //!
@@ -163,8 +163,8 @@
 //! ```
 
 use quillmark_core::{
-    decompose, Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Quill, RenderError,
-    RenderOptions, RenderResult, Severity,
+    Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Quill, RenderError, RenderOptions,
+    RenderResult, Severity,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -398,28 +398,28 @@ impl Workflow {
         parsed: &ParsedDocument,
         format: Option<OutputFormat>,
     ) -> Result<RenderResult, RenderError> {
-        let glue_output = self.process_glue_parsed(parsed)?;
+        let glue_output = self.process_glue(parsed)?;
 
         // Prepare quill with dynamic assets
         let prepared_quill = self.prepare_quill_with_assets();
 
         // Pass prepared quill to backend
-        self.render_source_with_quill(&glue_output, format, &prepared_quill)
+        self.render_processed_with_quill(&glue_output, format, &prepared_quill)
     }
 
     /// Render pre-processed glue content, skipping parsing and template composition.
-    pub fn render_source(
+    pub fn render_processed(
         &self,
         content: &str,
         format: Option<OutputFormat>,
     ) -> Result<RenderResult, RenderError> {
         // Prepare quill with dynamic assets
         let prepared_quill = self.prepare_quill_with_assets();
-        self.render_source_with_quill(content, format, &prepared_quill)
+        self.render_processed_with_quill(content, format, &prepared_quill)
     }
 
     /// Internal method to render content with a specific quill
-    fn render_source_with_quill(
+    fn render_processed_with_quill(
         &self,
         content: &str,
         format: Option<OutputFormat>,
@@ -444,18 +444,8 @@ impl Workflow {
         self.backend.compile(content, quill, &render_opts)
     }
 
-    /// Process Markdown through the glue template without compilation, returning the composed output.
-    pub fn process_glue(&self, markdown: &str) -> Result<String, RenderError> {
-        let parsed_doc = decompose(markdown).map_err(|e| RenderError::InvalidFrontmatter {
-            diag: Diagnostic::new(Severity::Error, format!("Failed to parse markdown: {}", e))
-                .with_code("parse::decompose".to_string()),
-        })?;
-
-        self.process_glue_parsed(&parsed_doc)
-    }
-
     /// Process a parsed document through the glue template without compilation
-    pub fn process_glue_parsed(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
+    pub fn process_glue(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
         // Create appropriate glue based on whether template is provided
         let mut glue = if self.quill.glue_template.is_empty() {
             Glue::new_json()

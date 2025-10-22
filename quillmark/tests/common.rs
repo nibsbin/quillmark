@@ -45,7 +45,7 @@ pub fn demo(
     }
 
     // process glue
-    let glued = workflow.process_glue_parsed(&parsed)?;
+    let glued = workflow.process_glue(&parsed)?;
 
     // write outputs
     let glued_bytes = glued.into_bytes();

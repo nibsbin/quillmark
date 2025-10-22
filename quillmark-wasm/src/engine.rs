@@ -243,7 +243,7 @@ impl Quillmark {
             })?;
 
         workflow
-            .process_glue_parsed(&parsed)
+            .process_glue(&parsed)
             .map_err(|e| QuillmarkError::from(e).to_js_value())
     }
 

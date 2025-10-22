@@ -35,7 +35,7 @@ test: "Hello from Example!"
         .expect("Failed to create workflow");
 
     // Compose glue output (JSON)
-    let glue_output = workflow.process_glue_parsed(&parsed)?;
+    let glue_output = workflow.process_glue(&parsed)?;
     write_example_output("usaf_form_8_glue.json", glue_output.as_bytes())?;
 
     let output_dir = PathBuf::from("quillmark-fixtures/output/");

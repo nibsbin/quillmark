@@ -24,6 +24,10 @@ See `designs/ARCHITECTURE.md` for complete architecture.
 - Err on the side of brevity
 - Avoid documentation creep; keep docs focused and up-to-date
 
+## Implementation/Testing Strategy
+
+- Never worry about backwards compatibility. This is pre-1.0 software.
+
 ## Build & Test
 
 ```bash
@@ -69,10 +73,6 @@ Common filters: `String`, `Lines`, `Date`, `Dict`, `Content`, `Asset` (prefixed 
 **Use `Diagnostic` everywhere** - never stringify prematurely:
 
 Map external errors (MiniJinja, Typst) to preserve context.
-
-## Implmentation Philosophy
-
-- Do not worry about backwards compatibility. This is pre-1.0 software.
 
 ## Reference
 

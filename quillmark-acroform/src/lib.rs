@@ -133,7 +133,7 @@ impl Backend for AcroformBackend {
             let using_tooltip_template = template_to_render.is_some();
 
             // Determine what to render: tooltip template or field value
-            let render_source = template_to_render.or_else(|| {
+            let render_processed = template_to_render.or_else(|| {
                 field
                     .current_value
                     .as_ref()
@@ -145,7 +145,7 @@ impl Backend for AcroformBackend {
                     })
             });
 
-            if let Some(source) = &render_source {
+            if let Some(source) = &render_processed {
                 let rendered_value =
                     env.render_str(&source, &context)
                         .map_err(|e| RenderError::TemplateFailed {

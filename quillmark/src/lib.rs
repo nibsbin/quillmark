@@ -99,9 +99,8 @@
 
 // Re-export all core types for convenience
 pub use quillmark_core::{
-    decompose, Artifact, Backend, Diagnostic, Glue, Location, OutputFormat, ParseError,
-    ParsedDocument, Quill, RenderError, RenderResult, SerializableDiagnostic, Severity,
-    TemplateError, BODY_FIELD,
+    Artifact, Backend, Diagnostic, Glue, Location, OutputFormat, ParseError, ParsedDocument, Quill,
+    RenderError, RenderResult, SerializableDiagnostic, Severity, TemplateError, BODY_FIELD,
 };
 
 // Declare orchestration module

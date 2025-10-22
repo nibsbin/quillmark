@@ -97,7 +97,7 @@ impl PyWorkflow {
     }
 
     #[pyo3(signature = (content, format=None))]
-    fn render_source(
+    fn render_processed(
         &self,
         content: &str,
         format: Option<PyOutputFormat>,
@@ -105,20 +105,14 @@ impl PyWorkflow {
         let rust_format = format.map(|f| f.into());
         let result = self
             .inner
-            .render_source(content, rust_format)
+            .render_processed(content, rust_format)
             .map_err(convert_render_error)?;
         Ok(PyRenderResult { inner: result })
     }
 
-    fn process_glue(&self, markdown: &str) -> PyResult<String> {
+    fn process_glue(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<String> {
         self.inner
-            .process_glue(markdown)
-            .map_err(convert_render_error)
-    }
-
-    fn process_glue_parsed(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<String> {
-        self.inner
-            .process_glue_parsed(&parsed.inner)
+            .process_glue(&parsed.inner)
             .map_err(convert_render_error)
     }
 

@@ -16,11 +16,11 @@
 //! ## Quick Start
 //!
 //! ```no_run
-//! use quillmark_core::{decompose, Quill};
+//! use quillmark_core::{ParsedDocument, Quill};
 //!
 //! // Parse markdown with frontmatter
 //! let markdown = "---\ntitle: Example\n---\n\n# Content";
-//! let doc = decompose(markdown).unwrap();
+//! let doc = ParsedDocument::from_markdown(markdown);
 //!
 //! // Load a quill template
 //! let quill = Quill::from_path("path/to/quill").unwrap();
@@ -43,7 +43,7 @@
 //! - [Examples](https://github.com/nibsbin/quillmark/tree/main/examples) - Working examples
 
 pub mod parse;
-pub use parse::{decompose, ParsedDocument, BODY_FIELD};
+pub use parse::{ParsedDocument, BODY_FIELD};
 
 pub mod templating;
 pub use templating::{Glue, TemplateError};

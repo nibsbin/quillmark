@@ -211,13 +211,13 @@ def render(parsed: ParsedDocument, format: OutputFormat | None = None) -> Render
         CompilationError: If backend compilation fails
     """
 
-def render_source(content: str, format: OutputFormat | None = None) -> RenderResult:
+def render_processed(content: str, format: OutputFormat | None = None) -> RenderResult:
     """Render pre-composed content (skip template processing)."""
 
 def process_glue(markdown: str) -> str:
     """Process markdown through glue template, return composed output."""
 
-def process_glue_parsed(parsed: ParsedDocument) -> str:
+def process_glue(parsed: ParsedDocument) -> str:
     """Process parsed document through glue template."""
 
 def backend_id() -> str:
