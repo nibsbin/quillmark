@@ -51,7 +51,6 @@ The system is built on three main types in `quillmark-core/src/error.rs`:
        pub code: Option<String>,      // e.g., "typst::unknown_variable"
        pub message: String,
        pub primary: Option<Location>, // Main error location
-       pub related: Vec<Location>,    // Trace/context locations
        pub hint: Option<String>,      // Helpful suggestion
        pub source: Option<Box<dyn std::error::Error + Send + Sync>>, // Error chain
    }
@@ -67,7 +66,6 @@ pub struct SerializableDiagnostic {
     pub code: Option<String>,
     pub message: String,
     pub primary: Option<Location>,
-    pub related: Vec<Location>,
     pub hint: Option<String>,
     pub source_chain: Vec<String>, // Flattened error chain
 }
@@ -137,7 +135,6 @@ The `map_typst_errors()` function converts Typst `SourceDiagnostic` arrays to `D
 
 - ✅ Maps severity: `typst::diag::Severity` → `Severity::Error` or `Severity::Warning`
 - ✅ Resolves spans to precise file/line/column locations via `resolve_span_to_location()`
-- ✅ Maps trace entries to related locations for debugging
 - ✅ Preserves hints from Typst errors
 - ✅ Generates error codes like `typst::unknown variable`
 - ✅ Used in `compile.rs` via `RenderError::CompilationFailed`
@@ -146,14 +143,12 @@ The `map_typst_errors()` function converts Typst `SourceDiagnostic` arrays to `D
 ```
 [ERROR] unknown variable: foo (typst::unknown variable)
   --> glue.typ:12:15
-  trace: lib.typ:45:8
-        helper.typ:23:4
   hint: Use '#let' to define variables before using them
 ```
 
 **Implementation details:**
 - `resolve_span_to_location()` extracts source text and calculates line/column from character offsets
-- Handles multi-file traces through Typst's `World` interface
+- Handles multi-file errors through Typst's `World` interface
 - Returns `Option<Location>` to gracefully handle unresolvable spans
 
 ---
@@ -167,8 +162,6 @@ The `Diagnostic::fmt_pretty()` method provides human-readable output:
 ```rust
 [ERROR] message (code) 
   --> file:line:col
-  trace: file:line:col
-        file:line:col
   hint: helpful suggestion
 ```
 
@@ -176,7 +169,6 @@ Features:
 - ✅ Severity-based labels: `[ERROR]`, `[WARN]`, `[NOTE]`
 - ✅ Optional error code in parentheses
 - ✅ Primary location with `-->` indicator
-- ✅ Related locations (trace) indented
 - ✅ Optional hint at the end
 
 ### Consolidated Error Printing

@@ -237,7 +237,6 @@ interface Diagnostic {
   code?: string;
   message: string;
   location?: Location;
-  relatedLocations: Location[];
   hint?: string;
 }
 
