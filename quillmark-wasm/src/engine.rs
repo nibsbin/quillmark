@@ -127,11 +127,6 @@ impl Quillmark {
             .to_js_value()
         })?;
 
-        // Validate
-        quill.validate().map_err(|e| {
-            QuillmarkError::new(format!("Quill validation failed: {}", e), None, None).to_js_value()
-        })?;
-
         // Register with backend validation
         self.inner
             .register_quill(quill.clone())
