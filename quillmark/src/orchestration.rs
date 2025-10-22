@@ -536,13 +536,9 @@ impl Workflow {
 
         // Create appropriate glue based on whether template is provided
         let mut glue = match &self.quill.glue {
-            Some(s) if !s.is_empty() => {
-                Glue::new(s.to_string())
-            }
-            _ => {
-                Glue::new_auto()
-            }
-        }; 
+            Some(s) if !s.is_empty() => Glue::new(s.to_string()),
+            _ => Glue::new_auto(),
+        };
         self.backend.register_filters(&mut glue);
         let glue_output =
             glue.compose(parsed.fields().clone())
@@ -570,7 +566,7 @@ impl Workflow {
         use quillmark_core::validation;
 
         // Build or load JSON Schema
-       
+
         if self.quill.schema.is_null() {
             // No schema defined, skip validation
             return Ok(());

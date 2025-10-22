@@ -653,7 +653,11 @@ name = "minimal-package"
 
         // Create a minimal complete quill structure with no fonts in assets
         fs::create_dir_all(quill_path.join("assets")).unwrap();
-        fs::write(quill_path.join("Quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(
+            quill_path.join("Quill.toml"),
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\ndescription = \"Test quill\"",
+        )
+        .unwrap();
         fs::write(
             quill_path.join("glue.typ"),
             "// Test template\n{{ title | String(default=\"Test\") }}",
@@ -710,7 +714,11 @@ name = "minimal-package"
         )
         .unwrap();
 
-        fs::write(quill_path.join("Quill.toml"), "[quill]\nname = \"test\"").unwrap();
+        fs::write(
+            quill_path.join("Quill.toml"),
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\ndescription = \"Test quill\"",
+        )
+        .unwrap();
         fs::write(
             quill_path.join("glue.typ"),
             "// Test template\n{{ title | String(default=\"Test\") }}",

@@ -1,9 +1,7 @@
 //! Quillmark WASM Engine - Simplified API
 
 use crate::error::QuillmarkError;
-use crate::types::{
-    OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult,
-};
+use crate::types::{OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult};
 use serde::Serialize;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;

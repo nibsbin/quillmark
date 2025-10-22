@@ -2,7 +2,7 @@
 use pyo3::conversion::IntoPyObjectExt;
 use pyo3::prelude::*; // PyResult, Python, etc.
 use pyo3::pycell::PyRef; // PyRef
-use pyo3::types::{PyDict}; // PyDict
+use pyo3::types::PyDict; // PyDict
 use pyo3::{Bound, PyAny}; // Bound, PyAny
 
 use quillmark::{

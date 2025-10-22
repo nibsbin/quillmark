@@ -19,10 +19,7 @@ pub fn build_schema_from_fields(
         let mut property = Map::new();
 
         // Add name
-        property.insert(
-            "name".to_string(),
-            Value::String(field_schema.name.clone()),
-        );
+        property.insert("name".to_string(), Value::String(field_schema.name.clone()));
 
         // Add type if specified
         if let Some(ref field_type) = field_schema.r#type {
@@ -113,23 +110,23 @@ pub fn validate_document(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::value::QuillValue;
     use crate::quill::FieldSchema;
+    use crate::value::QuillValue;
 
     #[test]
     fn test_build_schema_simple() {
         let mut fields = HashMap::new();
-        let mut schema = FieldSchema::new("Author name".to_string(), "The name of the author".to_string());
+        let mut schema = FieldSchema::new(
+            "Author name".to_string(),
+            "The name of the author".to_string(),
+        );
         schema.r#type = Some("str".to_string());
         fields.insert("author".to_string(), schema);
 
         let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
         assert_eq!(json_schema["type"], "object");
         assert_eq!(json_schema["properties"]["author"]["type"], "string");
-        assert_eq!(
-            json_schema["properties"]["author"]["name"],
-            "Author name"
-        );
+        assert_eq!(json_schema["properties"]["author"]["name"], "Author name");
         assert_eq!(
             json_schema["properties"]["author"]["description"],
             "The name of the author"
@@ -139,7 +136,10 @@ mod tests {
     #[test]
     fn test_build_schema_with_default() {
         let mut fields = HashMap::new();
-        let mut schema = FieldSchema::new("Field with default".to_string(), "A field with a default value".to_string());
+        let mut schema = FieldSchema::new(
+            "Field with default".to_string(),
+            "A field with a default value".to_string(),
+        );
         schema.r#type = Some("str".to_string());
         schema.default = Some(QuillValue::from_json(json!("default value")));
         // When default is present, field should be optional regardless of required flag
@@ -152,11 +152,15 @@ mod tests {
     fn test_build_schema_date_types() {
         let mut fields = HashMap::new();
 
-        let mut date_schema = FieldSchema::new("Date field".to_string(), "A field for dates".to_string());
+        let mut date_schema =
+            FieldSchema::new("Date field".to_string(), "A field for dates".to_string());
         date_schema.r#type = Some("date".to_string());
         fields.insert("date_field".to_string(), date_schema);
 
-        let mut datetime_schema = FieldSchema::new("DateTime field".to_string(), "A field for date and time".to_string());
+        let mut datetime_schema = FieldSchema::new(
+            "DateTime field".to_string(),
+            "A field for date and time".to_string(),
+        );
         datetime_schema.r#type = Some("datetime".to_string());
         fields.insert("datetime_field".to_string(), datetime_schema);
 

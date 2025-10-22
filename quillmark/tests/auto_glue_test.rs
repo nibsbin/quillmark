@@ -19,7 +19,10 @@ fn test_auto_glue_without_glue_file() {
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 
     // Verify glue_file is None
-    assert_eq!(quill.metadata.get("glue_file").and_then(|v| v.as_str()), None);
+    assert_eq!(
+        quill.metadata.get("glue_file").and_then(|v| v.as_str()),
+        None
+    );
     assert_eq!(quill.glue.clone().unwrap_or_default(), "");
 
     engine

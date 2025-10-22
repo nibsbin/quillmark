@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
-use crate::value::QuillValue;
 use crate::validation::build_schema_from_fields;
+use crate::value::QuillValue;
 
 /// Schema definition for a template field
 #[derive(Debug, Clone, PartialEq)]
@@ -50,7 +50,7 @@ impl FieldSchema {
         }
 
         let name = key.clone();
-        
+
         let description = obj
             .get("description")
             .and_then(|v| v.as_str())
@@ -379,6 +379,159 @@ pub struct QuillConfig {
     pub json_schema_file: Option<String>,
     /// Field schemas
     pub fields: HashMap<String, FieldSchema>,
+    /// Additional metadata from [Quill] section (excluding standard fields)
+    pub metadata: HashMap<String, QuillValue>,
+    /// Typst-specific configuration from [typst] section
+    pub typst_config: HashMap<String, QuillValue>,
+}
+
+impl QuillConfig {
+    /// Parse QuillConfig from TOML content
+    pub fn from_toml(toml_content: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        let quill_toml: toml::Value = toml::from_str(toml_content)
+            .map_err(|e| format!("Failed to parse Quill.toml: {}", e))?;
+
+        // Extract [Quill] section (required)
+        let quill_section = quill_toml
+            .get("Quill")
+            .ok_or("Missing required [Quill] section in Quill.toml")?;
+
+        // Extract required fields
+        let name = quill_section
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing required 'name' field in [Quill] section")?
+            .to_string();
+
+        let backend = quill_section
+            .get("backend")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing required 'backend' field in [Quill] section")?
+            .to_string();
+
+        let description = quill_section
+            .get("description")
+            .and_then(|v| v.as_str())
+            .ok_or("Missing required 'description' field in [Quill] section")?;
+
+        if description.trim().is_empty() {
+            return Err("'description' field in [Quill] section cannot be empty".into());
+        }
+        let description = description.to_string();
+
+        // Extract optional fields
+        let version = quill_section
+            .get("version")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let author = quill_section
+            .get("author")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let example_file = quill_section
+            .get("example_file")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let glue_file = quill_section
+            .get("glue_file")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        let json_schema_file = quill_section
+            .get("json_schema_file")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
+        // Extract additional metadata from [Quill] section (excluding standard fields)
+        let mut metadata = HashMap::new();
+        if let toml::Value::Table(table) = quill_section {
+            for (key, value) in table {
+                // Skip standard fields that are stored in dedicated struct fields
+                if key != "name"
+                    && key != "backend"
+                    && key != "description"
+                    && key != "version"
+                    && key != "author"
+                    && key != "example_file"
+                    && key != "glue_file"
+                    && key != "json_schema_file"
+                {
+                    match QuillValue::from_toml(value) {
+                        Ok(quill_value) => {
+                            metadata.insert(key.clone(), quill_value);
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: Failed to convert field '{}': {}", key, e);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Extract [typst] section (optional)
+        let mut typst_config = HashMap::new();
+        if let Some(typst_section) = quill_toml.get("typst") {
+            if let toml::Value::Table(table) = typst_section {
+                for (key, value) in table {
+                    match QuillValue::from_toml(value) {
+                        Ok(quill_value) => {
+                            typst_config.insert(key.clone(), quill_value);
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: Failed to convert typst field '{}': {}", key, e);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Extract [fields] section (optional)
+        let mut fields = HashMap::new();
+        if let Some(fields_section) = quill_toml.get("fields") {
+            if let toml::Value::Table(fields_table) = fields_section {
+                for (field_name, field_schema) in fields_table {
+                    match QuillValue::from_toml(field_schema) {
+                        Ok(quill_value) => {
+                            match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
+                                Ok(schema) => {
+                                    fields.insert(field_name.clone(), schema);
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "Warning: Failed to parse field schema '{}': {}",
+                                        field_name, e
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "Warning: Failed to convert field schema '{}': {}",
+                                field_name, e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(QuillConfig {
+            name,
+            description,
+            backend,
+            version,
+            author,
+            example_file,
+            glue_file,
+            json_schema_file,
+            fields,
+            metadata,
+            typst_config,
+        })
+    }
 }
 
 impl Quill {
@@ -426,8 +579,7 @@ impl Quill {
     /// # Arguments
     ///
     /// * `root` - The root node of the file tree
-    /// * `default_name` - Optional default name (will be overridden by name in Quill.toml)
-    /// * `default_name` - Optional default name (will be overridden by name in Quill.toml)
+    /// * `_default_name` - Optional default name (not used, name always comes from Quill.toml)
     ///
     /// # Errors
     ///
@@ -438,7 +590,7 @@ impl Quill {
     /// - Validation fails
     pub fn from_tree(
         root: FileTreeNode,
-        default_name: Option<String>,
+        _default_name: Option<String>,
     ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         // Read Quill.toml
         let quill_toml_bytes = root
@@ -448,169 +600,106 @@ impl Quill {
         let quill_toml_content = String::from_utf8(quill_toml_bytes.to_vec())
             .map_err(|e| format!("Quill.toml is not valid UTF-8: {}", e))?;
 
-        let quill_toml: toml::Value = toml::from_str(&quill_toml_content)
-            .map_err(|e| format!("Failed to parse Quill.toml: {}", e))?;
+        // Parse TOML into QuillConfig
+        let config = QuillConfig::from_toml(&quill_toml_content)?;
 
-        let mut metadata = HashMap::new();
-        let mut glue_file: Option<String> = None;
-        let mut example_file: Option<String> = None;
-        let mut quill_name = default_name.unwrap_or_else(|| "unnamed".to_string());
-        let mut backend = String::new();
-        let mut field_schemas = HashMap::new();
+        // Construct Quill from QuillConfig
+        Self::from_config(config, root)
+    }
 
-        // Extract fields from [Quill] section
-        if let Some(quill_section) = quill_toml.get("Quill") {
-            // Extract required fields: name, backend, glue, template
-            if let Some(name_val) = quill_section.get("name").and_then(|v| v.as_str()) {
-                quill_name = name_val.to_string();
-            }
+    /// Create a Quill from a QuillConfig and file tree
+    ///
+    /// This method constructs a Quill from a parsed QuillConfig and validates
+    /// all file references.
+    ///
+    /// # Arguments
+    ///
+    /// * `config` - The parsed QuillConfig
+    /// * `root` - The root node of the file tree
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if:
+    /// - The glue file specified in config is not found or not valid UTF-8
+    /// - The example file specified in config is not found or not valid UTF-8
+    /// - The json_schema_file is not found or not valid JSON
+    /// - Validation fails
+    fn from_config(
+        config: QuillConfig,
+        root: FileTreeNode,
+    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        // Build metadata from config
+        let mut metadata = config.metadata.clone();
 
-            if let Some(backend_val) = quill_section.get("backend").and_then(|v| v.as_str()) {
-                backend = backend_val.to_string();
-                match QuillValue::from_toml(&toml::Value::String(backend_val.to_string())) {
-                    Ok(quill_value) => {
-                        metadata.insert("backend".to_string(), quill_value);
-                    }
-                    Err(e) => {
-                        eprintln!("Warning: Failed to convert backend field: {}", e);
-                    }
-                }
-            }
+        // Add backend to metadata
+        metadata.insert(
+            "backend".to_string(),
+            QuillValue::from_json(serde_json::Value::String(config.backend.clone())),
+        );
 
-            if let Some(glue_val) = quill_section.get("glue_file").and_then(|v| v.as_str()) {
-                glue_file = Some(glue_val.to_string());
-            }
+        // Add description to metadata
+        metadata.insert(
+            "description".to_string(),
+            QuillValue::from_json(serde_json::Value::String(config.description.clone())),
+        );
 
-            if let Some(example_val) = quill_section.get("example_file").and_then(|v| v.as_str()) {
-                example_file = Some(example_val.to_string());
-            }
-
-            // Validate that description is present and non-empty (required field)
-            let description = quill_section
-                .get("description")
-                .and_then(|v| v.as_str())
-                .ok_or("Missing required 'description' field in [Quill] section")?;
-
-            if description.trim().is_empty() {
-                return Err("'description' field in [Quill] section cannot be empty".into());
-            }
-
-            // Add other fields to metadata (excluding special fields and version)
-            if let toml::Value::Table(table) = quill_section {
-                for (key, value) in table {
-                    if key != "name"
-                        && key != "backend"
-                        && key != "glue_file"
-                        && key != "example_file"
-                        && key != "version"
-                    {
-                        match QuillValue::from_toml(value) {
-                            Ok(quill_value) => {
-                                metadata.insert(key.clone(), quill_value);
-                            }
-                            Err(e) => {
-                                eprintln!("Warning: Failed to convert field '{}': {}", key, e);
-                            }
-                        }
-                    }
-                }
-            }
+        // Add author if present
+        if let Some(ref author) = config.author {
+            metadata.insert(
+                "author".to_string(),
+                QuillValue::from_json(serde_json::Value::String(author.clone())),
+            );
         }
 
-        // Extract fields from [typst] section
-        if let Some(typst_section) = quill_toml.get("typst") {
-            if let toml::Value::Table(table) = typst_section {
-                for (key, value) in table {
-                    match QuillValue::from_toml(value) {
-                        Ok(quill_value) => {
-                            metadata.insert(format!("typst_{}", key), quill_value);
-                        }
-                        Err(e) => {
-                            eprintln!("Warning: Failed to convert typst field '{}': {}", key, e);
-                        }
-                    }
-                }
-            }
-        }
-
-        // Parse field schemas from top-level [fields] section
-        if let Some(fields_section) = quill_toml.get("fields") {
-            if let toml::Value::Table(fields_table) = fields_section {
-                for (field_name, field_schema) in fields_table {
-                    match QuillValue::from_toml(field_schema) {
-                        Ok(quill_value) => match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
-                            Ok(schema) => {
-                                field_schemas.insert(field_name.clone(), schema);
-                            }
-                            Err(e) => {
-                                eprintln!(
-                                    "Warning: Failed to parse field schema '{}': {}",
-                                    field_name, e
-                                );
-                            }
-                        },
-                        Err(e) => {
-                            eprintln!(
-                                "Warning: Failed to convert field schema '{}': {}",
-                                field_name, e
-                            );
-                        }
-                    }
-                }
-            }
+        // Add typst config to metadata with typst_ prefix
+        for (key, value) in &config.typst_config {
+            metadata.insert(format!("typst_{}", key), value.clone());
         }
 
         // Validate json_schema_file if specified
-        if let Some(quill_section) = quill_toml.get("Quill") {
-            if let Some(json_schema_path) =
-                quill_section.get("json_schema_file").and_then(|v| v.as_str())
-            {
-                // Check if file exists
-                let schema_bytes = root.get_file(json_schema_path).ok_or_else(|| {
-                    format!(
-                        "json_schema_file '{}' not found in file tree",
-                        json_schema_path
-                    )
-                })?;
+        if let Some(ref json_schema_path) = config.json_schema_file {
+            // Check if file exists
+            let schema_bytes = root.get_file(json_schema_path).ok_or_else(|| {
+                format!(
+                    "json_schema_file '{}' not found in file tree",
+                    json_schema_path
+                )
+            })?;
 
-                // Validate JSON syntax
-                serde_json::from_slice::<serde_json::Value>(schema_bytes).map_err(|e| {
-                    format!(
-                        "json_schema_file '{}' is not valid JSON: {}",
-                        json_schema_path, e
-                    )
-                })?;
+            // Validate JSON syntax
+            serde_json::from_slice::<serde_json::Value>(schema_bytes).map_err(|e| {
+                format!(
+                    "json_schema_file '{}' is not valid JSON: {}",
+                    json_schema_path, e
+                )
+            })?;
 
-                // Warn if fields are also defined
-                if !field_schemas.is_empty() {
-                    eprintln!("Warning: [fields] section is overridden by json_schema_file");
-                }
+            // Warn if fields are also defined
+            if !config.fields.is_empty() {
+                eprintln!("Warning: [fields] section is overridden by json_schema_file");
             }
         }
 
         // Build JSON schema from field schemas
-        let schema = build_schema_from_fields(&field_schemas).map_err(|e| {
-            format!(
-                "Failed to build JSON schema from field schemas: {}",
-                e
-            )
-        })?;
+        let schema = build_schema_from_fields(&config.fields)
+            .map_err(|e| format!("Failed to build JSON schema from field schemas: {}", e))?;
 
         // Read the glue content from glue file (if specified)
-        let glue_content: Option<String> = if let Some(ref glue_file_name) = glue_file {
-        let glue_bytes = root
-            .get_file(glue_file_name)
-            .ok_or_else(|| format!("Glue file '{}' not found in file tree", glue_file_name))?;
+        let glue_content: Option<String> = if let Some(ref glue_file_name) = config.glue_file {
+            let glue_bytes = root
+                .get_file(glue_file_name)
+                .ok_or_else(|| format!("Glue file '{}' not found in file tree", glue_file_name))?;
 
-        let content = String::from_utf8(glue_bytes.to_vec())
-            .map_err(|e| format!("Glue file '{}' is not valid UTF-8: {}", glue_file_name, e))?;
+            let content = String::from_utf8(glue_bytes.to_vec())
+                .map_err(|e| format!("Glue file '{}' is not valid UTF-8: {}", glue_file_name, e))?;
             Some(content)
         } else {
             // No glue file specified
             None
         };
+
         // Read the markdown example content if specified
-        let example_content = if let Some(ref example_file_name) = example_file {
+        let example_content = if let Some(ref example_file_name) = config.example_file {
             root.get_file(example_file_name).and_then(|bytes| {
                 String::from_utf8(bytes.to_vec())
                     .map_err(|e| {
@@ -628,10 +717,10 @@ impl Quill {
 
         let quill = Quill {
             metadata,
-            name: quill_name,
-            backend,
+            name: config.name,
+            backend: config.backend,
             glue: glue_content,
-            example: example_content.into(),
+            example: example_content,
             schema,
             files: root,
         };
@@ -1574,9 +1663,18 @@ title = {description = "title of document" }
 
         // Validate field schemas were parsed
         assert_eq!(quill.schema["properties"].as_object().unwrap().len(), 3);
-        assert!(quill.schema["properties"].as_object().unwrap().contains_key("author"));
-        assert!(quill.schema["properties"].as_object().unwrap().contains_key("ice_cream"));
-        assert!(quill.schema["properties"].as_object().unwrap().contains_key("title"));
+        assert!(quill.schema["properties"]
+            .as_object()
+            .unwrap()
+            .contains_key("author"));
+        assert!(quill.schema["properties"]
+            .as_object()
+            .unwrap()
+            .contains_key("ice_cream"));
+        assert!(quill.schema["properties"]
+            .as_object()
+            .unwrap()
+            .contains_key("title"));
 
         // Verify author field schema
         let author_schema = quill.schema["properties"]["author"].as_object().unwrap();
@@ -1649,5 +1747,159 @@ description = "Test quill without glue file"
         // Validate that glue is null (will use auto glue)
         assert!(quill.glue.clone().is_none());
         assert_eq!(quill.name, "test-no-glue");
+    }
+
+    #[test]
+    fn test_quill_config_from_toml() {
+        // Test parsing QuillConfig from TOML content
+        let toml_content = r#"[Quill]
+name = "test-config"
+backend = "typst"
+description = "Test configuration parsing"
+version = "1.0.0"
+author = "Test Author"
+glue_file = "glue.typ"
+example_file = "example.md"
+
+[typst]
+packages = ["@preview/bubble:0.2.2"]
+
+[fields]
+title = {description = "Document title", type = "string"}
+author = {description = "Document author"}
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+
+        // Verify required fields
+        assert_eq!(config.name, "test-config");
+        assert_eq!(config.backend, "typst");
+        assert_eq!(config.description, "Test configuration parsing");
+
+        // Verify optional fields
+        assert_eq!(config.version, Some("1.0.0".to_string()));
+        assert_eq!(config.author, Some("Test Author".to_string()));
+        assert_eq!(config.glue_file, Some("glue.typ".to_string()));
+        assert_eq!(config.example_file, Some("example.md".to_string()));
+
+        // Verify typst config
+        assert!(config.typst_config.contains_key("packages"));
+
+        // Verify field schemas
+        assert_eq!(config.fields.len(), 2);
+        assert!(config.fields.contains_key("title"));
+        assert!(config.fields.contains_key("author"));
+
+        let title_field = &config.fields["title"];
+        assert_eq!(title_field.description, "Document title");
+        assert_eq!(title_field.r#type, Some("string".to_string()));
+    }
+
+    #[test]
+    fn test_quill_config_missing_required_fields() {
+        // Test that missing required fields result in error
+        let toml_missing_name = r#"[Quill]
+backend = "typst"
+description = "Missing name"
+"#;
+        let result = QuillConfig::from_toml(toml_missing_name);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required 'name'"));
+
+        let toml_missing_backend = r#"[Quill]
+name = "test"
+description = "Missing backend"
+"#;
+        let result = QuillConfig::from_toml(toml_missing_backend);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required 'backend'"));
+
+        let toml_missing_description = r#"[Quill]
+name = "test"
+backend = "typst"
+"#;
+        let result = QuillConfig::from_toml(toml_missing_description);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required 'description'"));
+    }
+
+    #[test]
+    fn test_quill_config_empty_description() {
+        // Test that empty description results in error
+        let toml_empty_description = r#"[Quill]
+name = "test"
+backend = "typst"
+description = "   "
+"#;
+        let result = QuillConfig::from_toml(toml_empty_description);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("description' field in [Quill] section cannot be empty"));
+    }
+
+    #[test]
+    fn test_quill_config_missing_quill_section() {
+        // Test that missing [Quill] section results in error
+        let toml_no_section = r#"[fields]
+title = {description = "Title"}
+"#;
+        let result = QuillConfig::from_toml(toml_no_section);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required [Quill] section"));
+    }
+
+    #[test]
+    fn test_quill_from_config_metadata() {
+        // Test that QuillConfig metadata flows through to Quill
+        let mut root_files = HashMap::new();
+
+        let quill_toml = r#"[Quill]
+name = "metadata-test"
+backend = "typst"
+description = "Test metadata flow"
+author = "Test Author"
+custom_field = "custom_value"
+
+[typst]
+packages = ["@preview/bubble:0.2.2"]
+"#;
+        root_files.insert(
+            "Quill.toml".to_string(),
+            FileTreeNode::File {
+                contents: quill_toml.as_bytes().to_vec(),
+            },
+        );
+
+        let root = FileTreeNode::Directory { files: root_files };
+        let quill = Quill::from_tree(root, None).unwrap();
+
+        // Verify metadata includes backend and description
+        assert!(quill.metadata.contains_key("backend"));
+        assert!(quill.metadata.contains_key("description"));
+        assert!(quill.metadata.contains_key("author"));
+
+        // Verify custom field is in metadata
+        assert!(quill.metadata.contains_key("custom_field"));
+        assert_eq!(
+            quill.metadata.get("custom_field").unwrap().as_str(),
+            Some("custom_value")
+        );
+
+        // Verify typst config with typst_ prefix
+        assert!(quill.metadata.contains_key("typst_packages"));
     }
 }
