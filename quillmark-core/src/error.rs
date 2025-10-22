@@ -177,8 +177,6 @@ pub struct Diagnostic {
     pub message: String,
     /// Primary source location
     pub primary: Option<Location>,
-    /// Related source locations for context
-    pub related: Vec<Location>,
     /// Optional hint for fixing the error
     pub hint: Option<String>,
     /// Source error that caused this diagnostic (for error chaining)
@@ -196,7 +194,6 @@ impl Diagnostic {
             code: None,
             message,
             primary: None,
-            related: Vec::new(),
             hint: None,
             source: None,
         }
@@ -211,12 +208,6 @@ impl Diagnostic {
     /// Set the primary location
     pub fn with_location(mut self, location: Location) -> Self {
         self.primary = Some(location);
-        self
-    }
-
-    /// Add a related location
-    pub fn with_related(mut self, location: Location) -> Self {
-        self.related.push(location);
         self
     }
 
@@ -266,17 +257,6 @@ impl Diagnostic {
             result.push_str(&format!("\n  --> {}:{}:{}", loc.file, loc.line, loc.col));
         }
 
-        // Add related locations (trace)
-        for (i, related) in self.related.iter().enumerate() {
-            result.push_str(&format!(
-                "\n  {} {}:{}:{}",
-                if i == 0 { "trace:" } else { "      " },
-                related.file,
-                related.line,
-                related.col
-            ));
-        }
-
         if let Some(ref hint) = self.hint {
             result.push_str(&format!("\n  hint: {}", hint));
         }
@@ -318,8 +298,6 @@ pub struct SerializableDiagnostic {
     pub message: String,
     /// Primary source location
     pub primary: Option<Location>,
-    /// Related source locations for context
-    pub related: Vec<Location>,
     /// Optional hint for fixing the error
     pub hint: Option<String>,
     /// Source chain as list of strings (for display purposes)
@@ -334,7 +312,6 @@ impl From<Diagnostic> for SerializableDiagnostic {
             code: diag.code,
             message: diag.message,
             primary: diag.primary,
-            related: diag.related,
             hint: diag.hint,
             source_chain,
         }
@@ -348,7 +325,6 @@ impl From<&Diagnostic> for SerializableDiagnostic {
             code: diag.code.clone(),
             message: diag.message.clone(),
             primary: diag.primary.clone(),
-            related: diag.related.clone(),
             hint: diag.hint.clone(),
             source_chain: diag.source_chain(),
         }

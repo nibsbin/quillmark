@@ -79,8 +79,6 @@ pub struct Diagnostic {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub location: Option<Location>,
-    #[serde(default)]
-    pub related_locations: Vec<Location>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
 }
@@ -92,7 +90,6 @@ impl From<quillmark_core::Diagnostic> for Diagnostic {
             code: None,
             message: diag.message,
             location: diag.primary.map(|loc| loc.into()),
-            related_locations: diag.related.into_iter().map(|loc| loc.into()).collect(),
             hint: diag.hint,
         }
     }

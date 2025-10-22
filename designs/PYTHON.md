@@ -429,7 +429,6 @@ class Diagnostic:
     message: str
     code: str | None = None
     primary: Location | None = None
-    related: list[Location] = field(default_factory=list)
     hint: str | None = None
 ```
 

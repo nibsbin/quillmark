@@ -439,7 +439,6 @@ pub struct Diagnostic {
     pub code: Option<String>,
     pub message: String,
     pub primary: Option<Location>,
-    pub related: Vec<Location>,
     pub hint: Option<String>,
 }
 ```
@@ -457,7 +456,6 @@ pub struct Diagnostic {
 - Error code for machine processing
 - Human-readable message
 - Source location (file, line, column)
-- Related locations for context
 - Helpful hints
 - **Source chain** - Preserves full error context via `source` field
 

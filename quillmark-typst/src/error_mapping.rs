@@ -23,13 +23,6 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
     // Extract location from span
     let location = resolve_span_to_location(&error.span, world);
 
-    // Map trace to related locations
-    let related = error
-        .trace
-        .iter()
-        .filter_map(|spanned| resolve_span_to_location(&spanned.span, world))
-        .collect();
-
     // Get first hint if available
     let hint = error.hints.first().map(|h| h.to_string());
 
@@ -44,7 +37,6 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
         code,
         message: error.message.to_string(),
         primary: location,
-        related,
         hint,
         source: None,
     }

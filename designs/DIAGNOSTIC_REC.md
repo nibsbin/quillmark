@@ -94,9 +94,6 @@ pub struct Diagnostic {
     /// Primary source location
     pub primary: Option<Location>,
     
-    /// Related source locations for context
-    pub related: Vec<Location>,
-    
     /// Optional hint for fixing the error
     pub hint: Option<String>,
     
@@ -153,7 +150,6 @@ pub struct SerializableDiagnostic {
     pub code: Option<String>,
     pub message: String,
     pub primary: Option<Location>,
-    pub related: Vec<Location>,
     pub hint: Option<String>,
     /// Source chain as list of strings (for display purposes)
     pub source_chain: Vec<String>,
@@ -166,7 +162,6 @@ impl From<Diagnostic> for SerializableDiagnostic {
             code: diag.code,
             message: diag.message,
             primary: diag.primary,
-            related: diag.related,
             hint: diag.hint,
             source_chain: diag.source_chain(),
         }
@@ -301,7 +296,6 @@ impl From<minijinja::Error> for RenderError {
             code: Some(format!("minijinja::{:?}", e.kind())),
             message: e.to_string(),
             primary: loc,
-            related: vec![],
             hint,
             source: Some(Box::new(e.clone())), // Preserve source!
         };
@@ -398,8 +392,6 @@ pub struct PyDiagnostic {
     #[pyo3(get)]
     pub primary: Option<PyLocation>,
     #[pyo3(get)]
-    pub related: Vec<PyLocation>,
-    #[pyo3(get)]
     pub hint: Option<String>,
     #[pyo3(get)]
     pub source_chain: Vec<String>,
@@ -412,7 +404,6 @@ impl From<Diagnostic> for PyDiagnostic {
             code: diag.code,
             message: diag.message,
             primary: diag.primary.map(Into::into),
-            related: diag.related.into_iter().map(Into::into).collect(),
             hint: diag.hint,
             source_chain: diag.source_chain(),
         }
@@ -569,12 +560,6 @@ pub fn map_typst_errors(
             };
 
             let primary = resolve_span_to_location(error.span, world);
-            
-            let related = error
-                .trace
-                .iter()
-                .filter_map(|t| resolve_span_to_location(t.span, world))
-                .collect();
 
             let code = format!(
                 "typst::{}",
@@ -588,7 +573,6 @@ pub fn map_typst_errors(
                 code: Some(code),
                 message: error.message.clone(),
                 primary,
-                related,
                 hint,
                 source: None, // Typst errors are leaf errors
             }

@@ -365,15 +365,6 @@ impl PyDiagnostic {
     }
 
     #[getter]
-    fn related(&self) -> Vec<PyLocation> {
-        self.inner
-            .related
-            .iter()
-            .map(|l| PyLocation { inner: l.clone() })
-            .collect()
-    }
-
-    #[getter]
     fn source_chain(&self) -> Vec<String> {
         self.inner.source_chain.clone()
     }
