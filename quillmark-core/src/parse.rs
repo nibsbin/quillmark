@@ -4,8 +4,7 @@
 //!
 //! ## Overview
 //!
-//! The `parse` module provides the [`decompose`] function for parsing markdown documents
-//! and the [`ParsedDocument`] type for accessing parsed content.
+//! The `parse` module provides the [`ParsedDocument::from_markdown`] function for parsing markdown documents
 //!
 //! ## Key Types
 //!
@@ -37,7 +36,7 @@
 //!
 //! ## Error Handling
 //!
-//! The [`decompose`] function returns errors for:
+//! The [`ParsedDocument::from_markdown`] function returns errors for:
 //! - Malformed YAML syntax
 //! - Unclosed frontmatter blocks
 //! - Multiple global frontmatter blocks
