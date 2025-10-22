@@ -1,18 +1,18 @@
 use proptest::prelude::*;
-use quillmark_core::decompose;
+use quillmark_core::ParsedDocument;
 
 proptest! {
     #[test]
     fn fuzz_decompose_no_panic(s in "\\PC{0,1000}") {
         // Test that decompose doesn't panic on arbitrary input
-        let _ = decompose(&s);
+        let _ = ParsedDocument::from_markdown(&s);
         // We don't care about the result, just that it doesn't panic
     }
 
     #[test]
     fn fuzz_decompose_with_dashes(s in "---[\\s\\S]*---[\\s\\S]*") {
         // Test inputs that might look like frontmatter
-        let result = decompose(&s);
+        let result = ParsedDocument::from_markdown(&s);
         // Should either succeed or return an error, but not panic
         match result {
             Ok(doc) => {
@@ -38,7 +38,7 @@ proptest! {
             title, author, content
         );
 
-        let result = decompose(&markdown);
+        let result = ParsedDocument::from_markdown(&markdown);
         // Should parse successfully for valid YAML
         if !title.contains(':') && !author.contains(':') {
             assert!(result.is_ok(), "Should parse valid frontmatter");
@@ -53,7 +53,7 @@ proptest! {
             tag_name
         );
 
-        let result = decompose(&markdown);
+        let result = ParsedDocument::from_markdown(&markdown);
         // Should handle tag directives without panic
         if let Ok(doc) = result {
             // Tag might create a collection
@@ -65,7 +65,7 @@ proptest! {
     fn fuzz_decompose_malformed_yaml(s in "[^a-zA-Z0-9\\s]{1,50}") {
         // Test with potentially malformed YAML
         let markdown = format!("---\n{}\n---\n\nContent", s);
-        let _ = decompose(&markdown);
+        let _ = ParsedDocument::from_markdown(&markdown);
         // Should handle errors gracefully
     }
 
@@ -78,7 +78,7 @@ proptest! {
         let frontmatter = fields.join("\n");
         let markdown = format!("---\n{}\n---\n\nContent", frontmatter);
 
-        let result = decompose(&markdown);
+        let result = ParsedDocument::from_markdown(&markdown);
         if let Ok(doc) = result {
             // Should be able to access all fields
             assert!(doc.fields().len() <= size + 1); // +1 for body field
@@ -96,7 +96,7 @@ proptest! {
         yaml.push_str(&format!("{}value: data", "  ".repeat(depth + 1)));
 
         let markdown = format!("---\n{}\n---\n\nContent", yaml);
-        let _ = decompose(&markdown);
+        let _ = ParsedDocument::from_markdown(&markdown);
     }
 }
 
@@ -107,7 +107,7 @@ proptest! {
     fn fuzz_decompose_special_characters(s in "[\\\\\"'`$#*_\\[\\]<>@\\n\\r\\t]{0,100}") {
         // Test with special characters in content
         let markdown = format!("---\ntitle: Test\n---\n\n{}", s);
-        let result = decompose(&markdown);
+        let result = ParsedDocument::from_markdown(&markdown);
 
         if let Ok(doc) = result {
             // Should be able to retrieve body with special chars
@@ -120,7 +120,7 @@ proptest! {
     fn fuzz_decompose_unicode(s in "\\PC{0,100}") {
         // Test with Unicode content
         let markdown = format!("---\ntitle: Test\n---\n\n{}", s);
-        let result = decompose(&markdown);
+        let result = ParsedDocument::from_markdown(&markdown);
 
         if let Ok(doc) = result {
             let _ = doc.body();
@@ -139,7 +139,7 @@ proptest! {
             ));
         }
 
-        let result = decompose(&markdown);
+        let result = ParsedDocument::from_markdown(&markdown);
         if let Ok(doc) = result {
             // Should handle multiple sections
             let _ = doc.fields();

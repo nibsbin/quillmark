@@ -163,7 +163,7 @@
 //! ```
 
 use quillmark_core::{
-    decompose, Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Quill, RenderError,
+    Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Quill, RenderError,
     RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;

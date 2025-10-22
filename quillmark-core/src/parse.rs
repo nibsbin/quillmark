@@ -17,7 +17,7 @@
 //! ### Basic Parsing
 //!
 //! ```
-//! use quillmark_core::decompose;
+//! use quillmark_core::ParsedDocument;
 //!
 //! let markdown = r#"---
 //! title: My Document
@@ -29,44 +29,10 @@
 //! Document content here.
 //! "#;
 //!
-//! let doc = decompose(markdown).unwrap();
+//! let doc = ParsedDocument::from_markdown(markdown).unwrap();
 //! let title = doc.get_field("title")
 //!     .and_then(|v| v.as_str())
 //!     .unwrap_or("Untitled");
-//! ```
-//!
-//! ### Extended Metadata with Tags
-//!
-//! ```
-//! use quillmark_core::decompose;
-//!
-//! let markdown = r#"---
-//! catalog_title: Product Catalog
-//! ---
-//!
-//! # Products
-//!
-//! ---
-//! SCOPE: products
-//! name: Widget
-//! price: 19.99
-//! ---
-//!
-//! A versatile widget for all occasions.
-//! "#;
-//!
-//! let doc = decompose(markdown).unwrap();
-//!
-//! // Access tagged collections
-//! if let Some(products) = doc.get_field("products")
-//!     .and_then(|v| v.as_sequence())
-//! {
-//!     for product in products {
-//!         let name = product.get("name").and_then(|v| v.as_str()).unwrap();
-//!         let price = product.get("price").and_then(|v| v.as_f64()).unwrap();
-//!         println!("{}: ${}", name, price);
-//!     }
-//! }
 //! ```
 //!
 //! ## Error Handling
@@ -396,7 +362,7 @@ fn find_metadata_blocks(
 }
 
 /// Decompose markdown into frontmatter fields and body
-pub fn decompose(
+fn decompose(
     markdown: &str,
 ) -> Result<ParsedDocument, Box<dyn std::error::Error + Send + Sync>> {
     // Check input size limit
