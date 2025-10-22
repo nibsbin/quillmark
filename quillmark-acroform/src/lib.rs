@@ -29,7 +29,7 @@ impl Backend for AcroformBackend {
     }
 
     fn register_filters(&self, _glue: &mut Glue) {
-        // No filters registered - we use default JSON glue
+        // No filters registered - we use default auto glue
     }
 
     fn compile(

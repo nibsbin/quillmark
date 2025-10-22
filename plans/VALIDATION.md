@@ -15,7 +15,7 @@ The validation system will provide two levels of validation:
 #### Backend Trait Extensions
 The Backend trait will be extended to support schema validation requirements:
 - Add `glue_extension_types()` method returning `&'static [&'static str]` - accepted glue file extensions
-- Add `allow_auto_glue()` method returning `bool` - whether JSON glue generation is allowed
+- Add `allow_auto_glue()` method returning `bool` - whether auto glue generation is allowed
 - Do NOT maintain backwards compatability. Remove legacy/redundant logic (e.g., `Backend::glue_type`) from codebase.
 
 #### Quill Validation (Strict)

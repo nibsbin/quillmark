@@ -573,7 +573,7 @@ impl Quill {
             String::from_utf8(glue_bytes.to_vec())
                 .map_err(|e| format!("Glue file '{}' is not valid UTF-8: {}", glue_file_name, e))?
         } else {
-            // If no glue file specified, use empty string (JSON glue will be used)
+            // If no glue file specified, use empty string (auto glue will be used)
             String::new()
         };
 
@@ -1652,7 +1652,7 @@ description = "Test quill without glue file"
 
         // Validate that glue_file is None
         assert_eq!(quill.glue_file, None);
-        // Validate that glue_template is empty (will use JSON glue)
+        // Validate that glue_template is empty (will use auto glue)
         assert_eq!(quill.glue_template, "");
         assert_eq!(quill.name, "test-no-glue");
     }

@@ -11,7 +11,7 @@ example_quill/
 - form.pdf # we will hardcode this file name for now
 - usaf_form_8.md
 
-Quill.toml uses the default JSON glue, so it does not have a glue file.
+Quill.toml uses the default auto glue, so it does not have a glue file.
 ```
 [Quill]
 name = "usaf_form_8"
@@ -35,7 +35,7 @@ Instead of relying on quillmark-core’s templating, quillmark-acroform will use
 
 - For the backend compile implementation, expect a JSON string for glue_content input.
 - If you need any dependencies like `serde_json`, pin them in the workspace `Cargo.toml`.
-- Do not register any filters because we are using the default JSON glue
+- Do not register any filters because we are using the default auto glue
 
 ## Resources
 
