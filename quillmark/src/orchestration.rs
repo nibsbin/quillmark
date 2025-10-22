@@ -444,16 +444,6 @@ impl Workflow {
         self.backend.compile(content, quill, &render_opts)
     }
 
-    /// Process Markdown through the glue template without compilation, returning the composed output.
-    pub fn process_glue(&self, markdown: &str) -> Result<String, RenderError> {
-        let parsed_doc = decompose(markdown).map_err(|e| RenderError::InvalidFrontmatter {
-            diag: Diagnostic::new(Severity::Error, format!("Failed to parse markdown: {}", e))
-                .with_code("parse::decompose".to_string()),
-        })?;
-
-        self.process_glue_parsed(&parsed_doc)
-    }
-
     /// Process a parsed document through the glue template without compilation
     pub fn process_glue_parsed(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
         // Create appropriate glue based on whether template is provided
