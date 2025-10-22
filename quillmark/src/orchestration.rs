@@ -303,7 +303,7 @@ impl Quillmark {
             })?;
 
         // Validate glue_file extension or auto_glue
-        if let Some(glue_file) = &quill.glue_file {
+        if let Some(glue_file) = &quill.metadata.get("glue_file").and_then(|v| v.as_str()) {
             let extension = std::path::Path::new(glue_file)
                 .extension()
                 .and_then(|e| e.to_str())
@@ -535,12 +535,14 @@ impl Workflow {
         self.validate_document(parsed)?;
 
         // Create appropriate glue based on whether template is provided
-        let mut glue = if self.quill.glue_template.is_empty() {
-            Glue::new_auto()
-        } else {
-            Glue::new(self.quill.glue_template.clone())
-        };
-
+        let mut glue = match &self.quill.glue {
+            Some(s) if !s.is_empty() => {
+                Glue::new(s.to_string())
+            }
+            _ => {
+                Glue::new_auto()
+            }
+        }; 
         self.backend.register_filters(&mut glue);
         let glue_output =
             glue.compose(parsed.fields().clone())

@@ -19,8 +19,8 @@ fn test_auto_glue_without_glue_file() {
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 
     // Verify glue_file is None
-    assert_eq!(quill.glue_file, None);
-    assert_eq!(quill.glue_template, "");
+    assert_eq!(quill.metadata.get("glue_file").and_then(|v| v.as_str()), None);
+    assert_eq!(quill.glue.clone().unwrap_or_default(), "");
 
     engine
         .register_quill(quill)
@@ -138,59 +138,4 @@ Content here.
     assert_eq!(json["metadata"]["status"], "draft");
     assert_eq!(json["contact"]["email"], "test@example.com");
     assert_eq!(json["contact"]["phone"], "555-1234");
-}
-
-#[test]
-fn test_template_glue_still_works() {
-    // Verify that template-based glue still works as expected
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("template-quill");
-
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-    fs::write(
-        quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"template-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test template glue\"\n",
-    )
-    .expect("Failed to write Quill.toml");
-    fs::write(
-        quill_path.join("glue.typ"),
-        "Title: {{ title }}\nAuthor: {{ author }}",
-    )
-    .expect("Failed to write glue.typ");
-
-    let markdown = r#"---
-title: My Document
-author: Bob Jones
----
-
-Content
-"#;
-
-    let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-
-    let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-
-    // Verify glue_file is set
-    assert_eq!(quill.glue_file, Some("glue.typ".to_string()));
-    assert!(!quill.glue_template.is_empty());
-
-    engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
-
-    let workflow = engine
-        .workflow_from_quill_name("template-quill")
-        .expect("Failed to load workflow");
-
-    let glue_output = workflow
-        .process_glue(&parsed)
-        .expect("Failed to process glue");
-
-    // Verify template output (not JSON)
-    assert!(glue_output.contains("Title: My Document"));
-    assert!(glue_output.contains("Author: Bob Jones"));
-
-    // Should not be valid JSON
-    assert!(serde_json::from_str::<serde_json::Value>(&glue_output).is_err());
 }

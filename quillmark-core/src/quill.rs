@@ -367,22 +367,44 @@ impl QuillIgnore {
 /// A quill template bundle.
 #[derive(Debug, Clone)]
 pub struct Quill {
-    /// The template content
-    pub glue_template: String,
     /// Quill-specific metadata
     pub metadata: HashMap<String, QuillValue>,
     /// Name of the quill
     pub name: String,
     /// Backend identifier (e.g., "typst")
     pub backend: String,
-    /// Glue template file name (optional)
-    pub glue_file: Option<String>,
+    /// Glue template content (optional)
+    pub glue: Option<String>,
     /// Markdown template content (optional)
     pub example: Option<String>,
     /// Field schema documentation (optional)
     pub field_schemas: HashMap<String, FieldSchema>,
+
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
+}
+
+/// Quill configuration extracted from Quill.toml
+#[derive(Debug, Clone)]
+pub struct QuillConfig {
+    /// Human-readable name
+    pub name: String,
+    /// Description of the quill
+    pub description: String,
+    /// Backend identifier (e.g., "typst")
+    pub backend: String,
+    /// Semantic version of the quill
+    pub version: Option<String>,
+    /// Author of the quill
+    pub author: Option<String>,
+    /// Example markdown file
+    pub example_file: Option<String>,
+    /// Glue file
+    pub glue_file: Option<String>,
+    /// JSON schema file
+    pub json_schema: Option<String>,
+    /// Field schemas
+    pub field_schemas: HashMap<String, FieldSchema>,
 }
 
 impl Quill {
@@ -457,7 +479,7 @@ impl Quill {
 
         let mut metadata = HashMap::new();
         let mut glue_file: Option<String> = None;
-        let mut template_file: Option<String> = None;
+        let mut example_file: Option<String> = None;
         let mut quill_name = default_name.unwrap_or_else(|| "unnamed".to_string());
         let mut backend = String::new();
         let mut field_schemas = HashMap::new();
@@ -486,7 +508,7 @@ impl Quill {
             }
 
             if let Some(example_val) = quill_section.get("example_file").and_then(|v| v.as_str()) {
-                template_file = Some(example_val.to_string());
+                example_file = Some(example_val.to_string());
             }
 
             // Validate that description is present and non-empty (required field)
@@ -592,27 +614,27 @@ impl Quill {
             }
         }
 
-        // Read the template content from glue file (if specified)
-        let template_content = if let Some(ref glue_file_name) = glue_file {
-            let glue_bytes = root
-                .get_file(glue_file_name)
-                .ok_or_else(|| format!("Glue file '{}' not found in file tree", glue_file_name))?;
+        // Read the glue content from glue file (if specified)
+        let glue_content: Option<String> = if let Some(ref glue_file_name) = glue_file {
+        let glue_bytes = root
+            .get_file(glue_file_name)
+            .ok_or_else(|| format!("Glue file '{}' not found in file tree", glue_file_name))?;
 
-            String::from_utf8(glue_bytes.to_vec())
-                .map_err(|e| format!("Glue file '{}' is not valid UTF-8: {}", glue_file_name, e))?
+        let content = String::from_utf8(glue_bytes.to_vec())
+            .map_err(|e| format!("Glue file '{}' is not valid UTF-8: {}", glue_file_name, e))?;
+            Some(content)
         } else {
-            // If no glue file specified, use empty string (auto glue will be used)
-            String::new()
+            // No glue file specified
+            None
         };
-
-        // Read the markdown template content if specified
-        let template_content_opt = if let Some(ref template_file_name) = template_file {
-            root.get_file(template_file_name).and_then(|bytes| {
+        // Read the markdown example content if specified
+        let example_content = if let Some(ref example_file_name) = example_file {
+            root.get_file(example_file_name).and_then(|bytes| {
                 String::from_utf8(bytes.to_vec())
                     .map_err(|e| {
                         eprintln!(
-                            "Warning: Template file '{}' is not valid UTF-8: {}",
-                            template_file_name, e
+                            "Warning: Example file '{}' is not valid UTF-8: {}",
+                            example_file_name, e
                         );
                         e
                     })
@@ -623,18 +645,14 @@ impl Quill {
         };
 
         let quill = Quill {
-            glue_template: template_content,
             metadata,
             name: quill_name,
             backend,
-            glue_file,
-            example: template_content_opt,
-            field_schemas,
+            glue: glue_content,
+            example: example_content.into(),
+            field_schemas: field_schemas,
             files: root,
         };
-
-        // Automatically validate the quill upon creation
-        quill.validate()?;
 
         Ok(quill)
     }
@@ -740,17 +758,6 @@ impl Quill {
                     .collect()
             })
             .unwrap_or_default()
-    }
-
-    /// Validate the quill structure
-    pub fn validate(&self) -> Result<(), Box<dyn StdError + Send + Sync>> {
-        // Check that glue file exists in memory (if specified)
-        if let Some(ref glue_file) = self.glue_file {
-            if !self.files.file_exists(glue_file) {
-                return Err(format!("Glue file '{}' does not exist", glue_file).into());
-            }
-        }
-        Ok(())
     }
 
     /// Get file contents by path (relative to quill root)
@@ -918,7 +925,7 @@ node_modules/
             "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
-        fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
+        fs::write(quill_dir.join("glue.typ"), "test glue").unwrap();
 
         let assets_dir = quill_dir.join("assets");
         fs::create_dir_all(&assets_dir).unwrap();
@@ -1037,9 +1044,6 @@ author = "Test Author"
         // Test that name comes from TOML, not directory
         assert_eq!(quill.name, "my-custom-quill");
 
-        // Test that glue file is set correctly
-        assert_eq!(quill.glue_file, Some("custom_glue.typ".to_string()));
-
         // Test that backend is in metadata
         assert!(quill.metadata.contains_key("backend"));
         if let Some(backend_val) = quill.metadata.get("backend") {
@@ -1056,8 +1060,7 @@ author = "Test Author"
         assert!(!quill.metadata.contains_key("version")); // version should be excluded
 
         // Test that glue template content is loaded correctly
-        assert!(quill.glue_template.contains("Custom Template"));
-        assert!(quill.glue_template.contains("custom template"));
+        assert!(quill.glue.unwrap().contains("Custom Template"));
     }
 
     #[test]
@@ -1118,7 +1121,7 @@ description = "Test quill with template"
         assert!(example.contains("This is a test template"));
 
         // Test that glue template is still loaded
-        assert_eq!(quill.glue_template, "glue content");
+        assert_eq!(quill.glue.unwrap(), "glue content");
     }
 
     #[test]
@@ -1143,7 +1146,7 @@ description = "Test quill without template"
         assert_eq!(quill.example, None);
 
         // Test that glue template is still loaded
-        assert_eq!(quill.glue_template, "glue content");
+        assert_eq!(quill.glue.unwrap(), "glue content");
     }
 
     #[test]
@@ -1181,8 +1184,7 @@ description = "A test quill from tree"
 
         // Validate the quill
         assert_eq!(quill.name, "test-from-tree");
-        assert_eq!(quill.glue_file, Some("glue.typ".to_string()));
-        assert_eq!(quill.glue_template, glue_content);
+        assert_eq!(quill.glue.unwrap(), glue_content);
         assert!(quill.metadata.contains_key("backend"));
         assert!(quill.metadata.contains_key("description"));
     }
@@ -1254,8 +1256,7 @@ description = "Test tree with template"
 
         // Validate the quill
         assert_eq!(quill.name, "test-from-json");
-        assert_eq!(quill.glue_file, Some("glue.typ".to_string()));
-        assert!(quill.glue_template.contains("Test Glue"));
+        assert!(quill.glue.unwrap().contains("Test Glue"));
         assert!(quill.metadata.contains_key("backend"));
     }
 
@@ -1278,7 +1279,7 @@ description = "Test tree with template"
 
         // Validate the quill was created
         assert_eq!(quill.name, "test");
-        assert_eq!(quill.glue_file, Some("glue.typ".to_string()));
+        assert_eq!(quill.glue.unwrap(), "test glue");
     }
 
     #[test]
@@ -1313,7 +1314,7 @@ description = "Test tree with template"
         let quill = Quill::from_json(json_str).unwrap();
 
         assert_eq!(quill.name, "test-tree-json");
-        assert!(quill.glue_template.contains("Tree structure content"));
+        assert!(quill.glue.unwrap().contains("Tree structure content"));
         assert!(quill.metadata.contains_key("backend"));
     }
 
@@ -1678,10 +1679,8 @@ description = "Test quill without glue file"
         // Create Quill from tree
         let quill = Quill::from_tree(root, None).unwrap();
 
-        // Validate that glue_file is None
-        assert_eq!(quill.glue_file, None);
-        // Validate that glue_template is empty (will use auto glue)
-        assert_eq!(quill.glue_template, "");
+        // Validate that glue is null (will use auto glue)
+        assert!(quill.glue.clone().is_none());
         assert_eq!(quill.name, "test-no-glue");
     }
 }

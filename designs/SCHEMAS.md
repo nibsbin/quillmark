@@ -27,7 +27,7 @@ Quills encapsulate the metadata, configuration, and behavior for generating a sp
 - glue_file -> Option[str]: Path to a custom glue file. If not provided, automatic glue generation is used. Validation:
     - Ensure extension is in the backend's `glue_extension_types`
     - If not provided, ensure `backend.allow_auto_glue` is true
-- example_markdown -> Option[str]: Path to an example markdown file demonstrating the Quill's capabilities. Developers should include usage instructions in the content for human and LLM consumers.
+- example_file -> Option[str]: Path to an example markdown file demonstrating the Quill's capabilities. Developers should include usage instructions in the content for human and LLM consumers.
 - json_schema -> Option[str]: Path to a comprehensive json schema file that overrides `[fields]`. If `json_schema` and fields are defined, emit a warning that the fields are overrided by the json_schema.
 
 ### Quill Field
