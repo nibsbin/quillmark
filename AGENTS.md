@@ -34,7 +34,7 @@ All design documents in `designs/` should follow consistent principles:
 
 ## Implementation/Testing Strategy
 
-- Never worry about backwards compatibility. This is pre-1.0 software.
+- This is pre-1.0 software. Never worry about backwards compatibility. Actively remove legacy code/comments.
 
 ## Build & Test
 
