@@ -20,6 +20,7 @@ thiserror = { workspace = true }
 anyhow = { workspace = true }
 minijinja = { workspace = true }
 glob = { workspace = true }
+jsonschema = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

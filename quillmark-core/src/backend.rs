@@ -13,7 +13,8 @@
 //! pub trait Backend: Send + Sync {
 //!     fn id(&self) -> &'static str;
 //!     fn supported_formats(&self) -> &'static [OutputFormat];
-//!     fn glue_type(&self) -> &'static str;
+//!     fn glue_extension_types(&self) -> &'static [&'static str];
+//!     fn allow_auto_glue(&self) -> bool;
 //!     fn register_filters(&self, glue: &mut Glue);
 //!     fn compile(
 //!         &self,
@@ -34,8 +35,12 @@
 //! #### `supported_formats()`
 //! Return a slice of [`OutputFormat`] variants this backend supports.
 //!
-//! #### `glue_type()`
-//! Return the file extension for glue files (e.g., ".typ", ".tex").
+//! #### `glue_extension_types()`
+//! Return the file extensions for glue files (e.g., &[".typ"], &[".tex"]).
+//! Return an empty array to disable custom glue files.
+//!
+//! #### `allow_auto_glue()`
+//! Return whether automatic JSON glue generation is allowed.
 //!
 //! #### `register_filters()`
 //! Register backend-specific filters with the glue environment.
@@ -107,8 +112,12 @@ pub trait Backend: Send + Sync {
     /// Get supported output formats
     fn supported_formats(&self) -> &'static [OutputFormat];
 
-    /// Get the glue file extension (e.g., ".typ", ".tex")
-    fn glue_type(&self) -> &'static str;
+    /// Get the glue file extensions accepted by this backend (e.g., &[".typ", ".tex"])
+    /// Returns an empty array to disable custom glue files.
+    fn glue_extension_types(&self) -> &'static [&'static str];
+
+    /// Whether this backend allows automatic JSON glue generation
+    fn allow_auto_glue(&self) -> bool;
 
     /// Register backend-specific filters with the glue environment
     fn register_filters(&self, glue: &mut Glue);

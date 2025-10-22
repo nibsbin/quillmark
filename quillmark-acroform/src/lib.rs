@@ -24,8 +24,12 @@ impl Backend for AcroformBackend {
         &[OutputFormat::Pdf]
     }
 
-    fn glue_type(&self) -> &'static str {
-        ".json"
+    fn glue_extension_types(&self) -> &'static [&'static str] {
+        &[".json"]
+    }
+
+    fn allow_auto_glue(&self) -> bool {
+        true
     }
 
     fn register_filters(&self, _glue: &mut Glue) {
@@ -224,7 +228,8 @@ mod tests {
     fn test_backend_info() {
         let backend = AcroformBackend::default();
         assert_eq!(backend.id(), "acroform");
-        assert_eq!(backend.glue_type(), ".json");
+        assert_eq!(backend.glue_extension_types(), &[".json"]);
+        assert!(backend.allow_auto_glue());
         assert!(backend.supported_formats().contains(&OutputFormat::Pdf));
     }
 

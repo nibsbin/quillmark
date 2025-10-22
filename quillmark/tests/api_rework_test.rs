@@ -42,7 +42,9 @@ fn test_workflow_from_quill_name() {
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     let workflow = engine
         .workflow_from_quill_name("test-quill")
@@ -104,7 +106,9 @@ This is the content.
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     let workflow = engine
         .workflow_from_quill_name("test-quill")
@@ -142,7 +146,9 @@ Some content
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill);
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
 
     let workflow = engine
         .workflow_from_quill_name("test-quill")

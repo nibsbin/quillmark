@@ -51,7 +51,7 @@ class Quillmark:
     def __init__(self) -> None:
         """Create engine with auto-registered backends based on enabled features."""
     
-    def register_quill(self, quill: Quill) -> None:
+    def register_quill(self, quill: Quill) -> None:  # raises QuillmarkError on validation failure
         """Register a quill template with the engine."""
     
     def workflow_from_quill_name(self, name: str) -> Workflow:
