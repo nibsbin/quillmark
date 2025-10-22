@@ -28,7 +28,7 @@ fn test_quill_engine_register_quill() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
@@ -55,7 +55,7 @@ fn test_quill_engine_get_workflow() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
@@ -107,7 +107,7 @@ fn test_quill_engine_backend_not_found() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"bad-backend-quill\"\nbackend = \"non-existent\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"bad-backend-quill\"\nbackend = \"non-existent\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
@@ -138,7 +138,7 @@ fn test_quill_engine_end_to_end() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
 
@@ -193,7 +193,7 @@ fn test_quill_engine_load_with_quill_object() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
@@ -229,7 +229,7 @@ fn test_quill_engine_load_with_different_string_types() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(

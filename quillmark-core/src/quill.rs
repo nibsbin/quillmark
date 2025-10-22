@@ -481,11 +481,11 @@ impl Quill {
                 }
             }
 
-            if let Some(glue_val) = quill_section.get("glue").and_then(|v| v.as_str()) {
+            if let Some(glue_val) = quill_section.get("glue_file").and_then(|v| v.as_str()) {
                 glue_file = Some(glue_val.to_string());
             }
 
-            if let Some(example_val) = quill_section.get("example").and_then(|v| v.as_str()) {
+            if let Some(example_val) = quill_section.get("example_file").and_then(|v| v.as_str()) {
                 template_file = Some(example_val.to_string());
             }
 
@@ -504,8 +504,8 @@ impl Quill {
                 for (key, value) in table {
                     if key != "name"
                         && key != "backend"
-                        && key != "glue"
-                        && key != "example"
+                        && key != "glue_file"
+                        && key != "example_file"
                         && key != "version"
                     {
                         match QuillValue::from_toml(value) {
@@ -915,7 +915,7 @@ node_modules/
         // Create test files
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
@@ -958,7 +958,7 @@ node_modules/
         // Create test files
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
@@ -985,7 +985,7 @@ node_modules/
         // Create test directory structure
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("glue.typ"), "template").unwrap();
@@ -1020,7 +1020,7 @@ node_modules/
         let toml_content = r#"[Quill]
 name = "my-custom-quill"
 backend = "typst"
-glue = "custom_glue.typ"
+glue_file = "custom_glue.typ"
 description = "Test quill with new format"
 author = "Test Author"
 "#;
@@ -1069,7 +1069,7 @@ author = "Test Author"
 [Quill]
 name = "test-quill"
 backend = "typst"
-glue = "glue.typ"
+glue_file = "glue.typ"
 description = "Test quill for packages"
 
 [typst]
@@ -1096,8 +1096,8 @@ packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
         let toml_content = r#"[Quill]
 name = "test-with-template"
 backend = "typst"
-glue = "glue.typ"
-example = "example.md"
+glue_file = "glue.typ"
+example_file = "example.md"
 description = "Test quill with template"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
@@ -1130,7 +1130,7 @@ description = "Test quill with template"
         let toml_content = r#"[Quill]
 name = "test-without-template"
 backend = "typst"
-glue = "glue.typ"
+glue_file = "glue.typ"
 description = "Test quill without template"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
@@ -1155,7 +1155,7 @@ description = "Test quill without template"
         let quill_toml = r#"[Quill]
 name = "test-from-tree"
 backend = "typst"
-glue = "glue.typ"
+glue_file = "glue.typ"
 description = "A test quill from tree"
 "#;
         root_files.insert(
@@ -1195,8 +1195,8 @@ description = "A test quill from tree"
         let quill_toml = r#"[Quill]
 name = "test-tree-template"
 backend = "typst"
-glue = "glue.typ"
-example = "template.md"
+glue_file = "glue.typ"
+example_file = "template.md"
 description = "Test tree with template"
 "#;
         root_files.insert(
@@ -1241,7 +1241,7 @@ description = "Test tree with template"
             },
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill from JSON\"\n"
+                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill from JSON\"\n"
                 },
                 "glue.typ": {
                     "contents": "= Test Glue\n\nThis is test content."
@@ -1265,7 +1265,7 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 32, 61, 32, 34, 84, 101, 115, 116, 32, 113, 117, 105, 108, 108, 34, 10]
+                    "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 95, 102, 105, 108, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 32, 61, 32, 34, 84, 101, 115, 116, 32, 113, 117, 105, 108, 108, 34, 10]
                 },
                 "glue.typ": {
                     "contents": "test glue"
@@ -1302,7 +1302,7 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test tree JSON\"\n"
+                    "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test tree JSON\"\n"
                 },
                 "glue.typ": {
                     "contents": "= Test Glue\n\nTree structure content."
@@ -1323,7 +1323,7 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Nested test\"\n"
+                    "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Nested test\"\n"
                 },
                 "glue.typ": {
                     "contents": "glue"
@@ -1359,7 +1359,7 @@ description = "Test tree with template"
             "Quill.toml".to_string(),
             FileTreeNode::File {
                 contents:
-                    b"[Quill]\nname = \"direct-tree\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Direct tree test\"\n"
+                    b"[Quill]\nname = \"direct-tree\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Direct tree test\"\n"
                         .to_vec(),
             },
         );
@@ -1403,7 +1403,7 @@ description = "Test tree with template"
             },
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"toml-name\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"TOML name test\"\n"
+                    "contents": "[Quill]\nname = \"toml-name\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"TOML name test\"\n"
                 },
                 "glue.typ": {
                     "contents": "= glue"
@@ -1423,7 +1423,7 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"empty-dir-test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Empty directory test\"\n"
+                    "contents": "[Quill]\nname = \"empty-dir-test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Empty directory test\"\n"
                 },
                 "glue.typ": {
                     "contents": "glue"
@@ -1446,7 +1446,7 @@ description = "Test tree with template"
         root_files.insert(
             "Quill.toml".to_string(),
             FileTreeNode::File {
-                contents: b"[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue = \"glue.typ\"\ndescription = \"Test quill\"\n"
+                contents: b"[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n"
                     .to_vec(),
             },
         );
@@ -1551,8 +1551,8 @@ description = "Test tree with template"
         let quill_toml = r#"[Quill]
 name = "taro"
 backend = "typst"
-glue = "glue.typ"
-example = "taro.md"
+glue_file = "glue.typ"
+example_file = "taro.md"
 description = "Test template for field schemas"
 
 [fields]

@@ -98,9 +98,9 @@ The JSON format has a root object with a `files` key. The optional `metadata` ke
 [Quill]
 name = "my-quill"
 backend = "typst"
-glue = "glue.typ"
+glue_file = "glue.typ"
 description = "A beautiful template"  # required
-example = "template.md"  # optional
+example_file = "template.md"  # optional
 version = "1.0.0"  # optional
 
 [fields]
