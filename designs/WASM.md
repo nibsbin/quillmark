@@ -1,82 +1,31 @@
-# Quillmark WASM Design - Clean Frontend API
+# Quillmark WASM API
 
 > **Status**: Implemented - Production Ready
 >
-> This document defines the complete WebAssembly API for Quillmark, providing JavaScript/TypeScript bindings primarily for bundler environments (webpack, rollup, vite, etc.).
+> This document defines the WebAssembly API for Quillmark, providing JavaScript/TypeScript bindings for bundler environments.
 
----
-
-## Table of Contents
-
-1. [Design Principles](#design-principles)
-2. [Architecture Overview](#architecture-overview)
-3. [Quill JSON Contract](#quill-json-contract)
-4. [WASM API Surface](#wasm-api-surface)
-5. [Type System & Serialization](#type-system--serialization)
-6. [Error Handling](#error-handling)
-7. [Usage Examples](#usage-examples)
-8. [Build Targets & Distribution](#build-targets--distribution)
-9. [Performance Characteristics](#performance-characteristics)
+> **Implementation**: `quillmark-wasm/src/`
 
 ---
 
 ## Design Principles
 
-1. **JSON-Only Data Exchange**: All structured data uses JSON serialization via `serde-wasm-bindgen`
-2. **JavaScript Handles I/O**: The WASM layer only handles rendering; JavaScript fetches files, reads filesystems, and unzips archives
-3. **Synchronous Operations**: Rendering is fast enough (typically <100ms) that async operations are unnecessary
-4. **No File System Abstractions**: No `fromPath()`, `fromUrl()`, or `fromZip()` methods - JavaScript prepares all data
-5. **Frontend-Friendly**: Intuitive API that maps naturally to JavaScript/TypeScript patterns
-6. **Rich Error Diagnostics**: Comprehensive error information with location details and suggestions
-
----
-
-## Architecture Overview
-
-The WASM API consists of a single main class with minimal surface area:
-
-```
-JavaScript Frontend
-        ↓ (JSON)
-┌─────────────────────────────────┐
-│        Quillmark WASM           │
-│  ┌─────────────────────────────┐│
-│  │     Engine Management       ││
-│  │   - Register Quills         ││
-│  │   - Load Workflows          ││
-│  │   - Memory Management       ││
-│  └─────────────────────────────┘│
-│  ┌─────────────────────────────┐│
-│  │     Quill Processing        ││
-│  │   - JSON Parsing            ││
-│  │   - Validation              ││
-│  │   - Tree Structure          ││
-│  └─────────────────────────────┘│
-│  ┌─────────────────────────────┐│
-│  │      Rendering              ││
-│  │   - Template Processing     ││
-│  │   - Backend Compilation     ││
-│  │   - Artifact Generation     ││
-│  └─────────────────────────────┘│
-└─────────────────────────────────┘
-        ↑ (Artifacts + Diagnostics)
-   JavaScript Frontend
-```
+1. **JSON-Only Data Exchange**: All structured data uses JSON serialization
+2. **JavaScript Handles I/O**: WASM layer only handles rendering
+3. **Synchronous Operations**: Rendering is fast enough (<100ms) for sync APIs
+4. **Frontend-Friendly**: Intuitive API for JavaScript/TypeScript
+5. **Rich Error Diagnostics**: Comprehensive error information with locations and suggestions
 
 ---
 
 ## Quill JSON Contract
 
-The WASM API accepts Quills in a specific JSON format that represents the file structure and metadata. This is the **canonical format** that users pass to the WASM module.
-
-### Standard Format
-
-The JSON format MUST have a root object with a `files` key. The optional `metadata` key provides a default name that will be used if `Quill.toml` does not specify one.
+JSON format with a root object containing a `files` key:
 
 ```json
 {
   "files": {
-    "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\nbackend = \"typst\"\nglue = \"glue.typ\"\n" },
+    "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\n..." },
     "glue.typ": { "contents": "= Template\n\n{{ body }}" },
     "assets": {
       "logo.png": { "contents": [137, 80, 78, 71, ...] }
@@ -85,139 +34,36 @@ The JSON format MUST have a root object with a `files` key. The optional `metada
 }
 ```
 
-### With Optional Metadata
-
-The optional `metadata` object in JSON provides a `default_name` when constructing a Quill. However, the name from `Quill.toml` always takes precedence if present.
-
-```json
-{
-  "metadata": {
-    "name": "my-quill-override"
-  },
-  "files": {
-    "Quill.toml": { "contents": "..." },
-    "glue.typ": { "contents": "..." }
-  }
-}
-```
-
-**Note**: Only the `name` field in the JSON `metadata` object is currently used (as a default). Other metadata fields like `version`, `description`, `author`, `license`, and `tags` should be specified in `Quill.toml` instead.
-
-### Node Types
-
-**File with UTF-8 string contents:**
-```json
-"file.txt": { "contents": "Hello, world!" }
-```
-
-**File with binary contents (byte array):**
-```json
-"image.png": { "contents": [137, 80, 78, 71, 13, 10, 26, 10] }
-```
-
-**Directory (nested object):**
-```json
-"assets": {
-  "logo.png": { "contents": [...] },
-  "icon.svg": { "contents": "..." }
-}
-```
-
-**Empty directory:**
-```json
-"empty_dir": {}
-```
-
-### Validation Rules
-
-1. Root MUST be an object with a `files` key
-2. The `files` value MUST be an object
-3. The `metadata` key is optional and provides a default name (Quill.toml name takes precedence)
-4. File nodes MUST have a `contents` key with either:
-   - A string (UTF-8 text content)
-   - An array of numbers 0-255 (binary content)
-5. Directory nodes are objects without a `contents` key
-6. Empty objects represent empty directories
-7. After parsing, `Quill.toml` MUST exist and be valid
-8. The glue file referenced in `Quill.toml` MUST exist
-
-### Frontend Construction Example (TypeScript)
-
-```typescript
-// Build from file uploads
-async function buildQuillFromUpload(files: File[]): Promise<object> {
-  const fileTree: any = {};
-
-  for (const file of files) {
-    const path = file.webkitRelativePath || file.name;
-    const parts = path.split('/');
-    let current = fileTree;
-
-    // Build nested directory structure
-    for (let i = 0; i < parts.length - 1; i++) {
-      if (!current[parts[i]]) current[parts[i]] = {};
-      current = current[parts[i]];
-    }
-
-    const fileName = parts[parts.length - 1];
-    const isBinary = /\.(png|jpg|jpeg|gif|pdf|woff|woff2|ttf|otf)$/i.test(fileName);
-
-    current[fileName] = {
-      contents: isBinary
-        ? Array.from(new Uint8Array(await file.arrayBuffer()))
-        : await file.text()
-    };
-  }
-
-  return {
-    metadata: {
-      name: files[0]?.webkitRelativePath?.split('/')[0] || 'uploaded-quill'
-    },
-    files: fileTree
-  };
-}
-```
+**Node Types:**
+- File with UTF-8: `"file.txt": { "contents": "Hello" }`
+- File with binary: `"image.png": { "contents": [137, 80, 78, 71, ...] }`
+- Directory: `"assets": { "logo.png": {...} }`
+- Empty directory: `"empty_dir": {}`
 
 ---
 
 ## WASM API Surface
 
-### Core Class: Quillmark
-
-The main WASM interface provides a single class for all operations:
+### Main Class
 
 ```typescript
 class Quillmark {
-  /// Create a new Quillmark engine
   constructor();
-
-  /// Register a Quill template bundle
-  /// Accepts either a JSON string or a JavaScript object representing the Quill file tree
   registerQuill(name: string, quillJson: string | object): void;
-
-  /// Process markdown through template engine (debugging)
-  /// Returns template source code (Typst, LaTeX, etc.)
-  renderGlue(quillName: string, markdown: string): string;
-
-  /// Render markdown to final artifacts (PDF, SVG, TXT)
-  /// Uses options.quillName if provided, otherwise infers from the markdown's QUILL frontmatter field
   render(markdown: string, options?: RenderOptions): RenderResult;
-
-  /// List registered Quill names
+  renderGlue(quillName: string, markdown: string): string;
   listQuills(): string[];
-
-  /// Unregister a Quill (free memory)
   unregisterQuill(name: string): void;
 }
 ```
 
-### Supporting Types
+### Types
 
 ```typescript
 interface RenderOptions {
   format?: 'pdf' | 'svg' | 'txt';
   assets?: Record<string, Uint8Array>;
-  quillName?: string;  // Optional: overrides or fills in for the markdown's QUILL frontmatter field
+  quillName?: string;  // overrides/fills in QUILL frontmatter field
 }
 
 interface RenderResult {
@@ -239,353 +85,52 @@ interface Diagnostic {
   location?: Location;
   hint?: string;
 }
-
-interface Location {
-  file: string;
-  line: number;
-  column: number;
-}
-
-interface QuillmarkError {
-  message: string;
-  location?: Location;
-  hint?: string;
-  diagnostics?: Diagnostic[];
-}
 ```
 
 ---
 
-## Type System & Serialization
+## Quill Selection
 
-All data crossing the JavaScript ↔ WebAssembly boundary uses JSON/serde-compatible serialization via `serde-wasm-bindgen`.
+Two ways to specify which Quill to use:
 
-### Serialization Rules
-
-**Enums**: Exported Rust enums serialize as strings (not numeric discriminants)
-```typescript
-// ✅ Correct
-{ format: "pdf" }
-{ format: OutputFormat.PDF } // using generated enum
-
-// ❌ Incorrect  
-{ format: 0 } // numeric discriminant
-```
-
-**Binary Data**: `Vec<u8>` maps to `Uint8Array`
-```typescript
-// For Quill JSON construction - use numeric arrays
-{
-  "image.png": { 
-    "contents": [137, 80, 78, 71, ...] // byte array
-  }
-}
-
-// For runtime APIs - use Uint8Array directly
-workflow.withAsset("logo.png", new Uint8Array([137, 80, 78, 71, ...]));
-```
-
-**Collections**: `Vec<T>` ↔ JavaScript arrays. For object types, we use `serde_json::Value` to ensure serialization as plain JavaScript objects `{}` rather than JavaScript `Map` objects.
-
-**Nullability**: `Option<T>` ↔ `value | null`
-
-**Errors**: Rust `Result` errors surface as thrown exceptions containing serialized `QuillmarkError`
-
----
-
-## Error Handling
-
-All errors are thrown as JavaScript exceptions containing serialized `QuillmarkError` objects with rich diagnostic information.
-
-### Error Structure
-```typescript
-try {
-  engine.render(markdown, options);
-} catch (error) {
-  const quillError = error as QuillmarkError;
-  
-  console.error('Error:', quillError.message);
-  
-  if (quillError.location) {
-    console.error(`At ${quillError.location.file}:${quillError.location.line}:${quillError.location.column}`);
-  }
-  
-  if (quillError.hint) {
-    console.log('Hint:', quillError.hint);
-  }
-  
-  if (quillError.diagnostics) {
-    for (const diag of quillError.diagnostics) {
-      console.log(`[${diag.severity}] ${diag.message}`);
-    }
-  }
-}
-```
-
-### Common Error Scenarios
-
-1. **Quill Registration Errors**:
-   - Invalid JSON structure
-   - Missing `Quill.toml`
-   - Invalid TOML syntax
-   - Missing glue file
-
-2. **Rendering Errors**:
-   - Template compilation failures
-   - Invalid frontmatter
-   - Backend-specific compilation errors
-   - Missing assets
-
-3. **Engine Errors**:
-   - Quill not found
-   - Invalid render options
-   - Memory allocation failures
-   - Missing `QUILL: <quill_name>` frontmatter field when using `render()` without `quillName` option
-
----
-
-## Usage Examples
-
-### Quill Selection Methods
-
-Quillmark provides two ways to specify which Quill to use for rendering:
-
-1. **Inferred from Markdown**: Uses the `QUILL` frontmatter field in the markdown
-2. **Explicit Selection via Options**: Pass `quillName` in the `RenderOptions` to override or fill in for the markdown's `QUILL` frontmatter field
-
-#### Using the QUILL frontmatter field
-
-Add a `QUILL` field to your markdown frontmatter to specify which registered Quill to use:
+1. **Inferred from Markdown**: Use `QUILL` frontmatter field in markdown
+2. **Explicit via Options**: Pass `quillName` in `RenderOptions`
 
 ```markdown
 ---
 QUILL: simple-letter
 title: "My Document"
 ---
-
-# Content here
+Content here
 ```
 
-This allows the markdown to be self-contained and portable - it knows which template to use.
-
-#### Using quillName Option
-
-Pass `quillName` in options to explicitly specify the Quill, which will override any `QUILL` frontmatter field in the markdown:
+Or:
 
 ```typescript
 const result = engine.render(markdown, { quillName: 'simple-letter' });
 ```
 
-### Basic Usage
-
-```typescript
-import { Quillmark } from '@quillmark-test/wasm';
-
-// Create engine
-const engine = new Quillmark();
-
-// Register a simple Quill
-const quillJson = {
-  files: {
-    "Quill.toml": { 
-      contents: `[Quill]\nname = "simple-letter"\nbackend = "typst"\nglue = "glue.typ"\n` 
-    },
-    "glue.typ": { 
-      contents: "= {{ title | String(default=\"Document\") }}\n\n{{ body | Content }}" 
-    }
-  }
-};
-
-engine.registerQuill('simple-letter', quillJson);
-
-// Render markdown with QUILL frontmatter field
-const markdown = `---
-QUILL: simple-letter
-title: "My Letter"
 ---
 
-# Hello World
+## Build & Distribution
 
-This is a simple letter.`;
-
-const result = engine.render(markdown);
-
-// Access the PDF bytes
-const pdfArtifact = result.artifacts.find(a => a.format === 'pdf');
-if (pdfArtifact) {
-  // Create blob URL for download or display
-  const blob = new Blob([pdfArtifact.bytes], { type: pdfArtifact.mimeType });
-  const url = URL.createObjectURL(blob);
-  window.open(url);
-}
-```
-
-### Using quillName Option (Explicit Quill Selection)
-
-```typescript
-// When you want to override the QUILL frontmatter field or markdown doesn't have one
-const markdownWithoutQuill = `---
-title: "My Letter"
----
-
-# Hello World
-
-This is a simple letter.`;
-
-const result = engine.render(markdownWithoutQuill, { quillName: 'simple-letter' });
-```
-
-### With Custom Assets
-
-```typescript
-// Load custom font
-const fontBytes = await fetch('/fonts/custom-font.ttf').then(r => r.arrayBuffer());
-
-const markdown = `---
-QUILL: my-quill
----
-
-# Document with custom font
-`;
-
-const result = engine.render(markdown, {
-  format: 'pdf',
-  assets: {
-    'custom-font.ttf': new Uint8Array(fontBytes)
-  }
-});
-```
-
-### Multiple Output Formats
-
-```typescript
-// Render to multiple formats
-const markdown = `---
-QUILL: my-quill
----
-
-# My Document
-`;
-
-const pdfResult = engine.render(markdown, { format: 'pdf' });
-const svgResult = engine.render(markdown, { format: 'svg' });
-const txtResult = engine.render(markdown, { format: 'txt' });
-```
-
-### Debugging with Template Source
-
-```typescript
-const markdown = `---
-QUILL: my-quill
-title: "Test Document"
----
-
-# Content
-`;
-
-try {
-  // Get the generated template source for debugging
-  const glueSource = engine.renderGlue('my-quill', markdown);
-  console.log('Generated template:', glueSource);
-  
-  // Then render normally
-  const result = engine.render(markdown);
-} catch (error) {
-  console.error('Template generation failed:', error);
-}
-```
-
----
-
-## Build Targets & Distribution
-
-The WASM module is built for three targets with separate packages:
-
-### Build Commands
-
+**Build Command:**
 ```bash
-# Build for bundler target (current implementation)
 bash scripts/build-wasm.sh
-
-# Or build directly with wasm-pack
-wasm-pack build quillmark-wasm --target bundler --out-dir "../pkg/bundler" --scope quillmark-test
+# or directly: wasm-pack build quillmark-wasm --target bundler
 ```
 
-### NPM Packages
+**NPM Package:** `@quillmark-test/wasm` for bundlers (webpack, rollup, vite)
 
-Currently, only the **Bundler Target** is built and distributed:
-- **`@quillmark-test/wasm`**: For webpack, rollup, vite, and other bundlers
-
-**Note**: Node.js and Web targets can be built using wasm-pack directly if needed, but are not currently part of the standard build process.
-
-### Installation
-
+**Installation:**
 ```bash
 npm install @quillmark-test/wasm
 ```
-```
 
 ---
 
-## Performance Characteristics
+## Performance
 
-### Rendering Performance
 - **Typical render time**: 50-200ms for standard documents
 - **Memory usage**: ~10-50MB depending on Quill complexity
-- **Concurrent rendering**: Not supported (single-threaded WASM)
-
-### Memory Management
-- **Quill storage**: Quills remain in memory until explicitly unregistered
-- **Asset caching**: Assets are processed per-render (no caching)
-- **Garbage collection**: Automatic cleanup of temporary render data
-
-### Optimization Recommendations
-
-1. **Reuse engines**: Create one `Quillmark` instance and reuse it
-2. **Batch operations**: Group multiple renders to avoid engine recreation
-3. **Unregister unused Quills**: Call `unregisterQuill()` to free memory
-4. **Minimize asset size**: Compress images and fonts before passing to WASM
-5. **Use appropriate formats**: SVG for smaller file sizes, PDF for fidelity
-
-### Performance Monitoring
-
-```typescript
-const start = performance.now();
-const result = engine.render(markdown);
-const renderTime = performance.now() - start;
-
-console.log(`Render took ${renderTime}ms (WASM reported: ${result.renderTimeMs}ms)`);
-```
-
----
-
-## Current Implementation Status
-
-### ✅ Implemented Features
-- Single `Quillmark` class for engine management
-- Quill registration from JSON objects/strings
-- Synchronous rendering to PDF/SVG/TXT
-- Dynamic asset injection via `RenderOptions`
-- Rich error diagnostics with location information
-- Memory management (register/unregister Quills)
-- Debug template source generation (`renderGlue`)
-
-### ❌ Not Implemented (By Design)
-- `Quill.fromZip()`, `fromUrl()`, `fromPath()` - JavaScript handles I/O
-- Progress callbacks - rendering is fast enough to be synchronous
-- Streaming APIs - unnecessary for quick operations
-- Async operations - complexity not justified by performance gains
-
-### 🔄 Future Considerations
-- WebWorker integration for true non-blocking rendering
-- Streaming artifact generation for very large documents
-- WASM threads support when broadly available
-- Advanced caching strategies for repeated renders
-
----
-
-## References
-
-- [quillmark-wasm/src/](../quillmark-wasm/src/) - Implementation source
-- [QUILL_DESIGN.md](./QUILL_DESIGN.md) - Quill file structure specification
-- [quillmark-wasm/README.md](../quillmark-wasm/README.md) - Package documentation
+- **Recommendations**: Reuse engines, batch operations, unregister unused Quills, minimize asset sizes
