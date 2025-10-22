@@ -28,7 +28,7 @@ Quills encapsulate the metadata, configuration, and behavior for generating a sp
     - Ensure extension is in the backend's `glue_extension_types`
     - If not provided, ensure `backend.allow_auto_glue` is true
 - example_file -> Option[str]: Path to an example markdown file demonstrating the Quill's capabilities. Developers should include usage instructions in the content for human and LLM consumers.
-- json_schema -> Option[str]: Path to a comprehensive json schema file that overrides `[fields]`. If `json_schema` and fields are defined, emit a warning that the fields are overrided by the json_schema.
+- json_schema_file -> Option[str]: Path to a comprehensive json schema file that overrides `[fields]`. If `json_schema_file` and fields are defined, emit a warning that the fields are overrided by the content in `json_schema_file`.
 
 ### Quill Field
 
