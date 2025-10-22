@@ -16,6 +16,7 @@ The validation system will provide two levels of validation:
 The Backend trait will be extended to support schema validation requirements:
 - Add `glue_extension_types()` method returning `&'static [&'static str]` - accepted glue file extensions
 - Add `allow_auto_glue()` method returning `bool` - whether JSON glue generation is allowed
+- Do NOT maintain backwards compatability. Remove legacy/redundant logic (e.g., `Backend::glue_type`) from codebase.
 
 #### Quill Validation (Strict)
 Validation occurs in `quillmark-core/src/quill.rs::Quill::from_tree()`:
@@ -23,7 +24,7 @@ Validation occurs in `quillmark-core/src/quill.rs::Quill::from_tree()`:
 **Configuration Validation:**
 - Validate `name` is present and non-empty
 - Validate `backend` is present and matches a registered backend (deferred to registration time)
-- Validate `description` is present and non-empty (already implemented)
+- Ensure `description` and other optional fields in `SCHEMAS.md` are optional
 - If `glue_file` is specified:
   - Ensure file exists in the Quill file tree
   - Ensure extension matches one of `backend.glue_extension_types()`
@@ -34,8 +35,8 @@ Validation occurs in `quillmark-core/src/quill.rs::Quill::from_tree()`:
 
 **Schema File Validation:**
 - If `json_schema` path is specified, ensure the file exists in the Quill file tree
-- Parse the JSON schema to validate it's valid JSON (syntax validation only)
-- Store the path for later use during document validation
+- Parse the JSON schema to validate it's valid JSON (syntax validation only). Consider also validating the JSON is a proper schema with `jsonschema`
+- Store in the Quill struct in the `json_schema` property
 
 #### ParsedDocument Validation (Loose)
 
@@ -68,7 +69,7 @@ fn glue_extension_types(&self) -> &'static [&'static str];
 fn allow_auto_glue(&self) -> bool;
 ```
 
-**Note:** The existing `glue_type()` method returns a single extension string (e.g., ".typ"). The new `glue_extension_types()` method returns an array to support backends that accept multiple glue file types. Consider deprecating `glue_type()` in favor of the new method, or keep both for backwards compatibility during transition.
+**Note:** The existing `glue_type()` method returns a single extension string (e.g., ".typ"). The new `glue_extension_types()` method returns an array to support backends that accept multiple glue file types. Delete the redundant `glue_type()` in favor of the new method.
 
 Update all backend implementations:
 - `quillmark-typst/src/lib.rs::TypstBackend` - return `&[".typ"]` for glue_extension_types, `true` for allow_auto_glue
@@ -94,8 +95,8 @@ Create a new validation module containing:
 **Required Fields:**
 - If `default` is defined in field schema, field is optional (per SCHEMAS.md)
 - Otherwise, field is required and added to `"required": []` array
-- **Note:** The current `FieldSchema` struct has a `required` field for backwards compatibility. During validation, the logic should be:
-  - If `default` is present → field is optional (regardless of `required` flag)
+- **Note:** The current `FieldSchema` struct has a `required` field. Delete this redundant field and modify existing Quills as necessary. During validation, the logic should be:
+  - If `default` is present → field is optional
   - If `default` is absent and `required` is true → field is required
   - If `default` is absent and `required` is false → field is optional
   - This provides flexibility while honoring the SCHEMAS.md specification
@@ -103,7 +104,7 @@ Create a new validation module containing:
 **JSON Schema Structure:**
 ```json
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
   "type": "object",
   "properties": {
     "field_name": {
