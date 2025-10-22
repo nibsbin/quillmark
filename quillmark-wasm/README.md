@@ -70,7 +70,7 @@ const engine = new Quillmark();
 const quillJson = {
   files: {
     'Quill.toml': { 
-      contents: '[Quill]\nname = "my-quill"\nbackend = "typst"\nglue = "glue.typ"\ndescription = "My template"\n' 
+      contents: '[Quill]\nname = "my-quill"\nbackend = "typst"\nglue_file = "glue.typ"\ndescription = "My template"\n' 
     },
     'glue.typ': { 
       contents: '= {{ title }}\n\n{{ body | Content }}' 
