@@ -579,7 +579,7 @@ impl Quill {
     /// # Arguments
     ///
     /// * `root` - The root node of the file tree
-    /// * `_default_name` - Optional default name (not used, name always comes from Quill.toml)
+    /// * `_default_name` - Unused parameter kept for API compatibility (name always from Quill.toml)
     ///
     /// # Errors
     ///
