@@ -43,7 +43,7 @@ glob = "0.3.3"
 minijinja = "~2.12"
 
 # Validation
-jsonschema = "0.18"
+jsonschema = {version = "0.33", default-features = false}
 
 # Typst backend dependencies
 fontdb = "0.21.0"

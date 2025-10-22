@@ -81,7 +81,7 @@ pub fn validate_document(
     let doc_value = Value::Object(doc_json);
 
     // Compile the schema
-    let compiled = match jsonschema::JSONSchema::compile(schema) {
+    let compiled = match jsonschema::Validator::new(schema) {
         Ok(c) => c,
         Err(e) => return Err(vec![format!("Failed to compile schema: {}", e)]),
     };
@@ -91,19 +91,15 @@ pub fn validate_document(
 
     match validation_result {
         Ok(_) => Ok(()),
-        Err(errors) => {
-            let error_messages: Vec<String> = errors
-                .map(|e| {
-                    let path = e.instance_path.to_string();
-                    let path_display = if path.is_empty() {
-                        "document".to_string()
-                    } else {
-                        path
-                    };
-                    format!("{}: {}", path_display, e)
-                })
-                .collect();
-            Err(error_messages)
+        Err(error) => {
+            let path = error.instance_path.to_string();
+            let path_display = if path.is_empty() {
+                "document".to_string()
+            } else {
+                path
+            };
+            let message = format!("Validation error at {}: {}", path_display, error);
+            Err(vec![message])        
         }
     }
 }
