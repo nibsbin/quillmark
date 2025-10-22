@@ -11,7 +11,7 @@ The Backend trait defines the interface for implementing backends in the quillma
 - id -> str: Returns the backend identifier (e.g., "typst", "latex").
 - supported_formats -> str[]: Returns the supported output formats.
 - glue_extension_types -> str[]: Returns the glue file extensions (e.g., ".typ", ".tex"). Returns an empty array to disable custom glue files.
-- allow_auto_glue -> bool: Whether to allow automatic JSON glue generation.
+- allow_auto_glue -> bool: Whether to allow automatic auto glue generation.
 
 ## Quill
 

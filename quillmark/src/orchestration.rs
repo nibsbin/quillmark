@@ -536,7 +536,7 @@ impl Workflow {
 
         // Create appropriate glue based on whether template is provided
         let mut glue = if self.quill.glue_template.is_empty() {
-            Glue::new_json()
+            Glue::new_auto()
         } else {
             Glue::new(self.quill.glue_template.clone())
         };

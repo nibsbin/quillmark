@@ -3,15 +3,15 @@ use std::fs;
 use tempfile::TempDir;
 
 #[test]
-fn test_json_glue_without_glue_file() {
+fn test_auto_glue_without_glue_file() {
     // Create a quill without a glue file
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("json-quill");
+    let quill_path = temp_dir.path().join("auto-quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"json-quill\"\nbackend = \"typst\"\ndescription = \"Test JSON glue\"\n",
+        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
     )
     .expect("Failed to write Quill.toml");
 
@@ -27,22 +27,22 @@ fn test_json_glue_without_glue_file() {
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("json-quill")
+        .workflow_from_quill_name("auto-quill")
         .expect("Failed to load workflow");
 
-    assert_eq!(workflow.quill_name(), "json-quill");
+    assert_eq!(workflow.quill_name(), "auto-quill");
 }
 
 #[test]
-fn test_json_glue_output() {
+fn test_auto_glue_output() {
     // Create a quill without a glue file
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("json-quill");
+    let quill_path = temp_dir.path().join("auto-quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"json-quill\"\nbackend = \"typst\"\ndescription = \"Test JSON glue\"\n",
+        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
     )
     .expect("Failed to write Quill.toml");
 
@@ -69,7 +69,7 @@ This is a test document.
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("json-quill")
+        .workflow_from_quill_name("auto-quill")
         .expect("Failed to load workflow");
 
     let glue_output = workflow
@@ -90,14 +90,14 @@ This is a test document.
 }
 
 #[test]
-fn test_json_glue_with_nested_data() {
+fn test_auto_glue_with_nested_data() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("json-quill");
+    let quill_path = temp_dir.path().join("auto-quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"json-quill\"\nbackend = \"typst\"\ndescription = \"Test JSON glue\"\n",
+        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
     )
     .expect("Failed to write Quill.toml");
 
@@ -122,7 +122,7 @@ Content here.
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("json-quill")
+        .workflow_from_quill_name("auto-quill")
         .expect("Failed to load workflow");
 
     let glue_output = workflow

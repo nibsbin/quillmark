@@ -5,27 +5,27 @@ use tempfile::TempDir;
 fn main() {
     // Create a temporary directory for the quill
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("json-example");
+    let quill_path = temp_dir.path().join("auto-example");
 
-    // Create a minimal quill without a glue file (will use JSON output)
+    // Create a minimal quill without a glue file (will use auto glue output)
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
         r#"[Quill]
-name = "json-example"
+name = "auto-example"
 backend = "typst"
-description = "Example quill that outputs JSON"
+description = "Example quill that outputs JSON using auto glue"
 "#,
     )
     .expect("Failed to write Quill.toml");
 
     // Create a markdown document with frontmatter
     let markdown = r#"---
-title: JSON Glue Example
+title: Auto Glue Example
 author: Quillmark Team
 version: 1.0
 tags:
-  - json
+  - auto
   - glue
   - example
 metadata:
@@ -35,7 +35,7 @@ metadata:
 
 # Introduction
 
-This example demonstrates the JSON glue functionality.
+This example demonstrates the auto glue functionality.
 
 When a quill doesn't specify a glue file, the context is automatically
 output as JSON instead of being processed through a template.
@@ -59,7 +59,7 @@ output as JSON instead of being processed through a template.
 
     // Create workflow and process the glue
     let workflow = engine
-        .workflow_from_quill_name("json-example")
+        .workflow_from_quill_name("auto-example")
         .expect("Failed to load workflow");
 
     let json_output = workflow

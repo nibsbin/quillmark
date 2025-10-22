@@ -136,17 +136,17 @@ pub struct TemplateGlue {
     filters: HashMap<String, FilterFn>,
 }
 
-/// JSON-based glue engine that outputs context as JSON
-pub struct JsonGlue {
+/// Auto glue engine that outputs context as JSON
+pub struct AutoGlue {
     filters: HashMap<String, FilterFn>,
 }
 
-/// Glue type that can be either template-based or JSON-based
+/// Glue type that can be either template-based or auto
 pub enum Glue {
     /// Template-based glue using MiniJinja
     Template(TemplateGlue),
-    /// JSON-based glue that outputs context as JSON
-    Json(JsonGlue),
+    /// Auto glue that outputs context as JSON
+    Auto(AutoGlue),
 }
 
 impl TemplateGlue {
@@ -203,8 +203,8 @@ impl GlueEngine for TemplateGlue {
     }
 }
 
-impl JsonGlue {
-    /// Create a new JsonGlue instance
+impl AutoGlue {
+    /// Create a new AutoGlue instance
     pub fn new() -> Self {
         Self {
             filters: HashMap::new(),
@@ -212,8 +212,8 @@ impl JsonGlue {
     }
 }
 
-impl GlueEngine for JsonGlue {
-    /// Register a filter with the JSON glue (ignored for JSON output)
+impl GlueEngine for AutoGlue {
+    /// Register a filter with the auto glue (ignored for JSON output)
     fn register_filter(&mut self, name: &str, func: FilterFn) {
         // Store filters even though they're not used for JSON output
         // This maintains consistency with the trait interface
@@ -252,16 +252,16 @@ impl Glue {
         Glue::Template(TemplateGlue::new(template))
     }
 
-    /// Create a new JSON-based Glue instance
-    pub fn new_json() -> Self {
-        Glue::Json(JsonGlue::new())
+    /// Create a new auto glue instance
+    pub fn new_auto() -> Self {
+        Glue::Auto(AutoGlue::new())
     }
 
     /// Register a filter with the glue engine
     pub fn register_filter(&mut self, name: &str, func: FilterFn) {
         match self {
             Glue::Template(engine) => engine.register_filter(name, func),
-            Glue::Json(engine) => engine.register_filter(name, func),
+            Glue::Auto(engine) => engine.register_filter(name, func),
         }
     }
 
@@ -272,7 +272,7 @@ impl Glue {
     ) -> Result<String, TemplateError> {
         match self {
             Glue::Template(engine) => engine.compose(context),
-            Glue::Json(engine) => engine.compose(context),
+            Glue::Auto(engine) => engine.compose(context),
         }
     }
 }
@@ -380,8 +380,8 @@ mod tests {
     }
 
     #[test]
-    fn test_json_glue_basic() {
-        let mut glue = Glue::new_json();
+    fn test_auto_glue_basic() {
+        let mut glue = Glue::new_auto();
         let mut context = HashMap::new();
         context.insert(
             "name".to_string(),
@@ -401,8 +401,8 @@ mod tests {
     }
 
     #[test]
-    fn test_json_glue_with_nested_data() {
-        let mut glue = Glue::new_json();
+    fn test_auto_glue_with_nested_data() {
+        let mut glue = Glue::new_auto();
         let mut context = HashMap::new();
 
         // Add nested object
@@ -427,9 +427,9 @@ mod tests {
     }
 
     #[test]
-    fn test_json_glue_filter_registration() {
+    fn test_auto_glue_filter_registration() {
         // Test that filters can be registered (even though they're not used)
-        let mut glue = Glue::new_json();
+        let mut glue = Glue::new_auto();
 
         fn dummy_filter(
             _state: &filter_api::State,

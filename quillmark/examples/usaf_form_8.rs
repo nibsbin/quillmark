@@ -27,7 +27,7 @@ test: "Hello from Example!"
 
     // Create engine and register quill
     let mut engine = Quillmark::new();
-    engine.register_quill(quill.clone());
+    engine.register_quill(quill.clone())?;
 
     // Build workflow
     let workflow = engine
