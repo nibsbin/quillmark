@@ -81,16 +81,20 @@ pub struct Diagnostic {
     pub location: Option<Location>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub hint: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub source_chain: Vec<String>,
 }
 
 impl From<quillmark_core::Diagnostic> for Diagnostic {
     fn from(diag: quillmark_core::Diagnostic) -> Self {
+        let source_chain = diag.source_chain();
         Diagnostic {
             severity: diag.severity.into(),
-            code: None,
+            code: diag.code,
             message: diag.message,
             location: diag.primary.map(|loc| loc.into()),
             hint: diag.hint,
+            source_chain,
         }
     }
 }
@@ -301,6 +305,54 @@ mod tests {
 
         let note: Severity = serde_json::from_str("\"note\"").unwrap();
         assert_eq!(note, Severity::Note);
+    }
+
+    #[test]
+    fn test_diagnostic_serialization() {
+        // Test that diagnostics with all fields serialize correctly
+        let diag = quillmark_core::Diagnostic::new(
+            quillmark_core::Severity::Error,
+            "Test error message".to_string(),
+        )
+        .with_code("E001".to_string())
+        .with_location(quillmark_core::Location {
+            file: "test.typ".to_string(),
+            line: 10,
+            col: 5,
+        })
+        .with_hint("This is a hint".to_string());
+
+        let wasm_diag: Diagnostic = diag.into();
+        let json = serde_json::to_string(&wasm_diag).unwrap();
+
+        assert!(json.contains("\"severity\":\"error\""));
+        assert!(json.contains("\"code\":\"E001\""));
+        assert!(json.contains("\"message\":\"Test error message\""));
+        assert!(json.contains("\"hint\":\"This is a hint\""));
+        assert!(json.contains("\"file\":\"test.typ\""));
+        assert!(json.contains("\"line\":10"));
+        assert!(json.contains("\"column\":5"));
+    }
+
+    #[test]
+    fn test_diagnostic_with_source_chain() {
+        // Test that diagnostics with source chains serialize correctly
+        let root_error = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
+        let diag = quillmark_core::Diagnostic::new(
+            quillmark_core::Severity::Error,
+            "Failed to load template".to_string(),
+        )
+        .with_code("E002".to_string())
+        .with_source(Box::new(root_error));
+
+        let wasm_diag: Diagnostic = diag.into();
+        let json = serde_json::to_string(&wasm_diag).unwrap();
+
+        assert!(json.contains("\"severity\":\"error\""));
+        assert!(json.contains("\"code\":\"E002\""));
+        assert!(json.contains("\"message\":\"Failed to load template\""));
+        assert!(json.contains("\"sourceChain\""));
+        assert!(json.contains("File not found"));
     }
 
     #[test]
