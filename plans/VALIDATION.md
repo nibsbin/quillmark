@@ -68,9 +68,11 @@ fn glue_extension_types(&self) -> &'static [&'static str];
 fn allow_auto_glue(&self) -> bool;
 ```
 
+**Note:** The existing `glue_type()` method returns a single extension string (e.g., ".typ"). The new `glue_extension_types()` method returns an array to support backends that accept multiple glue file types. Consider deprecating `glue_type()` in favor of the new method, or keep both for backwards compatibility during transition.
+
 Update all backend implementations:
-- `quillmark-typst/src/lib.rs::TypstBackend`
-- `quillmark-acroform/src/lib.rs::AcroformBackend`
+- `quillmark-typst/src/lib.rs::TypstBackend` - return `&[".typ"]` for glue_extension_types, `true` for allow_auto_glue
+- `quillmark-acroform/src/lib.rs::AcroformBackend` - return `&[".json"]` for glue_extension_types, `true` for allow_auto_glue
 
 ### 2. Schema Conversion Module
 
@@ -90,8 +92,13 @@ Create a new validation module containing:
 - `datetime` → `{"type": "string", "format": "date-time"}`
 
 **Required Fields:**
-- If `default` is defined in field schema, field is optional
+- If `default` is defined in field schema, field is optional (per SCHEMAS.md)
 - Otherwise, field is required and added to `"required": []` array
+- **Note:** The current `FieldSchema` struct has a `required` field for backwards compatibility. During validation, the logic should be:
+  - If `default` is present → field is optional (regardless of `required` flag)
+  - If `default` is absent and `required` is true → field is required
+  - If `default` is absent and `required` is false → field is optional
+  - This provides flexibility while honoring the SCHEMAS.md specification
 
 **JSON Schema Structure:**
 ```json
