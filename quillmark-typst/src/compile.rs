@@ -6,6 +6,8 @@
 //!
 //! - [`compile_to_pdf()`] - Compile Typst to PDF format
 //! - [`compile_to_svg()`] - Compile Typst to SVG format (one file per page)
+//! - [`compile_to_pdf_with_warnings()`] - Compile to PDF and return warnings
+//! - [`compile_to_svg_with_warnings()`] - Compile to SVG and return warnings
 //!
 //! ## Quick Example
 //!
@@ -40,6 +42,15 @@ use quillmark_core::{Diagnostic, Quill, RenderError, Severity};
 
 /// Compiles a Typst document to PDF format.
 pub fn compile_to_pdf(quill: &Quill, glued_content: &str) -> Result<Vec<u8>, RenderError> {
+    let (pdf, _warnings) = compile_to_pdf_with_warnings(quill, glued_content)?;
+    Ok(pdf)
+}
+
+/// Compiles a Typst document to PDF format, returning both the PDF and warnings.
+pub fn compile_to_pdf_with_warnings(
+    quill: &Quill,
+    glued_content: &str,
+) -> Result<(Vec<u8>, Vec<Diagnostic>), RenderError> {
     let world = QuillWorld::new(quill, glued_content).map_err(|e| RenderError::EngineCreation {
         diag: Diagnostic::new(
             Severity::Error,
@@ -49,7 +60,7 @@ pub fn compile_to_pdf(quill: &Quill, glued_content: &str) -> Result<Vec<u8>, Ren
         .with_source(e),
     })?;
 
-    let document = compile_document(&world)?;
+    let (document, warnings) = compile_document(&world)?;
 
     let pdf = typst_pdf::pdf(&document, &PdfOptions::default()).map_err(|e| {
         RenderError::CompilationFailed {
@@ -61,11 +72,20 @@ pub fn compile_to_pdf(quill: &Quill, glued_content: &str) -> Result<Vec<u8>, Ren
         }
     })?;
 
-    Ok(pdf)
+    Ok((pdf, warnings))
 }
 
 /// Compiles a Typst document to SVG format (one file per page).
 pub fn compile_to_svg(quill: &Quill, glued_content: &str) -> Result<Vec<Vec<u8>>, RenderError> {
+    let (svg_pages, _warnings) = compile_to_svg_with_warnings(quill, glued_content)?;
+    Ok(svg_pages)
+}
+
+/// Compiles a Typst document to SVG format, returning both the pages and warnings.
+pub fn compile_to_svg_with_warnings(
+    quill: &Quill,
+    glued_content: &str,
+) -> Result<(Vec<Vec<u8>>, Vec<Diagnostic>), RenderError> {
     let world = QuillWorld::new(quill, glued_content).map_err(|e| RenderError::EngineCreation {
         diag: Diagnostic::new(
             Severity::Error,
@@ -75,7 +95,7 @@ pub fn compile_to_svg(quill: &Quill, glued_content: &str) -> Result<Vec<Vec<u8>>
         .with_source(e),
     })?;
 
-    let document = compile_document(&world)?;
+    let (document, warnings) = compile_document(&world)?;
 
     let mut pages = Vec::new();
     for page in &document.pages {
@@ -83,18 +103,18 @@ pub fn compile_to_svg(quill: &Quill, glued_content: &str) -> Result<Vec<Vec<u8>>
         pages.push(svg.into_bytes());
     }
 
-    Ok(pages)
+    Ok((pages, warnings))
 }
 
-/// Internal compilation function
-fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
-    let Warned {
-        output,
-        warnings: _,
-    } = typst::compile::<PagedDocument>(world);
+/// Internal compilation function that returns both the document and any warnings
+fn compile_document(world: &QuillWorld) -> Result<(PagedDocument, Vec<Diagnostic>), RenderError> {
+    let Warned { output, warnings } = typst::compile::<PagedDocument>(world);
 
     match output {
-        Ok(doc) => Ok(doc),
+        Ok(doc) => {
+            let warning_diags = map_typst_errors(&warnings, world);
+            Ok((doc, warning_diags))
+        }
         Err(errors) => {
             let diagnostics = map_typst_errors(&errors, world);
             Err(RenderError::CompilationFailed { diags: diagnostics })
