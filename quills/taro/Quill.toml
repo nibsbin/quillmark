@@ -1,0 +1,11 @@
+[Quill]
+name = "taro"
+backend = "typst"
+glue_file = "glue.typ"
+example_file = "taro.md"
+description = "A simple document template for testing"
+
+[fields]
+author = {description = "Author of document"}
+ice_cream = {description = "favorite ice cream flavor", default = "taro"}
+title = {description = "title of document"}
