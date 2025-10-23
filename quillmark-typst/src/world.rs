@@ -6,7 +6,6 @@ use typst::syntax::{package::PackageSpec, FileId, Source, VirtualPath};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, World};
-use typst_kit::fonts::{FontSearcher, FontSlot};
 
 use quillmark_core::Quill;
 
@@ -19,7 +18,6 @@ pub struct QuillWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
     fonts: Vec<Font>,          // For fonts loaded from assets
-    font_slots: Vec<FontSlot>, // For lazy-loaded system fonts
     source: Source,
     sources: HashMap<FileId, Source>,
     binaries: HashMap<FileId, Bytes>,
@@ -43,15 +41,26 @@ impl QuillWorld {
         // so it acts as a stable fallback across platforms.
         #[cfg(feature = "embed-default-font")]
         {
+            fn load_embedded(byte_array: &[u8], book: &mut FontBook, fonts: &mut Vec<Font>) -> () {
+                let bytes = Bytes::new(byte_array.to_vec());
+                for font in Font::iter(bytes) {
+                    book.push(font.info().clone());
+                    fonts.push(font);
+                }
+            }
             // The font file should be placed at `quillmark-typst/assets/RobotoCondensed-VariableFont_wght.ttf`
             // and included in the crate via include_bytes! at compile time.
             const ROBOTO_BYTES: &[u8] =
                 include_bytes!("../assets/RobotoCondensed-VariableFont_wght.ttf");
-            let roboto_bytes = Bytes::new(ROBOTO_BYTES.to_vec());
-            for font in Font::iter(roboto_bytes) {
-                book.push(font.info().clone());
-                fonts.push(font);
-            }
+            load_embedded(ROBOTO_BYTES, &mut book, &mut fonts);
+
+            const DEJAVU_SANS_MONO_BYTES: &[u8] =
+                include_bytes!("../assets/DejaVuSansMono.ttf");
+            load_embedded(DEJAVU_SANS_MONO_BYTES, &mut book, &mut fonts);
+
+            const DEJAVU_SANS_MONO_BOLD_BYTES: &[u8] =
+                include_bytes!("../assets/DejaVuSansMono-Bold.ttf");
+            load_embedded(DEJAVU_SANS_MONO_BOLD_BYTES, &mut book, &mut fonts);
         }
 
         // Load fonts from quill assets first (eagerly loaded)
@@ -64,23 +73,11 @@ impl QuillWorld {
             }
         }
 
-        // Initialize system fonts (lazy loaded)
-        let searcher_fonts = FontSearcher::new().include_system_fonts(true).search();
-
-        // Add system font info to book after asset fonts
-        let mut system_font_index = 0;
-        while let Some(font_info) = searcher_fonts.book.info(system_font_index) {
-            book.push(font_info.clone());
-            system_font_index += 1;
-        }
-        let font_slots = searcher_fonts.fonts;
-
         // Error if no fonts available
-        if fonts.is_empty() && font_slots.is_empty() {
+        if fonts.is_empty() {
             return Err(format!(
-                "No fonts found: asset_faces={}, system_slots={}",
-                fonts.len(),
-                font_slots.len()
+                "No fonts found: asset_faces={}",
+                fonts.len()
             )
             .into());
         }
@@ -103,13 +100,12 @@ impl QuillWorld {
             library: LazyHash::new(Library::default()),
             book: LazyHash::new(book),
             fonts,
-            font_slots,
             source,
             sources,
             binaries,
         })
     }
-
+   
     /// Loads fonts from quill's in-memory file system.
     fn load_fonts_from_quill(
         quill: &Quill,
@@ -494,13 +490,6 @@ impl World for QuillWorld {
         // First check if we have an asset font at this index
         if let Some(font) = self.fonts.get(index) {
             return Some(font.clone());
-        }
-
-        // If not, check if we need to lazy-load from font slots
-        // The index needs to be adjusted for the font_slots
-        let font_slot_index = index - self.fonts.len();
-        if let Some(font_slot) = self.font_slots.get(font_slot_index) {
-            return font_slot.get();
         }
 
         None
