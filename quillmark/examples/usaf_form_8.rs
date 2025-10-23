@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
 use quillmark::{OutputFormat, ParsedDocument, Quillmark};
-use quillmark_fixtures::{resource_path, write_example_output};
+use quillmark_fixtures::{quills_path, write_example_output};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Path to the usaf_form_8 fixture
-    let quill_path = resource_path("usaf_form_8");
+    let quill_path = quills_path("usaf_form_8");
 
     // Load quill
     let quill = quillmark::Quill::from_path(quill_path).expect("Failed to load quill");

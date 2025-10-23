@@ -6,6 +6,14 @@ pub fn resource_path(name: &str) -> PathBuf {
     Path::new(manifest_dir).join("resources").join(name)
 }
 
+/// Get the path to tonguetoquill-collection quills
+pub fn quills_path(name: &str) -> PathBuf {
+    let manifest_dir = env!("CARGO_MANIFEST_DIR");
+    Path::new(manifest_dir).join("resources").
+        join("tonguetoquill-collection").
+        join("quills").join(name)
+}
+
 /// Get the example output directory path
 pub fn example_output_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");

@@ -1,4 +1,4 @@
-use quillmark_fixtures::{example_output_dir, resource_path, write_example_output};
+use quillmark_fixtures::{example_output_dir, quills_path, write_example_output};
 use std::error::Error;
 
 /// Demo helper that centralizes example plumbing.
@@ -6,13 +6,16 @@ use std::error::Error;
 /// It loads the quill and uses its markdown template, then processes and renders it.
 pub fn demo(
     quill_dir: &str,
-    asset_resources: Option<Vec<&str>>,
     glue_output: &str,
     render_output: &str,
+    use_resource_path: bool,
 ) -> Result<(), Box<dyn Error>> {
     // quill path (folder)
-    let quill_path = resource_path(quill_dir);
-
+    let quill_path = if use_resource_path {
+        quillmark_fixtures::resource_path(quill_dir)
+    } else {
+        quills_path(quill_dir)
+    };
     // Default engine flow used by examples: Typst backend, Quill from path, Workflow
     let quill = quillmark::Quill::from_path(quill_path.clone()).expect("Failed to load quill");
 
@@ -27,22 +30,9 @@ pub fn demo(
     let parsed = quillmark::ParsedDocument::from_markdown(&markdown)?;
 
     let engine = quillmark::Quillmark::new();
-    let mut workflow = engine
+    let workflow = engine
         .workflow_from_quill(&quill)
         .expect("Failed to load workflow");
-
-    if let Some(assets) = &asset_resources {
-        let full_assets: Vec<(String, Vec<u8>)> = assets
-            .iter()
-            .map(|name| {
-                (
-                    name.to_string(),
-                    std::fs::read(resource_path(name)).unwrap(),
-                )
-            })
-            .collect();
-        workflow.add_assets(full_assets)?;
-    }
 
     // process glue
     let glued = workflow.process_glue(&parsed)?;
