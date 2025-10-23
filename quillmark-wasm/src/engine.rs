@@ -180,7 +180,7 @@ impl Quillmark {
             backend: backend_id.clone(),
             metadata: metadata_json,
             example: quill.example.clone(),
-            field_schemas: quill.schema.clone().as_json().clone(),
+            schema: quill.schema.clone().as_json().clone(),
             supported_formats,
         };
 

@@ -40,19 +40,19 @@ def test_quill_properties(taro_quill_dir):
     # Verify all required properties are accessible
     assert quill.name == "taro"
     assert quill.backend == "typst"
-    assert quill.glue_template is not None
-    assert isinstance(quill.glue_template, str)
-    assert len(quill.glue_template) > 0
-    
+    assert quill.glue is not None
+    assert isinstance(quill.glue, str)
+    assert len(quill.glue) > 0
+
     # Check metadata is accessible
     metadata = quill.metadata
     assert isinstance(metadata, dict)
     assert metadata.get("backend") == "typst"
-    
-    # Check field_schemas is accessible
-    field_schemas = quill.field_schemas
-    assert isinstance(field_schemas, dict)
-    
+
+    # Check schema is accessible
+    schema = quill.schema
+    assert isinstance(schema, dict)
+
     # Check example content
     example = quill.example
     assert example is not None
@@ -131,7 +131,7 @@ This is a test.
     assert quill.name == "taro"
     assert quill.backend == "typst"
     assert quill.example is not None
-    assert quill.field_schemas is not None
+    assert quill.schema is not None
     assert quill.metadata is not None
     
     # Get supported formats from quill

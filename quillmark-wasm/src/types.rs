@@ -175,7 +175,7 @@ pub struct QuillInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub example: Option<String>,
     /// Field schemas (plain JavaScript object)
-    pub field_schemas: serde_json::Value,
+    pub schema: serde_json::Value,
     /// Supported output formats for this quill's backend
     pub supported_formats: Vec<OutputFormat>,
 }
@@ -396,8 +396,8 @@ mod tests {
         metadata_obj.insert("key1".to_string(), serde_json::json!("value1"));
         metadata_obj.insert("key2".to_string(), serde_json::json!(42));
 
-        let mut field_schemas_obj = serde_json::Map::new();
-        field_schemas_obj.insert(
+        let mut schema_obj = serde_json::Map::new();
+        schema_obj.insert(
             "title".to_string(),
             serde_json::json!({
                 "type": "string",
@@ -411,7 +411,7 @@ mod tests {
             backend: "typst".to_string(),
             metadata: serde_json::Value::Object(metadata_obj),
             example: None,
-            field_schemas: serde_json::Value::Object(field_schemas_obj),
+            schema: serde_json::Value::Object(schema_obj),
             supported_formats: vec![OutputFormat::Pdf, OutputFormat::Svg],
         };
 

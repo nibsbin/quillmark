@@ -145,7 +145,7 @@ class Quill:
         """Backend identifier from metadata"""
     
     @property
-    def glue_template(self) -> str:
+    def glue(self) -> str:
         """Glue template content"""
 
     @property
@@ -157,7 +157,7 @@ class Quill:
         """Quill metadata from Quill.toml"""
 
     @property
-    def field_schemas(self) -> dict[str, Any]:
+    def schema(self) -> Any:
         """Field schema definitions declared by the quill (from Quill.toml)."""
 
 class ParsedDocument:

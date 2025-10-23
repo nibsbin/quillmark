@@ -3,13 +3,14 @@
 import pytest
 
 from quillmark import ParsedDocument, ParseError
+from typing import cast
 
 
 def test_parse_markdown(taro_md):
     """Test parsing markdown with frontmatter."""
     parsed = ParsedDocument.from_markdown(taro_md)
-    assert "Ice Cream" in  parsed.get_field("title")
-    assert "nutty" in parsed.body()
+    assert "Ice Cream" in cast(str, parsed.get_field("title"))
+    assert "nutty" in cast(str, parsed.body())
 
 
 def test_parse_invalid_yaml():

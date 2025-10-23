@@ -73,7 +73,7 @@ The secret of getting ahead is getting started... with taro ice cream.
     print(f"  • Name: {quill.name}")
     print(f"  • Backend: {quill.backend}")
     print(f"  • Has example content: {quill.example is not None}")
-    print(f"  • Field schemas: {list(quill.field_schemas.keys())}")
+    print(f"  • Field schemas: {quill.schema}")
     
     # Get supported formats - consumer can use this to configure render options
     supported_formats = quill.supported_formats()
