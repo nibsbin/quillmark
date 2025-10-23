@@ -531,8 +531,11 @@ impl Workflow {
 
     /// Process a parsed document through the glue template without compilation
     pub fn process_glue(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
+        // Apply defaults from field schemas
+        let parsed_with_defaults = parsed.with_defaults(&self.quill.field_schemas);
+
         // Validate document against schema
-        self.validate_document(parsed)?;
+        self.validate_document(&parsed_with_defaults)?;
 
         // Create appropriate glue based on whether template is provided
         let mut glue = match &self.quill.glue {
@@ -540,12 +543,12 @@ impl Workflow {
             _ => Glue::new_auto(),
         };
         self.backend.register_filters(&mut glue);
-        let glue_output =
-            glue.compose(parsed.fields().clone())
-                .map_err(|e| RenderError::TemplateFailed {
-                    diag: Diagnostic::new(Severity::Error, e.to_string())
-                        .with_code("template::compose".to_string()),
-                })?;
+        let glue_output = glue
+            .compose(parsed_with_defaults.fields().clone())
+            .map_err(|e| RenderError::TemplateFailed {
+                diag: Diagnostic::new(Severity::Error, e.to_string())
+                    .with_code("template::compose".to_string()),
+            })?;
         Ok(glue_output)
     }
 
