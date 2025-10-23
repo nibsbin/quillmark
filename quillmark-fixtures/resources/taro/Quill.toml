@@ -6,6 +6,6 @@ example_file = "taro.md"
 description = "Taro template for documents"
 
 [fields]
-author = {description = "Author of document", required = true}
+author = {description = "Author of document"}
 ice_cream = {description = "favorite ice cream flavor"}
-title = {description = "title of document", required = true}
+title = {description = "title of document"}

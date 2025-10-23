@@ -18,6 +18,8 @@
 
 ---
 
+**Requires Update**
+
 ## Internal File Structure
 
 ### Structure Definition
@@ -39,6 +41,8 @@ pub struct Quill {
     pub files: FileTreeNode,
 }
 ```
+
+**Requires Update**
 
 ### Design Rationale
 

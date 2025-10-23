@@ -156,6 +156,11 @@ impl PyQuill {
     }
 
     #[getter]
+    fn print_tree(&self) -> String {
+        self.inner.files.print_tree().clone()
+    }
+
+    #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
@@ -170,8 +175,8 @@ impl PyQuill {
     }
 
     #[getter]
-    fn glue_template(&self) -> &str {
-        &self.inner.glue_template
+    fn glue(&self) -> Option<String> {
+        self.inner.glue.clone()
     }
 
     #[getter]
@@ -190,15 +195,9 @@ impl PyQuill {
     }
 
     #[getter]
-    fn field_schemas<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        // Convert field_schemas to Python dict
-        let dict = PyDict::new(py);
-        for (key, schema) in &self.inner.field_schemas {
-            // Convert FieldSchema to QuillValue, then to Python
-            let quill_value = schema.to_quill_value();
-            dict.set_item(key, quillvalue_to_py(py, &quill_value)?)?;
-        }
-        Ok(dict)
+    fn schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        // Convert serde_json::Value to Python object
+        json_to_py(py, &self.inner.schema)
     }
 
     fn supported_formats(&self) -> PyResult<Vec<PyOutputFormat>> {

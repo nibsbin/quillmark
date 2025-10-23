@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import { Quillmark } from '../pkg/bundler/wasm.js'
-import { loadQuill, loadQuillMarkdown } from './quillLoader.js'
+import { loadQuill } from './quillLoader.js'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
@@ -57,9 +57,11 @@ describe('WASM usaf_form_8 smoke test', () => {
     // Load the Quill structure
     console.log('Loading usaf_form_8 Quill...')
     quillJson = loadQuill(USAF_FORM_8_QUILL_PATH)
-    
+
     // Load the markdown example
-    markdown = loadQuillMarkdown(USAF_FORM_8_QUILL_PATH)
+    const quillmark = new Quillmark()
+    let quillInfo = quillmark.registerQuill(quillJson)
+    markdown = quillInfo.example
     console.log(`Markdown loaded: ${markdown.length} chars`)
   })
 
@@ -85,7 +87,7 @@ describe('WASM usaf_form_8 smoke test', () => {
     const engine = new Quillmark()
     
     expect(() => {
-      engine.registerQuill('usaf_form_8', quillJson)
+      engine.registerQuill(quillJson)
     }).not.toThrow()
     
     const quills = engine.listQuills()
@@ -94,7 +96,7 @@ describe('WASM usaf_form_8 smoke test', () => {
 
   it('should get usaf_form_8 Quill info', () => {
     const engine = new Quillmark()
-    engine.registerQuill('usaf_form_8', quillJson)
+    engine.registerQuill(quillJson)
     
     const info = engine.getQuillInfo('usaf_form_8')
     
@@ -107,7 +109,7 @@ describe('WASM usaf_form_8 smoke test', () => {
   it('should render usaf_form_8 to PDF via WASM', () => {
     const parsed = Quillmark.parseMarkdown(markdown)
     const engine = new Quillmark()
-    engine.registerQuill('usaf_form_8', quillJson)
+    engine.registerQuill(quillJson)
     
     const result = engine.render(parsed, { format: 'pdf' })
     
@@ -129,7 +131,7 @@ describe('WASM usaf_form_8 smoke test', () => {
     // Render via WASM
     const parsed = Quillmark.parseMarkdown(markdown)
     const engine = new Quillmark()
-    engine.registerQuill('usaf_form_8', quillJson)
+    engine.registerQuill(quillJson)
     
     const result = engine.render(parsed, { format: 'pdf' })
     const wasmPdf = Buffer.from(result.artifacts[0].bytes)

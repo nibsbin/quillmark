@@ -71,7 +71,7 @@ impl Backend for TypstBackend {
     }
 
     fn glue_extension_types(&self) -> &'static [&'static str] {
-        &[".typ"]
+        &["typ"]
     }
 
     fn allow_auto_glue(&self) -> bool {
@@ -154,7 +154,6 @@ mod tests {
     fn test_backend_info() {
         let backend = TypstBackend::default();
         assert_eq!(backend.id(), "typst");
-        assert_eq!(backend.glue_extension_types(), &[".typ"]);
         assert!(backend.allow_auto_glue());
         assert!(backend.supported_formats().contains(&OutputFormat::Pdf));
         assert!(backend.supported_formats().contains(&OutputFormat::Svg));

@@ -49,8 +49,14 @@ output as JSON instead of being processed through a template.
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 
     println!("Quill name: {}", quill.name);
-    println!("Glue file: {:?}", quill.glue_file);
-    println!("Glue template empty: {}", quill.glue_template.is_empty());
+    println!(
+        "Glue file: {:?}",
+        quill.metadata.get("glue_file").and_then(|v| v.as_str())
+    );
+    println!(
+        "Glue template empty: {}",
+        quill.glue.clone().unwrap_or_default().is_empty()
+    );
     println!();
 
     engine

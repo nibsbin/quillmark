@@ -73,12 +73,8 @@ The secret of getting ahead is getting started... with taro ice cream.
     print(f"  • Name: {quill.name}")
     print(f"  • Backend: {quill.backend}")
     print(f"  • Has example content: {quill.example is not None}")
-    print(f"  • Field schemas: {list(quill.field_schemas.keys())}")
+    print(f"  • Field schemas: {quill.schema}")
     
-    # Get supported formats - consumer can use this to configure render options
-    supported_formats = quill.supported_formats()
-    print(f"  • Supported formats: {supported_formats}")
-    print()
     
     # Step 4: Create workflow and configure render options
     print("Step 4: Creating Workflow...")
@@ -89,6 +85,11 @@ The secret of getting ahead is getting started... with taro ice cream.
     # Alternative options:
     # workflow = engine.workflow_from_quill_name("taro")
     # workflow = engine.workflow_from_quill(quill)
+
+    # Get supported formats - consumer can use this to configure render options
+    supported_formats = workflow.supported_formats
+    print(f"  • Supported formats: {supported_formats}")
+    print()
     
     print(f"  ✓ Created workflow for quill: {workflow.quill_name}")
     print(f"  ✓ Backend: {workflow.backend_id}")

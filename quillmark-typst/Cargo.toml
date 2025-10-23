@@ -33,9 +33,7 @@ wasm-bindgen = "^0.2"
 tempfile = { workspace = true }
 
 [features]
-default = ["native"]
+default = ["native", "embed-default-font"]
 native = ["typst-kit/packages", "typst-kit/embed-fonts", "dep:dirs"]
-# Opt-in: embed a default fallback font (Roboto Condensed) into the typst backend
-# When enabled, the crate will include `assets/fonts/RobotoCondensed-VariableFont_wght.ttf`
 embed-default-font = []
 

@@ -6,6 +6,7 @@
 use minijinja::value::Value as MjValue;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::ops::Deref;
 
 /// Unified value type backed by `serde_json::Value`.
 ///
@@ -45,6 +46,14 @@ impl QuillValue {
     /// Create a QuillValue directly from a JSON value
     pub fn from_json(json_val: serde_json::Value) -> Self {
         QuillValue(json_val)
+    }
+}
+
+impl Deref for QuillValue {
+    type Target = serde_json::Value;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 

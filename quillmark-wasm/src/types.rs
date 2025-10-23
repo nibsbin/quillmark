@@ -158,34 +158,6 @@ pub struct QuillMetadata {
     pub tags: Vec<String>,
 }
 
-/// Field schema for template fields
-///
-/// Describes the expected structure and constraints for a field in a Quill template.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FieldSchema {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub r#type: Option<String>,
-    pub required: bool,
-    pub description: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub example: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub default: Option<serde_json::Value>,
-}
-
-impl From<quillmark_core::FieldSchema> for FieldSchema {
-    fn from(schema: quillmark_core::FieldSchema) -> Self {
-        FieldSchema {
-            r#type: schema.r#type,
-            required: schema.required,
-            description: schema.description,
-            example: schema.example.map(|v| v.as_json().clone()),
-            default: schema.default.map(|v| v.as_json().clone()),
-        }
-    }
-}
-
 /// Shallow information about a registered Quill
 ///
 /// This provides consumers with the necessary information to configure render options
@@ -203,7 +175,7 @@ pub struct QuillInfo {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub example: Option<String>,
     /// Field schemas (plain JavaScript object)
-    pub field_schemas: serde_json::Value,
+    pub schema: serde_json::Value,
     /// Supported output formats for this quill's backend
     pub supported_formats: Vec<OutputFormat>,
 }
@@ -424,8 +396,8 @@ mod tests {
         metadata_obj.insert("key1".to_string(), serde_json::json!("value1"));
         metadata_obj.insert("key2".to_string(), serde_json::json!(42));
 
-        let mut field_schemas_obj = serde_json::Map::new();
-        field_schemas_obj.insert(
+        let mut schema_obj = serde_json::Map::new();
+        schema_obj.insert(
             "title".to_string(),
             serde_json::json!({
                 "type": "string",
@@ -439,7 +411,7 @@ mod tests {
             backend: "typst".to_string(),
             metadata: serde_json::Value::Object(metadata_obj),
             example: None,
-            field_schemas: serde_json::Value::Object(field_schemas_obj),
+            schema: serde_json::Value::Object(schema_obj),
             supported_formats: vec![OutputFormat::Pdf, OutputFormat::Svg],
         };
 
@@ -461,11 +433,9 @@ mod tests {
         );
         assert_eq!(metadata_obj.get("key2").unwrap().as_u64().unwrap(), 42);
 
-        // Verify field_schemas is an object (not a Map)
-        let field_schemas = obj.get("fieldSchemas").unwrap();
-        assert!(field_schemas.is_object());
-        let field_schemas_obj = field_schemas.as_object().unwrap();
-        assert!(field_schemas_obj.contains_key("title"));
+        // Verify field_schemas is an object
+        let schema = obj.get("schema").unwrap();
+        assert!(schema.is_object());
     }
 
     #[test]

@@ -1,9 +1,7 @@
 //! Quillmark WASM Engine - Simplified API
 
 use crate::error::QuillmarkError;
-use crate::types::{
-    FieldSchema, OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult,
-};
+use crate::types::{OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult};
 use serde::Serialize;
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
@@ -89,7 +87,7 @@ impl Quillmark {
     /// Accepts either a JSON string or a JsValue object representing the Quill file tree.
     /// Validation happens automatically on registration.
     #[wasm_bindgen(js_name = registerQuill)]
-    pub fn register_quill(&mut self, name: &str, quill_json: JsValue) -> Result<(), JsValue> {
+    pub fn register_quill(&mut self, quill_json: JsValue) -> Result<JsValue, JsValue> {
         // Convert JsValue to JSON string
         let json_str = if quill_json.is_string() {
             quill_json.as_string().ok_or_else(|| {
@@ -126,19 +124,16 @@ impl Quillmark {
             )
             .to_js_value()
         })?;
-
-        // Validate
-        quill.validate().map_err(|e| {
-            QuillmarkError::new(format!("Quill validation failed: {}", e), None, None).to_js_value()
-        })?;
+        let name = quill.name.clone();
 
         // Register with backend validation
         self.inner
             .register_quill(quill.clone())
             .map_err(|e| QuillmarkError::from(e).to_js_value())?;
-        self.quills.insert(name.to_string(), quill);
+        self.quills.insert(quill.name.clone(), quill);
 
-        Ok(())
+        let quill_info = self.get_quill_info(&name)?;
+        Ok(quill_info)
     }
 
     /// Get shallow information about a registered Quill
@@ -182,30 +177,12 @@ impl Quillmark {
         }
         let metadata_json = serde_json::Value::Object(metadata_obj);
 
-        // Convert field schemas to serde_json::Value (plain JavaScript object)
-        let mut field_schemas_obj = serde_json::Map::new();
-        for (key, value) in &quill.field_schemas {
-            let field_schema: FieldSchema = value.clone().into();
-            field_schemas_obj.insert(
-                key.clone(),
-                serde_json::to_value(&field_schema).map_err(|e| {
-                    QuillmarkError::new(
-                        format!("Failed to serialize field schema: {}", e),
-                        None,
-                        None,
-                    )
-                    .to_js_value()
-                })?,
-            );
-        }
-        let field_schemas_json = serde_json::Value::Object(field_schemas_obj);
-
         let quill_info = QuillInfo {
             name: quill.name.clone(),
             backend: backend_id.clone(),
             metadata: metadata_json,
             example: quill.example.clone(),
-            field_schemas: field_schemas_json,
+            schema: quill.schema.clone().as_json().clone(),
             supported_formats,
         };
 
@@ -220,8 +197,8 @@ impl Quillmark {
     /// Process markdown through template engine (debugging)
     ///
     /// Returns template source code (Typst, LaTeX, etc.)
-    #[wasm_bindgen(js_name = renderGlue)]
-    pub fn render_glue(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
+    #[wasm_bindgen(js_name = processGlue)]
+    pub fn process_glue(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
         // Parse markdown first
         let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
             QuillmarkError::new(

@@ -6,7 +6,6 @@ use typst::syntax::{package::PackageSpec, FileId, Source, VirtualPath};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, World};
-use typst_kit::fonts::{FontSearcher, FontSlot};
 
 use quillmark_core::Quill;
 
@@ -18,8 +17,7 @@ use quillmark_core::Quill;
 pub struct QuillWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
-    fonts: Vec<Font>,          // For fonts loaded from assets
-    font_slots: Vec<FontSlot>, // For lazy-loaded system fonts
+    fonts: Vec<Font>, // For fonts loaded from assets
     source: Source,
     sources: HashMap<FileId, Source>,
     binaries: HashMap<FileId, Bytes>,
@@ -43,15 +41,25 @@ impl QuillWorld {
         // so it acts as a stable fallback across platforms.
         #[cfg(feature = "embed-default-font")]
         {
+            fn load_embedded(byte_array: &[u8], book: &mut FontBook, fonts: &mut Vec<Font>) -> () {
+                let bytes = Bytes::new(byte_array.to_vec());
+                for font in Font::iter(bytes) {
+                    book.push(font.info().clone());
+                    fonts.push(font);
+                }
+            }
             // The font file should be placed at `quillmark-typst/assets/RobotoCondensed-VariableFont_wght.ttf`
             // and included in the crate via include_bytes! at compile time.
             const ROBOTO_BYTES: &[u8] =
                 include_bytes!("../assets/RobotoCondensed-VariableFont_wght.ttf");
-            let roboto_bytes = Bytes::new(ROBOTO_BYTES.to_vec());
-            for font in Font::iter(roboto_bytes) {
-                book.push(font.info().clone());
-                fonts.push(font);
-            }
+            load_embedded(ROBOTO_BYTES, &mut book, &mut fonts);
+
+            const DEJAVU_SANS_MONO_BYTES: &[u8] = include_bytes!("../assets/DejaVuSansMono.ttf");
+            load_embedded(DEJAVU_SANS_MONO_BYTES, &mut book, &mut fonts);
+
+            const DEJAVU_SANS_MONO_BOLD_BYTES: &[u8] =
+                include_bytes!("../assets/DejaVuSansMono-Bold.ttf");
+            load_embedded(DEJAVU_SANS_MONO_BOLD_BYTES, &mut book, &mut fonts);
         }
 
         // Load fonts from quill assets first (eagerly loaded)
@@ -64,25 +72,9 @@ impl QuillWorld {
             }
         }
 
-        // Initialize system fonts (lazy loaded)
-        let searcher_fonts = FontSearcher::new().include_system_fonts(true).search();
-
-        // Add system font info to book after asset fonts
-        let mut system_font_index = 0;
-        while let Some(font_info) = searcher_fonts.book.info(system_font_index) {
-            book.push(font_info.clone());
-            system_font_index += 1;
-        }
-        let font_slots = searcher_fonts.fonts;
-
         // Error if no fonts available
-        if fonts.is_empty() && font_slots.is_empty() {
-            return Err(format!(
-                "No fonts found: asset_faces={}, system_slots={}",
-                fonts.len(),
-                font_slots.len()
-            )
-            .into());
+        if fonts.is_empty() {
+            return Err(format!("No fonts found: asset_faces={}", fonts.len()).into());
         }
 
         // Load assets from quill's in-memory file system
@@ -103,7 +95,6 @@ impl QuillWorld {
             library: LazyHash::new(Library::default()),
             book: LazyHash::new(book),
             fonts,
-            font_slots,
             source,
             sources,
             binaries,
@@ -496,13 +487,6 @@ impl World for QuillWorld {
             return Some(font.clone());
         }
 
-        // If not, check if we need to lazy-load from font slots
-        // The index needs to be adjusted for the font_slots
-        let font_slot_index = index - self.fonts.len();
-        if let Some(font_slot) = self.font_slots.get(font_slot_index) {
-            return font_slot.get();
-        }
-
         None
     }
 
@@ -642,100 +626,6 @@ name = "minimal-package"
     }
 
     #[test]
-    fn test_font_loading_uses_lazy_approach() {
-        use quillmark_core::Quill;
-        use std::fs;
-        use tempfile::TempDir;
-
-        // Create a temporary directory for our test
-        let temp_dir = TempDir::new().unwrap();
-        let quill_path = temp_dir.path();
-
-        // Create a minimal complete quill structure with no fonts in assets
-        fs::create_dir_all(quill_path.join("assets")).unwrap();
-        fs::write(quill_path.join("Quill.toml"), "[quill]\nname = \"test\"").unwrap();
-        fs::write(
-            quill_path.join("glue.typ"),
-            "// Test template\n{{ title | String(default=\"Test\") }}",
-        )
-        .unwrap();
-
-        let quill = Quill::from_path(quill_path).unwrap();
-
-        // Create a QuillWorld - this should use lazy font loading since no asset fonts
-        let world_result = QuillWorld::new(&quill, "// Test content");
-
-        assert!(
-            world_result.is_ok(),
-            "QuillWorld creation should succeed with lazy font loading"
-        );
-
-        let world = world_result.unwrap();
-
-        // Verify that we have font slots for lazy loading
-        // If fonts are empty but font_slots are not, we're using lazy loading
-        if world.fonts.is_empty() {
-            assert!(
-                !world.font_slots.is_empty(),
-                "Should have font slots for lazy loading when no asset fonts"
-            );
-
-            // Test that font access works (this should trigger lazy loading)
-            let first_font = world.font(0);
-            assert!(
-                first_font.is_some(),
-                "Should be able to lazy-load a font when needed"
-            );
-        }
-    }
-
-    #[test]
-    fn test_asset_font_loading_unchanged() {
-        use quillmark_core::Quill;
-        use std::fs;
-        use tempfile::TempDir;
-
-        // Create a temporary directory for our test
-        let temp_dir = TempDir::new().unwrap();
-        let quill_path = temp_dir.path();
-
-        // Create a quill structure with a mock font file in assets
-        fs::create_dir_all(quill_path.join("assets").join("fonts")).unwrap();
-
-        // Create a minimal TTF font file (just a dummy file with .ttf extension for testing)
-        let dummy_font_data = b"dummy font data for testing";
-        fs::write(
-            quill_path.join("assets").join("fonts").join("test.ttf"),
-            dummy_font_data,
-        )
-        .unwrap();
-
-        fs::write(quill_path.join("Quill.toml"), "[quill]\nname = \"test\"").unwrap();
-        fs::write(
-            quill_path.join("glue.typ"),
-            "// Test template\n{{ title | String(default=\"Test\") }}",
-        )
-        .unwrap();
-
-        let quill = Quill::from_path(quill_path).unwrap();
-
-        // Create a QuillWorld - this should attempt to load assets fonts first
-        let world_result = QuillWorld::new(&quill, "// Test content");
-
-        assert!(world_result.is_ok(), "QuillWorld creation should succeed");
-
-        let world = world_result.unwrap();
-
-        // Even with dummy font data (which won't parse as a real font),
-        // the behavior should prioritize asset fonts first, then fall back to lazy loading
-        // Since our dummy data won't parse as a font, it should fall back to lazy loading
-        assert!(
-            !world.fonts.is_empty() || !world.font_slots.is_empty(),
-            "Should have fonts available either from assets or lazy loading"
-        );
-    }
-
-    #[test]
     fn test_asset_fonts_have_priority() {
         use quillmark_core::Quill;
         use std::path::Path;
@@ -765,17 +655,6 @@ name = "minimal-package"
             let font = world.font(i);
             assert!(font.is_some(), "Font at index {} should be available", i);
             // This font should come from the asset fonts (world.fonts vec), not font_slots
-        }
-
-        // Verify that fonts beyond the asset count come from font_slots
-        if !world.font_slots.is_empty() {
-            let system_font_index = world.fonts.len();
-            let font = world.font(system_font_index);
-            assert!(
-                font.is_some(),
-                "Font at index {} (system font) should be available",
-                system_font_index
-            );
         }
     }
 }

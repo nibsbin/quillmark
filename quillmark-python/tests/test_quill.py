@@ -10,7 +10,7 @@ def test_load_quill(taro_quill_dir):
     quill = Quill.from_path(str(taro_quill_dir))
     assert quill.name == "taro"
     assert quill.backend == "typst"
-    assert "Favorite Ice Cream" in quill.glue_template
+    assert "Favorite Ice Cream" in quill.glue
 
 
 def test_load_nonexistent_quill(tmp_path):

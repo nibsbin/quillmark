@@ -4,6 +4,9 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { Quillmark } from '../pkg/bundler/wasm.js'
+
+
 
 /**
  * Recursively load a directory structure into the Quill JSON format
@@ -54,29 +57,4 @@ export function loadQuill(quillPath) {
   return {
     files: files
   };
-}
-
-/**
- * Load the markdown example from a Quill directory
- * @param {string} quillPath - Path to Quill directory
- * @param {string} markdownFile - Name of markdown file (default: from Quill.toml)
- * @returns {string} - Markdown content
- */
-export function loadQuillMarkdown(quillPath, markdownFile = null) {
-  if (!markdownFile) {
-    // Try to parse Quill.toml to find example field
-    const tomlPath = path.join(quillPath, 'Quill.toml');
-    const tomlContent = fs.readFileSync(tomlPath, 'utf8');
-    
-    // Simple regex to extract example = "filename"
-    const match = tomlContent.match(/example\s*=\s*"([^"]+)"/);
-    if (match) {
-      markdownFile = match[1];
-    } else {
-      throw new Error('No markdown file specified and no example field found in Quill.toml');
-    }
-  }
-
-  const mdPath = path.join(quillPath, markdownFile);
-  return fs.readFileSync(mdPath, 'utf8');
 }

@@ -59,7 +59,9 @@ describe('WASM usaf_memo smoke test', () => {
     quillJson = loadQuill(USAF_MEMO_QUILL_PATH)
     
     // Load the markdown example
-    markdown = loadQuillMarkdown(USAF_MEMO_QUILL_PATH)
+    const quillmark = new Quillmark()
+    let quillInfo = quillmark.registerQuill(quillJson)
+    markdown = quillInfo.example
     console.log(`Markdown loaded: ${markdown.length} chars`)
   })
 
@@ -86,7 +88,7 @@ describe('WASM usaf_memo smoke test', () => {
     const engine = new Quillmark()
     
     expect(() => {
-      engine.registerQuill('usaf_memo', quillJson)
+      engine.registerQuill(quillJson)
     }).not.toThrow()
     
     const quills = engine.listQuills()
@@ -95,7 +97,7 @@ describe('WASM usaf_memo smoke test', () => {
 
   it('should get usaf_memo Quill info', () => {
     const engine = new Quillmark()
-    engine.registerQuill('usaf_memo', quillJson)
+    engine.registerQuill(quillJson)
     
     const info = engine.getQuillInfo('usaf_memo')
     
@@ -108,7 +110,7 @@ describe('WASM usaf_memo smoke test', () => {
   it('should render usaf_memo to PDF via WASM', () => {
     const parsed = Quillmark.parseMarkdown(markdown)
     const engine = new Quillmark()
-    engine.registerQuill('usaf_memo', quillJson)
+    engine.registerQuill(quillJson)
     
     const result = engine.render(parsed, { format: 'pdf' })
     
@@ -130,7 +132,7 @@ describe('WASM usaf_memo smoke test', () => {
     // Render via WASM
     const parsed = Quillmark.parseMarkdown(markdown)
     const engine = new Quillmark()
-    engine.registerQuill('usaf_memo', quillJson)
+    engine.registerQuill(quillJson)
     
     const result = engine.render(parsed, { format: 'pdf' })
     const wasmPdf = Buffer.from(result.artifacts[0].bytes)

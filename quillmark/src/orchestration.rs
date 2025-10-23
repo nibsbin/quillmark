@@ -303,7 +303,7 @@ impl Quillmark {
             })?;
 
         // Validate glue_file extension or auto_glue
-        if let Some(glue_file) = &quill.glue_file {
+        if let Some(glue_file) = &quill.metadata.get("glue_file").and_then(|v| v.as_str()) {
             let extension = std::path::Path::new(glue_file)
                 .extension()
                 .and_then(|e| e.to_str())
@@ -535,12 +535,10 @@ impl Workflow {
         self.validate_document(parsed)?;
 
         // Create appropriate glue based on whether template is provided
-        let mut glue = if self.quill.glue_template.is_empty() {
-            Glue::new_auto()
-        } else {
-            Glue::new(self.quill.glue_template.clone())
+        let mut glue = match &self.quill.glue {
+            Some(s) if !s.is_empty() => Glue::new(s.to_string()),
+            _ => Glue::new_auto(),
         };
-
         self.backend.register_filters(&mut glue);
         let glue_output =
             glue.compose(parsed.fields().clone())
@@ -555,7 +553,7 @@ impl Workflow {
     ///
     /// Validates the document's fields against the schema defined in the Quill.
     /// The schema can come from either:
-    /// - A json_schema file specified in Quill.toml
+    /// - A json_schema_file specified in Quill.toml
     /// - TOML `[fields]` section converted to JSON Schema
     ///
     /// If no schema is defined, this returns Ok(()).
@@ -568,47 +566,14 @@ impl Workflow {
         use quillmark_core::validation;
 
         // Build or load JSON Schema
-        let json_schema = if let Some(schema_path) = self.quill.metadata.get("json_schema") {
-            // Load from quill files
-            let schema_path_str =
-                schema_path
-                    .as_str()
-                    .ok_or_else(|| RenderError::InvalidSchema {
-                        diag: Diagnostic::new(
-                            Severity::Error,
-                            "json_schema field in Quill.toml must be a string".to_string(),
-                        )
-                        .with_code("validation::invalid_schema_path".to_string()),
-                    })?;
 
-            let schema_bytes = self.quill.files.get_file(schema_path_str).ok_or_else(|| {
-                RenderError::InvalidSchema {
-                    diag: Diagnostic::new(
-                        Severity::Error,
-                        format!("json_schema file '{}' not found", schema_path_str),
-                    )
-                    .with_code("validation::schema_not_found".to_string()),
-                }
-            })?;
-
-            serde_json::from_slice(schema_bytes).map_err(|e| RenderError::InvalidSchema {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!("Failed to parse json_schema file: {}", e),
-                )
-                .with_code("validation::schema_invalid".to_string())
-                .with_source(Box::new(e)),
-            })?
-        } else if !self.quill.field_schemas.is_empty() {
-            // Convert from TOML fields
-            validation::build_schema_from_fields(&self.quill.field_schemas)?
-        } else {
+        if self.quill.schema.is_null() {
             // No schema defined, skip validation
             return Ok(());
         };
 
         // Validate document
-        match validation::validate_document(&json_schema, parsed.fields()) {
+        match validation::validate_document(&self.quill.schema, parsed.fields()) {
             Ok(_) => Ok(()),
             Err(errors) => {
                 let error_message = errors.join("\n");
