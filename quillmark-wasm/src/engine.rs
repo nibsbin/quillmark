@@ -196,7 +196,7 @@ impl Quillmark {
     ///
     /// Returns template source code (Typst, LaTeX, etc.)
     #[wasm_bindgen(js_name = renderGlue)]
-    pub fn render_glue(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
+    pub fn process_glue(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
         // Parse markdown first
         let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
             QuillmarkError::new(

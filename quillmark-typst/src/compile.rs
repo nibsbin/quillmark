@@ -90,8 +90,12 @@ pub fn compile_to_svg(quill: &Quill, glued_content: &str) -> Result<Vec<Vec<u8>>
 fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
     let Warned {
         output,
-        warnings: _,
+        warnings,
     } = typst::compile::<PagedDocument>(world);
+
+    for warning in warnings {
+        eprintln!("Warning: {}", warning.message);
+    }
 
     match output {
         Ok(doc) => Ok(doc),

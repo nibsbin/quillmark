@@ -156,6 +156,11 @@ impl PyQuill {
     }
 
     #[getter]
+    fn print_tree(&self) -> String {
+        self.inner.files.print_tree().clone()
+    }
+
+    #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }

@@ -160,6 +160,10 @@ class Quill:
     def schema(self) -> Any:
         """Field schema definitions declared by the quill (from Quill.toml)."""
 
+    @function
+    def print_tree(self) -> str:
+        """Get a string representation of the quill file tree."""
+
 class ParsedDocument:
     """Parsed markdown document with frontmatter."""
     
