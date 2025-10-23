@@ -8,7 +8,7 @@ fn main() {
         "usaf_memo",
         "usaf_memo_glue.typ",
         "usaf_memo_output.pdf",
-        false
+        false,
     )
     .expect("Demo failed");
 }

@@ -1,5 +1,5 @@
 use quillmark::{Quill, Quillmark, RenderError};
-use quillmark_fixtures::{quills_path};
+use quillmark_fixtures::quills_path;
 
 #[test]
 fn test_with_font_basic() {

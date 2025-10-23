@@ -8,7 +8,7 @@ fn main() {
         "appreciated_letter",
         "appreciated_letter_glue.typ",
         "appreciated_letter_output.pdf",
-        true
+        true,
     )
     .expect("Demo failed");
 }
