@@ -5,6 +5,13 @@ import pytest
 from quillmark import ParsedDocument, ParseError
 from typing import cast
 
+import os
+from pathlib import Path
+
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+RESOURCES_PATH = WORKSPACE_ROOT / "quillmark-fixtures" / "resources"
+QUILLS_PATH = RESOURCES_PATH / "tonguetoquill-collection" / "quills"
+
 
 def test_parse_markdown(taro_md):
     """Test parsing markdown with frontmatter."""

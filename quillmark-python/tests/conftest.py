@@ -9,6 +9,10 @@ import shutil
 from pathlib import Path
 import pytest
 
+WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+RESOURCES_PATH = WORKSPACE_ROOT / "quillmark-fixtures" / "resources"
+QUILLS_PATH = RESOURCES_PATH / "tonguetoquill-collection" / "quills"
+
 
 @pytest.fixture
 def taro_quill_dir():
@@ -18,33 +22,19 @@ def taro_quill_dir():
     into the test temporary directory so tests can safely mutate files.
     The default fixture used is `appreciated_letter`.
     """
-    repo_root = Path(__file__).resolve().parents[2]
-    resources_dir = repo_root / "quillmark-fixtures" / "resources"
-    fixture_path = resources_dir / "taro"
+    fixture_path = QUILLS_PATH / "taro"
 
     assert fixture_path.exists(), f"Preferred fixture not found: {fixture_path}"
-
 
     return fixture_path
 
 
 @pytest.fixture
 def taro_md():
-    """Return simple test markdown.
-
-    Prefer the repository `sample.md` fixture when available.
-    """
-    repo_root = Path(__file__).resolve().parents[2]
-    sample_path = repo_root / "quillmark-fixtures" / "resources" / "taro" / "taro.md"
+    """Return the example taro markdown."""
+    sample_path = QUILLS_PATH / "taro" / "taro.md"
 
     if sample_path.exists():
         return sample_path.read_text()
-
-    return """---
-title: Test Document
----
-
-# Hello World
-
-This is a test document.
-"""
+    else:
+        raise FileNotFoundError(f"Markdown example not found: {sample_path}")

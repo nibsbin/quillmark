@@ -9,6 +9,7 @@ This test ensures that:
 
 import pytest
 from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat
+from conftest import QUILLS_PATH
 
 
 def test_parsed_document_quill_tag():
@@ -73,10 +74,7 @@ def test_workflow_from_parsed_with_quill_tag(taro_quill_dir, taro_md):
     engine.register_quill(quill)
     
     # Add QUILL tag to markdown
-    markdown_with_tag = f"""---
-QUILL: {quill.name}
----
-
+    markdown_with_tag = f"""
 {taro_md}
 """
     
@@ -104,7 +102,7 @@ def test_full_workflow_as_specified():
     # Find taro quill
     from pathlib import Path
     repo_root = Path(__file__).resolve().parents[2]
-    taro_dir = repo_root / "quillmark-fixtures" / "resources" / "taro"
+    taro_dir = QUILLS_PATH / "taro"
     
     quill = Quill.from_path(str(taro_dir))
     engine.register_quill(quill)
