@@ -149,8 +149,8 @@ pub struct PyQuill {
 #[pymethods]
 impl PyQuill {
     #[staticmethod]
-    fn from_path(path: String) -> PyResult<Self> {
-        let quill = Quill::from_path(PathBuf::from(path))
+    fn from_path(path: PathBuf) -> PyResult<Self> {
+        let quill = Quill::from_path(path)
             .map_err(|e| PyErr::new::<crate::errors::QuillmarkError, _>(e.to_string()))?;
         Ok(PyQuill { inner: quill })
     }

@@ -1,14 +1,60 @@
 use pyo3::prelude::*;
 use quillmark_core::{OutputFormat, Severity};
 
-#[pyclass(name = "OutputFormat", eq, eq_int)]
-#[derive(Clone, Copy, PartialEq)]
-pub enum PyOutputFormat {
-    PDF,
-    SVG,
-    TXT,
+// Macro with name attribute and all() method
+macro_rules! py_enum {
+    (
+        $(#[$meta:meta])*
+        $vis:vis enum $name:ident / $py_name:literal {
+            $($variant:ident),* $(,)?
+        }
+    ) => {
+        #[pyclass(name = $py_name, eq, eq_int)]
+        #[derive(Clone, Copy, PartialEq)]
+        $(#[$meta])*
+        $vis enum $name {
+            $($variant),*
+        }
+
+        #[pymethods]
+        impl $name {
+            fn __repr__(&self) -> String {
+                format!("<{}.{}>", $py_name, self.name())
+            }
+            
+            #[getter]
+            fn name(&self) -> &'static str {
+                match self {
+                    $(Self::$variant => stringify!($variant)),*
+                }
+            }
+            
+            // Use a static all() method instead
+            #[staticmethod]
+            fn all() -> Vec<Self> {
+                vec![$(Self::$variant),*]
+            }
+        }
+    };
 }
 
+py_enum! {
+    pub enum PyOutputFormat / "OutputFormat" {
+        PDF,
+        SVG,
+        TXT,
+    }
+}
+
+py_enum! {
+    pub enum PySeverity / "Severity" {
+        ERROR,
+        WARNING,
+        NOTE,
+    }
+}
+
+// From implementations (same as before)
 impl From<PyOutputFormat> for OutputFormat {
     fn from(val: PyOutputFormat) -> Self {
         match val {
@@ -27,14 +73,6 @@ impl From<OutputFormat> for PyOutputFormat {
             OutputFormat::Txt => PyOutputFormat::TXT,
         }
     }
-}
-
-#[pyclass(name = "Severity", eq, eq_int)]
-#[derive(Clone, Copy, PartialEq)]
-pub enum PySeverity {
-    ERROR,
-    WARNING,
-    NOTE,
 }
 
 impl From<PySeverity> for Severity {

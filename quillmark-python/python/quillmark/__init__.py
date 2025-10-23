@@ -5,14 +5,14 @@ from ._quillmark import (
     CompilationError,
     Diagnostic,
     Location,
-    OutputFormat,
+    OutputFormat,  # No underscore prefix!
     ParseError,
     ParsedDocument,
     Quill,
     Quillmark,
     QuillmarkError,
     RenderResult,
-    Severity,
+    Severity,  # No underscore prefix!
     TemplateError,
     Workflow,
 )
