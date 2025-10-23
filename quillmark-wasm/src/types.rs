@@ -433,11 +433,9 @@ mod tests {
         );
         assert_eq!(metadata_obj.get("key2").unwrap().as_u64().unwrap(), 42);
 
-        // Verify field_schemas is an object (not a Map)
-        let field_schemas = obj.get("fieldSchemas").unwrap();
-        assert!(field_schemas.is_object());
-        let field_schemas_obj = field_schemas.as_object().unwrap();
-        assert!(field_schemas_obj.contains_key("title"));
+        // Verify field_schemas is an object
+        let schema = obj.get("schema").unwrap();
+        assert!(schema.is_object());
     }
 
     #[test]

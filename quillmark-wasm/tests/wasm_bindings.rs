@@ -42,7 +42,7 @@ fn test_register_and_get_quill_info() {
 
     // Register quill
     engine
-        .register_quill("test-quill", JsValue::from_str(SMALL_QUILL_JSON))
+        .register_quill(JsValue::from_str(SMALL_QUILL_JSON))
         .expect("register failed");
 
     // Get quill info
@@ -74,7 +74,7 @@ This is a test.
     // Step 2: Create engine and register quill
     let mut engine = Quillmark::new();
     engine
-        .register_quill("test-quill", JsValue::from_str(SMALL_QUILL_JSON))
+        .register_quill(JsValue::from_str(SMALL_QUILL_JSON))
         .expect("register failed");
 
     // Step 3: Get quill info
@@ -97,7 +97,7 @@ fn engine_register_and_render_legacy() {
 
     // Register quill
     engine
-        .register_quill("test-quill", JsValue::from_str(SMALL_QUILL_JSON))
+        .register_quill(JsValue::from_str(SMALL_QUILL_JSON))
         .expect("register failed");
 
     // Call process_glue on a small markdown

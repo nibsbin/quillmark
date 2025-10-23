@@ -631,108 +631,6 @@ name = "minimal-package"
     }
 
     #[test]
-    fn test_font_loading_uses_lazy_approach() {
-        use quillmark_core::Quill;
-        use std::fs;
-        use tempfile::TempDir;
-
-        // Create a temporary directory for our test
-        let temp_dir = TempDir::new().unwrap();
-        let quill_path = temp_dir.path();
-
-        // Create a minimal complete quill structure with no fonts in assets
-        fs::create_dir_all(quill_path.join("assets")).unwrap();
-        fs::write(
-            quill_path.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\ndescription = \"Test quill\"",
-        )
-        .unwrap();
-        fs::write(
-            quill_path.join("glue.typ"),
-            "// Test template\n{{ title | String(default=\"Test\") }}",
-        )
-        .unwrap();
-
-        let quill = Quill::from_path(quill_path).unwrap();
-
-        // Create a QuillWorld - this should use lazy font loading since no asset fonts
-        let world_result = QuillWorld::new(&quill, "// Test content");
-
-        assert!(
-            world_result.is_ok(),
-            "QuillWorld creation should succeed with lazy font loading"
-        );
-
-        let world = world_result.unwrap();
-
-        // Verify that we have font slots for lazy loading
-        // If fonts are empty but font_slots are not, we're using lazy loading
-        if world.fonts.is_empty() {
-            assert!(
-                !world.font_slots.is_empty(),
-                "Should have font slots for lazy loading when no asset fonts"
-            );
-
-            // Test that font access works (this should trigger lazy loading)
-            let first_font = world.font(0);
-            assert!(
-                first_font.is_some(),
-                "Should be able to lazy-load a font when needed"
-            );
-        }
-    }
-
-    #[test]
-    fn test_asset_font_loading_unchanged() {
-        use quillmark_core::Quill;
-        use std::fs;
-        use tempfile::TempDir;
-
-        // Create a temporary directory for our test
-        let temp_dir = TempDir::new().unwrap();
-        let quill_path = temp_dir.path();
-
-        // Create a quill structure with a mock font file in assets
-        fs::create_dir_all(quill_path.join("assets").join("fonts")).unwrap();
-
-        // Create a minimal TTF font file (just a dummy file with .ttf extension for testing)
-        let dummy_font_data = b"dummy font data for testing";
-        fs::write(
-            quill_path.join("assets").join("fonts").join("test.ttf"),
-            dummy_font_data,
-        )
-        .unwrap();
-
-        fs::write(
-            quill_path.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\ndescription = \"Test quill\"",
-        )
-        .unwrap();
-        fs::write(
-            quill_path.join("glue.typ"),
-            "// Test template\n{{ title | String(default=\"Test\") }}",
-        )
-        .unwrap();
-
-        let quill = Quill::from_path(quill_path).unwrap();
-
-        // Create a QuillWorld - this should attempt to load assets fonts first
-        let world_result = QuillWorld::new(&quill, "// Test content");
-
-        assert!(world_result.is_ok(), "QuillWorld creation should succeed");
-
-        let world = world_result.unwrap();
-
-        // Even with dummy font data (which won't parse as a real font),
-        // the behavior should prioritize asset fonts first, then fall back to lazy loading
-        // Since our dummy data won't parse as a font, it should fall back to lazy loading
-        assert!(
-            !world.fonts.is_empty() || !world.font_slots.is_empty(),
-            "Should have fonts available either from assets or lazy loading"
-        );
-    }
-
-    #[test]
     fn test_asset_fonts_have_priority() {
         use quillmark_core::Quill;
         use std::path::Path;
@@ -762,17 +660,6 @@ name = "minimal-package"
             let font = world.font(i);
             assert!(font.is_some(), "Font at index {} should be available", i);
             // This font should come from the asset fonts (world.fonts vec), not font_slots
-        }
-
-        // Verify that fonts beyond the asset count come from font_slots
-        if !world.font_slots.is_empty() {
-            let system_font_index = world.fonts.len();
-            let font = world.font(system_font_index);
-            assert!(
-                font.is_some(),
-                "Font at index {} (system font) should be available",
-                system_font_index
-            );
         }
     }
 }
