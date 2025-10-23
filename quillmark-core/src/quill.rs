@@ -413,7 +413,7 @@ pub struct QuillConfig {
     pub fields: HashMap<String, FieldSchema>,
     /// Additional metadata from [Quill] section (excluding standard fields)
     pub metadata: HashMap<String, QuillValue>,
-    /// Typst-specific configuration from [typst] section
+    /// Typst-specific configuration from `[typst]` section
     pub typst_config: HashMap<String, QuillValue>,
 }
 
