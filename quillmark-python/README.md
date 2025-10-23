@@ -78,10 +78,10 @@ quill = Quill.from_path("path/to/quill")
 # Properties
 quill.name              # Quill name
 quill.backend           # Backend identifier (e.g., "typst")
-quill.glue_template     # Template content
+quill.glue     # Template content
 quill.example           # Example markdown content
 quill.metadata          # Quill metadata dict
-quill.field_schemas     # Field documentation dict
+quill.schemas            # Field documentation dict
 quill.supported_formats()  # [OutputFormat.PDF, OutputFormat.SVG]
 ```
 
