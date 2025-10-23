@@ -1,0 +1,19 @@
+[Quill]
+name = "usaf_memo"
+backend = "typst"
+glue_file = "glue.typ"
+example_file = "usaf_memo.md"
+description = "Typesetted USAF Official Memorandum"
+
+[fields]
+letterhead_title = { description = "Title in letterhead" , default = "DEPARTMENT OF THE AIR FORCE"}
+letterhead_caption = { description = "Caption in letterhead" , default = "123 STARK INDUSTRIES"}
+date = { description = "Date of memo (YYYY-MM-DD); defaults to today", default = 0}
+memo_for = { description = "To whom the memo is addressed (multiline)" }
+memo_from = { description = "From whom the memo is sent (multiline)"}
+subject = { description = "Subject of the memo" }
+references = { description = "References for the memo (array)", default = []}
+cc = { description = "Carbon copy recipients (array)" , default = []}
+distribution = { description = "Distribution list (array)" , default = []}
+attachments = { description = "Attachments (array)" , default = []}
+signature_block = { description = "Signature block (multiline)" }
