@@ -2,16 +2,17 @@
 
 from pathlib import Path
 from typing import Any
+from enum import Enum
 
-class OutputFormat:
-    PDF: OutputFormat
-    SVG: OutputFormat
-    TXT: OutputFormat
+class OutputFormat(Enum):
+    PDF = "pdf"
+    SVG = "svg"
+    TXT = "txt"
 
-class Severity:
-    ERROR: Severity
-    WARNING: Severity
-    NOTE: Severity
+class Severity(Enum):
+    ERROR = "error"
+    WARNING =  "warning"
+    NOTE = "note"
 
 class Location:
     @property
