@@ -264,6 +264,38 @@ impl FileTreeNode {
             Err(format!("Invalid file tree node: {:?}", value).into())
         }
     }
+
+    pub fn print_tree(&self) -> String {
+        self.__print_tree("", "", true)
+    } 
+
+    pub fn __print_tree(&self, name: &str, prefix: &str, is_last: bool) -> String {
+        let mut result = String::new();
+
+        // Choose the appropriate tree characters
+        let connector = if is_last { "└── " } else { "├── " };
+        let extension = if is_last { "    " } else { "│   " };
+
+        match self {
+            FileTreeNode::File { .. } => {
+                result.push_str(&format!("{}{}{}\n", prefix, connector, name));
+            }
+            FileTreeNode::Directory { files } => {
+                // Add trailing slash for directories like `tree` does
+                result.push_str(&format!("{}{}{}/\n", prefix, connector, name));
+                
+                let child_prefix = format!("{}{}", prefix, extension);
+                let count = files.len();
+                
+                for (i, (child_name, node)) in files.iter().enumerate() {
+                    let is_last_child = i == count - 1;
+                    result.push_str(&node.__print_tree(child_name, &child_prefix, is_last_child));
+                }
+            }
+        }
+
+        result
+    }
 }
 
 /// Simple gitignore-style pattern matcher for .quillignore
