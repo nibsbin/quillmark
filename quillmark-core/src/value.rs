@@ -6,8 +6,7 @@
 use minijinja::value::Value as MjValue;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::ops::{Deref};
-
+use std::ops::Deref;
 
 /// Unified value type backed by `serde_json::Value`.
 ///
