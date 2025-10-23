@@ -71,6 +71,29 @@ pub fn build_schema_from_fields(
     Ok(QuillValue::from_json(schema))
 }
 
+/// Apply default values from field schemas to document fields.
+///
+/// This function looks for fields defined in field_schemas that have a default value.
+/// If the field is missing from the document, the default value is applied.
+///
+/// # Arguments
+///
+/// * `field_schemas` - The field schemas from the Quill configuration
+/// * `fields` - The mutable document fields to apply defaults to
+pub fn apply_defaults(
+    field_schemas: &HashMap<String, FieldSchema>,
+    fields: &mut HashMap<String, crate::value::QuillValue>,
+) {
+    for (field_name, field_schema) in field_schemas {
+        // If field has a default value and is not present in the document, apply it
+        if let Some(default_value) = &field_schema.default {
+            if !fields.contains_key(field_name) {
+                fields.insert(field_name.clone(), default_value.clone());
+            }
+        }
+    }
+}
+
 /// Validate a document's fields against a JSON Schema
 pub fn validate_document(
     schema: &QuillValue,
@@ -260,5 +283,100 @@ mod tests {
 
         let result = validate_document(&QuillValue::from_json(schema), &fields);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_apply_defaults() {
+        let mut field_schemas = HashMap::new();
+
+        // Field with a default value
+        let mut field_with_default =
+            FieldSchema::new("status".to_string(), "Document status".to_string());
+        field_with_default.r#type = Some("str".to_string());
+        field_with_default.default = Some(QuillValue::from_json(json!("draft")));
+        field_schemas.insert("status".to_string(), field_with_default);
+
+        // Field without a default value
+        let field_without_default =
+            FieldSchema::new("title".to_string(), "Document title".to_string());
+        field_schemas.insert("title".to_string(), field_without_default);
+
+        // Document fields (missing "status")
+        let mut fields = HashMap::new();
+        fields.insert(
+            "title".to_string(),
+            QuillValue::from_json(json!("My Title")),
+        );
+
+        // Apply defaults
+        apply_defaults(&field_schemas, &mut fields);
+
+        // "status" should now be present with the default value
+        assert!(fields.contains_key("status"));
+        assert_eq!(fields.get("status").unwrap().as_str(), Some("draft"));
+
+        // "title" should remain unchanged
+        assert_eq!(fields.get("title").unwrap().as_str(), Some("My Title"));
+    }
+
+    #[test]
+    fn test_apply_defaults_does_not_override() {
+        let mut field_schemas = HashMap::new();
+
+        // Field with a default value
+        let mut field_with_default =
+            FieldSchema::new("status".to_string(), "Document status".to_string());
+        field_with_default.default = Some(QuillValue::from_json(json!("draft")));
+        field_schemas.insert("status".to_string(), field_with_default);
+
+        // Document fields (already has "status")
+        let mut fields = HashMap::new();
+        fields.insert(
+            "status".to_string(),
+            QuillValue::from_json(json!("published")),
+        );
+
+        // Apply defaults
+        apply_defaults(&field_schemas, &mut fields);
+
+        // "status" should remain as "published", not overridden
+        assert_eq!(fields.get("status").unwrap().as_str(), Some("published"));
+    }
+
+    #[test]
+    fn test_apply_defaults_various_types() {
+        let mut field_schemas = HashMap::new();
+
+        // String default
+        let mut string_field = FieldSchema::new("name".to_string(), "Name".to_string());
+        string_field.default = Some(QuillValue::from_json(json!("Unknown")));
+        field_schemas.insert("name".to_string(), string_field);
+
+        // Number default
+        let mut number_field = FieldSchema::new("count".to_string(), "Count".to_string());
+        number_field.default = Some(QuillValue::from_json(json!(0)));
+        field_schemas.insert("count".to_string(), number_field);
+
+        // Array default
+        let mut array_field = FieldSchema::new("tags".to_string(), "Tags".to_string());
+        array_field.default = Some(QuillValue::from_json(json!([])));
+        field_schemas.insert("tags".to_string(), array_field);
+
+        // Object default
+        let mut object_field = FieldSchema::new("metadata".to_string(), "Metadata".to_string());
+        object_field.default = Some(QuillValue::from_json(json!({})));
+        field_schemas.insert("metadata".to_string(), object_field);
+
+        // Empty document
+        let mut fields = HashMap::new();
+
+        // Apply defaults
+        apply_defaults(&field_schemas, &mut fields);
+
+        // All fields should be present with their default values
+        assert_eq!(fields.get("name").unwrap().as_str(), Some("Unknown"));
+        assert_eq!(fields.get("count").unwrap().as_i64(), Some(0));
+        assert!(fields.get("tags").unwrap().as_array().is_some());
+        assert!(fields.get("metadata").unwrap().as_object().is_some());
     }
 }

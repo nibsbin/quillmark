@@ -386,6 +386,8 @@ pub struct Quill {
     pub example: Option<String>,
     /// Field JSON schema
     pub schema: QuillValue,
+    /// Field schemas (for applying defaults)
+    pub field_schemas: HashMap<String, FieldSchema>,
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }
@@ -754,6 +756,7 @@ impl Quill {
             glue: glue_content,
             example: example_content,
             schema,
+            field_schemas: config.fields,
             files: root,
         };
 

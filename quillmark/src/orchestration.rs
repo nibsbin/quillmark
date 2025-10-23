@@ -531,8 +531,31 @@ impl Workflow {
 
     /// Process a parsed document through the glue template without compilation
     pub fn process_glue(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
-        // Validate document against schema
-        self.validate_document(parsed)?;
+        use quillmark_core::validation;
+
+        // Clone fields so we can apply defaults
+        let mut fields = parsed.fields().clone();
+
+        // Apply default values from field schemas
+        validation::apply_defaults(&self.quill.field_schemas, &mut fields);
+
+        // Validate document against schema (with defaults applied)
+        if !self.quill.schema.is_null() {
+            match validation::validate_document(&self.quill.schema, &fields) {
+                Ok(_) => {}
+                Err(errors) => {
+                    let error_message = errors.join("\n");
+                    return Err(RenderError::ValidationFailed {
+                        diag: Diagnostic::new(Severity::Error, error_message)
+                            .with_code("validation::document_invalid".to_string())
+                            .with_hint(
+                                "Ensure all required fields are present and have correct types"
+                                    .to_string(),
+                            ),
+                    });
+                }
+            }
+        }
 
         // Create appropriate glue based on whether template is provided
         let mut glue = match &self.quill.glue {
@@ -540,12 +563,12 @@ impl Workflow {
             _ => Glue::new_auto(),
         };
         self.backend.register_filters(&mut glue);
-        let glue_output =
-            glue.compose(parsed.fields().clone())
-                .map_err(|e| RenderError::TemplateFailed {
-                    diag: Diagnostic::new(Severity::Error, e.to_string())
-                        .with_code("template::compose".to_string()),
-                })?;
+        let glue_output = glue
+            .compose(fields)
+            .map_err(|e| RenderError::TemplateFailed {
+                diag: Diagnostic::new(Severity::Error, e.to_string())
+                    .with_code("template::compose".to_string()),
+            })?;
         Ok(glue_output)
     }
 
@@ -556,24 +579,25 @@ impl Workflow {
     /// - A json_schema_file specified in Quill.toml
     /// - TOML `[fields]` section converted to JSON Schema
     ///
+    /// Default values from field schemas are applied before validation.
+    ///
     /// If no schema is defined, this returns Ok(()).
     pub fn validate(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
-        self.validate_document(parsed)
-    }
-
-    /// Internal validation method
-    fn validate_document(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
         use quillmark_core::validation;
 
-        // Build or load JSON Schema
+        // Clone fields so we can apply defaults
+        let mut fields = parsed.fields().clone();
 
+        // Apply default values from field schemas
+        validation::apply_defaults(&self.quill.field_schemas, &mut fields);
+
+        // Validate document against schema (with defaults applied)
         if self.quill.schema.is_null() {
             // No schema defined, skip validation
             return Ok(());
-        };
+        }
 
-        // Validate document
-        match validation::validate_document(&self.quill.schema, parsed.fields()) {
+        match validation::validate_document(&self.quill.schema, &fields) {
             Ok(_) => Ok(()),
             Err(errors) => {
                 let error_message = errors.join("\n");

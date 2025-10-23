@@ -117,15 +117,17 @@ High-level data flow:
 
 ## End-to-End Orchestration Workflow
 
-The workflow follows a three-stage pipeline:
+The workflow follows a four-stage pipeline:
 
 1. **Parse** - Extract YAML frontmatter + body from markdown
-2. **Template** - Compose backend-specific glue via MiniJinja with registered filters
-3. **Compile** - Backend processes glue to generate output artifacts
+2. **Validate & Apply Defaults** - Apply default field values from schema, then validate against JSON Schema
+3. **Template** - Compose backend-specific glue via MiniJinja with registered filters
+4. **Compile** - Backend processes glue to generate output artifacts
 
 ### Key Concepts
 
 - **Backend Auto-Registration**: Backends are automatically registered based on enabled features
+- **Default Value Application**: Fields with defaults are applied before validation if missing from document
 - **Dynamic Assets**: Runtime assets prefixed with `DYNAMIC_ASSET__` and accessible via `Asset` filter
 - **Error Handling**: Structured `Diagnostic` information with source chains preserved
 

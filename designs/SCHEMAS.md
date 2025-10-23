@@ -37,5 +37,20 @@ Developers can define the schema for ParsedDocument input within the `fields` di
 - name -> str: This is the key; e.g. for the TOML section `[fields.title]`, the name would be "title".
 - description -> str: A description of the field.
 - type -> "str", "array", "dict", "date", "datetime", or "number": The value type of the field
-- default -> any: The default value for the field. If defined, this makes the field not required.
+- default -> any: The default value for the field. If defined, this makes the field not required. Default values are applied automatically before validation and template composition if the field is missing from the parsed document.
+
+### Default Value Application
+
+When a Workflow processes a ParsedDocument:
+
+1. The document's fields are cloned
+2. For each field schema with a `default` value: if the field is missing from the document, the default is applied
+3. The fields (now with defaults applied) are validated against the JSON schema
+4. The fields (with defaults) are passed to the template for composition
+
+This ensures that:
+- Templates always receive complete data (missing optional fields get defaults)
+- Validation passes for optional fields with defaults
+- Explicit field values in the document always take precedence over defaults
+
 
