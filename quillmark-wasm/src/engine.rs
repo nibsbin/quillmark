@@ -132,7 +132,6 @@ impl Quillmark {
             .map_err(|e| QuillmarkError::from(e).to_js_value())?;
         self.quills.insert(quill.name.clone(), quill);
 
-
         let quill_info = self.get_quill_info(&name)?;
         Ok(quill_info)
     }

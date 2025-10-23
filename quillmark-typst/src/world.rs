@@ -17,7 +17,7 @@ use quillmark_core::Quill;
 pub struct QuillWorld {
     library: LazyHash<Library>,
     book: LazyHash<FontBook>,
-    fonts: Vec<Font>,          // For fonts loaded from assets
+    fonts: Vec<Font>, // For fonts loaded from assets
     source: Source,
     sources: HashMap<FileId, Source>,
     binaries: HashMap<FileId, Bytes>,
@@ -54,8 +54,7 @@ impl QuillWorld {
                 include_bytes!("../assets/RobotoCondensed-VariableFont_wght.ttf");
             load_embedded(ROBOTO_BYTES, &mut book, &mut fonts);
 
-            const DEJAVU_SANS_MONO_BYTES: &[u8] =
-                include_bytes!("../assets/DejaVuSansMono.ttf");
+            const DEJAVU_SANS_MONO_BYTES: &[u8] = include_bytes!("../assets/DejaVuSansMono.ttf");
             load_embedded(DEJAVU_SANS_MONO_BYTES, &mut book, &mut fonts);
 
             const DEJAVU_SANS_MONO_BOLD_BYTES: &[u8] =
@@ -75,11 +74,7 @@ impl QuillWorld {
 
         // Error if no fonts available
         if fonts.is_empty() {
-            return Err(format!(
-                "No fonts found: asset_faces={}",
-                fonts.len()
-            )
-            .into());
+            return Err(format!("No fonts found: asset_faces={}", fonts.len()).into());
         }
 
         // Load assets from quill's in-memory file system
@@ -105,7 +100,7 @@ impl QuillWorld {
             binaries,
         })
     }
-   
+
     /// Loads fonts from quill's in-memory file system.
     fn load_fonts_from_quill(
         quill: &Quill,
