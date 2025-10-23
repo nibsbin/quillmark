@@ -1,10 +1,10 @@
 use quillmark::{Quill, Quillmark, RenderError};
-use quillmark_fixtures::resource_path;
+use quillmark_fixtures::{quills_path, resource_path};
 
 #[test]
 fn test_with_asset_basic() {
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(resource_path("taro")).unwrap();
+    let quill = Quill::from_path(quills_path("taro")).unwrap();
     let taro_picture = std::fs::read(resource_path("taro.png")).unwrap();
     engine
         .register_quill(quill)
@@ -21,7 +21,7 @@ fn test_with_asset_basic() {
 #[test]
 fn test_with_asset_collision() {
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(resource_path("taro")).unwrap();
+    let quill = Quill::from_path(quills_path("taro")).unwrap();
     engine
         .register_quill(quill)
         .expect("Failed to register quill");
@@ -42,7 +42,7 @@ fn test_with_asset_collision() {
 #[test]
 fn test_with_assets_multiple() {
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(resource_path("taro")).unwrap();
+    let quill = Quill::from_path(quills_path("taro")).unwrap();
     engine
         .register_quill(quill)
         .expect("Failed to register quill");
@@ -64,7 +64,7 @@ fn test_with_assets_multiple() {
 #[test]
 fn test_clear_assets() {
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(resource_path("taro")).unwrap();
+    let quill = Quill::from_path(quills_path("taro")).unwrap();
     engine
         .register_quill(quill)
         .expect("Failed to register quill");

@@ -9,10 +9,7 @@ mod tests {
         use quillmark_core::{Backend, OutputFormat, Quill, RenderOptions};
 
         let backend = AcroformBackend::default();
-        let quill_path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../quillmark-fixtures/resources/usaf_form_8"
-        );
+        let quill_path = quillmark_fixtures::quills_path("usaf_form_8");
         let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 
         let json_context = r#"{"test": "success!"}"#;
@@ -36,10 +33,7 @@ mod tests {
         use quillmark_core::{Backend, OutputFormat, Quill, RenderOptions};
 
         let backend = AcroformBackend::default();
-        let quill_path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../quillmark-fixtures/resources/usaf_form_8"
-        );
+        let quill_path = quillmark_fixtures::quills_path("usaf_form_8");
         let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 
         let json_context = r#"{
