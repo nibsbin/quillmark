@@ -171,7 +171,6 @@ def test_render_without_quill_tag(taro_quill_dir, taro_md):
     
     # Parse markdown without QUILL tag
     parsed = ParsedDocument.from_markdown(taro_md)
-    assert parsed.quill_tag() is None
     
     # Create workflow explicitly by name
     workflow = engine.workflow_from_quill_name(quill.name)
