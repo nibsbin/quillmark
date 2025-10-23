@@ -43,56 +43,6 @@ jobs:
       - name: Tests (${{ matrix.features.name }})
         run: cargo test ${{ matrix.features.flags }} --locked
 
-  publish-wasm:
-    needs: [test]
-    runs-on: ubuntu-latest
-    environment: Publish
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          target: wasm32-unknown-unknown
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@v2
-        with:
-          tool: wasm-pack
-
-      - name: Extract version from workspace
-        id: version
-        run: |
-          VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "quillmark-wasm") | .version')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Publishing WASM version: $VERSION"
-
-      - name: Check WASM build
-        run: cargo check --package quillmark-wasm --target wasm32-unknown-unknown --locked
-
-      - name: Build WASM packages
-        run: ./scripts/build-wasm.sh
-
-      - name: Publish @quillmark-test/wasm
-        working-directory: pkg/bundler
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: WASM publish summary
-        if: success()
-        run: echo "✓ @quillmark-test/wasm v${{ steps.version.outputs.version }} published to npm"
-
   publish-crates:
     needs: [test]
     runs-on: ubuntu-latest
@@ -117,7 +67,7 @@ jobs:
         run: echo "✓ All publishable workspace crates published to crates.io"
 
   summary:
-    needs: [publish-wasm, publish-crates]
+    needs: [publish-crates]
     runs-on: ubuntu-latest
     if: always()
     steps:
@@ -125,15 +75,6 @@ jobs:
         run: |
           echo "## Publishing Summary"
           echo ""
-
-          # WASM
-          if [ "${{ needs.publish-wasm.result }}" == "success" ]; then
-            echo "✓ WASM published to npm"
-          elif [ "${{ needs.publish-wasm.result }}" == "skipped" ]; then
-            echo "⊘ WASM publishing skipped"
-          else
-            echo "✗ WASM publishing failed"
-          fi
 
           # Crates
           if [ "${{ needs.publish-crates.result }}" == "success" ]; then

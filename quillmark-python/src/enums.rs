@@ -21,14 +21,14 @@ macro_rules! py_enum {
             fn __repr__(&self) -> String {
                 format!("<{}.{}>", $py_name, self.name())
             }
-            
+
             #[getter]
             fn name(&self) -> &'static str {
                 match self {
                     $(Self::$variant => stringify!($variant)),*
                 }
             }
-            
+
             // Use a static all() method instead
             #[staticmethod]
             fn all() -> Vec<Self> {
