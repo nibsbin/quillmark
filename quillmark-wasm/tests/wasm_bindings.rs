@@ -100,9 +100,9 @@ fn engine_register_and_render_legacy() {
         .register_quill("test-quill", JsValue::from_str(SMALL_QUILL_JSON))
         .expect("register failed");
 
-    // Call render_glue on a small markdown
+    // Call process_glue on a small markdown
     let glue_out = engine
-        .render_glue("test-quill", "---\ntitle: Glue\n---\n\n# X")
-        .expect("render_glue failed");
+        .process_glue("test-quill", "---\ntitle: Glue\n---\n\n# X")
+        .expect("process_glue failed");
     assert!(glue_out.len() > 0);
 }

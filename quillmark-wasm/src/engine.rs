@@ -87,7 +87,7 @@ impl Quillmark {
     /// Accepts either a JSON string or a JsValue object representing the Quill file tree.
     /// Validation happens automatically on registration.
     #[wasm_bindgen(js_name = registerQuill)]
-    pub fn register_quill(&mut self, name: &str, quill_json: JsValue) -> Result<(), JsValue> {
+    pub fn register_quill(&mut self, quill_json: JsValue) -> Result<JsValue, JsValue> {
         // Convert JsValue to JSON string
         let json_str = if quill_json.is_string() {
             quill_json.as_string().ok_or_else(|| {
@@ -124,14 +124,17 @@ impl Quillmark {
             )
             .to_js_value()
         })?;
+        let name = quill.name.clone();
 
         // Register with backend validation
         self.inner
             .register_quill(quill.clone())
             .map_err(|e| QuillmarkError::from(e).to_js_value())?;
-        self.quills.insert(name.to_string(), quill);
+        self.quills.insert(quill.name.clone(), quill);
 
-        Ok(())
+
+        let quill_info = self.get_quill_info(&name)?;
+        Ok(quill_info)
     }
 
     /// Get shallow information about a registered Quill
@@ -195,7 +198,7 @@ impl Quillmark {
     /// Process markdown through template engine (debugging)
     ///
     /// Returns template source code (Typst, LaTeX, etc.)
-    #[wasm_bindgen(js_name = renderGlue)]
+    #[wasm_bindgen(js_name = processGlue)]
     pub fn process_glue(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
         // Parse markdown first
         let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
