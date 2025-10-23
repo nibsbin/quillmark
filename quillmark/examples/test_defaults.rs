@@ -1,4 +1,4 @@
-use quillmark::{Quill, Quillmark, ParsedDocument};
+use quillmark::{ParsedDocument, Quill, Quillmark};
 
 fn main() {
     // Create a simple quill in memory
@@ -12,9 +12,9 @@ fn main() {
             }
         }
     }"#;
-    
+
     let quill = Quill::from_json(quill_json).expect("Failed to load quill");
-    
+
     println!("✓ Loaded quill: {}", quill.name);
     println!("✓ Field schemas:");
     for (name, schema) in &quill.field_schemas {
@@ -25,14 +25,17 @@ fn main() {
         }
     }
     println!();
-    
+
     // Create Quillmark engine and register the quill
     let mut engine = Quillmark::new();
-    engine.register_quill(quill).expect("Failed to register quill");
-    
-    let workflow = engine.workflow_from_quill_name("test-defaults")
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
+
+    let workflow = engine
+        .workflow_from_quill_name("test-defaults")
         .expect("Failed to get workflow");
-    
+
     // Parse markdown with only title (missing author and status)
     let markdown = r#"---
 title: My Test Document
@@ -40,24 +43,24 @@ title: My Test Document
 
 This is a test.
 "#;
-    
-    let parsed = ParsedDocument::from_markdown(markdown)
-        .expect("Failed to parse markdown");
-    
+
+    let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
+
     println!("✓ Fields in original parsed document:");
     for (key, value) in parsed.fields() {
         println!("  - {}: {}", key, value.as_json());
     }
     println!();
-    
+
     // Process through glue - this applies defaults
-    let glue_output = workflow.process_glue(&parsed)
+    let glue_output = workflow
+        .process_glue(&parsed)
         .expect("Failed to process glue");
-    
+
     println!("✓ Glue output (with defaults applied):");
     println!("{}", glue_output);
     println!();
-    
+
     // Verify defaults were applied
     if glue_output.contains("Author: Anonymous") {
         println!("✓ SUCCESS: Default author was applied!");
