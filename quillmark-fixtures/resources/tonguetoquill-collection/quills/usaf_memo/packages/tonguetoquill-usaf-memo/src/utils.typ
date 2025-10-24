@@ -156,6 +156,33 @@
   }
 }
 
+// Colors from: https://security.stackexchange.com/questions/161829/is-there-a-specification-for-the-color-values-representing-information-classific
+#let CLASSIFICATION_COLORS = (
+  "UNCLASSIFIED": rgb(0, 122, 51),    // #007A33 - Forest green
+  "CONFIDENTIAL": rgb(0, 51, 160),    // #0033A0 - Deep blue
+  "SECRET": rgb(200, 16, 46),         // #C8102E - Crimson red
+  "TOP SECRET": rgb(255, 103, 31),    // #FF671F - Burnt orange
+)
+/// Gets the color associated with a classification level.
+/// 
+/// - level (str): Classification level string
+/// -> color
+#let get-classification-level-color(level) = {
+  if level == none {
+    return rgb(0, 0, 0) // Default to black if no classification
+  }
+  // Order matters - check most specific first
+  let level-order = ("TOP SECRET", "SECRET", "CONFIDENTIAL", "UNCLASSIFIED")
+  
+  for base-level in level-order {
+    if base-level in level {
+      return CLASSIFICATION_COLORS.at(base-level)
+    }
+  }
+  
+  rgb(0, 0, 0) // Default
+}
+
 // =============================================================================
 // GRID LAYOUT UTILITIES
 // =============================================================================
