@@ -8,7 +8,7 @@ memo_for:
   - DOMINION/HQ
   - PROTOSS/FLEET
 memo_from:
-  - RAIDER/CMD
+  - RAIDER/CC
   - Raynor's Raiders
   - Hyperion Battlecruiser
   - Sector 7G
