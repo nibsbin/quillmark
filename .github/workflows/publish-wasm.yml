@@ -38,10 +38,7 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: wasm-pack
-      
-      - name: Check WASM build
-        run: cargo check --package quillmark-wasm --target wasm32-unknown-unknown --locked
-      
+
       - name: Build WASM packages
         run: ./scripts/build-wasm.sh
       
