@@ -17,3 +17,5 @@ cc = { description = "Carbon copy recipients (array)" , default = []}
 distribution = { description = "Distribution list (array)" , default = []}
 attachments = { description = "Attachments (array)" , default = []}
 signature_block = { description = "Signature block (multiline)" }
+tag_line = { description = "Tag line at bottom of memo" , default = "Aim High"}
+classification = { description = "Classification level of the memo; e.g. SECRET//TAGS" , default = ""}

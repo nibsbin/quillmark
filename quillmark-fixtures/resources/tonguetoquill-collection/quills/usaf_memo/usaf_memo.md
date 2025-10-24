@@ -11,6 +11,7 @@ subject: Comply without pain -- markdown to official memola
 signature_block:
   - FIRST M. LAST, Rank, USSF
 tag_line: Aim High
+classification: UNCLASSIFIED
 ---
 
 Write your paragraphs here. Separate them with two new lines.
