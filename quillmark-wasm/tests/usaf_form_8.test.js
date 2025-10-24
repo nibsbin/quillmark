@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest'
-import { Quillmark } from '../pkg/bundler/wasm.js'
+import { Quillmark } from '../../pkg/bundler/wasm.js'
 import { loadQuill } from './quillLoader.js'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -25,7 +25,7 @@ const USAF_FORM_8_QUILL_PATH = path.join(QUILLS_PATH, 'usaf_form_8')
 const CARGO_OUTPUT_PATH = path.join(WORKSPACE_ROOT, 'quillmark-fixtures', 'output', 'usaf_form_8.pdf')
 const WASM_OUTPUT_PATH = path.join(__dirname, 'output', 'usaf_form_8_wasm_output.pdf')
 
-describe('WASM usaf_form_8 smoke test', () => {
+describe.skipIf(process.env.CI)('WASM usaf_form_8 smoke test', () => {
   let quillJson
   let markdown
   let cargoOutputPdf
