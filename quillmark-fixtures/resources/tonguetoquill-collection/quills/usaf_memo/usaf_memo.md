@@ -34,4 +34,4 @@ The `usaf_memo` Quill automatically numbers paragraphs. Top-level paragraphs lik
 - Use bullets for hierarchical paragraph nesting.
   - Up to five levels are supported.
 
-Do not use headings within the memo body. If you want to title sections, use bold text in-line with the paragraph. Never include a section title on its own line.
+**Section Titles** Do NOT use markdown headings. If you want to title sections, use bold text in-line with the paragraph and child paragraphs with bullets. Never include a section title on its own line.
