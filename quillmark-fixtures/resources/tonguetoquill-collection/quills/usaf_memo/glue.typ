@@ -1,4 +1,4 @@
-#import "@preview/tonguetoquill-usaf-memo:0.1.1": official-memorandum, indorsement
+#import "@preview/tonguetoquill-usaf-memo:0.2.0": official-memorandum, indorsement
 
 // Generate the official memorandum with validated and processed input
 #show:official-memorandum.with(
