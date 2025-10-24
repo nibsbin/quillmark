@@ -52,9 +52,8 @@ pub fn build_schema_from_fields(
 
         // Determine if field is required based on the spec:
         // - If default is present → field is optional
-        // - If default is absent and required is true → field is required
-        // - If default is absent and required is false → field is optional
-        if field_schema.default.is_none() && field_schema.default.is_none() {
+        // - If default is absent → field is required
+        if field_schema.default.is_none() {
             required_fields.push(field_name.clone());
         }
     }
