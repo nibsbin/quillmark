@@ -52,6 +52,14 @@ jobs:
       - name: Run npm tests
         working-directory: quillmark-wasm
         run: npm test
+      
+      # Upload the built package for the publish job
+      - name: Upload WASM artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasm-packages
+          path: pkg/
+          retention-days: 1
 
   publish:
     needs: [test]
@@ -61,24 +69,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
 
-      - name: Install wasm-pack
-        uses: taiki-e/install-action@v2
+      # Download the pre-built package
+      - name: Download WASM artifacts
+        uses: actions/download-artifact@v4
         with:
-          tool: wasm-pack
+          name: wasm-packages
+          path: pkg/
 
       - name: Extract version from workspace
         id: version
@@ -86,9 +88,6 @@ jobs:
           VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "quillmark-wasm") | .version')
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Publishing WASM version: $VERSION"
-
-      - name: Build WASM packages
-        run: ./scripts/build-wasm.sh
 
       - name: Publish @quillmark-test/wasm
         working-directory: pkg/bundler
