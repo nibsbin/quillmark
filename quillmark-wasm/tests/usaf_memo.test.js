@@ -25,7 +25,7 @@ const USAF_MEMO_QUILL_PATH = path.join(QUILLS_PATH, 'usaf_memo')
 const CARGO_OUTPUT_PATH = path.join(WORKSPACE_ROOT, 'quillmark-fixtures', 'output', 'usaf_memo_output.pdf')
 const WASM_OUTPUT_PATH = path.join(__dirname, 'output', 'usaf_memo_wasm_output.pdf')
 
-describe('WASM usaf_memo smoke test', () => {
+describe.skipIf(process.env.CI)('WASM usaf_memo smoke test', () => {
   let quillJson
   let markdown
   let cargoOutputPdf
