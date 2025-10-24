@@ -591,6 +591,7 @@
   distribution: none,
   indorsements: none,
   footer-tag-line: none,
+  classification-level: none,
   // Optional styling parameters
   letterhead-font: DEFAULT_LETTERHEAD_FONTS,
   body-font: DEFAULT_BODY_FONTS,
@@ -616,39 +617,67 @@
     distribution: distribution,
     indorsements: indorsements,
     footer-tag-line: footer-tag-line,
+    classification-level: classification-level,
     letterhead-font: letterhead-font,
     body-font: body-font,
     memo-for-cols: memo-for-cols,
     paragraph-block-indent: paragraph-block-indent,
     leading-backmatter-pagebreak: leading-backmatter-pagebreak,
     body: body,
+
+    //Cached
+    classification-color: get-classification-level-color(classification-level),
   )
   MAIN_MEMO.update(self)
-
   counters.indorsement.update(0)
+
+
   set page(
     paper: "us-letter",
     margin: (left: spacing.margin, right: spacing.margin, top: spacing.margin, bottom: spacing.margin),
     header: context {
-      // Page numbering starting from page 2
-      // Position 0.5 inches from top, flush with right margin
-      if counter(page).get().first() > 1 {
-        place(
-          dy: +.5in,
-          block(
-            width: 100%,
-            align(right,
-              text(12pt)[#counter(page).display()]
+          // Page numbering starting from page 2
+          // Position 0.5 inches from top, flush with right margin
+          if counter(page).get().first() > 1 {
+            place(
+              dy: +.5in,
+              block(
+                width: 100%,
+                align(right,
+                  text(12pt)[#counter(page).display()]
+                )
+              )
             )
-          )
-        )
+          }
 
+        
+        // Top classification banner
+        // Position 0.375 inches from the top, centered, above the letterhead
+        if self.classification-level != none {
+          place(
+            top+center,
+            dy: 0.375in,
+            text(12pt, font: DEFAULT_BODY_FONTS, fill: self.classification-color)[#strong(self.classification-level)]
+          )
+        }
+      },
+    footer: context {
+      place(
+        bottom+center,
+        dy: -.375in,
+        text(12pt, font: DEFAULT_BODY_FONTS, fill: self.classification-color)[#strong(self.classification-level)]
+      )
+      // Footer tag line, if provided
+      // Position 0.625 inches from bottom, centered
+      if not falsey(self.footer-tag-line) {
+        place(
+          bottom + center,
+          dy: -0.625in,
+          align(center)[
+            #text(fill: LETTERHEAD_COLOR, font: "cinzel", size: 15pt)[#self.footer-tag-line]
+          ]
+        )
       }
-    },
-    footer: if not falsey(self.footer-tag-line) {
-      align(center)[
-        #text(fill: LETTERHEAD_COLOR, font: "cinzel", size: 15pt)[#self.footer-tag-line]
-      ]
     }
   )
 
