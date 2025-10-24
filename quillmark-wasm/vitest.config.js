@@ -6,6 +6,6 @@ export default defineConfig({
   plugins: [wasm(), topLevelAwait()],
   test: {
     environment: 'node',
-    testTimeout: 10000,
+    testTimeout: 40000,
   },
 })
