@@ -193,10 +193,6 @@ impl Backend for AcroformBackend {
                         }
                         None => FieldValue::Text(rendered_value),
                     };
-                    println!(
-                        "Filling field '{}' with value '{:?}'\n",
-                        field.name, new_value
-                    );
                     values_to_fill.insert(field.name.clone(), new_value);
                 }
             }
