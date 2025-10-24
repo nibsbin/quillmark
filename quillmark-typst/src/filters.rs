@@ -87,16 +87,14 @@ pub fn lines_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<
 
 pub fn date_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<Value, Error> {
     // 1) if undefined, use default
-    if value.is_undefined() {
+    if value.is_undefined() || value.to_string().is_empty() {
         if let Some(def) = kwargs.get("default")? {
             value = def;
         }
     }
 
-    // 2) if still undefined, use today's date (UTC) as "YYYY-MM-DD". On wasm
-    // targets OffsetDateTime::now_utc() may be unavailable; provide a safe
-    // fallback to a fixed epoch date instead of panicking.
-    let s = if value.is_undefined() {
+    // 2) if still undefined, use today's date (UTC) as "YYYY-MM-DD"
+    let s = if value.is_undefined() || value.to_string().is_empty() {
         #[cfg(not(target_arch = "wasm32"))]
         {
             time::OffsetDateTime::now_utc().date().to_string()
