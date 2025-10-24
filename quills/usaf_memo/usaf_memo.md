@@ -26,7 +26,7 @@ attachments:
 signature_block:
   - Commander Jim Raynor, Raynor's Raiders
 tag_line: Raiders Roll
-classification: TOP SECRET//FICTIONAL
+classification: SECRET//FICTIONAL
 ---
 
 The `usaf_memo` Quill automatically numbers paragraphs. Top-level paragraphs like this one are automatically numbered 1., 2., etc.
