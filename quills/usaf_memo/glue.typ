@@ -43,6 +43,11 @@
   footer-tag-line: {{ tag_line | String }},
   {% endif %}
 
+    // Optional classification level
+  {% if classification is defined %}
+  classification-level: {{ classification | String }},
+  {% endif %}
+
   // Signature block
   signature-block: {{ signature_block | Lines(default=["signature_block"]) }},
 )
