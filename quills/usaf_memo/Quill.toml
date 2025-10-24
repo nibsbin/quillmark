@@ -5,7 +5,7 @@ glue_file = "glue.typ"
 example_file = "usaf_memo.md"
 description = "Typesetted USAF Official Memorandum"
 
-[fields.title]
+[fields.letterhead_title]
 description = "Title in letterhead"
 type = "string"
 default = "DEPARTMENT OF THE AIR FORCE"

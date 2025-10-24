@@ -24,7 +24,7 @@ distribution:
 attachments:
   - Zerg Intel Report, 05 Oct 2504
 signature_block:
-  - Commander Jim Raynor, Raynor's Raiders
+  - JIM RAYNOR, Commander, Raynor's Raiders
 tag_line: Raiders Roll
 classification: SECRET//FICTIONAL
 ---
