@@ -69,6 +69,7 @@ type = "string"
 default = "Aim High"
 
 [fields.classification]
-description = "Classification level of the memo; e.g. SECRET//TAGS"
+description = "Classification level of the memo that displays in the banner"
 type = "string"
 default = ""
+example = "<UNCLASSIFIED|CONFIDENTIAL|SECRET|TOP SECRET>//TAGS"
