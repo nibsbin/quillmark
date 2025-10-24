@@ -92,7 +92,7 @@ impl QuillWorld {
         let source = Source::new(main_id, main.to_string());
 
         Ok(Self {
-            library: LazyHash::new(Library::default()),
+            library: LazyHash::new(<Library as typst::LibraryExt>::default()),
             book: LazyHash::new(book),
             fonts,
             source,
