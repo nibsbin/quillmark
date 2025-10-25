@@ -18,7 +18,7 @@ fn main() {
     println!("✓ Loaded quill: {}", quill.name);
     println!("✓ Default values from schema:");
     let defaults = quill.extract_defaults();
-    for (name, value) in &defaults {
+    for (name, value) in defaults {
         println!("  - {}: default = {:?}", name, value.as_json());
     }
     println!();

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
-use crate::validation::build_schema_from_fields;
+use crate::schema::build_schema_from_fields;
 use crate::value::QuillValue;
 
 /// Schema definition for a template field
@@ -394,6 +394,10 @@ pub struct Quill {
     pub example: Option<String>,
     /// Field JSON schema (single source of truth for schema and defaults)
     pub schema: QuillValue,
+    /// Cached default values extracted from schema (for performance)
+    pub defaults: HashMap<String, QuillValue>,
+    /// Cached example values extracted from schema (for performance)
+    pub examples: HashMap<String, Vec<QuillValue>>,
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }
@@ -758,6 +762,10 @@ impl Quill {
             None
         };
 
+        // Extract and cache defaults and examples from schema for performance
+        let defaults = crate::schema::extract_defaults_from_schema(&schema);
+        let examples = crate::schema::extract_examples_from_schema(&schema);
+
         let quill = Quill {
             metadata,
             name: config.name,
@@ -765,6 +773,8 @@ impl Quill {
             glue: glue_content,
             example: example_content,
             schema,
+            defaults,
+            examples,
             files: root,
         };
 
@@ -874,16 +884,23 @@ impl Quill {
             .unwrap_or_default()
     }
 
-    /// Extract default values from the JSON schema
+    /// Get default values from the cached schema defaults
     ///
-    /// Parses the schema's "properties" object and extracts any "default" values
-    /// defined for each property. Returns a HashMap mapping field names to their
-    /// default values.
+    /// Returns a reference to the pre-computed defaults HashMap that was extracted
+    /// during Quill construction. This is more efficient than re-parsing the schema.
     ///
     /// This is used by `ParsedDocument::with_defaults()` to apply default values
     /// to missing fields.
-    pub fn extract_defaults(&self) -> HashMap<String, QuillValue> {
-        crate::validation::extract_defaults_from_schema(&self.schema)
+    pub fn extract_defaults(&self) -> &HashMap<String, QuillValue> {
+        &self.defaults
+    }
+
+    /// Get example values from the cached schema examples
+    ///
+    /// Returns a reference to the pre-computed examples HashMap that was extracted
+    /// during Quill construction. This is more efficient than re-parsing the schema.
+    pub fn extract_examples(&self) -> &HashMap<String, Vec<QuillValue>> {
+        &self.examples
     }
 
     /// Get file contents by path (relative to quill root)

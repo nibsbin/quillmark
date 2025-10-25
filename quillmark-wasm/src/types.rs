@@ -157,6 +157,10 @@ pub struct QuillInfo {
     pub example: Option<String>,
     /// Field schemas (plain JavaScript object)
     pub schema: serde_json::Value,
+    /// Default values for fields (plain JavaScript object)
+    pub defaults: serde_json::Value,
+    /// Example values for fields (plain JavaScript object with arrays)
+    pub examples: serde_json::Value,
     /// Supported output formats for this quill's backend
     pub supported_formats: Vec<OutputFormat>,
 }
@@ -387,12 +391,23 @@ mod tests {
             }),
         );
 
+        let mut defaults_obj = serde_json::Map::new();
+        defaults_obj.insert("author".to_string(), serde_json::json!("Anonymous"));
+
+        let mut examples_obj = serde_json::Map::new();
+        examples_obj.insert(
+            "title".to_string(),
+            serde_json::json!(["Example Title 1", "Example Title 2"]),
+        );
+
         let quill_info = QuillInfo {
             name: "test-quill".to_string(),
             backend: "typst".to_string(),
             metadata: serde_json::Value::Object(metadata_obj),
             example: None,
             schema: serde_json::Value::Object(schema_obj),
+            defaults: serde_json::Value::Object(defaults_obj),
+            examples: serde_json::Value::Object(examples_obj),
             supported_formats: vec![OutputFormat::Pdf, OutputFormat::Svg],
         };
 
@@ -414,9 +429,27 @@ mod tests {
         );
         assert_eq!(metadata_obj.get("key2").unwrap().as_u64().unwrap(), 42);
 
-        // Verify field_schemas is an object
+        // Verify schema is an object
         let schema = obj.get("schema").unwrap();
         assert!(schema.is_object());
+
+        // Verify defaults is an object
+        let defaults = obj.get("defaults").unwrap();
+        assert!(defaults.is_object());
+        let defaults_obj = defaults.as_object().unwrap();
+        assert_eq!(
+            defaults_obj.get("author").unwrap().as_str().unwrap(),
+            "Anonymous"
+        );
+
+        // Verify examples is an object with arrays
+        let examples = obj.get("examples").unwrap();
+        assert!(examples.is_object());
+        let examples_obj = examples.as_object().unwrap();
+        let title_examples = examples_obj.get("title").unwrap().as_array().unwrap();
+        assert_eq!(title_examples.len(), 2);
+        assert_eq!(title_examples[0].as_str().unwrap(), "Example Title 1");
+        assert_eq!(title_examples[1].as_str().unwrap(), "Example Title 2");
     }
 
     #[test]
