@@ -241,7 +241,11 @@ fn coerce_value(value: &QuillValue, expected_type: &str) -> QuillValue {
                 return QuillValue::from_json(Value::Bool(n != 0));
             }
             if let Some(n) = json_value.as_f64() {
-                return QuillValue::from_json(Value::Bool(n != 0.0));
+                // Handle NaN and use epsilon comparison for zero
+                if n.is_nan() {
+                    return QuillValue::from_json(Value::Bool(false));
+                }
+                return QuillValue::from_json(Value::Bool(n.abs() > f64::EPSILON));
             }
             // Can't coerce, return as-is
             value.clone()
@@ -266,9 +270,8 @@ fn coerce_value(value: &QuillValue, expected_type: &str) -> QuillValue {
             }
             // Coerce from boolean (true -> 1, false -> 0)
             if let Some(b) = json_value.as_bool() {
-                return QuillValue::from_json(
-                    serde_json::Number::from(if b { 1 } else { 0 }).into(),
-                );
+                let num_value = if b { 1 } else { 0 };
+                return QuillValue::from_json(Value::Number(serde_json::Number::from(num_value)));
             }
             // Can't coerce, return as-is
             value.clone()
@@ -788,6 +791,35 @@ mod tests {
         assert_eq!(coerced.get("flag1").unwrap().as_bool().unwrap(), false);
         assert_eq!(coerced.get("flag2").unwrap().as_bool().unwrap(), true);
         assert_eq!(coerced.get("flag3").unwrap().as_bool().unwrap(), true);
+    }
+
+    #[test]
+    fn test_coerce_float_to_boolean() {
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "flag1": {"type": "boolean"},
+                "flag2": {"type": "boolean"},
+                "flag3": {"type": "boolean"},
+                "flag4": {"type": "boolean"}
+            }
+        });
+
+        let mut fields = HashMap::new();
+        fields.insert("flag1".to_string(), QuillValue::from_json(json!(0.0)));
+        fields.insert("flag2".to_string(), QuillValue::from_json(json!(0.5)));
+        fields.insert("flag3".to_string(), QuillValue::from_json(json!(-1.5)));
+        // Very small number below epsilon - should be considered false
+        fields.insert("flag4".to_string(), QuillValue::from_json(json!(1e-100)));
+
+        let coerced = coerce_document(&QuillValue::from_json(schema), &fields);
+
+        assert_eq!(coerced.get("flag1").unwrap().as_bool().unwrap(), false);
+        assert_eq!(coerced.get("flag2").unwrap().as_bool().unwrap(), true);
+        assert_eq!(coerced.get("flag3").unwrap().as_bool().unwrap(), true);
+        // Very small numbers are considered false due to epsilon comparison
+        assert_eq!(coerced.get("flag4").unwrap().as_bool().unwrap(), false);
     }
 
     #[test]
