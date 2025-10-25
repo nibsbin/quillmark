@@ -49,21 +49,17 @@ pub fn build_schema_from_fields(
         );
 
         let mut examples_array = if let Some(ref examples) = field_schema.examples {
-            examples.clone()
+            examples.as_array().cloned().unwrap_or_else(Vec::new)
         } else {
             Vec::new()
         };
 
-        // Add example (singular) if specified
+        // Add example (singular) if specified after examples
         if let Some(ref example) = field_schema.example {
-            examples_array.push(example.clone());
+            examples_array.push(example.as_json().clone());
         }
         if !examples_array.is_empty() {
-            let json_examples: Vec<Value> = examples_array
-                .iter()
-                .map(|ex| ex.as_json().clone())
-                .collect();
-            property.insert("examples".to_string(), Value::Array(json_examples));
+            property.insert("examples".to_string(), Value::Array(examples_array));
         }
 
         // Add default if specified
@@ -301,9 +297,9 @@ mod tests {
         assert!(json_schema["properties"]["memo_for"]
             .as_object()
             .unwrap()
-            .contains_key("example"));
+            .contains_key("examples"));
 
-        let example_value = &json_schema["properties"]["memo_for"]["example"];
+        let example_value = &json_schema["properties"]["memo_for"]["examples"][0];
         assert_eq!(example_value, &json!(["ORG1/SYMBOL", "ORG2/SYMBOL"]));
     }
 
