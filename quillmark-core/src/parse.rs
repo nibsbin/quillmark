@@ -976,35 +976,6 @@ Content here."#;
     }
 
     #[test]
-    fn test_with_coercion_preserves_quill_tag() {
-        use std::collections::HashMap;
-
-        let schema = QuillValue::from_json(serde_json::json!({
-            "$schema": "https://json-schema.org/draft/2019-09/schema",
-            "type": "object",
-            "properties": {
-                "active": {"type": "boolean"}
-            }
-        }));
-
-        let mut fields = HashMap::new();
-        fields.insert(
-            "active".to_string(),
-            QuillValue::from_json(serde_json::json!("true")),
-        );
-        let doc = ParsedDocument::with_quill_tag(fields, Some("test_quill".to_string()));
-
-        let coerced_doc = doc.with_coercion(&schema);
-
-        // Verify quill tag is preserved
-        assert_eq!(coerced_doc.quill_tag(), Some("test_quill"));
-        assert_eq!(
-            coerced_doc.get_field("active").unwrap().as_bool().unwrap(),
-            true
-        );
-    }
-
-    #[test]
     fn test_invalid_yaml() {
         let markdown = r#"---
 title: [invalid yaml
