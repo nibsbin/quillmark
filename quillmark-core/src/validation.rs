@@ -89,6 +89,42 @@ pub fn build_schema_from_fields(
     Ok(QuillValue::from_json(schema))
 }
 
+/// Extract default values from a JSON Schema
+///
+/// Parses the JSON schema's "properties" object and extracts any "default" values
+/// defined for each property. Returns a HashMap mapping field names to their default
+/// values.
+///
+/// # Arguments
+///
+/// * `schema` - A JSON Schema object (must have "properties" field)
+///
+/// # Returns
+///
+/// A HashMap of field names to their default QuillValues
+pub fn extract_defaults_from_schema(
+    schema: &QuillValue,
+) -> HashMap<String, crate::value::QuillValue> {
+    let mut defaults = HashMap::new();
+
+    // Get the properties object from the schema
+    if let Some(properties) = schema.as_json().get("properties") {
+        if let Some(properties_obj) = properties.as_object() {
+            for (field_name, field_schema) in properties_obj {
+                // Check if this field has a default value
+                if let Some(default_value) = field_schema.get("default") {
+                    defaults.insert(
+                        field_name.clone(),
+                        QuillValue::from_json(default_value.clone()),
+                    );
+                }
+            }
+        }
+    }
+
+    defaults
+}
+
 /// Validate a document's fields against a JSON Schema
 pub fn validate_document(
     schema: &QuillValue,
@@ -328,5 +364,78 @@ mod tests {
         // Verify that field with default is not required
         let required_fields = json_schema["required"].as_array().unwrap();
         assert!(!required_fields.contains(&json!("ice_cream")));
+    }
+
+    #[test]
+    fn test_extract_defaults_from_schema() {
+        // Create a JSON schema with defaults
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Document title"
+                },
+                "author": {
+                    "type": "string",
+                    "description": "Document author",
+                    "default": "Anonymous"
+                },
+                "status": {
+                    "type": "string",
+                    "description": "Document status",
+                    "default": "draft"
+                },
+                "count": {
+                    "type": "number",
+                    "default": 42
+                }
+            },
+            "required": ["title"]
+        });
+
+        let defaults = extract_defaults_from_schema(&QuillValue::from_json(schema));
+
+        // Verify that only fields with defaults are extracted
+        assert_eq!(defaults.len(), 3);
+        assert!(!defaults.contains_key("title")); // no default
+        assert!(defaults.contains_key("author"));
+        assert!(defaults.contains_key("status"));
+        assert!(defaults.contains_key("count"));
+
+        // Verify the default values
+        assert_eq!(defaults.get("author").unwrap().as_str(), Some("Anonymous"));
+        assert_eq!(defaults.get("status").unwrap().as_str(), Some("draft"));
+        assert_eq!(defaults.get("count").unwrap().as_json().as_i64(), Some(42));
+    }
+
+    #[test]
+    fn test_extract_defaults_from_schema_empty() {
+        // Schema with no defaults
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "author": {"type": "string"}
+            },
+            "required": ["title"]
+        });
+
+        let defaults = extract_defaults_from_schema(&QuillValue::from_json(schema));
+        assert_eq!(defaults.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_defaults_from_schema_no_properties() {
+        // Schema without properties field
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object"
+        });
+
+        let defaults = extract_defaults_from_schema(&QuillValue::from_json(schema));
+        assert_eq!(defaults.len(), 0);
     }
 }

@@ -392,10 +392,8 @@ pub struct Quill {
     pub glue: Option<String>,
     /// Markdown template content (optional)
     pub example: Option<String>,
-    /// Field JSON schema
+    /// Field JSON schema (single source of truth for schema and defaults)
     pub schema: QuillValue,
-    /// Field schemas for default value application
-    pub field_schemas: HashMap<String, FieldSchema>,
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }
@@ -698,9 +696,9 @@ impl Quill {
             metadata.insert(format!("typst_{}", key), value.clone());
         }
 
-        // Validate json_schema_file if specified
-        if let Some(ref json_schema_path) = config.json_schema_file {
-            // Check if file exists
+        // Load or build JSON schema
+        let schema = if let Some(ref json_schema_path) = config.json_schema_file {
+            // Load schema from file if specified
             let schema_bytes = root.get_file(json_schema_path).ok_or_else(|| {
                 format!(
                     "json_schema_file '{}' not found in file tree",
@@ -708,23 +706,26 @@ impl Quill {
                 )
             })?;
 
-            // Validate JSON syntax
-            serde_json::from_slice::<serde_json::Value>(schema_bytes).map_err(|e| {
-                format!(
-                    "json_schema_file '{}' is not valid JSON: {}",
-                    json_schema_path, e
-                )
-            })?;
+            // Parse and validate JSON syntax
+            let schema_json =
+                serde_json::from_slice::<serde_json::Value>(schema_bytes).map_err(|e| {
+                    format!(
+                        "json_schema_file '{}' is not valid JSON: {}",
+                        json_schema_path, e
+                    )
+                })?;
 
             // Warn if fields are also defined
             if !config.fields.is_empty() {
                 eprintln!("Warning: [fields] section is overridden by json_schema_file");
             }
-        }
 
-        // Build JSON schema from field schemas
-        let schema = build_schema_from_fields(&config.fields)
-            .map_err(|e| format!("Failed to build JSON schema from field schemas: {}", e))?;
+            QuillValue::from_json(schema_json)
+        } else {
+            // Build JSON schema from field schemas if no json_schema_file
+            build_schema_from_fields(&config.fields)
+                .map_err(|e| format!("Failed to build JSON schema from field schemas: {}", e))?
+        };
 
         // Read the glue content from glue file (if specified)
         let glue_content: Option<String> = if let Some(ref glue_file_name) = config.glue_file {
@@ -764,7 +765,6 @@ impl Quill {
             glue: glue_content,
             example: example_content,
             schema,
-            field_schemas: config.fields.clone(),
             files: root,
         };
 
@@ -872,6 +872,18 @@ impl Quill {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    /// Extract default values from the JSON schema
+    ///
+    /// Parses the schema's "properties" object and extracts any "default" values
+    /// defined for each property. Returns a HashMap mapping field names to their
+    /// default values.
+    ///
+    /// This is used by `ParsedDocument::with_defaults()` to apply default values
+    /// to missing fields.
+    pub fn extract_defaults(&self) -> HashMap<String, QuillValue> {
+        crate::validation::extract_defaults_from_schema(&self.schema)
     }
 
     /// Get file contents by path (relative to quill root)
@@ -1944,5 +1956,124 @@ packages = ["@preview/bubble:0.2.2"]
 
         // Verify typst config with typst_ prefix
         assert!(quill.metadata.contains_key("typst_packages"));
+    }
+
+    #[test]
+    fn test_json_schema_file_override() {
+        // Test that json_schema_file overrides [fields]
+        let mut root_files = HashMap::new();
+
+        // Create a custom JSON schema with defaults
+        let custom_schema = r#"{
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Document title"
+                },
+                "author": {
+                    "type": "string",
+                    "description": "Document author",
+                    "default": "Schema Author"
+                },
+                "version": {
+                    "type": "number",
+                    "description": "Version number",
+                    "default": 2
+                }
+            },
+            "required": ["title"]
+        }"#;
+
+        root_files.insert(
+            "schema.json".to_string(),
+            FileTreeNode::File {
+                contents: custom_schema.as_bytes().to_vec(),
+            },
+        );
+
+        let quill_toml = r#"[Quill]
+name = "schema-file-test"
+backend = "typst"
+description = "Test json_schema_file"
+json_schema_file = "schema.json"
+
+[fields]
+author = {description = "This should be ignored", default = "Fields Author"}
+status = {description = "This should also be ignored"}
+"#;
+
+        root_files.insert(
+            "Quill.toml".to_string(),
+            FileTreeNode::File {
+                contents: quill_toml.as_bytes().to_vec(),
+            },
+        );
+
+        let root = FileTreeNode::Directory { files: root_files };
+        let quill = Quill::from_tree(root, None).unwrap();
+
+        // Verify that schema came from json_schema_file, not [fields]
+        let properties = quill.schema["properties"].as_object().unwrap();
+        assert_eq!(properties.len(), 3); // title, author, version from schema.json
+        assert!(properties.contains_key("title"));
+        assert!(properties.contains_key("author"));
+        assert!(properties.contains_key("version"));
+        assert!(!properties.contains_key("status")); // from [fields], should be ignored
+
+        // Verify defaults from schema file
+        let defaults = quill.extract_defaults();
+        assert_eq!(defaults.len(), 2); // author and version have defaults
+        assert_eq!(
+            defaults.get("author").unwrap().as_str(),
+            Some("Schema Author")
+        );
+        assert_eq!(defaults.get("version").unwrap().as_json().as_i64(), Some(2));
+
+        // Verify required fields from schema
+        let required = quill.schema["required"].as_array().unwrap();
+        assert_eq!(required.len(), 1);
+        assert!(required.contains(&serde_json::json!("title")));
+    }
+
+    #[test]
+    fn test_extract_defaults_method() {
+        // Test the extract_defaults method on Quill
+        let mut root_files = HashMap::new();
+
+        let quill_toml = r#"[Quill]
+name = "defaults-test"
+backend = "typst"
+description = "Test defaults extraction"
+
+[fields]
+title = {description = "Title"}
+author = {description = "Author", default = "Anonymous"}
+status = {description = "Status", default = "draft"}
+"#;
+
+        root_files.insert(
+            "Quill.toml".to_string(),
+            FileTreeNode::File {
+                contents: quill_toml.as_bytes().to_vec(),
+            },
+        );
+
+        let root = FileTreeNode::Directory { files: root_files };
+        let quill = Quill::from_tree(root, None).unwrap();
+
+        // Extract defaults
+        let defaults = quill.extract_defaults();
+
+        // Verify only fields with defaults are returned
+        assert_eq!(defaults.len(), 2);
+        assert!(!defaults.contains_key("title")); // no default
+        assert!(defaults.contains_key("author"));
+        assert!(defaults.contains_key("status"));
+
+        // Verify default values
+        assert_eq!(defaults.get("author").unwrap().as_str(), Some("Anonymous"));
+        assert_eq!(defaults.get("status").unwrap().as_str(), Some("draft"));
     }
 }
