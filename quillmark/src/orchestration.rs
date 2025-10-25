@@ -535,6 +535,9 @@ impl Workflow {
         let defaults = self.quill.extract_defaults();
         let parsed_with_defaults = parsed.with_defaults(&defaults);
 
+        // Apply coercion based on schema
+        let parsed_with_defaults = parsed_with_defaults.with_coercion(&self.quill.schema);
+
         // Validate document against schema
         self.validate_document(&parsed_with_defaults)?;
 
