@@ -141,6 +141,34 @@ impl ParsedDocument {
             quill_tag: self.quill_tag.clone(),
         }
     }
+
+    /// Create a new ParsedDocument with coerced field values
+    ///
+    /// This method applies type coercions to field values based on the schema.
+    /// Coercions include:
+    /// - Singular values to arrays when schema expects array
+    /// - String "true"/"false" to boolean
+    /// - Numbers to boolean (0=false, non-zero=true)
+    /// - String numbers to number type
+    /// - Boolean to number (true=1, false=0)
+    ///
+    /// # Arguments
+    ///
+    /// * `schema` - A JSON Schema object defining expected field types
+    ///
+    /// # Returns
+    ///
+    /// A new ParsedDocument with coerced field values
+    pub fn with_coercion(&self, schema: &QuillValue) -> Self {
+        use crate::schema::coerce_document;
+
+        let coerced_fields = coerce_document(schema, &self.fields);
+
+        Self {
+            fields: coerced_fields,
+            quill_tag: self.quill_tag.clone(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -863,6 +891,117 @@ Content here."#;
         assert_eq!(tags.len(), 2);
         assert_eq!(tags[0].as_str().unwrap(), "default");
         assert_eq!(tags[1].as_str().unwrap(), "tag");
+    }
+
+    #[test]
+    fn test_with_coercion_singular_to_array() {
+        use std::collections::HashMap;
+
+        let schema = QuillValue::from_json(serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "tags": {"type": "array"}
+            }
+        }));
+
+        let mut fields = HashMap::new();
+        fields.insert(
+            "tags".to_string(),
+            QuillValue::from_json(serde_json::json!("single-tag")),
+        );
+        let doc = ParsedDocument::new(fields);
+
+        let coerced_doc = doc.with_coercion(&schema);
+
+        let tags = coerced_doc.get_field("tags").unwrap();
+        assert!(tags.as_array().is_some());
+        let tags_array = tags.as_array().unwrap();
+        assert_eq!(tags_array.len(), 1);
+        assert_eq!(tags_array[0].as_str().unwrap(), "single-tag");
+    }
+
+    #[test]
+    fn test_with_coercion_string_to_boolean() {
+        use std::collections::HashMap;
+
+        let schema = QuillValue::from_json(serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "active": {"type": "boolean"}
+            }
+        }));
+
+        let mut fields = HashMap::new();
+        fields.insert(
+            "active".to_string(),
+            QuillValue::from_json(serde_json::json!("true")),
+        );
+        let doc = ParsedDocument::new(fields);
+
+        let coerced_doc = doc.with_coercion(&schema);
+
+        assert_eq!(
+            coerced_doc.get_field("active").unwrap().as_bool().unwrap(),
+            true
+        );
+    }
+
+    #[test]
+    fn test_with_coercion_string_to_number() {
+        use std::collections::HashMap;
+
+        let schema = QuillValue::from_json(serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "count": {"type": "number"}
+            }
+        }));
+
+        let mut fields = HashMap::new();
+        fields.insert(
+            "count".to_string(),
+            QuillValue::from_json(serde_json::json!("42")),
+        );
+        let doc = ParsedDocument::new(fields);
+
+        let coerced_doc = doc.with_coercion(&schema);
+
+        assert_eq!(
+            coerced_doc.get_field("count").unwrap().as_i64().unwrap(),
+            42
+        );
+    }
+
+    #[test]
+    fn test_with_coercion_preserves_quill_tag() {
+        use std::collections::HashMap;
+
+        let schema = QuillValue::from_json(serde_json::json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "active": {"type": "boolean"}
+            }
+        }));
+
+        let mut fields = HashMap::new();
+        fields.insert(
+            "active".to_string(),
+            QuillValue::from_json(serde_json::json!("true")),
+        );
+        let doc = ParsedDocument::with_quill_tag(fields, Some("test_quill".to_string()));
+
+        let coerced_doc = doc.with_coercion(&schema);
+
+        // Verify quill tag is preserved
+        assert_eq!(coerced_doc.quill_tag(), Some("test_quill"));
+        assert_eq!(
+            coerced_doc.get_field("active").unwrap().as_bool().unwrap(),
+            true
+        );
     }
 
     #[test]
