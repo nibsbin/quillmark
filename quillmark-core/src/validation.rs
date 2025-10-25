@@ -48,9 +48,22 @@ pub fn build_schema_from_fields(
             Value::String(field_schema.description.clone()),
         );
 
-        // Add example if specified
+        let mut examples_array = if let Some(ref examples) = field_schema.examples {
+            examples.clone()
+        } else {
+            Vec::new()
+        };
+
+        // Add example (singular) if specified
         if let Some(ref example) = field_schema.example {
-            property.insert("example".to_string(), example.as_json().clone());
+            examples_array.push(example.clone());
+        }
+        if !examples_array.is_empty() {
+            let json_examples: Vec<Value> = examples_array
+                .iter()
+                .map(|ex| ex.as_json().clone())
+                .collect();
+            property.insert("examples".to_string(), Value::Array(json_examples));
         }
 
         // Add default if specified

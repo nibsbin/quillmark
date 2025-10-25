@@ -19,6 +19,8 @@ pub struct FieldSchema {
     pub default: Option<QuillValue>,
     /// Example value for the field
     pub example: Option<QuillValue>,
+    /// Example values for the field
+    pub examples: Option<Vec<QuillValue>>,
 }
 
 impl FieldSchema {
