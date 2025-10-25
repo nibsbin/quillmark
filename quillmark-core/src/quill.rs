@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
-use crate::validation::build_schema_from_fields;
+use crate::schema::build_schema_from_fields;
 use crate::value::QuillValue;
 
 /// Schema definition for a template field
@@ -883,7 +883,7 @@ impl Quill {
     /// This is used by `ParsedDocument::with_defaults()` to apply default values
     /// to missing fields.
     pub fn extract_defaults(&self) -> HashMap<String, QuillValue> {
-        crate::validation::extract_defaults_from_schema(&self.schema)
+        crate::schema::extract_defaults_from_schema(&self.schema)
     }
 
     /// Get file contents by path (relative to quill root)

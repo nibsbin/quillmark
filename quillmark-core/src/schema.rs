@@ -1,4 +1,4 @@
-//! Schema validation module for Quillmark.
+//! Schema validation and utilities for Quillmark.
 //!
 //! This module provides utilities for converting TOML field definitions to JSON Schema
 //! and validating ParsedDocument data against schemas.

@@ -65,4 +65,4 @@ pub use quill::{FileTreeNode, Quill, QuillIgnore};
 pub mod value;
 pub use value::QuillValue;
 
-pub mod validation;
+pub mod schema;

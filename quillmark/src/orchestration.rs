@@ -567,7 +567,7 @@ impl Workflow {
 
     /// Internal validation method
     fn validate_document(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
-        use quillmark_core::validation;
+        use quillmark_core::schema;
 
         // Build or load JSON Schema
 
@@ -577,7 +577,7 @@ impl Workflow {
         };
 
         // Validate document
-        match validation::validate_document(&self.quill.schema, parsed.fields()) {
+        match schema::validate_document(&self.quill.schema, parsed.fields()) {
             Ok(_) => Ok(()),
             Err(errors) => {
                 let error_message = errors.join("\n");
