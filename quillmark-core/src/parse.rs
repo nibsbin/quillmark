@@ -715,7 +715,6 @@ Content here."#;
 
     #[test]
     fn test_with_defaults_empty_document() {
-        use crate::quill::FieldSchema;
         use std::collections::HashMap;
 
         let mut defaults = HashMap::new();
