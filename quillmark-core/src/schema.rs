@@ -125,6 +125,47 @@ pub fn extract_defaults_from_schema(
     defaults
 }
 
+/// Extract example values from a JSON Schema
+///
+/// Parses the JSON schema's "properties" object and extracts any "examples" arrays
+/// defined for each property. Returns a HashMap mapping field names to their examples
+/// (as an array of QuillValues).
+///
+/// # Arguments
+///
+/// * `schema` - A JSON Schema object (must have "properties" field)
+///
+/// # Returns
+///
+/// A HashMap of field names to their examples (Vec<QuillValue>)
+pub fn extract_examples_from_schema(
+    schema: &QuillValue,
+) -> HashMap<String, Vec<crate::value::QuillValue>> {
+    let mut examples = HashMap::new();
+
+    // Get the properties object from the schema
+    if let Some(properties) = schema.as_json().get("properties") {
+        if let Some(properties_obj) = properties.as_object() {
+            for (field_name, field_schema) in properties_obj {
+                // Check if this field has examples
+                if let Some(examples_value) = field_schema.get("examples") {
+                    if let Some(examples_array) = examples_value.as_array() {
+                        let examples_vec: Vec<QuillValue> = examples_array
+                            .iter()
+                            .map(|v| QuillValue::from_json(v.clone()))
+                            .collect();
+                        if !examples_vec.is_empty() {
+                            examples.insert(field_name.clone(), examples_vec);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    examples
+}
+
 /// Validate a document's fields against a JSON Schema
 pub fn validate_document(
     schema: &QuillValue,
@@ -437,5 +478,89 @@ mod tests {
 
         let defaults = extract_defaults_from_schema(&QuillValue::from_json(schema));
         assert_eq!(defaults.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_examples_from_schema() {
+        // Create a JSON schema with examples
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "title": {
+                    "type": "string",
+                    "description": "Document title"
+                },
+                "memo_for": {
+                    "type": "array",
+                    "description": "List of recipients",
+                    "examples": [
+                        ["ORG1/SYMBOL", "ORG2/SYMBOL"],
+                        ["DEPT/OFFICE"]
+                    ]
+                },
+                "author": {
+                    "type": "string",
+                    "description": "Document author",
+                    "examples": ["John Doe", "Jane Smith"]
+                },
+                "status": {
+                    "type": "string",
+                    "description": "Document status"
+                }
+            }
+        });
+
+        let examples = extract_examples_from_schema(&QuillValue::from_json(schema));
+
+        // Verify that only fields with examples are extracted
+        assert_eq!(examples.len(), 2);
+        assert!(!examples.contains_key("title")); // no examples
+        assert!(examples.contains_key("memo_for"));
+        assert!(examples.contains_key("author"));
+        assert!(!examples.contains_key("status")); // no examples
+
+        // Verify the example values for memo_for
+        let memo_for_examples = examples.get("memo_for").unwrap();
+        assert_eq!(memo_for_examples.len(), 2);
+        assert_eq!(
+            memo_for_examples[0].as_json(),
+            &json!(["ORG1/SYMBOL", "ORG2/SYMBOL"])
+        );
+        assert_eq!(memo_for_examples[1].as_json(), &json!(["DEPT/OFFICE"]));
+
+        // Verify the example values for author
+        let author_examples = examples.get("author").unwrap();
+        assert_eq!(author_examples.len(), 2);
+        assert_eq!(author_examples[0].as_str(), Some("John Doe"));
+        assert_eq!(author_examples[1].as_str(), Some("Jane Smith"));
+    }
+
+    #[test]
+    fn test_extract_examples_from_schema_empty() {
+        // Schema with no examples
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "author": {"type": "string"}
+            }
+        });
+
+        let examples = extract_examples_from_schema(&QuillValue::from_json(schema));
+        assert_eq!(examples.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_examples_from_schema_no_properties() {
+        // Schema without properties field
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object"
+        });
+
+        let examples = extract_examples_from_schema(&QuillValue::from_json(schema));
+        assert_eq!(examples.len(), 0);
     }
 }
