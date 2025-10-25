@@ -69,7 +69,9 @@ impl FieldSchema {
 
         let example = obj.get("example").map(|v| QuillValue::from_json(v.clone()));
 
-        let examples = obj.get("examples").map(|v| QuillValue::from_json(v.clone()));
+        let examples = obj
+            .get("examples")
+            .map(|v| QuillValue::from_json(v.clone()));
 
         Ok(Self {
             name: name,
