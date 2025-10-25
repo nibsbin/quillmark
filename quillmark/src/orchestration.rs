@@ -531,8 +531,9 @@ impl Workflow {
 
     /// Process a parsed document through the glue template without compilation
     pub fn process_glue(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
-        // Apply defaults from field schemas
-        let parsed_with_defaults = parsed.with_defaults(&self.quill.field_schemas);
+        // Apply defaults from JSON schema
+        let defaults = self.quill.extract_defaults();
+        let parsed_with_defaults = parsed.with_defaults(&defaults);
 
         // Validate document against schema
         self.validate_document(&parsed_with_defaults)?;

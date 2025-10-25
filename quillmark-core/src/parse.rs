@@ -113,31 +113,26 @@ impl ParsedDocument {
         &self.fields
     }
 
-    /// Create a new ParsedDocument with default values applied from field schemas
+    /// Create a new ParsedDocument with default values applied
     ///
     /// This method creates a new ParsedDocument with default values applied for any
-    /// fields that are missing from the original document but have defaults specified
-    /// in the field schemas. Existing fields are preserved and not overwritten.
+    /// fields that are missing from the original document but have defaults specified.
+    /// Existing fields are preserved and not overwritten.
     ///
     /// # Arguments
     ///
-    /// * `field_schemas` - A HashMap of field schemas containing default values
+    /// * `defaults` - A HashMap of field names to their default QuillValues
     ///
     /// # Returns
     ///
     /// A new ParsedDocument with defaults applied for missing fields
-    pub fn with_defaults(
-        &self,
-        field_schemas: &HashMap<String, crate::quill::FieldSchema>,
-    ) -> Self {
+    pub fn with_defaults(&self, defaults: &HashMap<String, QuillValue>) -> Self {
         let mut fields = self.fields.clone();
 
-        for (field_name, schema) in field_schemas {
-            // Only apply default if field is missing and default exists
+        for (field_name, default_value) in defaults {
+            // Only apply default if field is missing
             if !fields.contains_key(field_name) {
-                if let Some(ref default_value) = schema.default {
-                    fields.insert(field_name.clone(), default_value.clone());
-                }
+                fields.insert(field_name.clone(), default_value.clone());
             }
         }
 
@@ -720,21 +715,21 @@ Content here."#;
 
     #[test]
     fn test_with_defaults_empty_document() {
-        use crate::quill::FieldSchema;
         use std::collections::HashMap;
 
-        let mut field_schemas = HashMap::new();
-        let mut schema1 = FieldSchema::new("status".to_string(), "Document status".to_string());
-        schema1.default = Some(QuillValue::from_json(serde_json::json!("draft")));
-        field_schemas.insert("status".to_string(), schema1);
-
-        let mut schema2 = FieldSchema::new("version".to_string(), "Version number".to_string());
-        schema2.default = Some(QuillValue::from_json(serde_json::json!(1)));
-        field_schemas.insert("version".to_string(), schema2);
+        let mut defaults = HashMap::new();
+        defaults.insert(
+            "status".to_string(),
+            QuillValue::from_json(serde_json::json!("draft")),
+        );
+        defaults.insert(
+            "version".to_string(),
+            QuillValue::from_json(serde_json::json!(1)),
+        );
 
         // Create an empty parsed document
         let doc = ParsedDocument::new(HashMap::new());
-        let doc_with_defaults = doc.with_defaults(&field_schemas);
+        let doc_with_defaults = doc.with_defaults(&defaults);
 
         // Check that defaults were applied
         assert_eq!(
@@ -759,13 +754,13 @@ Content here."#;
 
     #[test]
     fn test_with_defaults_preserves_existing_values() {
-        use crate::quill::FieldSchema;
         use std::collections::HashMap;
 
-        let mut field_schemas = HashMap::new();
-        let mut schema = FieldSchema::new("status".to_string(), "Document status".to_string());
-        schema.default = Some(QuillValue::from_json(serde_json::json!("draft")));
-        field_schemas.insert("status".to_string(), schema);
+        let mut defaults = HashMap::new();
+        defaults.insert(
+            "status".to_string(),
+            QuillValue::from_json(serde_json::json!("draft")),
+        );
 
         // Create document with existing status
         let mut fields = HashMap::new();
@@ -775,7 +770,7 @@ Content here."#;
         );
         let doc = ParsedDocument::new(fields);
 
-        let doc_with_defaults = doc.with_defaults(&field_schemas);
+        let doc_with_defaults = doc.with_defaults(&defaults);
 
         // Existing value should be preserved
         assert_eq!(
@@ -790,18 +785,17 @@ Content here."#;
 
     #[test]
     fn test_with_defaults_partial_application() {
-        use crate::quill::FieldSchema;
         use std::collections::HashMap;
 
-        let mut field_schemas = HashMap::new();
-
-        let mut schema1 = FieldSchema::new("status".to_string(), "Document status".to_string());
-        schema1.default = Some(QuillValue::from_json(serde_json::json!("draft")));
-        field_schemas.insert("status".to_string(), schema1);
-
-        let mut schema2 = FieldSchema::new("version".to_string(), "Version number".to_string());
-        schema2.default = Some(QuillValue::from_json(serde_json::json!(1)));
-        field_schemas.insert("version".to_string(), schema2);
+        let mut defaults = HashMap::new();
+        defaults.insert(
+            "status".to_string(),
+            QuillValue::from_json(serde_json::json!("draft")),
+        );
+        defaults.insert(
+            "version".to_string(),
+            QuillValue::from_json(serde_json::json!(1)),
+        );
 
         // Create document with only one field
         let mut fields = HashMap::new();
@@ -811,7 +805,7 @@ Content here."#;
         );
         let doc = ParsedDocument::new(fields);
 
-        let doc_with_defaults = doc.with_defaults(&field_schemas);
+        let doc_with_defaults = doc.with_defaults(&defaults);
 
         // Existing field preserved, missing field gets default
         assert_eq!(
@@ -836,35 +830,29 @@ Content here."#;
 
     #[test]
     fn test_with_defaults_no_defaults() {
-        use crate::quill::FieldSchema;
         use std::collections::HashMap;
 
-        let mut field_schemas = HashMap::new();
-
-        // Create schema without default
-        let schema = FieldSchema::new("title".to_string(), "Document title".to_string());
-        field_schemas.insert("title".to_string(), schema);
+        let defaults = HashMap::new(); // Empty defaults map
 
         let doc = ParsedDocument::new(HashMap::new());
-        let doc_with_defaults = doc.with_defaults(&field_schemas);
+        let doc_with_defaults = doc.with_defaults(&defaults);
 
         // No defaults should be applied
-        assert!(doc_with_defaults.get_field("title").is_none());
+        assert!(doc_with_defaults.fields().is_empty());
     }
 
     #[test]
     fn test_with_defaults_complex_types() {
-        use crate::quill::FieldSchema;
         use std::collections::HashMap;
 
-        let mut field_schemas = HashMap::new();
-
-        let mut schema = FieldSchema::new("tags".to_string(), "Document tags".to_string());
-        schema.default = Some(QuillValue::from_json(serde_json::json!(["default", "tag"])));
-        field_schemas.insert("tags".to_string(), schema);
+        let mut defaults = HashMap::new();
+        defaults.insert(
+            "tags".to_string(),
+            QuillValue::from_json(serde_json::json!(["default", "tag"])),
+        );
 
         let doc = ParsedDocument::new(HashMap::new());
-        let doc_with_defaults = doc.with_defaults(&field_schemas);
+        let doc_with_defaults = doc.with_defaults(&defaults);
 
         // Complex default value should be applied
         let tags = doc_with_defaults

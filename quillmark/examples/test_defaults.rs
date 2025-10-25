@@ -16,13 +16,10 @@ fn main() {
     let quill = Quill::from_json(quill_json).expect("Failed to load quill");
 
     println!("✓ Loaded quill: {}", quill.name);
-    println!("✓ Field schemas:");
-    for (name, schema) in &quill.field_schemas {
-        if let Some(default) = &schema.default {
-            println!("  - {}: default = {:?}", name, default.as_json());
-        } else {
-            println!("  - {}: no default", name);
-        }
+    println!("✓ Default values from schema:");
+    let defaults = quill.extract_defaults();
+    for (name, value) in &defaults {
+        println!("  - {}: default = {:?}", name, value.as_json());
     }
     println!();
 
