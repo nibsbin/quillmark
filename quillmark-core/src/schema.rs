@@ -137,7 +137,7 @@ pub fn extract_defaults_from_schema(
 ///
 /// # Returns
 ///
-/// A HashMap of field names to their examples (Vec<QuillValue>)
+/// A HashMap of field names to their examples (`Vec<QuillValue>``)
 pub fn extract_examples_from_schema(
     schema: &QuillValue,
 ) -> HashMap<String, Vec<crate::value::QuillValue>> {
