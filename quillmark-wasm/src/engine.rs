@@ -177,12 +177,30 @@ impl Quillmark {
         }
         let metadata_json = serde_json::Value::Object(metadata_obj);
 
+        // Convert defaults to serde_json::Value (plain JavaScript object)
+        let mut defaults_obj = serde_json::Map::new();
+        for (key, value) in quill.extract_defaults() {
+            defaults_obj.insert(key.clone(), value.as_json().clone());
+        }
+        let defaults_json = serde_json::Value::Object(defaults_obj);
+
+        // Convert examples to serde_json::Value (plain JavaScript object with arrays)
+        let mut examples_obj = serde_json::Map::new();
+        for (key, values) in quill.extract_examples() {
+            let examples_array: Vec<serde_json::Value> =
+                values.iter().map(|v| v.as_json().clone()).collect();
+            examples_obj.insert(key.clone(), serde_json::Value::Array(examples_array));
+        }
+        let examples_json = serde_json::Value::Object(examples_obj);
+
         let quill_info = QuillInfo {
             name: quill.name.clone(),
             backend: backend_id.clone(),
             metadata: metadata_json,
             example: quill.example.clone(),
             schema: quill.schema.clone().as_json().clone(),
+            defaults: defaults_json,
+            examples: examples_json,
             supported_formats,
         };
 

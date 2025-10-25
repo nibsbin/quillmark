@@ -200,6 +200,30 @@ impl PyQuill {
         json_to_py(py, &self.inner.schema)
     }
 
+    #[getter]
+    fn defaults<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        // Convert cached defaults HashMap to Python dict
+        let dict = PyDict::new(py);
+        for (key, value) in self.inner.extract_defaults() {
+            dict.set_item(key, quillvalue_to_py(py, value)?)?;
+        }
+        Ok(dict)
+    }
+
+    #[getter]
+    fn examples<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        // Convert cached examples HashMap to Python dict of lists
+        let dict = PyDict::new(py);
+        for (key, values) in self.inner.extract_examples() {
+            let py_list = pyo3::types::PyList::empty(py);
+            for value in values {
+                py_list.append(quillvalue_to_py(py, value)?)?;
+            }
+            dict.set_item(key, py_list)?;
+        }
+        Ok(dict)
+    }
+
     fn supported_formats(&self) -> PyResult<Vec<PyOutputFormat>> {
         // Get backend from metadata
         let backend = self
