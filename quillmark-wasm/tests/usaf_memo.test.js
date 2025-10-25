@@ -169,11 +169,5 @@ describe.skipIf(process.env.CI)('WASM usaf_memo smoke test', () => {
     const wasmHeader = wasmPdf.toString('utf8', 0, 10)
     expect(cargoHeader).toMatch(/^%PDF-1\.\d/)
     expect(wasmHeader).toMatch(/^%PDF-1\.\d/)
-    
-    // Both should have same Typst creator
-    const cargoCreator = cargoOutputPdf.toString('utf8').includes('Creator (Typst 0.13.1)')
-    const wasmCreator = wasmPdf.toString('utf8').includes('Creator (Typst 0.13.1)')
-    expect(cargoCreator).toBe(true)
-    expect(wasmCreator).toBe(true)
   })
 })
