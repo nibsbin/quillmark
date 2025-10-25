@@ -48,6 +48,25 @@ pub fn build_schema_from_fields(
             Value::String(field_schema.description.clone()),
         );
 
+        let mut examples_array = if let Some(ref examples) = field_schema.examples {
+            examples.as_array().cloned().unwrap_or_else(Vec::new)
+        } else {
+            Vec::new()
+        };
+
+        // Add example (singular) if specified after examples
+        if let Some(ref example) = field_schema.example {
+            examples_array.push(example.as_json().clone());
+        }
+        if !examples_array.is_empty() {
+            property.insert("examples".to_string(), Value::Array(examples_array));
+        }
+
+        // Add default if specified
+        if let Some(ref default) = field_schema.default {
+            property.insert("default".to_string(), default.as_json().clone());
+        }
+
         properties.insert(field_name.clone(), Value::Object(property));
 
         // Determine if field is required based on the spec:
@@ -259,5 +278,55 @@ mod tests {
 
         let result = validate_document(&QuillValue::from_json(schema), &fields);
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_build_schema_with_example() {
+        let mut fields = HashMap::new();
+        let mut schema = FieldSchema::new(
+            "memo_for".to_string(),
+            "List of recipient organization symbols".to_string(),
+        );
+        schema.r#type = Some("array".to_string());
+        schema.example = Some(QuillValue::from_json(json!(["ORG1/SYMBOL", "ORG2/SYMBOL"])));
+        fields.insert("memo_for".to_string(), schema);
+
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
+
+        // Verify that example field is present in the schema
+        assert!(json_schema["properties"]["memo_for"]
+            .as_object()
+            .unwrap()
+            .contains_key("examples"));
+
+        let example_value = &json_schema["properties"]["memo_for"]["examples"][0];
+        assert_eq!(example_value, &json!(["ORG1/SYMBOL", "ORG2/SYMBOL"]));
+    }
+
+    #[test]
+    fn test_build_schema_includes_default_in_properties() {
+        let mut fields = HashMap::new();
+        let mut schema = FieldSchema::new(
+            "ice_cream".to_string(),
+            "favorite ice cream flavor".to_string(),
+        );
+        schema.r#type = Some("string".to_string());
+        schema.default = Some(QuillValue::from_json(json!("taro")));
+        fields.insert("ice_cream".to_string(), schema);
+
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
+
+        // Verify that default field is present in the schema
+        assert!(json_schema["properties"]["ice_cream"]
+            .as_object()
+            .unwrap()
+            .contains_key("default"));
+
+        let default_value = &json_schema["properties"]["ice_cream"]["default"];
+        assert_eq!(default_value, &json!("taro"));
+
+        // Verify that field with default is not required
+        let required_fields = json_schema["required"].as_array().unwrap();
+        assert!(!required_fields.contains(&json!("ice_cream")));
     }
 }

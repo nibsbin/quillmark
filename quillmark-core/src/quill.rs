@@ -19,6 +19,8 @@ pub struct FieldSchema {
     pub default: Option<QuillValue>,
     /// Example value for the field
     pub example: Option<QuillValue>,
+    /// Example values for the field
+    pub examples: Option<QuillValue>,
 }
 
 impl FieldSchema {
@@ -28,8 +30,9 @@ impl FieldSchema {
             name,
             r#type: None,
             description,
-            example: None,
             default: None,
+            example: None,
+            examples: None,
         }
     }
 
@@ -62,16 +65,21 @@ impl FieldSchema {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
+        let default = obj.get("default").map(|v| QuillValue::from_json(v.clone()));
+
         let example = obj.get("example").map(|v| QuillValue::from_json(v.clone()));
 
-        let default = obj.get("default").map(|v| QuillValue::from_json(v.clone()));
+        let examples = obj
+            .get("examples")
+            .map(|v| QuillValue::from_json(v.clone()));
 
         Ok(Self {
             name: name,
             r#type: field_type,
-            description,
-            example,
-            default,
+            description: description,
+            default: default,
+            example: example,
+            examples: examples,
         })
     }
 }
