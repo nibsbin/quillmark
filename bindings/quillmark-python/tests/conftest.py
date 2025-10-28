@@ -9,7 +9,7 @@ import shutil
 from pathlib import Path
 import pytest
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
+WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
 RESOURCES_PATH = WORKSPACE_ROOT / "quillmark-fixtures" / "resources"
 QUILLS_PATH = RESOURCES_PATH / "tonguetoquill-collection" / "quills"
 
