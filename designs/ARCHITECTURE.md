@@ -76,7 +76,7 @@ High-level data flow:
 
 **API Documentation:** See the crate's rustdoc for comprehensive API documentation with usage examples, including module-level overview, detailed method documentation, and doc tests.
 
-### `quillmark-typst` (Typst backend)
+### `backends/quillmark-typst` (Typst backend)
 
 * Implements `Backend` for PDF/SVG
 * Markdown→Typst conversion (`mark_to_typst`)
@@ -91,7 +91,7 @@ High-level data flow:
 * `resource_path()`, `example_output_dir()`, `write_example_output()`
 * Workspace discovery and standardized example outputs
 
-### `quillmark-acroform` (AcroForm backend)
+### `backends/quillmark-acroform` (AcroForm backend)
 
 * Implements `Backend` for PDF form filling
 * Reads PDF forms from `form.pdf` file in quill bundle

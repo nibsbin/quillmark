@@ -93,7 +93,7 @@
 //!
 //! ## Example Implementation
 //!
-//! See `quillmark-typst` for a complete backend implementation example.
+//! See `backends/quillmark-typst` for a complete backend implementation example.
 //!
 //! ## Thread Safety
 //!
