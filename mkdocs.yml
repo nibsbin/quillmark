@@ -40,6 +40,8 @@ nav:
       - Quill Markdown: guides/quill-markdown.md
       - Typst Backend: guides/typst-backend.md
       - AcroForm Backend: guides/acroform-backend.md
+  - Quills:
+      - USAF Memo: quills/usaf-memo.md
   - Python:
       - API Reference: python/api.md
 
