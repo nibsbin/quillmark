@@ -18,8 +18,6 @@
 
 ---
 
-**Requires Update**
-
 ## Internal File Structure
 
 ### Structure Definition
@@ -31,18 +29,51 @@ pub enum FileTreeNode {
 }
 
 pub struct Quill {
-    pub glue_template: String,
+    /// Quill-specific metadata
     pub metadata: HashMap<String, QuillValue>,
+    /// Name of the quill
     pub name: String,
-    pub glue_file: String,
-    pub template_file: Option<String>,
-    pub template: Option<String>,
-    pub field_schemas: HashMap<String, FieldSchema>,
+    /// Backend identifier (e.g., "typst")
+    pub backend: String,
+    /// Glue template content (optional)
+    pub glue: Option<String>,
+    /// Markdown template content (optional)
+    pub example: Option<String>,
+    /// Field JSON schema (single source of truth for schema and defaults)
+    pub schema: QuillValue,
+    /// Cached default values extracted from schema (for performance)
+    pub defaults: HashMap<String, QuillValue>,
+    /// Cached example values extracted from schema (for performance)
+    pub examples: HashMap<String, Vec<QuillValue>>,
+    /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }
-```
 
-**Requires Update**
+pub struct QuillConfig {
+    /// Human-readable name
+    pub name: String,
+    /// Description of the quill
+    pub description: String,
+    /// Backend identifier (e.g., "typst")
+    pub backend: String,
+    /// Semantic version of the quill
+    pub version: Option<String>,
+    /// Author of the quill
+    pub author: Option<String>,
+    /// Example markdown file
+    pub example_file: Option<String>,
+    /// Glue file
+    pub glue_file: Option<String>,
+    /// JSON schema file
+    pub json_schema_file: Option<String>,
+    /// Field schemas
+    pub fields: HashMap<String, FieldSchema>,
+    /// Additional metadata from [Quill] section (excluding standard fields)
+    pub metadata: HashMap<String, QuillValue>,
+    /// Typst-specific configuration from `[typst]` section
+    pub typst_config: HashMap<String, QuillValue>,
+}
+```
 
 ### Design Rationale
 
@@ -102,23 +133,41 @@ The JSON format has a root object with a `files` key. The optional `metadata` ke
 [Quill]
 name = "my-quill"
 backend = "typst"
-glue_file = "glue.typ"
 description = "A beautiful template"  # required
-example_file = "template.md"  # optional
+glue_file = "glue.typ"  # optional - if not provided, auto glue is used
+example_file = "example.md"  # optional
 version = "1.0.0"  # optional
+author = "Template Author"  # optional
+json_schema_file = "schema.json"  # optional - overrides [fields]
+
+[typst]
+# Typst-specific configuration
+packages = ["@preview/bubble:0.2.2"]
 
 [fields]
-# Field schemas for template variables
-author = { description = "Author of document", required = true }
-title = { description = "Document title", required = true }
+# Field schemas for template variables (ignored if json_schema_file is specified)
+author = { description = "Author of document", type = "str", default = "Anonymous" }
+title = { description = "Document title", type = "str" }
 ```
 
-### Metadata Priority
+### Metadata Handling
 
-1. **Quill.toml `[Quill]` section** - Always takes precedence
-2. **Function arguments** - `default_name` passed to constructors (fallback)
-3. **JSON `metadata` object** - Provides default_name for `from_json`
-4. **Defaults** - Fallback value "unnamed"
+**Name Resolution:**
+- Always read from `Quill.toml` `[Quill].name` field (required)
+- The `default_name` parameter in constructors is ignored (kept for API compatibility)
+
+**Metadata Storage:**
+- The `metadata` HashMap includes:
+  - `backend` - Backend identifier from `[Quill].backend`
+  - `description` - Template description from `[Quill].description`
+  - `author` - Author name if specified in `[Quill].author`
+  - Any custom fields from `[Quill]` section (excluding standard fields)
+  - Typst configuration with `typst_` prefix (e.g., `typst_packages`)
+
+**Schema Handling:**
+- If `json_schema_file` is specified: Load schema from that file
+- Otherwise: Build JSON schema from `[fields]` section
+- Defaults and examples are cached from schema for performance
 
 ---
 
