@@ -91,6 +91,35 @@ High-level data flow:
 * `resource_path()`, `example_output_dir()`, `write_example_output()`
 * Workspace discovery and standardized example outputs
 
+### `quillmark-acroform` (AcroForm backend)
+
+* Implements `Backend` for PDF form filling
+* Reads PDF forms from `form.pdf` file in quill bundle
+* Templates field values using MiniJinja
+* Supports tooltip-based and value-based templating
+* Returns filled PDF forms as artifacts
+
+### `quillmark-python` (Python bindings)
+
+* PyO3-based Python bindings for Quillmark
+* Mirrors the Rust API with Pythonic conventions
+* Exposes `Quillmark`, `Workflow`, `Quill`, `ParsedDocument`, `RenderResult`, and `Artifact` classes
+* Published to PyPI as `quillmark` package
+
+### `quillmark-wasm` (WebAssembly bindings)
+
+* wasm-bindgen based WASM bindings for Quillmark
+* JSON-based data exchange across WASM boundary
+* Exposes `Quillmark` class with workflow methods
+* Published to npm as `@quillmark-test/wasm` package
+* Supports bundler, Node.js, and web targets
+
+### `quillmark-fuzz` (fuzzing tests)
+
+* Fuzz testing suite for Quillmark
+* Tests parsing, templating, and rendering edge cases
+* Not published to crates.io
+
 ---
 
 ## Core Interfaces and Structures
@@ -205,6 +234,24 @@ The Typst backend implements PDF and SVG output:
 - Implements Typst `World` trait
 - Virtual file system for packages and assets
 - Line/column mapping for error diagnostics
+
+### AcroForm Backend
+
+The AcroForm backend implements PDF form filling:
+
+**Key Features:**
+- Reads PDF forms from `form.pdf` in quill bundle
+- Templates field values using MiniJinja
+- Supports tooltip-based (`description__{{template}}`) and value-based templating
+- Returns filled PDF as single artifact
+- TXT format support for debugging (returns field values as JSON)
+
+**Compilation Process:**
+1. Load PDF form from quill's `form.pdf` file
+2. Extract field names and current values
+3. Render templated values using MiniJinja with JSON context
+4. Write rendered values back to PDF form
+5. Return filled PDF as byte vector
 
 ---
 
