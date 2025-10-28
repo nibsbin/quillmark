@@ -79,8 +79,8 @@ This workspace contains:
 
 - **quillmark-core** - Core parsing, templating, and backend traits
 - **quillmark** - High-level orchestration API
-- **quillmark-typst** - Typst backend for PDF/SVG output
-- **quillmark-acroform** - AcroForm backend for PDF form filling
+- **backends/quillmark-typst** - Typst backend for PDF/SVG output
+- **backends/quillmark-acroform** - AcroForm backend for PDF form filling
 - **quillmark-python** - Python bindings (PyO3)
 - **quillmark-wasm** - WebAssembly bindings
 - **quillmark-fixtures** - Test fixtures and utilities
