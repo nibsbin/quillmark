@@ -3,7 +3,6 @@
 [![Crates.io](https://img.shields.io/crates/v/quillmark.svg)](https://crates.io/crates/quillmark)
 [![PyPI](https://img.shields.io/pypi/v/quillmark.svg?color=3776AB)](https://pypi.org/project/quillmark/)
 [![npm](https://img.shields.io/npm/v/@quillmark-test/wasm.svg?color=CB3837)](https://www.npmjs.com/package/@quillmark-test/wasm)
-[![Documentation](https://docs.rs/quillmark/badge.svg)](https://docs.rs/quillmark)
 [![CI](https://github.com/nibsbin/quillmark/workflows/CI/badge.svg)](https://github.com/nibsbin/quillmark/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-lightgray.svg)](LICENSE)
 
@@ -14,12 +13,17 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
 ## Features
 
 - **Template-first design**: Quill templates control structure and styling, Markdown provides content
-- **YAML frontmatter support**: Extended YAML metadata with inline sections
+- **YAML metadata**: Extended YAML support for inline metadata blocks
 - **Multiple backends**: 
   - PDF and SVG output via Typst backend
   - PDF form filling via AcroForm backend
 - **Structured error handling**: Clear diagnostics with source locations
 - **Dynamic asset loading**: Fonts, images, and packages resolved at runtime
+
+## Documentation
+
+- **[User Guide](https://quillmark.readthedocs.io)** - Tutorials, concepts, and language bindings
+- **[Rust API Reference](https://docs.rs/quillmark)** - for the Quillmark crate
 
 ## Installation
 
