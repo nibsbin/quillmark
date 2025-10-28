@@ -7,19 +7,19 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest'
-import { Quillmark } from '../../../pkg/bundler/wasm.js'
+import { Quillmark } from '@quillmark-wasm'
 import { loadQuill, loadQuillMarkdown } from './quillLoader.js'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
 import { execSync } from 'child_process'
 import crypto from 'crypto'
+import { WORKSPACE_ROOT } from '../vitest.config.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // Paths relative to the workspace root
-const WORKSPACE_ROOT = path.join(__dirname, '..', '..','..')
 const QUILLS_PATH = path.join(WORKSPACE_ROOT, 'quillmark-fixtures', 'resources', 'tonguetoquill-collection', 'quills')
 const USAF_MEMO_QUILL_PATH = path.join(QUILLS_PATH, 'usaf_memo')
 const CARGO_OUTPUT_PATH = path.join(WORKSPACE_ROOT, 'quillmark-fixtures', 'output', 'usaf_memo_output.pdf')

@@ -8,11 +8,11 @@
  * - Render documents to PDF
  * - Basic error handling
  * 
- * Setup: Tests use the bundler build from ../pkg/bundler/
+ * Setup: Tests use the bundler build via @quillmark-wasm alias (see vitest.config.js)
  */
 
 import { describe, it, expect } from 'vitest'
-import { Quillmark } from '../../pkg/bundler/wasm.js'
+import { Quillmark } from '@quillmark-wasm'
 
 // Minimal inline Quill for testing
 const TEST_QUILL = {
