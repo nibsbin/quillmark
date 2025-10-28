@@ -98,7 +98,6 @@ jobs:
 
       - name: Check WASM build
         run: cargo check --package quillmark-wasm --target wasm32-unknown-unknown --locked
-        working-directory: .
 
   ci-success:
     runs-on: ubuntu-latest
