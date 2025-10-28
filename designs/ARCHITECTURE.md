@@ -99,14 +99,14 @@ High-level data flow:
 * Supports tooltip-based and value-based templating
 * Returns filled PDF forms as artifacts
 
-### `quillmark-python` (Python bindings)
+### `bindings/quillmark-python` (Python bindings)
 
 * PyO3-based Python bindings for Quillmark
 * Mirrors the Rust API with Pythonic conventions
 * Exposes `Quillmark`, `Workflow`, `Quill`, `ParsedDocument`, `RenderResult`, and `Artifact` classes
 * Published to PyPI as `quillmark` package
 
-### `quillmark-wasm` (WebAssembly bindings)
+### `bindings/quillmark-wasm` (WebAssembly bindings)
 
 * wasm-bindgen based WASM bindings for Quillmark
 * JSON-based data exchange across WASM boundary

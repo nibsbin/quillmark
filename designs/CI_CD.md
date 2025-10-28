@@ -8,7 +8,7 @@
 * `backends/quillmark-acroform` (publish ✅; depends on core)
 * `quillmark` (publish ✅; depends on core, typst, and acroform)
 
-`quillmark-fixtures`, `quillmark-fuzz`, `quillmark-python`, and `quillmark-wasm` are internal/bindings (not published to crates.io).
+`quillmark-fixtures`, `quillmark-fuzz`, `bindings/quillmark-python`, and `bindings/quillmark-wasm` are internal/bindings (not published to crates.io).
 
 **Publication order**: Automated via `cargo publish` which handles dependency order: `quillmark-core` → `backends/quillmark-typst` and `backends/quillmark-acroform` → `quillmark`.
 
