@@ -17,9 +17,9 @@ fi
 echo ""
 echo "Building for target: bundler"
 
-wasm-pack build quillmark-wasm \
+wasm-pack build bindings/quillmark-wasm \
     --target bundler \
-    --out-dir "../pkg/bundler" \
+    --out-dir "../../pkg/bundler" \
     --out-name wasm \
     --release \
     --scope quillmark-test

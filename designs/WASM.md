@@ -4,7 +4,7 @@
 >
 > This document defines the WebAssembly API for Quillmark, providing JavaScript/TypeScript bindings for bundler environments.
 
-> **Implementation**: `quillmark-wasm/src/`
+> **Implementation**: `bindings/quillmark-wasm/src/`
 
 ---
 
@@ -140,7 +140,7 @@ const result = engine.render(parsed, { quillName: 'simple-letter' });
 **Build Command:**
 ```bash
 bash scripts/build-wasm.sh
-# or directly: wasm-pack build quillmark-wasm --target bundler
+# or directly: wasm-pack build bindings/quillmark-wasm --target bundler
 ```
 
 **NPM Package:** `@quillmark-test/wasm` for bundlers (webpack, rollup, vite)
