@@ -4,7 +4,7 @@
 > **Package Name**: `quillmark`  
 > **Target**: Python 3.10+  
 
-> **For implementation details, see**: `quillmark-python/src/`
+> **For implementation details, see**: `bindings/quillmark-python/src/`
 
 ## Overview
 
@@ -144,7 +144,7 @@ except CompilationError as e:
 
 ## PyO3 Bindings Implementation
 
-See `quillmark-python/src/` for complete implementation details.
+See `bindings/quillmark-python/src/` for complete implementation details.
 
 **Module Structure:**
 - `lib.rs` - PyO3 module entry point with class and exception registration

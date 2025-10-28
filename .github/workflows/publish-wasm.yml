@@ -46,11 +46,11 @@ jobs:
         run: ./scripts/build-wasm.sh
       
       - name: Install npm dependencies
-        working-directory: quillmark-wasm
+        working-directory: bindings/quillmark-wasm
         run: npm install
       
       - name: Run npm tests
-        working-directory: quillmark-wasm
+        working-directory: bindings/quillmark-wasm
         run: npm test
       
       # Upload the built package for the publish job
