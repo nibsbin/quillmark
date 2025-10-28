@@ -1,12 +1,6 @@
 # Quillmark Architecture
 
-> This document merges **“Quillmark Architecture Design Document”** and **“Quillmark Improved Architecture Design Document”** into a single, authoritative DESIGN.md. Where the two differed, this doc reconciles them and notes compatibility.
-
----
-
-**See also:**
-- [PARSE.md](PARSE.md) - Detailed parsing and Extended YAML Metadata Standard documentation
-- [ERROR.md](ERROR.md) - Error handling system documentation and implementation guide
+This document outlines the architecture and design principles of Quillmark, a flexible Markdown rendering engine that outputs to fully typesetted documents or forms.
 
 ## Table of Contents
 

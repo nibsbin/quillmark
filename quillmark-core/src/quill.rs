@@ -784,7 +784,7 @@ impl Quill {
     /// Create a Quill from a JSON representation
     ///
     /// Parses a JSON string into an in-memory file tree and validates it. The
-    /// precise JSON contract is documented in `designs/QUILL_DESIGN.md`.
+    /// precise JSON contract is documented in `designs/QUILL.md`.
     /// The JSON format MUST have a root object with a `files` key. The optional
     /// `metadata` key provides additional metadata that overrides defaults.
     pub fn from_json(json_str: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {

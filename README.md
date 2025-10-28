@@ -67,7 +67,7 @@ cargo run --example taro
 ## Documentation
 
 - [API Documentation](https://docs.rs/quillmark)
-- [Architecture Design](designs/DESIGN.md)
+- [Architecture Design](designs/ARCHITECTURE.md)
 - [Contributing Guide](CONTRIBUTING.md)
 
 ## Project Structure
