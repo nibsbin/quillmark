@@ -49,9 +49,11 @@ JSON format with a root object containing a `files` key:
 ```typescript
 class Quillmark {
   constructor();
-  registerQuill(name: string, quillJson: string | object): void;
-  render(markdown: string, options?: RenderOptions): RenderResult;
-  renderGlue(quillName: string, markdown: string): string;
+  static parseMarkdown(markdown: string): ParsedDocument;
+  registerQuill(quillJson: string | object): void;
+  getQuillInfo(name: string): QuillInfo;
+  processGlue(quillName: string, markdown: string): string;
+  render(parsedDoc: ParsedDocument, options?: RenderOptions): RenderResult;
   listQuills(): string[];
   unregisterQuill(name: string): void;
 }
@@ -60,6 +62,20 @@ class Quillmark {
 ### Types
 
 ```typescript
+interface ParsedDocument {
+  fields: object;  // YAML frontmatter fields
+  quillTag?: string;  // Value of QUILL field (if present)
+}
+
+interface QuillInfo {
+  name: string;
+  backend: string;  // e.g., "typst"
+  metadata: object;  // Quill metadata from Quill.toml
+  example?: string;  // Example markdown (if available)
+  fieldSchemas: object;  // Field schema definitions
+  supportedFormats: Array<'pdf' | 'svg' | 'txt'>;  // Formats this backend supports
+}
+
 interface RenderOptions {
   format?: 'pdf' | 'svg' | 'txt';
   assets?: Record<string, Uint8Array>;
@@ -85,6 +101,12 @@ interface Diagnostic {
   location?: Location;
   hint?: string;
 }
+
+interface Location {
+  file?: string;
+  line: number;
+  col: number;
+}
 ```
 
 ---
@@ -107,7 +129,8 @@ Content here
 Or:
 
 ```typescript
-const result = engine.render(markdown, { quillName: 'simple-letter' });
+const parsed = Quillmark.parseMarkdown(markdown);
+const result = engine.render(parsed, { quillName: 'simple-letter' });
 ```
 
 ---
