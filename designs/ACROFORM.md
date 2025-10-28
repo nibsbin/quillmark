@@ -22,7 +22,12 @@ description = "Certificate of aircrew qualification"
 
 ## Functionality
 
-Instead of relying on quillmark-core’s templating, quillmark-acroform will use the workspace’s minijinja dependency to impute values into form fields that have jinja-style templating expressions. Use this crate to accomplish PDF field retrieval and manipulation:https://crates.io/crates/acroform
+The quillmark-acroform backend fills PDF form fields using MiniJinja templating. Fields are templated in two ways:
+
+1. **Tooltip-based templating**: Extract template from field description/tooltip using `description__{{template}}` format
+2. **Value-based templating**: Use the current field value as a template if no tooltip template exists
+
+The backend uses the workspace's minijinja dependency to render templates with the glue JSON context. PDF manipulation is handled using the `acroform` crate: https://crates.io/crates/acroform
 
 ## Compilation
 
