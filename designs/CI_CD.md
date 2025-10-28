@@ -1,15 +1,16 @@
-# Quillmark Rust Workspace — Basic CI/CD
+# Quillmark Rust Workspace — CI/CD
 
 **Status**: Implemented
 **Scope**: Build, test, and publish the following crates to crates.io:
 
 * `quillmark-core` (publish ✅)
 * `quillmark-typst` (publish ✅; depends on core)
-* `quillmark` (publish ✅; depends on core & typst)
+* `quillmark-acroform` (publish ✅; depends on core)
+* `quillmark` (publish ✅; depends on core, typst, and acroform)
 
-`quillmark-fixtures` is internal (not published).
+`quillmark-fixtures`, `quillmark-fuzz`, `quillmark-python`, and `quillmark-wasm` are internal/bindings (not published to crates.io).
 
-**Publication order**: `quillmark-core` → `quillmark-typst` → `quillmark`.
+**Publication order**: Automated via `cargo publish` which handles dependency order: `quillmark-core` → `quillmark-typst` and `quillmark-acroform` → `quillmark`.
 
 ---
 
@@ -34,77 +35,92 @@
 
 ## 2) Continuous Delivery (CD) — Publishing
 
-**Goal**: Publish the three crates to crates.io in dependency order.
+**Goal**: Publish crates to crates.io, Python packages to PyPI, and WASM packages to npm.
+
+### Rust Crates
 
 * **Trigger**: One of:
 
-  * Manual dispatch with a `version` input (recommended for simplicity), **or**
-  * A pushed tag like `vX.Y.Z` (optional).
+  * Manual dispatch (`workflow_dispatch`), **or**
+  * A pushed tag like `vX.Y.Z`
 * **Auth**: `CARGO_REGISTRY_TOKEN` stored as a repository secret.
 * **Prechecks**:
 
-  * All three crates share the same version in `Cargo.toml`.
-  * CI on `main` is green.
-  * Dry-run publishing succeeds for each crate.
+  * All crates share the same version in workspace `Cargo.toml`.
+  * CI on tag/main is green.
+  * Tests pass with default features, all features, and no default features.
 * **Publish sequence**:
 
-  1. `quillmark-core`
-  2. Wait briefly for crates.io indexing.
-  3. `quillmark-typst`
-  4. Wait briefly for crates.io indexing.
-  5. `quillmark`
-* **Post-publish**: Verify crates appear on crates.io and docs.rs builds succeed.
+  * Uses `cargo publish` which automatically handles dependency order
+  * Publishes: `quillmark-core`, then `quillmark-typst` and `quillmark-acroform`, then `quillmark`
+
+### Python Bindings
+
+* **Workflow**: `.github/workflows/publish-python.yml`
+* **Trigger**: Tag push `vX.Y.Z` or manual dispatch
+* **Platform**: Builds wheels for Linux, macOS, and Windows
+* **Publish**: PyPI via `maturin publish`
+
+### WASM Bindings
+
+* **Workflow**: `.github/workflows/publish-wasm.yml`
+* **Trigger**: Tag push `vX.Y.Z` or manual dispatch
+* **Build**: Uses `wasm-pack` to build for bundler, nodejs, and web targets
+* **Publish**: npm via `wasm-pack publish`
 
 ---
 
-## 3) Versioning (Minimal)
+## 3) Versioning
 
-* **SemVer** across all three crates.
-* **Lockstep versions**: bump `quillmark-core`, `quillmark-typst`, and `quillmark` together in one commit.
-* **Tagging**: Optional but recommended (`vX.Y.Z`) if you want tag-based triggers.
+* **SemVer** across all workspace crates and bindings.
+* **Lockstep versions**: bump `quillmark-core`, `quillmark-typst`, `quillmark-acroform`, and `quillmark` together in one commit.
+* **Bindings**: Python and WASM bindings follow the same version as the Rust workspace.
+* **Tagging**: Required for publishing (`vX.Y.Z` triggers automated workflows).
 
 ---
 
-## 4) Minimal Release Steps
+## 4) Release Steps
 
 1. **Prepare**
 
    * Ensure `main` is green.
-   * Bump versions in all three `Cargo.toml` files to `X.Y.Z`.
-   * Commit (and optionally tag `vX.Y.Z`).
+   * Bump versions in workspace `Cargo.toml` to `X.Y.Z`.
+   * Commit and tag `vX.Y.Z`.
+   * Push tag to trigger automated workflows.
 
-2. **Publish**
+2. **Automated Publishing**
 
-   * Run the Publish workflow:
-
-     * Either dispatch manually with `version = X.Y.Z`, or
-     * Push tag `vX.Y.Z` if using tag triggers.
+   * Rust crates published to crates.io
+   * Python wheels published to PyPI
+   * WASM packages published to npm
 
 3. **Verify**
 
-   * Confirm crate pages on crates.io for all three.
+   * Confirm crate pages on crates.io for all published crates.
    * Confirm docs.rs builds complete.
+   * Verify PyPI package availability.
+   * Verify npm package availability.
 
 ---
 
 ## 5) Readiness Checklist (per release)
 
 * [ ] CI checks pass on `main`.
-* [ ] Versions synchronized across `quillmark-core`, `quillmark-typst`, `quillmark`.
-* [ ] Dry-run `cargo publish` succeeds for all three.
+* [ ] Versions synchronized across workspace crates.
+* [ ] Tests pass with default, all, and no-default features.
 * [ ] README and crate metadata are accurate.
-* [ ] Publish completed in the correct order.
+* [ ] Tag `vX.Y.Z` created and pushed.
 
 ---
 
 ## 6) Out of Scope (intentionally omitted)
 
 * Clippy/lint gates
-* Multi-OS testing or MSRV gates
+* Multi-OS testing for Rust crates (Python and WASM test on multiple platforms)
+* MSRV gates
 * Security auditing and dependency automation
 * Coverage, benchmarks, and performance tracking
-* Python/NPM workflows and cross-ecosystem orchestration
 
 ---
 
-This is the leanest possible plan that still gives you reliable builds and a safe, ordered publish to crates.io.
+This CI/CD setup provides reliable builds and safe, ordered publishing to crates.io, PyPI, and npm.

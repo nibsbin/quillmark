@@ -83,7 +83,7 @@ backend = quill.backend
 - `from_path(path)` - Load quill from filesystem path
 
 **Properties:**
-- `name`, `backend`, `glue`, `metadata`
+- `name`, `backend`, `glue`, `metadata`, `schema`, `example`
 
 #### 4. `ParsedDocument` - Parsed Markdown
 

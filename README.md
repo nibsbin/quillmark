@@ -62,6 +62,9 @@ Run the included examples:
 cargo run --example appreciated_letter
 cargo run --example usaf_memo
 cargo run --example taro
+cargo run --example usaf_form_8
+cargo run --example auto_glue
+cargo run --example test_defaults
 ```
 
 ## Documentation
@@ -78,7 +81,10 @@ This workspace contains:
 - **quillmark** - High-level orchestration API
 - **quillmark-typst** - Typst backend for PDF/SVG output
 - **quillmark-acroform** - AcroForm backend for PDF form filling
+- **quillmark-python** - Python bindings (PyO3)
+- **quillmark-wasm** - WebAssembly bindings
 - **quillmark-fixtures** - Test fixtures and utilities
+- **quillmark-fuzz** - Fuzz testing suite
 
 ## License
 
