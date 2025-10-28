@@ -43,3 +43,7 @@ package-lock.json
 *.tgz
 
 .env
+
+# MkDocs build artifacts
+site/
+.cache/
