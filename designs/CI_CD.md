@@ -4,13 +4,13 @@
 **Scope**: Build, test, and publish the following crates to crates.io:
 
 * `quillmark-core` (publish ✅)
-* `quillmark-typst` (publish ✅; depends on core)
-* `quillmark-acroform` (publish ✅; depends on core)
+* `backends/quillmark-typst` (publish ✅; depends on core)
+* `backends/quillmark-acroform` (publish ✅; depends on core)
 * `quillmark` (publish ✅; depends on core, typst, and acroform)
 
-`quillmark-fixtures`, `quillmark-fuzz`, `quillmark-python`, and `quillmark-wasm` are internal/bindings (not published to crates.io).
+`quillmark-fixtures`, `quillmark-fuzz`, `bindings/quillmark-python`, and `bindings/quillmark-wasm` are internal/bindings (not published to crates.io).
 
-**Publication order**: Automated via `cargo publish` which handles dependency order: `quillmark-core` → `quillmark-typst` and `quillmark-acroform` → `quillmark`.
+**Publication order**: Automated via `cargo publish` which handles dependency order: `quillmark-core` → `backends/quillmark-typst` and `backends/quillmark-acroform` → `quillmark`.
 
 ---
 
@@ -52,7 +52,7 @@
 * **Publish sequence**:
 
   * Uses `cargo publish` which automatically handles dependency order
-  * Publishes: `quillmark-core`, then `quillmark-typst` and `quillmark-acroform`, then `quillmark`
+  * Publishes: `quillmark-core`, then `backends/quillmark-typst` and `backends/quillmark-acroform`, then `quillmark`
 
 ### Python Bindings
 
@@ -73,7 +73,7 @@
 ## 3) Versioning
 
 * **SemVer** across all workspace crates and bindings.
-* **Lockstep versions**: bump `quillmark-core`, `quillmark-typst`, `quillmark-acroform`, and `quillmark` together in one commit.
+* **Lockstep versions**: bump `quillmark-core`, `backends/quillmark-typst`, `backends/quillmark-acroform`, and `quillmark` together in one commit.
 * **Bindings**: Python and WASM bindings follow the same version as the Rust workspace.
 * **Tagging**: Required for publishing (`vX.Y.Z` triggers automated workflows).
 

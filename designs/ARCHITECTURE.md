@@ -76,7 +76,7 @@ High-level data flow:
 
 **API Documentation:** See the crate's rustdoc for comprehensive API documentation with usage examples, including module-level overview, detailed method documentation, and doc tests.
 
-### `quillmark-typst` (Typst backend)
+### `backends/quillmark-typst` (Typst backend)
 
 * Implements `Backend` for PDF/SVG
 * Markdown→Typst conversion (`mark_to_typst`)
@@ -91,7 +91,7 @@ High-level data flow:
 * `resource_path()`, `example_output_dir()`, `write_example_output()`
 * Workspace discovery and standardized example outputs
 
-### `quillmark-acroform` (AcroForm backend)
+### `backends/quillmark-acroform` (AcroForm backend)
 
 * Implements `Backend` for PDF form filling
 * Reads PDF forms from `form.pdf` file in quill bundle
@@ -99,14 +99,14 @@ High-level data flow:
 * Supports tooltip-based and value-based templating
 * Returns filled PDF forms as artifacts
 
-### `quillmark-python` (Python bindings)
+### `bindings/quillmark-python` (Python bindings)
 
 * PyO3-based Python bindings for Quillmark
 * Mirrors the Rust API with Pythonic conventions
 * Exposes `Quillmark`, `Workflow`, `Quill`, `ParsedDocument`, `RenderResult`, and `Artifact` classes
 * Published to PyPI as `quillmark` package
 
-### `quillmark-wasm` (WebAssembly bindings)
+### `bindings/quillmark-wasm` (WebAssembly bindings)
 
 * wasm-bindgen based WASM bindings for Quillmark
 * JSON-based data exchange across WASM boundary

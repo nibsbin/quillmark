@@ -1,4 +1,4 @@
-# quillmark-acroform
+# backends/quillmark-acroform
 
 This is an optional backend for `quillmark` that maps markdown/YAML context to PDF AcroForms.
 
@@ -22,7 +22,7 @@ description = "Certificate of aircrew qualification"
 
 ## Functionality
 
-The quillmark-acroform backend fills PDF form fields using MiniJinja templating. Fields are templated in two ways:
+The backends/quillmark-acroform backend fills PDF form fields using MiniJinja templating. Fields are templated in two ways:
 
 1. **Tooltip-based templating**: Extract template from field description/tooltip using `description__{{template}}` format
 2. **Value-based templating**: Use the current field value as a template if no tooltip template exists
@@ -44,5 +44,5 @@ The backend uses the workspace's minijinja dependency to render templates with t
 
 ## Resources
 
-- See the `quillmark-typst` crate for an example of backend implementation.
+- See the `backends/quillmark-typst` crate for an example of backend implementation.
 - Use the `quillmark-fixtures/resources/usaf_form_8` as a test Quill.

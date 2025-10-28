@@ -64,7 +64,7 @@ Typst diagnostics are mapped via `map_typst_errors()`:
 - Hints preserved from Typst errors
 - Error codes in format "typst::error_type" (e.g., "typst::unknown_variable")
 
-See `quillmark-typst/src/error_mapping.rs` for implementation details.
+See `backends/quillmark-typst/src/error_mapping.rs` for implementation details.
 
 ## Error Presentation
 
