@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest'
-import { Quillmark } from '../pkg/bundler/wasm.js'
+import { Quillmark } from '../../../pkg/bundler/wasm.js'
 import { loadQuill, loadQuillMarkdown } from './quillLoader.js'
 import * as fs from 'fs'
 import * as path from 'path'

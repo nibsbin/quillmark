@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { Quillmark } from '../pkg/bundler/wasm.js'
+import { Quillmark } from '../../pkg/bundler/wasm.js'
 
 // Minimal inline Quill for testing
 const TEST_QUILL = {
