@@ -124,3 +124,16 @@
 ---
 
 This CI/CD setup provides reliable builds and safe, ordered publishing to crates.io, PyPI, and npm.
+
+---
+
+## Cross-References
+
+**Related Design Documents:**
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Overall architecture
+- [PYTHON.md](PYTHON.md) - Python build and distribution
+- [WASM.md](WASM.md) - WebAssembly build and distribution
+
+**Implementation:**
+- `.github/workflows/` - GitHub Actions workflows
+- `scripts/` - Build and release automation scripts

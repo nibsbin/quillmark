@@ -179,6 +179,22 @@ title = { description = "Document title", type = "str" }
 - `Quill::from_tree(root, default_name)` - Load from in-memory file tree (canonical constructor)
 - `Quill::from_json(json_str)` - Load from JSON string
 
+**Usage Examples:**
+
+```rust
+// Load from filesystem path
+let quill = Quill::from_path("path/to/my-quill")?;
+
+// Load from JSON (useful for web frontends)
+let json_data = r#"{
+  "files": {
+    "Quill.toml": { "contents": "[Quill]\nname = \"demo\"\nbackend = \"typst\"\ndescription = \"Demo quill\"" },
+    "glue.typ": { "contents": "#set document(title: \"{{ title }}\")\n\n{{ body | Content }}" }
+  }
+}"#;
+let quill = Quill::from_json(json_data)?;
+```
+
 ### File Access APIs
 
 - `file_exists(path)` - Check if a file exists
@@ -186,3 +202,34 @@ title = { description = "Document title", type = "str" }
 - `dir_exists(path)` - Check if directory exists
 - `list_files(path)` - List files in a directory (non-recursive)
 - `list_subdirectories(path)` - List subdirectories (non-recursive)
+
+**File Tree Navigation Examples:**
+
+```rust
+// Check if asset exists before using
+if quill.file_exists("assets/logo.png") {
+    let logo_bytes = quill.get_file("assets/logo.png")?;
+}
+
+// List all fonts in a directory
+if quill.dir_exists("fonts/") {
+    let font_files = quill.list_files("fonts/")?;
+    for font in font_files {
+        println!("Found font: {}", font);
+    }
+}
+
+// Navigate nested directories
+let packages = quill.list_subdirectories("packages/")?;
+for package_dir in packages {
+    let package_files = quill.list_files(&format!("packages/{}/", package_dir))?;
+}
+```
+
+**Edge Cases:**
+
+1. **Path Separators**: Always use forward slashes (`/`) regardless of platform
+2. **Directory Paths**: Directory paths must end with `/` for `list_files()` and `list_subdirectories()`
+3. **Root Access**: Use `""` or `"/"` to access root directory
+4. **Non-existent Paths**: File access methods return `Err` for non-existent paths
+5. **Binary Files**: `get_file()` returns `Vec<u8>` for all files (convert to UTF-8 as needed)

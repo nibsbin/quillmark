@@ -157,3 +157,19 @@ npm install @quillmark-test/wasm
 - **Typical render time**: 50-200ms for standard documents
 - **Memory usage**: ~10-50MB depending on Quill complexity
 - **Recommendations**: Reuse engines, batch operations, unregister unused Quills, minimize asset sizes
+
+---
+
+## Cross-References
+
+**Related Design Documents:**
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Core architecture
+- [ERROR.md](ERROR.md) - Error handling and WASM error serialization
+- [QUILL.md](QUILL.md) - Quill structure (JSON format for web frontends)
+
+**Implementation:**
+- `bindings/quillmark-wasm/` - WASM bindings source
+- `bindings/quillmark-wasm/pkg/` - Built NPM package
+
+**Related:**
+- [PYTHON.md](PYTHON.md) - Python bindings for server-side use

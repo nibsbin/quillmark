@@ -207,4 +207,20 @@ pip install quillmark
 uv pip install quillmark
 ```
 
+---
+
+## Cross-References
+
+**Related Design Documents:**
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Core architecture
+- [ERROR.md](ERROR.md) - Error handling and Python error mapping
+- [QUILL.md](QUILL.md) - Quill structure (JSON format)
+
+**Implementation:**
+- `bindings/quillmark-python/` - Python bindings source
+- `bindings/quillmark-python/python/quillmark/` - Python package
+
+**Related:**
+- [WASM.md](WASM.md) - WebAssembly bindings for browser/Node.js
+
 
