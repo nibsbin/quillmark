@@ -72,9 +72,18 @@ High-level data flow:
 * Sealed rendering API: `Workflow`
 * Orchestration (parse → compose → compile)
 * Validation and **structured error propagation**
-* QuillRef for ergonomic quill references
+* Backend auto-registration on engine creation
+* Default Quill registration during backend setup
 
 **API Documentation:** See the crate's rustdoc for comprehensive API documentation with usage examples, including module-level overview, detailed method documentation, and doc tests.
+
+**Key Methods:**
+- `Quillmark::new()` - Creates engine with auto-registered backends
+- `Quillmark::register_quill(quill)` - Registers a quill template
+- `Quillmark::register_backend(backend)` - Registers a custom backend (and its default Quill if provided)
+- `Quillmark::workflow_from_quill_name(name)` - Creates workflow from registered quill name
+- `Quillmark::workflow_from_quill(&quill)` - Creates workflow from quill object (doesn't require registration)
+- `Quillmark::workflow_from_parsed(&parsed)` - Creates workflow from parsed document (uses QUILL field or `__default__`)
 
 ### `backends/quillmark-typst` (Typst backend)
 
@@ -148,9 +157,10 @@ The workflow follows a three-stage pipeline:
 
 ### Key Concepts
 
-- **Backend Auto-Registration**: Backends are automatically registered based on enabled features
+- **Backend Auto-Registration**: Backends are automatically registered based on enabled features when `Quillmark::new()` is called
+- **Default Quill System**: Backends can provide a default Quill template (registered as `__default__`) for documents without explicit `QUILL:` tags (see [DEFAULT_QUILL.md](DEFAULT_QUILL.md))
 - **Dynamic Assets**: Runtime assets prefixed with `DYNAMIC_ASSET__` and accessible via `Asset` filter
-- **Error Handling**: Structured `Diagnostic` information with source chains preserved
+- **Error Handling**: Structured `Diagnostic` information with source chains preserved through error chains
 
 ---
 
@@ -160,15 +170,17 @@ The template system uses **MiniJinja** with a **stable filter API** to keep back
 
 ### Filter Architecture
 
-Backends register custom filters via the stable `filter_api` module:
-- **String** - Escape/quote values
-- **Lines** - Array to multi-line string
-- **Date** - Date parsing for backend datetime types
-- **Dict** - Objects to backend-native structures
-- **Content** - Markdown body to backend markup
+Backends register custom filters via the stable `filter_api` module in `quillmark-core/src/templating.rs`:
+- **String** - Escape/quote values for backend syntax
+- **Lines** - Array to multi-line string conversion
+- **Date** - Date parsing for backend datetime types  
+- **Dict** - Objects to backend-native structures (e.g., YAML to TOML)
+- **Content** - Markdown body to backend markup conversion
 - **Asset** - Dynamic asset filename transformation
 
-Filters bridge YAML values to backend-specific constructs while maintaining a stable ABI.
+**Stability Guarantee:** The `filter_api` module provides a stable ABI that external crates can depend on without direct MiniJinja dependency. This prevents version conflicts and maintains backward compatibility.
+
+Filters bridge YAML values to backend-specific constructs while maintaining a stable interface. Backends implement filters using types from `quillmark_core::templating::filter_api::{State, Value, Kwargs, Error}`.
 
 ### Template Context
 
@@ -329,17 +341,27 @@ External errors (MiniJinja, Typst, etc.) are converted to structured diagnostics
 
 To implement a new backend:
 
-1. Implement the `Backend` trait
-2. Define `id()`, `supported_formats()`, `glue_type()`
-3. Register filters via `register_filters()`
-4. Implement `compile()` for artifact generation
-5. Ship as separate crate depending on `quillmark-core`
+1. Implement the `Backend` trait from `quillmark-core`
+2. Define required methods:
+   - `id()` - Unique backend identifier (e.g., "typst", "latex")
+   - `supported_formats()` - Output formats supported (e.g., PDF, SVG)
+   - `glue_extension_types()` - File extensions for custom glue files (e.g., ".typ")
+   - `allow_auto_glue()` - Whether automatic JSON glue generation is allowed
+   - `register_filters(&self, glue)` - Register backend-specific template filters
+   - `compile(&self, glue, quill, opts)` - Compile glue content to artifacts
+3. Optionally implement:
+   - `default_quill()` - Provide embedded default Quill template
+4. Ship as separate crate depending on `quillmark-core`
 
 **Requirements:**
 - Thread-safe (`Send + Sync`)
 - Format validation in `compile()`
 - Structured error reporting via `Diagnostic`
 - Asset and package handling as needed
+
+**Example Backend Implementation:** See `backends/quillmark-typst` for a complete reference implementation.
+
+**Default Quill Pattern:** Backends can embed a default Quill template to support documents without explicit `QUILL:` tags. The default Quill is registered as `__default__` during backend registration. See [DEFAULT_QUILL.md](DEFAULT_QUILL.md) for details.
 
 ### Custom Filters
 
@@ -352,9 +374,11 @@ To implement a new backend:
 
 ## Key Design Decisions
 
-1. **Sealed Engine w/ Explicit Backend** - Simplifies usage; deterministic selection
-2. **Template-First, YAML-Only Frontmatter** - Reduces parsing complexity
-3. **Dynamic Package Loading** - Runtime discovery of packages and versions
-4. **Filter-Based Data Transformation** - Stable templating ABI across backends
-5. **Unified Error Hierarchy** - Consistent diagnostics with source chains
-6. **Thread-Safe Design** - `Send + Sync` enables concurrent rendering
+1. **Sealed Engine w/ Explicit Backend** - Simplifies usage; deterministic backend selection at engine creation
+2. **Template-First, YAML-Only Frontmatter** - Reduces parsing complexity; backends convert via filters
+3. **Default Quill System** - Backends provide embedded default templates for zero-config usage
+4. **Dynamic Package Loading** - Runtime discovery of packages and versions
+5. **Filter-Based Data Transformation** - Stable templating ABI across backends via `filter_api` module
+6. **Unified Error Hierarchy** - Consistent diagnostics with source chains and location tracking
+7. **Thread-Safe Design** - `Send + Sync` traits enable concurrent rendering
+8. **Backend Auto-Registration** - Feature-based backend registration for simplified setup
