@@ -1,3 +1,31 @@
+//! # AcroForm Backend Integration Tests
+//!
+//! Integration tests for the AcroForm backend PDF form filling functionality.
+//!
+//! ## Test Coverage
+//!
+//! This test suite validates:
+//! - **Backend compilation** - Compiling JSON context to filled PDF forms
+//! - **Field mapping** - Mapping template values to PDF form fields
+//! - **Template rendering** - MiniJinja template processing in field values
+//! - **PDF output** - Valid PDF generation with filled fields
+//!
+//! ## AcroForm Backend
+//!
+//! The AcroForm backend fills PDF forms by:
+//! 1. Loading a PDF form from quill's `form.pdf` file
+//! 2. Extracting field names and descriptions
+//! 3. Rendering field values using MiniJinja templates
+//! 4. Writing rendered values back to the PDF form
+//!
+//! ## Test Requirements
+//!
+//! Tests require the `acroform` feature flag to be enabled.
+//!
+//! ## Design Reference
+//!
+//! See `prose/designs/ACROFORM.md` for backend design details.
+
 #[cfg(test)]
 #[cfg(feature = "acroform")]
 mod tests {
