@@ -12,8 +12,8 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = { version = "~0.26", features = ["extension-module", "abi3-py310"] }
-quillmark = { version = "0.6.6", path = "../../quillmark", default-features = true}
-quillmark-core = { version = "0.6.6", path = "../../quillmark-core" }
-quillmark-typst = { version = "0.6.6", path = "../../backends/quillmark-typst", default-features = false, features = ["embed-default-font"]}
+quillmark = { version = "0.6.7", path = "../../quillmark", default-features = true}
+quillmark-core = { version = "0.6.7", path = "../../quillmark-core" }
+quillmark-typst = { version = "0.6.7", path = "../../backends/quillmark-typst", default-features = false, features = ["embed-default-font"]}
 anyhow = { version = "~1.0" }
 serde_json = { version = "~1.0" }
