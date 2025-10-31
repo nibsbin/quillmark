@@ -345,7 +345,7 @@ cargo test --doc
 - [TECHNICAL_DEBT_REDUCTION.md](TECHNICAL_DEBT_REDUCTION.md) - Technical debt reduction plan
 - [TEST_COVERAGE_MATRIX.md](TEST_COVERAGE_MATRIX.md) - Test coverage overview
 - [../MAINTAINABILITY_SUMMARY.md](../MAINTAINABILITY_SUMMARY.md) - Project maintainability
-- [DESIGN_DOCUMENT_TEMPLATE.md](DESIGN_DOCUMENT_TEMPLATE.md) - Template for new designs (to be created)
+- [DESIGN_DOCUMENT_TEMPLATE.md](DESIGN_DOCUMENT_TEMPLATE.md) - Template for new designs
 
 ---
 

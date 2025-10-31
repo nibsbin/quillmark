@@ -276,7 +276,7 @@ cargo test --doc
 
 ## Related Documents
 
-- [TECHNICAL_DEBT_REDUCTION.md](TECHNICAL_DEBT_REDUCTION.md) - Overall technical debt plan
-- [DEFAULT_QUILL.md](DEFAULT_QUILL.md) - Default Quill implementation plan
+- [../plans/TECHNICAL_DEBT_REDUCTION.md](../plans/TECHNICAL_DEBT_REDUCTION.md) - Overall technical debt plan
+- [../plans/DEFAULT_QUILL.md](../plans/DEFAULT_QUILL.md) - Default Quill implementation plan
 - [../designs/ARCHITECTURE.md](../designs/ARCHITECTURE.md) - System architecture
 - [../MAINTAINABILITY_SUMMARY.md](../MAINTAINABILITY_SUMMARY.md) - Project maintainability overview
