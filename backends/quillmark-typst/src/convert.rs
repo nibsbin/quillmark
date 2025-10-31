@@ -512,7 +512,7 @@ mod tests {
         // Lists end with extra newline
         assert_eq!(typst, "- *Bold* item\n- _Italic_ item\n- `Code` item\n\n");
     }
-    
+
     #[test]
     fn test_mixed_list_types() {
         let markdown = "- Bullet item\n\n1. Ordered item\n2. Another ordered";
