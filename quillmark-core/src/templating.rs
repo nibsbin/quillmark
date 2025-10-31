@@ -306,9 +306,7 @@ impl Glue {
 }
 
 /// Separate metadata fields from body field
-fn separate_metadata_fields(
-    context: &HashMap<String, QuillValue>,
-) -> HashMap<String, QuillValue> {
+fn separate_metadata_fields(context: &HashMap<String, QuillValue>) -> HashMap<String, QuillValue> {
     context
         .iter()
         .filter(|(key, _)| key.as_str() != BODY_FIELD)
