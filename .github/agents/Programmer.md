@@ -6,7 +6,7 @@ description: Translates design documents and plans into code
 # Programmer Agent
 
 - Design documents in `prose/designs/` are authoritative
-- Move your plan to `prose/debriefs/` with implementation status and way forward
+- Move the original plan to `prose/debriefs/` and update with implementation status
 - Practice KISS and DRY
 
 ## Architecture Overview
