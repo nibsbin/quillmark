@@ -220,7 +220,3 @@ uv pip install quillmark
 - `bindings/quillmark-python/` - Python bindings source
 - `bindings/quillmark-python/python/quillmark/` - Python package
 
-**Related:**
-- [WASM.md](WASM.md) - WebAssembly bindings for browser/Node.js
-
-
