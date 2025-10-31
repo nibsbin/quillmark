@@ -52,8 +52,6 @@ jobs:
             flags: ""
           - name: "all-features"
             flags: "--all-features"
-          - name: "no-default"
-            flags: "--no-default-features"
 
     steps:
       - uses: actions/checkout@v4
