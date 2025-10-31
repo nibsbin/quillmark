@@ -15,7 +15,6 @@ default-members = [
     "quillmark",
     "backends/quillmark-typst",
     "backends/quillmark-acroform",
-    "bindings/quillmark-wasm",
 ]
 resolver = "2"
 
@@ -77,6 +76,22 @@ no_individual_tags = true
 
 [workspace.metadata.release]
 allow-branch = ["main"]
+
+[profile.dev]
+opt-level = 0
+debug = true
+strip = "none"
+debug-assertions = true
+overflow-checks = true
+lto = false
+panic = 'unwind'
+incremental = true
+codegen-units = 256
+rpath = false
+split-debuginfo = "unpacked"  # Faster on macOS/Linux
+[profile.dev.package."*"]
+debug = false
+opt-level = 0
 
 [profile.release]
 opt-level = "z"      # Optimize for size
