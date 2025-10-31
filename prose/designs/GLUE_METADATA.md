@@ -97,22 +97,23 @@ The `compose()` method in `TemplateGlue` and `AutoGlue` will be updated to:
 **Pseudocode:**
 ```rust
 fn compose(context: HashMap<String, QuillValue>) -> Result<String, TemplateError> {
-    // Separate body from metadata
-    let mut metadata_fields = HashMap::new();
-    
-    for (key, value) in &context {
-        if key != BODY_FIELD {
-            metadata_fields.insert(key.clone(), value.clone());
-        }
-    }
+    // Separate metadata from body
+    let metadata_fields: HashMap<String, QuillValue> = context
+        .iter()
+        .filter(|(key, _)| key.as_str() != BODY_FIELD)
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
     
     // Convert to MiniJinja values
     let mut minijinja_context = convert_quillvalue_to_minijinja(context)?;
-    let metadata_value = convert_quillvalue_to_minijinja(metadata_fields)?;
+    let metadata_minijinja = convert_quillvalue_to_minijinja(metadata_fields)?;
     
-    // Add __metadata__ field
-    minijinja_context.insert("__metadata__".to_string(), 
-                            minijinja::value::Value::from_object(metadata_value));
+    // Add __metadata__ field as a Value from the metadata HashMap
+    // MiniJinja's Value::from_serialize or Value::from_serializable handles HashMap
+    minijinja_context.insert(
+        "__metadata__".to_string(), 
+        minijinja::value::Value::from_serialize(&metadata_minijinja)
+    );
     
     // Render template with enhanced context
     // ...
@@ -236,3 +237,4 @@ Templates that iterate over fields to build headers/preambles can simplify:
 - [PARSE.md](PARSE.md) - Document parsing and field structure
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Template system architecture
 - [Extended YAML Metadata Standard](PARSE.md#extended-yaml-metadata-standard)
+- [Implementation Plan](../plans/GLUE_METADATA.md) - Detailed implementation steps

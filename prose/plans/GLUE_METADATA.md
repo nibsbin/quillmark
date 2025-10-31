@@ -55,10 +55,10 @@ fn compose(&mut self, context: HashMap<String, QuillValue>) -> Result<String, Te
     let mut minijinja_context = convert_quillvalue_to_minijinja(context)?;
     let metadata_minijinja = convert_quillvalue_to_minijinja(metadata_fields)?;
     
-    // Add __metadata__ field
+    // Add __metadata__ field as a MiniJinja Value
     minijinja_context.insert(
         "__metadata__".to_string(), 
-        minijinja::value::Value::from_object(metadata_minijinja)
+        minijinja::value::Value::from_serialize(&metadata_minijinja)
     );
 
     // Create environment and render (existing code continues)
