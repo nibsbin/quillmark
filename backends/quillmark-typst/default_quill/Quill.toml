@@ -1,0 +1,6 @@
+[Quill]
+name = "__default__"
+backend = "typst"
+glue_file = "glue.typ"
+example_file = "example.md"
+description = "Default Quill for rendering markdown."

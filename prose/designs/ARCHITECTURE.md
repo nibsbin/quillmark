@@ -170,6 +170,14 @@ Backends register custom filters via the stable `filter_api` module:
 
 Filters bridge YAML values to backend-specific constructs while maintaining a stable ABI.
 
+### Template Context
+
+Templates receive parsed document fields via the MiniJinja context. The context includes:
+- **Top-level fields**: All frontmatter fields and `body` accessible directly (e.g., `{{ title }}`, `{{ body }}`)
+- **`__metadata__` field**: A special system-generated field containing all frontmatter fields except `body` for convenient metadata-only access and iteration
+
+**See [GLUE_METADATA.md](GLUE_METADATA.md) for details on metadata access patterns.**
+
 ---
 
 ## Parsing and Document Decomposition

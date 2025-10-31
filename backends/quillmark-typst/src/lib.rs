@@ -43,6 +43,13 @@ mod error_mapping;
 mod filters;
 mod world;
 
+/// Embedded default Quill files
+mod embedded {
+    pub const QUILL_TOML: &str = include_str!("../default_quill/Quill.toml");
+    pub const GLUE_TYP: &str = include_str!("../default_quill/glue.typ");
+    pub const EXAMPLE_MD: &str = include_str!("../default_quill/example.md");
+}
+
 /// Utilities exposed for fuzzing tests.
 /// Not intended for general use.
 #[doc(hidden)]
@@ -57,6 +64,7 @@ use quillmark_core::{
     Artifact, Backend, Diagnostic, Glue, OutputFormat, Quill, RenderError, RenderOptions,
     RenderResult, Severity,
 };
+use std::collections::HashMap;
 
 /// Typst backend implementation for Quillmark.
 pub struct TypstBackend;
@@ -137,6 +145,36 @@ impl Backend for TypstBackend {
                 .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
             }),
         }
+    }
+
+    fn default_quill(&self) -> Option<Quill> {
+        use quillmark_core::FileTreeNode;
+
+        // Build file tree from embedded files
+        let mut files = HashMap::new();
+        files.insert(
+            "Quill.toml".to_string(),
+            FileTreeNode::File {
+                contents: embedded::QUILL_TOML.as_bytes().to_vec(),
+            },
+        );
+        files.insert(
+            "glue.typ".to_string(),
+            FileTreeNode::File {
+                contents: embedded::GLUE_TYP.as_bytes().to_vec(),
+            },
+        );
+        files.insert(
+            "example.md".to_string(),
+            FileTreeNode::File {
+                contents: embedded::EXAMPLE_MD.as_bytes().to_vec(),
+            },
+        );
+
+        let root = FileTreeNode::Directory { files };
+
+        // Try to create Quill from tree, return None if it fails
+        Quill::from_tree(root, None).ok()
     }
 }
 

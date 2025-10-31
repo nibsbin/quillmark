@@ -32,15 +32,6 @@ See `designs/ARCHITECTURE.md` for complete architecture.
 - Err on the side of brevity
 - Avoid documentation creep; keep docs focused and up-to-date
 
-## Design Document Philosophy
-All design documents in `designs/` should follow consistent principles:
-
-- High-level only - Focus on architecture, not implementation
-- Minimal code - Only essential examples, reference actual code
-- Medium detail - Enough to understand, not enough to implement
-- KISS - Keep it simple and maintainable
-- References - Point to actual implementation for details
-
 ## Implementation/Testing Strategy
 
 - This is pre-1.0 software. Never worry about backwards compatibility. Actively remove legacy code/comments.
