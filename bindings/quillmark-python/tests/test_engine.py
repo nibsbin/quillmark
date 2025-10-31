@@ -9,7 +9,7 @@ def test_engine_creation():
     """Test creating a Quillmark engine."""
     engine = Quillmark()
     assert "typst" in engine.registered_backends()
-    assert len(engine.registered_quills()) == 0
+    assert len(engine.registered_quills()) == 1
 
 
 def test_register_quill(taro_quill_dir):
