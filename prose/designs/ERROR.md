@@ -95,3 +95,20 @@ See `backends/quillmark-typst/src/error_mapping.rs` for implementation details.
 3. **Check warnings** - Inspect `RenderResult.warnings` and display to users
 4. **Serialize for tooling** - All diagnostic types support JSON serialization via `serde`
 5. **Preserve error context** - Use error chaining to maintain full diagnostic information
+
+---
+
+## Cross-References
+
+**Related Design Documents:**
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Error handling patterns in orchestration workflow
+- [PARSE.md](PARSE.md) - Parse error handling and validation
+- [DEFAULT_QUILL.md](DEFAULT_QUILL.md) - Error handling when no quill is available
+
+**Implementation:**
+- `quillmark-core/src/error.rs` - Core error types and diagnostics
+- `quillmark/src/orchestration.rs` - Error propagation in workflow
+
+**Language Bindings:**
+- [PYTHON.md](PYTHON.md) - Python error mapping
+- [WASM.md](WASM.md) - WebAssembly error serialization

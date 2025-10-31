@@ -151,4 +151,17 @@ The parser validates:
 - Invalid scope name syntax → error
 - Both SCOPE and QUILL in same block → error
 
+---
+
+## Cross-References
+
+**Related Design Documents:**
+- [ARCHITECTURE.md](ARCHITECTURE.md) - Parsing in the overall workflow
+- [ERROR.md](ERROR.md) - Parse error handling and diagnostics
+- [QUILL_VALUE.md](QUILL_VALUE.md) - Value types used in parsed documents
+
+**Implementation:**
+- `quillmark-core/src/parse.rs` - Parser implementation and tests
+- `quillmark-core/src/lib.rs` - `ParsedDocument` public API
+
 
