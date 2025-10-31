@@ -25,10 +25,10 @@ Quillmark is a flexible, **template-first** Markdown rendering system that conve
 
 High-level data flow:
 
-* **Parsing** → YAML frontmatter + body extraction (see [PARSE.md](PARSE.md))
-* **Templating** → MiniJinja-based "Glue" composition with backend-registered filters (see [Template System Design](#template-system-design))
-* **Backend Processing** → Compile composed glue to final artifacts (see [Backend Architecture](#backend-architecture))
-* **Assets/Packages** → Fonts, images, and backend packages resolved dynamically (see [Package Management and Asset Handling](#package-management-and-asset-handling))
+* **Parsing** → YAML frontmatter + body extraction
+* **Templating** → MiniJinja-based composition with backend-registered filters
+* **Backend Processing** → Compile to final artifacts
+* **Assets/Packages** → Fonts, images, and packages resolved dynamically
 
 ---
 
@@ -58,11 +58,11 @@ High-level data flow:
 ### `quillmark-core` (foundations)
 
 * Types: `Backend`, `Artifact`, `OutputFormat`
-* Parsing: `ParsedDocument` with `from_markdown()` constructor; `decompose()` function for direct parsing (see [PARSE.md](PARSE.md))
-* Templating: `Glue` + stable `filter_api` (see [Template System Design](#template-system-design))
-* Template model: `Quill` (+ `Quill.toml`) (see [QUILL.md](QUILL.md))
-* **Errors & Diagnostics:** `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location` (see [ERROR.md](ERROR.md))
-* Utilities: TOML⇄YAML conversion helpers (for backend filters)
+* Parsing: `ParsedDocument` with `from_markdown()` constructor
+* Templating: `Glue` + stable `filter_api`
+* Template model: `Quill` (+ `Quill.toml`)
+* Errors & Diagnostics: `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
+* Utilities: TOML⇄YAML conversion helpers
 
 **Design Note:** No external backend deps; backends depend on core → no cycles.
 
@@ -71,63 +71,45 @@ High-level data flow:
 * High-level API: `Quillmark` for managing backends and quills
 * Sealed rendering API: `Workflow`
 * Orchestration (parse → compose → compile)
-* Validation and **structured error propagation** (see [ERROR.md](ERROR.md))
-* Backend auto-registration on engine creation (see [Backend Architecture](#backend-architecture))
-* Default Quill registration during backend setup (see [DEFAULT_QUILL.md](DEFAULT_QUILL.md))
+* Validation and structured error propagation
+* Backend auto-registration on engine creation
+* Default Quill registration during backend setup
 
-**API Documentation:** See the crate's rustdoc for comprehensive API documentation with usage examples, including module-level overview, detailed method documentation, and doc tests.
-
-**Key Methods:**
-- `Quillmark::new()` - Creates engine with auto-registered backends
-- `Quillmark::register_quill(quill)` - Registers a quill template
-- `Quillmark::register_backend(backend)` - Registers a custom backend (and its default Quill if provided)
-- `Quillmark::workflow_from_quill_name(name)` - Creates workflow from registered quill name
-- `Quillmark::workflow_from_quill(&quill)` - Creates workflow from quill object (doesn't require registration)
-- `Quillmark::workflow_from_parsed(&parsed)` - Creates workflow from parsed document (uses QUILL field or `__default__`)
+**See crate rustdoc for complete API documentation.**
 
 ### `backends/quillmark-typst` (Typst backend)
 
 * Implements `Backend` for PDF/SVG
-* Markdown→Typst conversion (`mark_to_typst`)
-* Filters: `String`, `Lines`, `Date`, `Dict`, `Content`, `Asset` (via JSON injection)
-* Compilation environment (`QuillWorld`)
-* Dynamic package loading (`typst.toml`), font & asset resolution
-* **Structured diagnostics** with source locations (maps Typst diagnostics → `Diagnostic`)
+* Markdown→Typst conversion
+* Template filters: String, Lines, Date, Dict, Content, Asset
+* Compilation environment with font & asset resolution
+* Structured diagnostics with source locations
 
 ### `quillmark-fixtures` (dev/test utilities)
 
-* Centralized resources under `resources/`
-* `resource_path()`, `example_output_dir()`, `write_example_output()`
-* Workspace discovery and standardized example outputs
+* Centralized test resources under `resources/`
+* Helper functions for test setup and output
 
 ### `backends/quillmark-acroform` (AcroForm backend)
 
 * Implements `Backend` for PDF form filling
-* Reads PDF forms from `form.pdf` file in quill bundle
 * Templates field values using MiniJinja
 * Supports tooltip-based and value-based templating
-* Returns filled PDF forms as artifacts
 
 ### `bindings/quillmark-python` (Python bindings)
 
-* PyO3-based Python bindings for Quillmark
-* Mirrors the Rust API with Pythonic conventions
-* Exposes `Quillmark`, `Workflow`, `Quill`, `ParsedDocument`, `RenderResult`, and `Artifact` classes
+* PyO3-based bindings mirroring Rust API with Pythonic conventions
 * Published to PyPI as `quillmark` package
 
 ### `bindings/quillmark-wasm` (WebAssembly bindings)
 
-* wasm-bindgen based WASM bindings for Quillmark
-* JSON-based data exchange across WASM boundary
-* Exposes `Quillmark` class with workflow methods
+* wasm-bindgen based bindings with JSON data exchange
 * Published to npm as `@quillmark-test/wasm` package
 * Supports bundler, Node.js, and web targets
 
 ### `quillmark-fuzz` (fuzzing tests)
 
-* Fuzz testing suite for Quillmark
-* Tests parsing, templating, and rendering edge cases
-* Not published to crates.io
+* Fuzz testing suite for parsing, templating, and rendering
 
 ---
 
@@ -157,10 +139,10 @@ The workflow follows a three-stage pipeline:
 
 ### Key Concepts
 
-- **Backend Auto-Registration**: Backends are automatically registered based on enabled features when `Quillmark::new()` is called
-- **Default Quill System**: Backends can provide a default Quill template (registered as `__default__`) for documents without explicit `QUILL:` tags (see [DEFAULT_QUILL.md](DEFAULT_QUILL.md))
-- **Dynamic Assets**: Runtime assets prefixed with `DYNAMIC_ASSET__` and accessible via `Asset` filter
-- **Error Handling**: Structured `Diagnostic` information with source chains preserved through error chains
+- **Backend Auto-Registration**: Backends registered based on enabled features
+- **Default Quill System**: Backends provide fallback templates for documents without `QUILL:` tags
+- **Dynamic Assets**: Runtime assets accessible via `Asset` filter
+- **Error Handling**: Structured diagnostics with source chain preservation
 
 ---
 
@@ -170,30 +152,25 @@ The template system uses **MiniJinja** with a **stable filter API** to keep back
 
 ### Filter Architecture
 
-Backends register custom filters via the stable `filter_api` module in `quillmark-core/src/templating.rs`:
+### Filter Architecture
+
+Backends register custom filters via the stable `filter_api` module:
 - **String** - Escape/quote values for backend syntax
 - **Lines** - Array to multi-line string conversion
 - **Date** - Date parsing for backend datetime types  
-- **Dict** - Objects to backend-native structures (e.g., YAML to TOML)
+- **Dict** - Objects to backend-native structures
 - **Content** - Markdown body to backend markup conversion
 - **Asset** - Dynamic asset filename transformation
 
-**Stability Guarantee:** The `filter_api` module provides a stable ABI that external crates can depend on without direct MiniJinja dependency. This prevents version conflicts and maintains backward compatibility across Quillmark versions.
-
-**Implementation Note:** Filters bridge YAML values to backend-specific constructs while maintaining a stable interface. Backends implement filters using types from `quillmark_core::templating::filter_api::{State, Value, Kwargs, Error}`. This abstraction layer ensures that:
-1. Backend implementations remain independent of MiniJinja version updates
-2. Custom backends can be developed and maintained separately from the core library
-3. The public API surface remains minimal and stable across releases
-
-**See also:** [quillmark-core/src/templating.rs](../../quillmark-core/src/templating.rs) for filter API implementation details.
+The `filter_api` provides a stable ABI, preventing version conflicts and enabling independent backend development.
 
 ### Template Context
 
-Templates receive parsed document fields via the MiniJinja context. The context includes:
-- **Top-level fields**: All frontmatter fields and `body` accessible directly (e.g., `{{ title }}`, `{{ body }}`)
-- **`__metadata__` field**: A special system-generated field containing all frontmatter fields except `body` for convenient metadata-only access and iteration
+Templates receive parsed document fields via the MiniJinja context:
+- **Top-level fields**: All frontmatter fields and `body` accessible directly
+- **`__metadata__` field**: System-generated field containing all frontmatter fields except `body`
 
-**See [GLUE_METADATA.md](GLUE_METADATA.md) for details on metadata access patterns.**
+See [GLUE_METADATA.md](GLUE_METADATA.md) for metadata access patterns.
 
 ---
 
@@ -310,33 +287,15 @@ quill-template/
 
 ## Error Handling Patterns
 
-> **📋 Implementation Guide:** See [ERROR.md](ERROR.md) for comprehensive documentation of the error handling system, including usage examples and implementation details.
+See [ERROR.md](ERROR.md) for complete documentation.
 
 ### Core Error Types
 
-**Diagnostic** - Structured error information:
-- Severity level (Error, Warning, Note)
-- Error code for machine processing
-- Human-readable message
-- Source location (file, line, column)
-- Helpful hints
-- Source chain - Preserves full error context
+- **Diagnostic** - Structured error with severity, code, message, location, hints, and source chain
+- **RenderError** - Main error enum containing diagnostics
+- **SerializableDiagnostic** - For FFI boundaries (Python, WASM)
 
-**RenderError** - Main error enum with diagnostic payloads:
-- Every variant contains `Diagnostic` or `Vec<Diagnostic>`
-- `CompilationFailed` may contain multiple diagnostics
-- Display impl uses diagnostic messages
-
-**SerializableDiagnostic** - For FFI boundaries (Python, WASM)
-
-### Error Conversion
-
-External errors (MiniJinja, Typst, etc.) are converted to structured diagnostics:
-1. Extract location information (file, line, column)
-2. Create `Diagnostic` with appropriate severity and code
-3. Preserve original error via `with_source()`
-4. Generate context-aware hints
-5. Wrap in appropriate `RenderError` variant
+External errors are converted to structured diagnostics preserving location and context.
 
 ---
 
@@ -344,36 +303,15 @@ External errors (MiniJinja, Typst, etc.) are converted to structured diagnostics
 
 ### New Backends
 
-To implement a new backend:
+Implement the `Backend` trait with required methods: `id()`, `supported_formats()`, `glue_extension_types()`, `allow_auto_glue()`, `register_filters()`, and `compile()`. Optionally provide `default_quill()` for zero-config support.
 
-1. Implement the `Backend` trait from `quillmark-core`
-2. Define required methods:
-   - `id()` - Unique backend identifier (e.g., "typst", "latex")
-   - `supported_formats()` - Output formats supported (e.g., PDF, SVG)
-   - `glue_extension_types()` - File extensions for custom glue files (e.g., ".typ")
-   - `allow_auto_glue()` - Whether automatic JSON glue generation is allowed
-   - `register_filters(&self, glue)` - Register backend-specific template filters
-   - `compile(&self, glue, quill, opts)` - Compile glue content to artifacts
-3. Optionally implement:
-   - `default_quill()` - Provide embedded default Quill template
-4. Ship as separate crate depending on `quillmark-core`
+**Requirements:** Thread-safe (`Send + Sync`), structured error reporting, format validation.
 
-**Requirements:**
-- Thread-safe (`Send + Sync`)
-- Format validation in `compile()`
-- Structured error reporting via `Diagnostic`
-- Asset and package handling as needed
-
-**Example Backend Implementation:** See `backends/quillmark-typst` for a complete reference implementation.
-
-**Default Quill Pattern:** Backends can embed a default Quill template to support documents without explicit `QUILL:` tags. The default Quill is registered as `__default__` during backend registration. See [DEFAULT_QUILL.md](DEFAULT_QUILL.md) for details.
+See `backends/quillmark-typst` for reference implementation.
 
 ### Custom Filters
 
-- Register via `glue.register_filter(name, func)`
-- Use stable `filter_api` types only
-- Return `Result<Value, Error>` for proper error handling
-- Document filter behavior and type requirements
+Register via `glue.register_filter(name, func)` using stable `filter_api` types. Return `Result<Value, Error>` for error handling.
 
 ---
 

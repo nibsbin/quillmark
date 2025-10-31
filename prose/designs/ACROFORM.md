@@ -46,17 +46,3 @@ The backend uses the workspace's minijinja dependency to render templates with t
 
 - See the `backends/quillmark-typst` crate for an example of backend implementation.
 - Use the `quillmark-fixtures/resources/usaf_form_8` as a test Quill.
-
----
-
-## Cross-References
-
-**Related Design Documents:**
-- [ARCHITECTURE.md](ARCHITECTURE.md) - Backend architecture and auto glue
-- [ERROR.md](ERROR.md) - Error handling
-
-**Implementation:**
-- `backends/quillmark-acroform/` - AcroForm backend source
-
-**Tests:**
-- `quillmark/tests/acroform_integration_tests.rs` - Integration tests
