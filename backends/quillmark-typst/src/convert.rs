@@ -144,10 +144,10 @@ where
 
                             match list_type {
                                 ListType::Bullet => {
-                                    output.push_str(&format!("{}+ ", indent));
+                                    output.push_str(&format!("{}- ", indent));
                                 }
                                 ListType::Ordered => {
-                                    output.push_str(&format!("{}1. ", indent));
+                                    output.push_str(&format!("{}+ ", indent));
                                 }
                             }
                             end_newline = false;
