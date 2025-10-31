@@ -234,6 +234,9 @@ impl Quillmark {
     /// This method allows registering custom backends or explicitly registering
     /// feature-integrated backends. The backend is registered by its ID.
     ///
+    /// If the backend provides a default Quill and no Quill named `__default__`
+    /// is already registered, the default Quill will be automatically registered.
+    ///
     /// # Example
     ///
     /// ```no_run
@@ -257,7 +260,24 @@ impl Quillmark {
     /// ```
     pub fn register_backend(&mut self, backend: Box<dyn Backend>) {
         let id = backend.id().to_string();
-        self.backends.insert(id, Arc::from(backend));
+
+        // Get default Quill before moving backend
+        let default_quill = backend.default_quill();
+
+        // Register backend first so it's available when registering default Quill
+        self.backends.insert(id.clone(), Arc::from(backend));
+
+        // Register default Quill if available and not already registered
+        if !self.quills.contains_key("__default__") {
+            if let Some(default_quill) = default_quill {
+                if let Err(e) = self.register_quill(default_quill) {
+                    eprintln!(
+                        "Warning: Failed to register default Quill from backend '{}': {}",
+                        id, e
+                    );
+                }
+            }
+        }
     }
 
     /// Register a quill template with the engine by name.
@@ -352,17 +372,24 @@ impl Quillmark {
 
     /// Load a workflow from a parsed document that contains a quill tag
     pub fn workflow_from_parsed(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError> {
-        let quill_name = parsed.quill_tag().ok_or_else(|| {
-            RenderError::UnsupportedBackend {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    "No QUILL field found in parsed document. Add `QUILL: <name>` to the markdown frontmatter.".to_string(),
-                )
-                .with_code("engine::missing_quill_tag".to_string())
-                .with_hint("Add QUILL: <name> to specify which quill template to use".to_string()),
+        let quill_name = parsed.quill_tag().unwrap_or("__default__");
+
+        // Try to load the Quill
+        self.workflow_from_quill_name(quill_name).map_err(|e| {
+            // If we fell back to __default__ and it doesn't exist, provide better error
+            if quill_name == "__default__" && parsed.quill_tag().is_none() {
+                RenderError::UnsupportedBackend {
+                    diag: Diagnostic::new(
+                        Severity::Error,
+                        "No QUILL field found in parsed document and no default Quill is registered.".to_string(),
+                    )
+                    .with_code("engine::missing_quill_tag".to_string())
+                    .with_hint("Add 'QUILL: <name>' to specify which Quill template to use, or ensure a backend with a default Quill is registered.".to_string()),
+                }
+            } else {
+                e
             }
-        })?;
-        self.workflow_from_quill_name(quill_name)
+        })
     }
 
     /// Load a workflow by quill reference (name or object)

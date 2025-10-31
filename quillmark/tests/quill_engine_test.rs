@@ -12,9 +12,12 @@ fn test_quill_engine_creation() {
     #[cfg(any(feature = "typst", feature = "acroform"))]
     assert!(backends.len() > 0);
 
-    // Check that no quills are registered initially
+    // Check that default quill is registered when typst backend is enabled
     let quills = engine.registered_quills();
-    assert_eq!(quills.len(), 0);
+    #[cfg(feature = "typst")]
+    assert_eq!(quills.len(), 1);
+    #[cfg(feature = "typst")]
+    assert!(quills.contains(&"__default__"));
 }
 
 #[test]
@@ -28,7 +31,7 @@ fn test_quill_engine_register_quill() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my_test_quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
@@ -38,10 +41,13 @@ fn test_quill_engine_register_quill() {
         .register_quill(quill)
         .expect("Failed to register quill");
 
-    // Check that quill is registered
+    // Check that quill is registered (plus __default__)
     let quills = engine.registered_quills();
-    assert_eq!(quills.len(), 1);
-    assert!(quills.contains(&"my-test-quill"));
+    #[cfg(feature = "typst")]
+    assert_eq!(quills.len(), 2); // __default__ + my_test_quill
+    #[cfg(not(feature = "typst"))]
+    assert_eq!(quills.len(), 1); // just my_test_quill
+    assert!(quills.contains(&"my_test_quill"));
 }
 
 #[test]
