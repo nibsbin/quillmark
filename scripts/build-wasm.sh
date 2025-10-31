@@ -24,13 +24,6 @@ wasm-pack build bindings/quillmark-wasm \
     --release \
     --scope quillmark-test
 
-# Optional: Further compress with wasm-opt
-if command -v wasm-opt &> /dev/null; then
-    echo "Running wasm-opt for additional compression..."
-    wasm-opt -Oz -o pkg/bundler/wasm_bg.wasm.opt pkg/bundler/wasm_bg.wasm
-    mv pkg/bundler/wasm_bg.wasm.opt pkg/bundler/wasm_bg.wasm
-fi
-
 # Update package name
 if [ -f "pkg/bundler/package.json" ]; then
     if sed --version 2>&1 | grep -q GNU; then
