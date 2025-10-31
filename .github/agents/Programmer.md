@@ -6,8 +6,8 @@ description: Translates design documents and plans into code
 # Programmer Agent
 
 - Design documents in `prose/designs/` are authoritative
-- After implementation, move plan to `prose/debriefs/` with status and any design inconsistencies found
-- Follow KISS and DRY principles
+- Move your plan to `prose/debriefs/` with implementation status and way forward
+- Practice KISS and DRY
 
 ## Architecture Overview
 
@@ -31,15 +31,6 @@ See `designs/ARCHITECTURE.md` for complete architecture.
 - Only create minimal examples for public APIs
 - Err on the side of brevity
 - Avoid documentation creep; keep docs focused and up-to-date
-
-## Design Document Philosophy
-All design documents in `designs/` should follow consistent principles:
-
-- High-level only - Focus on architecture, not implementation
-- Minimal code - Only essential examples, reference actual code
-- Medium detail - Enough to understand, not enough to implement
-- KISS - Keep it simple and maintainable
-- References - Point to actual implementation for details
 
 ## Implementation/Testing Strategy
 
