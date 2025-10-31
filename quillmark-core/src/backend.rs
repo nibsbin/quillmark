@@ -129,4 +129,26 @@ pub trait Backend: Send + Sync {
         quill: &Quill,
         opts: &RenderOptions,
     ) -> Result<crate::RenderResult, RenderError>;
+
+    /// Provide an embedded default Quill for this backend.
+    /// 
+    /// Returns `None` if the backend does not provide a default Quill.
+    /// The returned Quill will be registered with the name `__default__`
+    /// during backend registration if no default Quill already exists.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use quillmark_core::{Backend, Quill};
+    /// # struct MyBackend;
+    /// # impl MyBackend {
+    /// fn default_quill(&self) -> Option<Quill> {
+    ///     // Load embedded default Quill
+    ///     Some(create_embedded_default_quill())
+    /// }
+    /// # }
+    /// ```
+    fn default_quill(&self) -> Option<Quill> {
+        None
+    }
 }
