@@ -168,12 +168,8 @@ impl GlueEngine for TemplateGlue {
 
     /// Compose template with context from markdown decomposition
     fn compose(&mut self, context: HashMap<String, QuillValue>) -> Result<String, TemplateError> {
-        // Separate metadata from body
-        let metadata_fields: HashMap<String, QuillValue> = context
-            .iter()
-            .filter(|(key, _)| key.as_str() != BODY_FIELD)
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
+        // Separate metadata from body using helper function
+        let metadata_fields = separate_metadata_fields(&context);
 
         // Convert QuillValue to MiniJinja values
         let mut minijinja_context = convert_quillvalue_to_minijinja(context)?;
@@ -240,24 +236,21 @@ impl GlueEngine for AutoGlue {
 
     /// Compose context into JSON output
     fn compose(&mut self, context: HashMap<String, QuillValue>) -> Result<String, TemplateError> {
-        // Separate metadata from body
-        let metadata_fields: HashMap<String, QuillValue> = context
-            .iter()
-            .filter(|(key, _)| key.as_str() != BODY_FIELD)
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect();
-
-        // Convert context to JSON
+        // Build both json_map and metadata_json in a single pass to avoid redundant iterations
         let mut json_map = serde_json::Map::new();
+        let mut metadata_json = serde_json::Map::new();
+
         for (key, value) in &context {
-            json_map.insert(key.clone(), value.as_json().clone());
+            let json_value = value.as_json().clone();
+            json_map.insert(key.clone(), json_value.clone());
+
+            // Add to metadata if not the body field
+            if key.as_str() != BODY_FIELD {
+                metadata_json.insert(key.clone(), json_value);
+            }
         }
 
-        // Add __metadata__ object
-        let mut metadata_json = serde_json::Map::new();
-        for (key, value) in &metadata_fields {
-            metadata_json.insert(key.clone(), value.as_json().clone());
-        }
+        // Add __metadata__ object to json_map
         json_map.insert(
             "__metadata__".to_string(),
             serde_json::Value::Object(metadata_json),
@@ -310,6 +303,17 @@ impl Glue {
             Glue::Auto(engine) => engine.compose(context),
         }
     }
+}
+
+/// Separate metadata fields from body field
+fn separate_metadata_fields(
+    context: &HashMap<String, QuillValue>,
+) -> HashMap<String, QuillValue> {
+    context
+        .iter()
+        .filter(|(key, _)| key.as_str() != BODY_FIELD)
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
 }
 
 /// Convert QuillValue map to MiniJinja values
