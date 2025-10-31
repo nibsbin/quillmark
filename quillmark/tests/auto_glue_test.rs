@@ -1,3 +1,33 @@
+//! # Auto Glue Tests
+//!
+//! Tests for automatic JSON glue generation for backends that support it.
+//!
+//! ## Test Coverage
+//!
+//! This test suite validates:
+//! - **Auto glue generation** - Quills without glue_file use automatic JSON glue
+//! - **Backend support** - Backends that set `allow_auto_glue() = true`
+//! - **Field rendering** - Frontmatter fields rendered as JSON context
+//! - **Template validation** - Auto glue works with backend compilation
+//!
+//! ## Auto Glue Mechanism
+//!
+//! When a Quill doesn't specify a `glue_file` in Quill.toml:
+//! 1. Engine checks `backend.allow_auto_glue()`
+//! 2. If true, generates JSON representation of parsed document
+//! 3. Backend receives JSON for compilation
+//! 4. Backend interprets JSON according to its needs
+//!
+//! ## Typical Use Cases
+//!
+//! - **AcroForm backend** - Maps JSON to form fields
+//! - **Simple data backends** - Direct JSON consumption
+//! - **Testing and prototyping** - Quick quill creation without templates
+//!
+//! ## Design Reference
+//!
+//! See `prose/designs/ARCHITECTURE.md` section on Template System Design.
+
 use quillmark::{ParsedDocument, Quill, Quillmark};
 use std::fs;
 use tempfile::TempDir;

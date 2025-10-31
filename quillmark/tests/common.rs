@@ -1,3 +1,28 @@
+//! # Common Test Utilities
+//!
+//! Shared test helpers and utilities for integration tests.
+//!
+//! ## Purpose
+//!
+//! This module provides common functionality used across multiple test files:
+//! - **`demo()` function** - Centralized example plumbing for rendering demos
+//!
+//! ## Usage
+//!
+//! The `demo()` helper simplifies the common pattern of:
+//! 1. Loading a quill from a path
+//! 2. Using the quill's example markdown
+//! 3. Processing through the glue template
+//! 4. Rendering to final output
+//! 5. Writing outputs to example directory
+//!
+//! This reduces code duplication in tests and examples.
+//!
+//! ## Design Pattern
+//!
+//! Test utilities should be minimal and focused. Complex test setup indicates
+//! that the public API may need simplification rather than more test helpers.
+
 use quillmark_fixtures::{example_output_dir, quills_path, write_example_output};
 use std::error::Error;
 

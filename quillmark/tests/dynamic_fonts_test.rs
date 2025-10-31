@@ -1,3 +1,34 @@
+//! # Dynamic Fonts Tests
+//!
+//! Tests for runtime font injection using the `Workflow::add_font()` API.
+//!
+//! ## Test Coverage
+//!
+//! This test suite validates:
+//! - **Basic font injection** - Adding fonts at runtime via workflow
+//! - **Font registration** - Fonts become available to backend for rendering
+//! - **Multiple fonts** - Managing multiple runtime font files
+//! - **Font accessibility** - Backend can access and use injected fonts
+//!
+//! ## Use Case
+//!
+//! Dynamic fonts enable scenarios where font files need to be selected or
+//! provided at render time rather than bundled with the quill template.
+//! Common use cases include:
+//! - User-selected fonts
+//! - Organization-specific branding fonts
+//! - Localization-specific fonts
+//! - Runtime font fallbacks
+//!
+//! ## Backend Support
+//!
+//! Font injection is currently supported by:
+//! - **Typst backend** - Registers fonts in compilation environment
+//!
+//! ## Related
+//!
+//! See `dynamic_assets_test.rs` for general asset injection tests.
+
 use quillmark::{Quill, Quillmark, RenderError};
 use quillmark_fixtures::quills_path;
 

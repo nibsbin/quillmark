@@ -1,3 +1,33 @@
+//! # Default Values Tests
+//!
+//! Tests for default value handling in Quill field schemas.
+//!
+//! ## Test Coverage
+//!
+//! This test suite validates:
+//! - **Schema-defined defaults** - Default values from Quill.toml [fields] section
+//! - **Missing field handling** - Defaults applied when fields are absent from markdown
+//! - **Explicit value precedence** - User-provided values override defaults
+//! - **Multiple defaults** - Multiple fields with different default values
+//! - **Default value types** - String, number, boolean, array, object defaults
+//!
+//! ## Schema System
+//!
+//! Quill templates can define default values for fields in Quill.toml:
+//! ```toml
+//! [fields.author]
+//! type = "str"
+//! description = "Document author"
+//! default = "Anonymous"
+//! ```
+//!
+//! When parsing markdown, missing fields are populated with defaults before
+//! template rendering, ensuring templates always have expected values.
+//!
+//! ## Design Reference
+//!
+//! See `prose/designs/SCHEMAS.md` for field schema specification.
+
 use quillmark::{ParsedDocument, Quill, Quillmark};
 use std::fs;
 use tempfile::TempDir;

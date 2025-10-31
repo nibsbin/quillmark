@@ -150,5 +150,3 @@ The parser validates:
 - Reserved field names in scopes → error
 - Invalid scope name syntax → error
 - Both SCOPE and QUILL in same block → error
-
-

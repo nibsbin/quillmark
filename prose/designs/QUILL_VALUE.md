@@ -1,31 +1,37 @@
-## QuillValue - Centralized Value Type
+# QuillValue - Centralized Value Type
 
-**Problem**: Conversion logic for TOML/YAML/JSON values is duplicated across Python bindings, WASM bindings, and templating code.
+> **Status**: Implemented  
+> **Implementation**: `quillmark-core/src/value.rs`
 
-**Solution**: Single canonical value type (`QuillValue`) backed by `serde_json::Value` in `quillmark-core`.
+## Overview
 
-### Design Principles
+`QuillValue` is a unified value type centralizing TOML/YAML/JSON conversions. Backed by `serde_json::Value`, it provides a single canonical representation for metadata and fields.
 
-**Use `serde_json::Value` as underlying representation** because:
-- Simple and well-understood
-- Maps naturally to JS/WASM (no extra conversions)
-- Easy to convert to/from TOML/YAML at boundaries
-- Excellent interop with templating engines and bindings
+## Design Principles
 
-**Conversion boundary rule**: 
-- TOML and YAML only for specialized deserialization
-- Convert to `QuillValue` immediately after parsing
-- Never pass `serde_yaml::Value` or `toml::Value` around the codebase
+1. **JSON Foundation** - Use `serde_json::Value` for simplicity and broad ecosystem support
+2. **Conversion Boundaries** - Convert TOML/YAML to `QuillValue` at system boundaries
+3. **Newtype Pattern** - Wrap JSON to add domain-specific methods and control API
 
-### Implementation
+## Implementation
 
-**File**: `quillmark-core/src/value.rs`
-- `pub struct QuillValue(serde_json::Value)` - newtype wrapper
-- Conversion helpers: `from_toml()`, `from_yaml()`, `to_minijinja()`, `as_json()`
-- Handle edge cases: non-string keys, YAML tags, numeric coercion
+```rust
+pub struct QuillValue(serde_json::Value);
+```
 
-**Migration points**:
-- `Quill.metadata`: Change to `HashMap<String, QuillValue>`
-- `ParsedDocument.fields`: Change to `HashMap<String, QuillValue>`
-- `FieldSchema`: Use `QuillValue` for example and default fields
-- Bindings: Use `QuillValue::as_json()` for Python/WASM conversions
+**Conversion methods:** `from_toml()`, `from_yaml()`, `from_json()`, `to_minijinja()`, `as_json()`, `into_json()`
+
+**Delegating methods:** `is_null()`, `as_str()`, `as_bool()`, `as_i64()`, `as_array()`, `as_object()`, `get(key)`
+- `get(key)` - Field access with `QuillValue` wrapping
+
+### Deref Implementation
+
+Implements `Deref<Target = serde_json::Value>` for transparent access to JSON methods.
+
+## Usage
+
+Used throughout the system:
+- Quill metadata and schemas
+- Parsed document fields
+- Field default and example values
+- FFI boundaries (Python, WASM)

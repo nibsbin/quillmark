@@ -206,5 +206,3 @@ uv run ruff check python/   # Linting
 pip install quillmark
 uv pip install quillmark
 ```
-
-

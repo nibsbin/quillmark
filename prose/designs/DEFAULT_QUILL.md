@@ -164,24 +164,9 @@ If a backend's default Quill fails validation during registration:
 
 ---
 
-## Cross-References
-
-- **Backend Trait:** See [ARCHITECTURE.md](ARCHITECTURE.md#backend-architecture)
-- **Quill Structure:** See [QUILL.md](QUILL.md)
-- **Error Handling:** See [ERROR.md](ERROR.md)
-- **Workflow Orchestration:** See [ARCHITECTURE.md](ARCHITECTURE.md#end-to-end-orchestration-workflow)
-
----
-
-## Implementation Phases
-
-See [prose/plans/DEFAULT_QUILL.md](../plans/DEFAULT_QUILL.md) for detailed implementation plan.
-
----
-
 ## Future Considerations
 
-1. **Multiple Default Quills:** Could support backend-specific defaults (e.g., `__default_typst__`, `__default_acroform__`)
+1. **Multiple Default Quills:** Could support backend-specific defaults
 2. **Configuration:** Allow users to override the default Quill name
 3. **Per-Backend Fallback:** If no global default, fall back to backend-specific defaults
 4. **Default Quill Discovery:** Load default Quills from a standard directory

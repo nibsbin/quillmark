@@ -1,3 +1,30 @@
+//! # API Workflow Tests
+//!
+//! Tests for the workflow API introduced during API refactoring.
+//!
+//! ## Purpose
+//!
+//! This test suite validates the public API for creating and using workflows:
+//! - `ParsedDocument::from_markdown()` - Markdown parsing
+//! - `Quillmark::workflow_from_quill_name()` - Load workflow by quill name
+//! - `Quillmark::workflow_from_quill()` - Load workflow from quill object
+//! - `Workflow::render()` - Full rendering pipeline
+//! - `Workflow::process_glue()` - Template processing only
+//!
+//! ## Relationship to Other Tests
+//!
+//! These tests complement `quill_engine_test.rs` by focusing specifically on
+//! workflow creation and usage patterns. While `quill_engine_test.rs` provides
+//! comprehensive integration coverage, these tests validate specific API methods
+//! and their contracts.
+//!
+//! ## Test Strategy
+//!
+//! - Use minimal quills to reduce test complexity
+//! - Focus on API method signatures and behavior
+//! - Validate error-free execution paths
+//! - Tests intentionally overlap with `quill_engine_test.rs` for redundancy
+
 use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark};
 use std::fs;
 use tempfile::TempDir;

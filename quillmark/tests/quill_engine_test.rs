@@ -1,3 +1,29 @@
+//! # Quillmark Engine Integration Tests
+//!
+//! Comprehensive integration tests for the `Quillmark` engine and `Workflow` orchestration.
+//!
+//! ## Test Coverage
+//!
+//! This test suite validates:
+//! - **Engine creation and initialization** - Backend auto-registration, default quill setup
+//! - **Quill registration** - Custom quill loading and management
+//! - **Workflow creation** - Loading workflows by name, by quill object, and from parsed documents
+//! - **End-to-end rendering** - Complete parse → template → compile pipeline
+//! - **Error handling** - Missing quills, invalid backends, validation failures
+//! - **API ergonomics** - Different string types, QuillRef patterns
+//!
+//! ## Related Tests
+//!
+//! - `api_rework_test.rs` - Focused API validation for new workflow methods
+//! - `backend_registration_test.rs` - Custom backend registration scenarios
+//! - `default_quill_test.rs` - Default quill system behavior
+//!
+//! ## Test Philosophy
+//!
+//! These tests use temporary directories and create custom quills to validate
+//! the full integration of the engine. They complement unit tests in individual
+//! crates by exercising the complete public API surface.
+
 use std::fs;
 use tempfile::TempDir;
 

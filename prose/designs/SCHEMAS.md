@@ -52,4 +52,3 @@ Field properties:
 **Required Field Logic:**
 - If a field has a `default` value: field is optional
 - If a field has no `default` value: field is required
-

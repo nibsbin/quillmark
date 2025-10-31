@@ -1,3 +1,29 @@
+//! # Dynamic Assets Tests
+//!
+//! Tests for runtime asset injection using the `Workflow::add_asset()` API.
+//!
+//! ## Test Coverage
+//!
+//! This test suite validates:
+//! - **Basic asset injection** - Adding assets at runtime via workflow
+//! - **Asset naming** - `DYNAMIC_ASSET__` prefix and collision avoidance
+//! - **Asset accessibility** - Assets available to backend during compilation
+//! - **Multiple assets** - Managing multiple runtime assets
+//!
+//! ## Use Case
+//!
+//! Dynamic assets enable scenarios where images, fonts, or data files need to
+//! be injected at render time rather than bundled with the quill template.
+//! Common use cases include:
+//! - User-uploaded images
+//! - Generated charts or graphs
+//! - Dynamic QR codes
+//! - Runtime-selected fonts
+//!
+//! ## Related
+//!
+//! See `dynamic_fonts_test.rs` for font-specific dynamic injection tests.
+
 use quillmark::{Quill, Quillmark, RenderError};
 use quillmark_fixtures::{quills_path, resource_path};
 
