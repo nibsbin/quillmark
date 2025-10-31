@@ -95,15 +95,15 @@ Content
 "#;
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-    
+
     // Verify no QUILL tag present
     assert_eq!(parsed.quill_tag(), None);
-    
+
     // Note: In the current implementation with Typst backend auto-registered,
     // __default__ is always available. This test documents the expected behavior
     // when no default Quill exists, which would occur with a backend that doesn't
     // provide default_quill() and no manually registered default.
-    // 
+    //
     // The actual error scenario is tested indirectly through the improved error
     // message in workflow_from_parsed when __default__ doesn't exist.
 }
