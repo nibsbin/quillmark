@@ -1,4 +1,5 @@
-// Default Quill template for Typst backend
-// Renders the markdown body content with all Typst formatting preserved
+#{{__metadata__ | Json}}
 
-{{ body | Content }}
+#line(length: 100%)
+
+#{{ body | Content }}

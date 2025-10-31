@@ -94,6 +94,7 @@ impl Backend for TypstBackend {
         glue.register_filter("Dict", dict_filter);
         glue.register_filter("Content", content_filter);
         glue.register_filter("Asset", asset_filter);
+        glue.register_filter("Json", filters::json_filter);
     }
 
     fn compile(

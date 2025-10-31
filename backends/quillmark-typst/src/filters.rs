@@ -223,6 +223,26 @@ pub fn asset_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Val
     Ok(Value::from_safe_string(format!("\"{}\"", asset_path)))
 }
 
+pub fn json_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
+    let jv = json::to_value(&value).map_err(|e| {
+        err(
+            ErrorKind::InvalidOperation,
+            format!(
+                "Value cannot be converted to JSON: {e} (source: {:?})",
+                value
+            ),
+        )
+    })?;
+
+    let json_str = json::to_string(&jv).map_err(|e| {
+        err(
+            ErrorKind::BadSerialization,
+            format!("Failed to serialize JSON: {e}"),
+        )
+    })?;
+    Ok(Value::from_safe_string(inject_json(&json_str)))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
