@@ -15,7 +15,6 @@ default-members = [
     "quillmark",
     "backends/quillmark-typst",
     "backends/quillmark-acroform",
-    "bindings/quillmark-wasm",
 ]
 resolver = "2"
 
@@ -69,6 +68,8 @@ tempfile = "~3.23"
 proptest = "~1.5"
 quillmark-fixtures = { path = "quillmark-fixtures" }
 
+cargo-husky = { version = "~1", default-features = false, features = ["user-hooks"] }
+
 [workspace.metadata.workspaces]
 # Exclude fixtures from publishing since it's dev-only
 no_individual_tags = true
@@ -76,9 +77,36 @@ no_individual_tags = true
 [workspace.metadata.release]
 allow-branch = ["main"]
 
+[profile.dev]
+opt-level = 0
+debug = true
+strip = "none"
+debug-assertions = true
+overflow-checks = true
+lto = false
+panic = 'unwind'
+incremental = true
+codegen-units = 256
+rpath = false
+split-debuginfo = "unpacked"  # Faster on macOS/Linux
+[profile.dev.package."*"]
+debug = false
+opt-level = 0
+
 [profile.release]
-opt-level = "z"      # Optimize for size
-lto = true           # Link-time optimization
-codegen-units = 1    # Better optimization
-panic = "abort"      # Smaller binary
-strip = true         # Remove debug symbols
+opt-level = 3           # Optimize for speed (not "z")
+lto = "thin"            # Good speed improvement, reasonable compile time
+codegen-units = 16      # Balance parallelization with optimization
+panic = "abort"         # Smaller binary, slightly faster
+strip = true            # Remove debug symbols (size)
+
+# WASM-specific optimizations
+[profile.wasm-release]
+inherits = "release"
+opt-level = "z"         # Optimize for size (WASM benefits greatly)
+lto = true              # Full LTO for maximum size reduction
+codegen-units = 1       # Single codegen unit for best optimization
+panic = "abort"         # Smaller binary
+strip = true            # Remove debug symbols
+[profile.wasm-release.package."*"]
+opt-level = "z"         # Optimize all dependencies for size

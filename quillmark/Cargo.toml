@@ -26,6 +26,8 @@ quillmark-typst = { workspace = true }
 quillmark-fixtures = { workspace = true }
 serde_json = { workspace = true }
 acroform = { workspace = true }
+# host cargo husky dev dep
+cargo-husky = {workspace = true}
 
 [features]
 default = ["typst","acroform"]

@@ -1,18 +1,27 @@
-# Quillmark AI Agent Instructions
+---
+name: Programmer
+description: Translates design documents and plans into code
+---
 
-## Architecture
+# Programmer Agent
+
+- Design documents in `prose/designs/` are authoritative
+- After implementation, move plan to `prose/debriefs/` with status and any design inconsistencies found
+- Follow KISS and DRY principles
+
+## Architecture Overview
 
 **Template-first Markdown rendering**: Parse (Markdown + YAML) → Template (MiniJinja) → Compile (backend glue) → Artifacts (PDF/SVG)
 
 **Workspace structure** (publish order `core` → `typst` → `quillmark`, synchronized versions):
 - `quillmark-core/` - Foundation (parsing, templating, Backend trait)
-- `quillmark-typst/` - Typst backend implementation
-- `quillmark-acroform/` - PDF Acroform backend implementation
+- `backends/quillmark-typst/` - Typst backend implementation
+- `backends/quillmark-acroform/` - PDF Acroform backend implementation
 - `quillmark/` - Orchestration layer (Quillmark engine and workflows)
 - `quillmark-fixtures/` - Test resources
 - `quillmark-fuzz/` - Fuzzing tests
-- `quillmark-python/` - Python bindings
-- `quillmark-wasm/` - WASM bindings
+- `bindings/quillmark-python/` - Python bindings
+- `bindings/quillmark-wasm/` - WASM bindings
 
 See `designs/ARCHITECTURE.md` for complete architecture.
 
@@ -35,22 +44,3 @@ All design documents in `designs/` should follow consistent principles:
 ## Implementation/Testing Strategy
 
 - This is pre-1.0 software. Never worry about backwards compatibility. Actively remove legacy code/comments.
-
-## Build & Test
-
-```bash
-cargo build --workspace --all-features
-cargo test --workspace --all-features
-cargo doc --no-deps --workspace --all-features
-cargo run --example usaf_memo
-```
-
-Before committing, ALWAYS run `cargo fmt` to ensure consistent formatting.
-
-When working with WASM, install the wasm target with `rustup target add wasm32-unknown-unknown` and use `scripts/build-wasm.sh` to build all targets.
-
-## Reference
-
-- `designs/` - Complete architecture, workflows, error strategy, specs
-- `CONTRIBUTING.md` - Documentation standards
-- `release.toml` - Release configuration
