@@ -260,17 +260,24 @@ impl Quillmark {
     /// ```
     pub fn register_backend(&mut self, backend: Box<dyn Backend>) {
         let id = backend.id().to_string();
-        
+
+        // Get default Quill before moving backend
+        let default_quill = backend.default_quill();
+
+        // Register backend first so it's available when registering default Quill
+        self.backends.insert(id.clone(), Arc::from(backend));
+
         // Register default Quill if available and not already registered
         if !self.quills.contains_key("__default__") {
-            if let Some(default_quill) = backend.default_quill() {
+            if let Some(default_quill) = default_quill {
                 if let Err(e) = self.register_quill(default_quill) {
-                    eprintln!("Warning: Failed to register default Quill from backend '{}': {}", id, e);
+                    eprintln!(
+                        "Warning: Failed to register default Quill from backend '{}': {}",
+                        id, e
+                    );
                 }
             }
         }
-        
-        self.backends.insert(id, Arc::from(backend));
     }
 
     /// Register a quill template with the engine by name.
@@ -366,7 +373,7 @@ impl Quillmark {
     /// Load a workflow from a parsed document that contains a quill tag
     pub fn workflow_from_parsed(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError> {
         let quill_name = parsed.quill_tag().unwrap_or("__default__");
-        
+
         // Try to load the Quill
         self.workflow_from_quill_name(quill_name).map_err(|e| {
             // If we fell back to __default__ and it doesn't exist, provide better error

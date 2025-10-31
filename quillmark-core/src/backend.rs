@@ -131,7 +131,7 @@ pub trait Backend: Send + Sync {
     ) -> Result<crate::RenderResult, RenderError>;
 
     /// Provide an embedded default Quill for this backend.
-    /// 
+    ///
     /// Returns `None` if the backend does not provide a default Quill.
     /// The returned Quill will be registered with the name `__default__`
     /// during backend registration if no default Quill already exists.
@@ -139,12 +139,24 @@ pub trait Backend: Send + Sync {
     /// # Example
     ///
     /// ```no_run
-    /// # use quillmark_core::{Backend, Quill};
+    /// # use quillmark_core::{Backend, Quill, FileTreeNode};
+    /// # use std::collections::HashMap;
     /// # struct MyBackend;
-    /// # impl MyBackend {
+    /// # impl Backend for MyBackend {
+    /// #     fn id(&self) -> &'static str { "my" }
+    /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
+    /// #     fn glue_extension_types(&self) -> &'static [&'static str] { &[] }
+    /// #     fn allow_auto_glue(&self) -> bool { true }
+    /// #     fn register_filters(&self, _: &mut quillmark_core::Glue) {}
+    /// #     fn compile(&self, _: &str, _: &Quill, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> { todo!() }
     /// fn default_quill(&self) -> Option<Quill> {
-    ///     // Load embedded default Quill
-    ///     Some(create_embedded_default_quill())
+    ///     // Build embedded default Quill from files
+    ///     let mut files = HashMap::new();
+    ///     files.insert("Quill.toml".to_string(), FileTreeNode::File {
+    ///         contents: b"[Quill]\nname = \"__default__\"\nbackend = \"my\"\n".to_vec(),
+    ///     });
+    ///     let root = FileTreeNode::Directory { files };
+    ///     Quill::from_tree(root, None).ok()
     /// }
     /// # }
     /// ```
