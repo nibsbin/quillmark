@@ -1,3 +1,26 @@
+//! # Default Quill System Tests
+//!
+//! Validates the default Quill system implementation.
+//!
+//! ## Test Coverage
+//!
+//! This test suite verifies:
+//! - **Auto-registration** - Default quill registered when backend is registered
+//! - **Fallback behavior** - Documents without QUILL tag use __default__
+//! - **Override behavior** - Explicit QUILL tags take precedence over default
+//! - **Error messaging** - Clear errors when no quill is available
+//! - **Multiple backends** - First backend's default quill wins
+//!
+//! ## Design Reference
+//!
+//! See `prose/designs/DEFAULT_QUILL.md` for system design and
+//! `prose/debriefs/DEFAULT_QUILL.md` for implementation details.
+//!
+//! ## Testing Philosophy
+//!
+//! These tests validate the zero-config experience where users can render
+//! simple documents without explicitly selecting a quill template.
+
 use quillmark::{ParsedDocument, Quillmark};
 use quillmark_core::OutputFormat;
 

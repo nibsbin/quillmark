@@ -1,3 +1,29 @@
+//! # Backend Registration Tests
+//!
+//! Tests for custom backend registration and management.
+//!
+//! ## Test Coverage
+//!
+//! This test suite validates:
+//! - **Basic registration** - Registering custom backends
+//! - **Multiple backends** - Multiple backend registration
+//! - **Backend replacement** - Re-registering with same ID
+//! - **Workflow creation** - Using custom backends in workflows
+//! - **Integration** - End-to-end rendering with custom backends
+//!
+//! ## Mock Backend
+//!
+//! Uses a minimal `MockBackend` implementation that:
+//! - Implements the full Backend trait
+//! - Supports TXT output format
+//! - Returns glue content as-is (for testing)
+//! - Provides minimal filter registration
+//!
+//! ## Purpose
+//!
+//! Validates that the backend extension system works correctly and that
+//! third-party backends can integrate cleanly with the engine.
+
 use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark, RenderError};
 use quillmark_core::{Artifact, Backend, Glue, RenderOptions, RenderResult};
 use std::fs;
