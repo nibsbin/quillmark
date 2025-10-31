@@ -83,11 +83,12 @@
 //! - [`TemplateError::InvalidTemplate`]: Template compilation failed
 //! - [`TemplateError::FilterError`]: Filter execution error
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::error::Error as StdError;
 
 use minijinja::{Environment, Error as MjError};
 
+use crate::parse::BODY_FIELD;
 use crate::value::QuillValue;
 
 /// Error types for template rendering
@@ -167,8 +168,21 @@ impl GlueEngine for TemplateGlue {
 
     /// Compose template with context from markdown decomposition
     fn compose(&mut self, context: HashMap<String, QuillValue>) -> Result<String, TemplateError> {
+        // Separate metadata from body using helper function
+        let metadata_fields = separate_metadata_fields(&context);
+
         // Convert QuillValue to MiniJinja values
-        let context = convert_quillvalue_to_minijinja(context)?;
+        let mut minijinja_context = convert_quillvalue_to_minijinja(context)?;
+        let metadata_minijinja = convert_quillvalue_to_minijinja(metadata_fields)?;
+
+        // Add __metadata__ field as a MiniJinja object
+        // Convert HashMap to BTreeMap for from_object
+        let metadata_btree: BTreeMap<String, minijinja::value::Value> =
+            metadata_minijinja.into_iter().collect();
+        minijinja_context.insert(
+            "__metadata__".to_string(),
+            minijinja::value::Value::from_object(metadata_btree),
+        );
 
         // Create a new environment for this render
         let mut env = Environment::new();
@@ -188,7 +202,7 @@ impl GlueEngine for TemplateGlue {
             TemplateError::InvalidTemplate("Failed to get template".to_string(), Box::new(e))
         })?;
 
-        let result = tmpl.render(&context)?;
+        let result = tmpl.render(&minijinja_context)?;
 
         // Check output size limit
         if result.len() > crate::error::MAX_TEMPLATE_OUTPUT {
@@ -222,11 +236,25 @@ impl GlueEngine for AutoGlue {
 
     /// Compose context into JSON output
     fn compose(&mut self, context: HashMap<String, QuillValue>) -> Result<String, TemplateError> {
-        // Convert context to JSON
+        // Build both json_map and metadata_json in a single pass to avoid redundant iterations
         let mut json_map = serde_json::Map::new();
-        for (key, value) in context {
-            json_map.insert(key, value.as_json().clone());
+        let mut metadata_json = serde_json::Map::new();
+
+        for (key, value) in &context {
+            let json_value = value.as_json().clone();
+            json_map.insert(key.clone(), json_value.clone());
+
+            // Add to metadata if not the body field
+            if key.as_str() != BODY_FIELD {
+                metadata_json.insert(key.clone(), json_value);
+            }
         }
+
+        // Add __metadata__ object to json_map
+        json_map.insert(
+            "__metadata__".to_string(),
+            serde_json::Value::Object(metadata_json),
+        );
 
         let json_value = serde_json::Value::Object(json_map);
         let result = serde_json::to_string_pretty(&json_value).map_err(|e| {
@@ -275,6 +303,15 @@ impl Glue {
             Glue::Auto(engine) => engine.compose(context),
         }
     }
+}
+
+/// Separate metadata fields from body field
+fn separate_metadata_fields(context: &HashMap<String, QuillValue>) -> HashMap<String, QuillValue> {
+    context
+        .iter()
+        .filter(|(key, _)| key.as_str() != BODY_FIELD)
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect()
 }
 
 /// Convert QuillValue map to MiniJinja values
@@ -451,5 +488,227 @@ mod tests {
         let result = glue.compose(context).unwrap();
         let json: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert_eq!(json["test"], "value");
+    }
+
+    #[test]
+    fn test_metadata_field_excludes_body() {
+        let template = "{% for key in __metadata__ %}{{ key }},{% endfor %}";
+        let mut glue = Glue::new(template.to_string());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "title".to_string(),
+            QuillValue::from_json(serde_json::json!("Test")),
+        );
+        context.insert(
+            "author".to_string(),
+            QuillValue::from_json(serde_json::json!("John")),
+        );
+        context.insert(
+            "body".to_string(),
+            QuillValue::from_json(serde_json::json!("Body content")),
+        );
+
+        let result = glue.compose(context).unwrap();
+
+        // Should contain title and author, but not body
+        assert!(result.contains("title"));
+        assert!(result.contains("author"));
+        assert!(!result.contains("body"));
+    }
+
+    #[test]
+    fn test_metadata_field_includes_frontmatter() {
+        let template = r#"
+{%- for key in __metadata__ -%}
+{{ key }}
+{% endfor -%}
+"#;
+        let mut glue = Glue::new(template.to_string());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "title".to_string(),
+            QuillValue::from_json(serde_json::json!("Test Document")),
+        );
+        context.insert(
+            "author".to_string(),
+            QuillValue::from_json(serde_json::json!("Jane Doe")),
+        );
+        context.insert(
+            "date".to_string(),
+            QuillValue::from_json(serde_json::json!("2024-01-01")),
+        );
+        context.insert(
+            "body".to_string(),
+            QuillValue::from_json(serde_json::json!("Document body")),
+        );
+
+        let result = glue.compose(context).unwrap();
+
+        // All metadata fields should be present as keys
+        assert!(result.contains("title"));
+        assert!(result.contains("author"));
+        assert!(result.contains("date"));
+        // Body should not be in metadata iteration
+        assert!(!result.contains("body"));
+    }
+
+    #[test]
+    fn test_metadata_field_empty_when_only_body() {
+        let template = "Metadata count: {{ __metadata__ | length }}";
+        let mut glue = Glue::new(template.to_string());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "body".to_string(),
+            QuillValue::from_json(serde_json::json!("Only body content")),
+        );
+
+        let result = glue.compose(context).unwrap();
+
+        // Should have 0 metadata fields when only body is present
+        assert!(result.contains("Metadata count: 0"));
+    }
+
+    #[test]
+    fn test_backward_compatibility_top_level_access() {
+        let template = "Title: {{ title }}, Author: {{ author }}, Body: {{ body }}";
+        let mut glue = Glue::new(template.to_string());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "title".to_string(),
+            QuillValue::from_json(serde_json::json!("My Title")),
+        );
+        context.insert(
+            "author".to_string(),
+            QuillValue::from_json(serde_json::json!("Author Name")),
+        );
+        context.insert(
+            "body".to_string(),
+            QuillValue::from_json(serde_json::json!("Body text")),
+        );
+
+        let result = glue.compose(context).unwrap();
+
+        // Top-level access should still work
+        assert!(result.contains("Title: My Title"));
+        assert!(result.contains("Author: Author Name"));
+        assert!(result.contains("Body: Body text"));
+    }
+
+    #[test]
+    fn test_metadata_iteration_in_template() {
+        let template = r#"
+{%- set metadata_count = __metadata__ | length -%}
+Metadata fields: {{ metadata_count }}
+{%- for key in __metadata__ %}
+- {{ key }}: {{ __metadata__[key] }}
+{%- endfor %}
+Body present: {{ body | length > 0 }}
+"#;
+        let mut glue = Glue::new(template.to_string());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "title".to_string(),
+            QuillValue::from_json(serde_json::json!("Test")),
+        );
+        context.insert(
+            "version".to_string(),
+            QuillValue::from_json(serde_json::json!("1.0")),
+        );
+        context.insert(
+            "body".to_string(),
+            QuillValue::from_json(serde_json::json!("Content")),
+        );
+
+        let result = glue.compose(context).unwrap();
+
+        // Should have exactly 2 metadata fields
+        assert!(result.contains("Metadata fields: 2"));
+        // Body should still be accessible directly
+        assert!(result.contains("Body present: true"));
+    }
+
+    #[test]
+    fn test_auto_glue_metadata_field() {
+        let mut glue = Glue::new_auto();
+
+        let mut context = HashMap::new();
+        context.insert(
+            "title".to_string(),
+            QuillValue::from_json(serde_json::json!("Document")),
+        );
+        context.insert(
+            "author".to_string(),
+            QuillValue::from_json(serde_json::json!("Writer")),
+        );
+        context.insert(
+            "body".to_string(),
+            QuillValue::from_json(serde_json::json!("Content here")),
+        );
+
+        let result = glue.compose(context).unwrap();
+
+        // Parse as JSON
+        let json: serde_json::Value = serde_json::from_str(&result).unwrap();
+
+        // Verify __metadata__ field exists and contains correct fields
+        assert!(json["__metadata__"].is_object());
+        assert_eq!(json["__metadata__"]["title"], "Document");
+        assert_eq!(json["__metadata__"]["author"], "Writer");
+
+        // Body should not be in metadata
+        assert!(json["__metadata__"]["body"].is_null());
+
+        // But body should be at top level
+        assert_eq!(json["body"], "Content here");
+    }
+
+    #[test]
+    fn test_metadata_with_nested_objects() {
+        let template = "{{ __metadata__.author.name }}";
+        let mut glue = Glue::new(template.to_string());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "author".to_string(),
+            QuillValue::from_json(serde_json::json!({
+                "name": "John Doe",
+                "email": "john@example.com"
+            })),
+        );
+        context.insert(
+            "body".to_string(),
+            QuillValue::from_json(serde_json::json!("Text")),
+        );
+
+        let result = glue.compose(context).unwrap();
+
+        // Should access nested metadata via __metadata__
+        assert!(result.contains("John Doe"));
+    }
+
+    #[test]
+    fn test_metadata_with_arrays() {
+        let template = "Tags: {{ __metadata__.tags | length }}";
+        let mut glue = Glue::new(template.to_string());
+
+        let mut context = HashMap::new();
+        context.insert(
+            "tags".to_string(),
+            QuillValue::from_json(serde_json::json!(["rust", "markdown", "template"])),
+        );
+        context.insert(
+            "body".to_string(),
+            QuillValue::from_json(serde_json::json!("Content")),
+        );
+
+        let result = glue.compose(context).unwrap();
+
+        // Should show 3 tags
+        assert!(result.contains("Tags: 3"));
     }
 }
