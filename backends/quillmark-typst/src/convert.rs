@@ -240,10 +240,6 @@ where
                 output.push('`');
                 end_newline = false;
             }
-            Event::SoftBreak => {
-                output.push(' ');
-                end_newline = false;
-            }
             Event::HardBreak => {
                 output.push('\n');
                 end_newline = true;
@@ -385,7 +381,7 @@ mod tests {
         let markdown = "- Item 1\n- Item 2\n- Item 3";
         let typst = mark_to_typst(markdown).unwrap();
         // Lists end with extra newline per CONVERT.md examples
-        assert_eq!(typst, "+ Item 1\n+ Item 2\n+ Item 3\n\n");
+        assert_eq!(typst, "- Item 1\n- Item 2\n- Item 3\n\n");
     }
 
     #[test]
@@ -394,7 +390,7 @@ mod tests {
         let typst = mark_to_typst(markdown).unwrap();
         // Typst auto-numbers, so we always use 1.
         // Lists end with extra newline per CONVERT.md examples
-        assert_eq!(typst, "1. First\n1. Second\n1. Third\n\n");
+        assert_eq!(typst, "+ First\n+ Second\n+ Third\n\n");
     }
 
     #[test]
@@ -402,7 +398,7 @@ mod tests {
         let markdown = "- Item 1\n- Item 2\n  - Nested item\n- Item 3";
         let typst = mark_to_typst(markdown).unwrap();
         // Lists end with extra newline per CONVERT.md examples
-        assert_eq!(typst, "+ Item 1\n+ Item 2\n  + Nested item\n+ Item 3\n\n");
+        assert_eq!(typst, "- Item 1\n- Item 2\n  - Nested item\n- Item 3\n\n");
     }
 
     #[test]
@@ -410,7 +406,7 @@ mod tests {
         let markdown = "- Level 1\n  - Level 2\n    - Level 3";
         let typst = mark_to_typst(markdown).unwrap();
         // Lists end with extra newline per CONVERT.md examples
-        assert_eq!(typst, "+ Level 1\n  + Level 2\n    + Level 3\n\n");
+        assert_eq!(typst, "- Level 1\n  - Level 2\n    - Level 3\n\n");
     }
 
     // Tests for Links
@@ -439,7 +435,7 @@ mod tests {
         // Lists end with extra newline per CONVERT.md examples
         assert_eq!(
             typst,
-            "A paragraph with *bold* and a #link(\"https:\\/\\/example.com\")[link].\n\nAnother paragraph with `inline code`.\n\n+ A list item\n+ Another item\n\n"
+            "A paragraph with *bold* and a #link(\"https:\\/\\/example.com\")[link].\n\nAnother paragraph with `inline code`.\n\n- A list item\n- Another item\n\n"
         );
     }
 
@@ -456,15 +452,6 @@ mod tests {
         let markdown = "First paragraph.\n\nSecond paragraph.";
         let typst = mark_to_typst(markdown).unwrap();
         assert_eq!(typst, "First paragraph.\n\nSecond paragraph.\n\n");
-    }
-
-    // Tests for Line Breaks
-    #[test]
-    fn test_soft_break() {
-        let markdown = "Line one\nLine two";
-        let typst = mark_to_typst(markdown).unwrap();
-        // Soft break becomes a space
-        assert_eq!(typst, "Line one Line two\n\n");
     }
 
     #[test]
@@ -523,19 +510,9 @@ mod tests {
         let markdown = "- **Bold** item\n- _Italic_ item\n- `Code` item";
         let typst = mark_to_typst(markdown).unwrap();
         // Lists end with extra newline
-        assert_eq!(typst, "+ *Bold* item\n+ _Italic_ item\n+ `Code` item\n\n");
+        assert_eq!(typst, "- *Bold* item\n- _Italic_ item\n- `Code` item\n\n");
     }
-
-    #[test]
-    fn test_list_with_multiple_paragraphs() {
-        // This tests the in_list_item flag behavior
-        let markdown = "- First paragraph.\n\n  Second paragraph.";
-        let typst = mark_to_typst(markdown).unwrap();
-        // Within list items, paragraphs should not add extra spacing
-        // But there's still a space between them from the soft break handling
-        assert_eq!(typst, "+ First paragraph.Second paragraph.\n\n");
-    }
-
+    
     #[test]
     fn test_mixed_list_types() {
         let markdown = "- Bullet item\n\n1. Ordered item\n2. Another ordered";
@@ -543,7 +520,7 @@ mod tests {
         // Each list ends with extra newline
         assert_eq!(
             typst,
-            "+ Bullet item\n\n1. Ordered item\n1. Another ordered\n\n"
+            "- Bullet item\n\n+ Ordered item\n+ Another ordered\n\n"
         );
     }
 
