@@ -25,10 +25,10 @@ Quillmark is a flexible, **template-first** Markdown rendering system that conve
 
 High-level data flow:
 
-* **Parsing** → YAML frontmatter + body extraction
-* **Templating** → MiniJinja-based "Glue" composition with backend-registered filters
-* **Backend Processing** → Compile composed glue to final artifacts
-* **Assets/Packages** → Fonts, images, and backend packages resolved dynamically
+* **Parsing** → YAML frontmatter + body extraction (see [PARSE.md](PARSE.md))
+* **Templating** → MiniJinja-based "Glue" composition with backend-registered filters (see [Template System Design](#template-system-design))
+* **Backend Processing** → Compile composed glue to final artifacts (see [Backend Architecture](#backend-architecture))
+* **Assets/Packages** → Fonts, images, and backend packages resolved dynamically (see [Package Management and Asset Handling](#package-management-and-asset-handling))
 
 ---
 
@@ -58,10 +58,10 @@ High-level data flow:
 ### `quillmark-core` (foundations)
 
 * Types: `Backend`, `Artifact`, `OutputFormat`
-* Parsing: `ParsedDocument` with `from_markdown()` constructor; `decompose()` function for direct parsing
-* Templating: `Glue` + stable `filter_api`
-* Template model: `Quill` (+ `Quill.toml`)
-* **Errors & Diagnostics:** `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
+* Parsing: `ParsedDocument` with `from_markdown()` constructor; `decompose()` function for direct parsing (see [PARSE.md](PARSE.md))
+* Templating: `Glue` + stable `filter_api` (see [Template System Design](#template-system-design))
+* Template model: `Quill` (+ `Quill.toml`) (see [QUILL.md](QUILL.md))
+* **Errors & Diagnostics:** `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location` (see [ERROR.md](ERROR.md))
 * Utilities: TOML⇄YAML conversion helpers (for backend filters)
 
 **Design Note:** No external backend deps; backends depend on core → no cycles.
@@ -71,9 +71,9 @@ High-level data flow:
 * High-level API: `Quillmark` for managing backends and quills
 * Sealed rendering API: `Workflow`
 * Orchestration (parse → compose → compile)
-* Validation and **structured error propagation**
-* Backend auto-registration on engine creation
-* Default Quill registration during backend setup
+* Validation and **structured error propagation** (see [ERROR.md](ERROR.md))
+* Backend auto-registration on engine creation (see [Backend Architecture](#backend-architecture))
+* Default Quill registration during backend setup (see [DEFAULT_QUILL.md](DEFAULT_QUILL.md))
 
 **API Documentation:** See the crate's rustdoc for comprehensive API documentation with usage examples, including module-level overview, detailed method documentation, and doc tests.
 
@@ -178,9 +178,14 @@ Backends register custom filters via the stable `filter_api` module in `quillmar
 - **Content** - Markdown body to backend markup conversion
 - **Asset** - Dynamic asset filename transformation
 
-**Stability Guarantee:** The `filter_api` module provides a stable ABI that external crates can depend on without direct MiniJinja dependency. This prevents version conflicts and maintains backward compatibility.
+**Stability Guarantee:** The `filter_api` module provides a stable ABI that external crates can depend on without direct MiniJinja dependency. This prevents version conflicts and maintains backward compatibility across Quillmark versions.
 
-Filters bridge YAML values to backend-specific constructs while maintaining a stable interface. Backends implement filters using types from `quillmark_core::templating::filter_api::{State, Value, Kwargs, Error}`.
+**Implementation Note:** Filters bridge YAML values to backend-specific constructs while maintaining a stable interface. Backends implement filters using types from `quillmark_core::templating::filter_api::{State, Value, Kwargs, Error}`. This abstraction layer ensures that:
+1. Backend implementations remain independent of MiniJinja version updates
+2. Custom backends can be developed and maintained separately from the core library
+3. The public API surface remains minimal and stable across releases
+
+**See also:** [quillmark-core/src/templating.rs](../../quillmark-core/src/templating.rs) for filter API implementation details.
 
 ### Template Context
 
