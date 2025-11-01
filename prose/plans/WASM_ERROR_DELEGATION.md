@@ -285,15 +285,6 @@ try {
 
 ---
 
-## Rollback Plan
-
-If issues arise:
-1. Revert changes to `error.rs` and `engine.rs`
-2. Restore `QuillmarkError` from git history
-3. Document issues for future attempts
-
----
-
 ## Success Criteria
 
 - [ ] WASM bindings use `SerializableDiagnostic` from core
