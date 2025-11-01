@@ -226,6 +226,7 @@ impl Quillmark {
         // Convert JSON value to HashMap<String, QuillValue>
         let fields_json = parsed_wasm.fields;
         let quill_tag = parsed_wasm.quill_tag; // Move quill_tag out
+
         let mut fields = std::collections::HashMap::new();
 
         if let serde_json::Value::Object(obj) = fields_json {
