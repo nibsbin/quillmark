@@ -51,8 +51,8 @@ This is a test document without a QUILL tag.
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
-    // Verify no QUILL tag
-    assert_eq!(parsed.quill_tag(), None);
+    // Verify default quill tag is set
+    assert_eq!(parsed.quill_tag(), "__default__");
 
     let engine = Quillmark::new();
 
@@ -92,7 +92,7 @@ Content here.
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
     // Verify QUILL tag is present
-    assert_eq!(parsed.quill_tag(), Some("custom_quill"));
+    assert_eq!(parsed.quill_tag(), "custom_quill");
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
@@ -119,8 +119,8 @@ Content
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
-    // Verify no QUILL tag present
-    assert_eq!(parsed.quill_tag(), None);
+    // Verify default quill tag is set (always "__default__" when no QUILL directive)
+    assert_eq!(parsed.quill_tag(), "__default__");
 
     // Note: In the current implementation with Typst backend auto-registered,
     // __default__ is always available. This test documents the expected behavior
@@ -128,7 +128,7 @@ Content
     // provide default_quill() and no manually registered default.
     //
     // The actual error scenario is tested indirectly through the improved error
-    // message in workflow_from_parsed when __default__ doesn't exist.
+    // message in workflow_from_quill_name when __default__ doesn't exist.
 }
 
 #[test]
