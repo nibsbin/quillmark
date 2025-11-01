@@ -1,153 +1,83 @@
-//! Error types for the WASM API
+//! Error handling utilities for WASM bindings
 
-use crate::types::{Diagnostic, Location};
+use quillmark_core::{RenderError, SerializableDiagnostic};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-/// Error type for Quillmark operations
+/// Serializable error for JavaScript consumption
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct QuillmarkError {
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub location: Option<Location>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub hint: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub diagnostics: Option<Vec<Diagnostic>>,
+#[serde(tag = "type")]
+pub enum WasmError {
+    /// Single diagnostic error
+    Diagnostic {
+        #[serde(flatten)]
+        diagnostic: SerializableDiagnostic,
+    },
+    /// Multiple diagnostics (e.g., compilation errors)
+    MultipleDiagnostics {
+        message: String,
+        diagnostics: Vec<SerializableDiagnostic>,
+    },
 }
 
-impl QuillmarkError {
-    pub fn new(message: String, location: Option<Location>, hint: Option<String>) -> Self {
-        Self {
-            message,
-            location,
-            hint,
-            diagnostics: None,
-        }
-    }
-
+impl WasmError {
     /// Convert to JsValue for throwing
     pub fn to_js_value(&self) -> JsValue {
-        serde_wasm_bindgen::to_value(self).unwrap_or_else(|_| JsValue::from_str(&self.message))
+        serde_wasm_bindgen::to_value(self)
+            .unwrap_or_else(|_| JsValue::from_str(&format!("{:?}", self)))
     }
 }
 
-impl From<quillmark_core::RenderError> for QuillmarkError {
-    fn from(error: quillmark_core::RenderError) -> Self {
-        use quillmark_core::RenderError;
-
+impl From<RenderError> for WasmError {
+    fn from(error: RenderError) -> Self {
         match error {
-            RenderError::CompilationFailed { diags } => QuillmarkError {
+            RenderError::CompilationFailed { diags } => WasmError::MultipleDiagnostics {
                 message: format!("Compilation failed with {} error(s)", diags.len()),
-                location: None,
+                diagnostics: diags.into_iter().map(|d| d.into()).collect(),
+            },
+            // All other variants contain a single Diagnostic
+            _ => {
+                let diags = error.diagnostics();
+                if let Some(diag) = diags.first() {
+                    WasmError::Diagnostic {
+                        diagnostic: (*diag).into(),
+                    }
+                } else {
+                    // Fallback for edge cases
+                    WasmError::Diagnostic {
+                        diagnostic: SerializableDiagnostic {
+                            severity: quillmark_core::Severity::Error,
+                            code: None,
+                            message: error.to_string(),
+                            primary: None,
+                            hint: None,
+                            source_chain: vec![],
+                        },
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl From<String> for WasmError {
+    fn from(message: String) -> Self {
+        WasmError::Diagnostic {
+            diagnostic: SerializableDiagnostic {
+                severity: quillmark_core::Severity::Error,
+                code: None,
+                message,
+                primary: None,
                 hint: None,
-                diagnostics: Some(diags.into_iter().map(|d| d.into()).collect()),
-            },
-            RenderError::TemplateFailed { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::InvalidFrontmatter { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::EngineCreation { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::FormatNotSupported { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::UnsupportedBackend { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::DynamicAssetCollision { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::DynamicFontCollision { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::InputTooLarge { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::YamlTooLarge { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::NestingTooDeep { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::OutputTooLarge { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::ValidationFailed { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::InvalidSchema { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
-            },
-            RenderError::QuillConfig { diag } => QuillmarkError {
-                message: diag.message.clone(),
-                location: diag.primary.map(|loc| loc.into()),
-                hint: diag.hint.clone(),
-                diagnostics: None,
+                source_chain: vec![],
             },
         }
     }
 }
 
-impl From<String> for QuillmarkError {
-    fn from(message: String) -> Self {
-        QuillmarkError::new(message, None, None)
-    }
-}
-
-impl From<&str> for QuillmarkError {
+impl From<&str> for WasmError {
     fn from(message: &str) -> Self {
-        QuillmarkError::new(message.to_string(), None, None)
+        WasmError::from(message.to_string())
     }
 }
-
-impl std::fmt::Display for QuillmarkError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl std::error::Error for QuillmarkError {}

@@ -375,6 +375,115 @@ mod tests {
     }
 
     #[test]
+    fn test_wasm_error_single_diagnostic() {
+        use crate::error::WasmError;
+        use quillmark_core::{Diagnostic, Location, Severity};
+
+        // Create a single diagnostic error
+        let diag = Diagnostic::new(Severity::Error, "Test error message".to_string())
+            .with_code("E001".to_string())
+            .with_location(Location {
+                file: "test.typ".to_string(),
+                line: 10,
+                col: 5,
+            })
+            .with_hint("This is a hint".to_string());
+
+        let render_err = quillmark_core::RenderError::TemplateFailed { diag };
+        let wasm_err: WasmError = render_err.into();
+
+        // Serialize to JSON and verify structure
+        let json = serde_json::to_value(&wasm_err).unwrap();
+        assert!(json.is_object());
+
+        let obj = json.as_object().unwrap();
+        assert_eq!(obj.get("type").unwrap().as_str().unwrap(), "diagnostic");
+
+        // Check that diagnostic fields are flattened
+        assert_eq!(obj.get("severity").unwrap().as_str().unwrap(), "Error");
+        assert_eq!(obj.get("code").unwrap().as_str().unwrap(), "E001");
+        assert_eq!(
+            obj.get("message").unwrap().as_str().unwrap(),
+            "Test error message"
+        );
+        assert_eq!(obj.get("hint").unwrap().as_str().unwrap(), "This is a hint");
+
+        // Verify location is nested
+        let primary = obj.get("primary").unwrap().as_object().unwrap();
+        assert_eq!(primary.get("file").unwrap().as_str().unwrap(), "test.typ");
+        assert_eq!(primary.get("line").unwrap().as_u64().unwrap(), 10);
+        assert_eq!(primary.get("col").unwrap().as_u64().unwrap(), 5);
+    }
+
+    #[test]
+    fn test_wasm_error_multiple_diagnostics() {
+        use crate::error::WasmError;
+        use quillmark_core::{Diagnostic, Severity};
+
+        // Create multiple diagnostics error
+        let diag1 = Diagnostic::new(Severity::Error, "Error 1".to_string());
+        let diag2 = Diagnostic::new(Severity::Error, "Error 2".to_string());
+
+        let render_err = quillmark_core::RenderError::CompilationFailed {
+            diags: vec![diag1, diag2],
+        };
+        let wasm_err: WasmError = render_err.into();
+
+        // Serialize to JSON and verify structure
+        let json = serde_json::to_value(&wasm_err).unwrap();
+        assert!(json.is_object());
+
+        let obj = json.as_object().unwrap();
+        assert_eq!(
+            obj.get("type").unwrap().as_str().unwrap(),
+            "multipleDiagnostics"
+        );
+        assert!(obj.get("message").unwrap().as_str().unwrap().contains("2"));
+
+        // Check diagnostics array
+        let diagnostics = obj.get("diagnostics").unwrap().as_array().unwrap();
+        assert_eq!(diagnostics.len(), 2);
+
+        let first_diag = diagnostics[0].as_object().unwrap();
+        assert_eq!(
+            first_diag.get("message").unwrap().as_str().unwrap(),
+            "Error 1"
+        );
+    }
+
+    #[test]
+    fn test_wasm_error_from_string() {
+        use crate::error::WasmError;
+
+        let wasm_err: WasmError = "Simple error message".into();
+
+        // Serialize to JSON and verify structure
+        let json = serde_json::to_value(&wasm_err).unwrap();
+        assert!(json.is_object());
+
+        let obj = json.as_object().unwrap();
+        assert_eq!(obj.get("type").unwrap().as_str().unwrap(), "diagnostic");
+        assert_eq!(
+            obj.get("message").unwrap().as_str().unwrap(),
+            "Simple error message"
+        );
+        assert_eq!(obj.get("severity").unwrap().as_str().unwrap(), "Error");
+    }
+
+    #[test]
+    #[cfg(target_arch = "wasm32")]
+    fn test_wasm_error_to_js_value() {
+        use crate::error::WasmError;
+
+        let wasm_err: WasmError = "Test error".into();
+        let js_value = wasm_err.to_js_value();
+
+        // Verify it's not undefined or null
+        assert!(!js_value.is_undefined());
+        assert!(!js_value.is_null());
+    }
+
+    #[test]
     fn test_quill_info_plain_objects() {
         // Test that QuillInfo metadata and field_schemas are serde_json::Value objects
         let mut metadata_obj = serde_json::Map::new();
