@@ -168,15 +168,14 @@ pub struct QuillInfo {
 /// Parsed markdown document
 ///
 /// Returned by `Quillmark.parseMarkdown()`. Contains the parsed YAML frontmatter
-/// fields and the optional quill tag from the QUILL field.
+/// fields and the quill tag (from QUILL field or "__default__" if not specified).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ParsedDocument {
     /// YAML frontmatter fields
     pub fields: serde_json::Value,
-    /// The quill tag from QUILL field (if present)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub quill_tag: Option<String>,
+    /// The quill tag (from QUILL field or "__default__")
+    pub quill_tag: String,
 }
 
 /// Options for rendering
@@ -570,7 +569,7 @@ mod tests {
 
         let parsed_doc = ParsedDocument {
             fields: serde_json::Value::Object(fields_obj),
-            quill_tag: Some("test-quill".to_string()),
+            quill_tag: "test-quill".to_string(),
         };
 
         // Serialize and verify structure
