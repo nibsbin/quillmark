@@ -372,24 +372,10 @@ impl Quillmark {
 
     /// Load a workflow from a parsed document that contains a quill tag
     pub fn workflow_from_parsed(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError> {
-        let quill_name = parsed.quill_tag().unwrap_or("__default__");
+        let quill_name = parsed.quill_tag();
 
         // Try to load the Quill
-        self.workflow_from_quill_name(quill_name).map_err(|e| {
-            // If we fell back to __default__ and it doesn't exist, provide better error
-            if quill_name == "__default__" && parsed.quill_tag().is_none() {
-                RenderError::UnsupportedBackend {
-                    diag: Diagnostic::new(
-                        Severity::Error,
-                        "No QUILL field found in parsed document and no default Quill is registered.".to_string(),
-                    )
-                    .with_code("engine::missing_quill_tag".to_string())
-                    .with_hint("Add 'QUILL: <name>' to specify which Quill template to use, or ensure a backend with a default Quill is registered.".to_string()),
-                }
-            } else {
-                e
-            }
-        })
+        self.workflow_from_quill_name(quill_name)
     }
 
     /// Load a workflow by quill reference (name or object)
