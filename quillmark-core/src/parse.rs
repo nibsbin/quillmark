@@ -708,7 +708,7 @@ This is the body."#;
             "Test Author"
         );
         assert_eq!(doc.fields().len(), 3); // title, author, body
-        // Verify default quill tag is set when no QUILL directive
+                                           // Verify default quill tag is set when no QUILL directive
         assert_eq!(doc.quill_tag(), "__default__");
     }
 
