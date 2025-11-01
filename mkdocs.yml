@@ -42,8 +42,9 @@ nav:
       - AcroForm Backend: guides/acroform-backend.md
   - Quills:
       - USAF Memo: quills/usaf-memo.md
-  - Python:
-      - API Reference: python/api.md
+  - API Reference:
+      - Python: python/api.md
+      - JavaScript/WASM: javascript/api.md
 
 markdown_extensions:
   - pymdownx.highlight:

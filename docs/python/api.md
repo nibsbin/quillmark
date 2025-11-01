@@ -15,11 +15,11 @@ pip install quillmark
 ## Quick Example
 
 ```python
-from quillmark import Quillmark, ParsedDocument, OutputFormat
+from quillmark import Quillmark, ParsedDocument, OutputFormat, Quill
 
 # Create engine and load quill
 engine = Quillmark()
-quill = engine.load_quill_from_path("path/to/quill")
+quill = Quill.from_path("path/to/quill")
 engine.register_quill(quill)
 
 # Parse markdown
@@ -96,11 +96,12 @@ engine = Quillmark()
 print(engine.registered_backends())  # ['typst', 'acroform']
 
 # Load and register quill
-quill = engine.load_quill_from_path("my-quill/")
+from quillmark import Quill
+quill = Quill.from_path("my-quill/")
 engine.register_quill(quill)
 
 # Check registered quills
-print(engine.registered_quills())  # ['my-quill']
+print(engine.registered_quills())  # ['my-quill', '__default__']
 ```
 
 ### Workflow
@@ -254,8 +255,8 @@ class ParsedDocument:
     def fields(self) -> dict[str, Any]:
         """All frontmatter fields."""
     
-    def quill_tag(self) -> str | None:
-        """Get QUILL field value."""
+    def quill_tag(self) -> str:
+        """Get QUILL field value (defaults to '__default__' if not specified)."""
 ```
 
 **Example:**
