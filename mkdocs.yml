@@ -40,10 +40,13 @@ nav:
       - Quill Markdown: guides/quill-markdown.md
       - Typst Backend: guides/typst-backend.md
       - AcroForm Backend: guides/acroform-backend.md
+  - Advanced:
+      - Architecture: advanced/architecture.md
   - Quills:
       - USAF Memo: quills/usaf-memo.md
-  - Python:
-      - API Reference: python/api.md
+  - API Reference:
+      - Python: python/api.md
+      - JavaScript/WASM: javascript/api.md
 
 markdown_extensions:
   - pymdownx.highlight:

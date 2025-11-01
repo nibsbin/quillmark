@@ -163,34 +163,57 @@ title: Main Document
 Some content here.
 
 ---
-SCOPE: author
-name: Alice
-affiliation: University
+SCOPE: products
+name: Widget
+price: 19.99
 ---
 
-More content about Alice's research.
+Widget description.
 
 ---
-SCOPE: author
-name: Bob
-affiliation: Institute
+SCOPE: products
+name: Gadget
+price: 29.99
 ---
 
-Content about Bob's contributions.
+Gadget description.
 ```
 
-The scoped blocks are collected into an array accessible as `author`:
+The scoped blocks are collected into an array accessible as `products`:
 
 ```python
 # Access in template or code
-authors = parsed.get_field("author")
-# Returns: [{"name": "Alice", "affiliation": "University"}, 
-#           {"name": "Bob", "affiliation": "Institute"}]
+products = parsed.get_field("products")
+# Returns: [{"name": "Widget", "price": 19.99, "body": "Widget description."}, 
+#           {"name": "Gadget", "price": 29.99, "body": "Gadget description."}]
 ```
 
-### QUILL Key (Reserved)
+### QUILL Key
 
-The `QUILL` key is reserved for future use and specifies which Quill template to use for a section.
+The `QUILL` key specifies which Quill template to use for rendering:
+
+```markdown
+---
+QUILL: my-custom-template
+title: Document Title
+author: Jane Doe
+---
+
+# Content
+```
+
+If no `QUILL` key is specified, Quillmark uses the `__default__` template provided by the backend (if available).
+
+### Rules for Extended Metadata
+
+- **SCOPE key**: Creates collections - blocks with same scope name are aggregated into arrays
+- **QUILL key**: Specifies which quill template to use (defaults to `__default__` if not specified)
+- **Scope names**: Must match `[a-z_][a-z0-9_]*` pattern
+- **Reserved names**: Cannot use `body` as scope name
+- **Single global**: Only one block without SCOPE/QUILL allowed
+- **No collisions**: Global field names cannot conflict with scope names
+- **Horizontal rule disambiguation**: `---` with blank lines above AND below is treated as markdown horizontal rule
+- **Each scoped block includes a `body` field**: Content between metadata blocks is stored in the `body` field
 
 ## Body Content
 
@@ -199,6 +222,18 @@ The document body (everything after frontmatter) is stored under the special fie
 ```jinja
 #{{ body | Content }}
 ```
+
+## Metadata Object
+
+Quillmark provides a special `__metadata__` field in templates that contains all frontmatter fields except `body`. This is useful for iterating over metadata or separating content from metadata:
+
+```jinja
+{% for key, value in __metadata__ %}
+  {{ key }}: {{ value }}
+{% endfor %}
+```
+
+The `__metadata__` field is automatically created and includes all fields from the frontmatter (including SCOPE-based collections), but excludes the `body` field. You can still access fields individually at the top level (e.g., `{{ title }}`), but `__metadata__` provides convenient metadata-only access.
 
 ## Validation
 

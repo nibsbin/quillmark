@@ -132,6 +132,21 @@ Author: {{ author | String }}
 Tags: {{ tags | Lines }}
 ```
 
+### Using the Metadata Object
+
+Quillmark provides a special `__metadata__` field that contains all frontmatter fields except `body`. This is useful for iterating over metadata:
+
+```jinja
+{% for key, value in __metadata__ %}
+  #set document({{ key }}: {{ value | String }})
+{% endfor %}
+
+{# Body content separately #}
+#{{ body | Content }}
+```
+
+The `__metadata__` field is automatically created and includes all fields from frontmatter (including SCOPE-based collections), but excludes the `body` field. You can still access individual fields at the top level (e.g., `{{ title }}`), but `__metadata__` provides convenient metadata-only access.
+
 ## Backend-Specific Configuration
 
 ### Typst Backend
@@ -223,10 +238,10 @@ This is an example document using the template.
 ### From Filesystem
 
 ```python
-from quillmark import Quillmark
+from quillmark import Quillmark, Quill
 
 engine = Quillmark()
-quill = engine.load_quill_from_path("path/to/my-quill")
+quill = Quill.from_path("path/to/my-quill")
 engine.register_quill(quill)
 ```
 
@@ -234,16 +249,17 @@ engine.register_quill(quill)
 
 ```python
 import json
+from quillmark import Quillmark, Quill
 
 quill_data = {
-    "metadata": {"name": "my-quill", "backend": "typst"},
     "files": {
         "Quill.toml": {"contents": "..."},
         "glue.typ": {"contents": "..."}
     }
 }
 
-quill = engine.load_quill_from_json(json.dumps(quill_data))
+quill = Quill.from_json(json.dumps(quill_data))
+engine = Quillmark()
 engine.register_quill(quill)
 ```
 

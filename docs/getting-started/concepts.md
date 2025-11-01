@@ -52,6 +52,28 @@ Backends transform composed templates into final artifacts:
 
 Each backend has its own templating capabilities and filters.
 
+### Default Quill System
+
+Quillmark includes a **default quill system** that allows rendering documents without explicitly specifying a Quill template. When no `QUILL` field is present in your frontmatter, Quillmark uses the `__default__` template provided by the backend (if available).
+
+For example, the Typst backend provides a default Quill that renders simple documents with minimal styling. This means you can get started quickly:
+
+```markdown
+---
+title: My First Document
+author: Jane Doe
+---
+
+# Introduction
+
+Content here.
+```
+
+This document will render using the default Typst quill without requiring you to create or register a custom Quill template. When you're ready for more customization, you can:
+
+1. Specify a custom Quill in frontmatter: `QUILL: my-custom-template`
+2. Create and register your own Quill templates
+
 ## The Rendering Pipeline
 
 Quillmark follows a multi-stage pipeline:
