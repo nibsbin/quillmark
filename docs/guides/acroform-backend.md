@@ -173,10 +173,10 @@ The AcroForm backend supports standard PDF form field types:
 ### Python
 
 ```python
-from quillmark import Quillmark, ParsedDocument, OutputFormat
+from quillmark import Quillmark, ParsedDocument, OutputFormat, Quill
 
 engine = Quillmark()
-quill = engine.load_quill_from_path("path/to/form-quill")
+quill = Quill.from_path("path/to/form-quill")
 engine.register_quill(quill)
 
 markdown = """---

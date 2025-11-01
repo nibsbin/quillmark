@@ -21,13 +21,13 @@ Get started with Quillmark in your preferred language.
     ## Basic Usage
 
     ```python
-    from quillmark import Quillmark, ParsedDocument, OutputFormat
+    from quillmark import Quillmark, ParsedDocument, OutputFormat, Quill
 
     # Create engine
     engine = Quillmark()
 
     # Load a quill template
-    quill = engine.load_quill_from_path("path/to/quill")
+    quill = Quill.from_path("path/to/quill")
     engine.register_quill(quill)
 
     # Parse markdown
@@ -132,14 +132,19 @@ Get started with Quillmark in your preferred language.
 
     // Load a quill template (as JSON)
     const quillJson = {
-        metadata: { name: "my-quill", backend: "typst" },
         files: {
+            "Quill.toml": {
+                contents: `[Quill]
+name = "my-quill"
+backend = "typst"
+description = "My template"
+`
+            },
             "glue.typ": { contents: "..." },
             // ... other files
         }
     };
-    const quill = engine.load_quill_from_json(JSON.stringify(quillJson));
-    engine.register_quill(quill);
+    engine.registerQuill(JSON.stringify(quillJson));
 
     // Parse markdown
     const markdown = `---
