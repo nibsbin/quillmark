@@ -161,7 +161,7 @@ Data crossing the JavaScript ↔ WebAssembly boundary:
 - **Binary data**: `Vec<u8>` maps to `Uint8Array`
 - **Collections**: `Vec<T>` maps to JS arrays; object types use plain JS objects `{}`
 - **Option**: `Option<T>` maps to `T | null`
-- **Errors**: Thrown as exceptions with `QuillmarkError` containing diagnostics
+- **Errors**: Thrown as exceptions using `SerializableDiagnostic` from core, containing structured diagnostic information (severity, message, location, hint, source chain)
 
 ## Design Principles
 
@@ -169,6 +169,7 @@ Data crossing the JavaScript ↔ WebAssembly boundary:
 - **JavaScript Handles I/O**: WASM layer only handles rendering
 - **Synchronous Operations**: Rendering is fast enough (<100ms typically)
 - **No File System Abstractions**: JavaScript prepares all data
+- **Error Delegation**: Error handling delegated to core types (`SerializableDiagnostic`) for consistency with Python bindings
 
 ## License
 
