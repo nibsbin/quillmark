@@ -218,7 +218,9 @@ impl Quillmark {
         };
 
         // Determine which quill name to use (before consuming parsed_wasm)
-        let quill_name_to_use = opts.quill_name.unwrap_or_else(|| parsed_wasm.quill_tag.clone());
+        let quill_name_to_use = opts
+            .quill_name
+            .unwrap_or_else(|| parsed_wasm.quill_tag.clone());
 
         // Reconstruct a core ParsedDocument from the WASM type
         // Convert JSON value to HashMap<String, QuillValue>
@@ -239,11 +241,8 @@ impl Quillmark {
             .inner
             .workflow_from_quill_name(&quill_name_to_use)
             .map_err(|e| {
-                WasmError::from(format!(
-                    "Quill '{}' not found: {}",
-                    quill_name_to_use, e
-                ))
-                .to_js_value()
+                WasmError::from(format!("Quill '{}' not found: {}", quill_name_to_use, e))
+                    .to_js_value()
             })?;
 
         // Add assets if provided
