@@ -100,6 +100,7 @@ interface Diagnostic {
   message: string;
   location?: Location;
   hint?: string;
+  sourceChain?: string[];
 }
 
 interface Location {
@@ -108,6 +109,46 @@ interface Location {
   col: number;
 }
 ```
+
+---
+
+## Error Handling
+
+**Delegation to Core Types:** WASM bindings use `SerializableDiagnostic` from `quillmark-core` directly, not custom error wrappers.
+
+**Error Structure:**
+- All errors are serialized `SerializableDiagnostic` or `RenderError` objects from core
+- Thrown as `JsValue` containing the serialized diagnostic
+- Contains complete error information: severity, code, message, location, hint, and source chain
+
+**Error Mapping:**
+```typescript
+// JavaScript catches errors with full diagnostic info
+try {
+  const result = engine.render(parsed, options);
+} catch (error) {
+  // error is a SerializableDiagnostic or contains diagnostics array
+  console.error(`Error: ${error.message}`);
+  if (error.location) {
+    console.error(`  at ${error.location.file}:${error.location.line}:${error.location.col}`);
+  }
+  if (error.hint) {
+    console.error(`  hint: ${error.hint}`);
+  }
+  if (error.diagnostics) {
+    // CompilationFailed case with multiple diagnostics
+    for (const diag of error.diagnostics) {
+      console.error(`  - ${diag.severity}: ${diag.message}`);
+    }
+  }
+}
+```
+
+**Benefits of Delegation:**
+- Single source of truth for error structure
+- Automatic propagation of new error fields
+- Consistency with Python bindings approach
+- No duplication of error handling logic
 
 ---
 

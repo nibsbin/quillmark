@@ -44,6 +44,21 @@ The error handling system is designed to:
 
 **`SerializableDiagnostic`**: Cross-language compatible version of `Diagnostic` with flattened source chain for Python and WASM bindings
 
+## Bindings Error Delegation
+
+Language bindings (Python and WASM) **delegate error handling to core types** rather than creating wrapper error types:
+
+- **Python bindings**: Use `PyDiagnostic` which wraps `SerializableDiagnostic` from core, converting `RenderError` to Python exceptions with attached diagnostic payloads
+- **WASM bindings**: Use `SerializableDiagnostic` from core directly, serializing to JSON for JavaScript consumption via `serde_wasm_bindgen`
+
+This approach ensures:
+- **Consistency**: All error information originates from core types
+- **Maintainability**: Single source of truth for error structure
+- **Extensibility**: New error fields automatically propagate to bindings
+- **Type safety**: Core types guarantee correct error structure
+
+Bindings should convert `RenderError` to language-specific exceptions/errors while preserving the diagnostic information in structured form.
+
 ## Backend Error Mapping
 
 Backends convert their native error types to Quillmark's structured diagnostics.
