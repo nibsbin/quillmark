@@ -240,7 +240,7 @@ impl Quillmark {
             self.inner
                 .workflow_from_quill_name(&quill_name)
                 .map_err(|e| {
-                    WasmError::from(format!("Quill '{}' not found: {}", quill_name, e))
+                WasmError::from(format!("Quill '{}' not found: {}", quill_name, e))
                         .to_js_value()
                 })?
         } else if let Some(quill_tag) = parsed_wasm.quill_tag {
