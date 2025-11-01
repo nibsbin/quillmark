@@ -71,7 +71,7 @@ pub const QUILL_TAG: &str = "quill";
 #[derive(Debug, Clone)]
 pub struct ParsedDocument {
     fields: HashMap<String, QuillValue>,
-    quill_tag: Option<String>,
+    quill_tag: String,
 }
 
 impl ParsedDocument {
@@ -79,12 +79,12 @@ impl ParsedDocument {
     pub fn new(fields: HashMap<String, QuillValue>) -> Self {
         Self {
             fields,
-            quill_tag: None,
+            quill_tag: "__default__".to_string(),
         }
     }
 
-    /// Create a ParsedDocument from fields and optional quill tag
-    pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: Option<String>) -> Self {
+    /// Create a ParsedDocument from fields and quill tag
+    pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: String) -> Self {
         Self { fields, quill_tag }
     }
 
@@ -93,9 +93,9 @@ impl ParsedDocument {
         decompose(markdown).map_err(|e| crate::error::ParseError::from(e))
     }
 
-    /// Get the quill tag if specified (from QUILL key)
-    pub fn quill_tag(&self) -> Option<&str> {
-        self.quill_tag.as_deref()
+    /// Get the quill tag (from QUILL key, or "__default__" if not specified)
+    pub fn quill_tag(&self) -> &str {
+        &self.quill_tag
     }
 
     /// Get the document body
@@ -664,12 +664,8 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
         }
     }
 
-    let mut parsed = ParsedDocument::new(fields);
-
-    // Set quill tag if present
-    if let Some(name) = quill_name {
-        parsed.quill_tag = Some(name);
-    }
+    let quill_tag = quill_name.unwrap_or_else(|| "__default__".to_string());
+    let parsed = ParsedDocument::with_quill_tag(fields, quill_tag);
 
     Ok(parsed)
 }
@@ -685,6 +681,8 @@ mod tests {
 
         assert_eq!(doc.body(), Some(markdown));
         assert_eq!(doc.fields().len(), 1);
+        // Verify default quill tag is set
+        assert_eq!(doc.quill_tag(), "__default__");
     }
 
     #[test]
@@ -710,6 +708,8 @@ This is the body."#;
             "Test Author"
         );
         assert_eq!(doc.fields().len(), 3); // title, author, body
+        // Verify default quill tag is set when no QUILL directive
+        assert_eq!(doc.quill_tag(), "__default__");
     }
 
     #[test]
@@ -1464,7 +1464,7 @@ This is the memo body."#;
         let doc = decompose(markdown).unwrap();
 
         // Verify quill tag is set
-        assert_eq!(doc.quill_tag(), Some("usaf_memo"));
+        assert_eq!(doc.quill_tag(), "usaf_memo");
 
         // Verify fields from quill block become frontmatter
         assert_eq!(
@@ -1497,7 +1497,7 @@ Section 1 body."#;
         let doc = decompose(markdown).unwrap();
 
         // Verify quill tag
-        assert_eq!(doc.quill_tag(), Some("document"));
+        assert_eq!(doc.quill_tag(), "document");
 
         // Verify global field from quill block
         assert_eq!(

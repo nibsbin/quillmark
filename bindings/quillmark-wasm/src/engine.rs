@@ -46,7 +46,7 @@ impl Quillmark {
     /// Parse markdown into a ParsedDocument
     ///
     /// This is the first step in the workflow. The returned ParsedDocument contains
-    /// the parsed YAML frontmatter fields and the quill_tag (if QUILL field is present).
+    /// the parsed YAML frontmatter fields and the quill_tag (from QUILL field or "__default__").
     #[wasm_bindgen(js_name = parseMarkdown)]
     pub fn parse_markdown(markdown: &str) -> Result<JsValue, JsValue> {
         let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
@@ -54,7 +54,7 @@ impl Quillmark {
         })?;
 
         // Convert to WASM type
-        let quill_tag = parsed.quill_tag().map(|s| s.to_string());
+        let quill_tag = parsed.quill_tag().to_string();
 
         // Convert fields HashMap to JSON
         let mut fields_obj = serde_json::Map::new();
@@ -243,22 +243,17 @@ impl Quillmark {
                     WasmError::from(format!("Quill '{}' not found: {}", quill_name, e))
                         .to_js_value()
                 })?
-        } else if let Some(quill_tag) = parsed_wasm.quill_tag {
-            // Use quill_tag from parsed document
+        } else {
+            // Use quill_tag from parsed document (always present, may be "__default__")
             self.inner
-                .workflow_from_quill_name(&quill_tag)
+                .workflow_from_quill_name(&parsed_wasm.quill_tag)
                 .map_err(|e| {
                     WasmError::from(format!(
                         "Quill '{}' from QUILL field not found: {}",
-                        quill_tag, e
+                        parsed_wasm.quill_tag, e
                     ))
                     .to_js_value()
                 })?
-        } else {
-            return Err(WasmError::from(
-                "No quill specified. Either add a 'QUILL: <name>' field in your markdown frontmatter or specify quillName in options"
-            )
-            .to_js_value());
         };
 
         // Add assets if provided
