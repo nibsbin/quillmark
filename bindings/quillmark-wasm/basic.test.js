@@ -212,17 +212,17 @@ this is not valid yaml
     expect(parsed.fields instanceof Object).toBe(true)
     expect(parsed.fields.title).toBe('Test Document')
     expect(parsed.fields.author).toBe('Test Author')
-    
+
     // Step 2: Register and get quill info - metadata and fieldSchemas should be plain objects
     const engine = new Quillmark()
     engine.registerQuill(TEST_QUILL)
     const info = engine.getQuillInfo('test_quill')
-    
+
     expect(info.metadata instanceof Map).toBe(false)
     expect(info.metadata instanceof Object).toBe(true)
     expect(info.metadata.backend).toBe('typst')
     expect(info.schema instanceof Object).toBe(true)
-    
+
     // Step 3: Render with assets as plain object
     const result = engine.render(parsed, {
       format: 'pdf',
@@ -230,10 +230,35 @@ this is not valid yaml
         'test.txt': [72, 101, 108, 108, 111]
       }
     })
-    
+
     expect(result).toBeDefined()
     expect(result.artifacts).toBeDefined()
     expect(Array.isArray(result.warnings)).toBe(true)
     expect(typeof result.renderTimeMs).toBe('number')
+  })
+
+  it('should use __default__ quill when QUILL tag is not specified', () => {
+    // Markdown without QUILL: tag
+    const markdownWithoutQuill = `---
+title: Default Test
+author: Test Author
+---
+
+# Hello Default
+
+This document has no QUILL tag.`
+
+    // Parse should set quillTag to __default__
+    const parsed = Quillmark.parseMarkdown(markdownWithoutQuill)
+    expect(parsed.quillTag).toBe("__default__")
+    expect(parsed.fields.title).toBe('Default Test')
+
+    // The engine auto-registers a __default__ quill from the Typst backend
+    // We can render with it directly without registering our own
+    const engine = new Quillmark()
+    const result = engine.render(parsed, { format: 'pdf' })
+
+    expect(result).toBeDefined()
+    expect(result.artifacts).toBeDefined()
   })
 })

@@ -42,13 +42,16 @@ Only YAML frontmatter is supported. Backends can convert to their native formats
 
 Stores both frontmatter fields and document body in a single `HashMap<String, QuillValue>`.
 - Body is stored under special `BODY_FIELD = "body"` constant
+- Quill tag is stored as a non-optional String, defaulting to `__default__`
 - Private fields enforce access through validated methods
 
 **Public API:**
-- `new(fields)` - Constructor
+- `new(fields)` - Constructor (sets quill_tag to `__default__`)
+- `with_quill_tag(fields, quill_tag)` - Constructor with explicit quill tag
 - `body()` - Returns `Option<&str>` for document body
 - `get_field(name)` - Returns `Option<&QuillValue>` for any field
 - `fields()` - Returns reference to entire field map
+- `quill_tag()` - Returns `&str` for the quill tag (never None)
 
 ## Parsing Algorithm
 
@@ -128,12 +131,13 @@ Body of second sub-document.
 ### Rules
 
 - **SCOPE key**: Creates collections - blocks with same scope name are aggregated into arrays
-- **QUILL key**: Specifies which quill template to use
+- **QUILL key**: Specifies which quill template to use (defaults to `__default__` if not specified)
 - **Scope names**: Must match `[a-z_][a-z0-9_]*` pattern
 - **Reserved names**: Cannot use `body` as scope name
 - **Single global**: Only one block without SCOPE/QUILL allowed
 - **No collisions**: Global field names cannot conflict with scope names
 - **Horizontal rule disambiguation**: `---` with blank lines above AND below is treated as markdown horizontal rule
+- **Default quill tag**: When no QUILL directive is present, ParsedDocument.quill_tag is set to `__default__` at parse time
 
 ### Parsing Flow
 

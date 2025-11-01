@@ -56,8 +56,8 @@
 //!
 //! ## Error Handling
 //!
-//! All errors are represented as [`JsValue`] containing serialized [`QuillmarkError`] objects
-//! with diagnostic information.
+//! All errors are represented as [`JsValue`] containing serialized [`WasmError`] objects
+//! with diagnostic information from the core error types.
 
 use wasm_bindgen::prelude::*;
 
@@ -66,7 +66,7 @@ mod error;
 mod types;
 
 pub use engine::Quillmark;
-pub use error::QuillmarkError;
+pub use error::WasmError;
 pub use types::*;
 
 /// Initialize the WASM module with panic hooks for better error messages

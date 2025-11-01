@@ -283,7 +283,7 @@ impl PyParsedDocument {
         Ok(dict)
     }
 
-    fn quill_tag(&self) -> Option<&str> {
+    fn quill_tag(&self) -> &str {
         self.inner.quill_tag()
     }
 }

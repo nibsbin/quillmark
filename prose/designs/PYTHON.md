@@ -153,7 +153,7 @@ See `bindings/quillmark-python/src/` for complete implementation details.
 - `enums.rs` - Enum conversions (OutputFormat, Severity)
 - `errors.rs` - Exception definitions and error mapping
 
-**Error Mapping:** External errors (Rust RenderError) are converted to Python exceptions with structured Diagnostic payloads.
+**Error Delegation:** Delegates error handling to core types. External errors (Rust `RenderError`) are converted to Python exceptions with `PyDiagnostic` wrapping `SerializableDiagnostic` from core. This ensures consistency across bindings and maintains a single source of truth for error structure.
 
 ---
 

@@ -1,6 +1,6 @@
 //! Quillmark WASM Engine - Simplified API
 
-use crate::error::QuillmarkError;
+use crate::error::WasmError;
 use crate::types::{OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult};
 use serde::Serialize;
 use std::collections::HashMap;
@@ -46,20 +46,15 @@ impl Quillmark {
     /// Parse markdown into a ParsedDocument
     ///
     /// This is the first step in the workflow. The returned ParsedDocument contains
-    /// the parsed YAML frontmatter fields and the quill_tag (if QUILL field is present).
+    /// the parsed YAML frontmatter fields and the quill_tag (from QUILL field or "__default__").
     #[wasm_bindgen(js_name = parseMarkdown)]
     pub fn parse_markdown(markdown: &str) -> Result<JsValue, JsValue> {
         let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
-            QuillmarkError::new(
-                format!("Failed to parse markdown: {}", e),
-                None,
-                Some("Check markdown syntax and YAML frontmatter".to_string()),
-            )
-            .to_js_value()
+            WasmError::from(format!("Failed to parse markdown: {}", e)).to_js_value()
         })?;
 
         // Convert to WASM type
-        let quill_tag = parsed.quill_tag().map(|s| s.to_string());
+        let quill_tag = parsed.quill_tag().to_string();
 
         // Convert fields HashMap to JSON
         let mut fields_obj = serde_json::Map::new();
@@ -73,12 +68,7 @@ impl Quillmark {
         wasm_parsed
             .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
             .map_err(|e| {
-                QuillmarkError::new(
-                    format!("Failed to serialize ParsedDocument: {}", e),
-                    None,
-                    None,
-                )
-                .to_js_value()
+                WasmError::from(format!("Failed to serialize ParsedDocument: {}", e)).to_js_value()
             })
     }
 
@@ -91,45 +81,27 @@ impl Quillmark {
         // Convert JsValue to JSON string
         let json_str = if quill_json.is_string() {
             quill_json.as_string().ok_or_else(|| {
-                QuillmarkError::new(
-                    "Failed to convert JsValue to string".to_string(),
-                    None,
-                    None,
-                )
-                .to_js_value()
+                WasmError::from("Failed to convert JsValue to string").to_js_value()
             })?
         } else {
             js_sys::JSON::stringify(&quill_json)
                 .map_err(|e| {
-                    QuillmarkError::new(
-                        format!("Failed to serialize Quill JSON: {:?}", e),
-                        None,
-                        Some("Ensure the Quill object has the correct structure".to_string()),
-                    )
-                    .to_js_value()
-                })?
-                .as_string()
-                .ok_or_else(|| {
-                    QuillmarkError::new("Failed to convert JSON to string".to_string(), None, None)
+                    WasmError::from(format!("Failed to serialize Quill JSON: {:?}", e))
                         .to_js_value()
                 })?
+                .as_string()
+                .ok_or_else(|| WasmError::from("Failed to convert JSON to string").to_js_value())?
         };
 
         // Parse and validate Quill
-        let quill = quillmark_core::Quill::from_json(&json_str).map_err(|e| {
-            QuillmarkError::new(
-                format!("Failed to parse Quill: {}", e),
-                None,
-                Some("Ensure Quill.toml exists and is valid TOML".to_string()),
-            )
-            .to_js_value()
-        })?;
+        let quill = quillmark_core::Quill::from_json(&json_str)
+            .map_err(|e| WasmError::from(format!("Failed to parse Quill: {}", e)).to_js_value())?;
         let name = quill.name.clone();
 
         // Register with backend validation
         self.inner
             .register_quill(quill.clone())
-            .map_err(|e| QuillmarkError::from(e).to_js_value())?;
+            .map_err(|e| WasmError::from(e).to_js_value())?;
         self.quills.insert(quill.name.clone(), quill);
 
         let quill_info = self.get_quill_info(&name)?;
@@ -143,12 +115,7 @@ impl Quillmark {
     #[wasm_bindgen(js_name = getQuillInfo)]
     pub fn get_quill_info(&self, name: &str) -> Result<JsValue, JsValue> {
         let quill = self.quills.get(name).ok_or_else(|| {
-            QuillmarkError::new(
-                format!("Quill '{}' not registered", name),
-                None,
-                Some("Use registerQuill() before getting quill info".to_string()),
-            )
-            .to_js_value()
+            WasmError::from(format!("Quill '{}' not registered", name)).to_js_value()
         })?;
 
         // Get backend ID
@@ -156,11 +123,10 @@ impl Quillmark {
 
         // Create workflow to get supported formats
         let workflow = self.inner.workflow_from_quill_name(name).map_err(|e| {
-            QuillmarkError::new(
-                format!("Failed to create workflow for quill '{}': {}", name, e),
-                None,
-                None,
-            )
+            WasmError::from(format!(
+                "Failed to create workflow for quill '{}': {}",
+                name, e
+            ))
             .to_js_value()
         })?;
 
@@ -207,8 +173,7 @@ impl Quillmark {
         quill_info
             .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
             .map_err(|e| {
-                QuillmarkError::new(format!("Failed to serialize QuillInfo: {}", e), None, None)
-                    .to_js_value()
+                WasmError::from(format!("Failed to serialize QuillInfo: {}", e)).to_js_value()
             })
     }
 
@@ -219,29 +184,19 @@ impl Quillmark {
     pub fn process_glue(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
         // Parse markdown first
         let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
-            QuillmarkError::new(
-                format!("Failed to parse markdown: {}", e),
-                None,
-                Some("Check markdown syntax and YAML frontmatter".to_string()),
-            )
-            .to_js_value()
+            WasmError::from(format!("Failed to parse markdown: {}", e)).to_js_value()
         })?;
 
         let workflow = self
             .inner
             .workflow_from_quill_name(quill_name)
             .map_err(|e| {
-                QuillmarkError::new(
-                    format!("Quill '{}' not found: {}", quill_name, e),
-                    None,
-                    Some("Use registerQuill() before rendering".to_string()),
-                )
-                .to_js_value()
+                WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
             })?;
 
         workflow
             .process_glue(&parsed)
-            .map_err(|e| QuillmarkError::from(e).to_js_value())
+            .map_err(|e| WasmError::from(e).to_js_value())
     }
 
     /// Render a ParsedDocument to final artifacts (PDF, SVG, TXT)
@@ -251,19 +206,27 @@ impl Quillmark {
     #[wasm_bindgen]
     pub fn render(&mut self, parsed_doc: JsValue, options: JsValue) -> Result<JsValue, JsValue> {
         // Parse the ParsedDocument from JsValue
-        let parsed_wasm: ParsedDocument =
-            serde_wasm_bindgen::from_value(parsed_doc).map_err(|e| {
-                QuillmarkError::new(
-                    format!("Invalid ParsedDocument: {}", e),
-                    None,
-                    Some("Ensure you pass a valid ParsedDocument from parseMarkdown()".to_string()),
-                )
-                .to_js_value()
-            })?;
+        let parsed_wasm: ParsedDocument = serde_wasm_bindgen::from_value(parsed_doc)
+            .map_err(|e| WasmError::from(format!("Invalid ParsedDocument: {}", e)).to_js_value())?;
+
+        let opts: RenderOptions = if options.is_undefined() || options.is_null() {
+            RenderOptions::default()
+        } else {
+            serde_wasm_bindgen::from_value(options).map_err(|e| {
+                WasmError::from(format!("Invalid render options: {}", e)).to_js_value()
+            })?
+        };
+
+        // Determine which quill name to use (before consuming parsed_wasm)
+        let quill_name_to_use = opts
+            .quill_name
+            .unwrap_or_else(|| parsed_wasm.quill_tag.clone());
 
         // Reconstruct a core ParsedDocument from the WASM type
         // Convert JSON value to HashMap<String, QuillValue>
         let fields_json = parsed_wasm.fields;
+        let quill_tag = parsed_wasm.quill_tag; // Move quill_tag out
+
         let mut fields = std::collections::HashMap::new();
 
         if let serde_json::Value::Object(obj) = fields_json {
@@ -272,58 +235,16 @@ impl Quillmark {
             }
         }
 
-        let parsed =
-            quillmark_core::ParsedDocument::with_quill_tag(fields, parsed_wasm.quill_tag.clone());
+        let parsed = quillmark_core::ParsedDocument::with_quill_tag(fields, quill_tag);
 
-        let opts: RenderOptions = if options.is_undefined() || options.is_null() {
-            RenderOptions::default()
-        } else {
-            serde_wasm_bindgen::from_value(options).map_err(|e| {
-                QuillmarkError::new(
-                    format!("Invalid render options: {}", e),
-                    None,
-                    Some("Check that format is 'pdf', 'svg', or 'txt'".to_string()),
-                )
-                .to_js_value()
-            })?
-        };
-
-        // Determine which workflow to use
-        let mut workflow = if let Some(quill_name) = opts.quill_name {
-            // Use explicitly provided quill name (overrides quill_tag field)
-            self.inner
-                .workflow_from_quill_name(&quill_name)
-                .map_err(|e| {
-                    QuillmarkError::new(
-                        format!("Quill '{}' not found: {}", quill_name, e),
-                        None,
-                        Some("Use registerQuill() before rendering".to_string()),
-                    )
+        // Load the workflow
+        let mut workflow = self
+            .inner
+            .workflow_from_quill_name(&quill_name_to_use)
+            .map_err(|e| {
+                WasmError::from(format!("Quill '{}' not found: {}", quill_name_to_use, e))
                     .to_js_value()
-                })?
-        } else if let Some(quill_tag) = parsed_wasm.quill_tag {
-            // Use quill_tag from parsed document
-            self.inner
-                .workflow_from_quill_name(&quill_tag)
-                .map_err(|e| {
-                    QuillmarkError::new(
-                        format!("Quill '{}' from QUILL field not found: {}", quill_tag, e),
-                        None,
-                        Some("Use registerQuill() before rendering".to_string()),
-                    )
-                    .to_js_value()
-                })?
-        } else {
-            return Err(QuillmarkError::new(
-                "No quill specified".to_string(),
-                None,
-                Some(
-                    "Either add a 'QUILL: <name>' field in your markdown frontmatter or specify quillName in options"
-                        .to_string(),
-                ),
-            )
-            .to_js_value());
-        };
+            })?;
 
         // Add assets if provided
         if let Some(assets_json) = opts.assets {
@@ -339,20 +260,15 @@ impl Quillmark {
                             .filter_map(|v| v.as_u64().map(|n| n as u8))
                             .collect::<Vec<u8>>()
                     } else {
-                        return Err(QuillmarkError::new(
-                            format!(
-                                "Invalid asset format for '{}': expected byte array",
-                                filename
-                            ),
-                            None,
-                            Some("Assets should be Uint8Array or array of numbers".to_string()),
-                        )
+                        return Err(WasmError::from(format!(
+                            "Invalid asset format for '{}': expected byte array",
+                            filename
+                        ))
                         .to_js_value());
                     };
 
                     workflow.add_asset(filename, bytes).map_err(|e| {
-                        QuillmarkError::new(format!("Failed to add asset: {}", e), None, None)
-                            .to_js_value()
+                        WasmError::from(format!("Failed to add asset: {}", e)).to_js_value()
                     })?;
                 }
             }
@@ -363,7 +279,7 @@ impl Quillmark {
         let output_format = opts.format.map(|f| f.into());
         let result = workflow
             .render(&parsed, output_format)
-            .map_err(|e| QuillmarkError::from(e).to_js_value())?;
+            .map_err(|e| WasmError::from(e).to_js_value())?;
 
         let render_result = RenderResult {
             artifacts: result.artifacts.into_iter().map(Into::into).collect(),
@@ -375,8 +291,7 @@ impl Quillmark {
         render_result
             .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
             .map_err(|e| {
-                QuillmarkError::new(format!("Failed to serialize result: {}", e), None, None)
-                    .to_js_value()
+                WasmError::from(format!("Failed to serialize result: {}", e)).to_js_value()
             })
     }
 
