@@ -14,14 +14,11 @@ fi
 echo ""
 echo "Building for target: bundler (optimized for size)"
 
-# Set profile to wasm-release
-export CARGO_PROFILE=wasm-release
-
 wasm-pack build bindings/quillmark-wasm \
     --target bundler \
     --out-dir "../../pkg/bundler" \
     --out-name wasm \
-    --release \
+    --profile wasm-release \
     --scope quillmark-test
 
 # Update package name
