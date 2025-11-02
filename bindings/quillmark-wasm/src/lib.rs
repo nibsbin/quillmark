@@ -42,7 +42,7 @@
 //! // Step 2: Load and register Quill (from JSON)
 //! const engine = new Quillmark();
 //! const quillJson = { /* Quill file tree in JSON format */ };
-//! engine.registerQuill('letter-quill', quillJson);
+//! engine.registerQuill(quillJson);
 //!
 //! // Step 3: Get Quill info to inspect available options
 //! const info = engine.getQuillInfo('letter-quill');
