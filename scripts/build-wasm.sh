@@ -19,6 +19,7 @@ wasm-pack build bindings/quillmark-wasm \
     --out-dir "../../pkg/bundler" \
     --out-name wasm \
     --profile wasm-release \
+    --no-opt \
     --scope quillmark-test
 
 # Update package name
