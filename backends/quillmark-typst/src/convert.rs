@@ -98,8 +98,9 @@ where
     let mut list_stack: Vec<ListType> = Vec::new();
     let mut in_list_item = false; // Track if we're inside a list item
     let mut depth = 0; // Track nesting depth for DoS prevention
+    let mut iter = iter.peekable();
 
-    for event in iter {
+    while let Some(event) = iter.next() {
         match event {
             Event::Start(tag) => {
                 // Track nesting depth
@@ -209,10 +210,22 @@ where
                     }
                     TagEnd::Emphasis => {
                         output.push('_');
+                        // Check if next event is text starting with alphanumeric
+                        if let Some(Event::Text(text)) = iter.peek() {
+                            if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
+                                output.push_str("#{}");
+                            }
+                        }
                         end_newline = false;
                     }
                     TagEnd::Strong => {
                         output.push('*');
+                        // Check if next event is text starting with alphanumeric
+                        if let Some(Event::Text(text)) = iter.peek() {
+                            if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
+                                output.push_str("#{}");
+                            }
+                        }
                         end_newline = false;
                     }
                     TagEnd::Strikethrough => {
@@ -626,5 +639,38 @@ mod tests {
         let typst = mark_to_typst(markdown).unwrap();
         // Single slashes should not be escaped (only // is a comment in Typst)
         assert!(typst.contains("path/to/file"));
+    }
+
+    #[test]
+    fn test_italic_followed_by_alphanumeric() {
+        // Bug: When closing italic marker is followed by alphanumeric, Typst doesn't recognize it
+        let markdown = "*Write y*our paragraphs here.";
+        let typst = mark_to_typst(markdown).unwrap();
+        // Should add word boundary after closing underscore when followed by alphanumeric
+        assert_eq!(typst, "_Write y_#{}our paragraphs here.\n\n");
+    }
+
+    #[test]
+    fn test_italic_followed_by_space() {
+        // When followed by space, no word boundary needed
+        let markdown = "*italic* text";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "_italic_ text\n\n");
+    }
+
+    #[test]
+    fn test_italic_followed_by_punctuation() {
+        // When followed by punctuation, no word boundary needed
+        let markdown = "*italic*.";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "_italic_.\n\n");
+    }
+
+    #[test]
+    fn test_bold_followed_by_alphanumeric() {
+        // Same issue can occur with bold
+        let markdown = "**bold**text";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "*bold*#{}text\n\n");
     }
 }
