@@ -213,7 +213,7 @@ where
                         // Check if next event is text starting with alphanumeric
                         if let Some(Event::Text(text)) = iter.peek() {
                             if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
-                                output.push_str("{}");
+                                output.push_str("#{}");
                             }
                         }
                         end_newline = false;
@@ -223,7 +223,7 @@ where
                         // Check if next event is text starting with alphanumeric
                         if let Some(Event::Text(text)) = iter.peek() {
                             if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
-                                output.push_str("{}");
+                                output.push_str("#{}");
                             }
                         }
                         end_newline = false;
@@ -647,7 +647,7 @@ mod tests {
         let markdown = "*Write y*our paragraphs here.";
         let typst = mark_to_typst(markdown).unwrap();
         // Should add word boundary after closing underscore when followed by alphanumeric
-        assert_eq!(typst, "_Write y_{}our paragraphs here.\n\n");
+        assert_eq!(typst, "_Write y_#{}our paragraphs here.\n\n");
     }
 
     #[test]
@@ -671,6 +671,6 @@ mod tests {
         // Same issue can occur with bold
         let markdown = "**bold**text";
         let typst = mark_to_typst(markdown).unwrap();
-        assert_eq!(typst, "*bold*{}text\n\n");
+        assert_eq!(typst, "*bold*#{}text\n\n");
     }
 }
