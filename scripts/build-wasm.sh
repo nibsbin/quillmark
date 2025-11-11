@@ -48,6 +48,8 @@ cat > pkg/bundler/package.json << EOF
   },
   "files": [
     "wasm_bg.wasm",
+    "wasm_bg.js",
+    "wasm_bg.wasm.d.ts",
     "wasm.js",
     "wasm.d.ts"
   ],
