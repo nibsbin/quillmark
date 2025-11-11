@@ -8,6 +8,7 @@ members = [
     "bindings/quillmark-wasm",
     "quillmark-fuzz",
     "bindings/quillmark-python",
+    "bindings/quillmark-cli",
 ]
 # The default members to include when running `cargo build` or `cargo test` in the workspace root.
 default-members = [
@@ -45,7 +46,6 @@ minijinja = "~2.12"
 jsonschema = {version = "0.33", default-features = false}
 
 # Typst backend dependencies
-fontdb = "0.21.0"
 pulldown-cmark = "0.13.0"
 time = { version = "0.3.44", features = ["formatting", "parsing"] }
 typst = "0.14.0"
