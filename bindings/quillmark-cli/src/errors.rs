@@ -1,3 +1,4 @@
+use quillmark_core::RenderError;
 use std::fmt;
 
 /// CLI-specific error type that wraps underlying errors
@@ -5,7 +6,8 @@ use std::fmt;
 #[derive(Debug)]
 pub enum CliError {
     Io(std::io::Error),
-    Quillmark(anyhow::Error),
+    Render(RenderError),
+    Parse(quillmark_core::ParseError),
     InvalidArgument(String),
 }
 
@@ -13,7 +15,8 @@ impl fmt::Display for CliError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             CliError::Io(e) => write!(f, "I/O error: {}", e),
-            CliError::Quillmark(e) => write!(f, "Rendering error: {}", e),
+            CliError::Render(e) => write!(f, "{}", e),
+            CliError::Parse(e) => write!(f, "Parse error: {}", e),
             CliError::InvalidArgument(msg) => write!(f, "Invalid argument: {}", msg),
         }
     }
@@ -27,10 +30,65 @@ impl From<std::io::Error> for CliError {
     }
 }
 
-impl From<anyhow::Error> for CliError {
-    fn from(err: anyhow::Error) -> Self {
-        CliError::Quillmark(err)
+impl From<RenderError> for CliError {
+    fn from(err: RenderError) -> Self {
+        CliError::Render(err)
+    }
+}
+
+impl From<quillmark_core::ParseError> for CliError {
+    fn from(err: quillmark_core::ParseError) -> Self {
+        CliError::Parse(err)
+    }
+}
+
+impl From<Box<dyn std::error::Error + Send + Sync>> for CliError {
+    fn from(err: Box<dyn std::error::Error + Send + Sync>) -> Self {
+        // Check if it's a RenderError we can extract
+        if let Some(render_err) = err.downcast_ref::<RenderError>() {
+            // Clone the diagnostic information
+            let diagnostics = render_err.diagnostics();
+            // Recreate the error based on the first diagnostic
+            if !diagnostics.is_empty() {
+                // For now, wrap as InvalidArgument with detailed message
+                return CliError::InvalidArgument(format!("{}", render_err));
+            }
+        }
+
+        // For other errors, wrap as InvalidArgument
+        CliError::InvalidArgument(err.to_string())
     }
 }
 
 pub type Result<T> = std::result::Result<T, CliError>;
+
+/// Print detailed diagnostics for CLI errors
+pub fn print_cli_error(err: &CliError) {
+    match err {
+        CliError::Render(render_err) => {
+            // Use the core library's print_errors function for rich diagnostics
+            quillmark_core::error::print_errors(render_err);
+        }
+        CliError::Parse(parse_err) => {
+            eprintln!("[ERROR] Parse error: {}", parse_err);
+        }
+        CliError::Io(io_err) => {
+            eprintln!("[ERROR] I/O error: {}", io_err);
+        }
+        CliError::InvalidArgument(msg) => {
+            eprintln!("[ERROR] Invalid argument: {}", msg);
+        }
+    }
+}
+
+/// Print warnings with full diagnostic information
+pub fn print_warnings(warnings: &[quillmark_core::Diagnostic]) {
+    if warnings.is_empty() {
+        return;
+    }
+
+    eprintln!("\nWarnings:");
+    for warning in warnings {
+        eprintln!("{}", warning.fmt_pretty());
+    }
+}
