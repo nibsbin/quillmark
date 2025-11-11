@@ -1,0 +1,31 @@
+{
+  "name": "@quillmark-test/wasm",
+  "version": "VERSION_PLACEHOLDER",
+  "description": "WebAssembly bindings for quillmark",
+  "type": "module",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/nibsbin/quillmark"
+  },
+  "files": [
+    "wasm_bg.wasm",
+    "wasm_bg.js",
+    "wasm_bg.wasm.d.ts",
+    "wasm.js",
+    "wasm.d.ts"
+  ],
+  "main": "./wasm.js",
+  "module": "./wasm.js",
+  "types": "./wasm.d.ts",
+  "exports": {
+    ".": {
+      "types": "./wasm.d.ts",
+      "import": "./wasm.js",
+      "default": "./wasm.js"
+    }
+  },
+  "sideEffects": [
+    "./wasm.js"
+  ]
+}

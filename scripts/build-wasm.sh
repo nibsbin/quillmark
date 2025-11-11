@@ -34,32 +34,9 @@ wasm-bindgen \
 # Step 3: Extract version from Cargo.toml
 VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "quillmark-wasm") | .version')
 
-# Step 4: Create package.json
+# Step 4: Create package.json from template
 echo "Creating package.json..."
-cat > pkg/bundler/package.json << EOF
-{
-  "name": "@quillmark-test/wasm",
-  "version": "$VERSION",
-  "description": "WebAssembly bindings for quillmark",
-  "license": "MIT OR Apache-2.0",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/nibsbin/quillmark"
-  },
-  "files": [
-    "wasm_bg.wasm",
-    "wasm_bg.js",
-    "wasm_bg.wasm.d.ts",
-    "wasm.js",
-    "wasm.d.ts"
-  ],
-  "module": "wasm.js",
-  "types": "wasm.d.ts",
-  "sideEffects": [
-    "wasm.js"
-  ]
-}
-EOF
+sed "s/VERSION_PLACEHOLDER/$VERSION/" bindings/quillmark-wasm/package.template.json > pkg/bundler/package.json
 
 # Step 5: Copy README and LICENSE files
 if [ -f "bindings/quillmark-wasm/README.md" ]; then
