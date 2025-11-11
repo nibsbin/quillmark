@@ -8,17 +8,31 @@ Command-line interface for the Quillmark Markdown rendering system.
 
 ## Installation
 
-### From Source
+### From crates.io (Recommended)
 
 ```bash
-cd bindings/quillmark-cli
-cargo build --release
-cp target/release/quillmark /usr/local/bin/
+cargo install quillmark-cli
 ```
 
-### From Workspace Root
+The binary will be installed to `~/.cargo/bin/quillmark` (ensure `~/.cargo/bin` is in your PATH).
+
+### From Git Repository
 
 ```bash
+# Install latest from main branch
+cargo install --git https://github.com/nibsbin/quillmark quillmark-cli
+
+# Install from specific branch or tag
+cargo install --git https://github.com/nibsbin/quillmark --branch main quillmark-cli
+```
+
+### From Local Source
+
+```bash
+# From workspace root
+cargo install --path bindings/quillmark-cli
+
+# Or build without installing
 cargo build --release -p quillmark-cli
 # Binary will be at: target/release/quillmark
 ```

@@ -2,9 +2,13 @@
 name = "quillmark-cli"
 version.workspace = true
 edition.workspace = true
-description = "Command-line interface for Quillmark"
+description = "Command-line interface for the Quillmark Markdown rendering system"
 license.workspace = true
-publish = false
+readme = "README.md"
+homepage = "https://github.com/nibsbin/quillmark"
+repository = "https://github.com/nibsbin/quillmark"
+keywords = ["markdown", "pdf", "typst", "template", "cli"]
+categories = ["command-line-utilities", "text-processing"]
 
 [[bin]]
 name = "quillmark"
