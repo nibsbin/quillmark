@@ -37,7 +37,7 @@ pub struct RenderArgs {
     verbose: bool,
 
     /// Suppress all non-error output
-    #[arg(short, long)]
+    #[arg(long)]
     quiet: bool,
 }
 
@@ -58,8 +58,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     let markdown = fs::read_to_string(&args.markdown_file)?;
 
     // Parse markdown
-    let parsed = ParsedDocument::from_markdown(&markdown)
-        .map_err(|e| CliError::Quillmark(anyhow::anyhow!("Failed to parse markdown: {}", e)))?;
+    let parsed = ParsedDocument::from_markdown(&markdown)?;
 
     if args.verbose {
         println!("Markdown parsed successfully");
@@ -106,8 +105,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 
     // Load quill
-    let quill = Quill::from_path(quill_path.clone())
-        .map_err(|e| CliError::Quillmark(anyhow::anyhow!("Failed to load quill: {}", e)))?;
+    let quill = Quill::from_path(quill_path.clone())?;
 
     if args.verbose {
         println!("Quill loaded: {}", quill.name);
@@ -115,9 +113,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 
     // Create engine and workflow
     let engine = Quillmark::new();
-    let workflow = engine
-        .workflow_from_quill(&quill)
-        .map_err(|e| CliError::Quillmark(anyhow::anyhow!("Failed to create workflow: {}", e)))?;
+    let workflow = engine.workflow_from_quill(&quill)?;
 
     if args.verbose {
         println!("Workflow created for backend: {}", workflow.backend_id());
@@ -129,9 +125,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             println!("Processing glue template...");
         }
 
-        let glued = workflow
-            .process_glue(&parsed)
-            .map_err(|e| CliError::Quillmark(anyhow::anyhow!("Failed to process glue: {}", e)))?;
+        let glued = workflow.process_glue(&parsed)?;
 
         let glued_bytes = glued.into_bytes();
 
@@ -164,21 +158,16 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 
     // Render
-    let result = workflow
-        .render(&parsed, Some(output_format))
-        .map_err(|e| CliError::Quillmark(anyhow::anyhow!("Failed to render: {}", e)))?;
+    let result = workflow.render(&parsed, Some(output_format))?;
 
     // Display warnings if any
     if !result.warnings.is_empty() && !args.quiet {
-        eprintln!("Warnings:");
-        for warning in &result.warnings {
-            eprintln!("  - {}", warning.message);
-        }
+        crate::errors::print_warnings(&result.warnings);
     }
 
     // Get the first artifact (there should only be one for single format render)
     let artifact = result.artifacts.first().ok_or_else(|| {
-        CliError::Quillmark(anyhow::anyhow!("No artifacts produced from rendering"))
+        CliError::InvalidArgument("No artifacts produced from rendering".to_string())
     })?;
 
     // Determine output path
