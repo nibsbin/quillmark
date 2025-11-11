@@ -883,20 +883,6 @@ dependencies = [
 
 [[package]]
 name = "fontdb"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "37be9fc20d966be438cd57a45767f73349477fb0f85ce86e000557f787298afb"
-dependencies = [
- "fontconfig-parser",
- "log",
- "memmap2",
- "slotmap",
- "tinyvec",
- "ttf-parser 0.24.1",
-]
-
-[[package]]
-name = "fontdb"
 version = "0.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "457e789b3d1202543297a350643cf459f836cade38934e7a4cf6a39e7cde2905"
@@ -906,7 +892,7 @@ dependencies = [
  "memmap2",
  "slotmap",
  "tinyvec",
- "ttf-parser 0.25.1",
+ "ttf-parser",
 ]
 
 [[package]]
@@ -1630,7 +1616,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d3eec075c9507dfdbfb4b9bc3b2aeac074ed422b61bcfd93517616d6b3d19c3"
 dependencies = [
  "flate2",
- "fontdb 0.23.0",
+ "fontdb",
  "krilla",
  "png 0.17.16",
  "resvg",
@@ -1778,7 +1764,7 @@ dependencies = [
  "stringprep",
  "thiserror",
  "time",
- "ttf-parser 0.25.1",
+ "ttf-parser",
  "weezl",
 ]
 
@@ -2521,7 +2507,6 @@ version = "0.6.12"
 dependencies = [
  "anyhow",
  "dirs",
- "fontdb 0.21.0",
  "js-sys",
  "pulldown-cmark",
  "quillmark-core",
@@ -2855,7 +2840,7 @@ dependencies = [
  "core_maths",
  "log",
  "smallvec",
- "ttf-parser 0.25.1",
+ "ttf-parser",
  "unicode-bidi-mirroring",
  "unicode-ccc",
  "unicode-properties",
@@ -3437,15 +3422,6 @@ checksum = "df8b2b54733674ad286d16267dcfc7a71ed5c776e4ac7aa3c3e2561f7c637bf2"
 
 [[package]]
 name = "ttf-parser"
-version = "0.24.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5be21190ff5d38e8b4a2d3b6a3ae57f612cc39c96e83cedeaf7abc338a8bac4a"
-dependencies = [
- "core_maths",
-]
-
-[[package]]
-name = "ttf-parser"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2df906b07856748fa3f6e0ad0cbaa047052d4a7dd609e231c4f72cee8c36f31"
@@ -3554,7 +3530,7 @@ dependencies = [
  "env_proxy",
  "fastrand",
  "flate2",
- "fontdb 0.23.0",
+ "fontdb",
  "native-tls",
  "once_cell",
  "openssl",
@@ -3592,7 +3568,7 @@ dependencies = [
  "rustc-hash",
  "rustybuzz",
  "smallvec",
- "ttf-parser 0.25.1",
+ "ttf-parser",
  "typst-assets",
  "typst-library",
  "typst-macros",
@@ -3621,7 +3597,7 @@ dependencies = [
  "csv",
  "ecow",
  "flate2",
- "fontdb 0.23.0",
+ "fontdb",
  "glidesort",
  "hayagriva",
  "hayro-syntax",
@@ -3653,7 +3629,7 @@ dependencies = [
  "syntect",
  "time",
  "toml 0.8.23",
- "ttf-parser 0.25.1",
+ "ttf-parser",
  "two-face",
  "typed-arena",
  "typst-assets",
@@ -3741,7 +3717,7 @@ dependencies = [
  "hayro-svg",
  "image",
  "rustc-hash",
- "ttf-parser 0.25.1",
+ "ttf-parser",
  "typst-assets",
  "typst-library",
  "typst-macros",
@@ -3976,7 +3952,7 @@ dependencies = [
  "base64",
  "data-url",
  "flate2",
- "fontdb 0.23.0",
+ "fontdb",
  "imagesize 0.13.0",
  "kurbo 0.11.3",
  "log",
