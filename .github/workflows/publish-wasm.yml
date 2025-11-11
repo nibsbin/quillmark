@@ -33,12 +33,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      
-      - name: Install wasm-pack
+
+      - name: Install wasm-bindgen-cli
         uses: taiki-e/install-action@v2
         with:
-          tool: wasm-pack
-      
+          tool: wasm-bindgen-cli@0.2.104
+
       - name: Check WASM build
         run: cargo check --package quillmark-wasm --target wasm32-unknown-unknown --locked
       
