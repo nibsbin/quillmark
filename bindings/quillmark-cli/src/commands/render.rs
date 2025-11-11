@@ -178,9 +178,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 
     // Get the first artifact (there should only be one for single format render)
     let artifact = result.artifacts.first().ok_or_else(|| {
-        CliError::Quillmark(anyhow::anyhow!(
-            "No artifacts produced from rendering"
-        ))
+        CliError::Quillmark(anyhow::anyhow!("No artifacts produced from rendering"))
     })?;
 
     // Determine output path
