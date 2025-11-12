@@ -257,6 +257,10 @@ where
                 output.push('\n');
                 end_newline = true;
             }
+            Event::SoftBreak => {
+                output.push(' ');
+                end_newline = false;
+            }
             _ => {
                 // Ignore other events not specified in requirements
                 // (html, math, footnotes, tables, etc.)
@@ -473,6 +477,22 @@ mod tests {
         let typst = mark_to_typst(markdown).unwrap();
         // Hard break (two spaces) becomes newline
         assert_eq!(typst, "Line one\nLine two\n\n");
+    }
+
+    #[test]
+    fn test_soft_break() {
+        let markdown = "Line one\nLine two";
+        let typst = mark_to_typst(markdown).unwrap();
+        // Soft break (single newline) becomes space
+        assert_eq!(typst, "Line one Line two\n\n");
+    }
+
+    #[test]
+    fn test_soft_break_multiple_lines() {
+        let markdown = "This is some\ntext on multiple\nlines";
+        let typst = mark_to_typst(markdown).unwrap();
+        // Soft breaks should join with spaces
+        assert_eq!(typst, "This is some text on multiple lines\n\n");
     }
 
     // Tests for Character Escaping
