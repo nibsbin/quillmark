@@ -470,12 +470,76 @@ impl Default for Quillmark {
     }
 }
 
+/// A generic collection for managing dynamic resources (assets, fonts, etc.) with collision detection.
+///
+/// This provides unified management for named byte buffers that need:
+/// - Collision detection on insertion
+/// - Prefixed injection into quill file systems
+/// - Collection lifecycle management (add, clear, inspect)
+struct DynamicCollection {
+    items: HashMap<String, Vec<u8>>,
+    prefix: &'static str,
+    collision_error: fn(String) -> RenderError,
+}
+
+impl DynamicCollection {
+    /// Create a new dynamic collection with the specified prefix and error constructor.
+    fn new(prefix: &'static str, collision_error: fn(String) -> RenderError) -> Self {
+        Self {
+            items: HashMap::new(),
+            prefix,
+            collision_error,
+        }
+    }
+
+    /// Add a single item to the collection, checking for collisions.
+    fn add(&mut self, filename: String, contents: Vec<u8>) -> Result<(), RenderError> {
+        if self.items.contains_key(&filename) {
+            return Err((self.collision_error)(filename));
+        }
+        self.items.insert(filename, contents);
+        Ok(())
+    }
+
+    /// Add multiple items at once, stopping at the first collision.
+    fn add_many(&mut self, items: impl IntoIterator<Item = (String, Vec<u8>)>) -> Result<(), RenderError> {
+        for (filename, contents) in items {
+            self.add(filename, contents)?;
+        }
+        Ok(())
+    }
+
+    /// Get a list of all item names in the collection.
+    fn names(&self) -> Vec<String> {
+        self.items.keys().cloned().collect()
+    }
+
+    /// Clear all items from the collection.
+    fn clear(&mut self) {
+        self.items.clear();
+    }
+
+    /// Inject all items into a quill's file system with the configured prefix.
+    fn inject_into(&self, quill: &mut Quill) {
+        use quillmark_core::FileTreeNode;
+
+        for (name, bytes) in &self.items {
+            let prefixed_path = format!("assets/{}{}", self.prefix, name);
+            let file_node = FileTreeNode::File {
+                contents: bytes.clone(),
+            };
+            // Ignore errors if insertion fails (e.g., path already exists)
+            let _ = quill.files.insert(&prefixed_path, file_node);
+        }
+    }
+}
+
 /// Sealed workflow for rendering Markdown documents. See [module docs](self) for usage patterns.
 pub struct Workflow {
     backend: Arc<dyn Backend>,
     quill: Quill,
-    dynamic_assets: HashMap<String, Vec<u8>>,
-    dynamic_fonts: HashMap<String, Vec<u8>>,
+    dynamic_assets: DynamicCollection,
+    dynamic_fonts: DynamicCollection,
 }
 
 impl Workflow {
@@ -485,8 +549,34 @@ impl Workflow {
         Ok(Self {
             backend,
             quill,
-            dynamic_assets: HashMap::new(),
-            dynamic_fonts: HashMap::new(),
+            dynamic_assets: DynamicCollection::new(
+                "DYNAMIC_ASSET__",
+                |filename| RenderError::DynamicAssetCollision {
+                    diag: Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "Dynamic asset '{}' already exists. Each asset filename must be unique.",
+                            filename
+                        ),
+                    )
+                    .with_code("workflow::asset_collision".to_string())
+                    .with_hint("Use unique filenames for each dynamic asset".to_string()),
+                },
+            ),
+            dynamic_fonts: DynamicCollection::new(
+                "DYNAMIC_FONT__",
+                |filename| RenderError::DynamicFontCollision {
+                    diag: Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "Dynamic font '{}' already exists. Each font filename must be unique.",
+                            filename
+                        ),
+                    )
+                    .with_code("workflow::font_collision".to_string())
+                    .with_hint("Use unique filenames for each dynamic font".to_string()),
+                },
+            ),
         })
     }
 
@@ -629,7 +719,7 @@ impl Workflow {
     /// This is primarily a debugging helper so callers (for example wasm bindings)
     /// can inspect which assets have been added via `add_asset` / `add_assets`.
     pub fn dynamic_asset_names(&self) -> Vec<String> {
-        self.dynamic_assets.keys().cloned().collect()
+        self.dynamic_assets.names()
     }
 
     /// Add a dynamic asset to the workflow. See [module docs](self) for examples.
@@ -638,25 +728,7 @@ impl Workflow {
         filename: impl Into<String>,
         contents: impl Into<Vec<u8>>,
     ) -> Result<(), RenderError> {
-        let filename = filename.into();
-
-        // Check for collision
-        if self.dynamic_assets.contains_key(&filename) {
-            return Err(RenderError::DynamicAssetCollision {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!(
-                        "Dynamic asset '{}' already exists. Each asset filename must be unique.",
-                        filename
-                    ),
-                )
-                .with_code("workflow::asset_collision".to_string())
-                .with_hint("Use unique filenames for each dynamic asset".to_string()),
-            });
-        }
-
-        self.dynamic_assets.insert(filename, contents.into());
-        Ok(())
+        self.dynamic_assets.add(filename.into(), contents.into())
     }
 
     /// Add multiple dynamic assets at once.
@@ -664,10 +736,7 @@ impl Workflow {
         &mut self,
         assets: impl IntoIterator<Item = (String, Vec<u8>)>,
     ) -> Result<(), RenderError> {
-        for (filename, contents) in assets {
-            self.add_asset(filename, contents)?;
-        }
-        Ok(())
+        self.dynamic_assets.add_many(assets)
     }
 
     /// Clear all dynamic assets from the workflow.
@@ -680,7 +749,7 @@ impl Workflow {
     /// This is primarily a debugging helper so callers (for example wasm bindings)
     /// can inspect which fonts have been added via `add_font` / `add_fonts`.
     pub fn dynamic_font_names(&self) -> Vec<String> {
-        self.dynamic_fonts.keys().cloned().collect()
+        self.dynamic_fonts.names()
     }
 
     /// Add a dynamic font to the workflow. Fonts are saved to assets/ with DYNAMIC_FONT__ prefix.
@@ -689,25 +758,7 @@ impl Workflow {
         filename: impl Into<String>,
         contents: impl Into<Vec<u8>>,
     ) -> Result<(), RenderError> {
-        let filename = filename.into();
-
-        // Check for collision
-        if self.dynamic_fonts.contains_key(&filename) {
-            return Err(RenderError::DynamicFontCollision {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!(
-                        "Dynamic font '{}' already exists. Each font filename must be unique.",
-                        filename
-                    ),
-                )
-                .with_code("workflow::font_collision".to_string())
-                .with_hint("Use unique filenames for each dynamic font".to_string()),
-            });
-        }
-
-        self.dynamic_fonts.insert(filename, contents.into());
-        Ok(())
+        self.dynamic_fonts.add(filename.into(), contents.into())
     }
 
     /// Add multiple dynamic fonts at once.
@@ -715,10 +766,7 @@ impl Workflow {
         &mut self,
         fonts: impl IntoIterator<Item = (String, Vec<u8>)>,
     ) -> Result<(), RenderError> {
-        for (filename, contents) in fonts {
-            self.add_font(filename, contents)?;
-        }
-        Ok(())
+        self.dynamic_fonts.add_many(fonts)
     }
 
     /// Clear all dynamic fonts from the workflow.
@@ -728,29 +776,11 @@ impl Workflow {
 
     /// Internal method to prepare a quill with dynamic assets and fonts
     fn prepare_quill_with_assets(&self) -> Quill {
-        use quillmark_core::FileTreeNode;
-
         let mut quill = self.quill.clone();
 
-        // Add dynamic assets to the cloned quill's file system
-        for (filename, contents) in &self.dynamic_assets {
-            let prefixed_path = format!("assets/DYNAMIC_ASSET__{}", filename);
-            let file_node = FileTreeNode::File {
-                contents: contents.clone(),
-            };
-            // Ignore errors if insertion fails (e.g., path already exists)
-            let _ = quill.files.insert(&prefixed_path, file_node);
-        }
-
-        // Add dynamic fonts to the cloned quill's file system
-        for (filename, contents) in &self.dynamic_fonts {
-            let prefixed_path = format!("assets/DYNAMIC_FONT__{}", filename);
-            let file_node = FileTreeNode::File {
-                contents: contents.clone(),
-            };
-            // Ignore errors if insertion fails (e.g., path already exists)
-            let _ = quill.files.insert(&prefixed_path, file_node);
-        }
+        // Inject dynamic assets and fonts using the DynamicCollection pattern
+        self.dynamic_assets.inject_into(&mut quill);
+        self.dynamic_fonts.inject_into(&mut quill);
 
         quill
     }
