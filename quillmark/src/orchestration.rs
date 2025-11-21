@@ -502,7 +502,10 @@ impl DynamicCollection {
     }
 
     /// Add multiple items at once, stopping at the first collision.
-    fn add_many(&mut self, items: impl IntoIterator<Item = (String, Vec<u8>)>) -> Result<(), RenderError> {
+    fn add_many(
+        &mut self,
+        items: impl IntoIterator<Item = (String, Vec<u8>)>,
+    ) -> Result<(), RenderError> {
         for (filename, contents) in items {
             self.add(filename, contents)?;
         }
@@ -549,9 +552,8 @@ impl Workflow {
         Ok(Self {
             backend,
             quill,
-            dynamic_assets: DynamicCollection::new(
-                "DYNAMIC_ASSET__",
-                |filename| RenderError::DynamicAssetCollision {
+            dynamic_assets: DynamicCollection::new("DYNAMIC_ASSET__", |filename| {
+                RenderError::DynamicAssetCollision {
                     diag: Diagnostic::new(
                         Severity::Error,
                         format!(
@@ -561,11 +563,10 @@ impl Workflow {
                     )
                     .with_code("workflow::asset_collision".to_string())
                     .with_hint("Use unique filenames for each dynamic asset".to_string()),
-                },
-            ),
-            dynamic_fonts: DynamicCollection::new(
-                "DYNAMIC_FONT__",
-                |filename| RenderError::DynamicFontCollision {
+                }
+            }),
+            dynamic_fonts: DynamicCollection::new("DYNAMIC_FONT__", |filename| {
+                RenderError::DynamicFontCollision {
                     diag: Diagnostic::new(
                         Severity::Error,
                         format!(
@@ -575,8 +576,8 @@ impl Workflow {
                     )
                     .with_code("workflow::font_collision".to_string())
                     .with_hint("Use unique filenames for each dynamic font".to_string()),
-                },
-            ),
+                }
+            }),
         })
     }
 
