@@ -470,6 +470,36 @@ impl Default for Quillmark {
     }
 }
 
+/// Helper to build a collision diagnostic for any dynamic resource type
+fn make_collision_diagnostic(resource_type: &str, filename: &str) -> Diagnostic {
+    Diagnostic::new(
+        Severity::Error,
+        format!(
+            "Dynamic {} '{}' already exists. Each {} filename must be unique.",
+            resource_type, filename, resource_type
+        ),
+    )
+    .with_code(format!("workflow::{}_collision", resource_type))
+    .with_hint(format!(
+        "Use unique filenames for each dynamic {}",
+        resource_type
+    ))
+}
+
+/// Helper function to create a dynamic asset collision error
+fn make_asset_collision_error(filename: String) -> RenderError {
+    RenderError::DynamicAssetCollision {
+        diag: make_collision_diagnostic("asset", &filename),
+    }
+}
+
+/// Helper function to create a dynamic font collision error
+fn make_font_collision_error(filename: String) -> RenderError {
+    RenderError::DynamicFontCollision {
+        diag: make_collision_diagnostic("font", &filename),
+    }
+}
+
 /// A generic collection for managing dynamic resources (assets, fonts, etc.) with collision detection.
 ///
 /// This provides unified management for named byte buffers that need:
@@ -494,11 +524,15 @@ impl DynamicCollection {
 
     /// Add a single item to the collection, checking for collisions.
     fn add(&mut self, filename: String, contents: Vec<u8>) -> Result<(), RenderError> {
-        if self.items.contains_key(&filename) {
-            return Err((self.collision_error)(filename));
+        use std::collections::hash_map::Entry;
+
+        match self.items.entry(filename) {
+            Entry::Vacant(entry) => {
+                entry.insert(contents);
+                Ok(())
+            }
+            Entry::Occupied(entry) => Err((self.collision_error)(entry.key().clone())),
         }
-        self.items.insert(filename, contents);
-        Ok(())
     }
 
     /// Add multiple items at once, stopping at the first collision.
@@ -552,32 +586,8 @@ impl Workflow {
         Ok(Self {
             backend,
             quill,
-            dynamic_assets: DynamicCollection::new("DYNAMIC_ASSET__", |filename| {
-                RenderError::DynamicAssetCollision {
-                    diag: Diagnostic::new(
-                        Severity::Error,
-                        format!(
-                            "Dynamic asset '{}' already exists. Each asset filename must be unique.",
-                            filename
-                        ),
-                    )
-                    .with_code("workflow::asset_collision".to_string())
-                    .with_hint("Use unique filenames for each dynamic asset".to_string()),
-                }
-            }),
-            dynamic_fonts: DynamicCollection::new("DYNAMIC_FONT__", |filename| {
-                RenderError::DynamicFontCollision {
-                    diag: Diagnostic::new(
-                        Severity::Error,
-                        format!(
-                            "Dynamic font '{}' already exists. Each font filename must be unique.",
-                            filename
-                        ),
-                    )
-                    .with_code("workflow::font_collision".to_string())
-                    .with_hint("Use unique filenames for each dynamic font".to_string()),
-                }
-            }),
+            dynamic_assets: DynamicCollection::new("DYNAMIC_ASSET__", make_asset_collision_error),
+            dynamic_fonts: DynamicCollection::new("DYNAMIC_FONT__", make_font_collision_error),
         })
     }
 
@@ -779,7 +789,6 @@ impl Workflow {
     fn prepare_quill_with_assets(&self) -> Quill {
         let mut quill = self.quill.clone();
 
-        // Inject dynamic assets and fonts using the DynamicCollection pattern
         self.dynamic_assets.inject_into(&mut quill);
         self.dynamic_fonts.inject_into(&mut quill);
 
