@@ -5,4 +5,9 @@ tests/
 build.sh
 template/
 README.md
+LIMITATIONS.md
+*.md
 .gitignore~*
+.orchestration.txt
+claude/
+github/

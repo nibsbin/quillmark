@@ -10,7 +10,7 @@ memo_from:
   - ORGANIZATION
   - Street Address
   - City St 12345-6789
-subject: Comply without pain -- markdown to official memo
+subject: Comply without pain — markdown to official memo
 signature_block:
   - FIRST M. LAST, Rank, USAF
 tag_line: Aim High
