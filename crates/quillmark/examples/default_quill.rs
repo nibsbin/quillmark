@@ -61,7 +61,7 @@ The default Quill supports:
     let glue_output = workflow.process_glue(&parsed)?;
     write_example_output("default_quill_glue.json", glue_output.as_bytes())?;
 
-    let output_dir = PathBuf::from("quillmark-fixtures/output/");
+    let output_dir = PathBuf::from("crates/fixtures/output/");
 
     println!(
         "Wrote glue output to: {}",

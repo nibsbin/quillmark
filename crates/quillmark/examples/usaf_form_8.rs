@@ -38,7 +38,7 @@ test: "Hello from Example!"
     let glue_output = workflow.process_glue(&parsed)?;
     write_example_output("usaf_form_8_glue.json", glue_output.as_bytes())?;
 
-    let output_dir = PathBuf::from("quillmark-fixtures/output/");
+    let output_dir = PathBuf::from("crates/fixtures/output/");
 
     println!(
         "Wrote glue output to examples output directory: {}",
