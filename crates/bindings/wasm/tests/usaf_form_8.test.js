@@ -20,9 +20,9 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // Paths relative to the workspace root
-const QUILLS_PATH = path.join(WORKSPACE_ROOT, 'quillmark-fixtures', 'resources', 'tonguetoquill-collection', 'quills')
+const QUILLS_PATH = path.join(WORKSPACE_ROOT, 'crates', 'fixtures', 'resources', 'tonguetoquill-collection', 'quills')
 const USAF_FORM_8_QUILL_PATH = path.join(QUILLS_PATH, 'usaf_form_8')
-const CARGO_OUTPUT_PATH = path.join(WORKSPACE_ROOT, 'quillmark-fixtures', 'output', 'usaf_form_8.pdf')
+const CARGO_OUTPUT_PATH = path.join(WORKSPACE_ROOT, 'crates', 'fixtures', 'output', 'usaf_form_8.pdf')
 const WASM_OUTPUT_PATH = path.join(__dirname, 'output', 'usaf_form_8_wasm_output.pdf')
 
 describe.skipIf(process.env.CI)('WASM usaf_form_8 smoke test', () => {
