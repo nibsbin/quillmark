@@ -11,7 +11,7 @@ type = "string"
 default = "DEPARTMENT OF THE AIR FORCE"
 
 [fields.letterhead_caption]
-description = "Caption lines in letterhead"
+description = "Letterhead caption line(s)"
 type = "array"
 default = ["123 Raynor's Raiders"]
 
@@ -47,7 +47,7 @@ default = []
 example = ["Rank and Name, ORG/SYMBOL"]
 
 [fields.distribution]
-description = "Distribution list"
+description = "Distribution list. Used when \"SEE DISTRIBUTION\" is specified in `memo_for`."
 type = "array"
 default = []
 example = ["ORG1/SYMBOL", "ORG2/SYMBOL"]
