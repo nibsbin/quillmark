@@ -31,7 +31,7 @@ title: Test
 # Content
 """
     parsed2 = ParsedDocument.from_markdown(markdown_without_quill)
-    assert parsed2.quill_tag() is None
+    assert parsed2.quill_tag() == "__default__"
 
 
 def test_quill_properties(taro_quill_dir):
