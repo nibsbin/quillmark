@@ -234,32 +234,32 @@
 // - First paragraph flush left, never indented
 // - Indent sub-paragraphs to align with first character of parent paragraph text
 
-/// Attempt to detect multiple paragraphs by examining raw markup
-// NOTE: Fragile heuristic—depends on repr() format (see CASCADES.md §C). Consider structural introspection.
-#let detect-multiple-paragraphs(content) = {
-  // Try to get string representation of content
-  let content-str = repr(content)
-
-  // Look for patterns that indicate paragraph breaks:
-  // - Double newlines in various forms
-  // - Multiple spaces/newlines that suggest paragraph separation
-  let has-double-newline = content-str.contains("\n\n") or content-str.contains("\\n\\n")
-  let has-parbreak = content-str.contains("parbreak()")
-
-  return has-double-newline or has-parbreak
-}
-
 #let render-paragraph-body(content) = {
   // Initialize base level counter
   counter("par-counter-0").update(1)
 
   // AFH 33-337: "Number and letter each paragraph and subparagraph. A single
   // paragraph is not numbered."
-  // Auto-detect by parsing raw markup for paragraph breaks
-  let should-number = detect-multiple-paragraphs(content)
+  // Count paragraphs using repr() introspection
+  let content-str = repr(content)
 
-  // Render content with paragraph numbering
-  {
+  // Detect multiple paragraphs by looking for parbreak() between content elements
+  // Pattern: ], parbreak(), [ (with optional whitespace and sequence wrappers)
+  // This matches parbreak() BETWEEN content, not trailing parbreaks
+  let has-multiple-pars = (
+    content-str.contains("],") and content-str.contains("parbreak(),") and content-str.contains("[")
+      and (
+        // Direct case: ], parbreak(), [
+        content-str.matches(regex("\\],\\s*parbreak\\(\\),\\s*\\[")).len() > 0
+          // Sequence case: ], parbreak(), sequence([
+          or content-str.matches(regex("\\],\\s*parbreak\\(\\),\\s*sequence\\(\\s*\\[")).len() > 0
+      )
+  )
+
+  // Render with paragraph numbering based on detection
+  context {
+    let should-number = has-multiple-pars
+
     // Track nesting level for enum/list items
     let enum-level = state("enum-level", 1)
 
