@@ -1729,7 +1729,7 @@ mod demo_file_test {
 
     #[test]
     fn test_extended_metadata_demo_file() {
-        let markdown = include_str!("../../quillmark-fixtures/resources/extended_metadata_demo.md");
+        let markdown = include_str!("../../fixtures/resources/extended_metadata_demo.md");
         let doc = decompose(markdown).unwrap();
 
         // Verify global fields

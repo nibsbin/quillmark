@@ -27,7 +27,7 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: bindings/quillmark-python
+          workspaces: crates/bindings/python
       
       - name: Setup uv
         uses: astral-sh/setup-uv@v3
@@ -39,9 +39,9 @@ jobs:
       
       - name: Install dependencies and run tests
         run: |
-          cd bindings/quillmark-python
+          cd crates/bindings/python
           uv venv
-          uv pip install -e ".[dev]" 
+          uv pip install -e ".[dev]"
           uv run pytest
 
   linux:
@@ -60,13 +60,13 @@ jobs:
           args: --release --out dist --interpreter 3.10 3.11 3.12
           sccache: 'true'
           manylinux: auto
-          working-directory: bindings/quillmark-python
+          working-directory: crates/bindings/python
       
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-${{ matrix.target }}
-          path: bindings/quillmark-python/dist/*.whl
+          path: crates/bindings/python/dist/*.whl
 
   windows:
     needs: [test]
@@ -83,13 +83,13 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist --interpreter 3.10 3.11 3.12
           sccache: 'true'
-          working-directory: bindings/quillmark-python
+          working-directory: crates/bindings/python
       
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-${{ matrix.target }}
-          path: bindings/quillmark-python/dist/*.whl
+          path: crates/bindings/python/dist/*.whl
 
   macos:
     needs: [test]
@@ -106,13 +106,13 @@ jobs:
           target: ${{ matrix.target }}
           args: --release --out dist --interpreter 3.10 3.11 3.12
           sccache: 'true'
-          working-directory: bindings/quillmark-python
+          working-directory: crates/bindings/python
       
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-${{ matrix.target }}
-          path: bindings/quillmark-python/dist/*.whl
+          path: crates/bindings/python/dist/*.whl
 
   sdist:
     needs: [test]
@@ -125,13 +125,13 @@ jobs:
         with:
           command: sdist
           args: --out dist
-          working-directory: bindings/quillmark-python
+          working-directory: crates/bindings/python
       
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
           name: wheels-sdist
-          path: bindings/quillmark-python/dist/*.tar.gz
+          path: crates/bindings/python/dist/*.tar.gz
 
   publish:
     needs: [linux, windows, macos, sdist]

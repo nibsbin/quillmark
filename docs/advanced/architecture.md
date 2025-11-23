@@ -98,7 +98,7 @@ Orchestration layer providing:
 
 ### Backend Crates
 
-#### `backends/quillmark-typst`
+#### `crates/backends/typst`
 
 Typst backend for PDF/SVG output:
 
@@ -108,7 +108,7 @@ Typst backend for PDF/SVG output:
 - Compilation environment with font & asset resolution
 - Structured diagnostics with source locations
 
-#### `backends/quillmark-acroform`
+#### `crates/backends/acroform`
 
 AcroForm backend for PDF form filling:
 
@@ -120,7 +120,7 @@ AcroForm backend for PDF form filling:
 
 ### Language Bindings
 
-#### `bindings/quillmark-python`
+#### `crates/bindings/python`
 
 PyO3-based Python bindings:
 
@@ -129,7 +129,7 @@ PyO3-based Python bindings:
 - Full feature parity with Rust API
 - Error delegation to core types
 
-#### `bindings/quillmark-wasm`
+#### `crates/bindings/wasm`
 
 wasm-bindgen based WebAssembly bindings:
 
@@ -138,9 +138,17 @@ wasm-bindgen based WebAssembly bindings:
 - Supports bundler, Node.js, and web targets
 - Error delegation to core types
 
+#### `crates/bindings/cli`
+
+Command-line interface:
+
+- Provides `quillmark` CLI tool
+- Full access to Quillmark features from terminal
+- Multiple output format support
+
 ### Supporting Crates
 
-#### `quillmark-fixtures`
+#### `crates/fixtures`
 
 Centralized test resources and utilities:
 
@@ -148,7 +156,7 @@ Centralized test resources and utilities:
 - Helper functions for test setup and output
 - Shared fixtures across test suites
 
-#### `quillmark-fuzz`
+#### `crates/fuzz`
 
 Fuzz testing suite for:
 

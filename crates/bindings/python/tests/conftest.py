@@ -1,7 +1,7 @@
 """Shared test fixtures for quillmark tests.
 
 These fixtures prefer using the canonical repository fixtures located in
-`quillmark-fixtures/resources`. If those resources cannot be found the
+`crates/fixtures/resources`. If those resources cannot be found the
 original simple fallbacks are used so tests remain robust in odd layouts.
 """
 
@@ -9,8 +9,8 @@ import shutil
 from pathlib import Path
 import pytest
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[3]
-RESOURCES_PATH = WORKSPACE_ROOT / "quillmark-fixtures" / "resources"
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
+RESOURCES_PATH = WORKSPACE_ROOT / "crates" / "fixtures" / "resources"
 QUILLS_PATH = RESOURCES_PATH / "tonguetoquill-collection" / "quills"
 
 

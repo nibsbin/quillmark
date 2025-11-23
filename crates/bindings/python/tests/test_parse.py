@@ -8,8 +8,8 @@ from typing import cast
 import os
 from pathlib import Path
 
-WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
-RESOURCES_PATH = WORKSPACE_ROOT / "quillmark-fixtures" / "resources"
+WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
+RESOURCES_PATH = WORKSPACE_ROOT / "crates" / "fixtures" / "resources"
 QUILLS_PATH = RESOURCES_PATH / "tonguetoquill-collection" / "quills"
 
 

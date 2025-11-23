@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
 // Centralized workspace root and bundle path
-export const WORKSPACE_ROOT = path.resolve(__dirname, '..', '..')
+export const WORKSPACE_ROOT = path.resolve(__dirname, '..', '..', '..')
 export const WASM_BUNDLE_PATH = path.join(WORKSPACE_ROOT, 'pkg', 'bundler', 'wasm.js')
 
 export default defineConfig({

@@ -16,8 +16,8 @@ from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat
 def main():
     # Find the taro quill in fixtures
     script_dir = Path(__file__).parent
-    repo_root = script_dir.parent.parent
-    taro_dir = repo_root / "quillmark-fixtures" / "resources" / "taro"
+    repo_root = script_dir.parent.parent.parent.parent
+    taro_dir = repo_root / "crates" / "fixtures" / "resources" / "tonguetoquill-collection" / "quills" / "taro"
     
     if not taro_dir.exists():
         print(f"Error: Could not find taro quill at {taro_dir}")
