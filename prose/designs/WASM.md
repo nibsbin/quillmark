@@ -64,7 +64,7 @@ class Quillmark {
 ```typescript
 interface ParsedDocument {
   fields: object;  // YAML frontmatter fields
-  quillTag?: string;  // Value of QUILL field (if present)
+  quillTag: string;  // Value of QUILL field or "__default__"
 }
 
 interface QuillInfo {
@@ -72,26 +72,28 @@ interface QuillInfo {
   backend: string;  // e.g., "typst"
   metadata: object;  // Quill metadata from Quill.toml
   example?: string;  // Example markdown (if available)
-  fieldSchemas: object;  // Field schema definitions
+  schema: object;  // JSON schema for fields
+  defaults: object;  // Default values extracted from schema
+  examples: object;  // Example values extracted from schema
   supportedFormats: Array<'pdf' | 'svg' | 'txt'>;  // Formats this backend supports
 }
 
 interface RenderOptions {
   format?: 'pdf' | 'svg' | 'txt';
-  assets?: Record<string, Uint8Array>;
+  assets?: Record<string, number[]>;  // Asset name to byte array mapping
   quillName?: string;  // overrides/fills in QUILL frontmatter field
 }
 
 interface RenderResult {
   artifacts: Artifact[];
   warnings: Diagnostic[];
+  outputFormat: 'pdf' | 'svg' | 'txt';
   renderTimeMs: number;
 }
 
 interface Artifact {
-  format: 'pdf' | 'svg' | 'txt';
-  bytes: Uint8Array;
-  mimeType: string;
+  outputFormat: 'pdf' | 'svg' | 'txt';
+  bytes: number[];  // Byte array
 }
 
 interface Diagnostic {
@@ -100,13 +102,13 @@ interface Diagnostic {
   message: string;
   location?: Location;
   hint?: string;
-  sourceChain?: string[];
+  source?: string;  // Source chain flattened
 }
 
 interface Location {
-  file?: string;
+  file: string;
   line: number;
-  col: number;
+  column: number;
 }
 ```
 
@@ -127,10 +129,10 @@ interface Location {
 try {
   const result = engine.render(parsed, options);
 } catch (error) {
-  // error is a SerializableDiagnostic or contains diagnostics array
+  // error is a WasmError containing diagnostic information
   console.error(`Error: ${error.message}`);
   if (error.location) {
-    console.error(`  at ${error.location.file}:${error.location.line}:${error.location.col}`);
+    console.error(`  at ${error.location.file}:${error.location.line}:${error.location.column}`);
   }
   if (error.hint) {
     console.error(`  hint: ${error.hint}`);

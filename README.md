@@ -74,7 +74,7 @@ cargo run --example test_defaults
 ## Documentation
 
 - [API Documentation](https://docs.rs/quillmark)
-- [Architecture Design](designs/ARCHITECTURE.md)
+- [Architecture Design](prose/designs/ARCHITECTURE.md)
 - [Contributing Guide](CONTRIBUTING.md)
 
 ## Project Structure
