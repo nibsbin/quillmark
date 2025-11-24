@@ -1,10 +1,10 @@
 # CLI Tool Design for Quillmark
 
-> **Status**: Design Phase
+> **Status**: Implemented
 > **Package Name**: `quillmark-cli`
 > **Target**: Cross-platform CLI binary
 
-> **For implementation details, see**: `bindings/quillmark-cli/src/`
+> **For implementation details, see**: `crates/bindings/cli/src/`
 
 ## Overview
 
@@ -29,21 +29,23 @@ This document outlines the design for `quillmark-cli`, a command-line interface 
 
 ### Command Structure
 
-The CLI follows a subcommand pattern for extensibility:
+The CLI currently provides a direct rendering command:
 
 ```
-quillmark <SUBCOMMAND> [OPTIONS]
+quillmark render [OPTIONS] <MARKDOWN_FILE>
 ```
 
-**Available Subcommands:**
+**Current Implementation:**
 - `render` - Render markdown file to output format
+
+**Future Subcommands** (not yet implemented):
 - `info` - Display quill template information
 - `list` - List available quills
 - `validate` - Validate markdown against quill schema
 
 ---
 
-### Subcommand: `render`
+### Command: `render`
 
 Primary command for rendering markdown files.
 
@@ -100,79 +102,20 @@ quillmark render memo.md --stdout > output.pdf
 
 ---
 
-### Subcommand: `info`
+### Future Commands
 
-Display detailed information about a quill template.
+The following commands are planned but not yet implemented:
 
-**Signature:**
-```
-quillmark info <QUILL_PATH>
-```
+#### `info` - Display Quill Information
+Display metadata, supported formats, and field schemas for a quill template.
 
-**Required Arguments:**
-- `<QUILL_PATH>` - Path to quill directory
+#### `list` - List Available Quills
+Discover and list quills from a directory or directory tree.
 
-**Output Fields:**
-- Name, backend, metadata
-- Supported output formats
-- Field schema definitions
-- Example markdown (if available)
+#### `validate` - Validate Markdown
+Validate markdown frontmatter against a quill's JSON schema.
 
-**Example:**
-```bash
-quillmark info ./quills/usaf_memo
-```
-
----
-
-### Subcommand: `list`
-
-List quills from a directory.
-
-**Signature:**
-```
-quillmark list [DIRECTORY]
-```
-
-**Optional Arguments:**
-- `[DIRECTORY]` - Directory to search for quills (default: current directory)
-
-**Options:**
-- `-r, --recursive` - Search subdirectories recursively
-
-**Example:**
-```bash
-quillmark list ./quills
-quillmark list --recursive
-```
-
----
-
-### Subcommand: `validate`
-
-Validate markdown file against quill schema.
-
-**Signature:**
-```
-quillmark validate <MARKDOWN_FILE> [OPTIONS]
-```
-
-**Required Arguments:**
-- `<MARKDOWN_FILE>` - Path to markdown file
-
-**Options:**
-- `-q, --quill <PATH>` - Path to quill directory (overrides QUILL field)
-
-**Output:**
-- Validation success/failure
-- Schema violations with field names and expected types
-- Missing required fields
-
-**Example:**
-```bash
-quillmark validate memo.md
-quillmark validate memo.md --quill ./quills/usaf_memo
-```
+See "Future Enhancements" section for more details on planned features.
 
 ---
 
@@ -180,18 +123,15 @@ quillmark validate memo.md --quill ./quills/usaf_memo
 
 **Project Structure:**
 ```
-bindings/quillmark-cli/
+crates/bindings/cli/
 ├── Cargo.toml           # Package manifest
 ├── README.md            # Usage documentation
 └── src/
     ├── main.rs          # Entry point, CLI parsing
     ├── commands/
     │   ├── mod.rs       # Command module exports
-    │   ├── render.rs    # Render command implementation
-    │   ├── info.rs      # Info command implementation
-    │   ├── list.rs      # List command implementation
-    │   └── validate.rs  # Validate command implementation
-    ├── output.rs        # Output formatting and file I/O
+    │   └── render.rs    # Render command implementation
+    ├── output.rs        # Output path derivation and file writing
     └── errors.rs        # Error handling and display
 ```
 
@@ -238,7 +178,7 @@ cp target/release/quillmark /usr/local/bin/
 
 **Local Development:**
 ```bash
-cd bindings/quillmark-cli
+cd crates/bindings/cli
 cargo build
 cargo run -- render example.md
 ```
@@ -251,7 +191,7 @@ cargo test --release
 
 **Integration Testing:**
 - Test against example markdown files from fixtures
-- Verify output byte-for-byte against expected results
+- Verify output against expected results
 - Test error conditions (missing files, invalid markdown, etc.)
 
 ---

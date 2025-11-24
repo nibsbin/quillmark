@@ -1,10 +1,10 @@
 # Python Package Design for Quillmark
 
-> **Status**: Design Phase  
-> **Package Name**: `quillmark`  
-> **Target**: Python 3.10+  
+> **Status**: Implemented
+> **Package Name**: `quillmark`
+> **Target**: Python 3.10+
 
-> **For implementation details, see**: `bindings/quillmark-python/src/`
+> **For implementation details, see**: `crates/bindings/python/src/`
 
 ## Overview
 
@@ -62,10 +62,10 @@ result = workflow.render(parsed, OutputFormat.PDF)
 **Methods:**
 - `render(parsed, format)` - Render parsed document to artifacts
 - `render_processed(content, format)` - Render pre-composed content
-- `process_glue(markdown)` / `process_glue(parsed)` - Process through glue template
-- `backend_id()` - Get backend identifier
-- `supported_formats()` - Get supported output formats
-- `quill_name()` - Get quill name
+- `process_glue(parsed)` - Process through glue template
+- `backend_id()` - Get backend identifier (property)
+- `supported_formats()` - Get supported output formats (property)
+- `quill_name()` - Get quill name (property)
 
 **Note**: Dynamic asset and font injection methods are not currently supported in Python bindings.
 
