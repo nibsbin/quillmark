@@ -1,0 +1,75 @@
+[Quill]
+name = "usaf_memo"
+backend = "typst"
+glue_file = "glue.typ"
+example_file = "usaf_memo.md"
+description = "Typesetted USAF Official Memorandum"
+
+[fields.letterhead_title]
+description = "Title in letterhead"
+type = "string"
+default = "DEPARTMENT OF THE AIR FORCE"
+
+[fields.letterhead_caption]
+description = "Letterhead caption line(s)"
+type = "array"
+default = ["123 Raynor's Raiders"]
+
+[fields.date]
+description = "Date of memo (YYYY-MM-DD); defaults to today"
+type = "string"
+default = ""
+
+[fields.memo_for]
+description = "List of recipient organization symbols"
+type = "array"
+example = ["ORG1/SYMBOL", "ORG2/SYMBOL"]
+
+[fields.memo_from]
+description = "Sender information as array: [ORG/SYMBOL, 'Organization Name', 'Street Address', 'City State ZIP']"
+type = "array"
+example = ["ORG/SYMBOL", "Organization Name", "123 Street Ave", "City ST 12345-6789"]
+
+[fields.subject]
+description = "Subject of the memo"
+type = "string"
+
+[fields.references]
+description = "References for the memo"
+type = "array"
+default = []
+example = ["AFM 33-326, 31 July 2019, Preparing Official Communications"]
+
+[fields.cc]
+description = "Carbon copy recipients"
+type = "array"
+default = []
+example = ["Rank and Name, ORG/SYMBOL"]
+
+[fields.distribution]
+description = "Distribution list. Used when \"SEE DISTRIBUTION\" is specified in `memo_for`."
+type = "array"
+default = []
+example = ["ORG1/SYMBOL", "ORG2/SYMBOL"]
+
+[fields.attachments]
+description = "List of attachments"
+type = "array"
+default = []
+example = ["Attachment description, YYYY MMM DD", "Another attachment, date"]
+
+[fields.signature_block]
+description = "Signature block lines"
+type = "array"
+example = ["FIRST M. LAST, Rank, USSF", "Duty Title"]
+
+[fields.tag_line]
+description = "Tag line at bottom of memo"
+type = "string"
+default = "Aim High"
+
+[fields.classification]
+description = "Classification level of the memo that displays in the banner"
+type = "string"
+default = ""
+example = "<UNCLASSIFIED|CONFIDENTIAL|SECRET|TOP SECRET>//TAGS"
