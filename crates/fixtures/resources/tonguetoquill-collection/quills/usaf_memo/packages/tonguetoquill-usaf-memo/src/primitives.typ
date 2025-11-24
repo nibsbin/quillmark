@@ -263,6 +263,9 @@
     // Track nesting level for enum/list items
     let enum-level = state("enum-level", 1)
 
+    // State to track pending heading text that should be prepended to next paragraph
+    let pending-heading = state("pending-heading", none)
+
     // Suppress default enum/list rendering - we'll handle it via nested paragraphs
     show enum.item: _enum_item => {}
     show list.item: _list_item => {}
@@ -295,16 +298,40 @@
       enum-level.update(l => l - 1)
     }
 
+    // Intercept headings to render as bold paragraph headings
+    // AFH 33-337: Headings within memo body should be rendered as bold text
+    // prepended to the following paragraph, not as standalone heading elements.
+    // Store heading in state to be consumed by the next paragraph.
+    show heading: it => context {
+      // Store heading text in state to prepend to next paragraph
+      pending-heading.update(it.body)
+      // Return empty content - heading will be rendered with the paragraph
+      v(0em, weak: true)
+    }
+
     // Intercept paragraphs for numbering
     show par: it => context {
       // Check if we're in backmatter - if so, don't number paragraphs
       if IN_BACKMATTER_STATE.get() {
         it
       } else {
+        // Check if there's a pending heading to prepend
+        let heading-text = pending-heading.get()
+
+        // Build paragraph content with optional heading prefix
+        let paragraph-content = if heading-text != none {
+          // Clear the pending heading
+          pending-heading.update(none)
+          // Prepend bold heading text with period and space to paragraph body
+          [*#heading-text.* #it.body]
+        } else {
+          it.body
+        }
+
         blank-line()
         if should-number {
           // Apply paragraph numbering per AFH 33-337 §2
-          let paragraph = memo-par([#it.body])
+          let paragraph = memo-par(paragraph-content)
           // AFH 33-337 "Continuation Pages" §11: "Type at least two lines of the text on each page.
           // Avoid dividing a paragraph of less than four lines between two pages."
           // We use Typst's orphan cost control to discourage single-line orphans
@@ -314,7 +341,7 @@
           // AFH 33-337 §2: "A single paragraph is not numbered"
           // Return body content wrapped in block (like numbered case, but without numbering)
           set text(costs: (orphan: 0%))
-          block(breakable: true)[#it.body]
+          block(breakable: true)[#paragraph-content]
         }
       }
     }

@@ -174,6 +174,15 @@ where
                         output.push_str("\")[");
                         end_newline = false;
                     }
+                    Tag::Heading { level, .. } => {
+                        if !end_newline {
+                            output.push('\n');
+                        }
+                        let equals = "=".repeat(level as usize);
+                        output.push_str(&equals);
+                        output.push(' ');
+                        end_newline = false;
+                    }
                     _ => {
                         // Ignore other start tags not in requirements
                     }
@@ -235,6 +244,11 @@ where
                     TagEnd::Link => {
                         output.push(']');
                         end_newline = false;
+                    }
+                    TagEnd::Heading(_) => {
+                        output.push('\n');
+                        output.push('\n'); // Extra newline after heading
+                        end_newline = true;
                     }
                     _ => {
                         // Ignore other end tags not in requirements
@@ -692,5 +706,90 @@ mod tests {
         let markdown = "**bold**text";
         let typst = mark_to_typst(markdown).unwrap();
         assert_eq!(typst, "*bold*#{}text\n\n");
+    }
+
+    // Tests for Headings
+    #[test]
+    fn test_heading_level_1() {
+        let markdown = "# Heading 1";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "= Heading 1\n\n");
+    }
+
+    #[test]
+    fn test_heading_level_2() {
+        let markdown = "## Heading 2";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "== Heading 2\n\n");
+    }
+
+    #[test]
+    fn test_heading_level_3() {
+        let markdown = "### Heading 3";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "=== Heading 3\n\n");
+    }
+
+    #[test]
+    fn test_heading_level_4() {
+        let markdown = "#### Heading 4";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "==== Heading 4\n\n");
+    }
+
+    #[test]
+    fn test_heading_level_5() {
+        let markdown = "##### Heading 5";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "===== Heading 5\n\n");
+    }
+
+    #[test]
+    fn test_heading_level_6() {
+        let markdown = "###### Heading 6";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "====== Heading 6\n\n");
+    }
+
+    #[test]
+    fn test_heading_with_formatting() {
+        let markdown = "## Heading with **bold** and _italic_";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "== Heading with *bold* and _italic_\n\n");
+    }
+
+    #[test]
+    fn test_multiple_headings() {
+        let markdown = "# First\n\n## Second\n\n### Third";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "= First\n\n== Second\n\n=== Third\n\n");
+    }
+
+    #[test]
+    fn test_heading_followed_by_paragraph() {
+        let markdown = "# Heading\n\nThis is a paragraph.";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "= Heading\n\nThis is a paragraph.\n\n");
+    }
+
+    #[test]
+    fn test_heading_with_special_chars() {
+        let markdown = "# Heading with $math$ and #functions";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "= Heading with \\$math\\$ and \\#functions\n\n");
+    }
+
+    #[test]
+    fn test_paragraph_then_heading() {
+        let markdown = "A paragraph.\n\n# A Heading";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "A paragraph.\n\n= A Heading\n\n");
+    }
+
+    #[test]
+    fn test_heading_with_inline_code() {
+        let markdown = "## Code example: `fn main()`";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "== Code example: `fn main()`\n\n");
     }
 }
