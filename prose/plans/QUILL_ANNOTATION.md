@@ -1,73 +1,40 @@
 # Quill Annotation Revamp
 
-## Goals
+## Plan 1: Core Refactoring & Cleanup
 
-- Create metadata foundation for defining dynamic UI forms
-- Migrate away from jsonschema? Use custom validation system?
+**Goal**: Simplify the orchestration logic and consolidate workflow creation to prepare for metadata changes.
 
-## Out of scope
+- [ ] **Refactor Orchestration**: Split `crates/quillmark/orchestration.rs` into a cleaner file structure for better maintainability.
+- [ ] **Consolidate Workflow Creation**:
+    - Deprecate/Remove `workflow_from_quill_name` and `workflow_from_parsed`.
+    - Standardize on a single entry point, e.g., `new_workflow()` (wrapping logic from `workflow_from_quill`).
+- [ ] **Centralize Registry**:
+    - Ensure WASM bindings do not maintain a duplicate map of registered Quills.
+    - Expose and rely on the core engine's registry to avoid drift and memory overhead.
 
-## Structure
+## Plan 2: Metadata Schema Strategy
 
-**Current**
+**Goal**: Establish a single source of truth for Quill configuration that supports dynamic UI generation (Sections, Tooltips), while keeping validation robust.
 
-- key (name)
-- description
-- type (array | string | bool | number)
-- default 
-- example
+- [ ] **Architecture Decision**: **DECIDED**: Keep `jsonschema` as internal implementation detail.
+    - *Source of Truth*: QuillConfig TOML fields (Rust structs) are authoritative.
+    - *Validation*: Generate/use `jsonschema` internally for validation logic, but do not expose it in the API for consumers.
+- [ ] **Schema Definition**:
+    - Add `Section` field to Quill definition.
+    - Add `Tooltip` field to Quill definition.
+    - Ensure these fields are serializable/accessible for the API.
+    - *Note*: Do not store/expose the raw `jsonschema` in the `Quill` struct unless needed for internal caching.
+- [ ] **Validation**:
+    - Ensure validation logic uses the internal `jsonschema` derived from the authoritative TOML fields.
 
-**New**
+## Plan 3: WASM API & UI Integration
 
-- Section
-- Tooltip
+**Goal**: Expose rich metadata to WASM consumers to enable dynamic wizard UIs.
 
-## API
-
-We need to expose a way for WASM consumers to retrieve the annotations.
-
-**Potential frontend flow:**
-parse markdown -> extract Quill tag -> 
-if tag changed, retrieve Quill info ->
-update wizard
-
-## Cleanup
-- Split up `quillmark/src/orchestration.rs` into clean, simple organization of files for maintainability.
-
-**Consolidate workflow creation functions to stay opinionated**
-Currently there are:
-- workflow_from_quill_name
-- workflow_from_quill
-- workflow_from_parsed
-
-`workflow_from_quill_name` and `workflow_from_quill` are redundant. We could remove `workflow_from_quill_name` and `workflow_from_parsed` to force all renders to flow through `workflow_from_quill`. We could rename this consolidated function to just `new_workflow()`.
-
-## Impl
-- In the quillmark crate, expose a function to retrieve the Quill from bindings
-- Wasm bindings engine should not maintain its own map of registered Quills. Rely on core engine's registry to avoid drift and memory overhead.
-- Changes to QuillInfo in `bindings/quillmark-wasm/src/types.rs`
-
-
-## IMPORTANT DECISION!!!
-- Migrate away from jsonschema?
-- Use Quill config fields as single source of truth?
-    - Still flow through jsonschema? Probably not
-- Use another schema library/language?
-
-**jsonschema (current)**
-
-+ Widely supported (especially in js environment)
-
-- Can it support tooltip and section attributes?
-    - If no,Requires fragmentation of metadata for UI support
-
-**another schema language?**
-
-
-
-
-**custom validation**
-
-+ Supports all metadata (schema, tooltip, section) with no fragmentation
-
-- We have to write it
+- [ ] **Update Bindings**:
+    - Modify `QuillInfo` in `crates/bindings/wasm/src/types.rs` to include new metadata fields (`section`, `tooltip`, etc.).
+- [ ] **Expose Retrieval API**:
+    - Create a function in `quillmark` crate to retrieve `Quill` details from bindings.
+    - Expose a WASM function to retrieve annotations/metadata for a given Quill.
+- [ ] **Verify Integration Flow**:
+    - `Parse Markdown` -> `Extract Quill Tag` -> `Retrieve Quill Info` -> `Update Wizard UI`.
