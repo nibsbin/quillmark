@@ -20,7 +20,7 @@ echo "Building WASM binary..."
 cargo build \
     --target wasm32-unknown-unknown \
     --profile wasm-release \
-    --manifest-path bindings/quillmark-wasm/Cargo.toml
+    --manifest-path crates/bindings/wasm/Cargo.toml
 
 # Step 2: Generate JS bindings with wasm-bindgen
 echo "Generating JS bindings..."
@@ -36,11 +36,11 @@ VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | sel
 
 # Step 4: Create package.json from template
 echo "Creating package.json..."
-sed "s/VERSION_PLACEHOLDER/$VERSION/" bindings/quillmark-wasm/package.template.json > pkg/bundler/package.json
+sed "s/VERSION_PLACEHOLDER/$VERSION/" crates/bindings/wasm/package.template.json > pkg/bundler/package.json
 
 # Step 5: Copy README and LICENSE files
-if [ -f "bindings/quillmark-wasm/README.md" ]; then
-    cp bindings/quillmark-wasm/README.md pkg/bundler/
+if [ -f "crates/bindings/wasm/README.md" ]; then
+    cp crates/bindings/wasm/README.md pkg/bundler/
 fi
 
 if [ -f "LICENSE-MIT" ]; then

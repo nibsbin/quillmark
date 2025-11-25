@@ -32,7 +32,7 @@ examples/output/
 examples/converted/
 **/.DS_Store
 
-quillmark-fixtures/output/
+crates/fixtures/output/
 
 # WASM build outputs
 pkg/

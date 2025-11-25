@@ -17,7 +17,7 @@ Implement a basic `quillmark-cli` binary that can render markdown files to PDF u
 - No CLI binding exists in the workspace
 - Python and WASM bindings serve as implementation references
 - Core `quillmark` library provides all necessary rendering functionality
-- Example markdown files exist in `quillmark-fixtures/resources/tonguetoquill-collection/quills/`
+- Example markdown files exist in `crates/fixtures/resources/tonguetoquill-collection/quills/`
 
 ---
 
@@ -33,11 +33,11 @@ A functional CLI tool that can:
 
 **Success Criteria:**
 ```bash
-cd bindings/quillmark-cli
+cd crates/bindings/cli
 cargo build --release
 ./target/release/quillmark render \
-  ../../quillmark-fixtures/resources/tonguetoquill-collection/quills/usaf_memo/usaf_memo.md \
-  --quill ../../quillmark-fixtures/resources/tonguetoquill-collection/quills/usaf_memo \
+  ../../fixtures/resources/tonguetoquill-collection/quills/usaf_memo/usaf_memo.md \
+  --quill ../../fixtures/resources/tonguetoquill-collection/quills/usaf_memo \
   -o usaf_memo_output.pdf
 # Result: usaf_memo_output.pdf created successfully
 ```
@@ -49,7 +49,7 @@ cargo build --release
 ### Step 1: Project Setup
 
 **Create workspace structure:**
-- Create `bindings/quillmark-cli/` directory
+- Create `crates/bindings/cli/` directory
 - Create `Cargo.toml` with package configuration
 - Add to workspace members in root `Cargo.toml`
 - Create `src/` directory with modular structure
@@ -61,13 +61,13 @@ cargo build --release
 - Metadata: description, license, authors
 
 **Files to create:**
-- `bindings/quillmark-cli/Cargo.toml`
-- `bindings/quillmark-cli/README.md`
-- `bindings/quillmark-cli/src/main.rs`
-- `bindings/quillmark-cli/src/commands/mod.rs`
-- `bindings/quillmark-cli/src/commands/render.rs`
-- `bindings/quillmark-cli/src/output.rs`
-- `bindings/quillmark-cli/src/errors.rs`
+- `crates/bindings/cli/Cargo.toml`
+- `crates/bindings/cli/README.md`
+- `crates/bindings/cli/src/main.rs`
+- `crates/bindings/cli/src/commands/mod.rs`
+- `crates/bindings/cli/src/commands/render.rs`
+- `crates/bindings/cli/src/output.rs`
+- `crates/bindings/cli/src/errors.rs`
 
 ### Step 2: CLI Argument Parsing
 
@@ -168,12 +168,12 @@ cargo build --release
 
 **Cross-reference points:**
 - `prose/designs/CLI.md` - Full design specification
-- `bindings/quillmark-python/` - Error handling patterns
-- `quillmark/tests/common.rs` - Workflow usage example
-- `quillmark/examples/usaf_memo.rs` - Simple demo reference
+- `crates/bindings/python/` - Error handling patterns
+- `crates/quillmark/tests/common.rs` - Workflow usage example
+- `crates/quillmark/examples/usaf_memo.rs` - Simple demo reference
 
 **Testing approach:**
-- Use existing fixture files from `quillmark-fixtures`
+- Use existing fixture files from `crates/fixtures`
 - No need to create new test markdown files
 - Focus on command-line argument variations
 - Manual testing initially, automated tests later
@@ -230,7 +230,7 @@ quillmark render memo.md --quill /bad/path
 
 **Build Verification:**
 ```bash
-cd bindings/quillmark-cli
+cd crates/bindings/cli
 cargo build --release
 cargo test
 file target/release/quillmark  # Verify it's a binary
@@ -258,7 +258,7 @@ file target/release/quillmark  # Verify it's a binary
 
 This plan is complete when:
 
-1. ✅ `bindings/quillmark-cli` project exists in workspace
+1. ✅ `crates/bindings/cli` project exists in workspace
 2. ✅ `cargo build --release` succeeds
 3. ✅ Can render `usaf_memo.md` to PDF with explicit quill path
 4. ✅ Output file is created and valid

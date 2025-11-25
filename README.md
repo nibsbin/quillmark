@@ -74,21 +74,22 @@ cargo run --example test_defaults
 ## Documentation
 
 - [API Documentation](https://docs.rs/quillmark)
-- [Architecture Design](designs/ARCHITECTURE.md)
+- [Architecture Design](prose/designs/ARCHITECTURE.md)
 - [Contributing Guide](CONTRIBUTING.md)
 
 ## Project Structure
 
 This workspace contains:
 
-- **quillmark-core** - Core parsing, templating, and backend traits
-- **quillmark** - High-level orchestration API
-- **backends/quillmark-typst** - Typst backend for PDF/SVG output
-- **backends/quillmark-acroform** - AcroForm backend for PDF form filling
-- **quillmark-python** - Python bindings (PyO3)
-- **quillmark-wasm** - WebAssembly bindings
-- **quillmark-fixtures** - Test fixtures and utilities
-- **quillmark-fuzz** - Fuzz testing suite
+- **crates/core** - Core parsing, templating, and backend traits
+- **crates/quillmark** - High-level orchestration API
+- **crates/backends/typst** - Typst backend for PDF/SVG output
+- **crates/backends/acroform** - AcroForm backend for PDF form filling
+- **crates/bindings/python** - Python bindings (PyO3)
+- **crates/bindings/wasm** - WebAssembly bindings
+- **crates/bindings/cli** - Command-line interface
+- **crates/fixtures** - Test fixtures and utilities
+- **crates/fuzz** - Fuzz testing suite
 
 ## License
 

@@ -41,13 +41,13 @@ jobs:
 
       - name: Build WASM packages
         run: ./scripts/build-wasm.sh
-      
+
       - name: Install npm dependencies
-        working-directory: bindings/quillmark-wasm
+        working-directory: crates/bindings/wasm
         run: npm install
-      
+
       - name: Run npm tests
-        working-directory: bindings/quillmark-wasm
+        working-directory: crates/bindings/wasm
         run: npm test
       
       # Upload the built package for the publish job
