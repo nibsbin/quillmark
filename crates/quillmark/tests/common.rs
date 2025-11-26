@@ -56,7 +56,7 @@ pub fn demo(
 
     let engine = quillmark::Quillmark::new();
     let workflow = engine
-        .workflow_from_quill(&quill)
+        .workflow(&quill)
         .expect("Failed to load workflow");
 
     // process glue

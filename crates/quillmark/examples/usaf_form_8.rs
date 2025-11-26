@@ -31,7 +31,7 @@ test: "Hello from Example!"
 
     // Build workflow
     let workflow = engine
-        .workflow_from_quill(&quill)
+        .workflow(&quill)
         .expect("Failed to create workflow");
 
     // Compose glue output (JSON)

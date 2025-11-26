@@ -241,7 +241,7 @@ fn test_quill_engine_load_with_quill_object() {
 
     // Load workflow by passing Quill object directly
     let workflow = engine
-        .workflow_from_quill(&quill)
+        .workflow(&quill)
         .expect("Failed to load workflow");
 
     // Verify workflow properties

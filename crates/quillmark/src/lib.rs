@@ -56,7 +56,7 @@
 //! # engine.register_quill(quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
-//! let mut workflow = engine.workflow_from_quill("my-quill").unwrap();
+//! let mut workflow = engine.workflow("my-quill").unwrap();
 //! workflow.add_asset("chart.png", vec![/* image bytes */]).unwrap();
 //! workflow.add_asset("data.csv", vec![/* csv bytes */]).unwrap();
 //!
