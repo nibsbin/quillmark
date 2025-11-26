@@ -185,7 +185,7 @@ impl Quillmark {
 
         let workflow = self
             .inner
-            .workflow_from_quill_name(quill_name)
+            .workflow(quill_name)
             .map_err(|e| {
                 WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
             })?;
@@ -236,7 +236,7 @@ impl Quillmark {
         // Load the workflow
         let mut workflow = self
             .inner
-            .workflow_from_quill_name(&quill_name_to_use)
+            .workflow(&quill_name_to_use)
             .map_err(|e| {
                 WasmError::from(format!("Quill '{}' not found: {}", quill_name_to_use, e))
                     .to_js_value()
