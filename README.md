@@ -51,7 +51,7 @@ let markdown = "---\ntitle: Example\n---\n\n# Hello World";
 let parsed = ParsedDocument::from_markdown(markdown)?;
 
 // Load workflow and render to PDF
-let workflow = engine.workflow_from_quill_name("quill_name")?;
+let workflow = engine.workflow("quill_name")?;
 let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
 
 // Access the generated PDF

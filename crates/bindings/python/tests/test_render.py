@@ -11,7 +11,7 @@ def test_end_to_end_render(taro_quill_dir, taro_md):
     quill = Quill.from_path(str(taro_quill_dir))
     engine.register_quill(quill)
     
-    workflow = engine.workflow_from_quill_name("taro")
+    workflow = engine.workflow("taro")
     parsed = ParsedDocument.from_markdown(taro_md)
     result = workflow.render(parsed, OutputFormat.PDF)
     
@@ -26,7 +26,7 @@ def test_process_glue(taro_quill_dir, taro_md):
     quill = Quill.from_path(str(taro_quill_dir))
     engine.register_quill(quill)
     
-    workflow = engine.workflow_from_quill_name("taro")
+    workflow = engine.workflow("taro")
     parsed = ParsedDocument.from_markdown(taro_md)
     glue_output = workflow.process_glue(parsed)
     
@@ -40,7 +40,7 @@ def test_save_artifact(taro_quill_dir, taro_md, tmp_path):
     quill = Quill.from_path(str(taro_quill_dir))
     engine.register_quill(quill)
     
-    workflow = engine.workflow_from_quill(quill)
+    workflow = engine.workflow(quill)
     parsed = ParsedDocument.from_markdown(taro_md)
     result = workflow.render(parsed, OutputFormat.PDF)
     

@@ -36,7 +36,7 @@ fn test_with_asset_basic() {
         .register_quill(quill)
         .expect("Failed to register quill");
 
-    let mut workflow = engine.workflow_from_quill_name("taro").unwrap();
+    let mut workflow = engine.workflow("taro").unwrap();
     workflow
         .add_asset("taro.png", taro_picture.to_vec())
         .expect("Should add asset");
@@ -52,7 +52,7 @@ fn test_with_asset_collision() {
         .register_quill(quill)
         .expect("Failed to register quill");
 
-    let mut workflow = engine.workflow_from_quill_name("taro").unwrap();
+    let mut workflow = engine.workflow("taro").unwrap();
     workflow
         .add_asset("taro.png", vec![1, 2, 3])
         .expect("Should add first asset");
@@ -79,7 +79,7 @@ fn test_with_assets_multiple() {
         ("data.csv".to_string(), vec![7, 8, 9]),
     ];
 
-    let mut workflow = engine.workflow_from_quill_name("taro").unwrap();
+    let mut workflow = engine.workflow("taro").unwrap();
     workflow
         .add_assets(assets)
         .expect("Should add multiple assets");
@@ -95,7 +95,7 @@ fn test_clear_assets() {
         .register_quill(quill)
         .expect("Failed to register quill");
 
-    let mut workflow = engine.workflow_from_quill_name("taro").unwrap();
+    let mut workflow = engine.workflow("taro").unwrap();
     workflow
         .add_asset("taro.png", vec![1, 2, 3])
         .expect("Should add first asset");

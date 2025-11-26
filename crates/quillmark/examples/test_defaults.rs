@@ -30,7 +30,7 @@ fn main() {
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("test-defaults")
+        .workflow("test-defaults")
         .expect("Failed to get workflow");
 
     // Parse markdown with only title (missing author and status)

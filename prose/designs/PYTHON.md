@@ -43,9 +43,9 @@ quills = engine.registered_quills()      # list[str]
 
 **Methods:**
 - `register_quill(quill)` - Register a quill template
-- `workflow_from_quill_name(name)` - Load workflow by quill name
+- `workflow(name)` - Load workflow by quill name
 - `workflow_from_quill(quill)` - Load workflow from quill object
-- `workflow_from_parsed(parsed)` - Load workflow from parsed document with QUILL field
+- `workflow(parsed)` - Load workflow from parsed document with QUILL field
 - `registered_backends()` - Get list of registered backend IDs
 - `registered_quills()` - Get list of registered quill names
 
@@ -54,7 +54,7 @@ quills = engine.registered_quills()      # list[str]
 Sealed workflow for executing the render pipeline.
 
 ```python
-workflow = engine.workflow_from_quill_name("my-quill")
+workflow = engine.workflow("my-quill")
 parsed = ParsedDocument.from_markdown(markdown)
 result = workflow.render(parsed, OutputFormat.PDF)
 ```

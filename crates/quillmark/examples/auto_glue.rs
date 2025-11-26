@@ -65,7 +65,7 @@ output as JSON instead of being processed through a template.
 
     // Create workflow and process the glue
     let workflow = engine
-        .workflow_from_quill_name("auto-example")
+        .workflow("auto-example")
         .expect("Failed to load workflow");
 
     let json_output = workflow

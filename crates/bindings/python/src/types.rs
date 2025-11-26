@@ -36,28 +36,37 @@ impl PyQuillmark {
         Ok(())
     }
 
-    fn workflow_from_quill_name(&self, name: &str) -> PyResult<PyWorkflow> {
-        let workflow = self
-            .inner
-            .workflow_from_quill_name(name)
-            .map_err(convert_render_error)?;
-        Ok(PyWorkflow { inner: workflow })
-    }
+    fn workflow(&self, quill_ref: &Bound<'_, PyAny>) -> PyResult<PyWorkflow> {
+        // Handle string (quill name)
+        if let Ok(name) = quill_ref.extract::<String>() {
+            let workflow = self
+                .inner
+                .workflow(name.as_str())
+                .map_err(convert_render_error)?;
+            return Ok(PyWorkflow { inner: workflow });
+        }
 
-    fn workflow_from_quill(&self, quill: PyRef<PyQuill>) -> PyResult<PyWorkflow> {
-        let workflow = self
-            .inner
-            .workflow_from_quill(&quill.inner)
-            .map_err(convert_render_error)?;
-        Ok(PyWorkflow { inner: workflow })
-    }
+        // Handle PyQuill
+        if let Ok(quill) = quill_ref.extract::<PyRef<PyQuill>>() {
+            let workflow = self
+                .inner
+                .workflow(&quill.inner)
+                .map_err(convert_render_error)?;
+            return Ok(PyWorkflow { inner: workflow });
+        }
 
-    fn workflow_from_parsed(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<PyWorkflow> {
-        let workflow = self
-            .inner
-            .workflow_from_parsed(&parsed.inner)
-            .map_err(convert_render_error)?;
-        Ok(PyWorkflow { inner: workflow })
+        // Handle PyParsedDocument
+        if let Ok(parsed) = quill_ref.extract::<PyRef<PyParsedDocument>>() {
+            let workflow = self
+                .inner
+                .workflow(&parsed.inner)
+                .map_err(convert_render_error)?;
+            return Ok(PyWorkflow { inner: workflow });
+        }
+
+        Err(pyo3::exceptions::PyTypeError::new_err(
+            "workflow() expects a string (quill name), Quill object, or ParsedDocument",
+        ))
     }
 
     fn registered_backends(&self) -> Vec<String> {

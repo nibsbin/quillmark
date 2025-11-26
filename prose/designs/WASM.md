@@ -114,6 +114,40 @@ interface Location {
 
 ---
 
+## Registry Architecture
+
+**Design**: WASM bindings delegate to core engine's quill registry (no duplicate storage)
+
+The WASM `Quillmark` struct wraps the core `quillmark::Quillmark` engine and delegates all quill registry operations to it. This ensures:
+
+- **Single source of truth**: Quills are stored only in the core engine
+- **Memory efficiency**: No duplicate HashMap in WASM layer
+- **Consistency**: Impossible for registries to drift
+- **Simplified code**: No synchronization overhead
+
+**Implementation**:
+
+```rust
+pub struct Quillmark {
+    inner: quillmark::Quillmark,  // Core engine with registry
+}
+```
+
+**Registry Operations**:
+
+- `registerQuill()` → `inner.register_quill()`
+- `getQuillInfo()` → `inner.get_quill()`
+- `listQuills()` → `inner.registered_quills()`
+- `unregisterQuill()` → `inner.unregister_quill()`
+
+**Benefits**:
+- Reduced WASM binary size (no duplicate data structures)
+- Lower memory footprint in browser environments
+- Guaranteed consistency between core and WASM layers
+- Automatic propagation of core engine improvements
+
+---
+
 ## Error Handling
 
 **Delegation to Core Types:** WASM bindings use `SerializableDiagnostic` from `quillmark-core` directly, not custom error wrappers.

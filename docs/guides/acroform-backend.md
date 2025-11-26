@@ -187,7 +187,7 @@ employee_id: EMP-12345
 """
 
 parsed = ParsedDocument.from_markdown(markdown)
-workflow = engine.workflow_from_quill_name("employee-form")
+workflow = engine.workflow("employee-form")
 result = workflow.render(parsed, OutputFormat.PDF)
 
 with open("filled-form.pdf", "wb") as f:
@@ -212,7 +212,7 @@ employee_id: EMP-12345
 "#;
 
 let parsed = ParsedDocument::from_markdown(markdown)?;
-let workflow = engine.workflow_from_quill_name("employee-form")?;
+let workflow = engine.workflow("employee-form")?;
 let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
 
 std::fs::write("filled-form.pdf", &result.artifacts[0].bytes)?;

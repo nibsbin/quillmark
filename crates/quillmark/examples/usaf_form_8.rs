@@ -30,9 +30,7 @@ test: "Hello from Example!"
     engine.register_quill(quill.clone())?;
 
     // Build workflow
-    let workflow = engine
-        .workflow_from_quill(&quill)
-        .expect("Failed to create workflow");
+    let workflow = engine.workflow(&quill).expect("Failed to create workflow");
 
     // Compose glue output (JSON)
     let glue_output = workflow.process_glue(&parsed)?;

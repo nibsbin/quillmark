@@ -96,16 +96,16 @@ pub fn register_backend(&mut self, backend: Box<dyn Backend>) {
 **File:** `quillmark/src/orchestration.rs`
 
 **Changes:**
-- Update `Quillmark::workflow_from_parsed()` to use `__default__` as fallback
+- Update `Quillmark::workflow()` to use `__default__` as fallback
 - Update error message when neither Quill tag nor default is available
 
 **Pseudo-code:**
 ```rust
-pub fn workflow_from_parsed(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError> {
+pub fn workflow(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError> {
     let quill_name = parsed.quill_tag().unwrap_or("__default__");
     
     // Try to load the Quill
-    self.workflow_from_quill_name(quill_name).map_err(|e| {
+    self.workflow(quill_name).map_err(|e| {
         // If we fell back to __default__ and it doesn't exist, provide better error
         if quill_name == "__default__" && parsed.quill_tag().is_none() {
             RenderError::UnsupportedBackend {

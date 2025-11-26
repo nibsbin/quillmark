@@ -49,9 +49,7 @@ The default Quill supports:
     println!("Registered quills: {:?}\n", registered_quills);
 
     // Build workflow from parsed document - will use __default__ quill
-    let workflow = engine
-        .workflow_from_parsed(&parsed)
-        .expect("Failed to create workflow");
+    let workflow = engine.workflow(&parsed).expect("Failed to create workflow");
 
     println!("Using quill: {}", workflow.quill_name());
     println!("Backend: {}", workflow.backend_id());

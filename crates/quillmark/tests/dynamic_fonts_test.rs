@@ -42,7 +42,7 @@ fn test_with_font_basic() {
         .register_quill(quill)
         .expect("Failed to register quill");
 
-    let mut workflow = engine.workflow_from_quill_name("taro").unwrap();
+    let mut workflow = engine.workflow("taro").unwrap();
     workflow
         .add_font("custom.ttf", font_data.clone())
         .expect("Should add font");
@@ -58,7 +58,7 @@ fn test_with_font_collision() {
         .register_quill(quill)
         .expect("Failed to register quill");
 
-    let mut workflow = engine.workflow_from_quill_name("taro").unwrap();
+    let mut workflow = engine.workflow("taro").unwrap();
     workflow
         .add_font("custom.ttf", vec![1, 2, 3])
         .expect("Should add first font");
@@ -85,7 +85,7 @@ fn test_with_fonts_multiple() {
         ("font3.woff".to_string(), vec![7, 8, 9]),
     ];
 
-    let mut workflow = engine.workflow_from_quill_name("taro").unwrap();
+    let mut workflow = engine.workflow("taro").unwrap();
     workflow
         .add_fonts(fonts)
         .expect("Should add multiple fonts");
@@ -101,7 +101,7 @@ fn test_clear_fonts() {
         .register_quill(quill)
         .expect("Failed to register quill");
 
-    let mut workflow = engine.workflow_from_quill_name("taro").unwrap();
+    let mut workflow = engine.workflow("taro").unwrap();
     workflow
         .add_font("font1.ttf", vec![1, 2, 3])
         .expect("Should add first font");
@@ -129,7 +129,7 @@ fn test_with_font_and_asset_together() {
         .register_quill(quill)
         .expect("Failed to register quill");
 
-    let mut workflow = engine.workflow_from_quill_name("taro").unwrap();
+    let mut workflow = engine.workflow("taro").unwrap();
     workflow
         .add_asset("chart.png", vec![1, 2, 3])
         .expect("Should add asset");
@@ -148,7 +148,7 @@ fn test_dynamic_font_names() {
         .register_quill(quill)
         .expect("Failed to register quill");
 
-    let mut workflow = engine.workflow_from_quill_name("taro").unwrap();
+    let mut workflow = engine.workflow("taro").unwrap();
     workflow
         .add_font("font1.ttf", vec![1, 2, 3])
         .expect("Should add first font");

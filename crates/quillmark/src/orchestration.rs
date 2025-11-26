@@ -23,7 +23,7 @@
 //!
 //! 1. Create an engine with [`Quillmark::new`]
 //! 2. Register quills with [`Quillmark::register_quill()`]
-//! 3. Load workflows with [`Quillmark::workflow_from_quill_name()`] or [`Quillmark::workflow_from_parsed()`]
+//! 3. Load workflows with [`Quillmark::workflow()`]
 //! 4. Render documents using the workflow
 //!
 //! ## Examples
@@ -44,8 +44,8 @@
 //! let markdown = "# Hello";
 //! let parsed = ParsedDocument::from_markdown(markdown).unwrap();
 //!
-//! // Step 4: Load workflow by quill name and render
-//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap();
+//! // Step 4: Load workflow and render
+//! let workflow = engine.workflow("my-quill").unwrap();
 //! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
 //!
@@ -58,10 +58,14 @@
 //! engine.register_quill(quill.clone());
 //!
 //! // Load by name
-//! let workflow1 = engine.workflow_from_quill_name("my-quill").unwrap();
+//! let workflow1 = engine.workflow("my-quill").unwrap();
 //!
 //! // Load by object (doesn't need to be registered)
-//! let workflow2 = engine.workflow_from_quill(&quill).unwrap();
+//! let workflow2 = engine.workflow(&quill).unwrap();
+//!
+//! // Load from parsed document
+//! let parsed = ParsedDocument::from_markdown("---\nQUILL: my-quill\n---\n# Hello").unwrap();
+//! let workflow3 = engine.workflow(&parsed).unwrap();
 //! ```
 //!
 //! ### Inspecting Engine State
@@ -100,7 +104,7 @@
 //! # let mut engine = Quillmark::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
-//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap();
+//! let workflow = engine.workflow("my-quill").unwrap();
 //!
 //! let markdown = r#"---
 //! title: "My Document"
@@ -125,7 +129,7 @@
 //! # engine.register_quill(quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
-//! let mut workflow = engine.workflow_from_quill_name("my-quill").unwrap();
+//! let mut workflow = engine.workflow("my-quill").unwrap();
 //! workflow.add_asset("logo.png", vec![/* PNG bytes */]).unwrap();
 //! workflow.add_asset("chart.svg", vec![/* SVG bytes */]).unwrap();
 //!
@@ -141,7 +145,7 @@
 //! # engine.register_quill(quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
-//! let mut workflow = engine.workflow_from_quill_name("my-quill").unwrap();
+//! let mut workflow = engine.workflow("my-quill").unwrap();
 //! workflow.add_font("custom-font.ttf", vec![/* TTF bytes */]).unwrap();
 //! workflow.add_font("another-font.otf", vec![/* OTF bytes */]).unwrap();
 //!
@@ -155,7 +159,7 @@
 //! # let mut engine = Quillmark::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
 //! # engine.register_quill(quill);
-//! let workflow = engine.workflow_from_quill_name("my-quill").unwrap();
+//! let workflow = engine.workflow("my-quill").unwrap();
 //!
 //! println!("Backend: {}", workflow.backend_id());
 //! println!("Quill: {}", workflow.quill_name());
@@ -175,6 +179,8 @@ pub enum QuillRef<'a> {
     Name(&'a str),
     /// Reference to a borrowed Quill object
     Object(&'a Quill),
+    /// Reference to a parsed document (extracts quill tag)
+    Parsed(&'a ParsedDocument),
 }
 
 impl<'a> From<&'a Quill> for QuillRef<'a> {
@@ -198,6 +204,12 @@ impl<'a> From<&'a String> for QuillRef<'a> {
 impl<'a> From<&'a std::borrow::Cow<'a, str>> for QuillRef<'a> {
     fn from(name: &'a std::borrow::Cow<'a, str>) -> Self {
         QuillRef::Name(name.as_ref())
+    }
+}
+
+impl<'a> From<&'a ParsedDocument> for QuillRef<'a> {
+    fn from(parsed: &'a ParsedDocument) -> Self {
+        QuillRef::Parsed(parsed)
     }
 }
 
@@ -370,16 +382,31 @@ impl Quillmark {
         Ok(())
     }
 
-    /// Load a workflow from a parsed document that contains a quill tag
-    pub fn workflow_from_parsed(&self, parsed: &ParsedDocument) -> Result<Workflow, RenderError> {
-        let quill_name = parsed.quill_tag();
-
-        // Try to load the Quill
-        self.workflow_from_quill_name(quill_name)
-    }
-
-    /// Load a workflow by quill reference (name or object)
-    pub fn workflow_from_quill<'a>(
+    /// Load a workflow by quill reference (name, object, or parsed document)
+    ///
+    /// This is the unified workflow creation method that accepts:
+    /// - `&str` - Looks up registered quill by name
+    /// - `&Quill` - Uses quill directly (doesn't need to be registered)
+    /// - `&ParsedDocument` - Extracts quill tag and looks up by name
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use quillmark::{Quillmark, Quill, ParsedDocument};
+    /// # let engine = Quillmark::new();
+    /// // By name
+    /// let workflow = engine.workflow("my-quill")?;
+    ///
+    /// // By object
+    /// # let quill = Quill::from_path("path/to/quill").unwrap();
+    /// let workflow = engine.workflow(&quill)?;
+    ///
+    /// // From parsed document
+    /// # let parsed = ParsedDocument::from_markdown("---\nQUILL: my-quill\n---\n# Hello").unwrap();
+    /// let workflow = engine.workflow(&parsed)?;
+    /// # Ok::<(), quillmark::RenderError>(())
+    /// ```
+    pub fn workflow<'a>(
         &self,
         quill_ref: impl Into<QuillRef<'a>>,
     ) -> Result<Workflow, RenderError> {
@@ -406,6 +433,23 @@ impl Quillmark {
             QuillRef::Object(quill) => {
                 // Use the provided quill directly
                 quill
+            }
+            QuillRef::Parsed(parsed) => {
+                // Extract quill tag from parsed document and look up by name
+                let quill_tag = parsed.quill_tag();
+                self.quills
+                    .get(quill_tag)
+                    .ok_or_else(|| RenderError::UnsupportedBackend {
+                        diag: Diagnostic::new(
+                            Severity::Error,
+                            format!("Quill '{}' not registered", quill_tag),
+                        )
+                        .with_code("engine::quill_not_found".to_string())
+                        .with_hint(format!(
+                            "Available quills: {}",
+                            self.quills.keys().cloned().collect::<Vec<_>>().join(", ")
+                        )),
+                    })?
             }
         };
 
@@ -448,11 +492,6 @@ impl Quillmark {
         Workflow::new(backend_clone, quill_clone)
     }
 
-    /// Load a workflow by quill name
-    pub fn workflow_from_quill_name(&self, name: &str) -> Result<Workflow, RenderError> {
-        self.workflow_from_quill(name)
-    }
-
     /// Get a list of registered backend IDs.
     pub fn registered_backends(&self) -> Vec<&str> {
         self.backends.keys().map(|s| s.as_str()).collect()
@@ -461,6 +500,61 @@ impl Quillmark {
     /// Get a list of registered quill names.
     pub fn registered_quills(&self) -> Vec<&str> {
         self.quills.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// Get a reference to a registered quill by name.
+    ///
+    /// Returns `None` if the quill is not registered.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use quillmark::Quillmark;
+    /// # let engine = Quillmark::new();
+    /// if let Some(quill) = engine.get_quill("my-quill") {
+    ///     println!("Found quill: {}", quill.name);
+    /// }
+    /// ```
+    pub fn get_quill(&self, name: &str) -> Option<&Quill> {
+        self.quills.get(name)
+    }
+
+    /// Get a reference to a quill's metadata by name.
+    ///
+    /// Returns `None` if the quill is not registered.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use quillmark::Quillmark;
+    /// # let engine = Quillmark::new();
+    /// if let Some(metadata) = engine.get_quill_metadata("my-quill") {
+    ///     println!("Metadata: {:?}", metadata);
+    /// }
+    /// ```
+    pub fn get_quill_metadata(
+        &self,
+        name: &str,
+    ) -> Option<&HashMap<String, quillmark_core::value::QuillValue>> {
+        self.quills.get(name).map(|quill| &quill.metadata)
+    }
+
+    /// Unregister a quill by name.
+    ///
+    /// Returns `true` if the quill was registered and has been removed,
+    /// `false` if the quill was not found.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use quillmark::Quillmark;
+    /// # let mut engine = Quillmark::new();
+    /// if engine.unregister_quill("my-quill") {
+    ///     println!("Quill unregistered");
+    /// }
+    /// ```
+    pub fn unregister_quill(&mut self, name: &str) -> bool {
+        self.quills.remove(name).is_some()
     }
 }
 

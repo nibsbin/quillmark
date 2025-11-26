@@ -3,7 +3,6 @@
 use crate::error::WasmError;
 use crate::types::{OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult};
 use serde::Serialize;
-use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
 // Cross-platform helper to get current time in milliseconds as f64.
@@ -29,7 +28,6 @@ fn now_ms() -> f64 {
 #[wasm_bindgen]
 pub struct Quillmark {
     inner: quillmark::Quillmark,
-    quills: HashMap<String, quillmark_core::Quill>,
 }
 
 #[wasm_bindgen]
@@ -39,7 +37,6 @@ impl Quillmark {
     pub fn new() -> Quillmark {
         Quillmark {
             inner: quillmark::Quillmark::new(),
-            quills: HashMap::new(),
         }
     }
 
@@ -100,9 +97,8 @@ impl Quillmark {
 
         // Register with backend validation
         self.inner
-            .register_quill(quill.clone())
+            .register_quill(quill)
             .map_err(|e| WasmError::from(e).to_js_value())?;
-        self.quills.insert(quill.name.clone(), quill);
 
         let quill_info = self.get_quill_info(&name)?;
         Ok(quill_info)
@@ -114,7 +110,7 @@ impl Quillmark {
     /// that consumers need to configure render options for the next step.
     #[wasm_bindgen(js_name = getQuillInfo)]
     pub fn get_quill_info(&self, name: &str) -> Result<JsValue, JsValue> {
-        let quill = self.quills.get(name).ok_or_else(|| {
+        let quill = self.inner.get_quill(name).ok_or_else(|| {
             WasmError::from(format!("Quill '{}' not registered", name)).to_js_value()
         })?;
 
@@ -122,7 +118,7 @@ impl Quillmark {
         let backend_id = &quill.backend;
 
         // Create workflow to get supported formats
-        let workflow = self.inner.workflow_from_quill_name(name).map_err(|e| {
+        let workflow = self.inner.workflow(name).map_err(|e| {
             WasmError::from(format!(
                 "Failed to create workflow for quill '{}': {}",
                 name, e
@@ -187,12 +183,9 @@ impl Quillmark {
             WasmError::from(format!("Failed to parse markdown: {}", e)).to_js_value()
         })?;
 
-        let workflow = self
-            .inner
-            .workflow_from_quill_name(quill_name)
-            .map_err(|e| {
-                WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
-            })?;
+        let workflow = self.inner.workflow(quill_name).map_err(|e| {
+            WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
+        })?;
 
         workflow
             .process_glue(&parsed)
@@ -238,13 +231,9 @@ impl Quillmark {
         let parsed = quillmark_core::ParsedDocument::with_quill_tag(fields, quill_tag);
 
         // Load the workflow
-        let mut workflow = self
-            .inner
-            .workflow_from_quill_name(&quill_name_to_use)
-            .map_err(|e| {
-                WasmError::from(format!("Quill '{}' not found: {}", quill_name_to_use, e))
-                    .to_js_value()
-            })?;
+        let mut workflow = self.inner.workflow(&quill_name_to_use).map_err(|e| {
+            WasmError::from(format!("Quill '{}' not found: {}", quill_name_to_use, e)).to_js_value()
+        })?;
 
         // Add assets if provided
         if let Some(assets_json) = opts.assets {
@@ -298,12 +287,16 @@ impl Quillmark {
     /// List registered Quill names
     #[wasm_bindgen(js_name = listQuills)]
     pub fn list_quills(&self) -> Vec<String> {
-        self.quills.keys().cloned().collect()
+        self.inner
+            .registered_quills()
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
     }
 
     /// Unregister a Quill (free memory)
     #[wasm_bindgen(js_name = unregisterQuill)]
     pub fn unregister_quill(&mut self, name: &str) {
-        self.quills.remove(name);
+        self.inner.unregister_quill(name);
     }
 }

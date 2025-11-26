@@ -70,7 +70,7 @@ version = { description = "Version number", default = 1 }
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("test-quill")
+        .workflow("test-quill")
         .expect("Failed to load workflow");
 
     // Create document with only title (missing status and version)
@@ -129,7 +129,7 @@ status = { description = "Document status", default = "draft" }
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("test-quill")
+        .workflow("test-quill")
         .expect("Failed to load workflow");
 
     // Create document with explicit status value
@@ -188,7 +188,7 @@ status = { description = "Document status", default = "draft" }
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("test-quill")
+        .workflow("test-quill")
         .expect("Failed to load workflow");
 
     // Create document with no fields - should validate because all have defaults
@@ -240,7 +240,7 @@ status = { description = "Document status", default = "draft" }
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("test-quill")
+        .workflow("test-quill")
         .expect("Failed to load workflow");
 
     // Create document missing required title field

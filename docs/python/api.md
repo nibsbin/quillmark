@@ -31,7 +31,7 @@ title: My Document
 parsed = ParsedDocument.from_markdown(markdown)
 
 # Render
-workflow = engine.workflow_from_quill_name("my-quill")
+workflow = engine.workflow("my-quill")
 result = workflow.render(parsed, OutputFormat.PDF)
 
 # Save output
@@ -57,7 +57,7 @@ class Quillmark:
             QuillmarkError: If validation fails
         """
     
-    def workflow_from_quill_name(self, name: str) -> Workflow:
+    def workflow(self, name: str) -> Workflow:
         """Get workflow by quill name.
         
         Args:
@@ -73,7 +73,7 @@ class Quillmark:
     def workflow_from_quill(self, quill: Quill) -> Workflow:
         """Get workflow from quill object."""
     
-    def workflow_from_parsed(self, parsed: ParsedDocument) -> Workflow:
+    def workflow(self, parsed: ParsedDocument) -> Workflow:
         """Get workflow from document's QUILL field.
         
         Raises:
@@ -155,7 +155,7 @@ class Workflow:
 **Example:**
 
 ```python
-workflow = engine.workflow_from_quill_name("my-quill")
+workflow = engine.workflow("my-quill")
 
 print(f"Backend: {workflow.backend_id}")  # 'typst'
 print(f"Formats: {workflow.supported_formats}")  # [PDF, SVG]
@@ -505,7 +505,7 @@ def render_document(quill_path: str, markdown: str, output_path: str):
         parsed = ParsedDocument.from_markdown(markdown)
         
         # Create workflow
-        workflow = engine.workflow_from_quill_name(quill.name)
+        workflow = engine.workflow(quill.name)
         
         # Check supported formats
         formats = workflow.supported_formats
