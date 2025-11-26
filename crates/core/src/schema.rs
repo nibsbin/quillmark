@@ -48,6 +48,34 @@ pub fn build_schema_from_fields(
             Value::String(field_schema.description.clone()),
         );
 
+        // Add UI metadata as x-ui property if present
+        if let Some(ref ui) = field_schema.ui {
+            let mut ui_obj = Map::new();
+
+            if let Some(ref group) = ui.group {
+                ui_obj.insert("group".to_string(), Value::String(group.clone()));
+            }
+
+            if let Some(ref component) = ui.component {
+                ui_obj.insert("component".to_string(), Value::String(component.clone()));
+            }
+
+            if let Some(ref placeholder) = ui.placeholder {
+                ui_obj.insert("placeholder".to_string(), Value::String(placeholder.clone()));
+            }
+
+            if let Some(order) = ui.order {
+                ui_obj.insert("order".to_string(), Value::Number(order.into()));
+            }
+
+            // Add extra UI properties
+            for (key, value) in &ui.extra {
+                ui_obj.insert(key.clone(), value.as_json().clone());
+            }
+
+            property.insert("x-ui".to_string(), Value::Object(ui_obj));
+        }
+
         let mut examples_array = if let Some(ref examples) = field_schema.examples {
             examples.as_array().cloned().unwrap_or_else(Vec::new)
         } else {
