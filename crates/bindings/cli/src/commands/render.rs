@@ -113,7 +113,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 
     // Create engine and workflow
     let engine = Quillmark::new();
-    let workflow = engine.workflow_from_quill(&quill)?;
+    let workflow = engine.workflow(&quill)?;
 
     if args.verbose {
         println!("Workflow created for backend: {}", workflow.backend_id());
