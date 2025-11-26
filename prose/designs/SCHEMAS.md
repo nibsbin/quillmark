@@ -40,8 +40,14 @@ Field properties:
 - type -> "str", "array", "dict", "date", "datetime", or "number": The value type of the field.
 - default -> any: The default value for the field. If defined, this makes the field optional (not required).
 - example -> any: An example value for the field (added to the examples array in the JSON schema).
-- section -> Option[str]: UI section grouping for organizing fields in wizard interfaces (e.g., "Author Info", "Document Settings").
-- tooltip -> Option[str]: Short help text displayed in UI tooltips/hints (distinct from verbose description).
+- ui -> Option[Table]: A table containing UI-specific metadata (see below).
+
+**UI Configuration (Nested `[ui]` table):**
+- group -> Option[str]: UI group/section name for organizing fields (e.g., "Personal Info").
+- component -> Option[str]: Recommended UI component (e.g., "text-input", "select", "textarea").
+- placeholder -> Option[str]: Placeholder text for inputs.
+- order -> Option[int]: Explicit ordering index for sorting fields in the UI.
+- *arbitrary keys* -> any: Any other keys in the `[ui]` table are preserved and passed to the schema.
 
 **Type Mapping (TOML to JSON Schema):**
 - "str" → "string"
@@ -57,12 +63,11 @@ Field properties:
 
 ### JSON Schema Custom Properties
 
-Field schemas support custom `x-*` properties for UI metadata that are included in the generated JSON schema:
+Field schemas support a custom `x-ui` property for UI metadata that is included in the generated JSON schema. This property contains the serialized content of the `[ui]` table from the TOML configuration.
 
-- `x-section`: Groups fields into collapsible UI sections (derived from `section` field property)
-- `x-tooltip`: Provides short help text for tooltips/hints (derived from `tooltip` field property)
+- `x-ui`: An object containing UI metadata (group, component, order, etc.)
 
-These properties follow the JSON Schema specification for custom extensions. Validation logic ignores these properties, but frontend UIs consume them for dynamic wizard generation.
+This property follows the JSON Schema specification for custom extensions. Validation logic ignores this property, but frontend UIs consume it for dynamic wizard generation.
 
 **Example**:
 ```json
@@ -73,8 +78,12 @@ These properties follow the JSON Schema specification for custom extensions. Val
       "type": "string",
       "description": "The full name of the document author...",
       "default": "Anonymous",
-      "x-section": "Author Info",
-      "x-tooltip": "Your full name"
+      "x-ui": {
+        "group": "Author Info",
+        "component": "text-input",
+        "placeholder": "e.g. John Doe",
+        "order": 1
+      }
     }
   }
 }

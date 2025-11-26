@@ -1,20 +1,19 @@
 # Quill Annotation Revamp - Phase 2 Plan
 
 **Status**: Design Phase
-**Goal**: Establish JSON Schema as the single source of truth for Quill field metadata that supports dynamic UI generation
-**Related**: [`prose/QUILL_ANNOTATION.md`](../QUILL_ANNOTATION.md), [`prose/designs/SCHEMAS.md`](../designs/SCHEMAS.md), [`prose/designs/QUILL.md`](../designs/QUILL.md)
+**Goal**: Establish JSON Schema as the single source of truth for Quill field metadata, including UI layout via `x-ui` properties.
+**Related**: [`prose/QUILL_ANNOTATION.md`](../QUILL_ANNOTATION.md), [`prose/designs/SCHEMAS.md`](../designs/SCHEMAS.md)
 
 ---
 
 ## Overview
 
-Phase 2 extends Quill metadata to enable dynamic wizard UIs in frontend applications by:
+Phase 2 extends Quill metadata to enable dynamic wizard UIs by embedding UI layout configuration directly into the JSON Schema using a custom `x-ui` property.
 
-1. **Adding field-level UI metadata** - Section grouping and tooltip help text
-2. **Maintaining JSON Schema as authoritative** - Single source of truth for validation and metadata
-3. **Enabling rich metadata exposure** - Custom properties flow naturally through existing WASM API
+1.  **Data Schema (JSON Schema)**: Authoritative source for validation, types, and data constraints.
+2.  **UI Layout (x-ui)**: A nested object within each field definition that specifies grouping, components, and ordering.
 
-This plan follows the architectural principle: **transform at construction, then rely on the schema**. TOML fields are parsed and immediately converted to JSON Schema with custom properties. The JSON Schema then serves as the authoritative source for validation, defaults extraction, and API exposure.
+This approach keeps all metadata co-located while providing a structured way to define UI behavior.
 
 ---
 
@@ -22,268 +21,157 @@ This plan follows the architectural principle: **transform at construction, then
 
 ### Metadata Flow Architecture
 
-**TOML → FieldSchema → JSON Schema (Authoritative)**
+**TOML → FieldSchema → JSON Schema**
 
-1. **Input**: `Quill.toml` with `[fields]` section
-   ```toml
-   [fields.author]
-   description = "Author of the document"
-   type = "str"
-   default = "Anonymous"
-   ```
+Currently, `Quill.toml` fields are parsed and converted into a single JSON Schema. This schema is used for everything: validation, defaults, and API exposure.
 
-2. **Parse**: `QuillConfig::from_toml()` creates `HashMap<String, FieldSchema>`
-   ```rust
-   pub struct FieldSchema {
-       pub name: String,
-       pub r#type: Option<String>,
-       pub description: String,
-       pub default: Option<QuillValue>,
-       pub example: Option<QuillValue>,
-       pub examples: Option<QuillValue>,
-   }
-   ```
-
-3. **Transform**: `build_schema_from_fields()` generates JSON Schema (single source of truth)
-   ```rust
-   // Location: crates/core/src/schema.rs:11-90
-   pub fn build_schema_from_fields(
-       field_schemas: &HashMap<String, FieldSchema>,
-   ) -> Result<QuillValue, RenderError>
-   ```
-
-4. **Store**: JSON Schema stored in `Quill.schema` as authoritative source
-   ```rust
-   pub struct Quill {
-       pub schema: QuillValue,  // Authoritative JSON Schema
-       pub defaults: HashMap<String, QuillValue>,  // Cached from schema
-       pub examples: HashMap<String, Vec<QuillValue>>,  // Cached from schema
-   }
-   ```
-
-5. **Use**: All downstream operations use the JSON Schema:
-   - **Validation**: `validate_document()` uses `jsonschema::Validator` on `schema`
-   - **Defaults**: `extract_defaults_from_schema()` reads from `schema.properties[field].default`
-   - **Examples**: `extract_examples_from_schema()` reads from `schema.properties[field].examples`
-   - **WASM API**: `QuillInfo.schema` exposes the complete JSON Schema
-
-**Key Insight**: `FieldSchema` is an input format (TOML representation). The JSON Schema is the actual data model used throughout the system. FieldSchema instances are discarded after schema generation.
-
-**Location**:
-- Schema generation: `crates/core/src/schema.rs:11-90`
-- Quill construction: `crates/core/src/quill.rs:671-782`
-- Extraction utilities: `crates/core/src/schema.rs:92-167`
-
-### UI Generation Gap
-
-**Problem**: Frontend wizard UIs need:
-- **Section grouping**: Organize fields into collapsible panels ("Author Info", "Document Settings")
-- **Tooltips**: Provide contextual help without cluttering the main UI
-
-**Current limitations**:
-- `FieldSchema.description` is verbose (used for full documentation)
-- No way to group related fields into UI sections
-- Frontend must hardcode UI organization logic
-
-**Example use case**: A resume template with 15 fields needs:
-- Section "Personal Info": name, email, phone
-- Section "Education": degree, university, graduation_date
-- Section "Experience": job_title, company, start_date, end_date
-- Section "Skills": skills_list, certifications
+**Gap**: The current architecture lacks a way to express UI-specific concerns like widgets, placeholders, and explicit ordering without polluting the validation schema with flat `x-*` properties.
 
 ---
 
 ## Desired State
 
-### 1. Extended FieldSchema (TOML Input)
+### 1. TOML Configuration (Input)
 
-**Add two new optional fields** to `FieldSchema`:
+We introduce a nested `[ui]` table within each field definition in `Quill.toml`.
 
-```rust
-pub struct FieldSchema {
-    pub name: String,
-    pub r#type: Option<String>,
-    pub description: String,
-    pub default: Option<QuillValue>,
-    pub example: Option<QuillValue>,
-    pub examples: Option<QuillValue>,
-    pub section: Option<String>,    // NEW: UI section grouping
-    pub tooltip: Option<String>,    // NEW: Short help text
-}
-```
-
-**TOML representation**:
+**`Quill.toml` Example**:
 ```toml
-[fields.author]
-description = "The full name of the document author. This will appear in the document header and metadata."
+[fields.full_name]
 type = "str"
-section = "Author Info"
-tooltip = "Your full name"
+[fields.full_name.ui]
+group = "Personal Info"
+component = "text-input"
+placeholder = "e.g. John Doe"
+order = 1
 
-[fields.email]
-description = "Contact email address for the author."
+[fields.flavor]
 type = "str"
-section = "Author Info"
-tooltip = "Your email address"
-
-[fields.title]
-description = "The main title of the document. This will be prominently displayed at the top."
-type = "str"
-section = "Document Settings"
-tooltip = "Document title"
+[fields.flavor.ui]
+group = "Preferences"
+component = "select"
+order = 2
 ```
 
-**Purpose**: `FieldSchema` is the TOML input format. New fields enable authors to specify UI metadata alongside field definitions.
+### 2. JSON Schema (Validation & Layout)
 
-### 2. JSON Schema with Custom Properties (Authoritative)
+The `build_schema_from_fields()` function generates a JSON Schema where each property includes an `x-ui` object.
 
-**Extend `build_schema_from_fields()`** to include `x-section` and `x-tooltip`:
-
-```rust
-// In build_schema_from_fields() at crates/core/src/schema.rs
-
-// After adding description (around line 48)
-property.insert(
-    "description".to_string(),
-    Value::String(field_schema.description.clone()),
-);
-
-// ADD: Include section if specified
-if let Some(ref section) = field_schema.section {
-    property.insert(
-        "x-section".to_string(),
-        Value::String(section.clone()),
-    );
-}
-
-// ADD: Include tooltip if specified
-if let Some(ref tooltip) = field_schema.tooltip {
-    property.insert(
-        "x-tooltip".to_string(),
-        Value::String(tooltip.clone()),
-    );
-}
-```
-
-**Generated JSON Schema**:
 ```json
 {
-  "$schema": "https://json-schema.org/draft/2019-09/schema",
   "type": "object",
   "properties": {
-    "author": {
+    "full_name": {
       "type": "string",
-      "description": "The full name of the document author...",
-      "default": "Anonymous",
-      "x-section": "Author Info",
-      "x-tooltip": "Your full name"
+      "x-ui": {
+        "group": "Personal Info",
+        "component": "text-input",
+        "placeholder": "e.g. John Doe",
+        "order": 1
+      }
     },
-    "email": {
+    "flavor": {
       "type": "string",
-      "description": "Contact email address for the author.",
-      "x-section": "Author Info",
-      "x-tooltip": "Your email address"
+      "x-ui": {
+        "group": "Preferences",
+        "component": "select",
+        "order": 2
+      }
     }
   }
 }
 ```
 
-**Rationale**:
-- JSON Schema standard supports custom `x-*` properties for extensions
-- Validators ignore unknown `x-*` properties (forward compatible)
-- Custom properties are part of the schema (not separate metadata)
-- Extraction utilities (`extract_defaults_from_schema()`, etc.) unaffected
+### 3. WASM API
 
-**Location**: `crates/core/src/schema.rs:11-90` (modify `build_schema_from_fields()`)
+The `QuillInfo` struct exposed to WASM remains unchanged, as the `schema` field already carries the complete JSON Schema including the `x-ui` extensions.
 
-### 3. WASM Metadata Access (No Changes)
-
-**No changes required** to `QuillInfo` structure:
-
-The `schema` field already exposes the complete JSON Schema including custom properties. Frontend consumers parse `x-section` and `x-tooltip` from the schema.
-
-**Frontend usage example**:
 ```typescript
-const quillInfo = engine.getQuillInfo('resume');
-const schema = quillInfo.schema;
-
-// Extract fields with sections
-const fieldsBySection = {};
-for (const [fieldName, fieldSchema] of Object.entries(schema.properties)) {
-  const section = fieldSchema['x-section'] || 'General';
-  const tooltip = fieldSchema['x-tooltip'] || fieldSchema.description;
-
-  if (!fieldsBySection[section]) {
-    fieldsBySection[section] = [];
-  }
-
-  fieldsBySection[section].push({
-    name: fieldName,
-    type: fieldSchema.type,
-    description: fieldSchema.description,
-    tooltip: tooltip,
-    default: fieldSchema.default,
-  });
-}
-
-// Render wizard UI with sections
-for (const [section, fields] of Object.entries(fieldsBySection)) {
-  renderSection(section, fields);  // Collapsible panel with tooltips
+interface QuillInfo {
+  id: string;
+  // ...
+  schema: JsonSchema; // Includes x-ui properties
 }
 ```
-
-**Benefits**:
-- Zero API surface changes (backward compatible)
-- Frontend has full control over UI rendering
-- Metadata flows naturally through existing schema mechanism
-- JSON Schema remains single source of truth
 
 ---
 
-## Architecture Decision: JSON Schema as Single Source of Truth
+## Implementation Plan
 
-**Decision**: Keep JSON Schema as the authoritative source for all field metadata
+### Step 1: Update Config Structures
 
-**Flow**:
+Modify `FieldSchema` to accept the optional `ui` table.
+
+```rust
+// crates/core/src/quill.rs
+
+#[derive(Deserialize)]
+pub struct FieldSchema {
+    // ... existing fields
+    pub ui: Option<UiSchema>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct UiSchema {
+    pub group: Option<String>,
+    pub component: Option<String>,
+    pub placeholder: Option<String>,
+    pub order: Option<i32>,
+    #[serde(flatten)]
+    pub extra: HashMap<String, QuillValue>, // Allow arbitrary other UI props
+}
 ```
-TOML [fields]
-  ↓ parse
-FieldSchema (temporary)
-  ↓ transform
-JSON Schema (authoritative)
-  ↓ extract
-Defaults, Examples (cached)
-  ↓ expose
-WASM QuillInfo.schema
+
+### Step 2: Update JSON Schema Generation
+
+Modify `build_schema_from_fields()` to inject the `x-ui` object into the generated schema.
+
+```rust
+// crates/core/src/schema.rs
+
+// Inside the loop for each field:
+if let Some(ref ui) = field_schema.ui {
+    property.insert(
+        "x-ui".to_string(),
+        serde_json::to_value(ui).unwrap(),
+    );
+}
 ```
 
-**Why JSON Schema is Authoritative**:
+### Step 3: Frontend Integration
 
-1. **Validation uses JSON Schema**
-   - `validate_document()` compiles `schema` with `jsonschema::Validator`
-   - All validation logic operates on the JSON Schema, not FieldSchema
+The frontend consumes the `schema` and parses the `x-ui` property to render the form.
 
-2. **Caching extracts from JSON Schema**
-   - `extract_defaults_from_schema()` reads `schema.properties[field].default`
-   - `extract_examples_from_schema()` reads `schema.properties[field].examples`
-   - Cached values (`Quill.defaults`, `Quill.examples`) are derived from schema
+```javascript
+// Example logic
+const fields = Object.entries(schema.properties).map(([key, prop]) => ({
+  key,
+  ...prop,
+  ui: prop['x-ui'] || {}
+}));
 
-3. **API exposes JSON Schema**
-   - WASM `QuillInfo.schema` serializes the JSON Schema
-   - Python bindings expose schema (not FieldSchema)
-   - Frontend consumers never see FieldSchema
+// Sort by order
+fields.sort((a, b) => (a.ui.order || 999) - (b.ui.order || 999));
 
-4. **FieldSchema is ephemeral**
-   - Only exists during `Quill::from_config()` construction
-   - Discarded after `build_schema_from_fields()` completes
-   - Not stored in `Quill` struct
+// Group by 'group'
+const groups = groupBy(fields, f => f.ui.group || 'General');
+```
 
-**Implications for Phase 2**:
+---
 
-- **Source of input**: TOML `[fields]` (parsed to `FieldSchema`)
-- **Transformation point**: `build_schema_from_fields()` (add `x-*` properties)
-- **Authoritative storage**: `Quill.schema` (JSON Schema with custom properties)
-- **API exposure**: `QuillInfo.schema` (no changes needed)
+## Architecture Decision: Embedded x-ui Object
+
+**Decision**: Embed UI metadata in `x-ui` property within JSON Schema.
+
+**Rationale**:
+1.  **Co-location**: Keeps validation and UI logic for a field together.
+2.  **Simplicity**: Single artifact (JSON Schema) to pass around.
+3.  **Flexibility**: The `x-ui` object can contain any UI-specific metadata without cluttering the root of the field definition.
+
+**Implications**:
+- `FieldSchema` gets a `ui` field.
+- `build_schema_from_fields` serializes `ui` to `x-ui`.
+- No changes to WASM API surface.
 
 **Benefits**:
 - Single source of truth (JSON Schema)
