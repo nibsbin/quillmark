@@ -294,7 +294,11 @@ impl Quillmark {
     /// List registered Quill names
     #[wasm_bindgen(js_name = listQuills)]
     pub fn list_quills(&self) -> Vec<String> {
-        self.inner.registered_quills().iter().map(|s| s.to_string()).collect()
+        self.inner
+            .registered_quills()
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
     }
 
     /// Unregister a Quill (free memory)

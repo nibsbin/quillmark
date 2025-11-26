@@ -55,9 +55,7 @@ pub fn demo(
     let parsed = quillmark::ParsedDocument::from_markdown(&markdown)?;
 
     let engine = quillmark::Quillmark::new();
-    let workflow = engine
-        .workflow(&quill)
-        .expect("Failed to load workflow");
+    let workflow = engine.workflow(&quill).expect("Failed to load workflow");
 
     // process glue
     let glued = workflow.process_glue(&parsed)?;

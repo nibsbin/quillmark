@@ -532,7 +532,10 @@ impl Quillmark {
     ///     println!("Metadata: {:?}", metadata);
     /// }
     /// ```
-    pub fn get_quill_metadata(&self, name: &str) -> Option<&HashMap<String, quillmark_core::value::QuillValue>> {
+    pub fn get_quill_metadata(
+        &self,
+        name: &str,
+    ) -> Option<&HashMap<String, quillmark_core::value::QuillValue>> {
         self.quills.get(name).map(|quill| &quill.metadata)
     }
 

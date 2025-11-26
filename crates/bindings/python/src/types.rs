@@ -65,7 +65,7 @@ impl PyQuillmark {
         }
 
         Err(pyo3::exceptions::PyTypeError::new_err(
-            "workflow() expects a string (quill name), Quill object, or ParsedDocument"
+            "workflow() expects a string (quill name), Quill object, or ParsedDocument",
         ))
     }
 

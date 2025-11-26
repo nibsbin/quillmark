@@ -96,9 +96,7 @@ fn test_workflow_from_quill() {
     let engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 
-    let workflow = engine
-        .workflow(&quill)
-        .expect("Failed to load workflow");
+    let workflow = engine.workflow(&quill).expect("Failed to load workflow");
 
     assert_eq!(workflow.quill_name(), "test-quill");
 }

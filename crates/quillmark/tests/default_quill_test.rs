@@ -101,9 +101,7 @@ Content here.
         .expect("Failed to register quill");
 
     // Should use custom quill, not default
-    let workflow = engine
-        .workflow(&parsed)
-        .expect("Failed to load workflow");
+    let workflow = engine.workflow(&parsed).expect("Failed to load workflow");
 
     assert_eq!(workflow.quill_name(), "custom_quill");
 }
@@ -150,9 +148,7 @@ This is a **test** document with _formatting_.
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
     let engine = Quillmark::new();
-    let workflow = engine
-        .workflow(&parsed)
-        .expect("Failed to load workflow");
+    let workflow = engine.workflow(&parsed).expect("Failed to load workflow");
 
     // Should successfully render with default Quill
     let result = workflow

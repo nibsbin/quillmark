@@ -240,9 +240,7 @@ fn test_quill_engine_load_with_quill_object() {
         .expect("Failed to register quill");
 
     // Load workflow by passing Quill object directly
-    let workflow = engine
-        .workflow(&quill)
-        .expect("Failed to load workflow");
+    let workflow = engine.workflow(&quill).expect("Failed to load workflow");
 
     // Verify workflow properties
     assert_eq!(workflow.quill_name(), "my-test-quill");
