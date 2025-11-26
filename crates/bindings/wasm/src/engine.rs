@@ -183,12 +183,9 @@ impl Quillmark {
             WasmError::from(format!("Failed to parse markdown: {}", e)).to_js_value()
         })?;
 
-        let workflow = self
-            .inner
-            .workflow(quill_name)
-            .map_err(|e| {
-                WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
-            })?;
+        let workflow = self.inner.workflow(quill_name).map_err(|e| {
+            WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
+        })?;
 
         workflow
             .process_glue(&parsed)
@@ -234,13 +231,9 @@ impl Quillmark {
         let parsed = quillmark_core::ParsedDocument::with_quill_tag(fields, quill_tag);
 
         // Load the workflow
-        let mut workflow = self
-            .inner
-            .workflow(&quill_name_to_use)
-            .map_err(|e| {
-                WasmError::from(format!("Quill '{}' not found: {}", quill_name_to_use, e))
-                    .to_js_value()
-            })?;
+        let mut workflow = self.inner.workflow(&quill_name_to_use).map_err(|e| {
+            WasmError::from(format!("Quill '{}' not found: {}", quill_name_to_use, e)).to_js_value()
+        })?;
 
         // Add assets if provided
         if let Some(assets_json) = opts.assets {
