@@ -33,7 +33,7 @@ This is a test document.
 parsed = ParsedDocument.from_markdown(markdown)
 
 # Create workflow and render
-workflow = engine.workflow_from_parsed(parsed)  # Infers quill from QUILL tag
+workflow = engine.workflow(parsed)  # Infers quill from QUILL tag
 result = workflow.render(parsed, OutputFormat.PDF)
 
 # Save output
@@ -63,8 +63,8 @@ engine.registered_backends()  # ['typst']
 engine.registered_quills()    # ['my_quill']
 
 # Create workflows
-workflow = engine.workflow_from_parsed(parsed)     # Infer from QUILL tag
-workflow = engine.workflow_from_quill_name("name") # By name
+workflow = engine.workflow(parsed)     # Infer from QUILL tag
+workflow = engine.workflow("name") # By name
 workflow = engine.workflow_from_quill(quill)       # By object
 ```
 
@@ -103,7 +103,7 @@ parsed.fields           # All frontmatter fields (dict)
 Sealed workflow for rendering.
 
 ```python
-workflow = engine.workflow_from_quill_name("my_quill")
+workflow = engine.workflow("my_quill")
 
 # Render
 result = workflow.render(parsed, OutputFormat.PDF)

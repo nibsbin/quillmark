@@ -6,7 +6,7 @@
 
 - [ ] **Refactor Orchestration**: Split `crates/quillmark/orchestration.rs` into a cleaner file structure for better maintainability.
 - [ ] **Consolidate Workflow Creation**:
-    - Deprecate/Remove `workflow_from_quill_name` and `workflow_from_parsed`.
+    - Deprecate/Remove `workflow` and `workflow`.
     - Standardize on a single entry point, e.g., `new_workflow()` (wrapping logic from `workflow_from_quill`).
 - [ ] **Centralize Registry**:
     - Ensure WASM bindings do not maintain a duplicate map of registered Quills.

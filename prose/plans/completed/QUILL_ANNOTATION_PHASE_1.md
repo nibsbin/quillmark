@@ -26,8 +26,8 @@ The `Quillmark` engine currently provides three workflow creation methods:
 
 ```
 workflow_from_quill(QuillRef)      // Canonical implementation
-workflow_from_quill_name(&str)     // Thin wrapper → workflow_from_quill
-workflow_from_parsed(ParsedDocument) // Thin wrapper → workflow_from_quill_name
+workflow(&str)     // Thin wrapper → workflow_from_quill
+workflow(ParsedDocument) // Thin wrapper → workflow
 ```
 
 **Problem**: Multiple entry points create confusion about which method to use. The thin wrappers provide minimal value but increase API surface area and maintenance burden.
@@ -127,8 +127,8 @@ QuillRef::Parsed(&ParsedDocument)  // NEW
 ### Step 2: Deprecate Wrapper Methods
 
 **Mark deprecated**:
-- `workflow_from_quill_name()`
-- `workflow_from_parsed()`
+- `workflow()`
+- `workflow()`
 
 **Update** all internal callers to use `workflow_from_quill()`
 
@@ -230,8 +230,8 @@ Phase 1 implementation follows this sequence:
   - Update `workflow_from_quill()` match logic
 
 - [ ] **Step 2**: Deprecate wrapper methods
-  - Add `#[deprecated]` to `workflow_from_quill_name()`
-  - Add `#[deprecated]` to `workflow_from_parsed()`
+  - Add `#[deprecated]` to `workflow()`
+  - Add `#[deprecated]` to `workflow()`
   - Update internal callers to use `workflow_from_quill()`
 
 - [ ] **Step 3**: Add core engine query methods

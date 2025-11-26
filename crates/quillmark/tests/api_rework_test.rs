@@ -74,7 +74,7 @@ fn test_workflow_from_quill_name() {
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("test-quill")
+        .workflow("test-quill")
         .expect("Failed to load workflow");
 
     assert_eq!(workflow.quill_name(), "test-quill");
@@ -138,7 +138,7 @@ This is the content.
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("test-quill")
+        .workflow("test-quill")
         .expect("Failed to load workflow");
 
     let result = workflow
@@ -178,7 +178,7 @@ Some content
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("test-quill")
+        .workflow("test-quill")
         .expect("Failed to load workflow");
 
     let glue = workflow

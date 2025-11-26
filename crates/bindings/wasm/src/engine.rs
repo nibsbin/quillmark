@@ -118,7 +118,7 @@ impl Quillmark {
         let backend_id = &quill.backend;
 
         // Create workflow to get supported formats
-        let workflow = self.inner.workflow_from_quill_name(name).map_err(|e| {
+        let workflow = self.inner.workflow(name).map_err(|e| {
             WasmError::from(format!(
                 "Failed to create workflow for quill '{}': {}",
                 name, e

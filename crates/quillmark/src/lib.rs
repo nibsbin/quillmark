@@ -36,7 +36,7 @@
 //! let parsed = ParsedDocument::from_markdown(markdown).unwrap();
 //!
 //! // Create a workflow and render
-//! let workflow = engine.workflow_from_quill("my-quill").unwrap();
+//! let workflow = engine.workflow("my-quill").unwrap();
 //! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //!
 //! // Access the rendered artifacts

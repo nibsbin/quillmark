@@ -42,7 +42,7 @@ Get started with Quillmark in your preferred language.
     parsed = ParsedDocument.from_markdown(markdown)
 
     # Create workflow and render
-    workflow = engine.workflow_from_quill_name("quill_name")
+    workflow = engine.workflow("quill_name")
     result = workflow.render(parsed, OutputFormat.PDF)
 
     # Access the generated PDF
@@ -95,7 +95,7 @@ Get started with Quillmark in your preferred language.
         let parsed = ParsedDocument::from_markdown(markdown)?;
 
         // Create workflow and render
-        let workflow = engine.workflow_from_quill_name("quill_name")?;
+        let workflow = engine.workflow("quill_name")?;
         let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
 
         // Access the generated PDF
@@ -158,7 +158,7 @@ description = "My template"
     const parsed = ParsedDocument.from_markdown(markdown);
 
     // Create workflow and render
-    const workflow = engine.workflow_from_quill_name("my-quill");
+    const workflow = engine.workflow("my-quill");
     const result = workflow.render(parsed, OutputFormat.PDF);
 
     // Access the generated PDF

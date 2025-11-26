@@ -82,7 +82,7 @@ def test_workflow_from_parsed_with_quill_tag(taro_quill_dir, taro_md):
     assert parsed.quill_tag() == quill.name
     
     # Create workflow from parsed document
-    workflow = engine.workflow_from_parsed(parsed)
+    workflow = engine.workflow(parsed)
     assert workflow.quill_name == quill.name
     assert workflow.backend_id == quill.backend
 
@@ -138,13 +138,13 @@ This is a test.
     
     # Step 4: Create workflow (can be inferred from ParsedDocument or explicit)
     # Option 1: Infer from ParsedDocument.quill_tag
-    workflow = engine.workflow_from_parsed(parsed)
+    workflow = engine.workflow(parsed)
     
     # Option 2: Explicit by name
-    # workflow = engine.workflow_from_quill_name("taro")
+    # workflow = engine.workflow("taro")
     
     # Option 3: Explicit by Quill object
-    # workflow = engine.workflow_from_quill(quill)
+    # workflow = engine.workflow(quill)
     
     # Verify workflow properties
     assert workflow.quill_name == "taro"
@@ -173,7 +173,7 @@ def test_render_without_quill_tag(taro_quill_dir, taro_md):
     parsed = ParsedDocument.from_markdown(taro_md)
     
     # Create workflow explicitly by name
-    workflow = engine.workflow_from_quill_name(quill.name)
+    workflow = engine.workflow(quill.name)
     
     # Render should work
     result = workflow.render(parsed, OutputFormat.PDF)

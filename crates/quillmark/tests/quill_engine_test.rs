@@ -103,7 +103,7 @@ fn test_quill_engine_get_workflow() {
 
     // Load workflow by quill name using new load() method
     let workflow = engine
-        .workflow_from_quill_name("my-test-quill")
+        .workflow("my-test-quill")
         .expect("Failed to load workflow");
 
     // Verify workflow properties
@@ -117,7 +117,7 @@ fn test_quill_engine_workflow_not_found() {
     let engine = Quillmark::new();
 
     // Try to load workflow for non-existent quill
-    let result = engine.workflow_from_quill_name("non-existent");
+    let result = engine.workflow("non-existent");
 
     assert!(result.is_err());
     match result {
@@ -190,7 +190,7 @@ _By {{ author | String(default="Unknown") }}_
 
     // Load workflow and render
     let workflow = engine
-        .workflow_from_quill_name("my-test-quill")
+        .workflow("my-test-quill")
         .expect("Failed to load workflow");
 
     let markdown = r#"---
@@ -277,14 +277,14 @@ fn test_quill_engine_load_with_different_string_types() {
 
     // Test with &str
     let workflow1 = engine
-        .workflow_from_quill_name("my-test-quill")
+        .workflow("my-test-quill")
         .expect("Failed to load with &str");
     assert_eq!(workflow1.quill_name(), "my-test-quill");
 
     // Test with &String
     let quill_name = String::from("my-test-quill");
     let workflow2 = engine
-        .workflow_from_quill_name(&quill_name)
+        .workflow(&quill_name)
         .expect("Failed to load with &String");
     assert_eq!(workflow2.quill_name(), "my-test-quill");
 }

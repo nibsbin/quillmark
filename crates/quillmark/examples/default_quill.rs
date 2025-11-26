@@ -50,7 +50,7 @@ The default Quill supports:
 
     // Build workflow from parsed document - will use __default__ quill
     let workflow = engine
-        .workflow_from_parsed(&parsed)
+        .workflow(&parsed)
         .expect("Failed to create workflow");
 
     println!("Using quill: {}", workflow.quill_name());

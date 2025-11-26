@@ -144,7 +144,7 @@ fn test_workflow_with_custom_backend() {
 
     // Load workflow using the custom backend
     let workflow = engine
-        .workflow_from_quill_name("custom-backend-quill")
+        .workflow("custom-backend-quill")
         .expect("Failed to load workflow");
 
     // Verify workflow properties

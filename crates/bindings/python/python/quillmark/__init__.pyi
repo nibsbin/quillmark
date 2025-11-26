@@ -56,21 +56,17 @@ class Quillmark:
     def register_quill(self, quill: Quill) -> None:  # raises QuillmarkError on validation failure
         """Register a quill template with the engine."""
     
-    def workflow_from_quill_name(self, name: str) -> Workflow:
-        """Load workflow by quill name (must be registered).
-        
+    def workflow(self, quill_ref: str | Quill | ParsedDocument) -> Workflow:
+        """Load a workflow from a quill reference.
+
+        Accepts:
+            - str: Quill name (must be registered)
+            - Quill: Quill object (doesn't need to be registered)
+            - ParsedDocument: Parsed document (extracts QUILL field)
+
         Raises:
             QuillmarkError: If quill is not registered or backend unavailable
-        """
-    
-    def workflow_from_quill(self, quill: Quill) -> Workflow:
-        """Load workflow from quill object (doesn't need to be registered)."""
-    
-    def workflow_from_parsed(self, parsed: ParsedDocument) -> Workflow:
-        """Load workflow from parsed document with QUILL field.
-        
-        Raises:
-            QuillmarkError: If document lacks QUILL field
+            TypeError: If quill_ref is not one of the accepted types
         """
     
     def registered_backends(self) -> list[str]:

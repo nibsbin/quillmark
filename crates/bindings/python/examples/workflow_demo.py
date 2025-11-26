@@ -80,11 +80,11 @@ The secret of getting ahead is getting started... with taro ice cream.
     print("Step 4: Creating Workflow...")
     
     # Option 1: Infer from ParsedDocument.quill_tag (recommended)
-    workflow = engine.workflow_from_parsed(parsed)
+    workflow = engine.workflow(parsed)
     
     # Alternative options:
-    # workflow = engine.workflow_from_quill_name("taro")
-    # workflow = engine.workflow_from_quill(quill)
+    # workflow = engine.workflow("taro")
+    # workflow = engine.workflow(quill)
 
     # Get supported formats - consumer can use this to configure render options
     supported_formats = workflow.supported_formats

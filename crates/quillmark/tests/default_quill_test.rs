@@ -58,7 +58,7 @@ This is a test document without a QUILL tag.
 
     // Should successfully load workflow using __default__
     let workflow = engine
-        .workflow_from_parsed(&parsed)
+        .workflow(&parsed)
         .expect("Failed to load workflow with default Quill");
 
     assert_eq!(workflow.quill_name(), "__default__");
@@ -102,7 +102,7 @@ Content here.
 
     // Should use custom quill, not default
     let workflow = engine
-        .workflow_from_parsed(&parsed)
+        .workflow(&parsed)
         .expect("Failed to load workflow");
 
     assert_eq!(workflow.quill_name(), "custom_quill");
@@ -151,7 +151,7 @@ This is a **test** document with _formatting_.
 
     let engine = Quillmark::new();
     let workflow = engine
-        .workflow_from_parsed(&parsed)
+        .workflow(&parsed)
         .expect("Failed to load workflow");
 
     // Should successfully render with default Quill
@@ -168,7 +168,7 @@ This is a **test** document with _formatting_.
 fn test_default_quill_properties() {
     let engine = Quillmark::new();
     let workflow = engine
-        .workflow_from_quill_name("__default__")
+        .workflow("__default__")
         .expect("Failed to load default workflow");
 
     assert_eq!(workflow.quill_name(), "__default__");
@@ -234,7 +234,7 @@ fn test_second_backend_with_default_quill_does_not_override() {
 
     // Typst backend already registered __default__
     let workflow_before = engine
-        .workflow_from_quill_name("__default__")
+        .workflow("__default__")
         .expect("Failed to load default workflow");
     assert_eq!(workflow_before.backend_id(), "typst");
 
@@ -243,7 +243,7 @@ fn test_second_backend_with_default_quill_does_not_override() {
 
     // __default__ should still point to Typst backend's default
     let workflow_after = engine
-        .workflow_from_quill_name("__default__")
+        .workflow("__default__")
         .expect("Failed to load default workflow after second backend");
     assert_eq!(
         workflow_after.backend_id(),

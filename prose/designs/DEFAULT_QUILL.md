@@ -59,7 +59,7 @@ The `Quillmark::register_backend()` method is enhanced to:
 
 ### Workflow Loading Enhancement
 
-The `Quillmark::workflow_from_parsed()` method loads workflows from a ParsedDocument:
+The `Quillmark::workflow()` method loads workflows from a ParsedDocument:
 
 1. The parsed document always has a quill_tag (either from QUILL: directive or `__default__`)
 2. The workflow is loaded using the quill_tag directly

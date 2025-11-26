@@ -60,7 +60,7 @@ fn test_auto_glue_without_glue_file() {
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("auto-quill")
+        .workflow("auto-quill")
         .expect("Failed to load workflow");
 
     assert_eq!(workflow.quill_name(), "auto-quill");
@@ -102,7 +102,7 @@ This is a test document.
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("auto-quill")
+        .workflow("auto-quill")
         .expect("Failed to load workflow");
 
     let glue_output = workflow
@@ -155,7 +155,7 @@ Content here.
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow_from_quill_name("auto-quill")
+        .workflow("auto-quill")
         .expect("Failed to load workflow");
 
     let glue_output = workflow
