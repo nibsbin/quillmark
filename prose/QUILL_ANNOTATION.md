@@ -16,16 +16,19 @@
 
 **Goal**: Establish a single source of truth for Quill configuration that supports dynamic UI generation (Sections, Tooltips), while keeping validation robust.
 
+**Detailed Plan**: [`prose/plans/QUILL_ANNOTATION_PHASE_2.md`](plans/QUILL_ANNOTATION_PHASE_2.md)
+
 - [ ] **Architecture Decision**: **DECIDED**: Keep `jsonschema` as internal implementation detail.
     - *Source of Truth*: QuillConfig TOML fields (Rust structs) are authoritative.
     - *Validation*: Generate/use `jsonschema` internally for validation logic, but do not expose it in the API for consumers.
 - [ ] **Schema Definition**:
-    - Add `Section` field to Quill definition.
-    - Add `Tooltip` field to Quill definition.
-    - Ensure these fields are serializable/accessible for the API.
-    - *Note*: Do not store/expose the raw `jsonschema` in the `Quill` struct unless needed for internal caching.
+    - Add `section: Option<String>` field to `FieldSchema` struct (field-level UI grouping).
+    - Add `tooltip: Option<String>` field to `FieldSchema` struct (short help text).
+    - Extend JSON Schema generation to include `x-section` and `x-tooltip` custom properties.
+    - Ensure fields are serializable and accessible via WASM `QuillInfo.schema`.
 - [ ] **Validation**:
-    - Ensure validation logic uses the internal `jsonschema` derived from the authoritative TOML fields.
+    - Ensure validation logic uses the internal `jsonschema` derived from TOML fields.
+    - Verify validators ignore custom `x-*` properties (forward compatible).
 
 ## Phase 3: WASM API & UI Integration
 

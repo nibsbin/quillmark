@@ -40,6 +40,8 @@ Field properties:
 - type -> "str", "array", "dict", "date", "datetime", or "number": The value type of the field.
 - default -> any: The default value for the field. If defined, this makes the field optional (not required).
 - example -> any: An example value for the field (added to the examples array in the JSON schema).
+- section -> Option[str]: UI section grouping for organizing fields in wizard interfaces (e.g., "Author Info", "Document Settings").
+- tooltip -> Option[str]: Short help text displayed in UI tooltips/hints (distinct from verbose description).
 
 **Type Mapping (TOML to JSON Schema):**
 - "str" → "string"
@@ -52,3 +54,28 @@ Field properties:
 **Required Field Logic:**
 - If a field has a `default` value: field is optional
 - If a field has no `default` value: field is required
+
+### JSON Schema Custom Properties
+
+Field schemas support custom `x-*` properties for UI metadata that are included in the generated JSON schema:
+
+- `x-section`: Groups fields into collapsible UI sections (derived from `section` field property)
+- `x-tooltip`: Provides short help text for tooltips/hints (derived from `tooltip` field property)
+
+These properties follow the JSON Schema specification for custom extensions. Validation logic ignores these properties, but frontend UIs consume them for dynamic wizard generation.
+
+**Example**:
+```json
+{
+  "type": "object",
+  "properties": {
+    "author": {
+      "type": "string",
+      "description": "The full name of the document author...",
+      "default": "Anonymous",
+      "x-section": "Author Info",
+      "x-tooltip": "Your full name"
+    }
+  }
+}
+```
