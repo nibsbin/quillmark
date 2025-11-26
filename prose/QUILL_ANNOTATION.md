@@ -14,21 +14,22 @@
 
 ## Phase 2: Metadata Schema Strategy
 
-**Goal**: Establish a single source of truth for Quill configuration that supports dynamic UI generation (Sections, Tooltips), while keeping validation robust.
+**Goal**: Establish JSON Schema as the single source of truth for Quill field metadata that supports dynamic UI generation (Sections, Tooltips).
 
 **Detailed Plan**: [`prose/plans/QUILL_ANNOTATION_PHASE_2.md`](plans/QUILL_ANNOTATION_PHASE_2.md)
 
-- [ ] **Architecture Decision**: **DECIDED**: Keep `jsonschema` as internal implementation detail.
-    - *Source of Truth*: QuillConfig TOML fields (Rust structs) are authoritative.
-    - *Validation*: Generate/use `jsonschema` internally for validation logic, but do not expose it in the API for consumers.
+- [ ] **Architecture Decision**: **DECIDED**: JSON Schema is the authoritative source.
+    - *Input Format*: TOML `[fields]` parsed to `FieldSchema` (ephemeral, discarded after construction).
+    - *Transformation*: `build_schema_from_fields()` converts FieldSchema to JSON Schema with custom `x-*` properties.
+    - *Single Source of Truth*: JSON Schema stored in `Quill.schema` is used for validation, caching, and API exposure.
 - [ ] **Schema Definition**:
-    - Add `section: Option<String>` field to `FieldSchema` struct (field-level UI grouping).
-    - Add `tooltip: Option<String>` field to `FieldSchema` struct (short help text).
-    - Extend JSON Schema generation to include `x-section` and `x-tooltip` custom properties.
-    - Ensure fields are serializable and accessible via WASM `QuillInfo.schema`.
+    - Add `section: Option<String>` field to `FieldSchema` struct (TOML input format).
+    - Add `tooltip: Option<String>` field to `FieldSchema` struct (TOML input format).
+    - Extend `build_schema_from_fields()` to include `x-section` and `x-tooltip` in generated JSON Schema.
+    - WASM `QuillInfo.schema` automatically exposes these custom properties (no API changes).
 - [ ] **Validation**:
-    - Ensure validation logic uses the internal `jsonschema` derived from TOML fields.
-    - Verify validators ignore custom `x-*` properties (forward compatible).
+    - Validation uses `jsonschema::Validator` on the authoritative `Quill.schema`.
+    - Verify validators ignore custom `x-*` properties per JSON Schema spec (forward compatible).
 
 ## Phase 3: WASM API & UI Integration
 

@@ -1,7 +1,7 @@
 # Quill Annotation Revamp - Phase 2 Plan
 
 **Status**: Design Phase
-**Goal**: Establish a single source of truth for Quill configuration that supports dynamic UI generation
+**Goal**: Establish JSON Schema as the single source of truth for Quill field metadata that supports dynamic UI generation
 **Related**: [`prose/QUILL_ANNOTATION.md`](../QUILL_ANNOTATION.md), [`prose/designs/SCHEMAS.md`](../designs/SCHEMAS.md), [`prose/designs/QUILL.md`](../designs/QUILL.md)
 
 ---
@@ -11,10 +11,10 @@
 Phase 2 extends Quill metadata to enable dynamic wizard UIs in frontend applications by:
 
 1. **Adding field-level UI metadata** - Section grouping and tooltip help text
-2. **Maintaining jsonschema as internal** - Keep implementation details private
-3. **Enabling rich metadata exposure** - Serializable fields for WASM/Python consumers
+2. **Maintaining JSON Schema as authoritative** - Single source of truth for validation and metadata
+3. **Enabling rich metadata exposure** - Custom properties flow naturally through existing WASM API
 
-This plan follows the architectural principle: **extend the schema at the source, not at the API boundary**. By adding metadata fields to `FieldSchema` (the TOML representation), they automatically flow through the entire system—internal validation, JSON schema generation, and WASM/Python bindings—without requiring API-specific transformations.
+This plan follows the architectural principle: **transform at construction, then rely on the schema**. TOML fields are parsed and immediately converted to JSON Schema with custom properties. The JSON Schema then serves as the authoritative source for validation, defaults extraction, and API exposure.
 
 ---
 
@@ -22,9 +22,9 @@ This plan follows the architectural principle: **extend the schema at the source
 
 ### Metadata Flow Architecture
 
-**TOML → Rust → JSON Schema → WASM**
+**TOML → FieldSchema → JSON Schema (Authoritative)**
 
-1. **Source**: `Quill.toml` with `[fields]` section
+1. **Input**: `Quill.toml` with `[fields]` section
    ```toml
    [fields.author]
    description = "Author of the document"
@@ -32,7 +32,7 @@ This plan follows the architectural principle: **extend the schema at the source
    default = "Anonymous"
    ```
 
-2. **Parse**: `QuillConfig` struct with `fields: HashMap<String, FieldSchema>`
+2. **Parse**: `QuillConfig::from_toml()` creates `HashMap<String, FieldSchema>`
    ```rust
    pub struct FieldSchema {
        pub name: String,
@@ -44,25 +44,35 @@ This plan follows the architectural principle: **extend the schema at the source
    }
    ```
 
-3. **Transform**: Generate JSON schema from `FieldSchema` (in `Quill::from_config()`)
+3. **Transform**: `build_schema_from_fields()` generates JSON Schema (single source of truth)
+   ```rust
+   // Location: crates/core/src/schema.rs:11-90
+   pub fn build_schema_from_fields(
+       field_schemas: &HashMap<String, FieldSchema>,
+   ) -> Result<QuillValue, RenderError>
+   ```
+
+4. **Store**: JSON Schema stored in `Quill.schema` as authoritative source
    ```rust
    pub struct Quill {
-       pub schema: QuillValue,  // Generated JSON schema
-       pub defaults: HashMap<String, QuillValue>,  // Extracted from schema
-       pub examples: HashMap<String, Vec<QuillValue>>,  // Extracted from schema
+       pub schema: QuillValue,  // Authoritative JSON Schema
+       pub defaults: HashMap<String, QuillValue>,  // Cached from schema
+       pub examples: HashMap<String, Vec<QuillValue>>,  // Cached from schema
    }
    ```
 
-4. **Expose**: WASM `QuillInfo` serializes `schema`, `defaults`, `examples`
-   ```rust
-   pub struct QuillInfo {
-       pub schema: serde_json::Value,
-       pub defaults: serde_json::Value,
-       pub examples: serde_json::Value,
-   }
-   ```
+5. **Use**: All downstream operations use the JSON Schema:
+   - **Validation**: `validate_document()` uses `jsonschema::Validator` on `schema`
+   - **Defaults**: `extract_defaults_from_schema()` reads from `schema.properties[field].default`
+   - **Examples**: `extract_examples_from_schema()` reads from `schema.properties[field].examples`
+   - **WASM API**: `QuillInfo.schema` exposes the complete JSON Schema
 
-**Location**: `crates/core/src/quill.rs:12-24` (FieldSchema), `crates/core/src/quill.rs:384-403` (Quill), `crates/bindings/wasm/src/types.rs:148-166` (QuillInfo)
+**Key Insight**: `FieldSchema` is an input format (TOML representation). The JSON Schema is the actual data model used throughout the system. FieldSchema instances are discarded after schema generation.
+
+**Location**:
+- Schema generation: `crates/core/src/schema.rs:11-90`
+- Quill construction: `crates/core/src/quill.rs:671-782`
+- Extraction utilities: `crates/core/src/schema.rs:92-167`
 
 ### UI Generation Gap
 
@@ -71,7 +81,7 @@ This plan follows the architectural principle: **extend the schema at the source
 - **Tooltips**: Provide contextual help without cluttering the main UI
 
 **Current limitations**:
-- `FieldSchema.description` is human-readable but too verbose for tooltips
+- `FieldSchema.description` is verbose (used for full documentation)
 - No way to group related fields into UI sections
 - Frontend must hardcode UI organization logic
 
@@ -85,7 +95,7 @@ This plan follows the architectural principle: **extend the schema at the source
 
 ## Desired State
 
-### 1. Extended FieldSchema
+### 1. Extended FieldSchema (TOML Input)
 
 **Add two new optional fields** to `FieldSchema`:
 
@@ -123,17 +133,42 @@ section = "Document Settings"
 tooltip = "Document title"
 ```
 
-**Benefits**:
-- **Single source of truth**: TOML fields define all UI metadata
-- **DRY principle**: Section/tooltip propagate automatically to JSON schema
-- **Backward compatible**: Optional fields don't break existing Quills
+**Purpose**: `FieldSchema` is the TOML input format. New fields enable authors to specify UI metadata alongside field definitions.
 
-### 2. JSON Schema Extension
+### 2. JSON Schema with Custom Properties (Authoritative)
 
-**Extend JSON schema generation** to include section/tooltip as custom properties:
+**Extend `build_schema_from_fields()`** to include `x-section` and `x-tooltip`:
 
+```rust
+// In build_schema_from_fields() at crates/core/src/schema.rs
+
+// After adding description (around line 48)
+property.insert(
+    "description".to_string(),
+    Value::String(field_schema.description.clone()),
+);
+
+// ADD: Include section if specified
+if let Some(ref section) = field_schema.section {
+    property.insert(
+        "x-section".to_string(),
+        Value::String(section.clone()),
+    );
+}
+
+// ADD: Include tooltip if specified
+if let Some(ref tooltip) = field_schema.tooltip {
+    property.insert(
+        "x-tooltip".to_string(),
+        Value::String(tooltip.clone()),
+    );
+}
+```
+
+**Generated JSON Schema**:
 ```json
 {
+  "$schema": "https://json-schema.org/draft/2019-09/schema",
   "type": "object",
   "properties": {
     "author": {
@@ -154,18 +189,18 @@ tooltip = "Document title"
 ```
 
 **Rationale**:
-- JSON Schema standard supports custom `x-*` properties
-- Keeps section/tooltip separate from validation logic
-- Frontend can extract and use these properties for UI generation
-- Validation logic ignores unknown `x-*` properties (forward compatible)
+- JSON Schema standard supports custom `x-*` properties for extensions
+- Validators ignore unknown `x-*` properties (forward compatible)
+- Custom properties are part of the schema (not separate metadata)
+- Extraction utilities (`extract_defaults_from_schema()`, etc.) unaffected
 
-**Location**: Schema generation in `crates/core/src/quill.rs` (around line 500-600)
+**Location**: `crates/core/src/schema.rs:11-90` (modify `build_schema_from_fields()`)
 
-### 3. WASM Metadata Access
+### 3. WASM Metadata Access (No Changes)
 
 **No changes required** to `QuillInfo` structure:
 
-The `schema` field already exposes the complete JSON schema, which now includes `x-section` and `x-tooltip` properties. Frontend consumers can parse these properties from the schema.
+The `schema` field already exposes the complete JSON Schema including custom properties. Frontend consumers parse `x-section` and `x-tooltip` from the schema.
 
 **Frontend usage example**:
 ```typescript
@@ -201,6 +236,60 @@ for (const [section, fields] of Object.entries(fieldsBySection)) {
 - Zero API surface changes (backward compatible)
 - Frontend has full control over UI rendering
 - Metadata flows naturally through existing schema mechanism
+- JSON Schema remains single source of truth
+
+---
+
+## Architecture Decision: JSON Schema as Single Source of Truth
+
+**Decision**: Keep JSON Schema as the authoritative source for all field metadata
+
+**Flow**:
+```
+TOML [fields]
+  ↓ parse
+FieldSchema (temporary)
+  ↓ transform
+JSON Schema (authoritative)
+  ↓ extract
+Defaults, Examples (cached)
+  ↓ expose
+WASM QuillInfo.schema
+```
+
+**Why JSON Schema is Authoritative**:
+
+1. **Validation uses JSON Schema**
+   - `validate_document()` compiles `schema` with `jsonschema::Validator`
+   - All validation logic operates on the JSON Schema, not FieldSchema
+
+2. **Caching extracts from JSON Schema**
+   - `extract_defaults_from_schema()` reads `schema.properties[field].default`
+   - `extract_examples_from_schema()` reads `schema.properties[field].examples`
+   - Cached values (`Quill.defaults`, `Quill.examples`) are derived from schema
+
+3. **API exposes JSON Schema**
+   - WASM `QuillInfo.schema` serializes the JSON Schema
+   - Python bindings expose schema (not FieldSchema)
+   - Frontend consumers never see FieldSchema
+
+4. **FieldSchema is ephemeral**
+   - Only exists during `Quill::from_config()` construction
+   - Discarded after `build_schema_from_fields()` completes
+   - Not stored in `Quill` struct
+
+**Implications for Phase 2**:
+
+- **Source of input**: TOML `[fields]` (parsed to `FieldSchema`)
+- **Transformation point**: `build_schema_from_fields()` (add `x-*` properties)
+- **Authoritative storage**: `Quill.schema` (JSON Schema with custom properties)
+- **API exposure**: `QuillInfo.schema` (no changes needed)
+
+**Benefits**:
+- Single source of truth (JSON Schema)
+- Clear transformation boundary (TOML → Schema)
+- Validation and metadata use same source
+- Forward compatible (validators ignore `x-*` properties)
 
 ---
 
@@ -226,75 +315,64 @@ pub struct FieldSchema {
 }
 ```
 
+**Update**:
+- Add Serde `#[serde(skip_serializing_if = "Option::is_none")]` for new fields
+- Update `FieldSchema::new()` constructor (if exists)
+- Update `FieldSchema::from_quill_value()` to parse new fields from TOML
+
 **Impact**:
-- Add Serde deserialization for new fields
-- Update `FieldSchema::new()` constructor if exists
 - Existing Quills continue to work (fields are optional)
+- TOML deserialization automatically handles new fields
 
-### Step 2: Update TOML Deserialization
+### Step 2: Update JSON Schema Generation
 
-**Ensure** `QuillConfig` deserialization handles new fields:
+**Modify** `build_schema_from_fields()` to include custom properties:
 
-**Location**: `crates/core/src/quill.rs:407-430`
+**Location**: `crates/core/src/schema.rs:11-90`
 
-**Impact**:
-- Serde automatically handles new optional fields
-- Test with Quill.toml files that include/exclude these fields
-- Verify backward compatibility with existing Quills
-
-### Step 3: Extend JSON Schema Generation
-
-**Modify** schema generation logic to include `x-section` and `x-tooltip`:
-
-**Location**: Schema generation in `crates/core/src/quill.rs` (look for `to_json_schema()` or similar)
-
-**Logic**:
+**Add after line 48** (after inserting description):
 ```rust
-// When building JSON schema for a field:
-if let Some(section) = &field_schema.section {
-    json_field["x-section"] = json!(section);
+// Add section if specified
+if let Some(ref section) = field_schema.section {
+    property.insert(
+        "x-section".to_string(),
+        Value::String(section.clone()),
+    );
 }
-if let Some(tooltip) = &field_schema.tooltip {
-    json_field["x-tooltip"] = json!(tooltip);
+
+// Add tooltip if specified
+if let Some(ref tooltip) = field_schema.tooltip {
+    property.insert(
+        "x-tooltip".to_string(),
+        Value::String(tooltip.clone()),
+    );
 }
 ```
 
 **Impact**:
 - Generated JSON schemas now include UI metadata
-- WASM/Python consumers automatically receive this data
+- WASM/Python consumers automatically receive this data via `schema` field
 - Validation logic unaffected (validators ignore unknown `x-*` properties)
+- Extraction utilities (`extract_defaults_from_schema()`, etc.) unaffected
 
-### Step 4: Update SCHEMAS.md Design Document
+### Step 3: Update SCHEMAS.md Design Document
 
 **Document** the new fields in the design specification:
 
 **Location**: `prose/designs/SCHEMAS.md`
 
-**Add** to Quill Field properties section:
-```markdown
-- section -> Option[str]: UI section grouping (e.g., "Author Info", "Document Settings")
-- tooltip -> Option[str]: Short help text for field (displayed in UI hints)
-```
+**Already updated** with:
+- New FieldSchema field properties (`section`, `tooltip`)
+- JSON Schema custom properties documentation (`x-section`, `x-tooltip`)
+- Example JSON Schema showing custom properties
 
-**Add** JSON Schema extension documentation:
-```markdown
-### JSON Schema Custom Properties
-
-Field schemas support custom `x-*` properties for UI metadata:
-
-- `x-section`: Groups fields into collapsible UI sections
-- `x-tooltip`: Provides short help text for tooltips/hints
-
-These properties are ignored by validation logic but consumed by frontend UIs.
-```
-
-### Step 5: Create Example Quill with Sections
+### Step 4: Create Example Quill with Sections
 
 **Create** or update an example Quill to demonstrate the feature:
 
 **Location**: `examples/` directory (choose appropriate example)
 
-**Example**:
+**Example TOML**:
 ```toml
 [Quill]
 name = "resume-template"
@@ -329,38 +407,7 @@ tooltip = "Degree (e.g., Bachelor of Science)"
 **Impact**:
 - Demonstrates best practices for section/tooltip usage
 - Provides reference for Quill developers
-- Tests the entire metadata flow
-
----
-
-## Architecture Decision: JSON Schema as Internal
-
-**Decision**: Keep jsonschema as internal implementation detail
-
-**Rationale** (from Phase 1):
-- **Source of truth**: TOML `[fields]` in `Quill.toml`
-- **Validation**: Use generated JSON schema internally
-- **API**: Expose schema via `QuillInfo.schema` but don't require consumers to understand jsonschema internals
-
-**Implications for Phase 2**:
-
-1. **Schema generation is internal logic**
-   - Consumers receive JSON schema but aren't expected to generate it
-   - Custom `x-*` properties are implementation details exposed for convenience
-
-2. **TOML fields remain authoritative**
-   - `section` and `tooltip` are defined in `FieldSchema`
-   - JSON schema `x-section` and `x-tooltip` are derived, not primary
-
-3. **Future flexibility**
-   - Can change schema generation logic without breaking API
-   - Can optimize caching/extraction independently
-   - Can add more `x-*` properties without API changes
-
-**Benefits**:
-- Frontend doesn't need jsonschema libraries
-- Rust code owns validation logic
-- Clear separation: TOML (input) → JSON Schema (internal) → WASM (output)
+- Tests the entire metadata flow (TOML → Schema → WASM)
 
 ---
 
@@ -372,32 +419,95 @@ tooltip = "Degree (e.g., Bachelor of Science)"
 
 - New fields are optional in `FieldSchema`
 - Existing Quills without section/tooltip continue to work
-- JSON Schema `x-*` properties are ignored by validators
+- JSON Schema `x-*` properties are ignored by standard validators
 - WASM API surface unchanged (metadata embedded in existing `schema` field)
 
 **Migration path**:
-- Old Quills: Work unchanged, no sections/tooltips in UI
+- Old Quills: Work unchanged, no sections/tooltips in generated schema
 - New Quills: Can opt-in to sections/tooltips for better UX
 - Gradual adoption: Quill developers update at their own pace
 
+**Compatibility verification**:
+- Load existing example Quills without modifications
+- Verify they parse, register, and validate correctly
+- Confirm WASM `getQuillInfo()` returns schemas without `x-*` properties
+
 ### Testing Strategy
 
-**Unit tests**:
-- Parse TOML with section/tooltip fields
-- Parse TOML without section/tooltip fields (backward compat)
-- Generate JSON schema with `x-section` and `x-tooltip`
+**Unit tests** (add to `crates/core/src/schema.rs`):
+- Test `build_schema_from_fields()` with section/tooltip fields
+- Test `build_schema_from_fields()` without section/tooltip (backward compat)
+- Verify generated schema includes `x-section` and `x-tooltip` properties
 - Verify schema validates documents correctly (ignores custom properties)
 
-**Integration tests**:
-- Load example Quill with sections
-- Retrieve via WASM `getQuillInfo()`
-- Parse schema and extract section/tooltip metadata
-- Verify defaults and examples unaffected
+**Integration tests** (add to `crates/core/src/quill.rs`):
+- Load Quill TOML with section/tooltip fields
+- Verify `Quill.schema` includes custom properties
+- Extract defaults and examples (ensure extraction logic unaffected)
+- Test via WASM bindings (parse schema and extract metadata)
 
 **Regression tests**:
 - Load all existing example Quills
 - Verify they parse and register correctly
-- Confirm schemas still validate documents
+- Confirm schemas validate documents as before
+- Ensure WASM tests pass unchanged
+
+**Test cases**:
+```rust
+#[test]
+fn test_build_schema_with_section_and_tooltip() {
+    let mut fields = HashMap::new();
+    let mut schema = FieldSchema::new(
+        "author".to_string(),
+        "Document author name".to_string(),
+    );
+    schema.r#type = Some("str".to_string());
+    schema.section = Some("Author Info".to_string());
+    schema.tooltip = Some("Your full name".to_string());
+    fields.insert("author".to_string(), schema);
+
+    let json_schema = build_schema_from_fields(&fields)
+        .unwrap()
+        .as_json()
+        .clone();
+
+    assert_eq!(
+        json_schema["properties"]["author"]["x-section"],
+        "Author Info"
+    );
+    assert_eq!(
+        json_schema["properties"]["author"]["x-tooltip"],
+        "Your full name"
+    );
+}
+
+#[test]
+fn test_build_schema_without_section_tooltip() {
+    // Backward compatibility: fields without section/tooltip
+    let mut fields = HashMap::new();
+    let mut schema = FieldSchema::new(
+        "title".to_string(),
+        "Document title".to_string(),
+    );
+    schema.r#type = Some("str".to_string());
+    fields.insert("title".to_string(), schema);
+
+    let json_schema = build_schema_from_fields(&fields)
+        .unwrap()
+        .as_json()
+        .clone();
+
+    // Should not have x-section or x-tooltip
+    assert!(!json_schema["properties"]["title"]
+        .as_object()
+        .unwrap()
+        .contains_key("x-section"));
+    assert!(!json_schema["properties"]["title"]
+        .as_object()
+        .unwrap()
+        .contains_key("x-tooltip"));
+}
+```
 
 ### Validation Behavior
 
@@ -408,9 +518,14 @@ tooltip = "Degree (e.g., Bachelor of Science)"
 - Ensure validation errors don't reference custom properties
 - Confirm schema evolution (adding new `x-*` fields) doesn't break validation
 
-**Fallback behavior**:
-- Missing `section`: Frontend groups in default "General" section
-- Missing `tooltip`: Frontend uses `description` as tooltip
+**Standard compliance**:
+- JSON Schema Draft 2019-09 and later support custom `x-*` extensions
+- The `jsonschema` crate (used in `validate_document()`) complies with the standard
+- Validators treat `x-*` properties as annotations, not constraints
+
+**Fallback behavior** (frontend):
+- Missing `x-section`: Frontend groups in default "General" section
+- Missing `x-tooltip`: Frontend uses `description` field as tooltip
 - Malformed `x-*` properties: Frontend ignores and falls back to defaults
 
 ---
@@ -422,32 +537,29 @@ Phase 2 implementation follows this sequence:
 - [ ] **Step 1**: Extend `FieldSchema` struct
   - Add `section: Option<String>` field
   - Add `tooltip: Option<String>` field
-  - Update struct documentation
+  - Update Serde attributes for optional fields
+  - Update `FieldSchema::from_quill_value()` to parse new fields
 
-- [ ] **Step 2**: Verify TOML deserialization
-  - Test with Quill.toml containing new fields
-  - Test with Quill.toml missing new fields
-  - Ensure backward compatibility
-
-- [ ] **Step 3**: Update JSON Schema generation
-  - Find schema generation logic in quill.rs
+- [ ] **Step 2**: Update JSON Schema generation
+  - Modify `build_schema_from_fields()` in `crates/core/src/schema.rs`
   - Add `x-section` property when `field.section` is `Some`
   - Add `x-tooltip` property when `field.tooltip` is `Some`
   - Test generated schema structure
 
-- [ ] **Step 4**: Update SCHEMAS.md design document
-  - Document new FieldSchema fields
-  - Document JSON Schema custom properties
-  - Add usage examples
+- [ ] **Step 3**: Documentation already updated
+  - ✅ `prose/designs/SCHEMAS.md` updated with new fields
+  - ✅ JSON Schema custom properties documented
 
-- [ ] **Step 5**: Create/update example Quill
+- [ ] **Step 4**: Create/update example Quill
   - Choose appropriate example (or create new one)
   - Add section and tooltip to multiple fields
   - Demonstrate different section groupings
+  - Test end-to-end (TOML → Schema → WASM)
 
 - [ ] **Testing**: Run comprehensive test suite
-  - Unit tests for FieldSchema parsing
-  - Integration tests for schema generation
+  - Unit tests for `build_schema_from_fields()` with new fields
+  - Unit tests for backward compatibility (without new fields)
+  - Integration tests for Quill loading and schema generation
   - Regression tests for existing Quills
   - WASM bindings tests for metadata access
 
@@ -464,7 +576,7 @@ Phase 2 implementation follows this sequence:
 - Cannot implement dynamic UI without this foundation
 
 **Related**: [`prose/designs/SCHEMAS.md`](../designs/SCHEMAS.md)
-- Schema design document should be updated with new fields
+- Schema design document updated with new fields
 - Maintains single source of truth for field definitions
 
 ---
@@ -474,17 +586,18 @@ Phase 2 implementation follows this sequence:
 Phase 2 is complete when:
 
 1. ✅ `FieldSchema` includes optional `section` and `tooltip` fields
-2. ✅ JSON Schema generation includes `x-section` and `x-tooltip` properties
+2. ✅ `build_schema_from_fields()` generates JSON Schema with `x-section` and `x-tooltip`
 3. ✅ WASM `QuillInfo.schema` exposes UI metadata (no API changes needed)
 4. ✅ Example Quill demonstrates section grouping and tooltips
 5. ✅ All existing tests pass (backward compatibility maintained)
-6. ✅ Documentation updated (`SCHEMAS.md` reflects new fields)
+6. ✅ Documentation updated (already complete)
 
 **Verification**:
 - Run `cargo test --all-features`
 - Load example Quill and inspect generated schema
-- Retrieve via WASM and verify `x-section`/`x-tooltip` present
+- Retrieve via WASM and verify `x-section`/`x-tooltip` present in schema
 - Confirm existing Quills still work without modifications
+- Build WASM bindings: `wasm-pack build crates/bindings/wasm`
 
 ---
 
@@ -492,9 +605,9 @@ Phase 2 is complete when:
 
 ### Why Field-Level Section (Not Quill-Level)?
 
-The initial specification said "Add Section field to Quill definition" which could be interpreted as:
-- **Option A**: Quill-level metadata (e.g., categorize entire quill as "Letter" vs "Report")
-- **Option B**: Field-level metadata (e.g., group fields into sections within a quill)
+The specification mentions "Add Section field to Quill definition" which could mean:
+- **Option A**: Quill-level metadata (categorize entire quill as "Letter" vs "Report")
+- **Option B**: Field-level metadata (group fields into sections within a quill)
 
 **Chosen**: Option B (field-level)
 
@@ -504,9 +617,9 @@ The initial specification said "Add Section field to Quill definition" which cou
 - Quill-level categorization can be added later as `QuillConfig.category` if needed
 - Matches mental model: sections organize form fields, not entire templates
 
-**Alternative considered**: Quill-level `category` field
-- **Use case**: Template marketplace UI ("Browse Letters", "Browse Reports")
-- **Decision**: Out of scope for Phase 2 (focused on wizard UI generation)
+**Alternative**: Quill-level `category` field for marketplace UI
+- **Use case**: Template browsing ("Browse Letters", "Browse Reports")
+- **Decision**: Out of scope for Phase 2
 - **Future work**: Can add `QuillConfig.category` in separate enhancement
 
 ### Why x-* Properties in JSON Schema?
@@ -514,7 +627,7 @@ The initial specification said "Add Section field to Quill definition" which cou
 JSON Schema specification reserves `x-*` properties for custom extensions:
 
 **Standard compliance**:
-- Validators ignore unknown `x-*` properties (forward compatible)
+- Validators ignore unknown `x-*` properties per spec (forward compatible)
 - Clear separation: standard properties (type, description) vs custom (x-section, x-tooltip)
 - No risk of conflicting with future JSON Schema standards
 
@@ -540,3 +653,37 @@ JSON Schema specification reserves `x-*` properties for custom extensions:
 - API docs: Generate from `description` field
 
 **Fallback**: If `tooltip` missing, frontend can use truncated `description` or first sentence
+
+### JSON Schema as Single Source: Implementation Pattern
+
+**Pattern**: Transform once, use everywhere
+
+```rust
+// 1. Parse TOML (ephemeral representation)
+let config = QuillConfig::from_toml(&toml_content)?;
+
+// 2. Transform to JSON Schema (authoritative)
+let schema = build_schema_from_fields(&config.fields)?;
+
+// 3. Extract cached values (derived from schema)
+let defaults = extract_defaults_from_schema(&schema);
+let examples = extract_examples_from_schema(&schema);
+
+// 4. Store schema + caches (FieldSchema discarded)
+let quill = Quill {
+    schema,        // Authoritative
+    defaults,      // Cache
+    examples,      // Cache
+    // ...
+};
+
+// 5. All operations use schema
+validate_document(&quill.schema, &fields)?;       // Validation
+let info = QuillInfo { schema: quill.schema };    // WASM API
+```
+
+**Key benefits**:
+- FieldSchema is implementation detail (TOML parser)
+- JSON Schema is the data model (validation, API, caching)
+- Single transformation point (easy to maintain)
+- Clear ownership (schema owns the data)
