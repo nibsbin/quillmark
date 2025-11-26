@@ -1,6 +1,6 @@
 # Quill Annotation Revamp
 
-## Plan 1: Core Refactoring & Cleanup
+## Phase 1: Core Refactoring & Cleanup
 
 **Goal**: Simplify the orchestration logic and consolidate workflow creation to prepare for metadata changes.
 
@@ -12,7 +12,7 @@
     - Ensure WASM bindings do not maintain a duplicate map of registered Quills.
     - Expose and rely on the core engine's registry to avoid drift and memory overhead.
 
-## Plan 2: Metadata Schema Strategy
+## Phase 2: Metadata Schema Strategy
 
 **Goal**: Establish a single source of truth for Quill configuration that supports dynamic UI generation (Sections, Tooltips), while keeping validation robust.
 
@@ -27,7 +27,7 @@
 - [ ] **Validation**:
     - Ensure validation logic uses the internal `jsonschema` derived from the authoritative TOML fields.
 
-## Plan 3: WASM API & UI Integration
+## Phase 3: WASM API & UI Integration
 
 **Goal**: Expose rich metadata to WASM consumers to enable dynamic wizard UIs.
 
