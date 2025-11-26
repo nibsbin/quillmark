@@ -14,25 +14,27 @@
 
 ## Phase 2: Metadata Schema Strategy
 
-**Goal**: Establish a single source of truth for Quill configuration that supports dynamic UI generation (Sections, Tooltips), while keeping validation robust.
+**Goal**: Establish JSON Schema as the single source of truth for Quill field metadata, including UI layout via `x-ui` properties.
 
-- [ ] **Architecture Decision**: **DECIDED**: Keep `jsonschema` as internal implementation detail.
-    - *Source of Truth*: QuillConfig TOML fields (Rust structs) are authoritative.
-    - *Validation*: Generate/use `jsonschema` internally for validation logic, but do not expose it in the API for consumers.
+**Detailed Plan**: [`prose/plans/QUILL_ANNOTATION_PHASE_2.md`](plans/QUILL_ANNOTATION_PHASE_2.md)
+
+- [ ] **Architecture Decision**: **DECIDED**: Embedded `x-ui` object in JSON Schema.
+    - *Input Format*: TOML `[fields.name.ui]` table.
+    - *Transformation*: `build_schema_from_fields()` injects `x-ui` object into schema properties.
+    - *Output*: `QuillInfo.schema` contains all metadata.
 - [ ] **Schema Definition**:
-    - Add `Section` field to Quill definition.
-    - Add `Tooltip` field to Quill definition.
-    - Ensure these fields are serializable/accessible for the API.
-    - *Note*: Do not store/expose the raw `jsonschema` in the `Quill` struct unless needed for internal caching.
+    - Add `ui: Option<UiSchema>` to `FieldSchema`.
+    - Implement `UiSchema` struct with `group`, `component`, `order`, etc.
+    - Update `build_schema_from_fields()` to serialize `ui` to `x-ui`.
 - [ ] **Validation**:
-    - Ensure validation logic uses the internal `jsonschema` derived from the authoritative TOML fields.
+    - Validation uses `jsonschema::Validator` on the schema (ignores `x-ui`).
 
 ## Phase 3: WASM API & UI Integration
 
 **Goal**: Expose rich metadata to WASM consumers to enable dynamic wizard UIs.
 
 - [ ] **Update Bindings**:
-    - Modify `QuillInfo` in `crates/bindings/wasm/src/types.rs` to include new metadata fields (`section`, `tooltip`, etc.).
+    - No changes required to `QuillInfo` structure (schema already exposed).
 - [ ] **Expose Retrieval API**:
     - Create a function in `quillmark` crate to retrieve `Quill` details from bindings.
     - Expose a WASM function to retrieve annotations/metadata for a given Quill.

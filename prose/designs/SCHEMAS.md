@@ -40,6 +40,14 @@ Field properties:
 - type -> "str", "array", "dict", "date", "datetime", or "number": The value type of the field.
 - default -> any: The default value for the field. If defined, this makes the field optional (not required).
 - example -> any: An example value for the field (added to the examples array in the JSON schema).
+- ui -> Option[Table]: A table containing UI-specific metadata (see below).
+
+**UI Configuration (Nested `[ui]` table):**
+- group -> Option[str]: UI group/section name for organizing fields (e.g., "Personal Info").
+- component -> Option[str]: Recommended UI component (e.g., "text-input", "select", "textarea").
+- placeholder -> Option[str]: Placeholder text for inputs.
+- order -> Option[int]: Explicit ordering index for sorting fields in the UI.
+- *arbitrary keys* -> any: Any other keys in the `[ui]` table are preserved and passed to the schema.
 
 **Type Mapping (TOML to JSON Schema):**
 - "str" → "string"
@@ -52,3 +60,31 @@ Field properties:
 **Required Field Logic:**
 - If a field has a `default` value: field is optional
 - If a field has no `default` value: field is required
+
+### JSON Schema Custom Properties
+
+Field schemas support a custom `x-ui` property for UI metadata that is included in the generated JSON schema. This property contains the serialized content of the `[ui]` table from the TOML configuration.
+
+- `x-ui`: An object containing UI metadata (group, component, order, etc.)
+
+This property follows the JSON Schema specification for custom extensions. Validation logic ignores this property, but frontend UIs consume it for dynamic wizard generation.
+
+**Example**:
+```json
+{
+  "type": "object",
+  "properties": {
+    "author": {
+      "type": "string",
+      "description": "The full name of the document author...",
+      "default": "Anonymous",
+      "x-ui": {
+        "group": "Author Info",
+        "component": "text-input",
+        "placeholder": "e.g. John Doe",
+        "order": 1
+      }
+    }
+  }
+}
+```
