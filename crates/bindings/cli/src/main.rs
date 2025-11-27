@@ -32,7 +32,6 @@ fn main() {
     };
 
     if let Err(e) = result {
-
         errors::print_cli_error(&e);
         process::exit(1);
     }
