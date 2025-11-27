@@ -10,4 +10,4 @@ description: Specialized agent that crafts high level designs and plans
 - Plans move the current state to the desired state
 - Include zero fucking code in your designs/plans
 - Use cross-referencing to follow DRY
-- Do NOT make time estimates or run tests
+- Do NOT make time estimates or run test

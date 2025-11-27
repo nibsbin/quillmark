@@ -33,6 +33,8 @@
 
 **Goal**: Expose rich metadata to WASM consumers to enable dynamic wizard UIs.
 
+**Detailed Plan**: [`prose/plans/QUILL_ANNOTATION_PHASE_3.md`](plans/QUILL_ANNOTATION_PHASE_3.md)
+
 - [ ] **Update Bindings**:
     - No changes required to `QuillInfo` structure (schema already exposed).
 - [ ] **Expose Retrieval API**:
