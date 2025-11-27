@@ -39,4 +39,4 @@
     - Create a function in `quillmark` crate to retrieve `Quill` details from bindings.
     - Expose a WASM function to retrieve annotations/metadata for a given Quill.
 - [ ] **Verify Integration Flow**:
-    - `Parse Markdown` -> `Extract Quill Tag` -> `Retrieve Quill Info` -> `Update Wizard UI`.
+    - `Parse Markdown` -> `Extract Quill Tag` -> `Retrieve Quill Info`
