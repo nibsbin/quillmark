@@ -73,6 +73,25 @@ Each field can specify:
 - `default` - Default value if not provided
 - `examples` - Array of example values
 
+### UI Configuration
+
+You can provide additional metadata for UI generators (like wizards or form builders) using the `ui` table within a field definition.
+
+```toml
+[fields.sender]
+type = "string"
+
+[fields.sender.ui]
+group = "Sender Information"
+tooltip = "The name of the person sending the letter"
+extra = { placeholder = "John Doe" }
+```
+
+Supported UI properties:
+- `group` - Group name for organizing fields
+- `tooltip` - Help text to display on hover
+- `extra` - Arbitrary key-value pairs for custom UI logic
+
 ## Glue Templates
 
 Glue templates use MiniJinja syntax to compose backend-specific code. They have access to frontmatter data and special filters.
