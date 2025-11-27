@@ -7,6 +7,17 @@ use std::path::{Path, PathBuf};
 use crate::schema::build_schema_from_fields;
 use crate::value::QuillValue;
 
+/// UI-specific metadata for field rendering
+#[derive(Debug, Clone, PartialEq)]
+pub struct UiSchema {
+    /// Group name for organizing fields (e.g., "Personal Info", "Preferences")
+    pub group: Option<String>,
+    /// Short tooltip text for the field (concise hint, unlike verbose description)
+    pub tooltip: Option<String>,
+    /// Additional UI-specific properties
+    pub extra: HashMap<String, QuillValue>,
+}
+
 /// Schema definition for a template field
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldSchema {
@@ -21,6 +32,8 @@ pub struct FieldSchema {
     pub example: Option<QuillValue>,
     /// Example values for the field
     pub examples: Option<QuillValue>,
+    /// UI-specific metadata for rendering
+    pub ui: Option<UiSchema>,
 }
 
 impl FieldSchema {
@@ -33,6 +46,7 @@ impl FieldSchema {
             default: None,
             example: None,
             examples: None,
+            ui: None,
         }
     }
 
@@ -45,7 +59,7 @@ impl FieldSchema {
         //Ensure only known keys are present
         for key in obj.keys() {
             match key.as_str() {
-                "name" | "type" | "description" | "example" | "default" => {}
+                "name" | "type" | "description" | "example" | "default" | "ui" => {}
                 _ => {
                     return Err(format!("Unknown key '{}' in field schema", key));
                 }
@@ -73,13 +87,50 @@ impl FieldSchema {
             .get("examples")
             .map(|v| QuillValue::from_json(v.clone()));
 
+        // Parse UI metadata if present
+        let ui = if let Some(ui_value) = obj.get("ui") {
+            if let Some(ui_obj) = ui_value.as_object() {
+                let group = ui_obj
+                    .get("group")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                let tooltip = ui_obj
+                    .get("tooltip")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
+                // Collect any extra UI properties
+                let mut extra = HashMap::new();
+                for (ui_key, ui_val) in ui_obj {
+                    match ui_key.as_str() {
+                        "group" | "tooltip" => {}
+                        _ => {
+                            extra.insert(ui_key.clone(), QuillValue::from_json(ui_val.clone()));
+                        }
+                    }
+                }
+
+                Some(UiSchema {
+                    group,
+                    tooltip,
+                    extra,
+                })
+            } else {
+                return Err("UI field must be an object".to_string());
+            }
+        } else {
+            None
+        };
+
         Ok(Self {
-            name: name,
+            name,
             r#type: field_type,
-            description: description,
-            default: default,
-            example: example,
-            examples: examples,
+            description,
+            default,
+            example,
+            examples,
+            ui,
         })
     }
 }
