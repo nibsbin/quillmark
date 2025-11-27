@@ -42,6 +42,7 @@ quillmark render [OPTIONS] <MARKDOWN_FILE>
 - `info` - Display quill template information
 - `list` - List available quills
 - `validate` - Validate markdown against quill schema
+- `schema` - Retrieve the Quill's field schema
 
 ---
 
@@ -98,6 +99,37 @@ quillmark render memo.md --glue-only -o glue_output.typ
 
 # Pipe output for further processing
 quillmark render memo.md --stdout > output.pdf
+```
+
+---
+
+### Command: `schema`
+
+Retrieve the Quill's field schema as JSON.
+
+**Signature:**
+```
+quillmark schema <QUILL_PATH> [OPTIONS]
+```
+
+**Required Arguments:**
+- `<QUILL_PATH>` - Path to quill directory
+
+**Options:**
+- `-o, --output <FILE>` - Output file path (default: stdout)
+
+**Behavior:**
+1. Load quill from filesystem
+2. Extract schema from quill configuration
+3. Output schema as JSON to stdout or file
+
+**Examples:**
+```bash
+# Print schema to stdout
+quillmark schema ./quills/usaf_memo
+
+# Save schema to file
+quillmark schema ./quills/usaf_memo -o schema.json
 ```
 
 ---
