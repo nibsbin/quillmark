@@ -56,10 +56,6 @@ pub fn build_schema_from_fields(
                 ui_obj.insert("group".to_string(), Value::String(group.clone()));
             }
 
-            if let Some(ref component) = ui.component {
-                ui_obj.insert("component".to_string(), Value::String(component.clone()));
-            }
-
             if let Some(ref placeholder) = ui.placeholder {
                 ui_obj.insert("placeholder".to_string(), Value::String(placeholder.clone()));
             }
