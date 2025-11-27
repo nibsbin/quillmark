@@ -2204,7 +2204,10 @@ fourth = {description = "Fourth field"}
 
         let third = config.fields.get("third").unwrap();
         assert_eq!(third.ui.as_ref().unwrap().order, Some(2));
-        assert_eq!(third.ui.as_ref().unwrap().group, Some("Test Group".to_string()));
+        assert_eq!(
+            third.ui.as_ref().unwrap().group,
+            Some("Test Group".to_string())
+        );
 
         let fourth = config.fields.get("fourth").unwrap();
         assert_eq!(fourth.ui.as_ref().unwrap().order, Some(3));
