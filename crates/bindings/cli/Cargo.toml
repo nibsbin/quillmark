@@ -19,6 +19,8 @@ clap = { version = "~4.5", features = ["derive"] }
 quillmark = { workspace = true, default-features = true }
 quillmark-core = { workspace = true }
 anyhow = { workspace = true}
+serde_json = { workspace = true }
+
 
 [profile.release]
 # Inherit from workspace but optimize for size

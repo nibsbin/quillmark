@@ -2454,6 +2454,7 @@ dependencies = [
  "clap",
  "quillmark",
  "quillmark-core",
+ "serde_json",
 ]
 
 [[package]]
