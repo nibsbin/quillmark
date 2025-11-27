@@ -14,10 +14,8 @@ pub struct UiSchema {
     pub group: Option<String>,
     /// Short tooltip text for the field (concise hint, unlike verbose description)
     pub tooltip: Option<String>,
-    /// Order of the field in the UI
+    /// Order of the field in the UI (automatically generated based on field position in Quill.toml)
     pub order: Option<i32>,
-    /// Additional UI-specific properties
-    pub extra: HashMap<String, QuillValue>,
 }
 
 /// Schema definition for a template field
@@ -102,13 +100,12 @@ impl FieldSchema {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
-                // Collect any extra UI properties
-                let mut extra = HashMap::new();
-                for (ui_key, ui_val) in ui_obj {
-                    match ui_key.as_str() {
+                // Validate that only known UI properties are present
+                for key in ui_obj.keys() {
+                    match key.as_str() {
                         "group" | "tooltip" => {}
                         _ => {
-                            extra.insert(ui_key.clone(), QuillValue::from_json(ui_val.clone()));
+                            return Err(format!("Unknown UI property '{}'. Only 'group' and 'tooltip' are supported. 'order' is automatically generated.", key));
                         }
                     }
                 }
@@ -117,7 +114,6 @@ impl FieldSchema {
                     group,
                     tooltip,
                     order: None, // Order is determined by position in Quill.toml
-                    extra,
                 })
             } else {
                 return Err("UI field must be an object".to_string());
@@ -623,7 +619,6 @@ impl QuillConfig {
                                             group: None,
                                             tooltip: None,
                                             order: Some(order),
-                                            extra: HashMap::new(),
                                         });
                                     } else if let Some(ui) = &mut schema.ui {
                                         ui.order = Some(order);
@@ -2192,14 +2187,14 @@ description = "Test field order"
 [fields]
 first = {description = "First field"}
 second = {description = "Second field"}
-third = {description = "Third field", ui = {order = 10}}
+third = {description = "Third field", ui = {group = "Test Group"}}
 fourth = {description = "Fourth field"}
 "#;
 
         let config = QuillConfig::from_toml(toml_content).unwrap();
 
         // Check that fields have correct order based on TOML position
-        // Explicit ui.order in TOML should be ignored/overwritten
+        // Order is automatically generated based on field position
 
         let first = config.fields.get("first").unwrap();
         assert_eq!(first.ui.as_ref().unwrap().order, Some(0));
@@ -2208,8 +2203,8 @@ fourth = {description = "Fourth field"}
         assert_eq!(second.ui.as_ref().unwrap().order, Some(1));
 
         let third = config.fields.get("third").unwrap();
-        // Should be 2 because it's the 3rd field, ignoring the explicit 10
         assert_eq!(third.ui.as_ref().unwrap().order, Some(2));
+        assert_eq!(third.ui.as_ref().unwrap().group, Some("Test Group".to_string()));
 
         let fourth = config.fields.get("fourth").unwrap();
         assert_eq!(fourth.ui.as_ref().unwrap().order, Some(3));

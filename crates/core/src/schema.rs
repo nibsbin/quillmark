@@ -64,11 +64,6 @@ pub fn build_schema_from_fields(
                 ui_obj.insert("order".to_string(), json!(order));
             }
 
-            // Add extra UI properties
-            for (key, value) in &ui.extra {
-                ui_obj.insert(key.clone(), value.as_json().clone());
-            }
-
             property.insert("x-ui".to_string(), Value::Object(ui_obj));
         }
 
