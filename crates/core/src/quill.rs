@@ -61,7 +61,8 @@ impl FieldSchema {
             match key.as_str() {
                 "name" | "type" | "description" | "example" | "default" | "ui" => {}
                 _ => {
-                    return Err(format!("Unknown key '{}' in field schema", key));
+                    // Log warning but don't fail
+                    eprintln!("Warning: Unknown key '{}' in field schema", key);
                 }
             }
         }
@@ -105,7 +106,8 @@ impl FieldSchema {
                     match key.as_str() {
                         "group" | "tooltip" => {}
                         _ => {
-                            return Err(format!("Unknown UI property '{}'. Only 'group' and 'tooltip' are supported. 'order' is automatically generated.", key));
+                            // Log warning but don't fail
+                            eprintln!("Warning: Unknown UI property '{}'. Only 'group' and 'tooltip' are supported.", key);
                         }
                     }
                 }
@@ -2212,4 +2214,6 @@ fourth = {description = "Fourth field"}
         let fourth = config.fields.get("fourth").unwrap();
         assert_eq!(fourth.ui.as_ref().unwrap().order, Some(3));
     }
+
+
 }
