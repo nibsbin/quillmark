@@ -2214,6 +2214,4 @@ fourth = {description = "Fourth field"}
         let fourth = config.fields.get("fourth").unwrap();
         assert_eq!(fourth.ui.as_ref().unwrap().order, Some(3));
     }
-
-
 }
