@@ -56,12 +56,8 @@ pub fn build_schema_from_fields(
                 ui_obj.insert("group".to_string(), Value::String(group.clone()));
             }
 
-            if let Some(ref placeholder) = ui.placeholder {
-                ui_obj.insert("placeholder".to_string(), Value::String(placeholder.clone()));
-            }
-
-            if let Some(order) = ui.order {
-                ui_obj.insert("order".to_string(), Value::Number(order.into()));
+            if let Some(ref tooltip) = ui.tooltip {
+                ui_obj.insert("tooltip".to_string(), Value::String(tooltip.clone()));
             }
 
             // Add extra UI properties

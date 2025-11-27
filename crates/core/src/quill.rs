@@ -12,10 +12,8 @@ use crate::value::QuillValue;
 pub struct UiSchema {
     /// Group name for organizing fields (e.g., "Personal Info", "Preferences")
     pub group: Option<String>,
-    /// Placeholder text for the input field
-    pub placeholder: Option<String>,
-    /// Order within the group (lower numbers appear first)
-    pub order: Option<i32>,
+    /// Short tooltip text for the field (concise hint, unlike verbose description)
+    pub tooltip: Option<String>,
     /// Additional UI-specific properties
     pub extra: HashMap<String, QuillValue>,
 }
@@ -97,21 +95,16 @@ impl FieldSchema {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
-                let placeholder = ui_obj
-                    .get("placeholder")
+                let tooltip = ui_obj
+                    .get("tooltip")
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
-
-                let order = ui_obj
-                    .get("order")
-                    .and_then(|v| v.as_i64())
-                    .map(|i| i as i32);
 
                 // Collect any extra UI properties
                 let mut extra = HashMap::new();
                 for (ui_key, ui_val) in ui_obj {
                     match ui_key.as_str() {
-                        "group" | "placeholder" | "order" => {}
+                        "group" | "tooltip" => {}
                         _ => {
                             extra.insert(ui_key.clone(), QuillValue::from_json(ui_val.clone()));
                         }
@@ -120,8 +113,7 @@ impl FieldSchema {
 
                 Some(UiSchema {
                     group,
-                    placeholder,
-                    order,
+                    tooltip,
                     extra,
                 })
             } else {

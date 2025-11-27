@@ -10,16 +10,14 @@ description = "title of document"
 type = "str"
 [fields.title.ui]
 group = "Document Info"
-placeholder = "Enter document title"
-order = 1
+tooltip = "Document title"
 
 [fields.author]
 description = "Author of document"
 type = "str"
 [fields.author.ui]
 group = "Document Info"
-placeholder = "Enter author name"
-order = 2
+tooltip = "Author name"
 
 [fields.ice_cream]
 description = "favorite ice cream flavor"
@@ -27,5 +25,4 @@ type = "str"
 default = "taro"
 [fields.ice_cream.ui]
 group = "Preferences"
-placeholder = "Select your favorite flavor"
-order = 1
+tooltip = "Favorite flavor"
