@@ -604,7 +604,8 @@ impl QuillConfig {
                 let mut order_counter = 0;
                 for (field_name, field_schema) in fields_table {
                     // Determine order
-                    let order = if let Some(idx) = field_order.iter().position(|k| k == field_name) {
+                    let order = if let Some(idx) = field_order.iter().position(|k| k == field_name)
+                    {
                         idx as i32
                     } else {
                         let o = field_order.len() as i32 + order_counter;
