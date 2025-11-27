@@ -14,6 +14,8 @@ pub struct UiSchema {
     pub group: Option<String>,
     /// Short tooltip text for the field (concise hint, unlike verbose description)
     pub tooltip: Option<String>,
+    /// Order of the field in the UI
+    pub order: Option<i32>,
     /// Additional UI-specific properties
     pub extra: HashMap<String, QuillValue>,
 }
@@ -114,6 +116,7 @@ impl FieldSchema {
                 Some(UiSchema {
                     group,
                     tooltip,
+                    order: None, // Order is determined by position in Quill.toml
                     extra,
                 })
             } else {
@@ -486,6 +489,17 @@ impl QuillConfig {
         let quill_toml: toml::Value = toml::from_str(toml_content)
             .map_err(|e| format!("Failed to parse Quill.toml: {}", e))?;
 
+        // Parse with toml_edit to get field order
+        let field_order: Vec<String> = toml_content
+            .parse::<toml_edit::DocumentMut>()
+            .ok()
+            .and_then(|doc| {
+                doc.get("fields")
+                    .and_then(|item| item.as_table())
+                    .map(|table| table.iter().map(|(k, _)| k.to_string()).collect())
+            })
+            .unwrap_or_default();
+
         // Extract [Quill] section (required)
         let quill_section = quill_toml
             .get("Quill")
@@ -587,11 +601,34 @@ impl QuillConfig {
         let mut fields = HashMap::new();
         if let Some(fields_section) = quill_toml.get("fields") {
             if let toml::Value::Table(fields_table) = fields_section {
+                let mut order_counter = 0;
                 for (field_name, field_schema) in fields_table {
+                    // Determine order
+                    let order = if let Some(idx) = field_order.iter().position(|k| k == field_name)
+                    {
+                        idx as i32
+                    } else {
+                        let o = field_order.len() as i32 + order_counter;
+                        order_counter += 1;
+                        o
+                    };
+
                     match QuillValue::from_toml(field_schema) {
                         Ok(quill_value) => {
                             match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
-                                Ok(schema) => {
+                                Ok(mut schema) => {
+                                    // Always set ui.order based on position in Quill.toml
+                                    if schema.ui.is_none() {
+                                        schema.ui = Some(UiSchema {
+                                            group: None,
+                                            tooltip: None,
+                                            order: Some(order),
+                                            extra: HashMap::new(),
+                                        });
+                                    } else if let Some(ui) = &mut schema.ui {
+                                        ui.order = Some(order);
+                                    }
+
                                     fields.insert(field_name.clone(), schema);
                                 }
                                 Err(e) => {
@@ -2143,5 +2180,38 @@ status = {description = "Status", default = "draft"}
         // Verify default values
         assert_eq!(defaults.get("author").unwrap().as_str(), Some("Anonymous"));
         assert_eq!(defaults.get("status").unwrap().as_str(), Some("draft"));
+    }
+
+    #[test]
+    fn test_field_order_preservation() {
+        let toml_content = r#"[Quill]
+name = "order-test"
+backend = "typst"
+description = "Test field order"
+
+[fields]
+first = {description = "First field"}
+second = {description = "Second field"}
+third = {description = "Third field", ui = {order = 10}}
+fourth = {description = "Fourth field"}
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+
+        // Check that fields have correct order based on TOML position
+        // Explicit ui.order in TOML should be ignored/overwritten
+
+        let first = config.fields.get("first").unwrap();
+        assert_eq!(first.ui.as_ref().unwrap().order, Some(0));
+
+        let second = config.fields.get("second").unwrap();
+        assert_eq!(second.ui.as_ref().unwrap().order, Some(1));
+
+        let third = config.fields.get("third").unwrap();
+        // Should be 2 because it's the 3rd field, ignoring the explicit 10
+        assert_eq!(third.ui.as_ref().unwrap().order, Some(2));
+
+        let fourth = config.fields.get("fourth").unwrap();
+        assert_eq!(fourth.ui.as_ref().unwrap().order, Some(3));
     }
 }

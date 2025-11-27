@@ -60,6 +60,10 @@ pub fn build_schema_from_fields(
                 ui_obj.insert("tooltip".to_string(), Value::String(tooltip.clone()));
             }
 
+            if let Some(order) = ui.order {
+                ui_obj.insert("order".to_string(), json!(order));
+            }
+
             // Add extra UI properties
             for (key, value) in &ui.extra {
                 ui_obj.insert(key.clone(), value.as_json().clone());

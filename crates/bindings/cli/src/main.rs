@@ -18,6 +18,9 @@ struct Cli {
 enum Commands {
     /// Render markdown file to output format
     Render(commands::render::RenderArgs),
+
+    /// Output the JSON schema for a quill
+    Schema(commands::schema::SchemaArgs),
 }
 
 fn main() {
@@ -25,6 +28,7 @@ fn main() {
 
     let result = match cli.command {
         Commands::Render(args) => commands::render::execute(args),
+        Commands::Schema(args) => commands::schema::execute(args),
     };
 
     if let Err(e) = result {
