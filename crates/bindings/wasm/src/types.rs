@@ -1,9 +1,13 @@
 //! Type definitions for the WASM API
 
 use serde::{Deserialize, Serialize};
+use tsify::Tsify;
+use wasm_bindgen::convert::IntoWasmAbi;
+use wasm_bindgen::prelude::*;
 
 /// Output formats supported by backends
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "lowercase")]
 pub enum OutputFormat {
     Pdf,
@@ -32,7 +36,8 @@ impl From<quillmark_core::OutputFormat> for OutputFormat {
 }
 
 /// Severity levels for diagnostics
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     Error,
@@ -51,7 +56,8 @@ impl From<quillmark_core::Severity> for Severity {
 }
 
 /// Source location for errors and warnings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct Location {
     pub file: String,
@@ -70,7 +76,8 @@ impl From<quillmark_core::Location> for Location {
 }
 
 /// Diagnostic message (error, warning, or note)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostic {
     pub severity: Severity,
@@ -100,10 +107,12 @@ impl From<quillmark_core::Diagnostic> for Diagnostic {
 }
 
 /// Rendered artifact (PDF, SVG, etc.)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct Artifact {
     pub format: OutputFormat,
+    #[tsify(type = "Uint8Array")]
     pub bytes: Vec<u8>,
     pub mime_type: String,
 }
@@ -130,7 +139,8 @@ impl From<quillmark_core::Artifact> for Artifact {
 }
 
 /// Result of a render operation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderResult {
     pub artifacts: Vec<Artifact>,
@@ -143,7 +153,8 @@ pub struct RenderResult {
 ///
 /// This provides consumers with the necessary information to configure render options
 /// without exposing the entire Quill file tree.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct QuillInfo {
     /// Quill name
@@ -151,40 +162,70 @@ pub struct QuillInfo {
     /// Backend ID (e.g., "typst")
     pub backend: String,
     /// Quill metadata (plain JavaScript object)
+    #[tsify(type = "Record<string, any>")]
     pub metadata: serde_json::Value,
     /// Loaded example markdown (if available)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub example: Option<String>,
     /// Field schemas (plain JavaScript object)
+    #[tsify(type = "Record<string, any>")]
     pub schema: serde_json::Value,
     /// Default values for fields (plain JavaScript object)
+    #[tsify(type = "Record<string, any>")]
     pub defaults: serde_json::Value,
     /// Example values for fields (plain JavaScript object with arrays)
+    #[tsify(type = "Record<string, any[]>")]
     pub examples: serde_json::Value,
     /// Supported output formats for this quill's backend
     pub supported_formats: Vec<OutputFormat>,
+}
+
+impl IntoWasmAbi for QuillInfo {
+    type Abi = <JsValue as IntoWasmAbi>::Abi;
+
+    fn into_abi(self) -> Self::Abi {
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        self.serialize(&serializer)
+            .unwrap_or(JsValue::UNDEFINED)
+            .into_abi()
+    }
 }
 
 /// Parsed markdown document
 ///
 /// Returned by `Quillmark.parseMarkdown()`. Contains the parsed YAML frontmatter
 /// fields and the quill tag (from QUILL field or "__default__" if not specified).
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct ParsedDocument {
     /// YAML frontmatter fields
+    #[tsify(type = "Record<string, any>")]
     pub fields: serde_json::Value,
     /// The quill tag (from QUILL field or "__default__")
     pub quill_tag: String,
 }
 
+impl IntoWasmAbi for ParsedDocument {
+    type Abi = <JsValue as IntoWasmAbi>::Abi;
+
+    fn into_abi(self) -> Self::Abi {
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        self.serialize(&serializer)
+            .unwrap_or(JsValue::UNDEFINED)
+            .into_abi()
+    }
+}
+
 /// Options for rendering
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct RenderOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<OutputFormat>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[tsify(type = "Record<string, Uint8Array | number[]>")]
     pub assets: Option<serde_json::Value>,
     /// Optional quill name that overrides or fills in for the markdown's QUILL frontmatter field
     #[serde(skip_serializing_if = "Option::is_none")]

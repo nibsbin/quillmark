@@ -2,7 +2,6 @@
 
 use crate::error::WasmError;
 use crate::types::{OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult};
-use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 // Cross-platform helper to get current time in milliseconds as f64.
@@ -45,7 +44,7 @@ impl Quillmark {
     /// This is the first step in the workflow. The returned ParsedDocument contains
     /// the parsed YAML frontmatter fields and the quill_tag (from QUILL field or "__default__").
     #[wasm_bindgen(js_name = parseMarkdown)]
-    pub fn parse_markdown(markdown: &str) -> Result<JsValue, JsValue> {
+    pub fn parse_markdown(markdown: &str) -> Result<ParsedDocument, JsValue> {
         let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
             WasmError::from(format!("Failed to parse markdown: {}", e)).to_js_value()
         })?;
@@ -60,13 +59,7 @@ impl Quillmark {
         }
         let fields = serde_json::Value::Object(fields_obj);
 
-        let wasm_parsed = ParsedDocument { fields, quill_tag };
-
-        wasm_parsed
-            .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
-            .map_err(|e| {
-                WasmError::from(format!("Failed to serialize ParsedDocument: {}", e)).to_js_value()
-            })
+        Ok(ParsedDocument { fields, quill_tag })
     }
 
     /// Register a Quill template bundle
@@ -74,7 +67,7 @@ impl Quillmark {
     /// Accepts either a JSON string or a JsValue object representing the Quill file tree.
     /// Validation happens automatically on registration.
     #[wasm_bindgen(js_name = registerQuill)]
-    pub fn register_quill(&mut self, quill_json: JsValue) -> Result<JsValue, JsValue> {
+    pub fn register_quill(&mut self, quill_json: JsValue) -> Result<QuillInfo, JsValue> {
         // Convert JsValue to JSON string
         let json_str = if quill_json.is_string() {
             quill_json.as_string().ok_or_else(|| {
@@ -100,8 +93,7 @@ impl Quillmark {
             .register_quill(quill)
             .map_err(|e| WasmError::from(e).to_js_value())?;
 
-        let quill_info = self.get_quill_info(&name)?;
-        Ok(quill_info)
+        self.get_quill_info(&name)
     }
 
     /// Get shallow information about a registered Quill
@@ -109,7 +101,7 @@ impl Quillmark {
     /// This returns metadata, backend info, field schemas, and supported formats
     /// that consumers need to configure render options for the next step.
     #[wasm_bindgen(js_name = getQuillInfo)]
-    pub fn get_quill_info(&self, name: &str) -> Result<JsValue, JsValue> {
+    pub fn get_quill_info(&self, name: &str) -> Result<QuillInfo, JsValue> {
         let quill = self.inner.get_quill(name).ok_or_else(|| {
             WasmError::from(format!("Quill '{}' not registered", name)).to_js_value()
         })?;
@@ -155,7 +147,7 @@ impl Quillmark {
         }
         let examples_json = serde_json::Value::Object(examples_obj);
 
-        let quill_info = QuillInfo {
+        Ok(QuillInfo {
             name: quill.name.clone(),
             backend: backend_id.clone(),
             metadata: metadata_json,
@@ -164,13 +156,7 @@ impl Quillmark {
             defaults: defaults_json,
             examples: examples_json,
             supported_formats,
-        };
-
-        quill_info
-            .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
-            .map_err(|e| {
-                WasmError::from(format!("Failed to serialize QuillInfo: {}", e)).to_js_value()
-            })
+        })
     }
 
     /// Process markdown through template engine (debugging)
@@ -197,19 +183,11 @@ impl Quillmark {
     /// Uses the Quill specified in options.quill_name if provided,
     /// otherwise infers it from the ParsedDocument's quill_tag field.
     #[wasm_bindgen]
-    pub fn render(&mut self, parsed_doc: JsValue, options: JsValue) -> Result<JsValue, JsValue> {
-        // Parse the ParsedDocument from JsValue
-        let parsed_wasm: ParsedDocument = serde_wasm_bindgen::from_value(parsed_doc)
-            .map_err(|e| WasmError::from(format!("Invalid ParsedDocument: {}", e)).to_js_value())?;
-
-        let opts: RenderOptions = if options.is_undefined() || options.is_null() {
-            RenderOptions::default()
-        } else {
-            serde_wasm_bindgen::from_value(options).map_err(|e| {
-                WasmError::from(format!("Invalid render options: {}", e)).to_js_value()
-            })?
-        };
-
+    pub fn render(
+        &mut self,
+        parsed_wasm: ParsedDocument,
+        opts: RenderOptions,
+    ) -> Result<RenderResult, JsValue> {
         // Determine which quill name to use (before consuming parsed_wasm)
         let quill_name_to_use = opts
             .quill_name
@@ -270,18 +248,12 @@ impl Quillmark {
             .render(&parsed, output_format)
             .map_err(|e| WasmError::from(e).to_js_value())?;
 
-        let render_result = RenderResult {
+        Ok(RenderResult {
             artifacts: result.artifacts.into_iter().map(Into::into).collect(),
             warnings: result.warnings.into_iter().map(Into::into).collect(),
             output_format: result.output_format.into(),
             render_time_ms: now_ms() - start,
-        };
-
-        render_result
-            .serialize(&serde_wasm_bindgen::Serializer::json_compatible())
-            .map_err(|e| {
-                WasmError::from(format!("Failed to serialize result: {}", e)).to_js_value()
-            })
+        })
     }
 
     /// List registered Quill names

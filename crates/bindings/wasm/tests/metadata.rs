@@ -23,16 +23,14 @@ fn test_metadata_retrieval() {
         })
         .unwrap();
 
-    let info_js = engine
+    let info = engine
         .get_quill_info("ui-test-quill")
         .expect("getQuillInfo failed");
 
-    // Convert JsValue to serde_json::Value to inspect it easily in Rust
-    let info: Value = serde_wasm_bindgen::from_value(info_js).expect("failed to deserialize info");
-
     // Navigate to schema.properties.my_field.x-ui
     let x_ui = info
-        .pointer("/schema/properties/my_field/x-ui")
+        .schema
+        .pointer("/properties/my_field/x-ui")
         .expect("x-ui not found");
 
     assert_eq!(x_ui["group"], "Personal Info");

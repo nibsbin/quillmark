@@ -163,6 +163,9 @@ impl Backend for AcroformBackend {
                             .with_hint(format!("Template: {}", source)),
                         })?;
 
+                // Normalize newlines to \n to ensure consistency across platforms (e.g. WASM vs Native)
+                let rendered_value = rendered_value.replace("\r\n", "\n").replace('\r', "\n");
+
                 let should_update = using_tooltip_template || &rendered_value != source;
 
                 if should_update {
