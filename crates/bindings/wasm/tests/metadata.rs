@@ -28,7 +28,8 @@ fn test_metadata_retrieval() {
         .expect("getQuillInfo failed");
 
     // Navigate to schema.properties.my_field.x-ui
-    let x_ui = info.schema
+    let x_ui = info
+        .schema
         .pointer("/properties/my_field/x-ui")
         .expect("x-ui not found");
 
