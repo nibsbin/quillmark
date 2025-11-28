@@ -394,8 +394,4 @@ Register via `glue.register_filter(name, func)` using stable `filter_api` types.
 
 For complete implementation details, see:
 
-- Architecture design: `prose/designs/ARCHITECTURE.md` in the repository
-- Parsing specification: `prose/designs/PARSE.md` in the repository
-- Error handling: `prose/designs/ERROR.md` in the repository
-- Quill structure: `prose/designs/QUILL.md` in the repository
 - [Rust API Documentation](https://docs.rs/quillmark/latest/quillmark/)

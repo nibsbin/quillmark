@@ -6,8 +6,6 @@
 
 **Design Document**: [prose/designs/GLUE_METADATA.md](../designs/GLUE_METADATA.md)
 
-**Original Plan**: [prose/plans/GLUE_METADATA.md](../plans/GLUE_METADATA.md)
-
 ## Summary
 
 Successfully implemented the `__metadata__` field feature that exposes all non-body document fields in MiniJinja template contexts. The implementation follows the design document precisely and maintains full backward compatibility.
