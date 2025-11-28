@@ -742,8 +742,7 @@ impl Quill {
     /// Returns an error if:
     /// - The glue file specified in config is not found or not valid UTF-8
     /// - The example file specified in config is not found or not valid UTF-8
-    /// - The json_schema_file is not found or not valid JSON
-    /// - Validation fails
+    /// - Schema generation fails
     fn from_config(
         config: QuillConfig,
         root: FileTreeNode,
