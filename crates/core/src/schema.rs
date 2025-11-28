@@ -61,7 +61,10 @@ pub fn build_schema_from_fields(
             }
 
             if let Some(ref placeholder) = ui.placeholder {
-                ui_obj.insert("placeholder".to_string(), Value::String(placeholder.clone()));
+                ui_obj.insert(
+                    "placeholder".to_string(),
+                    Value::String(placeholder.clone()),
+                );
             }
 
             if let Some(order) = ui.order {
@@ -1010,10 +1013,7 @@ mod tests {
     #[test]
     fn test_build_schema_with_placeholder() {
         let mut fields = HashMap::new();
-        let mut schema = FieldSchema::new(
-            "author".to_string(),
-            "Document author name".to_string(),
-        );
+        let mut schema = FieldSchema::new("author".to_string(), "Document author name".to_string());
         schema.r#type = Some("str".to_string());
         schema.ui = Some(UiSchema {
             group: Some("Author Info".to_string()),
@@ -1023,10 +1023,7 @@ mod tests {
         });
         fields.insert("author".to_string(), schema);
 
-        let json_schema = build_schema_from_fields(&fields)
-            .unwrap()
-            .as_json()
-            .clone();
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
 
         let x_ui = &json_schema["properties"]["author"]["x-ui"];
         assert_eq!(x_ui["placeholder"], "e.g., John Doe");
