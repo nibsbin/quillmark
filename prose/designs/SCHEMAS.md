@@ -28,7 +28,6 @@ Quills encapsulate the metadata, configuration, and behavior for generating a sp
     - Ensure extension is in the backend's `glue_extension_types`
     - If not provided, ensure `backend.allow_auto_glue` is true
 - example_file -> Option[str]: Path to an example markdown file demonstrating the Quill's capabilities. Developers should include usage instructions in the content for human and LLM consumers.
-- json_schema_file -> Option[str]: Path to a comprehensive JSON schema file that overrides `[fields]`. If `json_schema_file` and fields are defined, emit a warning that the fields are overridden by the content in `json_schema_file`.
 
 ### Quill Field
 
@@ -45,7 +44,6 @@ Field properties:
 **UI Configuration (Nested `[ui]` table):**
 - group -> Option[str]: UI group/section name for organizing fields (e.g., "Personal Info").
 - tooltip -> Option[str]: Short hint text for the field (concise hint, unlike verbose description).
-- placeholder -> Option[str]: Placeholder text for inputs.
 - order -> Option[int]: Ordering index for sorting fields in the UI (auto-generated from TOML field position).
 
 **Implementation Status:**
@@ -53,7 +51,6 @@ Field properties:
 |----------|--------|
 | group | ✅ Implemented |
 | tooltip | ✅ Implemented |
-| placeholder | ✅ Implemented |
 | order | ✅ Implemented (auto-generated) |
 | component | ❌ Not yet implemented |
 
@@ -73,7 +70,7 @@ Field properties:
 
 Field schemas support a custom `x-ui` property for UI metadata that is included in the generated JSON schema. This property contains the serialized content of the `[ui]` table from the TOML configuration.
 
-- `x-ui`: An object containing UI metadata (group, tooltip, placeholder, order, etc.)
+- `x-ui`: An object containing UI metadata (group, tooltip, order, etc.)
 
 This property follows the JSON Schema specification for custom extensions. Validation logic ignores this property, but frontend UIs consume it for dynamic wizard generation.
 
@@ -89,7 +86,6 @@ This property follows the JSON Schema specification for custom extensions. Valid
       "x-ui": {
         "group": "Author Info",
         "tooltip": "Your full name",
-        "placeholder": "e.g. John Doe",
         "order": 1
       }
     }

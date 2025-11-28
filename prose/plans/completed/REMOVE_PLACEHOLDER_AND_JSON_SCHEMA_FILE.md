@@ -1,6 +1,6 @@
 # Remove ui.placeholder and json_schema_file from Quill.toml
 
-**Status**: Design Phase
+**Status**: ✅ Completed
 **Goal**: Remove the `ui.placeholder` field from Quill field schemas and the `json_schema_file` field from `QuillConfig`. Both features are being removed with extreme prejudice—no backward compatibility.
 **Related**: [SCHEMAS.md](../designs/SCHEMAS.md), [UI_SCHEMA_PROPERTIES.md](completed/UI_SCHEMA_PROPERTIES.md)
 

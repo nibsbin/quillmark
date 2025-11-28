@@ -25,7 +25,7 @@ This approach keeps all metadata co-located while providing a structured way to 
 
 Currently, `Quill.toml` fields are parsed and converted into a single JSON Schema. This schema is used for everything: validation, defaults, and API exposure.
 
-**Gap**: The current architecture lacks a way to express UI-specific concerns like widgets, placeholders, and explicit ordering without polluting the validation schema with flat `x-*` properties.
+**Gap**: The current architecture lacks a way to express UI-specific concerns like widgets and explicit ordering without polluting the validation schema with flat `x-*` properties.
 
 ---
 
@@ -42,7 +42,6 @@ type = "str"
 [fields.full_name.ui]
 group = "Personal Info"
 component = "text-input"
-placeholder = "e.g. John Doe"
 order = 1
 
 [fields.flavor]
@@ -66,7 +65,6 @@ The `build_schema_from_fields()` function generates a JSON Schema where each pro
       "x-ui": {
         "group": "Personal Info",
         "component": "text-input",
-        "placeholder": "e.g. John Doe",
         "order": 1
       }
     },
@@ -115,7 +113,6 @@ pub struct FieldSchema {
 pub struct UiSchema {
     pub group: Option<String>,
     pub component: Option<String>,
-    pub placeholder: Option<String>,
     pub order: Option<i32>,
     #[serde(flatten)]
     pub extra: HashMap<String, QuillValue>, // Allow arbitrary other UI props

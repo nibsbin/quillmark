@@ -60,13 +60,6 @@ pub fn build_schema_from_fields(
                 ui_obj.insert("tooltip".to_string(), Value::String(tooltip.clone()));
             }
 
-            if let Some(ref placeholder) = ui.placeholder {
-                ui_obj.insert(
-                    "placeholder".to_string(),
-                    Value::String(placeholder.clone()),
-                );
-            }
-
             if let Some(order) = ui.order {
                 ui_obj.insert("order".to_string(), json!(order));
             }
@@ -367,7 +360,7 @@ pub fn coerce_document(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::quill::{FieldSchema, UiSchema};
+    use crate::quill::FieldSchema;
     use crate::value::QuillValue;
 
     #[test]
@@ -1008,27 +1001,5 @@ mod tests {
         let items_array = items.as_array().unwrap();
         assert_eq!(items_array.len(), 1);
         assert!(items_array[0].as_object().is_some());
-    }
-
-    #[test]
-    fn test_build_schema_with_placeholder() {
-        let mut fields = HashMap::new();
-        let mut schema = FieldSchema::new("author".to_string(), "Document author name".to_string());
-        schema.r#type = Some("str".to_string());
-        schema.ui = Some(UiSchema {
-            group: Some("Author Info".to_string()),
-            tooltip: Some("Your full name".to_string()),
-            placeholder: Some("e.g., John Doe".to_string()),
-            order: Some(0),
-        });
-        fields.insert("author".to_string(), schema);
-
-        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
-
-        let x_ui = &json_schema["properties"]["author"]["x-ui"];
-        assert_eq!(x_ui["placeholder"], "e.g., John Doe");
-        assert_eq!(x_ui["tooltip"], "Your full name");
-        assert_eq!(x_ui["group"], "Author Info");
-        assert_eq!(x_ui["order"], 0);
     }
 }

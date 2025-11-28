@@ -54,7 +54,6 @@ date = { description = "Document date", type = "str" }
 - `example_file` - Path to example markdown file
 - `version` - Semantic version of your Quill
 - `author` - Creator of the Quill
-- `json_schema_file` - Path to JSON schema file (overrides `[fields]`)
 
 ### Field Schemas
 

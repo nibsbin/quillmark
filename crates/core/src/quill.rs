@@ -14,8 +14,6 @@ pub struct UiSchema {
     pub group: Option<String>,
     /// Short tooltip text for the field (concise hint, unlike verbose description)
     pub tooltip: Option<String>,
-    /// Placeholder text for input components (e.g., "Enter your name")
-    pub placeholder: Option<String>,
     /// Order of the field in the UI (automatically generated based on field position in Quill.toml)
     pub order: Option<i32>,
 }
@@ -103,18 +101,13 @@ impl FieldSchema {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
-                let placeholder = ui_obj
-                    .get("placeholder")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-
                 // Validate that only known UI properties are present
                 for key in ui_obj.keys() {
                     match key.as_str() {
-                        "group" | "tooltip" | "placeholder" => {}
+                        "group" | "tooltip" => {}
                         _ => {
                             // Log warning but don't fail
-                            eprintln!("Warning: Unknown UI property '{}'. Only 'group', 'tooltip', and 'placeholder' are supported.", key);
+                            eprintln!("Warning: Unknown UI property '{}'. Only 'group' and 'tooltip' are supported.", key);
                         }
                     }
                 }
@@ -122,7 +115,6 @@ impl FieldSchema {
                 Some(UiSchema {
                     group,
                     tooltip,
-                    placeholder,
                     order: None, // Order is determined by position in Quill.toml
                 })
             } else {
@@ -479,8 +471,6 @@ pub struct QuillConfig {
     pub example_file: Option<String>,
     /// Glue file
     pub glue_file: Option<String>,
-    /// JSON schema file
-    pub json_schema_file: Option<String>,
     /// Field schemas
     pub fields: HashMap<String, FieldSchema>,
     /// Additional metadata from [Quill] section (excluding standard fields)
@@ -555,11 +545,6 @@ impl QuillConfig {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let json_schema_file = quill_section
-            .get("json_schema_file")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
         // Extract additional metadata from [Quill] section (excluding standard fields)
         let mut metadata = HashMap::new();
         if let toml::Value::Table(table) = quill_section {
@@ -572,7 +557,6 @@ impl QuillConfig {
                     && key != "author"
                     && key != "example_file"
                     && key != "glue_file"
-                    && key != "json_schema_file"
                 {
                     match QuillValue::from_toml(value) {
                         Ok(quill_value) => {
@@ -628,7 +612,6 @@ impl QuillConfig {
                                         schema.ui = Some(UiSchema {
                                             group: None,
                                             tooltip: None,
-                                            placeholder: None,
                                             order: Some(order),
                                         });
                                     } else if let Some(ui) = &mut schema.ui {
@@ -664,7 +647,6 @@ impl QuillConfig {
             author,
             example_file,
             glue_file,
-            json_schema_file,
             fields,
             metadata,
             typst_config,
@@ -794,36 +776,9 @@ impl Quill {
             metadata.insert(format!("typst_{}", key), value.clone());
         }
 
-        // Load or build JSON schema
-        let schema = if let Some(ref json_schema_path) = config.json_schema_file {
-            // Load schema from file if specified
-            let schema_bytes = root.get_file(json_schema_path).ok_or_else(|| {
-                format!(
-                    "json_schema_file '{}' not found in file tree",
-                    json_schema_path
-                )
-            })?;
-
-            // Parse and validate JSON syntax
-            let schema_json =
-                serde_json::from_slice::<serde_json::Value>(schema_bytes).map_err(|e| {
-                    format!(
-                        "json_schema_file '{}' is not valid JSON: {}",
-                        json_schema_path, e
-                    )
-                })?;
-
-            // Warn if fields are also defined
-            if !config.fields.is_empty() {
-                eprintln!("Warning: [fields] section is overridden by json_schema_file");
-            }
-
-            QuillValue::from_json(schema_json)
-        } else {
-            // Build JSON schema from field schemas if no json_schema_file
-            build_schema_from_fields(&config.fields)
-                .map_err(|e| format!("Failed to build JSON schema from field schemas: {}", e))?
-        };
+        // Build JSON schema from field schemas
+        let schema = build_schema_from_fields(&config.fields)
+            .map_err(|e| format!("Failed to build JSON schema from field schemas: {}", e))?;
 
         // Read the glue content from glue file (if specified)
         let glue_content: Option<String> = if let Some(ref glue_file_name) = config.glue_file {
@@ -2070,85 +2025,6 @@ packages = ["@preview/bubble:0.2.2"]
     }
 
     #[test]
-    fn test_json_schema_file_override() {
-        // Test that json_schema_file overrides [fields]
-        let mut root_files = HashMap::new();
-
-        // Create a custom JSON schema with defaults
-        let custom_schema = r#"{
-            "$schema": "https://json-schema.org/draft/2019-09/schema",
-            "type": "object",
-            "properties": {
-                "title": {
-                    "type": "string",
-                    "description": "Document title"
-                },
-                "author": {
-                    "type": "string",
-                    "description": "Document author",
-                    "default": "Schema Author"
-                },
-                "version": {
-                    "type": "number",
-                    "description": "Version number",
-                    "default": 2
-                }
-            },
-            "required": ["title"]
-        }"#;
-
-        root_files.insert(
-            "schema.json".to_string(),
-            FileTreeNode::File {
-                contents: custom_schema.as_bytes().to_vec(),
-            },
-        );
-
-        let quill_toml = r#"[Quill]
-name = "schema-file-test"
-backend = "typst"
-description = "Test json_schema_file"
-json_schema_file = "schema.json"
-
-[fields]
-author = {description = "This should be ignored", default = "Fields Author"}
-status = {description = "This should also be ignored"}
-"#;
-
-        root_files.insert(
-            "Quill.toml".to_string(),
-            FileTreeNode::File {
-                contents: quill_toml.as_bytes().to_vec(),
-            },
-        );
-
-        let root = FileTreeNode::Directory { files: root_files };
-        let quill = Quill::from_tree(root, None).unwrap();
-
-        // Verify that schema came from json_schema_file, not [fields]
-        let properties = quill.schema["properties"].as_object().unwrap();
-        assert_eq!(properties.len(), 3); // title, author, version from schema.json
-        assert!(properties.contains_key("title"));
-        assert!(properties.contains_key("author"));
-        assert!(properties.contains_key("version"));
-        assert!(!properties.contains_key("status")); // from [fields], should be ignored
-
-        // Verify defaults from schema file
-        let defaults = quill.extract_defaults();
-        assert_eq!(defaults.len(), 2); // author and version have defaults
-        assert_eq!(
-            defaults.get("author").unwrap().as_str(),
-            Some("Schema Author")
-        );
-        assert_eq!(defaults.get("version").unwrap().as_json().as_i64(), Some(2));
-
-        // Verify required fields from schema
-        let required = quill.schema["required"].as_array().unwrap();
-        assert_eq!(required.len(), 1);
-        assert!(required.contains(&serde_json::json!("title")));
-    }
-
-    #[test]
     fn test_extract_defaults_method() {
         // Test the extract_defaults method on Quill
         let mut root_files = HashMap::new();
@@ -2225,30 +2101,6 @@ fourth = {description = "Fourth field"}
     }
 
     #[test]
-    fn test_quill_with_placeholder() {
-        let toml_content = r#"[Quill]
-name = "placeholder-test"
-backend = "typst"
-description = "Test placeholder"
-
-[fields.name]
-description = "Your name"
-type = "str"
-
-[fields.name.ui]
-placeholder = "e.g., Jane Smith"
-"#;
-
-        let config = QuillConfig::from_toml(toml_content).unwrap();
-
-        let name_field = &config.fields["name"];
-        assert_eq!(
-            name_field.ui.as_ref().unwrap().placeholder,
-            Some("e.g., Jane Smith".to_string())
-        );
-    }
-
-    #[test]
     fn test_quill_with_all_ui_properties() {
         let toml_content = r#"[Quill]
 name = "full-ui-test"
@@ -2262,7 +2114,6 @@ type = "str"
 [fields.author.ui]
 group = "Author Info"
 tooltip = "Your full name"
-placeholder = "e.g., John Doe"
 "#;
 
         let config = QuillConfig::from_toml(toml_content).unwrap();
@@ -2271,7 +2122,6 @@ placeholder = "e.g., John Doe"
         let ui = author_field.ui.as_ref().unwrap();
         assert_eq!(ui.group, Some("Author Info".to_string()));
         assert_eq!(ui.tooltip, Some("Your full name".to_string()));
-        assert_eq!(ui.placeholder, Some("e.g., John Doe".to_string()));
         assert_eq!(ui.order, Some(0)); // First field should have order 0
     }
 }
