@@ -47,8 +47,6 @@ Field properties:
 - tooltip -> Option[str]: Short hint text for the field (concise hint, unlike verbose description).
 - placeholder -> Option[str]: Placeholder text for inputs.
 - order -> Option[int]: Ordering index for sorting fields in the UI (auto-generated from TOML field position).
-- component -> Option[str]: Recommended UI component (e.g., "text-input", "select", "textarea"). *Not yet implemented.*
-- *arbitrary keys* -> any: Any other keys in the `[ui]` table are preserved and passed to the schema. *Not yet implemented.*
 
 **Implementation Status:**
 | Property | Status |
