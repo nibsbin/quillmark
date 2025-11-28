@@ -54,7 +54,6 @@ date = { description = "Document date", type = "str" }
 - `example_file` - Path to example markdown file
 - `version` - Semantic version of your Quill
 - `author` - Creator of the Quill
-- `json_schema_file` - Path to JSON schema file (overrides `[fields]`)
 
 ### Field Schemas
 
@@ -84,13 +83,11 @@ type = "string"
 [fields.sender.ui]
 group = "Sender Information"
 tooltip = "The name of the person sending the letter"
-extra = { placeholder = "John Doe" }
 ```
 
 Supported UI properties:
 - `group` - Group name for organizing fields
 - `tooltip` - Help text to display on hover
-- `extra` - Arbitrary key-value pairs for custom UI logic
 
 ## Glue Templates
 

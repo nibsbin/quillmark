@@ -1,7 +1,9 @@
 # UI Schema Properties Implementation Plan
 
-**Status**: ✅ Completed
-**Goal**: Add `ui.placeholder` property to Quill field schemas (`ui.tooltip` is already implemented)
+> **⚠️ DEPRECATED**: The `ui.placeholder` feature implemented in this plan has been removed from the codebase. See [REMOVE_PLACEHOLDER_AND_JSON_SCHEMA_FILE.md](../REMOVE_PLACEHOLDER_AND_JSON_SCHEMA_FILE.md) for details.
+
+**Status**: ~~✅ Completed~~ → Superseded (feature removed)
+**Goal**: ~~Add `ui.placeholder` property to Quill field schemas (`ui.tooltip` is already implemented)~~ Feature removed
 **Related**: [SCHEMAS.md](../designs/SCHEMAS.md), [QUILL_ANNOTATION_PHASE_2.md](completed/QUILL_ANNOTATION_PHASE_2.md)
 
 ---

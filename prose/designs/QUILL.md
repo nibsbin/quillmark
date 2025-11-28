@@ -64,8 +64,6 @@ pub struct QuillConfig {
     pub example_file: Option<String>,
     /// Glue file
     pub glue_file: Option<String>,
-    /// JSON schema file
-    pub json_schema_file: Option<String>,
     /// Field schemas
     pub fields: HashMap<String, FieldSchema>,
     /// Additional metadata from [Quill] section (excluding standard fields)
@@ -138,14 +136,13 @@ glue_file = "glue.typ"  # optional - if not provided, auto glue is used
 example_file = "example.md"  # optional
 version = "1.0.0"  # optional
 author = "Template Author"  # optional
-json_schema_file = "schema.json"  # optional - overrides [fields]
 
 [typst]
 # Typst-specific configuration
 packages = ["@preview/bubble:0.2.2"]
 
 [fields]
-# Field schemas for template variables (ignored if json_schema_file is specified)
+# Field schemas for template variables
 author = { description = "Author of document", type = "str", default = "Anonymous" }
 title = { description = "Document title", type = "str" }
 ```
@@ -165,8 +162,7 @@ title = { description = "Document title", type = "str" }
   - Typst configuration with `typst_` prefix (e.g., `typst_packages`)
 
 **Schema Handling:**
-- If `json_schema_file` is specified: Load schema from that file
-- Otherwise: Build JSON schema from `[fields]` section
+- JSON schema is always built from `[fields]` section
 - Defaults and examples are cached from schema for performance
 
 ---

@@ -107,9 +107,7 @@ impl Workflow {
     /// Validate a ParsedDocument against the Quill's schema
     ///
     /// Validates the document's fields against the schema defined in the Quill.
-    /// The schema can come from either:
-    /// - A json_schema_file specified in Quill.toml
-    /// - TOML `[fields]` section converted to JSON Schema
+    /// The schema is built from the TOML `[fields]` section converted to JSON Schema.
     ///
     /// If no schema is defined, this returns Ok(()).
     pub fn validate(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
