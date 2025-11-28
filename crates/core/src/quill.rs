@@ -14,7 +14,7 @@ pub struct UiSchema {
     pub group: Option<String>,
     /// Short tooltip text for the field (concise hint, unlike verbose description)
     pub tooltip: Option<String>,
-    /// Placeholder text for input components (e.g., "e.g., John Doe")
+    /// Placeholder text for input components (e.g., "Enter your name")
     pub placeholder: Option<String>,
     /// Order of the field in the UI (automatically generated based on field position in Quill.toml)
     pub order: Option<i32>,
