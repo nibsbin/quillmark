@@ -30,9 +30,9 @@ This is a test document.
 
     let parsed = Quillmark::parse_markdown(markdown).expect("parse_markdown failed");
 
-    // Verify it returns a JsValue (we can't easily inspect it without browser APIs)
-    assert!(!parsed.is_undefined());
-    assert!(!parsed.is_null());
+    // Verify it returns a ParsedDocument
+    assert_eq!(parsed.quill_tag, "test-quill");
+    assert!(parsed.fields.is_object());
 }
 
 #[wasm_bindgen_test]
@@ -50,9 +50,9 @@ fn test_register_and_get_quill_info() {
         .get_quill_info("test-quill")
         .expect("getQuillInfo failed");
 
-    // Verify it returns a JsValue
-    assert!(!info.is_undefined());
-    assert!(!info.is_null());
+    // Verify it returns a QuillInfo
+    assert_eq!(info.name, "test-quill");
+    assert_eq!(info.backend, "typst");
 }
 
 #[wasm_bindgen_test]
@@ -81,11 +81,12 @@ This is a test.
     let info = engine
         .get_quill_info("test-quill")
         .expect("getQuillInfo failed");
-    assert!(!info.is_undefined());
+    assert_eq!(info.name, "test-quill");
 
     // Step 4: Render (this may fail in test environment without full WASM setup)
     // We'll just verify the API is callable
-    let options = JsValue::undefined();
+    use quillmark_wasm::RenderOptions;
+    let options = RenderOptions::default();
     let _result = engine.render(parsed, options);
     // Note: render may fail in test due to typst compilation, but that's ok for API testing
 }
