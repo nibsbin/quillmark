@@ -237,4 +237,3 @@ Templates that iterate over fields to build headers/preambles can simplify:
 - [PARSE.md](PARSE.md) - Document parsing and field structure
 - [ARCHITECTURE.md](ARCHITECTURE.md) - Template system architecture
 - [Extended YAML Metadata Standard](PARSE.md#extended-yaml-metadata-standard)
-- [Implementation Plan](../plans/GLUE_METADATA.md) - Detailed implementation steps
