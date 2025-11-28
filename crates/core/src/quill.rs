@@ -14,6 +14,8 @@ pub struct UiSchema {
     pub group: Option<String>,
     /// Short tooltip text for the field (concise hint, unlike verbose description)
     pub tooltip: Option<String>,
+    /// Placeholder text for input components (e.g., "e.g., John Doe")
+    pub placeholder: Option<String>,
     /// Order of the field in the UI (automatically generated based on field position in Quill.toml)
     pub order: Option<i32>,
 }
@@ -101,13 +103,18 @@ impl FieldSchema {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
+                let placeholder = ui_obj
+                    .get("placeholder")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+
                 // Validate that only known UI properties are present
                 for key in ui_obj.keys() {
                     match key.as_str() {
-                        "group" | "tooltip" => {}
+                        "group" | "tooltip" | "placeholder" => {}
                         _ => {
                             // Log warning but don't fail
-                            eprintln!("Warning: Unknown UI property '{}'. Only 'group' and 'tooltip' are supported.", key);
+                            eprintln!("Warning: Unknown UI property '{}'. Only 'group', 'tooltip', and 'placeholder' are supported.", key);
                         }
                     }
                 }
@@ -115,6 +122,7 @@ impl FieldSchema {
                 Some(UiSchema {
                     group,
                     tooltip,
+                    placeholder,
                     order: None, // Order is determined by position in Quill.toml
                 })
             } else {
@@ -620,6 +628,7 @@ impl QuillConfig {
                                         schema.ui = Some(UiSchema {
                                             group: None,
                                             tooltip: None,
+                                            placeholder: None,
                                             order: Some(order),
                                         });
                                     } else if let Some(ui) = &mut schema.ui {
@@ -2213,5 +2222,56 @@ fourth = {description = "Fourth field"}
 
         let fourth = config.fields.get("fourth").unwrap();
         assert_eq!(fourth.ui.as_ref().unwrap().order, Some(3));
+    }
+
+    #[test]
+    fn test_quill_with_placeholder() {
+        let toml_content = r#"[Quill]
+name = "placeholder-test"
+backend = "typst"
+description = "Test placeholder"
+
+[fields.name]
+description = "Your name"
+type = "str"
+
+[fields.name.ui]
+placeholder = "e.g., Jane Smith"
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+
+        let name_field = &config.fields["name"];
+        assert_eq!(
+            name_field.ui.as_ref().unwrap().placeholder,
+            Some("e.g., Jane Smith".to_string())
+        );
+    }
+
+    #[test]
+    fn test_quill_with_all_ui_properties() {
+        let toml_content = r#"[Quill]
+name = "full-ui-test"
+backend = "typst"
+description = "Test all UI properties"
+
+[fields.author]
+description = "The full name of the document author"
+type = "str"
+
+[fields.author.ui]
+group = "Author Info"
+tooltip = "Your full name"
+placeholder = "e.g., John Doe"
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+
+        let author_field = &config.fields["author"];
+        let ui = author_field.ui.as_ref().unwrap();
+        assert_eq!(ui.group, Some("Author Info".to_string()));
+        assert_eq!(ui.tooltip, Some("Your full name".to_string()));
+        assert_eq!(ui.placeholder, Some("e.g., John Doe".to_string()));
+        assert_eq!(ui.order, Some(0)); // First field should have order 0
     }
 }
