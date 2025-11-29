@@ -2430,7 +2430,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "acroform",
  "anyhow",
@@ -2448,7 +2448,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-acroform"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "acroform",
  "minijinja",
@@ -2461,7 +2461,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-cli"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2472,7 +2472,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-core"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "anyhow",
  "glob",
@@ -2489,7 +2489,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fixtures"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "quillmark",
  "quillmark-typst",
@@ -2497,7 +2497,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fuzz"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "proptest",
  "quillmark-core",
@@ -2506,7 +2506,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-python"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "anyhow",
  "pyo3",
@@ -2518,7 +2518,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-typst"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "anyhow",
  "dirs",
@@ -2539,7 +2539,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-wasm"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "console_error_panic_hook",
  "getrandom 0.3.4",
