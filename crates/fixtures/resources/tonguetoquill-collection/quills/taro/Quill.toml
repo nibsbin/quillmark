@@ -5,24 +5,7 @@ glue_file = "glue.typ"
 example_file = "taro.md"
 description = "A simple document template for testing"
 
-[fields.title]
-description = "title of document"
-type = "str"
-[fields.title.ui]
-group = "Document Info"
-tooltip = "Document title"
-
-[fields.author]
-description = "Author of document"
-type = "str"
-[fields.author.ui]
-group = "Document Info"
-tooltip = "Author name"
-
-[fields.ice_cream]
-description = "favorite ice cream flavor"
-type = "str"
-default = "taro"
-[fields.ice_cream.ui]
-group = "Preferences"
-tooltip = "Favorite flavor"
+[fields]
+author = {description = "Author of document"}
+ice_cream = {description = "favorite ice cream flavor", default = "taro"}
+title = {description = "title of document"}

@@ -21,6 +21,8 @@ compress_indorsements: true
 # Based on LOCAR template from https://www.shaw.af.mil/Portals/98/Docs/Legal/Revamp/2022%20LOCAR%20TEMPLATE%20(Enlisted).docx
 ---
 
+**NOTE: This template is undergoing major refinement. It is included for demonstration purposes.**
+
 <!-- Describe the incident: what the member did or failed to do, citing specific incidents and dates, and if possible, with UCMJ articles. -->
 Investigation has disclosed the _incident description_.
 

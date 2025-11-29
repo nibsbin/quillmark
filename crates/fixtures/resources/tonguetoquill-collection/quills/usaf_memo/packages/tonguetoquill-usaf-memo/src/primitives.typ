@@ -244,16 +244,11 @@
   let content-str = repr(content)
 
   // Detect multiple paragraphs by looking for parbreak() between content elements
-  // Pattern: ], parbreak(), [ (with optional whitespace and sequence wrappers)
+  // Pattern: content, parbreak(), content
   // This matches parbreak() BETWEEN content, not trailing parbreaks
   let has-multiple-pars = (
-    content-str.contains("],") and content-str.contains("parbreak(),") and content-str.contains("[")
-      and (
-        // Direct case: ], parbreak(), [
-        content-str.matches(regex("\\],\\s*parbreak\\(\\),\\s*\\[")).len() > 0
-          // Sequence case: ], parbreak(), sequence([
-          or content-str.matches(regex("\\],\\s*parbreak\\(\\),\\s*sequence\\(\\s*\\[")).len() > 0
-      )
+    content-str.contains("parbreak(),")
+      and content-str.matches(regex("(\\]|\\)),\\s*parbreak\\(\\),\\s*(\\[|[a-zA-Z_][a-zA-Z0-9_]*\\()")).len() > 0
   )
 
   // Render with paragraph numbering based on detection
