@@ -1,0 +1,38 @@
+[
+	{
+		"name": "USAF Memo",
+		"description": "Official U.S. Air Force memorandum template",
+		"file": "usaf_template.md",
+		"production": true
+	},
+	{
+		"name": "USSF Memo",
+		"description": "Official U.S. Space Force memorandum template",
+		"file": "ussf_template.md",
+		"production": true
+	},
+	{
+		"name": "Letter of Counseling",
+		"description": "Letter of Counseling template",
+		"file": "loc.md",
+		"production": true
+	},
+	{
+		"name": "Rebuttal",
+		"description": "Rebuttal template for LOC",
+		"file": "rebuttal.md",
+		"production": true
+	},
+	{
+		"name": "Taro Template",
+		"description": "Official Taro ice cream template",
+		"file": "taro.md",
+		"production": false
+	},
+	{
+		"name": "Fry's Aircrew Qualification Report",
+		"description": "Fry's Aircrew Qualification Report",
+		"file": "af8_fry.md",
+		"production": true
+	}
+]
