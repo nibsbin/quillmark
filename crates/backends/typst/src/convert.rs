@@ -29,6 +29,7 @@
 //! See [CONVERT.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-typst/docs/designs/CONVERT.md) for the complete specification.
 
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
+use std::ops::Range;
 
 /// Maximum nesting depth for markdown structures
 const MAX_NESTING_DEPTH: usize = 100;
@@ -89,18 +90,25 @@ enum ListType {
     Ordered,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum StrongKind {
+    Bold,      // Source was **...**
+    Underline, // Source was __...__
+}
+
 /// Converts an iterator of markdown events to Typst markup
-fn push_typst<'a, I>(output: &mut String, iter: I) -> Result<(), ConversionError>
+fn push_typst<'a, I>(output: &mut String, source: &str, iter: I) -> Result<(), ConversionError>
 where
-    I: Iterator<Item = Event<'a>>,
+    I: Iterator<Item = (Event<'a>, Range<usize>)>,
 {
     let mut end_newline = true;
     let mut list_stack: Vec<ListType> = Vec::new();
+    let mut strong_stack: Vec<StrongKind> = Vec::new();
     let mut in_list_item = false; // Track if we're inside a list item
     let mut depth = 0; // Track nesting depth for DoS prevention
     let mut iter = iter.peekable();
 
-    while let Some(event) = iter.next() {
+    while let Some((event, range)) = iter.next() {
         match event {
             Event::Start(tag) => {
                 // Track nesting depth
@@ -159,7 +167,21 @@ where
                         end_newline = false;
                     }
                     Tag::Strong => {
-                        output.push('*');
+                        // Detect whether this is __ (underline) or ** (bold) by peeking at source
+                        let kind = if range.start + 2 <= source.len() {
+                            match &source[range.start..range.start + 2] {
+                                "__" => StrongKind::Underline,
+                                _ => StrongKind::Bold, // Default to bold for ** or edge cases
+                            }
+                        } else {
+                            StrongKind::Bold // Fallback for very short ranges
+                        };
+                        strong_stack.push(kind);
+
+                        match kind {
+                            StrongKind::Underline => output.push_str("#underline["),
+                            StrongKind::Bold => output.push('*'),
+                        }
                         end_newline = false;
                     }
                     Tag::Strikethrough => {
@@ -220,7 +242,7 @@ where
                     TagEnd::Emphasis => {
                         output.push('_');
                         // Check if next event is text starting with alphanumeric
-                        if let Some(Event::Text(text)) = iter.peek() {
+                        if let Some((Event::Text(text), _)) = iter.peek() {
                             if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
                                 output.push_str("#{}");
                             }
@@ -228,11 +250,25 @@ where
                         end_newline = false;
                     }
                     TagEnd::Strong => {
-                        output.push('*');
-                        // Check if next event is text starting with alphanumeric
-                        if let Some(Event::Text(text)) = iter.peek() {
-                            if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
-                                output.push_str("#{}");
+                        match strong_stack.pop() {
+                            Some(StrongKind::Bold) => {
+                                output.push('*');
+                                // Word-boundary handling only for bold
+                                if let Some((Event::Text(text), _)) = iter.peek() {
+                                    if text.chars().next().map_or(false, |c| c.is_alphanumeric())
+                                    {
+                                        output.push_str("#{}");
+                                    }
+                                }
+                            }
+                            Some(StrongKind::Underline) => {
+                                output.push(']');
+                                // No word-boundary handling needed for function syntax
+                            }
+                            None => {
+                                // Malformed: more end tags than start tags
+                                // Default to bold behavior for robustness
+                                output.push('*');
                             }
                         }
                         end_newline = false;
@@ -295,7 +331,8 @@ pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
     let parser = Parser::new_ext(markdown, options);
     let mut typst_output = String::new();
 
-    push_typst(&mut typst_output, parser)?;
+    // Pass source text for delimiter peeking
+    push_typst(&mut typst_output, markdown, parser.into_offset_iter())?;
     Ok(typst_output)
 }
 
@@ -791,5 +828,162 @@ mod tests {
         let markdown = "## Code example: `fn main()`";
         let typst = mark_to_typst(markdown).unwrap();
         assert_eq!(typst, "== Code example: `fn main()`\n\n");
+    }
+
+    // Tests for underline support (__ syntax)
+
+    // Basic Underline Tests
+    #[test]
+    fn test_underline_basic() {
+        assert_eq!(
+            mark_to_typst("__underlined__").unwrap(),
+            "#underline[underlined]\n\n"
+        );
+    }
+
+    #[test]
+    fn test_underline_with_text() {
+        assert_eq!(
+            mark_to_typst("This is __underlined__ text").unwrap(),
+            "This is #underline[underlined] text\n\n"
+        );
+    }
+
+    #[test]
+    fn test_bold_unchanged() {
+        // Verify ** still works as bold
+        assert_eq!(mark_to_typst("**bold**").unwrap(), "*bold*\n\n");
+    }
+
+    // Nesting Tests
+    #[test]
+    fn test_underline_containing_bold() {
+        assert_eq!(
+            mark_to_typst("__A **B** A__").unwrap(),
+            "#underline[A *B* A]\n\n"
+        );
+    }
+
+    #[test]
+    fn test_bold_containing_underline() {
+        assert_eq!(
+            mark_to_typst("**A __B__ A**").unwrap(),
+            "*A #underline[B] A*\n\n"
+        );
+    }
+
+    #[test]
+    fn test_deep_nesting() {
+        assert_eq!(
+            mark_to_typst("__A **B __C__ B** A__").unwrap(),
+            "#underline[A *B #underline[C] B* A]\n\n"
+        );
+    }
+
+    // Adjacent Styles Tests
+    #[test]
+    fn test_adjacent_underline_bold() {
+        assert_eq!(
+            mark_to_typst("__A__**B**").unwrap(),
+            "#underline[A]*B*\n\n"
+        );
+    }
+
+    #[test]
+    fn test_adjacent_bold_underline() {
+        assert_eq!(
+            mark_to_typst("**A**__B__").unwrap(),
+            "*A*#underline[B]\n\n"
+        );
+    }
+
+    // Escaping Tests
+    #[test]
+    fn test_underline_special_chars() {
+        // Special characters inside underline should be escaped
+        assert_eq!(
+            mark_to_typst("__#1__").unwrap(),
+            "#underline[\\#1]\n\n"
+        );
+    }
+
+    #[test]
+    fn test_underline_with_brackets() {
+        assert_eq!(
+            mark_to_typst("__[text]__").unwrap(),
+            "#underline[\\[text\\]]\n\n"
+        );
+    }
+
+    #[test]
+    fn test_underline_with_asterisk() {
+        assert_eq!(
+            mark_to_typst("__a * b__").unwrap(),
+            "#underline[a \\* b]\n\n"
+        );
+    }
+
+    // Edge Case Tests
+    #[test]
+    fn test_empty_underline() {
+        // Four underscores is parsed as horizontal rule by pulldown-cmark, not empty strong
+        // This test verifies we don't crash on this input
+        // (pulldown-cmark treats ____ as a thematic break / horizontal rule)
+        let result = mark_to_typst("____").unwrap();
+        // The result is empty because Rule events are ignored in our converter
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_underline_in_list() {
+        assert_eq!(
+            mark_to_typst("- __underlined__ item").unwrap(),
+            "- #underline[underlined] item\n\n"
+        );
+    }
+
+    #[test]
+    fn test_underline_in_heading() {
+        assert_eq!(
+            mark_to_typst("# Heading with __underline__").unwrap(),
+            "= Heading with #underline[underline]\n\n"
+        );
+    }
+
+    #[test]
+    fn test_underline_followed_by_alphanumeric() {
+        // When __under__ is immediately followed by alphanumeric (no space),
+        // pulldown-cmark does NOT parse it as Strong - it treats underscores as literal.
+        // This is standard CommonMark behavior requiring word boundaries.
+        // With a space after, it does work as underline:
+        assert_eq!(
+            mark_to_typst("__under__ line").unwrap(),
+            "#underline[under] line\n\n"
+        );
+    }
+
+    // Mixed Formatting Tests
+    #[test]
+    fn test_underline_with_italic() {
+        assert_eq!(
+            mark_to_typst("__underline *italic*__").unwrap(),
+            "#underline[underline _italic_]\n\n"
+        );
+    }
+
+    #[test]
+    fn test_underline_with_code() {
+        assert_eq!(
+            mark_to_typst("__underline `code`__").unwrap(),
+            "#underline[underline `code`]\n\n"
+        );
+    }
+
+    #[test]
+    fn test_underline_with_strikethrough() {
+        assert_eq!(
+            mark_to_typst("__underline ~~strike~~__").unwrap(),
+            "#underline[underline #strike[strike]]\n\n"
+        );
     }
 }
