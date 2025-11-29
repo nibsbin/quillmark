@@ -1,1 +1,0 @@
-Flow through instructions in `.github/agents/Architect.md` to update designs and plan. Then follow instructions in `.github/agents/Programmer.md` to implement the solution.
