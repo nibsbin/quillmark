@@ -255,8 +255,7 @@ where
                                 output.push('*');
                                 // Word-boundary handling only for bold
                                 if let Some((Event::Text(text), _)) = iter.peek() {
-                                    if text.chars().next().map_or(false, |c| c.is_alphanumeric())
-                                    {
+                                    if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
                                         output.push_str("#{}");
                                     }
                                 }
@@ -883,28 +882,19 @@ mod tests {
     // Adjacent Styles Tests
     #[test]
     fn test_adjacent_underline_bold() {
-        assert_eq!(
-            mark_to_typst("__A__**B**").unwrap(),
-            "#underline[A]*B*\n\n"
-        );
+        assert_eq!(mark_to_typst("__A__**B**").unwrap(), "#underline[A]*B*\n\n");
     }
 
     #[test]
     fn test_adjacent_bold_underline() {
-        assert_eq!(
-            mark_to_typst("**A**__B__").unwrap(),
-            "*A*#underline[B]\n\n"
-        );
+        assert_eq!(mark_to_typst("**A**__B__").unwrap(), "*A*#underline[B]\n\n");
     }
 
     // Escaping Tests
     #[test]
     fn test_underline_special_chars() {
         // Special characters inside underline should be escaped
-        assert_eq!(
-            mark_to_typst("__#1__").unwrap(),
-            "#underline[\\#1]\n\n"
-        );
+        assert_eq!(mark_to_typst("__#1__").unwrap(), "#underline[\\#1]\n\n");
     }
 
     #[test]
