@@ -43,7 +43,9 @@ pub struct RenderArgs {
 
 pub fn execute(args: RenderArgs) -> Result<()> {
     // Determine if we have a markdown file or need to use example content
-    let (parsed, quill, markdown_path_for_output) = if let Some(ref markdown_path) = args.markdown_file {
+    let (parsed, quill, markdown_path_for_output) = if let Some(ref markdown_path) =
+        args.markdown_file
+    {
         // Validate markdown file exists
         if !markdown_path.exists() {
             return Err(CliError::InvalidArgument(format!(
@@ -116,9 +118,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     } else {
         // No markdown file provided, must have --quill
         let quill_path = args.quill.clone().ok_or_else(|| {
-            CliError::InvalidArgument(
-                "Must provide either a markdown file or --quill".to_string(),
-            )
+            CliError::InvalidArgument("Must provide either a markdown file or --quill".to_string())
         })?;
 
         // Validate quill path exists
