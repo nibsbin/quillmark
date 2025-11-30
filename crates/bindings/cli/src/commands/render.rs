@@ -10,7 +10,7 @@ use std::path::PathBuf;
 pub struct RenderArgs {
     /// Path to markdown file with YAML frontmatter
     #[arg(value_name = "MARKDOWN_FILE")]
-    markdown_file: PathBuf,
+    markdown_file: Option<PathBuf>,
 
     /// Path to quill directory (overrides QUILL frontmatter field)
     #[arg(short, long, value_name = "PATH")]
@@ -42,74 +42,125 @@ pub struct RenderArgs {
 }
 
 pub fn execute(args: RenderArgs) -> Result<()> {
-    // Validate markdown file exists
-    if !args.markdown_file.exists() {
-        return Err(CliError::InvalidArgument(format!(
-            "Markdown file not found: {}",
-            args.markdown_file.display()
-        )));
-    }
-
-    if args.verbose {
-        println!("Reading markdown from: {}", args.markdown_file.display());
-    }
-
-    // Read markdown file
-    let markdown = fs::read_to_string(&args.markdown_file)?;
-
-    // Parse markdown
-    let parsed = ParsedDocument::from_markdown(&markdown)?;
-
-    if args.verbose {
-        println!("Markdown parsed successfully");
-    }
-
-    // Determine quill path
-    let quill_path = if let Some(ref path) = args.quill {
-        path.clone()
-    } else {
-        // Try to get QUILL field from frontmatter
-        let quill_tag = parsed.quill_tag();
-
-        // Check if a QUILL field was specified (not the default "__default__")
-        if quill_tag == "__default__" {
-            return Err(CliError::InvalidArgument(
-                "No QUILL field in frontmatter and --quill not specified".to_string(),
-            ));
+    // Determine if we have a markdown file or need to use example content
+    let (parsed, quill, markdown_path_for_output) = if let Some(ref markdown_path) = args.markdown_file {
+        // Validate markdown file exists
+        if !markdown_path.exists() {
+            return Err(CliError::InvalidArgument(format!(
+                "Markdown file not found: {}",
+                markdown_path.display()
+            )));
         }
 
-        // If QUILL field is a path, use it directly
-        let quill_candidate = PathBuf::from(quill_tag);
-        if quill_candidate.exists() && quill_candidate.is_dir() {
-            quill_candidate
+        if args.verbose {
+            println!("Reading markdown from: {}", markdown_path.display());
+        }
+
+        // Read markdown file
+        let markdown = fs::read_to_string(markdown_path)?;
+
+        // Parse markdown
+        let parsed = ParsedDocument::from_markdown(&markdown)?;
+
+        if args.verbose {
+            println!("Markdown parsed successfully");
+        }
+
+        // Determine quill path
+        let quill_path = if let Some(ref path) = args.quill {
+            path.clone()
         } else {
-            // Otherwise, try to find it relative to markdown file
-            let markdown_dir = args
-                .markdown_file
-                .parent()
-                .unwrap_or_else(|| std::path::Path::new("."));
-            markdown_dir.join(quill_tag)
+            // Try to get QUILL field from frontmatter
+            let quill_tag = parsed.quill_tag();
+
+            // Check if a QUILL field was specified (not the default "__default__")
+            if quill_tag == "__default__" {
+                return Err(CliError::InvalidArgument(
+                    "No QUILL field in frontmatter and --quill not specified".to_string(),
+                ));
+            }
+
+            // If QUILL field is a path, use it directly
+            let quill_candidate = PathBuf::from(quill_tag);
+            if quill_candidate.exists() && quill_candidate.is_dir() {
+                quill_candidate
+            } else {
+                // Otherwise, try to find it relative to markdown file
+                let markdown_dir = markdown_path
+                    .parent()
+                    .unwrap_or_else(|| std::path::Path::new("."));
+                markdown_dir.join(quill_tag)
+            }
+        };
+
+        // Validate quill path exists
+        if !quill_path.exists() {
+            return Err(CliError::InvalidArgument(format!(
+                "Quill directory not found: {}",
+                quill_path.display()
+            )));
         }
+
+        if args.verbose {
+            println!("Loading quill from: {}", quill_path.display());
+        }
+
+        // Load quill
+        let quill = Quill::from_path(quill_path.clone())?;
+
+        if args.verbose {
+            println!("Quill loaded: {}", quill.name);
+        }
+
+        (parsed, quill, Some(markdown_path.clone()))
+    } else {
+        // No markdown file provided, must have --quill
+        let quill_path = args.quill.clone().ok_or_else(|| {
+            CliError::InvalidArgument(
+                "Must provide either a markdown file or --quill".to_string(),
+            )
+        })?;
+
+        // Validate quill path exists
+        if !quill_path.exists() {
+            return Err(CliError::InvalidArgument(format!(
+                "Quill directory not found: {}",
+                quill_path.display()
+            )));
+        }
+
+        if args.verbose {
+            println!("Loading quill from: {}", quill_path.display());
+        }
+
+        // Load quill
+        let quill = Quill::from_path(quill_path.clone())?;
+
+        if args.verbose {
+            println!("Quill loaded: {}", quill.name);
+        }
+
+        // Get example content
+        let markdown = quill.example.clone().ok_or_else(|| {
+            CliError::InvalidArgument(format!(
+                "Quill '{}' does not have example content",
+                quill.name
+            ))
+        })?;
+
+        if args.verbose {
+            println!("Using example content from quill");
+        }
+
+        // Parse markdown
+        let parsed = ParsedDocument::from_markdown(&markdown)?;
+
+        if args.verbose {
+            println!("Example markdown parsed successfully");
+        }
+
+        (parsed, quill, None)
     };
-
-    // Validate quill path exists
-    if !quill_path.exists() {
-        return Err(CliError::InvalidArgument(format!(
-            "Quill directory not found: {}",
-            quill_path.display()
-        )));
-    }
-
-    if args.verbose {
-        println!("Loading quill from: {}", quill_path.display());
-    }
-
-    // Load quill
-    let quill = Quill::from_path(quill_path.clone())?;
-
-    if args.verbose {
-        println!("Quill loaded: {}", quill.name);
-    }
 
     // Create engine and workflow
     let engine = Quillmark::new();
@@ -130,9 +181,13 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         let glued_bytes = glued.into_bytes();
 
         // Determine output path
-        let output_path = args
-            .output
-            .unwrap_or_else(|| derive_glue_output_path(&args.markdown_file));
+        let output_path = args.output.unwrap_or_else(|| {
+            if let Some(ref path) = markdown_path_for_output {
+                derive_glue_output_path(path)
+            } else {
+                PathBuf::from("example_glue.typ")
+            }
+        });
 
         let writer = OutputWriter::new(args.stdout, Some(output_path), args.quiet);
         writer.write(&glued_bytes)?;
@@ -174,10 +229,13 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     let output_path = if args.stdout {
         None
     } else {
-        Some(
-            args.output
-                .unwrap_or_else(|| derive_output_path(&args.markdown_file, &args.format)),
-        )
+        Some(args.output.unwrap_or_else(|| {
+            if let Some(ref path) = markdown_path_for_output {
+                derive_output_path(path, &args.format)
+            } else {
+                PathBuf::from(format!("example.{}", args.format))
+            }
+        }))
     };
 
     let writer = OutputWriter::new(args.stdout, output_path, args.quiet);
