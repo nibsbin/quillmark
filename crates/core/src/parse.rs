@@ -222,6 +222,20 @@ fn find_metadata_blocks(
 
         if let Some((delimiter_pos, delimiter_len, _line_ending)) = delimiter_result {
             let abs_pos = pos + delimiter_pos;
+
+            // Check if the delimiter is at the start of a line
+            let is_start_of_line = if abs_pos == 0 {
+                true
+            } else {
+                let char_before = markdown.as_bytes()[abs_pos - 1];
+                char_before == b'\n' || char_before == b'\r'
+            };
+
+            if !is_start_of_line {
+                pos = abs_pos + 1;
+                continue;
+            }
+
             let content_start = abs_pos + delimiter_len; // After "---\n" or "---\r\n"
 
             // Check if this --- is a horizontal rule (blank lines above AND below)
@@ -1721,6 +1735,23 @@ Body content."#;
             "John Doe"
         );
         assert_eq!(doc.get_field("version").unwrap().as_f64().unwrap(), 1.0);
+    }
+
+    #[test]
+    fn test_html_comment_interaction() {
+        let markdown = r#"<!---
+---> the rest of the page content
+
+---
+key: value
+---
+"#;
+        let doc = decompose(markdown).unwrap();
+
+        // The comment should be ignored (or at least not cause a parse error)
+        // The frontmatter should be parsed
+        let key = doc.get_field("key").and_then(|v| v.as_str());
+        assert_eq!(key, Some("value"));
     }
 }
 #[cfg(test)]
