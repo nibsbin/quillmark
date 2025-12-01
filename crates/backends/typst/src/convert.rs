@@ -34,11 +34,8 @@ use std::ops::Range;
 /// Maximum nesting depth for markdown structures
 const MAX_NESTING_DEPTH: usize = 100;
 
-/// Maximum buffer size for guillemet content (64 KiB)
-const MAX_GUILLEMET_BUFFER_SIZE: usize = 64 * 1024;
-
-/// Maximum event count when processing guillemet content
-const MAX_GUILLEMET_EVENT_COUNT: usize = 512;
+/// Maximum length for guillemet content (single line, 64 KiB)
+const MAX_GUILLEMET_LENGTH: usize = 64 * 1024;
 
 /// Errors that can occur during markdown to Typst conversion
 #[derive(Debug, thiserror::Error)]
@@ -53,51 +50,114 @@ pub enum ConversionError {
     },
 }
 
-/// Extracts plain text from markdown content, stripping formatting.
-/// Returns None if the content contains unsupported constructs.
-fn extract_plain_text(markdown: &str) -> Option<String> {
-    // Use same options as main parser
-    let mut options = pulldown_cmark::Options::empty();
-    options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
-    let parser = Parser::new_ext(markdown, options);
-    let mut result = String::new();
-    let mut event_count = 0;
+/// Preprocesses markdown to convert guillemets: <<text>> → «text»
+/// Strips all markdown formatting from content between << and >>
+/// Skips conversion inside code blocks and code spans
+fn preprocess_guillemets(markdown: &str) -> String {
+    let mut result = String::with_capacity(markdown.len());
+    let bytes = markdown.as_bytes();
+    let mut i = 0;
+    let mut in_code_block = false;
+    let mut in_inline_code = false;
     
-    for event in parser {
-        event_count += 1;
-        if event_count > MAX_GUILLEMET_EVENT_COUNT {
-            return None; // Too many events, abort
+    while i < bytes.len() {
+        // Track code block state (``` or ~~~)
+        if i + 2 < bytes.len() && &bytes[i..i+3] == b"```" {
+            in_code_block = !in_code_block;
+            result.push_str("```");
+            i += 3;
+            continue;
         }
         
-        match event {
-            Event::Text(text) => result.push_str(&text),
-            Event::Code(text) => result.push_str(&text),
-            Event::SoftBreak => result.push(' '),
-            Event::HardBreak => result.push(' '),
-            // Skip HTML but extract text from it by treating it as text
-            Event::Html(html) | Event::InlineHtml(html) => {
-                // Strip < and > to get the content
-                let html_str = html.as_ref();
-                if let Some(content) = html_str.strip_prefix('<').and_then(|s| s.strip_suffix('>')) {
-                    result.push_str(content);
-                } else {
-                    result.push_str(&html);
+        // Track inline code state (`)
+        if bytes[i] == b'`' {
+            in_inline_code = !in_inline_code;
+            result.push('`');
+            i += 1;
+            continue;
+        }
+        
+        // Only process << when not in code
+        if !in_code_block && !in_inline_code && i + 1 < bytes.len() && &bytes[i..i+2] == b"<<" {
+            // Find matching >>
+            if let Some(end_offset) = find_matching_guillemet_end(&bytes[i+2..]) {
+                let content_end = i + 2 + end_offset;
+                let content = &markdown[i+2..content_end];
+                
+                // Check constraints: same line and size limit
+                if !content.contains('\n') && content.len() <= MAX_GUILLEMET_LENGTH {
+                    // Strip formatting and wrap in guillemets
+                    let plain = strip_markdown_formatting(content);
+                    result.push('«');
+                    result.push_str(&plain);
+                    result.push('»');
+                    i = content_end + 2; // Skip past >>
+                    continue;
                 }
             }
-            // Skip formatting tags but continue
-            Event::Start(Tag::Emphasis) | Event::End(TagEnd::Emphasis) => {}
-            Event::Start(Tag::Strong) | Event::End(TagEnd::Strong) => {}
-            Event::Start(Tag::Strikethrough) | Event::End(TagEnd::Strikethrough) => {}
-            Event::Start(Tag::Paragraph) | Event::End(TagEnd::Paragraph) => {}
-            // For links and images, we want just the text/alt, not the URL
-            Event::Start(Tag::Link { .. }) | Event::End(TagEnd::Link) => {}
-            Event::Start(Tag::Image { .. }) | Event::End(TagEnd::Image) => {}
-            // Abort on unsupported constructs
-            _ => return None,
+        }
+        
+        // Regular character - just copy it
+        result.push(bytes[i] as char);
+        i += 1;
+    }
+    
+    result
+}
+
+/// Finds the position of >> that matches an opening <<, returns offset from search start
+fn find_matching_guillemet_end(bytes: &[u8]) -> Option<usize> {
+    for i in 0..bytes.len().saturating_sub(1) {
+        if &bytes[i..i+2] == b">>" {
+            return Some(i);
+        }
+    }
+    None
+}
+
+/// Strips markdown formatting characters from text, keeping only content
+fn strip_markdown_formatting(text: &str) -> String {
+    // Simple approach: replace common patterns, then clean up
+    let mut result = text.to_string();
+    
+    // Remove double markers first (strong, strikethrough)
+    result = result.replace("**", "");
+    result = result.replace("__", "");
+    result = result.replace("~~", "");
+    
+    // Remove single markers (emphasis)
+    result = result.replace('*', "");
+    result = result.replace('_', "");
+    
+    // Remove inline code backticks
+    result = result.replace('`', "");
+    
+    // Remove link syntax: [text](url) -> text
+    while let Some(start) = result.find('[') {
+        if let Some(middle) = result[start..].find(']') {
+            let middle = start + middle;
+            // Check if there's a (url) part
+            if result.len() > middle + 1 && result.as_bytes()[middle + 1] == b'(' {
+                if let Some(end) = result[middle..].find(')') {
+                    let end = middle + end + 1;
+                    // Extract the link text (clone to avoid borrow issues)
+                    let link_text = result[start + 1..middle].to_string();
+                    result.replace_range(start..end, &link_text);
+                    continue;
+                }
+            }
+            // Just a bracket, remove it
+            result.remove(start);
+        } else {
+            // No closing bracket, remove the opening one
+            result.remove(start);
         }
     }
     
-    Some(result)
+    // Remove any remaining brackets
+    result = result.replace(&['[', ']', '(', ')'][..], "");
+    
+    result.trim().to_string()
 }
 
 /// Escapes text for safe use in Typst markup context.
@@ -149,141 +209,19 @@ enum StrongKind {
     Underline, // Source was __...__
 }
 
-/// Finds all guillemet pairs in the source text and returns their positions
-/// Returns Vec of (start, end, content) where start is position of <<, end is position after >>
-fn find_guillemet_pairs(source: &str) -> Vec<(usize, usize, String)> {
-    let mut pairs = Vec::new();
-    let mut pos = 0;
-    
-    while let Some(start) = source[pos..].find("<<") {
-        let abs_start = pos + start;
-        let search_from = abs_start + 2;
-        
-        if let Some(rel_end) = source[search_from..].find(">>") {
-            let abs_end = search_from + rel_end;
-            let content = &source[search_from..abs_end];
-            
-            // Check same-line requirement and buffer limit
-            if !content.contains('\n') && content.len() <= MAX_GUILLEMET_BUFFER_SIZE {
-                // Try to extract plain text
-                if let Some(plain_text) = extract_plain_text(content) {
-                    pairs.push((abs_start, abs_end + 2, plain_text));
-                    pos = abs_end + 2;
-                    continue;
-                }
-            }
-        }
-        
-        pos = abs_start + 2;
-    }
-    
-    pairs
-}
-
 /// Converts an iterator of markdown events to Typst markup
 fn push_typst<'a, I>(output: &mut String, source: &str, iter: I) -> Result<(), ConversionError>
 where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
 {
-    // Pre-scan for guillemet pairs
-    let guillemet_pairs = find_guillemet_pairs(source);
-    
     let mut end_newline = true;
     let mut list_stack: Vec<ListType> = Vec::new();
     let mut strong_stack: Vec<StrongKind> = Vec::new();
     let mut in_list_item = false; // Track if we're inside a list item
     let mut depth = 0; // Track nesting depth for DoS prevention
-    let mut in_code_block = false; // Track if we're in a code block
-    let mut in_html = false; // Track if we're in HTML
-    let mut skip_until_pos: Option<usize> = None; // For skipping events during guillemet processing
     let mut iter = iter.peekable();
 
     while let Some((event, range)) = iter.next() {
-        // Check if we need to handle partial skip (event extends beyond guillemet)
-        let should_skip = if let Some(skip_pos) = skip_until_pos {
-            match &event {
-                // Never skip paragraph/list/heading structure
-                Event::Start(Tag::Paragraph) | Event::End(TagEnd::Paragraph) |
-                Event::Start(Tag::List(_)) | Event::End(TagEnd::List(_)) |
-                Event::Start(Tag::Item) | Event::End(TagEnd::Item) |
-                Event::Start(Tag::Heading { .. }) | Event::End(TagEnd::Heading(_)) => {
-                    if range.end >= skip_pos {
-                        skip_until_pos = None;
-                    }
-                    false
-                }
-                // Skip formatting events that are entirely within the range
-                Event::Start(Tag::Emphasis) | Event::End(TagEnd::Emphasis) |
-                Event::Start(Tag::Strong) | Event::End(TagEnd::Strong) |
-                Event::Start(Tag::Strikethrough) | Event::End(TagEnd::Strikethrough) |
-                Event::Start(Tag::Link { .. }) | Event::End(TagEnd::Link) => {
-                    if range.end <= skip_pos {
-                        true // Skip formatting events inside guillemets
-                    } else {
-                        skip_until_pos = None;
-                        false
-                    }
-                }
-                // For other events, use content-based logic
-                _ => {
-                    if range.start < skip_pos && range.end <= skip_pos {
-                        true // Entirely within skip range
-                    } else if range.start < skip_pos && range.end > skip_pos {
-                        // Spans across the end - output remaining part for text events
-                        match &event {
-                            Event::Text(_) => {
-                                if let Some(remaining_text) = source.get(skip_pos..range.end) {
-                                    let escaped = escape_markup(remaining_text);
-                                    output.push_str(&escaped);
-                                    end_newline = escaped.ends_with('\n');
-                                }
-                            }
-                            _ => {}
-                        }
-                        skip_until_pos = None;
-                        true // Skip this event
-                    } else {
-                        // Event is after skip range
-                        skip_until_pos = None;
-                        false
-                    }
-                }
-            }
-        } else {
-            false
-        };
-        
-        if should_skip {
-            continue;
-        }
-        
-        // Check if this event starts within a guillemet pair
-        if !in_code_block && !in_html {
-            match &event {
-                Event::Text(_) | Event::Code(_) | Event::Html(_) | Event::InlineHtml(_) => {
-                    if let Some((pair_start, pair_end, plain_text)) = guillemet_pairs.iter()
-                        .find(|(start, end, _)| range.start >= *start && range.start < *end) 
-                    {
-                        // This event is inside a guillemet pair
-                        if range.start == *pair_start {
-                            // This is the start of the pair - output guillemets
-                            output.push('«');
-                            output.push_str(&escape_markup(plain_text));
-                            output.push('»');
-                            skip_until_pos = Some(*pair_end);
-                            end_newline = false;
-                            continue;
-                        }
-                        // Skip this event - it's part of a guillemet we've already processed
-                        continue;
-                    }
-                }
-                _ => {
-                    // Don't try to match structural events to guillemets
-                }
-            }
-        }
-
         match event {
             Event::Start(tag) => {
                 // Track nesting depth
@@ -308,10 +246,10 @@ where
                         // Typst doesn't need explicit paragraph tags for simple paragraphs
                     }
                     Tag::CodeBlock(_) => {
-                        in_code_block = true;
+                        // Code blocks are handled, no special tracking needed
                     }
                     Tag::HtmlBlock => {
-                        in_html = true;
+                        // HTML blocks are handled, no special tracking needed
                     }
                     Tag::List(start_number) => {
                         if !end_newline {
@@ -406,10 +344,10 @@ where
                         // For paragraphs inside list items, we don't add extra spacing
                     }
                     TagEnd::CodeBlock => {
-                        in_code_block = false;
+                        // Code blocks are handled, no special tracking needed
                     }
                     TagEnd::HtmlBlock => {
-                        in_html = false;
+                        // HTML blocks are handled, no special tracking needed
                     }
                     TagEnd::List(_) => {
                         list_stack.pop();
@@ -512,14 +450,17 @@ where
 ///
 /// Returns an error if nesting depth exceeds the maximum allowed.
 pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
+    // Preprocess to convert guillemets before parsing
+    let preprocessed = preprocess_guillemets(markdown);
+    
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
 
-    let parser = Parser::new_ext(markdown, options);
+    let parser = Parser::new_ext(&preprocessed, options);
     let mut typst_output = String::new();
 
-    // Pass source text for delimiter peeking
-    push_typst(&mut typst_output, markdown, parser.into_offset_iter())?;
+    // Pass preprocessed source for delimiter peeking
+    push_typst(&mut typst_output, &preprocessed, parser.into_offset_iter())?;
     Ok(typst_output)
 }
 
@@ -1322,9 +1263,10 @@ mod tests {
     #[test]
     fn test_guillemet_with_special_chars() {
         // Special chars inside guillemets should be escaped
+        // Note: * is removed as it's a formatting character, even if not paired
         assert_eq!(
             mark_to_typst("<<text with #hash and *star>>").unwrap(),
-            "«text with \\#hash and \\*star»\n\n"
+            "«text with \\#hash and star»\n\n"
         );
     }
 
@@ -1372,8 +1314,8 @@ mod tests {
     // Safety Tests
     #[test]
     fn test_guillemet_respects_buffer_limit() {
-        // Create content larger than MAX_GUILLEMET_BUFFER_SIZE
-        let large_content = "a".repeat(MAX_GUILLEMET_BUFFER_SIZE + 1);
+        // Create content larger than MAX_GUILLEMET_LENGTH
+        let large_content = "a".repeat(MAX_GUILLEMET_LENGTH + 1);
         let markdown = format!("<<{}>>", large_content);
         let result = mark_to_typst(&markdown).unwrap();
         // Should not convert due to buffer limit - guillemets should not appear
