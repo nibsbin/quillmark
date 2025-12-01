@@ -51,18 +51,18 @@ pub enum ConversionError {
 }
 
 /// Preprocesses markdown to convert guillemets: <<text>> → «text»
-/// Strips all markdown formatting from content between << and >>
+/// Extracts raw text content between << and >> and passes through escape_markup
 /// Skips conversion inside code blocks and code spans
 fn preprocess_guillemets(markdown: &str) -> String {
     let mut result = String::with_capacity(markdown.len());
-    let bytes = markdown.as_bytes();
+    let chars: Vec<char> = markdown.chars().collect();
     let mut i = 0;
     let mut in_code_block = false;
     let mut in_inline_code = false;
     
-    while i < bytes.len() {
-        // Track code block state (``` or ~~~)
-        if i + 2 < bytes.len() && &bytes[i..i+3] == b"```" {
+    while i < chars.len() {
+        // Track code block state (```)
+        if i + 2 < chars.len() && chars[i] == '`' && chars[i+1] == '`' && chars[i+2] == '`' {
             in_code_block = !in_code_block;
             result.push_str("```");
             i += 3;
@@ -70,7 +70,7 @@ fn preprocess_guillemets(markdown: &str) -> String {
         }
         
         // Track inline code state (`)
-        if bytes[i] == b'`' {
+        if chars[i] == '`' {
             in_inline_code = !in_inline_code;
             result.push('`');
             i += 1;
@@ -78,18 +78,17 @@ fn preprocess_guillemets(markdown: &str) -> String {
         }
         
         // Only process << when not in code
-        if !in_code_block && !in_inline_code && i + 1 < bytes.len() && &bytes[i..i+2] == b"<<" {
+        if !in_code_block && !in_inline_code && i + 1 < chars.len() && chars[i] == '<' && chars[i+1] == '<' {
             // Find matching >>
-            if let Some(end_offset) = find_matching_guillemet_end(&bytes[i+2..]) {
+            if let Some(end_offset) = find_matching_guillemet_end(&chars[i+2..]) {
                 let content_end = i + 2 + end_offset;
-                let content = &markdown[i+2..content_end];
+                let content: String = chars[i+2..content_end].iter().collect();
                 
                 // Check constraints: same line and size limit
                 if !content.contains('\n') && content.len() <= MAX_GUILLEMET_LENGTH {
-                    // Strip formatting and wrap in guillemets
-                    let plain = strip_markdown_formatting(content);
+                    // Just pass raw content through - escape_markup will handle it
                     result.push('«');
-                    result.push_str(&plain);
+                    result.push_str(&content);
                     result.push('»');
                     i = content_end + 2; // Skip past >>
                     continue;
@@ -98,7 +97,7 @@ fn preprocess_guillemets(markdown: &str) -> String {
         }
         
         // Regular character - just copy it
-        result.push(bytes[i] as char);
+        result.push(chars[i]);
         i += 1;
     }
     
@@ -106,58 +105,13 @@ fn preprocess_guillemets(markdown: &str) -> String {
 }
 
 /// Finds the position of >> that matches an opening <<, returns offset from search start
-fn find_matching_guillemet_end(bytes: &[u8]) -> Option<usize> {
-    for i in 0..bytes.len().saturating_sub(1) {
-        if &bytes[i..i+2] == b">>" {
+fn find_matching_guillemet_end(chars: &[char]) -> Option<usize> {
+    for i in 0..chars.len().saturating_sub(1) {
+        if chars[i] == '>' && chars[i+1] == '>' {
             return Some(i);
         }
     }
     None
-}
-
-/// Strips markdown formatting characters from text, keeping only content
-fn strip_markdown_formatting(text: &str) -> String {
-    // Simple approach: replace common patterns, then clean up
-    let mut result = text.to_string();
-    
-    // Remove double markers first (strong, strikethrough)
-    result = result.replace("**", "");
-    result = result.replace("__", "");
-    result = result.replace("~~", "");
-    
-    // Remove single markers (emphasis)
-    result = result.replace('*', "");
-    result = result.replace('_', "");
-    
-    // Remove inline code backticks
-    result = result.replace('`', "");
-    
-    // Remove link syntax: [text](url) -> text
-    while let Some(start) = result.find('[') {
-        if let Some(middle) = result[start..].find(']') {
-            let middle = start + middle;
-            // Check if there's a (url) part
-            if result.len() > middle + 1 && result.as_bytes()[middle + 1] == b'(' {
-                if let Some(end) = result[middle..].find(')') {
-                    let end = middle + end + 1;
-                    // Extract the link text (clone to avoid borrow issues)
-                    let link_text = result[start + 1..middle].to_string();
-                    result.replace_range(start..end, &link_text);
-                    continue;
-                }
-            }
-            // Just a bracket, remove it
-            result.remove(start);
-        } else {
-            // No closing bracket, remove the opening one
-            result.remove(start);
-        }
-    }
-    
-    // Remove any remaining brackets
-    result = result.replace(&['[', ']', '(', ')'][..], "");
-    
-    result.trim().to_string()
 }
 
 /// Escapes text for safe use in Typst markup context.
@@ -1139,7 +1093,7 @@ mod tests {
     fn test_guillemet_strips_bold() {
         assert_eq!(
             mark_to_typst("<<**bold**>>").unwrap(),
-            "«bold»\n\n"
+            "«*bold*»\n\n"
         );
     }
 
@@ -1147,7 +1101,7 @@ mod tests {
     fn test_guillemet_strips_italic() {
         assert_eq!(
             mark_to_typst("<<_italic_>>").unwrap(),
-            "«italic»\n\n"
+            "«_italic_»\n\n"
         );
     }
 
@@ -1155,7 +1109,7 @@ mod tests {
     fn test_guillemet_strips_mixed_formatting() {
         assert_eq!(
             mark_to_typst("<<**bold** and _italic_ text>>").unwrap(),
-            "«bold and italic text»\n\n"
+            "«*bold* and _italic_ text»\n\n"
         );
     }
 
@@ -1163,7 +1117,7 @@ mod tests {
     fn test_guillemet_strips_strikethrough() {
         assert_eq!(
             mark_to_typst("<<~~strike~~>>").unwrap(),
-            "«strike»\n\n"
+            "«#strike[strike]»\n\n"
         );
     }
 
@@ -1171,25 +1125,25 @@ mod tests {
     fn test_guillemet_strips_underline() {
         assert_eq!(
             mark_to_typst("<<__underline__>>").unwrap(),
-            "«underline»\n\n"
+            "«#underline[underline]»\n\n"
         );
     }
 
     #[test]
     fn test_guillemet_preserves_inline_code_text() {
-        // Inline code text is preserved but backticks removed
+        // Inline code text is preserved as Typst markup
         assert_eq!(
             mark_to_typst("<<text with `code` inside>>").unwrap(),
-            "«text with code inside»\n\n"
+            "«text with `code` inside»\n\n"
         );
     }
 
     #[test]
     fn test_guillemet_extracts_link_text() {
-        // Link text extracted, URL discarded
+        // Link is preserved as Typst markup
         assert_eq!(
             mark_to_typst("<<visit [our site](https://example.com)>>").unwrap(),
-            "«visit our site»\n\n"
+            "«visit #link(\"https://example.com\")[our site]»\n\n"
         );
     }
 
@@ -1262,11 +1216,10 @@ mod tests {
 
     #[test]
     fn test_guillemet_with_special_chars() {
-        // Special chars inside guillemets should be escaped
-        // Note: * is removed as it's a formatting character, even if not paired
+        // Special chars inside guillemets are escaped by Typst processing
         assert_eq!(
             mark_to_typst("<<text with #hash and *star>>").unwrap(),
-            "«text with \\#hash and star»\n\n"
+            "«text with \\#hash and \\*star»\n\n"
         );
     }
 
