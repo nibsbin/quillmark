@@ -59,16 +59,16 @@ fn preprocess_guillemets(markdown: &str) -> String {
     let mut i = 0;
     let mut in_code_block = false;
     let mut in_inline_code = false;
-    
+
     while i < chars.len() {
         // Track code block state (```)
-        if i + 2 < chars.len() && chars[i] == '`' && chars[i+1] == '`' && chars[i+2] == '`' {
+        if i + 2 < chars.len() && chars[i] == '`' && chars[i + 1] == '`' && chars[i + 2] == '`' {
             in_code_block = !in_code_block;
             result.push_str("```");
             i += 3;
             continue;
         }
-        
+
         // Track inline code state (`)
         if chars[i] == '`' {
             in_inline_code = !in_inline_code;
@@ -76,14 +76,19 @@ fn preprocess_guillemets(markdown: &str) -> String {
             i += 1;
             continue;
         }
-        
+
         // Only process << when not in code
-        if !in_code_block && !in_inline_code && i + 1 < chars.len() && chars[i] == '<' && chars[i+1] == '<' {
+        if !in_code_block
+            && !in_inline_code
+            && i + 1 < chars.len()
+            && chars[i] == '<'
+            && chars[i + 1] == '<'
+        {
             // Find matching >>
-            if let Some(end_offset) = find_matching_guillemet_end(&chars[i+2..]) {
+            if let Some(end_offset) = find_matching_guillemet_end(&chars[i + 2..]) {
                 let content_end = i + 2 + end_offset;
-                let content: String = chars[i+2..content_end].iter().collect();
-                
+                let content: String = chars[i + 2..content_end].iter().collect();
+
                 // Check constraints: same line and size limit
                 if !content.contains('\n') && content.len() <= MAX_GUILLEMET_LENGTH {
                     // Just pass raw content through - escape_markup will handle it
@@ -95,19 +100,19 @@ fn preprocess_guillemets(markdown: &str) -> String {
                 }
             }
         }
-        
+
         // Regular character - just copy it
         result.push(chars[i]);
         i += 1;
     }
-    
+
     result
 }
 
 /// Finds the position of >> that matches an opening <<, returns offset from search start
 fn find_matching_guillemet_end(chars: &[char]) -> Option<usize> {
     for i in 0..chars.len().saturating_sub(1) {
-        if chars[i] == '>' && chars[i+1] == '>' {
+        if chars[i] == '>' && chars[i + 1] == '>' {
             return Some(i);
         }
     }
@@ -406,7 +411,7 @@ where
 pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
     // Preprocess to convert guillemets before parsing
     let preprocessed = preprocess_guillemets(markdown);
-    
+
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
 
@@ -1073,10 +1078,7 @@ mod tests {
 
     #[test]
     fn test_guillemet_simple_text() {
-        assert_eq!(
-            mark_to_typst("<<text>>").unwrap(),
-            "«text»\n\n"
-        );
+        assert_eq!(mark_to_typst("<<text>>").unwrap(), "«text»\n\n");
     }
 
     #[test]
@@ -1091,18 +1093,12 @@ mod tests {
     // Formatting Strip Tests
     #[test]
     fn test_guillemet_strips_bold() {
-        assert_eq!(
-            mark_to_typst("<<**bold**>>").unwrap(),
-            "«*bold*»\n\n"
-        );
+        assert_eq!(mark_to_typst("<<**bold**>>").unwrap(), "«*bold*»\n\n");
     }
 
     #[test]
     fn test_guillemet_strips_italic() {
-        assert_eq!(
-            mark_to_typst("<<_italic_>>").unwrap(),
-            "«_italic_»\n\n"
-        );
+        assert_eq!(mark_to_typst("<<_italic_>>").unwrap(), "«_italic_»\n\n");
     }
 
     #[test]
@@ -1172,18 +1168,12 @@ mod tests {
     // Edge Cases
     #[test]
     fn test_guillemet_unmatched_open() {
-        assert_eq!(
-            mark_to_typst("<<unmatched").unwrap(),
-            "\\<\\<unmatched\n\n"
-        );
+        assert_eq!(mark_to_typst("<<unmatched").unwrap(), "\\<\\<unmatched\n\n");
     }
 
     #[test]
     fn test_guillemet_unmatched_close() {
-        assert_eq!(
-            mark_to_typst("unmatched>>").unwrap(),
-            "unmatched\\>\\>\n\n"
-        );
+        assert_eq!(mark_to_typst("unmatched>>").unwrap(), "unmatched\\>\\>\n\n");
     }
 
     #[test]
@@ -1225,10 +1215,7 @@ mod tests {
 
     #[test]
     fn test_guillemet_empty_content() {
-        assert_eq!(
-            mark_to_typst("<<>>").unwrap(),
-            "«»\n\n"
-        );
+        assert_eq!(mark_to_typst("<<>>").unwrap(), "«»\n\n");
     }
 
     // Integration Tests
