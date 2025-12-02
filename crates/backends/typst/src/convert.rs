@@ -1304,28 +1304,44 @@ mod tests {
     fn test_guillemet_not_in_multi_backtick_code_span() {
         // Multi-backtick code spans per CommonMark
         let result = mark_to_typst("`` <<text>> ``").unwrap();
-        assert!(!result.contains('«'), "Multi-backtick span incorrectly converted: {}", result);
+        assert!(
+            !result.contains('«'),
+            "Multi-backtick span incorrectly converted: {}",
+            result
+        );
     }
 
     #[test]
     fn test_guillemet_not_in_indented_code_block() {
         // Indented code blocks (4+ spaces) per CommonMark
         let result = mark_to_typst("    <<not converted>>").unwrap();
-        assert!(!result.contains('«'), "Indented code block incorrectly converted: {}", result);
+        assert!(
+            !result.contains('«'),
+            "Indented code block incorrectly converted: {}",
+            result
+        );
     }
 
     #[test]
     fn test_guillemet_not_in_tilde_fence() {
         // Tilde fences per CommonMark
         let result = mark_to_typst("~~~\n<<text>>\n~~~").unwrap();
-        assert!(!result.contains('«'), "Tilde fence incorrectly converted: {}", result);
+        assert!(
+            !result.contains('«'),
+            "Tilde fence incorrectly converted: {}",
+            result
+        );
     }
 
     #[test]
     fn test_guillemet_not_in_long_backtick_fence() {
         // Fences with >3 backticks per CommonMark
         let result = mark_to_typst("````\n<<text>>\n````").unwrap();
-        assert!(!result.contains('«'), "Long backtick fence incorrectly converted: {}", result);
+        assert!(
+            !result.contains('«'),
+            "Long backtick fence incorrectly converted: {}",
+            result
+        );
     }
 
     #[test]
