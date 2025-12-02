@@ -475,7 +475,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
     if blocks.is_empty() {
         // No metadata blocks, entire content is body
         // Preprocess guillemets in markdown body
-        let (preprocessed_body, _) = preprocess_markdown_guillemets(markdown);
+        let preprocessed_body = preprocess_markdown_guillemets(markdown);
         fields.insert(
             BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::Value::String(preprocessed_body)),
@@ -616,7 +616,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
             let body = &markdown[body_start..body_end];
 
             // Preprocess guillemets in the tagged block body (markdown-aware)
-            let (preprocessed_body, _) = preprocess_markdown_guillemets(body);
+            let preprocessed_body = preprocess_markdown_guillemets(body);
 
             // Add preprocessed body to item fields
             item_fields.insert(
@@ -676,7 +676,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
     let global_body = &markdown[body_start..body_end];
 
     // Preprocess guillemets in markdown body
-    let (preprocessed_global_body, _) = preprocess_markdown_guillemets(global_body);
+    let preprocessed_global_body = preprocess_markdown_guillemets(global_body);
 
     fields.insert(
         BODY_FIELD.to_string(),

@@ -96,6 +96,21 @@ enum StrongKind {
     Underline, // Source was __...__
 }
 
+/// Pushes `#{}` word-boundary guard if the next event is text starting with alphanumeric.
+///
+/// This prevents Typst from interpreting the end of emphasis/bold markers as part of
+/// a word when immediately followed by alphanumeric text (e.g., `*bold*text`).
+fn push_word_boundary_guard<'a, I>(output: &mut String, iter: &mut std::iter::Peekable<I>)
+where
+    I: Iterator<Item = (Event<'a>, Range<usize>)>,
+{
+    if let Some((Event::Text(text), _)) = iter.peek() {
+        if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
+            output.push_str("#{}");
+        }
+    }
+}
+
 /// Converts an iterator of markdown events to Typst markup
 fn push_typst<'a, I>(output: &mut String, source: &str, iter: I) -> Result<(), ConversionError>
 where
@@ -255,11 +270,7 @@ where
                     TagEnd::Emphasis => {
                         output.push('_');
                         // Check if next event is text starting with alphanumeric
-                        if let Some((Event::Text(text), _)) = iter.peek() {
-                            if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
-                                output.push_str("#{}");
-                            }
-                        }
+                        push_word_boundary_guard(output, &mut iter);
                         end_newline = false;
                     }
                     TagEnd::Strong => {
@@ -267,11 +278,7 @@ where
                             Some(StrongKind::Bold) => {
                                 output.push('*');
                                 // Word-boundary handling only for bold
-                                if let Some((Event::Text(text), _)) = iter.peek() {
-                                    if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
-                                        output.push_str("#{}");
-                                    }
-                                }
+                                push_word_boundary_guard(output, &mut iter);
                             }
                             Some(StrongKind::Underline) => {
                                 output.push(']');

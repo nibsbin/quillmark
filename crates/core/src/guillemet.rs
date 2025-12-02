@@ -23,8 +23,6 @@
 //! assert_eq!(result, "Use «raw content» here");
 //! ```
 
-use std::ops::Range;
-
 /// Maximum length for guillemet content (single line, 64 KiB)
 pub const MAX_GUILLEMET_LENGTH: usize = 64 * 1024;
 
@@ -36,11 +34,6 @@ fn find_matching_guillemet_end(chars: &[char]) -> Option<usize> {
         }
     }
     None
-}
-
-/// Trims whitespace from guillemet content.
-fn trim_guillemet_content(content: &str) -> String {
-    content.trim().to_string()
 }
 
 /// Counts consecutive occurrences of a character from the start of the slice.
@@ -89,9 +82,8 @@ pub fn preprocess_guillemets(text: &str) -> String {
                 // Check constraints: same line and size limit
                 if !content.contains('\n') && content.len() <= MAX_GUILLEMET_LENGTH {
                     // Trim leading/trailing whitespace
-                    let clean = trim_guillemet_content(&content);
                     result.push('«');
-                    result.push_str(&clean);
+                    result.push_str(content.trim());
                     result.push('»');
                     i = content_end + 2; // Skip past >>
                     continue;
@@ -114,26 +106,20 @@ pub fn preprocess_guillemets(text: &str) -> String {
 /// - Indented code blocks (4+ spaces)
 /// - Inline code spans (backticks)
 ///
-/// Returns both the preprocessed source and the byte ranges for guillemet
-/// content within the preprocessed source. This lets consumers perform
-/// context-aware processing for events that occur inside guillemets.
-///
 /// # Examples
 ///
 /// ```
 /// use quillmark_core::guillemet::preprocess_markdown_guillemets;
 ///
-/// let (result, ranges) = preprocess_markdown_guillemets("<<hello>>");
+/// let result = preprocess_markdown_guillemets("<<hello>>");
 /// assert_eq!(result, "«hello»");
-/// assert_eq!(ranges.len(), 1);
 ///
 /// // Code spans are not converted
-/// let (result, _) = preprocess_markdown_guillemets("`<<code>>`");
+/// let result = preprocess_markdown_guillemets("`<<code>>`");
 /// assert_eq!(result, "`<<code>>`");
 /// ```
-pub fn preprocess_markdown_guillemets(markdown: &str) -> (String, Vec<Range<usize>>) {
+pub fn preprocess_markdown_guillemets(markdown: &str) -> String {
     let mut result = String::with_capacity(markdown.len());
-    let mut ranges: Vec<Range<usize>> = Vec::new();
     let chars: Vec<char> = markdown.chars().collect();
     let mut i = 0;
     // Fence state: Some((char, length)) when inside a fenced code block
@@ -248,14 +234,9 @@ pub fn preprocess_markdown_guillemets(markdown: &str) -> (String, Vec<Range<usiz
                 // Check constraints: same line and size limit
                 if !content.contains('\n') && content.len() <= MAX_GUILLEMET_LENGTH {
                     // Trim leading/trailing whitespace
-                    let clean = trim_guillemet_content(&content);
                     result.push('«');
-                    // Record byte start for range
-                    let start = result.len();
-                    result.push_str(&clean);
-                    let end = result.len();
+                    result.push_str(content.trim());
                     result.push('»');
-                    ranges.push(start..end);
                     i = content_end + 2; // Skip past >>
                     continue;
                 }
@@ -267,7 +248,7 @@ pub fn preprocess_markdown_guillemets(markdown: &str) -> (String, Vec<Range<usiz
         i += 1;
     }
 
-    (result, ranges)
+    result
 }
 
 #[cfg(test)]
@@ -331,54 +312,47 @@ mod tests {
     // Tests for preprocess_markdown_guillemets (markdown-aware)
     #[test]
     fn test_markdown_basic() {
-        let (result, ranges) = preprocess_markdown_guillemets("<<text>>");
+        let result = preprocess_markdown_guillemets("<<text>>");
         assert_eq!(result, "«text»");
-        assert_eq!(ranges.len(), 1);
     }
 
     #[test]
     fn test_markdown_not_in_code_span() {
-        let (result, ranges) = preprocess_markdown_guillemets("`<<code>>`");
+        let result = preprocess_markdown_guillemets("`<<code>>`");
         assert_eq!(result, "`<<code>>`");
-        assert!(ranges.is_empty());
     }
 
     #[test]
     fn test_markdown_not_in_multi_backtick_code_span() {
-        let (result, ranges) = preprocess_markdown_guillemets("`` <<text>> ``");
+        let result = preprocess_markdown_guillemets("`` <<text>> ``");
         assert!(result.contains("<<text>>"));
-        assert!(ranges.is_empty());
     }
 
     #[test]
     fn test_markdown_not_in_fenced_code_block() {
-        let (result, ranges) = preprocess_markdown_guillemets("```\n<<text>>\n```");
+        let result = preprocess_markdown_guillemets("```\n<<text>>\n```");
         assert!(!result.contains('«'));
         assert!(!result.contains('»'));
-        assert!(ranges.is_empty());
     }
 
     #[test]
     fn test_markdown_not_in_tilde_fence() {
-        let (result, ranges) = preprocess_markdown_guillemets("~~~\n<<text>>\n~~~");
+        let result = preprocess_markdown_guillemets("~~~\n<<text>>\n~~~");
         assert!(!result.contains('«'));
         assert!(!result.contains('»'));
-        assert!(ranges.is_empty());
     }
 
     #[test]
     fn test_markdown_not_in_indented_code_block() {
-        let (result, ranges) = preprocess_markdown_guillemets("    <<not converted>>");
+        let result = preprocess_markdown_guillemets("    <<not converted>>");
         assert!(!result.contains('«'));
         assert!(!result.contains('»'));
-        assert!(ranges.is_empty());
     }
 
     #[test]
     fn test_markdown_multiple_same_line() {
-        let (result, ranges) = preprocess_markdown_guillemets("<<one>> and <<two>>");
+        let result = preprocess_markdown_guillemets("<<one>> and <<two>>");
         assert_eq!(result, "«one» and «two»");
-        assert_eq!(ranges.len(), 2);
     }
 
     #[test]
@@ -386,21 +360,18 @@ mod tests {
         // Create content larger than MAX_GUILLEMET_LENGTH
         let large_content = "a".repeat(MAX_GUILLEMET_LENGTH + 1);
         let markdown = format!("<<{}>>", large_content);
-        let (result, ranges) = preprocess_markdown_guillemets(&markdown);
+        let result = preprocess_markdown_guillemets(&markdown);
         // Should not convert due to buffer limit
         assert!(!result.contains('«'));
         assert!(!result.contains('»'));
-        assert!(ranges.is_empty());
     }
 
     #[test]
     fn test_markdown_mixed_context() {
         // Some inside code, some outside
-        let (result, ranges) =
-            preprocess_markdown_guillemets("<<converted>> and `<<not converted>>`");
+        let result = preprocess_markdown_guillemets("<<converted>> and `<<not converted>>`");
         assert!(result.contains("«converted»"));
         assert!(result.contains("`<<not converted>>`"));
-        assert_eq!(ranges.len(), 1);
     }
 
     // Additional robustness tests
@@ -448,7 +419,7 @@ mod tests {
     #[test]
     fn test_markdown_unclosed_code_span() {
         // Unclosed backtick - should still not convert what appears to be in code
-        let (result, _) = preprocess_markdown_guillemets("`<<code>>");
+        let result = preprocess_markdown_guillemets("`<<code>>");
         // The backtick opens a code span that never closes, so everything after is in code
         assert!(!result.contains('«'));
     }
@@ -456,77 +427,66 @@ mod tests {
     #[test]
     fn test_markdown_fence_with_info_string() {
         // Fenced code block with language info string
-        let (result, ranges) = preprocess_markdown_guillemets("```rust\n<<text>>\n```");
+        let result = preprocess_markdown_guillemets("```rust\n<<text>>\n```");
         assert!(!result.contains('«'));
-        assert!(ranges.is_empty());
     }
 
     #[test]
     fn test_markdown_nested_fences_different_chars() {
         // ~~~ inside ``` should not close the fence
-        let (result, ranges) = preprocess_markdown_guillemets("```\n~~~\n<<text>>\n~~~\n```");
+        let result = preprocess_markdown_guillemets("```\n~~~\n<<text>>\n~~~\n```");
         assert!(!result.contains('«'));
-        assert!(ranges.is_empty());
     }
 
     #[test]
     fn test_markdown_longer_closing_fence() {
         // Closing fence can be longer than opening
-        let (result, ranges) = preprocess_markdown_guillemets("```\n<<text>>\n`````");
+        let result = preprocess_markdown_guillemets("```\n<<text>>\n`````");
         assert!(!result.contains('«'));
-        assert!(ranges.is_empty());
     }
 
     #[test]
     fn test_markdown_indented_block_after_content() {
         // Indented code only triggers at line start
-        let (result, ranges) = preprocess_markdown_guillemets("text    <<convert>>");
+        let result = preprocess_markdown_guillemets("text    <<convert>>");
         assert!(result.contains("«convert»"));
-        assert_eq!(ranges.len(), 1);
     }
 
     #[test]
     fn test_markdown_tabs_not_indented_code() {
         // Tabs don't count as indented code block (only spaces)
-        let (result, ranges) = preprocess_markdown_guillemets("\t<<should convert>>");
+        let result = preprocess_markdown_guillemets("\t<<should convert>>");
         assert!(result.contains("«should convert»"));
-        assert_eq!(ranges.len(), 1);
     }
 
     #[test]
     fn test_markdown_three_spaces_not_code() {
         // 3 spaces is not an indented code block (needs 4+)
-        let (result, ranges) = preprocess_markdown_guillemets("   <<should convert>>");
+        let result = preprocess_markdown_guillemets("   <<should convert>>");
         assert!(result.contains("«should convert»"));
-        assert_eq!(ranges.len(), 1);
     }
 
     #[test]
-    fn test_range_byte_positions() {
-        // Verify that ranges are correct byte positions
-        let (result, ranges) = preprocess_markdown_guillemets("<<hello>>");
+    fn test_markdown_content_preserved() {
+        // Verify content is correctly preserved in output
+        let result = preprocess_markdown_guillemets("<<hello>>");
         assert_eq!(result, "«hello»");
-        // «hello» - « is 2 bytes, hello is 5 bytes, » is 2 bytes
-        // Range should cover "hello" which starts at byte 2 (after «) and ends at byte 7
-        assert_eq!(ranges.len(), 1);
-        assert_eq!(&result[ranges[0].clone()], "hello");
+        assert!(result.contains("hello"));
     }
 
     #[test]
-    fn test_range_byte_positions_unicode() {
-        // Verify ranges work with unicode content
-        let (result, ranges) = preprocess_markdown_guillemets("<<你好>>");
+    fn test_markdown_unicode_content() {
+        // Verify unicode content works
+        let result = preprocess_markdown_guillemets("<<你好>>");
         assert_eq!(result, "«你好»");
-        assert_eq!(ranges.len(), 1);
-        assert_eq!(&result[ranges[0].clone()], "你好");
+        assert!(result.contains("你好"));
     }
 
     #[test]
     fn test_empty_input() {
         assert_eq!(preprocess_guillemets(""), "");
-        let (result, ranges) = preprocess_markdown_guillemets("");
+        let result = preprocess_markdown_guillemets("");
         assert_eq!(result, "");
-        assert!(ranges.is_empty());
     }
 
     #[test]
