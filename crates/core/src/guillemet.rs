@@ -268,25 +268,16 @@ pub fn preprocess_fields_guillemets(
     fields
         .into_iter()
         .map(|(key, value)| {
-            let is_body = key == BODY_FIELD;
-            let processed = preprocess_quillvalue_guillemets(value, is_body);
-            (key, processed)
+            let json = value.into_json();
+            let processed = preprocess_json_value(json, key == BODY_FIELD);
+            (key, QuillValue::from_json(processed))
         })
         .collect()
 }
 
-/// Recursively preprocess guillemets in a QuillValue.
-///
-/// When `markdown_aware` is true, uses markdown-aware preprocessing that
-/// skips code blocks and inline code spans.
-fn preprocess_quillvalue_guillemets(value: QuillValue, markdown_aware: bool) -> QuillValue {
-    let json = value.into_json();
-    let processed = preprocess_json_guillemets(json, markdown_aware);
-    QuillValue::from_json(processed)
-}
-
-/// Recursively preprocess guillemets in a serde_json::Value.
-fn preprocess_json_guillemets(value: serde_json::Value, markdown_aware: bool) -> serde_json::Value {
+/// Recursively preprocess guillemets in a JSON value.
+/// The `markdown_aware` flag is used for top-level strings and propagated to nested "body" fields.
+fn preprocess_json_value(value: serde_json::Value, markdown_aware: bool) -> serde_json::Value {
     match value {
         serde_json::Value::String(s) => {
             let processed = if markdown_aware {
@@ -296,40 +287,9 @@ fn preprocess_json_guillemets(value: serde_json::Value, markdown_aware: bool) ->
             };
             serde_json::Value::String(processed)
         }
-        serde_json::Value::Array(arr) => {
-            // For arrays, we need to handle "body" fields within objects specially
-            serde_json::Value::Array(
-                arr.into_iter()
-                    .map(|v| preprocess_json_guillemets_in_object(v))
-                    .collect(),
-            )
-        }
-        serde_json::Value::Object(map) => {
-            let processed_map: serde_json::Map<String, serde_json::Value> = map
-                .into_iter()
-                .map(|(k, v)| {
-                    let is_body = k == BODY_FIELD;
-                    (k, preprocess_json_guillemets(v, is_body))
-                })
-                .collect();
-            serde_json::Value::Object(processed_map)
-        }
-        // Pass through other types unchanged (numbers, booleans, null)
-        other => other,
-    }
-}
-
-/// Preprocess guillemets in a JSON value that's inside an object or array.
-/// This determines markdown_aware based on field names within objects.
-fn preprocess_json_guillemets_in_object(value: serde_json::Value) -> serde_json::Value {
-    match value {
-        serde_json::Value::String(s) => {
-            // For strings at array level, use simple preprocessing
-            serde_json::Value::String(preprocess_guillemets(&s))
-        }
         serde_json::Value::Array(arr) => serde_json::Value::Array(
             arr.into_iter()
-                .map(preprocess_json_guillemets_in_object)
+                .map(|v| preprocess_json_value(v, false))
                 .collect(),
         ),
         serde_json::Value::Object(map) => {
@@ -337,11 +297,12 @@ fn preprocess_json_guillemets_in_object(value: serde_json::Value) -> serde_json:
                 .into_iter()
                 .map(|(k, v)| {
                     let is_body = k == BODY_FIELD;
-                    (k, preprocess_json_guillemets(v, is_body))
+                    (k, preprocess_json_value(v, is_body))
                 })
                 .collect();
             serde_json::Value::Object(processed_map)
         }
+        // Pass through other types unchanged (numbers, booleans, null)
         other => other,
     }
 }

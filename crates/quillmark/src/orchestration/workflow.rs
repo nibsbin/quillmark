@@ -91,7 +91,8 @@ impl Workflow {
 
         // Preprocess guillemets: convert <<text>> to «text»
         // This is done here so ParsedDocument accurately represents the source document
-        let fields_with_guillemets = preprocess_fields_guillemets(parsed_with_defaults.fields().clone());
+        let fields_with_guillemets =
+            preprocess_fields_guillemets(parsed_with_defaults.fields().clone());
 
         // Create appropriate glue based on whether template is provided
         let mut glue = match &self.quill.glue {
@@ -99,12 +100,12 @@ impl Workflow {
             _ => Glue::new_auto(),
         };
         self.backend.register_filters(&mut glue);
-        let glue_output = glue
-            .compose(fields_with_guillemets)
-            .map_err(|e| RenderError::TemplateFailed {
-                diag: Diagnostic::new(Severity::Error, e.to_string())
-                    .with_code("template::compose".to_string()),
-            })?;
+        let glue_output =
+            glue.compose(fields_with_guillemets)
+                .map_err(|e| RenderError::TemplateFailed {
+                    diag: Diagnostic::new(Severity::Error, e.to_string())
+                        .with_code("template::compose".to_string()),
+                })?;
         Ok(glue_output)
     }
 
