@@ -34,9 +34,6 @@ use std::ops::Range;
 /// Maximum nesting depth for markdown structures
 const MAX_NESTING_DEPTH: usize = 100;
 
-/// Maximum length for guillemet content (single line, 64 KiB)
-const MAX_GUILLEMET_LENGTH: usize = 64 * 1024;
-
 /// Errors that can occur during markdown to Typst conversion
 #[derive(Debug, thiserror::Error)]
 pub enum ConversionError {
@@ -48,177 +45,6 @@ pub enum ConversionError {
         /// Maximum allowed depth
         max: usize,
     },
-}
-
-/// Preprocesses markdown to convert guillemets: <<text>> → «text»
-/// Extracts raw text content between << and >>, trims leading/trailing whitespace
-/// and returns both the preprocessed source and the byte ranges for guillemet
-/// content within the preprocessed source. This lets the main converter
-/// perform context-aware escaping (e.g., link destination escaping) for
-/// events that occur inside guillemets.
-/// Skips conversion inside code blocks (fenced and indented) and code spans
-fn preprocess_guillemets(markdown: &str) -> (String, Vec<Range<usize>>) {
-    let mut result = String::with_capacity(markdown.len());
-    let mut ranges: Vec<Range<usize>> = Vec::new();
-    let chars: Vec<char> = markdown.chars().collect();
-    let mut i = 0;
-    // Fence state: Some((char, length)) when inside a fenced code block
-    let mut fence_state: Option<(char, usize)> = None;
-    // Inline code state: Some(length) when inside an inline code span
-    let mut inline_code_backticks: Option<usize> = None;
-    let mut at_line_start = true;
-
-    while i < chars.len() {
-        let ch = chars[i];
-
-        // Track line start for indented code block detection
-        if ch == '\n' {
-            at_line_start = true;
-            result.push(ch);
-            i += 1;
-            continue;
-        }
-
-        // Check for indented code block (4+ spaces at line start, but only outside fences)
-        if at_line_start && fence_state.is_none() && inline_code_backticks.is_none() {
-            let indent = count_leading_spaces(&chars[i..]);
-            if indent >= 4 {
-                // This is an indented code block line - copy entire line without conversion
-                while i < chars.len() && chars[i] != '\n' {
-                    result.push(chars[i]);
-                    i += 1;
-                }
-                continue;
-            }
-        }
-
-        // No longer at line start after processing non-newline
-        at_line_start = false;
-
-        // Handle fenced code blocks (``` or ~~~, 3+ chars)
-        if fence_state.is_none() && inline_code_backticks.is_none() && (ch == '`' || ch == '~') {
-            let fence_len = count_consecutive(&chars[i..], ch);
-            if fence_len >= 3 {
-                // Start of fenced code block
-                fence_state = Some((ch, fence_len));
-                for _ in 0..fence_len {
-                    result.push(ch);
-                }
-                i += fence_len;
-                continue;
-            }
-        }
-
-        // Check for end of fenced code block
-        if let Some((fence_char, fence_len)) = fence_state {
-            if ch == fence_char {
-                let current_len = count_consecutive(&chars[i..], ch);
-                if current_len >= fence_len {
-                    // End of fenced code block
-                    fence_state = None;
-                    for _ in 0..current_len {
-                        result.push(ch);
-                    }
-                    i += current_len;
-                    continue;
-                }
-            }
-            // Inside fenced code block - just copy
-            result.push(ch);
-            i += 1;
-            continue;
-        }
-
-        // Handle inline code spans (backticks only)
-        if ch == '`' {
-            let backtick_count = count_consecutive(&chars[i..], '`');
-            if let Some(open_count) = inline_code_backticks {
-                if backtick_count == open_count {
-                    // End of inline code span
-                    inline_code_backticks = None;
-                    for _ in 0..backtick_count {
-                        result.push('`');
-                    }
-                    i += backtick_count;
-                    continue;
-                }
-                // Inside inline code span but different backtick count - just copy
-                result.push(ch);
-                i += 1;
-                continue;
-            } else {
-                // Start of inline code span
-                inline_code_backticks = Some(backtick_count);
-                for _ in 0..backtick_count {
-                    result.push('`');
-                }
-                i += backtick_count;
-                continue;
-            }
-        }
-
-        // Inside inline code span - just copy
-        if inline_code_backticks.is_some() {
-            result.push(ch);
-            i += 1;
-            continue;
-        }
-
-        // Only process << when not in any code context
-        if i + 1 < chars.len() && ch == '<' && chars[i + 1] == '<' {
-            // Find matching >>
-            if let Some(end_offset) = find_matching_guillemet_end(&chars[i + 2..]) {
-                let content_end = i + 2 + end_offset;
-                let content: String = chars[i + 2..content_end].iter().collect();
-
-                // Check constraints: same line and size limit
-                if !content.contains('\n') && content.len() <= MAX_GUILLEMET_LENGTH {
-                    // Trim leading/trailing whitespace
-                    let clean = trim_guillemet_content(&content);
-                    result.push('«');
-                    // Record byte start for range
-                    let start = result.len();
-                    result.push_str(&clean);
-                    let end = result.len();
-                    result.push('»');
-                    ranges.push(start..end);
-                    i = content_end + 2; // Skip past >>
-                    continue;
-                }
-            }
-        }
-
-        // Regular character - just copy it
-        result.push(ch);
-        i += 1;
-    }
-
-    (result, ranges)
-}
-
-/// Counts consecutive occurrences of a character from the start of the slice.
-fn count_consecutive(chars: &[char], target: char) -> usize {
-    chars.iter().take_while(|&&c| c == target).count()
-}
-
-/// Counts leading spaces (not tabs) at the start of the slice.
-fn count_leading_spaces(chars: &[char]) -> usize {
-    chars.iter().take_while(|&&c| c == ' ').count()
-}
-
-/// Trims whitespace from guillemet content.
-fn trim_guillemet_content(content: &str) -> String {
-    content.trim().to_string()
-}
-
-/// Finds the position of >> that matches an opening <<, returns offset from search start
-fn find_matching_guillemet_end(chars: &[char]) -> Option<usize> {
-    for i in 0..chars.len().saturating_sub(1) {
-        if chars[i] == '>' && chars[i + 1] == '>' {
-            return Some(i);
-        }
-    }
-    None
 }
 
 /// Escapes text for safe use in Typst markup context.
@@ -275,7 +101,6 @@ fn push_typst<'a, I>(
     output: &mut String,
     source: &str,
     iter: I,
-    guillemet_ranges: &[Range<usize>],
 ) -> Result<(), ConversionError>
 where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
@@ -283,18 +108,11 @@ where
     let mut end_newline = true;
     let mut list_stack: Vec<ListType> = Vec::new();
     let mut strong_stack: Vec<StrongKind> = Vec::new();
-    let mut skip_strong_stack: Vec<bool> = Vec::new();
     let mut in_list_item = false; // Track if we're inside a list item
     let mut depth = 0; // Track nesting depth for DoS prevention
     let mut iter = iter.peekable();
 
-    let mut had_strong_in_paragraph = false;
     while let Some((event, range)) = iter.next() {
-        // Check whether this event falls within any guillemet range
-        let in_guillemet = guillemet_ranges
-            .iter()
-            .any(|r| range.start >= r.start && range.start < r.end);
-        // no-op
         match event {
             Event::Start(tag) => {
                 // Track nesting depth
@@ -317,7 +135,6 @@ where
                             }
                         }
                         // Typst doesn't need explicit paragraph tags for simple paragraphs
-                        had_strong_in_paragraph = false;
                     }
                     Tag::CodeBlock(_) => {
                         // Code blocks are handled, no special tracking needed
@@ -370,25 +187,10 @@ where
                             StrongKind::Bold // Fallback for very short ranges
                         };
                         strong_stack.push(kind);
-                        // Determine whether we should suppress this strong. Use the
-                        // pre-existing paragraph state (i.e., whether a strong was
-                        // already present earlier), so compute skip_current before
-                        // updating the paragraph flag.
-                        let skip_current = in_guillemet
-                            && had_strong_in_paragraph
-                            && matches!(kind, StrongKind::Bold);
-                        // Track that we saw a strong in this paragraph
-                        had_strong_in_paragraph = true;
-                        skip_strong_stack.push(skip_current);
                         match kind {
                             StrongKind::Underline => output.push_str("#underline["),
                             StrongKind::Bold => {
-                                // Debug (removed)
-                                // Special case: if the paragraph had earlier strong, and this start
-                                // is inside guillemets, we skip the inner strong markers.
-                                if !skip_strong_stack.last().copied().unwrap_or(false) {
-                                    output.push('*');
-                                }
+                                output.push('*');
                             }
                         }
                         end_newline = false;
@@ -401,12 +203,7 @@ where
                         dest_url, title: _, ..
                     } => {
                         output.push_str("#link(\"");
-                        if in_guillemet {
-                            // Inside guillemets, use string escaping (no // escape)
-                            output.push_str(&escape_string(&dest_url));
-                        } else {
-                            output.push_str(&escape_markup(&dest_url));
-                        }
+                        output.push_str(&escape_string(&dest_url));
                         output.push_str("\")[");
                         end_newline = false;
                     }
@@ -470,12 +267,9 @@ where
                         end_newline = false;
                     }
                     TagEnd::Strong => {
-                        let skip_current = skip_strong_stack.pop().unwrap_or(false);
                         match strong_stack.pop() {
                             Some(StrongKind::Bold) => {
-                                if !skip_current {
-                                    output.push('*');
-                                }
+                                output.push('*');
                                 // Word-boundary handling only for bold
                                 if let Some((Event::Text(text), _)) = iter.peek() {
                                     if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
@@ -484,9 +278,7 @@ where
                                 }
                             }
                             Some(StrongKind::Underline) => {
-                                if !skip_current {
-                                    output.push(']');
-                                }
+                                output.push(']');
                                 // No word-boundary handling needed for function syntax
                             }
                             None => {
@@ -495,7 +287,6 @@ where
                                 output.push('*');
                             }
                         }
-                        // no-op
                         end_newline = false;
                     }
                     TagEnd::Strikethrough => {
@@ -550,22 +341,20 @@ where
 /// Converts CommonMark Markdown to Typst markup.
 ///
 /// Returns an error if nesting depth exceeds the maximum allowed.
+///
+/// Note: Guillemet preprocessing (`<<text>>` → `«text»`) is expected to be done
+/// by the caller (e.g., via `ParsedDocument::from_markdown` in quillmark-core).
 pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
-    // Preprocess to convert guillemets before parsing
-    let (preprocessed, guillemet_ranges) = preprocess_guillemets(markdown);
-
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
 
-    let parser = Parser::new_ext(&preprocessed, options);
+    let parser = Parser::new_ext(markdown, options);
     let mut typst_output = String::new();
 
-    // Pass preprocessed source for delimiter peeking
     push_typst(
         &mut typst_output,
-        &preprocessed,
+        markdown,
         parser.into_offset_iter(),
-        &guillemet_ranges,
     )?;
     Ok(typst_output)
 }
@@ -716,7 +505,7 @@ mod tests {
     fn test_link() {
         let markdown = "[Link text](https://example.com)";
         let typst = mark_to_typst(markdown).unwrap();
-        assert_eq!(typst, "#link(\"https:\\/\\/example.com\")[Link text]\n\n");
+        assert_eq!(typst, "#link(\"https://example.com\")[Link text]\n\n");
     }
 
     #[test]
@@ -725,7 +514,7 @@ mod tests {
         let typst = mark_to_typst(markdown).unwrap();
         assert_eq!(
             typst,
-            "Visit #link(\"https:\\/\\/example.com\")[our site] for more.\n\n"
+            "Visit #link(\"https://example.com\")[our site] for more.\n\n"
         );
     }
 
@@ -737,7 +526,7 @@ mod tests {
         // Lists end with extra newline per CONVERT.md examples
         assert_eq!(
             typst,
-            "A paragraph with *bold* and a #link(\"https:\\/\\/example.com\")[link].\n\nAnother paragraph with `inline code`.\n\n- A list item\n- Another item\n\n"
+            "A paragraph with *bold* and a #link(\"https://example.com\")[link].\n\nAnother paragraph with `inline code`.\n\n- A list item\n- Another item\n\n"
         );
     }
 
@@ -844,10 +633,10 @@ mod tests {
 
     #[test]
     fn test_link_with_special_chars_in_url() {
-        // URLs with special chars should be escaped
+        // URLs don't need # escaped in Typst string literals
         let markdown = "[Link](#anchor)";
         let typst = mark_to_typst(markdown).unwrap();
-        assert_eq!(typst, "#link(\"\\#anchor\")[Link]\n\n");
+        assert_eq!(typst, "#link(\"#anchor\")[Link]\n\n");
     }
 
     #[test]
@@ -1210,247 +999,5 @@ mod tests {
             mark_to_typst("__underline ~~strike~~__").unwrap(),
             "#underline[underline #strike[strike]]\n\n"
         );
-    }
-
-    // Tests for guillemet conversion
-
-    // Basic Conversion Tests
-    #[test]
-    fn test_guillemet_basic() {
-        assert_eq!(
-            mark_to_typst("She said <<Hello, world>>.").unwrap(),
-            "She said «Hello, world».\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_simple_text() {
-        assert_eq!(mark_to_typst("<<text>>").unwrap(), "«text»\n\n");
-    }
-
-    #[test]
-    fn test_guillemet_with_spaces() {
-        // Note: Markdown parser trims leading/trailing spaces in paragraphs
-        assert_eq!(
-            mark_to_typst("<<  spaced  text  >>").unwrap(),
-            "«spaced  text»\n\n"
-        );
-    }
-
-    // Formatting Strip Tests
-    #[test]
-    fn test_guillemet_strips_bold() {
-        assert_eq!(mark_to_typst("<<**bold**>>").unwrap(), "«*bold*»\n\n");
-    }
-
-    #[test]
-    fn test_guillemet_strips_italic() {
-        assert_eq!(mark_to_typst("<<_italic_>>").unwrap(), "«_italic_»\n\n");
-    }
-
-    #[test]
-    fn test_guillemet_strips_mixed_formatting() {
-        assert_eq!(
-            mark_to_typst("<<**bold** and _italic_ text>>").unwrap(),
-            "«*bold* and _italic_ text»\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_strips_strikethrough() {
-        assert_eq!(
-            mark_to_typst("<<~~strike~~>>").unwrap(),
-            "«#strike[strike]»\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_strips_underline() {
-        assert_eq!(
-            mark_to_typst("<<__underline__>>").unwrap(),
-            "«#underline[underline]»\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_preserves_inline_code_text() {
-        // Inline code text is preserved as Typst markup
-        assert_eq!(
-            mark_to_typst("<<text with `code` inside>>").unwrap(),
-            "«text with `code` inside»\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_extracts_link_text() {
-        // Link is preserved as Typst markup
-        assert_eq!(
-            mark_to_typst("<<visit [our site](https://example.com)>>").unwrap(),
-            "«visit #link(\"https://example.com\")[our site]»\n\n"
-        );
-    }
-
-    // Context Awareness Tests
-    #[test]
-    fn test_guillemet_not_in_code_span() {
-        // Chevrons inside inline code should not convert
-        assert_eq!(
-            mark_to_typst("`<<not converted>>`").unwrap(),
-            "`<<not converted>>`\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_not_in_multi_backtick_code_span() {
-        // Multi-backtick code spans per CommonMark
-        let result = mark_to_typst("`` <<text>> ``").unwrap();
-        assert!(
-            !result.contains('«'),
-            "Multi-backtick span incorrectly converted: {}",
-            result
-        );
-    }
-
-    #[test]
-    fn test_guillemet_not_in_indented_code_block() {
-        // Indented code blocks (4+ spaces) per CommonMark
-        let result = mark_to_typst("    <<not converted>>").unwrap();
-        assert!(
-            !result.contains('«'),
-            "Indented code block incorrectly converted: {}",
-            result
-        );
-    }
-
-    #[test]
-    fn test_guillemet_not_in_tilde_fence() {
-        // Tilde fences per CommonMark
-        let result = mark_to_typst("~~~\n<<text>>\n~~~").unwrap();
-        assert!(
-            !result.contains('«'),
-            "Tilde fence incorrectly converted: {}",
-            result
-        );
-    }
-
-    #[test]
-    fn test_guillemet_not_in_long_backtick_fence() {
-        // Fences with >3 backticks per CommonMark
-        let result = mark_to_typst("````\n<<text>>\n````").unwrap();
-        assert!(
-            !result.contains('«'),
-            "Long backtick fence incorrectly converted: {}",
-            result
-        );
-    }
-
-    #[test]
-    fn test_guillemet_not_in_code_block() {
-        // Chevrons in code blocks should not convert
-        // Note: Code blocks are not fully implemented in the converter,
-        // so text still gets output (without guillemet conversion)
-        let markdown = "```\n<<not converted>>\n```";
-        let result = mark_to_typst(markdown).unwrap();
-        // Should not contain guillemets
-        assert!(!result.contains('«'));
-        assert!(!result.contains('»'));
-    }
-
-    // Edge Cases
-    #[test]
-    fn test_guillemet_unmatched_open() {
-        assert_eq!(mark_to_typst("<<unmatched").unwrap(), "\\<\\<unmatched\n\n");
-    }
-
-    #[test]
-    fn test_guillemet_unmatched_close() {
-        assert_eq!(mark_to_typst("unmatched>>").unwrap(), "unmatched\\>\\>\n\n");
-    }
-
-    #[test]
-    fn test_guillemet_multiple_same_line() {
-        assert_eq!(
-            mark_to_typst("<<first>> and <<second>>").unwrap(),
-            "«first» and «second»\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_multiline_not_converted() {
-        // Newlines between chevrons should prevent conversion
-        let markdown = "<<text on\ndifferent line>>";
-        let result = mark_to_typst(markdown).unwrap();
-        // The content becomes HTML which is ignored, so we just get the < and > chars
-        assert!(result.contains("\\<\\<") || result.contains("\\<\\>"));
-    }
-
-    #[test]
-    fn test_guillemet_nested_chevrons() {
-        // Nearest-match logic: first << matches first >>
-        // "<<outer <<inner>> text>>" -> first << at 0, first >> at 16
-        // Content: "outer <<inner" - this successfully extracts to plain text
-        assert_eq!(
-            mark_to_typst("<<outer <<inner>> text>>").unwrap(),
-            "«outer \\<\\<inner» text\\>\\>\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_with_special_chars() {
-        // Special chars inside guillemets are escaped by Typst processing
-        assert_eq!(
-            mark_to_typst("<<text with #hash and *star>>").unwrap(),
-            "«text with \\#hash and \\*star»\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_empty_content() {
-        assert_eq!(mark_to_typst("<<>>").unwrap(), "«»\n\n");
-    }
-
-    // Integration Tests
-    #[test]
-    fn test_guillemet_in_heading() {
-        assert_eq!(
-            mark_to_typst("# Heading with <<guillemets>>").unwrap(),
-            "= Heading with «guillemets»\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_in_list() {
-        assert_eq!(
-            mark_to_typst("- Item with <<guillemets>>").unwrap(),
-            "- Item with «guillemets»\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_mixed_with_formatting() {
-        assert_eq!(
-            mark_to_typst("**Bold** and <<**bold in guillemets**>>").unwrap(),
-            "*Bold* and «bold in guillemets»\n\n"
-        );
-    }
-
-    #[test]
-    fn test_guillemet_before_and_after_text() {
-        assert_eq!(
-            mark_to_typst("Before <<middle>> after").unwrap(),
-            "Before «middle» after\n\n"
-        );
-    }
-
-    // Safety Tests
-    #[test]
-    fn test_guillemet_respects_buffer_limit() {
-        // Create content larger than MAX_GUILLEMET_LENGTH
-        let large_content = "a".repeat(MAX_GUILLEMET_LENGTH + 1);
-        let markdown = format!("<<{}>>", large_content);
-        let result = mark_to_typst(&markdown).unwrap();
-        // Should not convert due to buffer limit - guillemets should not appear
-        assert!(!result.contains('«'));
-        assert!(!result.contains('»'));
     }
 }
