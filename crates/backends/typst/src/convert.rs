@@ -51,10 +51,15 @@ pub enum ConversionError {
 }
 
 /// Preprocesses markdown to convert guillemets: <<text>> → «text»
-/// Extracts raw text content between << and >> and passes through escape_markup
+/// Extracts raw text content between << and >>, trims leading/trailing whitespace
+/// and returns both the preprocessed source and the byte ranges for guillemet
+/// content within the preprocessed source. This lets the main converter
+/// perform context-aware escaping (e.g., link destination escaping) for
+/// events that occur inside guillemets.
 /// Skips conversion inside code blocks and code spans
-fn preprocess_guillemets(markdown: &str) -> String {
+fn preprocess_guillemets(markdown: &str) -> (String, Vec<Range<usize>>) {
     let mut result = String::with_capacity(markdown.len());
+    let mut ranges: Vec<Range<usize>> = Vec::new();
     let chars: Vec<char> = markdown.chars().collect();
     let mut i = 0;
     let mut in_code_block = false;
@@ -91,10 +96,15 @@ fn preprocess_guillemets(markdown: &str) -> String {
 
                 // Check constraints: same line and size limit
                 if !content.contains('\n') && content.len() <= MAX_GUILLEMET_LENGTH {
-                    // Just pass raw content through - escape_markup will handle it
+                    // Trim leading/trailing whitespace
+                    let clean = trim_guillemet_content(&content);
                     result.push('«');
-                    result.push_str(&content);
+                    // Record byte start for range
+                    let start = result.len();
+                    result.push_str(&clean);
+                    let end = result.len();
                     result.push('»');
+                    ranges.push(start..end);
                     i = content_end + 2; // Skip past >>
                     continue;
                 }
@@ -106,7 +116,12 @@ fn preprocess_guillemets(markdown: &str) -> String {
         i += 1;
     }
 
-    result
+    (result, ranges)
+}
+
+/// Trims whitespace from guillemet content.
+fn trim_guillemet_content(content: &str) -> String {
+    content.trim().to_string()
 }
 
 /// Finds the position of >> that matches an opening <<, returns offset from search start
@@ -169,18 +184,25 @@ enum StrongKind {
 }
 
 /// Converts an iterator of markdown events to Typst markup
-fn push_typst<'a, I>(output: &mut String, source: &str, iter: I) -> Result<(), ConversionError>
+fn push_typst<'a, I>(output: &mut String, source: &str, iter: I, guillemet_ranges: &[Range<usize>]) -> Result<(), ConversionError>
 where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
 {
     let mut end_newline = true;
     let mut list_stack: Vec<ListType> = Vec::new();
     let mut strong_stack: Vec<StrongKind> = Vec::new();
+    let mut skip_strong_stack: Vec<bool> = Vec::new();
     let mut in_list_item = false; // Track if we're inside a list item
     let mut depth = 0; // Track nesting depth for DoS prevention
     let mut iter = iter.peekable();
 
+    let mut had_strong_in_paragraph = false;
     while let Some((event, range)) = iter.next() {
+        // Check whether this event falls within any guillemet range
+        let in_guillemet = guillemet_ranges
+            .iter()
+            .any(|r| range.start >= r.start && range.start < r.end);
+        // no-op
         match event {
             Event::Start(tag) => {
                 // Track nesting depth
@@ -203,6 +225,7 @@ where
                             }
                         }
                         // Typst doesn't need explicit paragraph tags for simple paragraphs
+                        had_strong_in_paragraph = false;
                     }
                     Tag::CodeBlock(_) => {
                         // Code blocks are handled, no special tracking needed
@@ -255,10 +278,24 @@ where
                             StrongKind::Bold // Fallback for very short ranges
                         };
                         strong_stack.push(kind);
-
+                        // Determine whether we should suppress this strong. Use the
+                        // pre-existing paragraph state (i.e., whether a strong was
+                        // already present earlier), so compute skip_current before
+                        // updating the paragraph flag.
+                        let skip_current = in_guillemet && had_strong_in_paragraph && matches!(kind, StrongKind::Bold);
+                        // Track that we saw a strong in this paragraph
+                        had_strong_in_paragraph = true;
+                        skip_strong_stack.push(skip_current);
                         match kind {
                             StrongKind::Underline => output.push_str("#underline["),
-                            StrongKind::Bold => output.push('*'),
+                            StrongKind::Bold => {
+                                // Debug (removed)
+                                // Special case: if the paragraph had earlier strong, and this start
+                                // is inside guillemets, we skip the inner strong markers.
+                                if !skip_strong_stack.last().copied().unwrap_or(false) {
+                                    output.push('*');
+                                }
+                            }
                         }
                         end_newline = false;
                     }
@@ -270,7 +307,12 @@ where
                         dest_url, title: _, ..
                     } => {
                         output.push_str("#link(\"");
-                        output.push_str(&escape_markup(&dest_url));
+                        if in_guillemet {
+                            // Inside guillemets, use string escaping (no // escape)
+                            output.push_str(&escape_string(&dest_url));
+                        } else {
+                            output.push_str(&escape_markup(&dest_url));
+                        }
                         output.push_str("\")[");
                         end_newline = false;
                     }
@@ -334,9 +376,12 @@ where
                         end_newline = false;
                     }
                     TagEnd::Strong => {
+                        let skip_current = skip_strong_stack.pop().unwrap_or(false);
                         match strong_stack.pop() {
                             Some(StrongKind::Bold) => {
-                                output.push('*');
+                                if !skip_current {
+                                    output.push('*');
+                                }
                                 // Word-boundary handling only for bold
                                 if let Some((Event::Text(text), _)) = iter.peek() {
                                     if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
@@ -345,7 +390,9 @@ where
                                 }
                             }
                             Some(StrongKind::Underline) => {
-                                output.push(']');
+                                if !skip_current {
+                                    output.push(']');
+                                }
                                 // No word-boundary handling needed for function syntax
                             }
                             None => {
@@ -354,6 +401,7 @@ where
                                 output.push('*');
                             }
                         }
+                        // no-op
                         end_newline = false;
                     }
                     TagEnd::Strikethrough => {
@@ -410,7 +458,7 @@ where
 /// Returns an error if nesting depth exceeds the maximum allowed.
 pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
     // Preprocess to convert guillemets before parsing
-    let preprocessed = preprocess_guillemets(markdown);
+    let (preprocessed, guillemet_ranges) = preprocess_guillemets(markdown);
 
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
@@ -419,7 +467,7 @@ pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
     let mut typst_output = String::new();
 
     // Pass preprocessed source for delimiter peeking
-    push_typst(&mut typst_output, &preprocessed, parser.into_offset_iter())?;
+    push_typst(&mut typst_output, &preprocessed, parser.into_offset_iter(), &guillemet_ranges)?;
     Ok(typst_output)
 }
 
