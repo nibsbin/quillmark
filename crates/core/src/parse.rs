@@ -48,34 +48,10 @@
 
 use std::collections::HashMap;
 
-use crate::guillemet::{preprocess_guillemets, preprocess_markdown_guillemets};
 use crate::value::QuillValue;
 
 /// The field name used to store the document body
 pub const BODY_FIELD: &str = "body";
-
-/// Recursively preprocesses guillemets in YAML values
-///
-/// Converts `<<text>>` to `«text»` in all string values within the YAML structure.
-/// For non-string values (numbers, booleans, null), they are passed through unchanged.
-/// For sequences and mappings, the function recurses into their elements.
-fn preprocess_yaml_guillemets(value: serde_yaml::Value) -> serde_yaml::Value {
-    match value {
-        serde_yaml::Value::String(s) => serde_yaml::Value::String(preprocess_guillemets(&s)),
-        serde_yaml::Value::Sequence(seq) => {
-            serde_yaml::Value::Sequence(seq.into_iter().map(preprocess_yaml_guillemets).collect())
-        }
-        serde_yaml::Value::Mapping(map) => {
-            let new_map: serde_yaml::Mapping = map
-                .into_iter()
-                .map(|(k, v)| (k, preprocess_yaml_guillemets(v)))
-                .collect();
-            serde_yaml::Value::Mapping(new_map)
-        }
-        // Pass through other types unchanged (numbers, booleans, null, tagged)
-        other => other,
-    }
-}
 
 /// Reserved tag name for quill specification
 pub const QUILL_TAG: &str = "quill";
@@ -470,11 +446,9 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
 
     if blocks.is_empty() {
         // No metadata blocks, entire content is body
-        // Preprocess guillemets in markdown body
-        let preprocessed_body = preprocess_markdown_guillemets(markdown);
         fields.insert(
             BODY_FIELD.to_string(),
-            QuillValue::from_json(serde_json::Value::String(preprocessed_body)),
+            QuillValue::from_json(serde_json::Value::String(markdown.to_string())),
         );
         return Ok(ParsedDocument::new(fields));
     }
@@ -547,10 +521,8 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
         }
 
         // Convert YAML values to QuillValue at boundary
-        // Preprocess guillemets in all string values
         for (key, value) in yaml_fields {
-            let preprocessed = preprocess_yaml_guillemets(value);
-            fields.insert(key, QuillValue::from_yaml(preprocessed)?);
+            fields.insert(key, QuillValue::from_yaml(value)?);
         }
     }
 
@@ -585,10 +557,8 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
                 }
 
                 // Convert YAML values to QuillValue at boundary
-                // Preprocess guillemets in all string values
                 for (key, value) in yaml_fields {
-                    let preprocessed = preprocess_yaml_guillemets(value);
-                    fields.insert(key, QuillValue::from_yaml(preprocessed)?);
+                    fields.insert(key, QuillValue::from_yaml(value)?);
                 }
             }
         }
@@ -638,23 +608,14 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
             };
             let body = &markdown[body_start..body_end];
 
-            // Preprocess guillemets in the tagged block body (markdown-aware)
-            let preprocessed_body = preprocess_markdown_guillemets(body);
-
-            // Add preprocessed body to item fields
+            // Add body to item fields
             item_fields.insert(
                 BODY_FIELD.to_string(),
-                serde_yaml::Value::String(preprocessed_body),
+                serde_yaml::Value::String(body.to_string()),
             );
 
-            // Preprocess guillemets in YAML string values
-            let preprocessed_fields: HashMap<String, serde_yaml::Value> = item_fields
-                .into_iter()
-                .map(|(k, v)| (k, preprocess_yaml_guillemets(v)))
-                .collect();
-
             // Convert HashMap to serde_yaml::Value::Mapping
-            let item_value = serde_yaml::to_value(preprocessed_fields)?;
+            let item_value = serde_yaml::to_value(item_fields)?;
 
             // Add to collection
             tagged_attributes
@@ -698,12 +659,9 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
 
     let global_body = &markdown[body_start..body_end];
 
-    // Preprocess guillemets in markdown body
-    let preprocessed_global_body = preprocess_markdown_guillemets(global_body);
-
     fields.insert(
         BODY_FIELD.to_string(),
-        QuillValue::from_json(serde_json::Value::String(preprocessed_global_body)),
+        QuillValue::from_json(serde_json::Value::String(global_body.to_string())),
     );
 
     // Add all tagged collections to fields (convert to QuillValue)
@@ -713,7 +671,6 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
             // The existing value must be an array (checked earlier)
             if let Some(existing_array) = existing_value.as_array() {
                 // Convert new items from YAML to JSON
-                // Note: guillemets in items were already preprocessed when the items were created
                 let new_items_json: Vec<serde_json::Value> = items
                     .into_iter()
                     .map(|yaml_val| {
@@ -1914,18 +1871,19 @@ mod demo_file_test {
         assert!(result.is_ok());
     }
 
-    // Tests for guillemet preprocessing in parsing
+    // Tests for guillemet preservation in parsing (guillemets are NOT converted during parsing)
+    // Guillemet conversion now happens in process_glue, not during parsing
     #[test]
-    fn test_guillemet_in_body_no_frontmatter() {
+    fn test_chevrons_preserved_in_body_no_frontmatter() {
         let markdown = "Use <<raw content>> here.";
         let doc = decompose(markdown).unwrap();
 
-        // Body should have guillemets converted
-        assert_eq!(doc.body(), Some("Use «raw content» here."));
+        // Body should preserve chevrons (conversion happens later in process_glue)
+        assert_eq!(doc.body(), Some("Use <<raw content>> here."));
     }
 
     #[test]
-    fn test_guillemet_in_body_with_frontmatter() {
+    fn test_chevrons_preserved_in_body_with_frontmatter() {
         let markdown = r#"---
 title: Test
 ---
@@ -1933,12 +1891,12 @@ title: Test
 Use <<raw content>> here."#;
         let doc = decompose(markdown).unwrap();
 
-        // Body should have guillemets converted
-        assert_eq!(doc.body(), Some("\nUse «raw content» here."));
+        // Body should preserve chevrons
+        assert_eq!(doc.body(), Some("\nUse <<raw content>> here."));
     }
 
     #[test]
-    fn test_guillemet_in_yaml_string() {
+    fn test_chevrons_preserved_in_yaml_string() {
         let markdown = r#"---
 title: Test <<with chevrons>>
 ---
@@ -1946,15 +1904,15 @@ title: Test <<with chevrons>>
 Body content."#;
         let doc = decompose(markdown).unwrap();
 
-        // YAML string values should have guillemets converted
+        // YAML string values should preserve chevrons
         assert_eq!(
             doc.get_field("title").unwrap().as_str().unwrap(),
-            "Test «with chevrons»"
+            "Test <<with chevrons>>"
         );
     }
 
     #[test]
-    fn test_guillemet_in_yaml_array() {
+    fn test_chevrons_preserved_in_yaml_array() {
         let markdown = r#"---
 items:
   - "<<first>>"
@@ -1965,12 +1923,12 @@ Body."#;
         let doc = decompose(markdown).unwrap();
 
         let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items[0].as_str().unwrap(), "«first»");
-        assert_eq!(items[1].as_str().unwrap(), "«second»");
+        assert_eq!(items[0].as_str().unwrap(), "<<first>>");
+        assert_eq!(items[1].as_str().unwrap(), "<<second>>");
     }
 
     #[test]
-    fn test_guillemet_in_yaml_nested() {
+    fn test_chevrons_preserved_in_yaml_nested() {
         let markdown = r#"---
 metadata:
   description: "<<nested value>>"
@@ -1982,40 +1940,38 @@ Body."#;
         let metadata = doc.get_field("metadata").unwrap().as_object().unwrap();
         assert_eq!(
             metadata.get("description").unwrap().as_str().unwrap(),
-            "«nested value»"
+            "<<nested value>>"
         );
     }
 
     #[test]
-    fn test_guillemet_in_body_skips_code_blocks() {
+    fn test_chevrons_preserved_in_code_blocks() {
         let markdown = r#"```
-<<not converted>>
+<<in code block>>
 ```
 
-<<converted>>"#;
+<<outside code block>>"#;
         let doc = decompose(markdown).unwrap();
 
         let body = doc.body().unwrap();
-        // Code block content should NOT be converted
-        assert!(body.contains("<<not converted>>"));
-        // Regular content should be converted
-        assert!(body.contains("«converted»"));
+        // All chevrons should be preserved (no conversion during parsing)
+        assert!(body.contains("<<in code block>>"));
+        assert!(body.contains("<<outside code block>>"));
     }
 
     #[test]
-    fn test_guillemet_in_body_skips_inline_code() {
-        let markdown = "`<<not converted>>` and <<converted>>";
+    fn test_chevrons_preserved_in_inline_code() {
+        let markdown = "`<<in inline code>>` and <<outside inline code>>";
         let doc = decompose(markdown).unwrap();
 
         let body = doc.body().unwrap();
-        // Inline code should NOT be converted
-        assert!(body.contains("`<<not converted>>`"));
-        // Regular content should be converted
-        assert!(body.contains("«converted»"));
+        // All chevrons should be preserved
+        assert!(body.contains("`<<in inline code>>`"));
+        assert!(body.contains("<<outside inline code>>"));
     }
 
     #[test]
-    fn test_guillemet_in_tagged_block_body() {
+    fn test_chevrons_preserved_in_tagged_block_body() {
         let markdown = r#"---
 title: Main
 ---
@@ -2033,12 +1989,12 @@ Use <<raw>> here."#;
         let items = doc.get_field("items").unwrap().as_sequence().unwrap();
         let item = items[0].as_object().unwrap();
         let item_body = item.get("body").unwrap().as_str().unwrap();
-        // Tagged block body should have guillemets converted
-        assert!(item_body.contains("«raw»"));
+        // Tagged block body should preserve chevrons
+        assert!(item_body.contains("<<raw>>"));
     }
 
     #[test]
-    fn test_guillemet_in_tagged_block_yaml() {
+    fn test_chevrons_preserved_in_tagged_block_yaml() {
         let markdown = r#"---
 title: Main
 ---
@@ -2055,15 +2011,15 @@ Item body."#;
 
         let items = doc.get_field("items").unwrap().as_sequence().unwrap();
         let item = items[0].as_object().unwrap();
-        // Tagged block YAML should have guillemets converted
+        // Tagged block YAML should preserve chevrons
         assert_eq!(
             item.get("description").unwrap().as_str().unwrap(),
-            "«tagged yaml»"
+            "<<tagged yaml>>"
         );
     }
 
     #[test]
-    fn test_guillemet_not_converted_in_yaml_numbers() {
+    fn test_yaml_numbers_not_affected() {
         // Numbers should not be affected
         let markdown = r#"---
 count: 42
@@ -2075,7 +2031,7 @@ Body."#;
     }
 
     #[test]
-    fn test_guillemet_not_converted_in_yaml_booleans() {
+    fn test_yaml_booleans_not_affected() {
         // Booleans should not be affected
         let markdown = r#"---
 active: true
@@ -2087,19 +2043,19 @@ Body."#;
     }
 
     #[test]
-    fn test_guillemet_multiline_not_converted() {
-        // Multiline guillemets should not be converted
+    fn test_multiline_chevrons_preserved() {
+        // Multiline chevrons should be preserved as-is
         let markdown = "<<text\nacross lines>>";
         let doc = decompose(markdown).unwrap();
 
         let body = doc.body().unwrap();
-        // Should NOT contain guillemets since content spans lines
-        assert!(!body.contains('«'));
-        assert!(!body.contains('»'));
+        // Should contain the original chevrons
+        assert!(body.contains("<<text"));
+        assert!(body.contains("across lines>>"));
     }
 
     #[test]
-    fn test_guillemet_unmatched_not_converted() {
+    fn test_unmatched_chevrons_preserved() {
         let markdown = "<<unmatched";
         let doc = decompose(markdown).unwrap();
 

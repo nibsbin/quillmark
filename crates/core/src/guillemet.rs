@@ -236,6 +236,116 @@ pub fn preprocess_markdown_guillemets(markdown: &str) -> String {
     preprocess_guillemets_impl(markdown, true)
 }
 
+use crate::parse::BODY_FIELD;
+use crate::value::QuillValue;
+use std::collections::HashMap;
+
+/// Preprocess guillemets in a map of QuillValue fields.
+///
+/// This function recursively processes all string values in the fields map,
+/// converting `<<text>>` to `«text»`. The body field is processed with
+/// markdown-awareness (skipping code blocks), while other fields use simple
+/// conversion.
+///
+/// # Examples
+///
+/// ```
+/// use quillmark_core::guillemet::preprocess_fields_guillemets;
+/// use quillmark_core::QuillValue;
+/// use std::collections::HashMap;
+///
+/// let mut fields = HashMap::new();
+/// fields.insert("title".to_string(), QuillValue::from_json(serde_json::json!("<<hello>>")));
+/// fields.insert("body".to_string(), QuillValue::from_json(serde_json::json!("<<world>>")));
+///
+/// let result = preprocess_fields_guillemets(fields);
+/// assert_eq!(result.get("title").unwrap().as_str().unwrap(), "«hello»");
+/// assert_eq!(result.get("body").unwrap().as_str().unwrap(), "«world»");
+/// ```
+pub fn preprocess_fields_guillemets(
+    fields: HashMap<String, QuillValue>,
+) -> HashMap<String, QuillValue> {
+    fields
+        .into_iter()
+        .map(|(key, value)| {
+            let is_body = key == BODY_FIELD;
+            let processed = preprocess_quillvalue_guillemets(value, is_body);
+            (key, processed)
+        })
+        .collect()
+}
+
+/// Recursively preprocess guillemets in a QuillValue.
+///
+/// When `markdown_aware` is true, uses markdown-aware preprocessing that
+/// skips code blocks and inline code spans.
+fn preprocess_quillvalue_guillemets(value: QuillValue, markdown_aware: bool) -> QuillValue {
+    let json = value.into_json();
+    let processed = preprocess_json_guillemets(json, markdown_aware);
+    QuillValue::from_json(processed)
+}
+
+/// Recursively preprocess guillemets in a serde_json::Value.
+fn preprocess_json_guillemets(value: serde_json::Value, markdown_aware: bool) -> serde_json::Value {
+    match value {
+        serde_json::Value::String(s) => {
+            let processed = if markdown_aware {
+                preprocess_markdown_guillemets(&s)
+            } else {
+                preprocess_guillemets(&s)
+            };
+            serde_json::Value::String(processed)
+        }
+        serde_json::Value::Array(arr) => {
+            // For arrays, we need to handle "body" fields within objects specially
+            serde_json::Value::Array(
+                arr.into_iter()
+                    .map(|v| preprocess_json_guillemets_in_object(v))
+                    .collect(),
+            )
+        }
+        serde_json::Value::Object(map) => {
+            let processed_map: serde_json::Map<String, serde_json::Value> = map
+                .into_iter()
+                .map(|(k, v)| {
+                    let is_body = k == BODY_FIELD;
+                    (k, preprocess_json_guillemets(v, is_body))
+                })
+                .collect();
+            serde_json::Value::Object(processed_map)
+        }
+        // Pass through other types unchanged (numbers, booleans, null)
+        other => other,
+    }
+}
+
+/// Preprocess guillemets in a JSON value that's inside an object or array.
+/// This determines markdown_aware based on field names within objects.
+fn preprocess_json_guillemets_in_object(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::String(s) => {
+            // For strings at array level, use simple preprocessing
+            serde_json::Value::String(preprocess_guillemets(&s))
+        }
+        serde_json::Value::Array(arr) => serde_json::Value::Array(
+            arr.into_iter()
+                .map(preprocess_json_guillemets_in_object)
+                .collect(),
+        ),
+        serde_json::Value::Object(map) => {
+            let processed_map: serde_json::Map<String, serde_json::Value> = map
+                .into_iter()
+                .map(|(k, v)| {
+                    let is_body = k == BODY_FIELD;
+                    (k, preprocess_json_guillemets(v, is_body))
+                })
+                .collect();
+            serde_json::Value::Object(processed_map)
+        }
+        other => other,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

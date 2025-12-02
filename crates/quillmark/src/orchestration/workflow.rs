@@ -1,6 +1,6 @@
 use quillmark_core::{
-    Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Quill, RenderError, RenderOptions,
-    RenderResult, Severity,
+    preprocess_fields_guillemets, Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Quill,
+    RenderError, RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -89,6 +89,10 @@ impl Workflow {
         // Validate document against schema
         self.validate_document(&parsed_with_defaults)?;
 
+        // Preprocess guillemets: convert <<text>> to «text»
+        // This is done here so ParsedDocument accurately represents the source document
+        let fields_with_guillemets = preprocess_fields_guillemets(parsed_with_defaults.fields().clone());
+
         // Create appropriate glue based on whether template is provided
         let mut glue = match &self.quill.glue {
             Some(s) if !s.is_empty() => Glue::new(s.to_string()),
@@ -96,7 +100,7 @@ impl Workflow {
         };
         self.backend.register_filters(&mut glue);
         let glue_output = glue
-            .compose(parsed_with_defaults.fields().clone())
+            .compose(fields_with_guillemets)
             .map_err(|e| RenderError::TemplateFailed {
                 diag: Diagnostic::new(Severity::Error, e.to_string())
                     .with_code("template::compose".to_string()),
