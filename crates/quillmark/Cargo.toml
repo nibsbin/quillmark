@@ -30,7 +30,7 @@ acroform = { workspace = true }
 cargo-husky = {workspace = true}
 
 [features]
-default = ["typst","acroform"]
+default = ["typst"]
 typst = ["dep:quillmark-typst"]
 acroform = ["dep:quillmark-acroform"]
 

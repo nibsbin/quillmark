@@ -12,7 +12,7 @@ publish = false
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-quillmark = { workspace = true, default-features = false, features = ["typst","acroform"] }
+quillmark = { workspace = true }
 # Ensure the Typst backend is built for WASM with the embedded default font, but
 # without the `native` feature (which would pull in native-only code).
 # This explicitly sets quillmark-typst's features for this crate.
