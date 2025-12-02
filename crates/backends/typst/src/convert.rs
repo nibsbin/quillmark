@@ -993,3 +993,442 @@ mod tests {
         );
     }
 }
+
+// Additional robustness tests
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+
+    // Empty and edge case inputs
+
+    #[test]
+    fn test_only_newlines() {
+        let result = mark_to_typst("\n\n\n").unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_only_spaces_and_newlines() {
+        let result = mark_to_typst("   \n   \n   ").unwrap();
+        assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_single_character() {
+        assert_eq!(mark_to_typst("a").unwrap(), "a\n\n");
+    }
+
+    #[test]
+    fn test_single_special_character() {
+        // Note: Single * at line start is parsed as a list marker by pulldown-cmark
+        // Single # at line start is parsed as a heading marker
+        // So we test with characters in context where they're literal
+        assert_eq!(mark_to_typst("a # b").unwrap(), "a \\# b\n\n");
+        assert_eq!(mark_to_typst("$").unwrap(), "\\$\n\n");
+        // Asterisk in middle of text is escaped
+        assert_eq!(mark_to_typst("a * b").unwrap(), "a \\* b\n\n");
+    }
+
+    // Unicode handling
+
+    #[test]
+    fn test_unicode_text() {
+        let result = mark_to_typst("你好世界").unwrap();
+        assert_eq!(result, "你好世界\n\n");
+    }
+
+    #[test]
+    fn test_unicode_with_formatting() {
+        let result = mark_to_typst("**你好** _世界_").unwrap();
+        assert_eq!(result, "*你好* _世界_\n\n");
+    }
+
+    #[test]
+    fn test_emoji() {
+        let result = mark_to_typst("Hello 🎉 World 🚀").unwrap();
+        assert_eq!(result, "Hello 🎉 World 🚀\n\n");
+    }
+
+    #[test]
+    fn test_emoji_in_link() {
+        let result = mark_to_typst("[Click 🎉](https://example.com)").unwrap();
+        assert_eq!(result, "#link(\"https://example.com\")[Click 🎉]\n\n");
+    }
+
+    #[test]
+    fn test_rtl_text() {
+        // Arabic text
+        let result = mark_to_typst("مرحبا بالعالم").unwrap();
+        assert_eq!(result, "مرحبا بالعالم\n\n");
+    }
+
+    // Escape edge cases
+
+    #[test]
+    fn test_multiple_consecutive_slashes() {
+        let result = mark_to_typst("a///b").unwrap();
+        // /// should become \/\// (first // escaped, third / stays)
+        assert!(result.contains("\\/\\/"));
+    }
+
+    #[test]
+    fn test_escape_at_string_boundaries() {
+        // Test escaping at start of string
+        assert!(mark_to_typst("*start").unwrap().starts_with("\\*"));
+        // Test escaping at end of string
+        assert!(mark_to_typst("end*").unwrap().contains("end\\*"));
+    }
+
+    #[test]
+    fn test_backslash_before_special_char() {
+        // Backslash followed by special char - both should be escaped
+        let result = mark_to_typst("\\*").unwrap();
+        // In markdown, \* is an escaped asterisk, becomes literal *
+        // Then we escape it for Typst
+        assert!(result.contains("\\*"));
+    }
+
+    #[test]
+    fn test_all_special_chars_together() {
+        let result = mark_to_typst("*_`#[]$<>@\\").unwrap();
+        assert!(result.contains("\\*"));
+        assert!(result.contains("\\_"));
+        assert!(result.contains("\\`"));
+        assert!(result.contains("\\#"));
+        assert!(result.contains("\\["));
+        assert!(result.contains("\\]"));
+        assert!(result.contains("\\$"));
+        assert!(result.contains("\\<"));
+        assert!(result.contains("\\>"));
+        assert!(result.contains("\\@"));
+        assert!(result.contains("\\\\"));
+    }
+
+    // Link edge cases
+
+    #[test]
+    fn test_link_with_quotes_in_url() {
+        let result = mark_to_typst("[link](https://example.com?q=\"test\")").unwrap();
+        assert!(result.contains("\\\"test\\\""));
+    }
+
+    #[test]
+    fn test_link_with_backslash_in_url() {
+        let result = mark_to_typst("[link](https://example.com\\path)").unwrap();
+        assert!(result.contains("\\\\"));
+    }
+
+    #[test]
+    fn test_link_with_newline_in_text() {
+        // Markdown link text can span lines with soft breaks
+        let result = mark_to_typst("[multi\nline](https://example.com)").unwrap();
+        // Soft break becomes space in link text
+        assert!(result.contains("[multi line]"));
+    }
+
+    #[test]
+    fn test_empty_link_text() {
+        let result = mark_to_typst("[](https://example.com)").unwrap();
+        assert_eq!(result, "#link(\"https://example.com\")[]\n\n");
+    }
+
+    #[test]
+    fn test_link_with_special_chars_in_text() {
+        let result = mark_to_typst("[*bold* link](https://example.com)").unwrap();
+        assert!(result.contains("_bold_"));
+    }
+
+    // List edge cases
+
+    #[test]
+    fn test_empty_list_item() {
+        let result = mark_to_typst("- \n- item").unwrap();
+        // Empty list items are valid
+        assert!(result.contains("- "));
+    }
+
+    #[test]
+    fn test_list_with_multiple_paragraphs() {
+        let markdown = "- First para\n\n  Second para in same item";
+        let result = mark_to_typst(markdown).unwrap();
+        assert!(result.contains("First para"));
+    }
+
+    #[test]
+    fn test_very_deeply_nested_list() {
+        // Create a list nested 10 levels deep (within limit)
+        let mut markdown = String::new();
+        for i in 0..10 {
+            markdown.push_str(&"  ".repeat(i));
+            markdown.push_str("- item\n");
+        }
+        let result = mark_to_typst(&markdown);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_mixed_ordered_unordered_nested() {
+        let markdown = "1. First\n   - Nested bullet\n   - Another bullet\n2. Second";
+        let result = mark_to_typst(markdown).unwrap();
+        assert!(result.contains("+ First"));
+        assert!(result.contains("- Nested bullet"));
+        assert!(result.contains("+ Second"));
+    }
+
+    // Heading edge cases
+
+    #[test]
+    fn test_heading_with_only_special_chars() {
+        let result = mark_to_typst("# ***").unwrap();
+        assert!(result.contains("= "));
+    }
+
+    #[test]
+    fn test_heading_followed_by_list() {
+        let result = mark_to_typst("# Heading\n\n- Item").unwrap();
+        assert!(result.contains("= Heading\n\n"));
+        assert!(result.contains("- Item"));
+    }
+
+    #[test]
+    fn test_consecutive_headings() {
+        let result = mark_to_typst("# One\n## Two\n### Three").unwrap();
+        assert!(result.contains("= One"));
+        assert!(result.contains("== Two"));
+        assert!(result.contains("=== Three"));
+    }
+
+    // Code block handling (currently ignored but should not crash)
+
+    #[test]
+    fn test_fenced_code_block_ignored() {
+        let markdown = "```rust\nfn main() {}\n```";
+        let result = mark_to_typst(markdown);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_indented_code_block_ignored() {
+        let markdown = "    fn main() {}\n    println!()";
+        let result = mark_to_typst(markdown);
+        assert!(result.is_ok());
+    }
+
+    // Inline code edge cases
+
+    #[test]
+    fn test_inline_code_with_backticks() {
+        // Using double backticks to include single backtick
+        let result = mark_to_typst("`` `code` ``").unwrap();
+        assert!(result.contains("`"));
+    }
+
+    #[test]
+    fn test_inline_code_with_special_chars() {
+        // Special chars in code should NOT be escaped
+        let result = mark_to_typst("`*#$<>`").unwrap();
+        assert_eq!(result, "`*#$<>`\n\n");
+    }
+
+    #[test]
+    fn test_empty_inline_code() {
+        // pulldown-cmark doesn't parse `` as empty inline code
+        // It needs content or different backtick counts
+        let result = mark_to_typst("` `").unwrap();
+        assert!(result.contains("`")); // space-only code span
+    }
+
+    // Formatting edge cases
+
+    #[test]
+    fn test_adjacent_emphasis() {
+        let result = mark_to_typst("*a**b*").unwrap();
+        // Depends on how markdown parser handles this
+        assert!(result.contains("_"));
+    }
+
+    #[test]
+    fn test_emphasis_across_words() {
+        let result = mark_to_typst("*multiple words here*").unwrap();
+        assert_eq!(result, "_multiple words here_\n\n");
+    }
+
+    #[test]
+    fn test_strong_across_lines() {
+        let result = mark_to_typst("**bold\nacross\nlines**").unwrap();
+        // Soft breaks become spaces
+        assert!(result.contains("bold across lines"));
+    }
+
+    #[test]
+    fn test_strikethrough_with_special_chars() {
+        let result = mark_to_typst("~~*text*~~").unwrap();
+        // Strikethrough content: emphasis should still work
+        assert!(result.contains("#strike["));
+    }
+
+    // Strong stack edge cases
+
+    #[test]
+    fn test_multiple_nested_strong() {
+        // Unusual but valid: nested strongs
+        let result = mark_to_typst("**a **b** a**");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_alternating_bold_underline() {
+        let result = mark_to_typst("**bold** __under__ **bold**").unwrap();
+        assert!(result.contains("*bold*"));
+        assert!(result.contains("#underline[under]"));
+    }
+
+    // escape_string function tests
+
+    #[test]
+    fn test_escape_string_unicode() {
+        // Unicode should pass through unchanged
+        assert_eq!(escape_string("你好"), "你好");
+        assert_eq!(escape_string("🎉"), "🎉");
+    }
+
+    #[test]
+    fn test_escape_string_all_escapes() {
+        assert_eq!(escape_string("\\\"\n\r\t"), "\\\\\\\"\\n\\r\\t");
+    }
+
+    #[test]
+    fn test_escape_string_nul_character() {
+        assert_eq!(escape_string("\x00"), "\\u{0}");
+    }
+
+    #[test]
+    fn test_escape_string_bell_character() {
+        assert_eq!(escape_string("\x07"), "\\u{7}");
+    }
+
+    #[test]
+    fn test_escape_string_mixed() {
+        assert_eq!(
+            escape_string("Hello\nWorld\t\"quoted\""),
+            "Hello\\nWorld\\t\\\"quoted\\\""
+        );
+    }
+
+    // escape_markup function tests
+
+    #[test]
+    fn test_escape_markup_empty() {
+        assert_eq!(escape_markup(""), "");
+    }
+
+    #[test]
+    fn test_escape_markup_unicode() {
+        // Unicode should pass through unchanged
+        assert_eq!(escape_markup("你好世界"), "你好世界");
+    }
+
+    #[test]
+    fn test_escape_markup_triple_slash() {
+        // /// should escape the first // and leave the third /
+        assert_eq!(escape_markup("///"), "\\/\\//");
+    }
+
+    #[test]
+    fn test_escape_markup_url() {
+        assert_eq!(
+            escape_markup("https://example.com"),
+            "https:\\/\\/example.com"
+        );
+    }
+
+    // Paragraph handling
+
+    #[test]
+    fn test_many_paragraphs() {
+        let markdown = "P1.\n\nP2.\n\nP3.\n\nP4.\n\nP5.";
+        let result = mark_to_typst(markdown).unwrap();
+        assert_eq!(result.matches("P").count(), 5);
+        assert!(result.contains("P1.\n\nP2."));
+    }
+
+    #[test]
+    fn test_paragraph_with_only_formatting() {
+        let result = mark_to_typst("**bold only**").unwrap();
+        assert_eq!(result, "*bold only*\n\n");
+    }
+
+    // Soft break and hard break
+
+    #[test]
+    fn test_hard_break_in_list() {
+        let result = mark_to_typst("- line one  \n  line two").unwrap();
+        // Hard break in list item
+        assert!(result.contains("line one"));
+    }
+
+    #[test]
+    fn test_multiple_hard_breaks() {
+        let result = mark_to_typst("a  \nb  \nc").unwrap();
+        assert_eq!(result, "a\nb\nc\n\n");
+    }
+
+    // Word boundary handling
+
+    #[test]
+    fn test_italic_before_number() {
+        let result = mark_to_typst("*italic*1").unwrap();
+        // Should add word boundary before number
+        assert!(result.contains("_italic_#{}1"));
+    }
+
+    #[test]
+    fn test_bold_before_underscore() {
+        // In **bold**_after, the _ is literal text (not starting emphasis)
+        // So it gets escaped in Typst output
+        let result = mark_to_typst("**bold**_after").unwrap();
+        // Underscore is escaped as literal text
+        assert!(result.contains("*bold*\\_after"));
+    }
+
+    #[test]
+    fn test_emphasis_at_end_of_text() {
+        // No next token, so no boundary check
+        let result = mark_to_typst("*italic*").unwrap();
+        assert_eq!(result, "_italic_\n\n");
+    }
+
+    // Complex real-world scenarios
+
+    #[test]
+    fn test_markdown_document() {
+        let markdown = r#"# Title
+
+This is a paragraph with **bold** and *italic* text.
+
+## Section
+
+- List item 1
+- List item 2 with [link](https://example.com)
+
+More text with `inline code`."#;
+
+        let result = mark_to_typst(markdown).unwrap();
+        assert!(result.contains("= Title"));
+        assert!(result.contains("== Section"));
+        assert!(result.contains("*bold*"));
+        assert!(result.contains("_italic_"));
+        assert!(result.contains("- List item"));
+        assert!(result.contains("#link"));
+        assert!(result.contains("`inline code`"));
+    }
+
+    #[test]
+    fn test_typst_syntax_in_content() {
+        // Content that looks like Typst syntax should be escaped
+        let markdown = "Use #set for settings and $x^2$ for math.";
+        let result = mark_to_typst(markdown).unwrap();
+        assert!(result.contains("\\#set"));
+        assert!(result.contains("\\$x^2\\$"));
+    }
+}
