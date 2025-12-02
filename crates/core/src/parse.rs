@@ -72,13 +72,9 @@ fn yaml_error_to_string(e: serde_yaml::Error, context: &str) -> String {
 /// For sequences and mappings, the function recurses into their elements.
 fn preprocess_yaml_guillemets(value: serde_yaml::Value) -> serde_yaml::Value {
     match value {
-        serde_yaml::Value::String(s) => {
-            serde_yaml::Value::String(preprocess_guillemets(&s))
-        }
+        serde_yaml::Value::String(s) => serde_yaml::Value::String(preprocess_guillemets(&s)),
         serde_yaml::Value::Sequence(seq) => {
-            serde_yaml::Value::Sequence(
-                seq.into_iter().map(preprocess_yaml_guillemets).collect()
-            )
+            serde_yaml::Value::Sequence(seq.into_iter().map(preprocess_yaml_guillemets).collect())
         }
         serde_yaml::Value::Mapping(map) => {
             let new_map: serde_yaml::Mapping = map
@@ -2089,4 +2085,3 @@ Body."#;
         assert_eq!(body, "<<unmatched");
     }
 }
-

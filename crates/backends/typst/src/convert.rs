@@ -97,11 +97,7 @@ enum StrongKind {
 }
 
 /// Converts an iterator of markdown events to Typst markup
-fn push_typst<'a, I>(
-    output: &mut String,
-    source: &str,
-    iter: I,
-) -> Result<(), ConversionError>
+fn push_typst<'a, I>(output: &mut String, source: &str, iter: I) -> Result<(), ConversionError>
 where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
 {
@@ -351,11 +347,7 @@ pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
     let parser = Parser::new_ext(markdown, options);
     let mut typst_output = String::new();
 
-    push_typst(
-        &mut typst_output,
-        markdown,
-        parser.into_offset_iter(),
-    )?;
+    push_typst(&mut typst_output, markdown, parser.into_offset_iter())?;
     Ok(typst_output)
 }
 
