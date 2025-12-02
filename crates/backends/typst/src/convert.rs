@@ -56,39 +56,116 @@ pub enum ConversionError {
 /// content within the preprocessed source. This lets the main converter
 /// perform context-aware escaping (e.g., link destination escaping) for
 /// events that occur inside guillemets.
-/// Skips conversion inside code blocks and code spans
+/// Skips conversion inside code blocks (fenced and indented) and code spans
 fn preprocess_guillemets(markdown: &str) -> (String, Vec<Range<usize>>) {
     let mut result = String::with_capacity(markdown.len());
     let mut ranges: Vec<Range<usize>> = Vec::new();
     let chars: Vec<char> = markdown.chars().collect();
     let mut i = 0;
-    let mut in_code_block = false;
-    let mut in_inline_code = false;
+    // Fence state: Some((char, length)) when inside a fenced code block
+    let mut fence_state: Option<(char, usize)> = None;
+    // Inline code state: Some(length) when inside an inline code span
+    let mut inline_code_backticks: Option<usize> = None;
+    let mut at_line_start = true;
 
     while i < chars.len() {
-        // Track code block state (```)
-        if i + 2 < chars.len() && chars[i] == '`' && chars[i + 1] == '`' && chars[i + 2] == '`' {
-            in_code_block = !in_code_block;
-            result.push_str("```");
-            i += 3;
-            continue;
-        }
+        let ch = chars[i];
 
-        // Track inline code state (`)
-        if chars[i] == '`' {
-            in_inline_code = !in_inline_code;
-            result.push('`');
+        // Track line start for indented code block detection
+        if ch == '\n' {
+            at_line_start = true;
+            result.push(ch);
             i += 1;
             continue;
         }
 
-        // Only process << when not in code
-        if !in_code_block
-            && !in_inline_code
-            && i + 1 < chars.len()
-            && chars[i] == '<'
-            && chars[i + 1] == '<'
-        {
+        // Check for indented code block (4+ spaces at line start, but only outside fences)
+        if at_line_start && fence_state.is_none() && inline_code_backticks.is_none() {
+            let indent = count_leading_spaces(&chars[i..]);
+            if indent >= 4 {
+                // This is an indented code block line - copy entire line without conversion
+                while i < chars.len() && chars[i] != '\n' {
+                    result.push(chars[i]);
+                    i += 1;
+                }
+                continue;
+            }
+        }
+
+        // No longer at line start after processing non-newline
+        at_line_start = false;
+
+        // Handle fenced code blocks (``` or ~~~, 3+ chars)
+        if fence_state.is_none() && inline_code_backticks.is_none() && (ch == '`' || ch == '~') {
+            let fence_len = count_consecutive(&chars[i..], ch);
+            if fence_len >= 3 {
+                // Start of fenced code block
+                fence_state = Some((ch, fence_len));
+                for _ in 0..fence_len {
+                    result.push(ch);
+                }
+                i += fence_len;
+                continue;
+            }
+        }
+
+        // Check for end of fenced code block
+        if let Some((fence_char, fence_len)) = fence_state {
+            if ch == fence_char {
+                let current_len = count_consecutive(&chars[i..], ch);
+                if current_len >= fence_len {
+                    // End of fenced code block
+                    fence_state = None;
+                    for _ in 0..current_len {
+                        result.push(ch);
+                    }
+                    i += current_len;
+                    continue;
+                }
+            }
+            // Inside fenced code block - just copy
+            result.push(ch);
+            i += 1;
+            continue;
+        }
+
+        // Handle inline code spans (backticks only)
+        if ch == '`' {
+            let backtick_count = count_consecutive(&chars[i..], '`');
+            if let Some(open_count) = inline_code_backticks {
+                if backtick_count == open_count {
+                    // End of inline code span
+                    inline_code_backticks = None;
+                    for _ in 0..backtick_count {
+                        result.push('`');
+                    }
+                    i += backtick_count;
+                    continue;
+                }
+                // Inside inline code span but different backtick count - just copy
+                result.push(ch);
+                i += 1;
+                continue;
+            } else {
+                // Start of inline code span
+                inline_code_backticks = Some(backtick_count);
+                for _ in 0..backtick_count {
+                    result.push('`');
+                }
+                i += backtick_count;
+                continue;
+            }
+        }
+
+        // Inside inline code span - just copy
+        if inline_code_backticks.is_some() {
+            result.push(ch);
+            i += 1;
+            continue;
+        }
+
+        // Only process << when not in any code context
+        if i + 1 < chars.len() && ch == '<' && chars[i + 1] == '<' {
             // Find matching >>
             if let Some(end_offset) = find_matching_guillemet_end(&chars[i + 2..]) {
                 let content_end = i + 2 + end_offset;
@@ -112,11 +189,21 @@ fn preprocess_guillemets(markdown: &str) -> (String, Vec<Range<usize>>) {
         }
 
         // Regular character - just copy it
-        result.push(chars[i]);
+        result.push(ch);
         i += 1;
     }
 
     (result, ranges)
+}
+
+/// Counts consecutive occurrences of a character from the start of the slice.
+fn count_consecutive(chars: &[char], target: char) -> usize {
+    chars.iter().take_while(|&&c| c == target).count()
+}
+
+/// Counts leading spaces (not tabs) at the start of the slice.
+fn count_leading_spaces(chars: &[char]) -> usize {
+    chars.iter().take_while(|&&c| c == ' ').count()
 }
 
 /// Trims whitespace from guillemet content.
@@ -1210,6 +1297,50 @@ mod tests {
         assert_eq!(
             mark_to_typst("`<<not converted>>`").unwrap(),
             "`<<not converted>>`\n\n"
+        );
+    }
+
+    #[test]
+    fn test_guillemet_not_in_multi_backtick_code_span() {
+        // Multi-backtick code spans per CommonMark
+        let result = mark_to_typst("`` <<text>> ``").unwrap();
+        assert!(
+            !result.contains('«'),
+            "Multi-backtick span incorrectly converted: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_guillemet_not_in_indented_code_block() {
+        // Indented code blocks (4+ spaces) per CommonMark
+        let result = mark_to_typst("    <<not converted>>").unwrap();
+        assert!(
+            !result.contains('«'),
+            "Indented code block incorrectly converted: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_guillemet_not_in_tilde_fence() {
+        // Tilde fences per CommonMark
+        let result = mark_to_typst("~~~\n<<text>>\n~~~").unwrap();
+        assert!(
+            !result.contains('«'),
+            "Tilde fence incorrectly converted: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_guillemet_not_in_long_backtick_fence() {
+        // Fences with >3 backticks per CommonMark
+        let result = mark_to_typst("````\n<<text>>\n````").unwrap();
+        assert!(
+            !result.contains('«'),
+            "Long backtick fence incorrectly converted: {}",
+            result
         );
     }
 
