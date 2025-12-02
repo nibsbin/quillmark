@@ -186,11 +186,11 @@ impl ParsedDocument {
 
 #[derive(Debug)]
 struct MetadataBlock {
-    start: usize, // Position of opening "---"
-    end: usize,   // Position after closing "---\n"
+    start: usize,                          // Position of opening "---"
+    end: usize,                            // Position after closing "---\n"
     yaml_value: Option<serde_yaml::Value>, // Parsed YAML (None if empty or parse failed)
-    tag: Option<String>,        // Field name from SCOPE key
-    quill_name: Option<String>, // Quill name from QUILL key
+    tag: Option<String>,                   // Field name from SCOPE key
+    quill_name: Option<String>,            // Quill name from QUILL key
 }
 
 /// Validate tag name follows pattern [a-z_][a-z0-9_]*
@@ -514,14 +514,10 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
 
         // Get parsed YAML fields directly (already parsed in find_metadata_blocks)
         let yaml_fields: HashMap<String, serde_yaml::Value> = match &block.yaml_value {
-            Some(serde_yaml::Value::Mapping(mapping)) => {
-                mapping
-                    .iter()
-                    .filter_map(|(k, v)| {
-                        k.as_str().map(|key| (key.to_string(), v.clone()))
-                    })
-                    .collect()
-            }
+            Some(serde_yaml::Value::Mapping(mapping)) => mapping
+                .iter()
+                .filter_map(|(k, v)| k.as_str().map(|key| (key.to_string(), v.clone())))
+                .collect(),
             Some(serde_yaml::Value::Null) => {
                 // Null value (from whitespace-only YAML) - treat as empty mapping
                 HashMap::new()
@@ -564,14 +560,10 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
             // Quill directive blocks can have YAML content (becomes part of frontmatter)
             if let Some(ref yaml_val) = block.yaml_value {
                 let yaml_fields: HashMap<String, serde_yaml::Value> = match yaml_val {
-                    serde_yaml::Value::Mapping(mapping) => {
-                        mapping
-                            .iter()
-                            .filter_map(|(k, v)| {
-                                k.as_str().map(|key| (key.to_string(), v.clone()))
-                            })
-                            .collect()
-                    }
+                    serde_yaml::Value::Mapping(mapping) => mapping
+                        .iter()
+                        .filter_map(|(k, v)| k.as_str().map(|key| (key.to_string(), v.clone())))
+                        .collect(),
                     serde_yaml::Value::Null => {
                         // Null value (from whitespace-only YAML) - treat as empty mapping
                         HashMap::new()
@@ -619,14 +611,10 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
 
             // Get YAML metadata directly (already parsed in find_metadata_blocks)
             let mut item_fields: HashMap<String, serde_yaml::Value> = match &block.yaml_value {
-                Some(serde_yaml::Value::Mapping(mapping)) => {
-                    mapping
-                        .iter()
-                        .filter_map(|(k, v)| {
-                            k.as_str().map(|key| (key.to_string(), v.clone()))
-                        })
-                        .collect()
-                }
+                Some(serde_yaml::Value::Mapping(mapping)) => mapping
+                    .iter()
+                    .filter_map(|(k, v)| k.as_str().map(|key| (key.to_string(), v.clone())))
+                    .collect(),
                 Some(serde_yaml::Value::Null) => {
                     // Null value (from whitespace-only YAML) - treat as empty mapping
                     HashMap::new()

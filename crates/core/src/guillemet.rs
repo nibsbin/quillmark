@@ -56,7 +56,7 @@ fn preprocess_guillemets_impl(text: &str, skip_code_blocks: bool) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut result = String::with_capacity(text.len());
     let mut i = 0;
-    
+
     // Markdown-specific state (only used when skip_code_blocks is true)
     let mut fence_state: Option<(char, usize)> = None;
     let mut inline_code_backticks: Option<usize> = None;
@@ -92,7 +92,8 @@ fn preprocess_guillemets_impl(text: &str, skip_code_blocks: bool) -> String {
             at_line_start = false;
 
             // Handle fenced code blocks (``` or ~~~, 3+ chars)
-            if fence_state.is_none() && inline_code_backticks.is_none() && (ch == '`' || ch == '~') {
+            if fence_state.is_none() && inline_code_backticks.is_none() && (ch == '`' || ch == '~')
+            {
                 let fence_len = count_consecutive(&chars[i..], ch);
                 if fence_len >= 3 {
                     // Start of fenced code block
