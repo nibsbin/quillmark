@@ -464,8 +464,7 @@ mod tests {
     #[test]
     fn test_markdown_nested_fences_different_chars() {
         // ~~~ inside ``` should not close the fence
-        let (result, ranges) =
-            preprocess_markdown_guillemets("```\n~~~\n<<text>>\n~~~\n```");
+        let (result, ranges) = preprocess_markdown_guillemets("```\n~~~\n<<text>>\n~~~\n```");
         assert!(!result.contains('«'));
         assert!(ranges.is_empty());
     }
