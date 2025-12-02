@@ -54,17 +54,6 @@ use crate::value::QuillValue;
 /// The field name used to store the document body
 pub const BODY_FIELD: &str = "body";
 
-/// Helper function to convert serde_yaml::Error with location extraction
-fn yaml_error_to_string(e: serde_yaml::Error, context: &str) -> String {
-    let mut msg = format!("{}: {}", context, e);
-
-    if let Some(loc) = e.location() {
-        msg.push_str(&format!(" at line {}, column {}", loc.line(), loc.column()));
-    }
-
-    msg
-}
-
 /// Recursively preprocesses guillemets in YAML values
 ///
 /// Converts `<<text>>` to `«text»` in all string values within the YAML structure.
@@ -199,7 +188,7 @@ impl ParsedDocument {
 struct MetadataBlock {
     start: usize, // Position of opening "---"
     end: usize,   // Position after closing "---\n"
-    yaml_content: String,
+    yaml_value: Option<serde_yaml::Value>, // Parsed YAML (None if empty or parse failed)
     tag: Option<String>,        // Field name from SCOPE key
     quill_name: Option<String>, // Quill name from QUILL key
 }
@@ -343,11 +332,11 @@ fn find_metadata_blocks(
 
                 // Parse YAML content to check for reserved keys (QUILL, SCOPE)
                 // First, try to parse as YAML
-                let (tag, quill_name, yaml_content) = if !content.is_empty() {
+                let (tag, quill_name, yaml_value) = if !content.is_empty() {
                     // Try to parse the YAML to check for reserved keys
                     match serde_yaml::from_str::<serde_yaml::Value>(content) {
-                        Ok(yaml_value) => {
-                            if let Some(mapping) = yaml_value.as_mapping() {
+                        Ok(parsed_yaml) => {
+                            if let Some(mapping) = parsed_yaml.as_mapping() {
                                 let quill_key = serde_yaml::Value::String("QUILL".to_string());
                                 let scope_key = serde_yaml::Value::String("SCOPE".to_string());
 
@@ -376,13 +365,16 @@ fn find_metadata_blocks(
                                         .into());
                                     }
 
-                                    // Remove QUILL from the YAML content for processing
+                                    // Remove QUILL from the YAML value for processing
                                     let mut new_mapping = mapping.clone();
                                     new_mapping.remove(&quill_key);
-                                    let new_yaml = serde_yaml::to_string(&new_mapping)
-                                        .map_err(|e| format!("Failed to serialize YAML: {}", e))?;
+                                    let new_value = if new_mapping.is_empty() {
+                                        None
+                                    } else {
+                                        Some(serde_yaml::Value::Mapping(new_mapping))
+                                    };
 
-                                    (None, Some(quill_name_str.to_string()), new_yaml)
+                                    (None, Some(quill_name_str.to_string()), new_value)
                                 } else if has_scope {
                                     // Extract scope field name
                                     let scope_value = mapping.get(&scope_key).unwrap();
@@ -406,35 +398,39 @@ fn find_metadata_blocks(
                                         .into());
                                     }
 
-                                    // Remove SCOPE from the YAML content for processing
+                                    // Remove SCOPE from the YAML value for processing
                                     let mut new_mapping = mapping.clone();
                                     new_mapping.remove(&scope_key);
-                                    let new_yaml = serde_yaml::to_string(&new_mapping)
-                                        .map_err(|e| format!("Failed to serialize YAML: {}", e))?;
+                                    let new_value = if new_mapping.is_empty() {
+                                        None
+                                    } else {
+                                        Some(serde_yaml::Value::Mapping(new_mapping))
+                                    };
 
-                                    (Some(field_name.to_string()), None, new_yaml)
+                                    (Some(field_name.to_string()), None, new_value)
                                 } else {
-                                    // No reserved keys, treat as normal YAML
-                                    (None, None, content.to_string())
+                                    // No reserved keys, keep the parsed YAML
+                                    (None, None, Some(parsed_yaml))
                                 }
                             } else {
-                                // Not a mapping, treat as normal YAML
-                                (None, None, content.to_string())
+                                // Not a mapping, keep the parsed YAML (could be null for whitespace)
+                                (None, None, Some(parsed_yaml))
                             }
                         }
-                        Err(_) => {
-                            // If YAML parsing fails here, we'll catch it later
-                            (None, None, content.to_string())
+                        Err(e) => {
+                            // YAML parsing failed - return error with context
+                            return Err(format!("Invalid YAML frontmatter: {}", e).into());
                         }
                     }
                 } else {
-                    (None, None, content.to_string())
+                    // Empty content
+                    (None, None, None)
                 };
 
                 blocks.push(MetadataBlock {
                     start: abs_pos,
                     end: abs_closing_pos + closing_len, // After closing delimiter
-                    yaml_content,
+                    yaml_value,
                     tag,
                     quill_name,
                 });
@@ -516,12 +512,25 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
     if let Some(idx) = global_frontmatter_index {
         let block = &blocks[idx];
 
-        // Parse YAML frontmatter
-        let yaml_fields: HashMap<String, serde_yaml::Value> = if block.yaml_content.is_empty() {
-            HashMap::new()
-        } else {
-            serde_yaml::from_str(&block.yaml_content)
-                .map_err(|e| yaml_error_to_string(e, "Invalid YAML frontmatter"))?
+        // Get parsed YAML fields directly (already parsed in find_metadata_blocks)
+        let yaml_fields: HashMap<String, serde_yaml::Value> = match &block.yaml_value {
+            Some(serde_yaml::Value::Mapping(mapping)) => {
+                mapping
+                    .iter()
+                    .filter_map(|(k, v)| {
+                        k.as_str().map(|key| (key.to_string(), v.clone()))
+                    })
+                    .collect()
+            }
+            Some(serde_yaml::Value::Null) => {
+                // Null value (from whitespace-only YAML) - treat as empty mapping
+                HashMap::new()
+            }
+            Some(_) => {
+                // Non-mapping, non-null YAML (e.g., scalar, sequence) - this is an error for frontmatter
+                return Err("Invalid YAML frontmatter: expected a mapping".into());
+            }
+            None => HashMap::new(),
         };
 
         // Check that all tagged blocks don't conflict with global fields
@@ -553,10 +562,24 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
     for block in &blocks {
         if block.quill_name.is_some() {
             // Quill directive blocks can have YAML content (becomes part of frontmatter)
-            if !block.yaml_content.is_empty() {
-                let yaml_fields: HashMap<String, serde_yaml::Value> =
-                    serde_yaml::from_str(&block.yaml_content)
-                        .map_err(|e| yaml_error_to_string(e, "Invalid YAML in quill block"))?;
+            if let Some(ref yaml_val) = block.yaml_value {
+                let yaml_fields: HashMap<String, serde_yaml::Value> = match yaml_val {
+                    serde_yaml::Value::Mapping(mapping) => {
+                        mapping
+                            .iter()
+                            .filter_map(|(k, v)| {
+                                k.as_str().map(|key| (key.to_string(), v.clone()))
+                            })
+                            .collect()
+                    }
+                    serde_yaml::Value::Null => {
+                        // Null value (from whitespace-only YAML) - treat as empty mapping
+                        HashMap::new()
+                    }
+                    _ => {
+                        return Err("Invalid YAML in quill block: expected a mapping".into());
+                    }
+                };
 
                 // Check for conflicts with existing fields
                 for key in yaml_fields.keys() {
@@ -594,16 +617,28 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
                 }
             }
 
-            // Parse YAML metadata
-            let mut item_fields: HashMap<String, serde_yaml::Value> = if block
-                .yaml_content
-                .is_empty()
-            {
-                HashMap::new()
-            } else {
-                serde_yaml::from_str(&block.yaml_content).map_err(|e| {
-                    yaml_error_to_string(e, &format!("Invalid YAML in tagged block '{}'", tag_name))
-                })?
+            // Get YAML metadata directly (already parsed in find_metadata_blocks)
+            let mut item_fields: HashMap<String, serde_yaml::Value> = match &block.yaml_value {
+                Some(serde_yaml::Value::Mapping(mapping)) => {
+                    mapping
+                        .iter()
+                        .filter_map(|(k, v)| {
+                            k.as_str().map(|key| (key.to_string(), v.clone()))
+                        })
+                        .collect()
+                }
+                Some(serde_yaml::Value::Null) => {
+                    // Null value (from whitespace-only YAML) - treat as empty mapping
+                    HashMap::new()
+                }
+                Some(_) => {
+                    return Err(format!(
+                        "Invalid YAML in tagged block '{}': expected a mapping",
+                        tag_name
+                    )
+                    .into());
+                }
+                None => HashMap::new(),
             };
 
             // Extract body for this tagged block

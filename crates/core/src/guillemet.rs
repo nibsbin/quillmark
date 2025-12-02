@@ -46,33 +46,122 @@ fn count_leading_spaces(chars: &[char]) -> usize {
     chars.iter().take_while(|&&c| c == ' ').count()
 }
 
-/// Preprocesses text to convert guillemets: `<<text>>` → `«text»`
+/// Internal implementation for guillemet preprocessing with optional markdown awareness.
 ///
-/// This is a simple conversion that does NOT skip code blocks or code spans.
-/// Use this for YAML field values or other non-markdown contexts.
-///
-/// Constraints:
-/// - Content must be on a single line (no newlines between `<<` and `>>`)
-/// - Content must not exceed [`MAX_GUILLEMET_LENGTH`] bytes
-///
-/// # Examples
-///
-/// ```
-/// use quillmark_core::guillemet::preprocess_guillemets;
-///
-/// assert_eq!(preprocess_guillemets("<<hello>>"), "«hello»");
-/// assert_eq!(preprocess_guillemets("<< spaced >>"), "«spaced»");
-/// assert_eq!(preprocess_guillemets("no chevrons"), "no chevrons");
-/// ```
-pub fn preprocess_guillemets(text: &str) -> String {
+/// When `skip_code_blocks` is true, guillemet conversion is skipped inside:
+/// - Fenced code blocks (` ``` ` or `~~~`)
+/// - Indented code blocks (4+ spaces)
+/// - Inline code spans (backticks)
+fn preprocess_guillemets_impl(text: &str, skip_code_blocks: bool) -> String {
     let chars: Vec<char> = text.chars().collect();
     let mut result = String::with_capacity(text.len());
     let mut i = 0;
+    
+    // Markdown-specific state (only used when skip_code_blocks is true)
+    let mut fence_state: Option<(char, usize)> = None;
+    let mut inline_code_backticks: Option<usize> = None;
+    let mut at_line_start = true;
 
     while i < chars.len() {
         let ch = chars[i];
 
-        // Process << when found
+        // Markdown code block handling (only when skip_code_blocks is enabled)
+        if skip_code_blocks {
+            // Track line start for indented code block detection
+            if ch == '\n' {
+                at_line_start = true;
+                result.push(ch);
+                i += 1;
+                continue;
+            }
+
+            // Check for indented code block (4+ spaces at line start, but only outside fences)
+            if at_line_start && fence_state.is_none() && inline_code_backticks.is_none() {
+                let indent = count_leading_spaces(&chars[i..]);
+                if indent >= 4 {
+                    // This is an indented code block line - copy entire line without conversion
+                    while i < chars.len() && chars[i] != '\n' {
+                        result.push(chars[i]);
+                        i += 1;
+                    }
+                    continue;
+                }
+            }
+
+            // No longer at line start after processing non-newline
+            at_line_start = false;
+
+            // Handle fenced code blocks (``` or ~~~, 3+ chars)
+            if fence_state.is_none() && inline_code_backticks.is_none() && (ch == '`' || ch == '~') {
+                let fence_len = count_consecutive(&chars[i..], ch);
+                if fence_len >= 3 {
+                    // Start of fenced code block
+                    fence_state = Some((ch, fence_len));
+                    for _ in 0..fence_len {
+                        result.push(ch);
+                    }
+                    i += fence_len;
+                    continue;
+                }
+            }
+
+            // Check for end of fenced code block
+            if let Some((fence_char, fence_len)) = fence_state {
+                if ch == fence_char {
+                    let current_len = count_consecutive(&chars[i..], ch);
+                    if current_len >= fence_len {
+                        // End of fenced code block
+                        fence_state = None;
+                        for _ in 0..current_len {
+                            result.push(ch);
+                        }
+                        i += current_len;
+                        continue;
+                    }
+                }
+                // Inside fenced code block - just copy
+                result.push(ch);
+                i += 1;
+                continue;
+            }
+
+            // Handle inline code spans (backticks only)
+            if ch == '`' {
+                let backtick_count = count_consecutive(&chars[i..], '`');
+                if let Some(open_count) = inline_code_backticks {
+                    if backtick_count == open_count {
+                        // End of inline code span
+                        inline_code_backticks = None;
+                        for _ in 0..backtick_count {
+                            result.push('`');
+                        }
+                        i += backtick_count;
+                        continue;
+                    }
+                    // Inside inline code span but different backtick count - just copy
+                    result.push(ch);
+                    i += 1;
+                    continue;
+                } else {
+                    // Start of inline code span
+                    inline_code_backticks = Some(backtick_count);
+                    for _ in 0..backtick_count {
+                        result.push('`');
+                    }
+                    i += backtick_count;
+                    continue;
+                }
+            }
+
+            // Inside inline code span - just copy
+            if inline_code_backticks.is_some() {
+                result.push(ch);
+                i += 1;
+                continue;
+            }
+        }
+
+        // Process << when found (common to both modes)
         if i + 1 < chars.len() && ch == '<' && chars[i + 1] == '<' {
             // Find matching >>
             if let Some(end_offset) = find_matching_guillemet_end(&chars[i + 2..]) {
@@ -99,6 +188,29 @@ pub fn preprocess_guillemets(text: &str) -> String {
     result
 }
 
+/// Preprocesses text to convert guillemets: `<<text>>` → `«text»`
+///
+/// This is a simple conversion that does NOT skip code blocks or code spans.
+/// Use this for YAML field values or other non-markdown contexts.
+///
+/// Constraints:
+/// - Content must be on a single line (no newlines between `<<` and `>>`)
+/// - Content must not exceed [`MAX_GUILLEMET_LENGTH`] bytes
+///
+/// # Examples
+///
+/// ```
+/// use quillmark_core::guillemet::preprocess_guillemets;
+///
+/// assert_eq!(preprocess_guillemets("<<hello>>"), "«hello»");
+/// assert_eq!(preprocess_guillemets("<< spaced >>"), "«spaced»");
+/// assert_eq!(preprocess_guillemets("no chevrons"), "no chevrons");
+/// ```
+#[inline]
+pub fn preprocess_guillemets(text: &str) -> String {
+    preprocess_guillemets_impl(text, false)
+}
+
 /// Preprocesses markdown to convert guillemets: `<<text>>` → `«text»`
 ///
 /// This is a markdown-aware conversion that skips guillemet conversion inside:
@@ -118,137 +230,9 @@ pub fn preprocess_guillemets(text: &str) -> String {
 /// let result = preprocess_markdown_guillemets("`<<code>>`");
 /// assert_eq!(result, "`<<code>>`");
 /// ```
+#[inline]
 pub fn preprocess_markdown_guillemets(markdown: &str) -> String {
-    let mut result = String::with_capacity(markdown.len());
-    let chars: Vec<char> = markdown.chars().collect();
-    let mut i = 0;
-    // Fence state: Some((char, length)) when inside a fenced code block
-    let mut fence_state: Option<(char, usize)> = None;
-    // Inline code state: Some(length) when inside an inline code span
-    let mut inline_code_backticks: Option<usize> = None;
-    let mut at_line_start = true;
-
-    while i < chars.len() {
-        let ch = chars[i];
-
-        // Track line start for indented code block detection
-        if ch == '\n' {
-            at_line_start = true;
-            result.push(ch);
-            i += 1;
-            continue;
-        }
-
-        // Check for indented code block (4+ spaces at line start, but only outside fences)
-        if at_line_start && fence_state.is_none() && inline_code_backticks.is_none() {
-            let indent = count_leading_spaces(&chars[i..]);
-            if indent >= 4 {
-                // This is an indented code block line - copy entire line without conversion
-                while i < chars.len() && chars[i] != '\n' {
-                    result.push(chars[i]);
-                    i += 1;
-                }
-                continue;
-            }
-        }
-
-        // No longer at line start after processing non-newline
-        at_line_start = false;
-
-        // Handle fenced code blocks (``` or ~~~, 3+ chars)
-        if fence_state.is_none() && inline_code_backticks.is_none() && (ch == '`' || ch == '~') {
-            let fence_len = count_consecutive(&chars[i..], ch);
-            if fence_len >= 3 {
-                // Start of fenced code block
-                fence_state = Some((ch, fence_len));
-                for _ in 0..fence_len {
-                    result.push(ch);
-                }
-                i += fence_len;
-                continue;
-            }
-        }
-
-        // Check for end of fenced code block
-        if let Some((fence_char, fence_len)) = fence_state {
-            if ch == fence_char {
-                let current_len = count_consecutive(&chars[i..], ch);
-                if current_len >= fence_len {
-                    // End of fenced code block
-                    fence_state = None;
-                    for _ in 0..current_len {
-                        result.push(ch);
-                    }
-                    i += current_len;
-                    continue;
-                }
-            }
-            // Inside fenced code block - just copy
-            result.push(ch);
-            i += 1;
-            continue;
-        }
-
-        // Handle inline code spans (backticks only)
-        if ch == '`' {
-            let backtick_count = count_consecutive(&chars[i..], '`');
-            if let Some(open_count) = inline_code_backticks {
-                if backtick_count == open_count {
-                    // End of inline code span
-                    inline_code_backticks = None;
-                    for _ in 0..backtick_count {
-                        result.push('`');
-                    }
-                    i += backtick_count;
-                    continue;
-                }
-                // Inside inline code span but different backtick count - just copy
-                result.push(ch);
-                i += 1;
-                continue;
-            } else {
-                // Start of inline code span
-                inline_code_backticks = Some(backtick_count);
-                for _ in 0..backtick_count {
-                    result.push('`');
-                }
-                i += backtick_count;
-                continue;
-            }
-        }
-
-        // Inside inline code span - just copy
-        if inline_code_backticks.is_some() {
-            result.push(ch);
-            i += 1;
-            continue;
-        }
-
-        // Only process << when not in any code context
-        if i + 1 < chars.len() && ch == '<' && chars[i + 1] == '<' {
-            // Find matching >>
-            if let Some(end_offset) = find_matching_guillemet_end(&chars[i + 2..]) {
-                let content_end = i + 2 + end_offset;
-                let content: String = chars[i + 2..content_end].iter().collect();
-
-                // Check constraints: same line and size limit
-                if !content.contains('\n') && content.len() <= MAX_GUILLEMET_LENGTH {
-                    // Trim leading/trailing whitespace
-                    result.push('«');
-                    result.push_str(content.trim());
-                    result.push('»');
-                    i = content_end + 2; // Skip past >>
-                    continue;
-                }
-            }
-        }
-
-        // Regular character - just copy it
-        result.push(ch);
-        i += 1;
-    }
-
-    result
+    preprocess_guillemets_impl(markdown, true)
 }
 
 #[cfg(test)]
