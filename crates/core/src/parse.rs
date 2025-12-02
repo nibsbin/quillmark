@@ -2360,8 +2360,14 @@ author: John Doe
 Body content."#;
         let doc = decompose(markdown).unwrap();
         assert_eq!(doc.quill_tag(), "my_quill");
-        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Document Title");
-        assert_eq!(doc.get_field("author").unwrap().as_str().unwrap(), "John Doe");
+        assert_eq!(
+            doc.get_field("title").unwrap().as_str().unwrap(),
+            "Document Title"
+        );
+        assert_eq!(
+            doc.get_field("author").unwrap().as_str().unwrap(),
+            "John Doe"
+        );
     }
 
     // Error handling
@@ -2371,7 +2377,10 @@ Body content."#;
         let markdown = "---\nSCOPE: ITEMS\n---\n\nBody.";
         let result = decompose(markdown);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Invalid field name"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid field name"));
     }
 
     #[test]
