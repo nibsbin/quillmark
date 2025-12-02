@@ -2085,3 +2085,428 @@ Body."#;
         assert_eq!(body, "<<unmatched");
     }
 }
+
+// Additional robustness tests
+#[cfg(test)]
+mod robustness_tests {
+    use super::*;
+
+    // Edge cases for delimiter handling
+
+    #[test]
+    fn test_empty_document() {
+        let doc = decompose("").unwrap();
+        assert_eq!(doc.body(), Some(""));
+        assert_eq!(doc.quill_tag(), "__default__");
+    }
+
+    #[test]
+    fn test_only_whitespace() {
+        let doc = decompose("   \n\n   \t").unwrap();
+        assert_eq!(doc.body(), Some("   \n\n   \t"));
+    }
+
+    #[test]
+    fn test_only_dashes() {
+        // Just "---" at document start without newline is not treated as frontmatter opener
+        // (requires "---\n" to start a frontmatter block)
+        let result = decompose("---");
+        // This is NOT an error - "---" alone without newline is just body content
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().body(), Some("---"));
+    }
+
+    #[test]
+    fn test_dashes_in_middle_of_line() {
+        // --- not at start of line should not be treated as delimiter
+        let markdown = "some text --- more text";
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(doc.body(), Some("some text --- more text"));
+    }
+
+    #[test]
+    fn test_four_dashes() {
+        // ---- is not a valid delimiter
+        let markdown = "----\ntitle: Test\n----\n\nBody";
+        let doc = decompose(markdown).unwrap();
+        // Should treat entire content as body
+        assert!(doc.body().unwrap().contains("----"));
+    }
+
+    #[test]
+    fn test_crlf_line_endings() {
+        // Windows-style line endings
+        let markdown = "---\r\ntitle: Test\r\n---\r\n\r\nBody content.";
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
+        assert!(doc.body().unwrap().contains("Body content."));
+    }
+
+    #[test]
+    fn test_mixed_line_endings() {
+        // Mix of \n and \r\n
+        let markdown = "---\ntitle: Test\r\n---\n\nBody.";
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
+    }
+
+    #[test]
+    fn test_frontmatter_at_eof_no_trailing_newline() {
+        // Frontmatter closed at EOF without trailing newline
+        let markdown = "---\ntitle: Test\n---";
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
+        assert_eq!(doc.body(), Some(""));
+    }
+
+    #[test]
+    fn test_empty_frontmatter() {
+        // Empty frontmatter block - requires content between delimiters
+        // "---\n---" is not valid because --- followed by --- (blank line then ---)
+        // is treated as horizontal rule logic, not empty frontmatter
+        // A valid empty frontmatter would be "---\n \n---" (with whitespace content)
+        let markdown = "---\n \n---\n\nBody content.";
+        let doc = decompose(markdown).unwrap();
+        assert!(doc.body().unwrap().contains("Body content."));
+        // Should only have body field
+        assert_eq!(doc.fields().len(), 1);
+    }
+
+    #[test]
+    fn test_whitespace_only_frontmatter() {
+        // Frontmatter with only whitespace
+        let markdown = "---\n   \n\n   \n---\n\nBody.";
+        let doc = decompose(markdown).unwrap();
+        assert!(doc.body().unwrap().contains("Body."));
+    }
+
+    // Unicode handling
+
+    #[test]
+    fn test_unicode_in_yaml_keys() {
+        let markdown = "---\ntitre: Bonjour\nタイトル: こんにちは\n---\n\nBody.";
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(doc.get_field("titre").unwrap().as_str().unwrap(), "Bonjour");
+        assert_eq!(
+            doc.get_field("タイトル").unwrap().as_str().unwrap(),
+            "こんにちは"
+        );
+    }
+
+    #[test]
+    fn test_unicode_in_yaml_values() {
+        let markdown = "---\ntitle: 你好世界 🎉\n---\n\nBody.";
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(
+            doc.get_field("title").unwrap().as_str().unwrap(),
+            "你好世界 🎉"
+        );
+    }
+
+    #[test]
+    fn test_unicode_in_body() {
+        let markdown = "---\ntitle: Test\n---\n\n日本語テキスト with emoji 🚀";
+        let doc = decompose(markdown).unwrap();
+        assert!(doc.body().unwrap().contains("日本語テキスト"));
+        assert!(doc.body().unwrap().contains("🚀"));
+    }
+
+    // YAML edge cases
+
+    #[test]
+    fn test_yaml_multiline_string() {
+        let markdown = r#"---
+description: |
+  This is a
+  multiline string
+  with preserved newlines.
+---
+
+Body."#;
+        let doc = decompose(markdown).unwrap();
+        let desc = doc.get_field("description").unwrap().as_str().unwrap();
+        assert!(desc.contains("multiline string"));
+        assert!(desc.contains('\n'));
+    }
+
+    #[test]
+    fn test_yaml_folded_string() {
+        let markdown = r#"---
+description: >
+  This is a folded
+  string that becomes
+  a single line.
+---
+
+Body."#;
+        let doc = decompose(markdown).unwrap();
+        let desc = doc.get_field("description").unwrap().as_str().unwrap();
+        // Folded strings join lines with spaces
+        assert!(desc.contains("folded"));
+    }
+
+    #[test]
+    fn test_yaml_null_value() {
+        let markdown = "---\noptional: null\n---\n\nBody.";
+        let doc = decompose(markdown).unwrap();
+        assert!(doc.get_field("optional").unwrap().is_null());
+    }
+
+    #[test]
+    fn test_yaml_empty_string_value() {
+        let markdown = "---\nempty: \"\"\n---\n\nBody.";
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(doc.get_field("empty").unwrap().as_str().unwrap(), "");
+    }
+
+    #[test]
+    fn test_yaml_special_characters_in_string() {
+        let markdown = "---\nspecial: \"colon: here, and [brackets]\"\n---\n\nBody.";
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(
+            doc.get_field("special").unwrap().as_str().unwrap(),
+            "colon: here, and [brackets]"
+        );
+    }
+
+    #[test]
+    fn test_yaml_nested_objects() {
+        let markdown = r#"---
+config:
+  database:
+    host: localhost
+    port: 5432
+  cache:
+    enabled: true
+---
+
+Body."#;
+        let doc = decompose(markdown).unwrap();
+        let config = doc.get_field("config").unwrap().as_object().unwrap();
+        let db = config.get("database").unwrap().as_object().unwrap();
+        assert_eq!(db.get("host").unwrap().as_str().unwrap(), "localhost");
+        assert_eq!(db.get("port").unwrap().as_i64().unwrap(), 5432);
+    }
+
+    // SCOPE block edge cases
+
+    #[test]
+    fn test_scope_with_empty_body() {
+        let markdown = r#"---
+SCOPE: items
+name: Item
+---"#;
+        let doc = decompose(markdown).unwrap();
+        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
+        assert_eq!(items.len(), 1);
+        let item = items[0].as_object().unwrap();
+        assert_eq!(item.get("body").unwrap().as_str().unwrap(), "");
+    }
+
+    #[test]
+    fn test_scope_consecutive_blocks() {
+        let markdown = r#"---
+SCOPE: a
+id: 1
+---
+---
+SCOPE: a
+id: 2
+---"#;
+        let doc = decompose(markdown).unwrap();
+        let items = doc.get_field("a").unwrap().as_sequence().unwrap();
+        assert_eq!(items.len(), 2);
+    }
+
+    #[test]
+    fn test_scope_with_body_containing_dashes() {
+        let markdown = r#"---
+SCOPE: items
+name: Item
+---
+
+Some text with --- dashes in it."#;
+        let doc = decompose(markdown).unwrap();
+        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
+        let item = items[0].as_object().unwrap();
+        let body = item.get("body").unwrap().as_str().unwrap();
+        assert!(body.contains("--- dashes"));
+    }
+
+    // QUILL directive edge cases
+
+    #[test]
+    fn test_quill_with_underscore_prefix() {
+        let markdown = "---\nQUILL: _internal\n---\n\nBody.";
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(doc.quill_tag(), "_internal");
+    }
+
+    #[test]
+    fn test_quill_with_numbers() {
+        let markdown = "---\nQUILL: form_8_v2\n---\n\nBody.";
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(doc.quill_tag(), "form_8_v2");
+    }
+
+    #[test]
+    fn test_quill_with_additional_fields() {
+        let markdown = r#"---
+QUILL: my_quill
+title: Document Title
+author: John Doe
+---
+
+Body content."#;
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(doc.quill_tag(), "my_quill");
+        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Document Title");
+        assert_eq!(doc.get_field("author").unwrap().as_str().unwrap(), "John Doe");
+    }
+
+    // Error handling
+
+    #[test]
+    fn test_invalid_scope_name_uppercase() {
+        let markdown = "---\nSCOPE: ITEMS\n---\n\nBody.";
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid field name"));
+    }
+
+    #[test]
+    fn test_invalid_scope_name_starts_with_number() {
+        let markdown = "---\nSCOPE: 123items\n---\n\nBody.";
+        let result = decompose(markdown);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_scope_name_with_hyphen() {
+        let markdown = "---\nSCOPE: my-items\n---\n\nBody.";
+        let result = decompose(markdown);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_quill_name_uppercase() {
+        let markdown = "---\nQUILL: MyQuill\n---\n\nBody.";
+        let result = decompose(markdown);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_yaml_syntax_error_missing_colon() {
+        let markdown = "---\ntitle Test\n---\n\nBody.";
+        let result = decompose(markdown);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_yaml_syntax_error_bad_indentation() {
+        let markdown = "---\nitems:\n- one\n - two\n---\n\nBody.";
+        let result = decompose(markdown);
+        // Bad indentation may or may not be an error depending on YAML parser
+        // Just ensure it doesn't panic
+        let _ = result;
+    }
+
+    // Body extraction edge cases
+
+    #[test]
+    fn test_body_with_leading_newlines() {
+        let markdown = "---\ntitle: Test\n---\n\n\n\nBody with leading newlines.";
+        let doc = decompose(markdown).unwrap();
+        // Body should preserve leading newlines after frontmatter
+        assert!(doc.body().unwrap().starts_with('\n'));
+    }
+
+    #[test]
+    fn test_body_with_trailing_newlines() {
+        let markdown = "---\ntitle: Test\n---\n\nBody.\n\n\n";
+        let doc = decompose(markdown).unwrap();
+        // Body should preserve trailing newlines
+        assert!(doc.body().unwrap().ends_with('\n'));
+    }
+
+    #[test]
+    fn test_no_body_after_frontmatter() {
+        let markdown = "---\ntitle: Test\n---";
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(doc.body(), Some(""));
+    }
+
+    // Tag name validation
+
+    #[test]
+    fn test_valid_tag_name_single_underscore() {
+        assert!(is_valid_tag_name("_"));
+    }
+
+    #[test]
+    fn test_valid_tag_name_underscore_prefix() {
+        assert!(is_valid_tag_name("_private"));
+    }
+
+    #[test]
+    fn test_valid_tag_name_with_numbers() {
+        assert!(is_valid_tag_name("item1"));
+        assert!(is_valid_tag_name("item_2"));
+    }
+
+    #[test]
+    fn test_invalid_tag_name_empty() {
+        assert!(!is_valid_tag_name(""));
+    }
+
+    #[test]
+    fn test_invalid_tag_name_starts_with_number() {
+        assert!(!is_valid_tag_name("1item"));
+    }
+
+    #[test]
+    fn test_invalid_tag_name_uppercase() {
+        assert!(!is_valid_tag_name("Items"));
+        assert!(!is_valid_tag_name("ITEMS"));
+    }
+
+    #[test]
+    fn test_invalid_tag_name_special_chars() {
+        assert!(!is_valid_tag_name("my-items"));
+        assert!(!is_valid_tag_name("my.items"));
+        assert!(!is_valid_tag_name("my items"));
+    }
+
+    // Guillemet preprocessing in YAML
+
+    #[test]
+    fn test_guillemet_in_yaml_preserves_non_strings() {
+        let markdown = r#"---
+count: 42
+price: 19.99
+active: true
+items:
+  - first
+  - 100
+  - true
+---
+
+Body."#;
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(doc.get_field("count").unwrap().as_i64().unwrap(), 42);
+        assert_eq!(doc.get_field("price").unwrap().as_f64().unwrap(), 19.99);
+        assert_eq!(doc.get_field("active").unwrap().as_bool().unwrap(), true);
+    }
+
+    #[test]
+    fn test_guillemet_double_conversion_prevention() {
+        // Ensure «» in input doesn't get double-processed
+        let markdown = "---\ntitle: Already «converted»\n---\n\nBody.";
+        let doc = decompose(markdown).unwrap();
+        // Should remain as-is (not double-escaped)
+        assert_eq!(
+            doc.get_field("title").unwrap().as_str().unwrap(),
+            "Already «converted»"
+        );
+    }
+}
