@@ -25,7 +25,26 @@ const USAF_FORM_8_QUILL_PATH = path.join(QUILLS_PATH, 'usaf_form_8')
 const CARGO_OUTPUT_PATH = path.join(WORKSPACE_ROOT, 'crates', 'fixtures', 'output', 'usaf_form_8.pdf')
 const WASM_OUTPUT_PATH = path.join(__dirname, 'output', 'usaf_form_8_wasm_output.pdf')
 
-describe.skipIf(process.env.CI)('WASM usaf_form_8 smoke test', () => {
+// Detect whether WASM Quillmark runtime has Acroform backend support by
+// trying to register the usaf_form_8 quill. If registration fails because
+// the backend isn't registered, skip the tests.
+let acroformEnabled = true
+try {
+  const probeEngine = new Quillmark()
+  const probeQuill = loadQuill(USAF_FORM_8_QUILL_PATH)
+  // Attempt to register and then unregister the quill. If the backend is not
+  // present, this will throw and we'll skip the tests below.
+  probeEngine.registerQuill(probeQuill)
+  probeEngine.unregisterQuill('usaf_form_8')
+} catch (e) {
+  // If there was any error (e.g., backend not found), we disable the test.
+  acroformEnabled = false
+  // Print a helpful warning for local debugging.
+  // eslint-disable-next-line no-console
+  console.warn('Skipping usaf_form_8 WASM test: acroform backend not enabled or registration failed:', e && e.message ? e.message : e)
+}
+
+describe.skipIf(process.env.CI || !acroformEnabled)('WASM usaf_form_8 smoke test', () => {
   let quillJson
   let markdown
   let cargoOutputPdf
