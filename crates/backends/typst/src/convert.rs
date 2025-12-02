@@ -184,7 +184,12 @@ enum StrongKind {
 }
 
 /// Converts an iterator of markdown events to Typst markup
-fn push_typst<'a, I>(output: &mut String, source: &str, iter: I, guillemet_ranges: &[Range<usize>]) -> Result<(), ConversionError>
+fn push_typst<'a, I>(
+    output: &mut String,
+    source: &str,
+    iter: I,
+    guillemet_ranges: &[Range<usize>],
+) -> Result<(), ConversionError>
 where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
 {
@@ -282,7 +287,9 @@ where
                         // pre-existing paragraph state (i.e., whether a strong was
                         // already present earlier), so compute skip_current before
                         // updating the paragraph flag.
-                        let skip_current = in_guillemet && had_strong_in_paragraph && matches!(kind, StrongKind::Bold);
+                        let skip_current = in_guillemet
+                            && had_strong_in_paragraph
+                            && matches!(kind, StrongKind::Bold);
                         // Track that we saw a strong in this paragraph
                         had_strong_in_paragraph = true;
                         skip_strong_stack.push(skip_current);
@@ -467,7 +474,12 @@ pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
     let mut typst_output = String::new();
 
     // Pass preprocessed source for delimiter peeking
-    push_typst(&mut typst_output, &preprocessed, parser.into_offset_iter(), &guillemet_ranges)?;
+    push_typst(
+        &mut typst_output,
+        &preprocessed,
+        parser.into_offset_iter(),
+        &guillemet_ranges,
+    )?;
     Ok(typst_output)
 }
 
