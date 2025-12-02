@@ -402,4 +402,140 @@ mod tests {
         assert!(result.contains("`<<not converted>>`"));
         assert_eq!(ranges.len(), 1);
     }
+
+    // Additional robustness tests
+
+    #[test]
+    fn test_simple_unicode_content() {
+        // Multi-byte UTF-8 characters should work correctly
+        assert_eq!(preprocess_guillemets("<<你好>>"), "«你好»");
+        assert_eq!(preprocess_guillemets("<<émoji 🎉>>"), "«émoji 🎉»");
+    }
+
+    #[test]
+    fn test_simple_only_whitespace_content() {
+        // Content that is only whitespace gets trimmed to empty
+        assert_eq!(preprocess_guillemets("<<   >>"), "«»");
+        assert_eq!(preprocess_guillemets("<<\t\t>>"), "«»");
+    }
+
+    #[test]
+    fn test_simple_triple_chevrons() {
+        // <<< should match the first << with >>
+        assert_eq!(preprocess_guillemets("<<<text>>>"), "«<text»>");
+    }
+
+    #[test]
+    fn test_simple_adjacent_guillemets() {
+        // Two guillemets directly adjacent
+        assert_eq!(preprocess_guillemets("<<a>><<b>>"), "«a»«b»");
+    }
+
+    #[test]
+    fn test_simple_single_chevron_inside() {
+        // Single < or > inside should be preserved
+        assert_eq!(preprocess_guillemets("<<a < b>>"), "«a < b»");
+        assert_eq!(preprocess_guillemets("<<a > b>>"), "«a > b»");
+    }
+
+    #[test]
+    fn test_simple_carriage_return_not_converted() {
+        // \r without \n should still work (content.contains('\n') checks \n only)
+        // But \r\n is a newline on Windows, so this tests \r alone
+        assert_eq!(preprocess_guillemets("<<text\rhere>>"), "«text\rhere»");
+    }
+
+    #[test]
+    fn test_markdown_unclosed_code_span() {
+        // Unclosed backtick - should still not convert what appears to be in code
+        let (result, _) = preprocess_markdown_guillemets("`<<code>>");
+        // The backtick opens a code span that never closes, so everything after is in code
+        assert!(!result.contains('«'));
+    }
+
+    #[test]
+    fn test_markdown_fence_with_info_string() {
+        // Fenced code block with language info string
+        let (result, ranges) = preprocess_markdown_guillemets("```rust\n<<text>>\n```");
+        assert!(!result.contains('«'));
+        assert!(ranges.is_empty());
+    }
+
+    #[test]
+    fn test_markdown_nested_fences_different_chars() {
+        // ~~~ inside ``` should not close the fence
+        let (result, ranges) =
+            preprocess_markdown_guillemets("```\n~~~\n<<text>>\n~~~\n```");
+        assert!(!result.contains('«'));
+        assert!(ranges.is_empty());
+    }
+
+    #[test]
+    fn test_markdown_longer_closing_fence() {
+        // Closing fence can be longer than opening
+        let (result, ranges) = preprocess_markdown_guillemets("```\n<<text>>\n`````");
+        assert!(!result.contains('«'));
+        assert!(ranges.is_empty());
+    }
+
+    #[test]
+    fn test_markdown_indented_block_after_content() {
+        // Indented code only triggers at line start
+        let (result, ranges) = preprocess_markdown_guillemets("text    <<convert>>");
+        assert!(result.contains("«convert»"));
+        assert_eq!(ranges.len(), 1);
+    }
+
+    #[test]
+    fn test_markdown_tabs_not_indented_code() {
+        // Tabs don't count as indented code block (only spaces)
+        let (result, ranges) = preprocess_markdown_guillemets("\t<<should convert>>");
+        assert!(result.contains("«should convert»"));
+        assert_eq!(ranges.len(), 1);
+    }
+
+    #[test]
+    fn test_markdown_three_spaces_not_code() {
+        // 3 spaces is not an indented code block (needs 4+)
+        let (result, ranges) = preprocess_markdown_guillemets("   <<should convert>>");
+        assert!(result.contains("«should convert»"));
+        assert_eq!(ranges.len(), 1);
+    }
+
+    #[test]
+    fn test_range_byte_positions() {
+        // Verify that ranges are correct byte positions
+        let (result, ranges) = preprocess_markdown_guillemets("<<hello>>");
+        assert_eq!(result, "«hello»");
+        // «hello» - « is 2 bytes, hello is 5 bytes, » is 2 bytes
+        // Range should cover "hello" which starts at byte 2 (after «) and ends at byte 7
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(&result[ranges[0].clone()], "hello");
+    }
+
+    #[test]
+    fn test_range_byte_positions_unicode() {
+        // Verify ranges work with unicode content
+        let (result, ranges) = preprocess_markdown_guillemets("<<你好>>");
+        assert_eq!(result, "«你好»");
+        assert_eq!(ranges.len(), 1);
+        assert_eq!(&result[ranges[0].clone()], "你好");
+    }
+
+    #[test]
+    fn test_empty_input() {
+        assert_eq!(preprocess_guillemets(""), "");
+        let (result, ranges) = preprocess_markdown_guillemets("");
+        assert_eq!(result, "");
+        assert!(ranges.is_empty());
+    }
+
+    #[test]
+    fn test_only_chevrons() {
+        // Just << or >> alone
+        assert_eq!(preprocess_guillemets("<<"), "<<");
+        assert_eq!(preprocess_guillemets(">>"), ">>");
+        assert_eq!(preprocess_guillemets("<"), "<");
+        assert_eq!(preprocess_guillemets(">"), ">");
+    }
 }
