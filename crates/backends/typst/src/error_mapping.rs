@@ -1,20 +1,20 @@
-//! Error mapping utilities for converting Typst diagnostics to Quillmark diagnostics.
+//! Error mapping utilities for converting Typst diagnostics to Platemark diagnostics.
 
-use crate::world::QuillWorld;
+use crate::world::PlateWorld;
 use quillmark_core::{Diagnostic, Location, Severity};
 use typst::diag::SourceDiagnostic;
 
-/// Converts Typst diagnostics to Quillmark diagnostics.
-pub fn map_typst_errors(errors: &[SourceDiagnostic], world: &QuillWorld) -> Vec<Diagnostic> {
+/// Converts Typst diagnostics to Platemark diagnostics.
+pub fn map_typst_errors(errors: &[SourceDiagnostic], world: &PlateWorld) -> Vec<Diagnostic> {
     errors
         .iter()
         .map(|e| map_single_diagnostic(e, world))
         .collect()
 }
 
-/// Converts a single Typst diagnostic to a Quillmark diagnostic.
-fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagnostic {
-    // Map Typst severity to Quillmark severity
+/// Converts a single Typst diagnostic to a Platemark diagnostic.
+fn map_single_diagnostic(error: &SourceDiagnostic, world: &PlateWorld) -> Diagnostic {
+    // Map Typst severity to Platemark severity
     let severity = match error.severity {
         typst::diag::Severity::Error => Severity::Error,
         typst::diag::Severity::Warning => Severity::Warning,
@@ -42,8 +42,8 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
     }
 }
 
-/// Resolves a Typst span to a Quillmark Location.
-fn resolve_span_to_location(span: &typst::syntax::Span, world: &QuillWorld) -> Option<Location> {
+/// Resolves a Typst span to a Platemark Location.
+fn resolve_span_to_location(span: &typst::syntax::Span, world: &PlateWorld) -> Option<Location> {
     use typst::World;
 
     let source_id = world.main();

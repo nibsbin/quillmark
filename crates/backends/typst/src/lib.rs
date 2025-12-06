@@ -1,4 +1,4 @@
-//! # Typst Backend for Quillmark
+//! # Typst Backend for Platemark
 //!
 //! This crate provides a complete Typst backend implementation that converts Markdown
 //! documents to PDF and SVG formats via the Typst typesetting system.
@@ -7,7 +7,7 @@
 //!
 //! The primary entry point is the [`TypstBackend`] struct, which implements the
 //! [`Backend`] trait from `quillmark-core`. Users typically interact with this backend
-//! through the high-level `Workflow` API from the `quillmark` crate.
+//! through the high-level `Workflow` API from the `platemark` crate.
 //!
 //! ## Features
 //!
@@ -21,13 +21,13 @@
 //!
 //! ```no_run
 //! use quillmark_typst::TypstBackend;
-//! use quillmark_core::{Backend, Quill, OutputFormat};
+//! use quillmark_core::{Backend, Plate, OutputFormat};
 //!
 //! let backend = TypstBackend::default();
-//! let quill = Quill::from_path("path/to/quill").unwrap();
+//! let plate = Plate::from_path("path/to/plate").unwrap();
 //!
 //! // Use with Workflow API (recommended)
-//! // let workflow = Workflow::new(Box::new(backend), quill);
+//! // let workflow = Workflow::new(Box::new(backend), plate);
 //! ```
 //! ## Modules
 //!
@@ -35,7 +35,7 @@
 //! - [`compile`] - Typst to PDF/SVG compilation functions
 //!
 //! Note: The `error_mapping` module provides internal utilities for converting Typst
-//! diagnostics to Quillmark diagnostics and is not part of the public API.
+//! diagnostics to Platemark diagnostics and is not part of the public API.
 
 pub mod compile;
 pub mod convert;
@@ -43,11 +43,11 @@ mod error_mapping;
 mod filters;
 mod world;
 
-/// Embedded default Quill files
+/// Embedded default Plate files
 mod embedded {
-    pub const QUILL_TOML: &str = include_str!("../default_quill/Quill.toml");
-    pub const GLUE_TYP: &str = include_str!("../default_quill/glue.typ");
-    pub const EXAMPLE_MD: &str = include_str!("../default_quill/example.md");
+    pub const PLATE_TOML: &str = include_str!("../default_plate/Plate.toml");
+    pub const GLUE_TYP: &str = include_str!("../default_plate/glue.typ");
+    pub const EXAMPLE_MD: &str = include_str!("../default_plate/example.md");
 }
 
 /// Utilities exposed for fuzzing tests.
@@ -61,12 +61,12 @@ use filters::{
     asset_filter, content_filter, date_filter, dict_filter, lines_filter, string_filter,
 };
 use quillmark_core::{
-    Artifact, Backend, Diagnostic, Glue, OutputFormat, Quill, RenderError, RenderOptions,
+    Artifact, Backend, Diagnostic, Glue, OutputFormat, Plate, RenderError, RenderOptions,
     RenderResult, Severity,
 };
 use std::collections::HashMap;
 
-/// Typst backend implementation for Quillmark.
+/// Typst backend implementation for Platemark.
 pub struct TypstBackend;
 
 impl Backend for TypstBackend {
@@ -100,7 +100,7 @@ impl Backend for TypstBackend {
     fn compile(
         &self,
         glued_content: &str,
-        quill: &Quill,
+        plate: &Plate,
         opts: &RenderOptions,
     ) -> Result<RenderResult, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
@@ -119,7 +119,7 @@ impl Backend for TypstBackend {
 
         match format {
             OutputFormat::Pdf => {
-                let bytes = compile::compile_to_pdf(quill, glued_content)?;
+                let bytes = compile::compile_to_pdf(plate, glued_content)?;
                 let artifacts = vec![Artifact {
                     bytes,
                     output_format: OutputFormat::Pdf,
@@ -127,7 +127,7 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
             }
             OutputFormat::Svg => {
-                let svg_pages = compile::compile_to_svg(quill, glued_content)?;
+                let svg_pages = compile::compile_to_svg(plate, glued_content)?;
                 let artifacts = svg_pages
                     .into_iter()
                     .map(|bytes| Artifact {
@@ -148,15 +148,15 @@ impl Backend for TypstBackend {
         }
     }
 
-    fn default_quill(&self) -> Option<Quill> {
+    fn default_plate(&self) -> Option<Plate> {
         use quillmark_core::FileTreeNode;
 
         // Build file tree from embedded files
         let mut files = HashMap::new();
         files.insert(
-            "Quill.toml".to_string(),
+            "Plate.toml".to_string(),
             FileTreeNode::File {
-                contents: embedded::QUILL_TOML.as_bytes().to_vec(),
+                contents: embedded::PLATE_TOML.as_bytes().to_vec(),
             },
         );
         files.insert(
@@ -174,8 +174,8 @@ impl Backend for TypstBackend {
 
         let root = FileTreeNode::Directory { files };
 
-        // Try to create Quill from tree, return None if it fails
-        Quill::from_tree(root, None).ok()
+        // Try to create Plate from tree, return None if it fails
+        Plate::from_tree(root, None).ok()
     }
 }
 
