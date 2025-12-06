@@ -14,29 +14,29 @@
 //!
 //! ## Core Components
 //!
-//! - [`Quillmark`] - High-level engine for managing backends and quills
+//! - [`Quillmark`] - High-level engine for managing backends and plates
 //! - [`Workflow`] - Sealed rendering API for executing the render pipeline
-//! - [`QuillRef`] - Ergonomic references to quills (by name or object)
-//! - [`Quill`] - Template bundle containing glue templates and assets
+//! - [`QuillRef`] - Ergonomic references to plates (by name or object)
+//! - [`Plate`] - Template bundle containing glue templates and assets
 //!
 //! ## Quick Start
 //!
 //! ```no_run
-//! use quillmark::{Quillmark, Quill, OutputFormat, ParsedDocument};
+//! use quillmark::{Quillmark, Plate, OutputFormat, ParsedDocument};
 //!
 //! // Create engine with auto-registered backends
 //! let mut engine = Quillmark::new();
 //!
-//! // Load and register a quill template
-//! let quill = Quill::from_path("path/to/quill").unwrap();
-//! engine.register_quill(quill);
+//! // Load and register a plate template
+//! let plate = Plate::from_path("path/to/plate").unwrap();
+//! engine.register_plate(plate);
 //!
 //! // Parse markdown
 //! let markdown = "---\ntitle: Hello\n---\n# Hello World";
 //! let parsed = ParsedDocument::from_markdown(markdown).unwrap();
 //!
 //! // Create a workflow and render
-//! let workflow = engine.workflow("my-quill").unwrap();
+//! let workflow = engine.workflow("my-plate").unwrap();
 //! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //!
 //! // Access the rendered artifacts
@@ -50,13 +50,13 @@
 //! Workflows support adding runtime assets:
 //!
 //! ```no_run
-//! # use quillmark::{Quillmark, Quill, OutputFormat, ParsedDocument};
+//! # use quillmark::{Quillmark, Plate, OutputFormat, ParsedDocument};
 //! # let mut engine = Quillmark::new();
-//! # let quill = Quill::from_path("path/to/quill").unwrap();
-//! # engine.register_quill(quill);
+//! # let plate = Plate::from_path("path/to/plate").unwrap();
+//! # engine.register_plate(plate);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
-//! let mut workflow = engine.workflow("my-quill").unwrap();
+//! let mut workflow = engine.workflow("my-plate").unwrap();
 //! workflow.add_asset("chart.png", vec![/* image bytes */]).unwrap();
 //! workflow.add_asset("data.csv", vec![/* csv bytes */]).unwrap();
 //!
@@ -73,7 +73,7 @@
 //!
 //! ```no_run
 //! use quillmark::{Quillmark, Backend};
-//! # use quillmark_core::{Glue, OutputFormat, Quill, RenderOptions, Artifact, RenderError, RenderResult};
+//! # use quillmark_core::{Glue, OutputFormat, Plate, RenderOptions, Artifact, RenderError, RenderResult};
 //! # struct MyCustomBackend;
 //! # impl Backend for MyCustomBackend {
 //! #     fn id(&self) -> &'static str { "custom" }
@@ -81,7 +81,7 @@
 //! #     fn glue_extension_types(&self) -> &'static [&'static str] { &[".txt"] }
 //! #     fn allow_auto_glue(&self) -> bool { true }
 //! #     fn register_filters(&self, _glue: &mut Glue) {}
-//! #     fn compile(&self, content: &str, _quill: &Quill, _opts: &RenderOptions) -> Result<RenderResult, RenderError> {
+//! #     fn compile(&self, content: &str, _plate: &Plate, _opts: &RenderOptions) -> Result<RenderResult, RenderError> {
 //! #         let artifacts = vec![Artifact { bytes: content.as_bytes().to_vec(), output_format: OutputFormat::Txt }];
 //! #         Ok(RenderResult::new(artifacts, OutputFormat::Txt))
 //! #     }
@@ -100,7 +100,7 @@
 
 // Re-export all core types for convenience
 pub use quillmark_core::{
-    Artifact, Backend, Diagnostic, Glue, Location, OutputFormat, ParseError, ParsedDocument, Quill,
+    Artifact, Backend, Diagnostic, Glue, Location, OutputFormat, ParseError, ParsedDocument, Plate,
     RenderError, RenderResult, SerializableDiagnostic, Severity, TemplateError, BODY_FIELD,
 };
 

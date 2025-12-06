@@ -1,14 +1,14 @@
-use quillmark_core::{Backend, Diagnostic, Quill, RenderError, Severity};
+use quillmark_core::{Backend, Diagnostic, Plate, RenderError, Severity};
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::workflow::Workflow;
 use super::QuillRef;
 
-/// High-level engine for orchestrating backends and quills. See [module docs](super) for usage patterns.
+/// High-level engine for orchestrating backends and plates. See [module docs](super) for usage patterns.
 pub struct Quillmark {
     backends: HashMap<String, Arc<dyn Backend>>,
-    quills: HashMap<String, Quill>,
+    plates: HashMap<String, Plate>,
 }
 
 impl Quillmark {
@@ -16,7 +16,7 @@ impl Quillmark {
     pub fn new() -> Self {
         let mut engine = Self {
             backends: HashMap::new(),
-            quills: HashMap::new(),
+            plates: HashMap::new(),
         };
 
         // Auto-register backends based on enabled features
@@ -38,8 +38,8 @@ impl Quillmark {
     /// This method allows registering custom backends or explicitly registering
     /// feature-integrated backends. The backend is registered by its ID.
     ///
-    /// If the backend provides a default Quill and no Quill named `__default__`
-    /// is already registered, the default Quill will be automatically registered.
+    /// If the backend provides a default Plate and no Plate named `__default__`
+    /// is already registered, the default Plate will be automatically registered.
     ///
     /// # Example
     ///
@@ -53,7 +53,7 @@ impl Quillmark {
     /// #     fn glue_extension_types(&self) -> &'static [&'static str] { &[".custom"] }
     /// #     fn allow_auto_glue(&self) -> bool { true }
     /// #     fn register_filters(&self, _: &mut quillmark_core::Glue) {}
-    /// #     fn compile(&self, _: &str, _: &quillmark_core::Quill, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
+    /// #     fn compile(&self, _: &str, _: &quillmark_core::Plate, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
     /// #         Ok(quillmark_core::RenderResult::new(vec![], quillmark_core::OutputFormat::Txt))
     /// #     }
     /// # }
@@ -65,18 +65,18 @@ impl Quillmark {
     pub fn register_backend(&mut self, backend: Box<dyn Backend>) {
         let id = backend.id().to_string();
 
-        // Get default Quill before moving backend
-        let default_quill = backend.default_quill();
+        // Get default Plate before moving backend
+        let default_plate = backend.default_plate();
 
-        // Register backend first so it's available when registering default Quill
+        // Register backend first so it's available when registering default Plate
         self.backends.insert(id.clone(), Arc::from(backend));
 
-        // Register default Quill if available and not already registered
-        if !self.quills.contains_key("__default__") {
-            if let Some(default_quill) = default_quill {
-                if let Err(e) = self.register_quill(default_quill) {
+        // Register default Plate if available and not already registered
+        if !self.plates.contains_key("__default__") {
+            if let Some(default_plate) = default_plate {
+                if let Err(e) = self.register_plate(default_plate) {
                     eprintln!(
-                        "Warning: Failed to register default Quill from backend '{}': {}",
+                        "Warning: Failed to register default Plate from backend '{}': {}",
                         id, e
                     );
                 }
@@ -84,30 +84,30 @@ impl Quillmark {
         }
     }
 
-    /// Register a quill template with the engine by name.
+    /// Register a plate template with the engine by name.
     ///
-    /// Validates the quill configuration against the registered backend, including:
+    /// Validates the plate configuration against the registered backend, including:
     /// - Backend exists and is registered
     /// - Glue file extension matches backend requirements
     /// - Auto-glue is allowed if no glue file is specified
-    /// - Quill name is unique
-    pub fn register_quill(&mut self, quill: Quill) -> Result<(), RenderError> {
-        let name = quill.name.clone();
+    /// - Plate name is unique
+    pub fn register_plate(&mut self, plate: Plate) -> Result<(), RenderError> {
+        let name = plate.name.clone();
 
         // Check name uniqueness
-        if self.quills.contains_key(&name) {
+        if self.plates.contains_key(&name) {
             return Err(RenderError::QuillConfig {
                 diag: Diagnostic::new(
                     Severity::Error,
-                    format!("Quill '{}' is already registered", name),
+                    format!("Plate '{}' is already registered", name),
                 )
                 .with_code("quill::name_collision".to_string())
-                .with_hint("Each quill must have a unique name".to_string()),
+                .with_hint("Each plate must have a unique name".to_string()),
             });
         }
 
         // Get backend
-        let backend_id = quill.backend.as_str();
+        let backend_id = plate.backend.as_str();
         let backend = self
             .backends
             .get(backend_id)
@@ -115,7 +115,7 @@ impl Quillmark {
                 diag: Diagnostic::new(
                     Severity::Error,
                     format!(
-                        "Backend '{}' specified in quill '{}' is not registered",
+                        "Backend '{}' specified in plate '{}' is not registered",
                         backend_id, name
                     ),
                 )
@@ -127,7 +127,7 @@ impl Quillmark {
             })?;
 
         // Validate glue_file extension or auto_glue
-        if let Some(glue_file) = &quill.metadata.get("glue_file").and_then(|v| v.as_str()) {
+        if let Some(glue_file) = &plate.metadata.get("glue_file").and_then(|v| v.as_str()) {
             let extension = std::path::Path::new(glue_file)
                 .extension()
                 .and_then(|e| e.to_str())
@@ -157,7 +157,7 @@ impl Quillmark {
                     diag: Diagnostic::new(
                         Severity::Error,
                         format!(
-                            "Backend '{}' does not support automatic glue generation, but quill '{}' does not specify a glue file",
+                            "Backend '{}' does not support automatic glue generation, but plate '{}' does not specify a glue file",
                             backend_id, name
                         ),
                     )
@@ -170,31 +170,31 @@ impl Quillmark {
             }
         }
 
-        self.quills.insert(name, quill);
+        self.plates.insert(name, plate);
         Ok(())
     }
 
-    /// Load a workflow by quill reference (name, object, or parsed document)
+    /// Load a workflow by plate reference (name, object, or parsed document)
     ///
     /// This is the unified workflow creation method that accepts:
-    /// - `&str` - Looks up registered quill by name
-    /// - `&Quill` - Uses quill directly (doesn't need to be registered)
-    /// - `&ParsedDocument` - Extracts quill tag and looks up by name
+    /// - `&str` - Looks up registered plate by name
+    /// - `&Plate` - Uses plate directly (doesn't need to be registered)
+    /// - `&ParsedDocument` - Extracts plate tag and looks up by name
     ///
     /// # Example
     ///
     /// ```no_run
-    /// # use quillmark::{Quillmark, Quill, ParsedDocument};
+    /// # use quillmark::{Quillmark, Plate, ParsedDocument};
     /// # let engine = Quillmark::new();
     /// // By name
-    /// let workflow = engine.workflow("my-quill")?;
+    /// let workflow = engine.workflow("my-plate")?;
     ///
     /// // By object
-    /// # let quill = Quill::from_path("path/to/quill").unwrap();
-    /// let workflow = engine.workflow(&quill)?;
+    /// # let plate = Plate::from_path("path/to/plate").unwrap();
+    /// let workflow = engine.workflow(&plate)?;
     ///
     /// // From parsed document
-    /// # let parsed = ParsedDocument::from_markdown("---\nQUILL: my-quill\n---\n# Hello").unwrap();
+    /// # let parsed = ParsedDocument::from_markdown("---\nQUILL: my-plate\n---\n# Hello").unwrap();
     /// let workflow = engine.workflow(&parsed)?;
     /// # Ok::<(), quillmark::RenderError>(())
     /// ```
@@ -204,60 +204,60 @@ impl Quillmark {
     ) -> Result<Workflow, RenderError> {
         let quill_ref = quill_ref.into();
 
-        // Get the quill reference based on the parameter type
-        let quill = match quill_ref {
+        // Get the plate reference based on the parameter type
+        let plate = match quill_ref {
             QuillRef::Name(name) => {
-                // Look up the quill by name
-                self.quills
+                // Look up the plate by name
+                self.plates
                     .get(name)
                     .ok_or_else(|| RenderError::UnsupportedBackend {
                         diag: Diagnostic::new(
                             Severity::Error,
-                            format!("Quill '{}' not registered", name),
+                            format!("Plate '{}' not registered", name),
                         )
                         .with_code("engine::quill_not_found".to_string())
                         .with_hint(format!(
-                            "Available quills: {}",
-                            self.quills.keys().cloned().collect::<Vec<_>>().join(", ")
+                            "Available plates: {}",
+                            self.plates.keys().cloned().collect::<Vec<_>>().join(", ")
                         )),
                     })?
             }
-            QuillRef::Object(quill) => {
-                // Use the provided quill directly
-                quill
+            QuillRef::Object(plate) => {
+                // Use the provided plate directly
+                plate
             }
             QuillRef::Parsed(parsed) => {
-                // Extract quill tag from parsed document and look up by name
-                let quill_tag = parsed.quill_tag();
-                self.quills
-                    .get(quill_tag)
+                // Extract plate tag from parsed document and look up by name
+                let plate_tag = parsed.quill_tag();
+                self.plates
+                    .get(plate_tag)
                     .ok_or_else(|| RenderError::UnsupportedBackend {
                         diag: Diagnostic::new(
                             Severity::Error,
-                            format!("Quill '{}' not registered", quill_tag),
+                            format!("Plate '{}' not registered", plate_tag),
                         )
                         .with_code("engine::quill_not_found".to_string())
                         .with_hint(format!(
-                            "Available quills: {}",
-                            self.quills.keys().cloned().collect::<Vec<_>>().join(", ")
+                            "Available plates: {}",
+                            self.plates.keys().cloned().collect::<Vec<_>>().join(", ")
                         )),
                     })?
             }
         };
 
-        // Get backend ID from quill metadata
-        let backend_id = quill
+        // Get backend ID from plate metadata
+        let backend_id = plate
             .metadata
             .get("backend")
             .and_then(|v| v.as_str())
             .ok_or_else(|| RenderError::EngineCreation {
                 diag: Diagnostic::new(
                     Severity::Error,
-                    format!("Quill '{}' does not specify a backend", quill.name),
+                    format!("Plate '{}' does not specify a backend", plate.name),
                 )
                 .with_code("engine::missing_backend".to_string())
                 .with_hint(
-                    "Add 'backend = \"typst\"' to the [Quill] section of Quill.toml".to_string(),
+                    "Add 'backend = \"typst\"' to the [Plate] section of Plate.toml".to_string(),
                 ),
             })?;
 
@@ -277,11 +277,11 @@ impl Quillmark {
                     )),
                 })?;
 
-        // Clone the Arc reference to the backend and the quill for the workflow
+        // Clone the Arc reference to the backend and the plate for the workflow
         let backend_clone = Arc::clone(backend);
-        let quill_clone = quill.clone();
+        let plate_clone = plate.clone();
 
-        Workflow::new(backend_clone, quill_clone)
+        Workflow::new(backend_clone, plate_clone)
     }
 
     /// Get a list of registered backend IDs.
@@ -289,38 +289,38 @@ impl Quillmark {
         self.backends.keys().map(|s| s.as_str()).collect()
     }
 
-    /// Get a list of registered quill names.
+    /// Get a list of registered plate names.
     pub fn registered_quills(&self) -> Vec<&str> {
-        self.quills.keys().map(|s| s.as_str()).collect()
+        self.plates.keys().map(|s| s.as_str()).collect()
     }
 
-    /// Get a reference to a registered quill by name.
+    /// Get a reference to a registered plate by name.
     ///
-    /// Returns `None` if the quill is not registered.
+    /// Returns `None` if the plate is not registered.
     ///
     /// # Example
     ///
     /// ```no_run
     /// # use quillmark::Quillmark;
     /// # let engine = Quillmark::new();
-    /// if let Some(quill) = engine.get_quill("my-quill") {
-    ///     println!("Found quill: {}", quill.name);
+    /// if let Some(plate) = engine.get_quill("my-plate") {
+    ///     println!("Found plate: {}", plate.name);
     /// }
     /// ```
-    pub fn get_quill(&self, name: &str) -> Option<&Quill> {
-        self.quills.get(name)
+    pub fn get_quill(&self, name: &str) -> Option<&Plate> {
+        self.plates.get(name)
     }
 
-    /// Get a reference to a quill's metadata by name.
+    /// Get a reference to a plate's metadata by name.
     ///
-    /// Returns `None` if the quill is not registered.
+    /// Returns `None` if the plate is not registered.
     ///
     /// # Example
     ///
     /// ```no_run
     /// # use quillmark::Quillmark;
     /// # let engine = Quillmark::new();
-    /// if let Some(metadata) = engine.get_quill_metadata("my-quill") {
+    /// if let Some(metadata) = engine.get_quill_metadata("my-plate") {
     ///     println!("Metadata: {:?}", metadata);
     /// }
     /// ```
@@ -328,25 +328,25 @@ impl Quillmark {
         &self,
         name: &str,
     ) -> Option<&HashMap<String, quillmark_core::value::QuillValue>> {
-        self.quills.get(name).map(|quill| &quill.metadata)
+        self.plates.get(name).map(|plate| &plate.metadata)
     }
 
-    /// Unregister a quill by name.
+    /// Unregister a plate by name.
     ///
-    /// Returns `true` if the quill was registered and has been removed,
-    /// `false` if the quill was not found.
+    /// Returns `true` if the plate was registered and has been removed,
+    /// `false` if the plate was not found.
     ///
     /// # Example
     ///
     /// ```no_run
     /// # use quillmark::Quillmark;
     /// # let mut engine = Quillmark::new();
-    /// if engine.unregister_quill("my-quill") {
-    ///     println!("Quill unregistered");
+    /// if engine.unregister_quill("my-plate") {
+    ///     println!("Plate unregistered");
     /// }
     /// ```
     pub fn unregister_quill(&mut self, name: &str) -> bool {
-        self.quills.remove(name).is_some()
+        self.plates.remove(name).is_some()
     }
 }
 

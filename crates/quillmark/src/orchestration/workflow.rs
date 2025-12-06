@@ -1,5 +1,5 @@
 use quillmark_core::{
-    preprocess_fields_guillemets, Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Quill,
+    preprocess_fields_guillemets, Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Plate,
     RenderError, RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;
@@ -8,18 +8,18 @@ use std::sync::Arc;
 /// Sealed workflow for rendering Markdown documents. See [module docs](super) for usage patterns.
 pub struct Workflow {
     backend: Arc<dyn Backend>,
-    quill: Quill,
+    plate: Plate,
     dynamic_assets: HashMap<String, Vec<u8>>,
     dynamic_fonts: HashMap<String, Vec<u8>>,
 }
 
 impl Workflow {
-    /// Create a new Workflow with the specified backend and quill.
-    pub fn new(backend: Arc<dyn Backend>, quill: Quill) -> Result<Self, RenderError> {
-        // Since Quill::from_path() now automatically validates, we don't need to validate again
+    /// Create a new Workflow with the specified backend and plate.
+    pub fn new(backend: Arc<dyn Backend>, plate: Plate) -> Result<Self, RenderError> {
+        // Since Plate::from_path() now automatically validates, we don't need to validate again
         Ok(Self {
             backend,
-            quill,
+            plate,
             dynamic_assets: HashMap::new(),
             dynamic_fonts: HashMap::new(),
         })
@@ -33,11 +33,11 @@ impl Workflow {
     ) -> Result<RenderResult, RenderError> {
         let glue_output = self.process_glue(parsed)?;
 
-        // Prepare quill with dynamic assets
-        let prepared_quill = self.prepare_quill_with_assets();
+        // Prepare plate with dynamic assets
+        let prepared_plate = self.prepare_plate_with_assets();
 
-        // Pass prepared quill to backend
-        self.render_processed_with_quill(&glue_output, format, &prepared_quill)
+        // Pass prepared plate to backend
+        self.render_processed_with_plate(&glue_output, format, &prepared_plate)
     }
 
     /// Render pre-processed glue content, skipping parsing and template composition.
@@ -46,17 +46,17 @@ impl Workflow {
         content: &str,
         format: Option<OutputFormat>,
     ) -> Result<RenderResult, RenderError> {
-        // Prepare quill with dynamic assets
-        let prepared_quill = self.prepare_quill_with_assets();
-        self.render_processed_with_quill(content, format, &prepared_quill)
+        // Prepare plate with dynamic assets
+        let prepared_plate = self.prepare_plate_with_assets();
+        self.render_processed_with_plate(content, format, &prepared_plate)
     }
 
-    /// Internal method to render content with a specific quill
-    fn render_processed_with_quill(
+    /// Internal method to render content with a specific plate
+    fn render_processed_with_plate(
         &self,
         content: &str,
         format: Option<OutputFormat>,
-        quill: &Quill,
+        plate: &Plate,
     ) -> Result<RenderResult, RenderError> {
         let format = if format.is_some() {
             format
@@ -74,17 +74,17 @@ impl Workflow {
             output_format: format,
         };
 
-        self.backend.compile(content, quill, &render_opts)
+        self.backend.compile(content, plate, &render_opts)
     }
 
     /// Process a parsed document through the glue template without compilation
     pub fn process_glue(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
         // Apply defaults from JSON schema
-        let defaults = self.quill.extract_defaults();
+        let defaults = self.plate.extract_defaults();
         let parsed_with_defaults = parsed.with_defaults(&defaults);
 
         // Apply coercion based on schema
-        let parsed_with_defaults = parsed_with_defaults.with_coercion(&self.quill.schema);
+        let parsed_with_defaults = parsed_with_defaults.with_coercion(&self.plate.schema);
 
         // Validate document against schema
         self.validate_document(&parsed_with_defaults)?;
@@ -95,7 +95,7 @@ impl Workflow {
             preprocess_fields_guillemets(parsed_with_defaults.fields().clone());
 
         // Create appropriate glue based on whether template is provided
-        let mut glue = match &self.quill.glue {
+        let mut glue = match &self.plate.glue {
             Some(s) if !s.is_empty() => Glue::new(s.to_string()),
             _ => Glue::new_auto(),
         };
@@ -109,9 +109,9 @@ impl Workflow {
         Ok(glue_output)
     }
 
-    /// Validate a ParsedDocument against the Quill's schema
+    /// Validate a ParsedDocument against the Plate's schema
     ///
-    /// Validates the document's fields against the schema defined in the Quill.
+    /// Validates the document's fields against the schema defined in the Plate.
     /// The schema is built from the TOML `[fields]` section converted to JSON Schema.
     ///
     /// If no schema is defined, this returns Ok(()).
@@ -125,13 +125,13 @@ impl Workflow {
 
         // Build or load JSON Schema
 
-        if self.quill.schema.is_null() {
+        if self.plate.schema.is_null() {
             // No schema defined, skip validation
             return Ok(());
         };
 
         // Validate document
-        match schema::validate_document(&self.quill.schema, parsed.fields()) {
+        match schema::validate_document(&self.plate.schema, parsed.fields()) {
             Ok(_) => Ok(()),
             Err(errors) => {
                 let error_message = errors.join("\n");
@@ -157,9 +157,9 @@ impl Workflow {
         self.backend.supported_formats()
     }
 
-    /// Get the quill name used by this workflow.
-    pub fn quill_name(&self) -> &str {
-        &self.quill.name
+    /// Get the plate name used by this workflow.
+    pub fn plate_name(&self) -> &str {
+        &self.plate.name
     }
 
     /// Return the list of dynamic asset filenames currently stored in the workflow.
@@ -264,32 +264,32 @@ impl Workflow {
         self.dynamic_fonts.clear();
     }
 
-    /// Internal method to prepare a quill with dynamic assets and fonts
-    fn prepare_quill_with_assets(&self) -> Quill {
+    /// Internal method to prepare a plate with dynamic assets and fonts
+    fn prepare_plate_with_assets(&self) -> Plate {
         use quillmark_core::FileTreeNode;
 
-        let mut quill = self.quill.clone();
+        let mut plate = self.plate.clone();
 
-        // Add dynamic assets to the cloned quill's file system
+        // Add dynamic assets to the cloned plate's file system
         for (filename, contents) in &self.dynamic_assets {
             let prefixed_path = format!("assets/DYNAMIC_ASSET__{}", filename);
             let file_node = FileTreeNode::File {
                 contents: contents.clone(),
             };
             // Ignore errors if insertion fails (e.g., path already exists)
-            let _ = quill.files.insert(&prefixed_path, file_node);
+            let _ = plate.files.insert(&prefixed_path, file_node);
         }
 
-        // Add dynamic fonts to the cloned quill's file system
+        // Add dynamic fonts to the cloned plate's file system
         for (filename, contents) in &self.dynamic_fonts {
             let prefixed_path = format!("assets/DYNAMIC_FONT__{}", filename);
             let file_node = FileTreeNode::File {
                 contents: contents.clone(),
             };
             // Ignore errors if insertion fails (e.g., path already exists)
-            let _ = quill.files.insert(&prefixed_path, file_node);
+            let _ = plate.files.insert(&prefixed_path, file_node);
         }
 
-        quill
+        plate
     }
 }
