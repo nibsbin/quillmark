@@ -1,4 +1,4 @@
-[Quill]
+[Plate]
 name = "taro"
 backend = "typst"
 glue_file = "glue.typ"

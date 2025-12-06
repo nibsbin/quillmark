@@ -19,7 +19,7 @@
 //!     fn compile(
 //!         &self,
 //!         glue_content: &str,
-//!         quill: &Quill,
+//!         plate: &Plate,
 //!         opts: &RenderOptions,
 //!     ) -> Result<RenderResult, RenderError>;
 //! }
@@ -64,17 +64,17 @@
 //! Compile glue content into final artifacts.
 //!
 //! ```no_run
-//! # use quillmark_core::{Quill, RenderOptions, Artifact, OutputFormat, RenderError, RenderResult};
+//! # use quillmark_core::{Plate, RenderOptions, Artifact, OutputFormat, RenderError, RenderResult};
 //! # struct MyBackend;
 //! # impl MyBackend {
 //! fn compile(
 //!     &self,
 //!     glue_content: &str,
-//!     quill: &Quill,
+//!     plate: &Plate,
 //!     opts: &RenderOptions,
 //! ) -> Result<RenderResult, RenderError> {
 //!     // 1. Create compilation environment
-//!     // 2. Load assets from quill
+//!     // 2. Load assets from plate
 //!     // 3. Compile glue content
 //!     // 4. Handle errors and map to Diagnostics
 //!     // 5. Return RenderResult with artifacts and output format
@@ -102,7 +102,7 @@
 
 use crate::error::RenderError;
 use crate::templating::Glue;
-use crate::{OutputFormat, Quill, RenderOptions};
+use crate::{OutputFormat, Plate, RenderOptions};
 
 /// Backend trait for rendering different output formats
 pub trait Backend: Send + Sync {
@@ -126,20 +126,20 @@ pub trait Backend: Send + Sync {
     fn compile(
         &self,
         glue_content: &str,
-        quill: &Quill,
+        plate: &Plate,
         opts: &RenderOptions,
     ) -> Result<crate::RenderResult, RenderError>;
 
-    /// Provide an embedded default Quill for this backend.
+    /// Provide an embedded default Plate for this backend.
     ///
-    /// Returns `None` if the backend does not provide a default Quill.
-    /// The returned Quill will be registered with the name `__default__`
-    /// during backend registration if no default Quill already exists.
+    /// Returns `None` if the backend does not provide a default Plate.
+    /// The returned Plate will be registered with the name `__default__`
+    /// during backend registration if no default Plate already exists.
     ///
     /// # Example
     ///
     /// ```no_run
-    /// # use quillmark_core::{Backend, Quill, FileTreeNode};
+    /// # use quillmark_core::{Backend, Plate, FileTreeNode};
     /// # use std::collections::HashMap;
     /// # struct MyBackend;
     /// # impl Backend for MyBackend {
@@ -148,19 +148,19 @@ pub trait Backend: Send + Sync {
     /// #     fn glue_extension_types(&self) -> &'static [&'static str] { &[] }
     /// #     fn allow_auto_glue(&self) -> bool { true }
     /// #     fn register_filters(&self, _: &mut quillmark_core::Glue) {}
-    /// #     fn compile(&self, _: &str, _: &Quill, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> { todo!() }
-    /// fn default_quill(&self) -> Option<Quill> {
-    ///     // Build embedded default Quill from files
+    /// #     fn compile(&self, _: &str, _: &Plate, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> { todo!() }
+    /// fn default_plate(&self) -> Option<Plate> {
+    ///     // Build embedded default Plate from files
     ///     let mut files = HashMap::new();
-    ///     files.insert("Quill.toml".to_string(), FileTreeNode::File {
-    ///         contents: b"[Quill]\nname = \"__default__\"\nbackend = \"my\"\n".to_vec(),
+    ///     files.insert("Plate.toml".to_string(), FileTreeNode::File {
+    ///         contents: b"[Plate]\nname = \"__default__\"\nbackend = \"my\"\n".to_vec(),
     ///     });
     ///     let root = FileTreeNode::Directory { files };
-    ///     Quill::from_tree(root, None).ok()
+    ///     Plate::from_tree(root, None).ok()
     /// }
     /// # }
     /// ```
-    fn default_quill(&self) -> Option<Quill> {
+    fn default_plate(&self) -> Option<Plate> {
         None
     }
 }

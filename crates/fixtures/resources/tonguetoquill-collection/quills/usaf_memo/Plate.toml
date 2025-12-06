@@ -1,4 +1,4 @@
-[Quill]
+[Plate]
 name = "usaf_memo"
 backend = "typst"
 glue_file = "glue.typ"
