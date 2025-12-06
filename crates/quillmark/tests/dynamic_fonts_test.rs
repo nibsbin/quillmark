@@ -13,7 +13,7 @@
 //! ## Use Case
 //!
 //! Dynamic fonts enable scenarios where font files need to be selected or
-//! provided at render time rather than bundled with the quill template.
+//! provided at render time rather than bundled with the plate template.
 //! Common use cases include:
 //! - User-selected fonts
 //! - Organization-specific branding fonts
@@ -29,34 +29,34 @@
 //!
 //! See `dynamic_assets_test.rs` for general asset injection tests.
 
-use quillmark::{Quill, Quillmark, RenderError};
+use quillmark::{Plate, Quillmark, RenderError};
 use quillmark_fixtures::quills_path;
 
 #[test]
 fn test_with_font_basic() {
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quills_path("taro")).unwrap();
+    let plate = Plate::from_path(quills_path("taro")).unwrap();
     // Create some dummy font data
     let font_data = vec![1, 2, 3, 4, 5];
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let mut workflow = engine.workflow("taro").unwrap();
     workflow
         .add_font("custom.ttf", font_data.clone())
         .expect("Should add font");
 
-    assert_eq!(workflow.quill_name(), "taro");
+    assert_eq!(workflow.plate_name(), "taro");
 }
 
 #[test]
 fn test_with_font_collision() {
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quills_path("taro")).unwrap();
+    let plate = Plate::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let mut workflow = engine.workflow("taro").unwrap();
     workflow
@@ -74,10 +74,10 @@ fn test_with_font_collision() {
 #[test]
 fn test_with_fonts_multiple() {
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quills_path("taro")).unwrap();
+    let plate = Plate::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let fonts = vec![
         ("font1.ttf".to_string(), vec![1, 2, 3]),
@@ -90,16 +90,16 @@ fn test_with_fonts_multiple() {
         .add_fonts(fonts)
         .expect("Should add multiple fonts");
 
-    assert_eq!(workflow.quill_name(), "taro");
+    assert_eq!(workflow.plate_name(), "taro");
 }
 
 #[test]
 fn test_clear_fonts() {
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quills_path("taro")).unwrap();
+    let plate = Plate::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let mut workflow = engine.workflow("taro").unwrap();
     workflow
@@ -118,16 +118,16 @@ fn test_clear_fonts() {
         .add_font("font2.ttf", vec![10, 11, 12])
         .expect("Should add font2.ttf again after clearing");
 
-    assert_eq!(workflow.quill_name(), "taro");
+    assert_eq!(workflow.plate_name(), "taro");
 }
 
 #[test]
 fn test_with_font_and_asset_together() {
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quills_path("taro")).unwrap();
+    let plate = Plate::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let mut workflow = engine.workflow("taro").unwrap();
     workflow
@@ -137,16 +137,16 @@ fn test_with_font_and_asset_together() {
         .add_font("custom.ttf", vec![4, 5, 6])
         .expect("Should add font");
 
-    assert_eq!(workflow.quill_name(), "taro");
+    assert_eq!(workflow.plate_name(), "taro");
 }
 
 #[test]
 fn test_dynamic_font_names() {
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quills_path("taro")).unwrap();
+    let plate = Plate::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let mut workflow = engine.workflow("taro").unwrap();
     workflow

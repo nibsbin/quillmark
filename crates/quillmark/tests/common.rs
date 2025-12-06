@@ -10,8 +10,8 @@
 //! ## Usage
 //!
 //! The `demo()` helper simplifies the common pattern of:
-//! 1. Loading a quill from a path
-//! 2. Using the quill's example markdown
+//! 1. Loading a plate from a path
+//! 2. Using the plate's example markdown
 //! 3. Processing through the glue template
 //! 4. Rendering to final output
 //! 5. Writing outputs to example directory
@@ -28,34 +28,34 @@ use std::error::Error;
 
 /// Demo helper that centralizes example plumbing.
 ///
-/// It loads the quill and uses its markdown template, then processes and renders it.
+/// It loads the plate and uses its markdown template, then processes and renders it.
 pub fn demo(
     quill_dir: &str,
     glue_output: &str,
     render_output: &str,
     use_resource_path: bool,
 ) -> Result<(), Box<dyn Error>> {
-    // quill path (folder)
+    // plate path (folder)
     let quill_path = if use_resource_path {
         quillmark_fixtures::resource_path(quill_dir)
     } else {
         quills_path(quill_dir)
     };
     // Default engine flow used by examples: Typst backend, Quill from path, Workflow
-    let quill = quillmark::Quill::from_path(quill_path.clone()).expect("Failed to load quill");
+    let plate = quillmark::Plate::from_path(quill_path.clone()).expect("Failed to load plate");
 
-    // Load the markdown template from the quill
-    let markdown = quill
+    // Load the markdown template from the plate
+    let markdown = plate
         .example
         .as_ref()
-        .ok_or("Quill does not have a markdown template")?
+        .ok_or("Plate does not have a markdown template")?
         .clone();
 
     // Parse the markdown once
     let parsed = quillmark::ParsedDocument::from_markdown(&markdown)?;
 
     let engine = quillmark::Quillmark::new();
-    let workflow = engine.workflow(&quill).expect("Failed to load workflow");
+    let workflow = engine.workflow(&plate).expect("Failed to load workflow");
 
     // process glue
     let glued = workflow.process_glue(&parsed)?;

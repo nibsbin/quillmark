@@ -15,10 +15,10 @@ This is ideal for standardized forms like applications, certificates, and govern
 
 ## Basic Usage
 
-Specify `backend = "acroform"` in your `Quill.toml`:
+Specify `backend = "acroform"` in your `Plate.toml`:
 
 ```toml
-[Quill]
+[Plate]
 name = "my-form"
 backend = "acroform"
 description = "Employee information form"
@@ -31,7 +31,7 @@ An AcroForm Quill requires a PDF form file:
 
 ```
 my-form-quill/
-├── Quill.toml
+├── Plate.toml
 ├── form.pdf          # PDF form with fillable fields
 └── example.md        # Example usage
 ```
@@ -75,10 +75,10 @@ dept: Engineering
 
 ## Example Quill
 
-### Quill.toml
+### Plate.toml
 
 ```toml
-[Quill]
+[Plate]
 name = "employee-form"
 backend = "acroform"
 description = "Employee information form"
@@ -177,7 +177,7 @@ from quillmark import Quillmark, ParsedDocument, OutputFormat, Quill
 
 engine = Quillmark()
 quill = Quill.from_path("path/to/form-quill")
-engine.register_quill(quill)
+engine.register_plate(quill)
 
 markdown = """---
 first_name: Jane
@@ -202,7 +202,7 @@ use quillmark_core::Quill;
 
 let mut engine = Quillmark::new();
 let quill = Quill::from_path("path/to/form-quill")?;
-engine.register_quill(quill);
+engine.register_plate(quill);
 
 let markdown = r#"---
 first_name: Jane
@@ -223,7 +223,7 @@ std::fs::write("filled-form.pdf", &result.artifacts[0].bytes)?;
 1. **Test your PDF form** - Verify all fields are fillable before using with Quillmark
 2. **Use descriptive field names** - Match frontmatter field names to PDF form fields
 3. **Add tooltips** - Use tooltip templates for complex field values
-4. **Validate inputs** - Define field schemas in `Quill.toml`
+4. **Validate inputs** - Define field schemas in `Plate.toml`
 5. **Provide examples** - Include example.md with sample data
 
 ## Limitations

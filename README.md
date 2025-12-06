@@ -46,7 +46,7 @@ let mut engine = Quillmark::new();
 
 // Load a quill template
 let quill = Quill::from_path("path/to/quill")?;
-engine.register_quill(quill);
+engine.register_plate(quill);
 
 // Parse markdown once
 let markdown = "---\ntitle: Example\n---\n\n# Hello World";

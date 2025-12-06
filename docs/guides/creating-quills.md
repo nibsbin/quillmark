@@ -8,7 +8,7 @@ A Quill is a directory containing:
 
 ```
 my-quill/
-├── Quill.toml          # Configuration and metadata
+├── Plate.toml          # Configuration and metadata
 ├── glue.typ            # MiniJinja template (backend-specific)
 ├── example.md          # Optional example document
 └── assets/             # Optional assets (fonts, images, etc.)
@@ -17,12 +17,12 @@ my-quill/
         └── custom.ttf
 ```
 
-## Quill.toml Configuration
+## Plate.toml Configuration
 
-The `Quill.toml` file defines your Quill's metadata and configuration:
+The `Plate.toml` file defines your Quill's metadata and configuration:
 
 ```toml
-[Quill]
+[Plate]
 name = "my-quill"
 backend = "typst"
 description = "A professional document template"
@@ -185,7 +185,7 @@ The AcroForm backend fills PDF forms. Place a `form.pdf` file in your Quill dire
 
 ```
 my-form-quill/
-├── Quill.toml
+├── Plate.toml
 ├── glue.jinja       # Template for field values
 └── form.pdf         # PDF form to fill
 ```
@@ -258,7 +258,7 @@ from quillmark import Quillmark, Quill
 
 engine = Quillmark()
 quill = Quill.from_path("path/to/my-quill")
-engine.register_quill(quill)
+engine.register_plate(quill)
 ```
 
 ### From JSON
@@ -269,14 +269,14 @@ from quillmark import Quillmark, Quill
 
 quill_data = {
     "files": {
-        "Quill.toml": {"contents": "..."},
+        "Plate.toml": {"contents": "..."},
         "glue.typ": {"contents": "..."}
     }
 }
 
 quill = Quill.from_json(json.dumps(quill_data))
 engine = Quillmark()
-engine.register_quill(quill)
+engine.register_plate(quill)
 ```
 
 ## Best Practices

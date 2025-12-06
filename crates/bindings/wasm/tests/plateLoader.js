@@ -51,7 +51,7 @@ function loadDirectory(dirPath) {
  * @param {string} quillPath - Path to Quill directory
  * @returns {object} - Quill JSON with {files: {...}}
  */
-export function loadQuill(quillPath) {
+export function loadPlate(quillPath) {
   const files = loadDirectory(quillPath);
 
   return {

@@ -7,11 +7,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Path to the usaf_form_8 fixture
     let quill_path = quills_path("usaf_form_8");
 
-    // Load quill
-    let quill = quillmark::Quill::from_path(quill_path).expect("Failed to load quill");
+    // Load plate
+    let plate = quillmark::Plate::from_path(quill_path).expect("Failed to load plate");
 
-    // Use the example template from the quill if present, otherwise use a small frontmatter
-    let markdown = if let Some(example) = &quill.example {
+    // Use the example template from the plate if present, otherwise use a small frontmatter
+    let markdown = if let Some(example) = &plate.example {
         example.clone()
     } else {
         // Minimal frontmatter used in the test
@@ -25,12 +25,12 @@ test: "Hello from Example!"
     // Parse the markdown
     let parsed = ParsedDocument::from_markdown(&markdown)?;
 
-    // Create engine and register quill
+    // Create engine and register plate
     let mut engine = Quillmark::new();
-    engine.register_quill(quill.clone())?;
+    engine.register_plate(plate.clone())?;
 
     // Build workflow
-    let workflow = engine.workflow(&quill).expect("Failed to create workflow");
+    let workflow = engine.workflow(&plate).expect("Failed to create workflow");
 
     // Compose glue output (JSON)
     let glue_output = workflow.process_glue(&parsed)?;

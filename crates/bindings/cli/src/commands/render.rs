@@ -1,7 +1,7 @@
 use crate::errors::{CliError, Result};
 use crate::output::{derive_glue_output_path, derive_output_path, OutputWriter};
 use clap::Parser;
-use quillmark::{ParsedDocument, Quill, Quillmark};
+use quillmark::{ParsedDocument, Plate, Quillmark};
 use quillmark_core::OutputFormat;
 use std::fs;
 use std::path::PathBuf;
@@ -14,7 +14,7 @@ pub struct RenderArgs {
 
     /// Path to quill directory (overrides QUILL frontmatter field)
     #[arg(short, long, value_name = "PATH")]
-    quill: Option<PathBuf>,
+    plate: Option<PathBuf>,
 
     /// Output file path (default: derived from input filename)
     #[arg(short, long, value_name = "FILE")]
@@ -98,7 +98,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         // Validate quill path exists
         if !quill_path.exists() {
             return Err(CliError::InvalidArgument(format!(
-                "Quill directory not found: {}",
+                "Plate directory not found: {}",
                 quill_path.display()
             )));
         }
@@ -108,10 +108,10 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         }
 
         // Load quill
-        let quill = Quill::from_path(quill_path.clone())?;
+        let quill = Plate::from_path(quill_path.clone())?;
 
         if args.verbose {
-            println!("Quill loaded: {}", quill.name);
+            println!("Plate loaded: {}", quill.name);
         }
 
         (parsed, quill, Some(markdown_path.clone()))
@@ -124,7 +124,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         // Validate quill path exists
         if !quill_path.exists() {
             return Err(CliError::InvalidArgument(format!(
-                "Quill directory not found: {}",
+                "Plate directory not found: {}",
                 quill_path.display()
             )));
         }
@@ -134,16 +134,16 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         }
 
         // Load quill
-        let quill = Quill::from_path(quill_path.clone())?;
+        let quill = Plate::from_path(quill_path.clone())?;
 
         if args.verbose {
-            println!("Quill loaded: {}", quill.name);
+            println!("Plate loaded: {}", quill.name);
         }
 
         // Get example content
         let markdown = quill.example.clone().ok_or_else(|| {
             CliError::InvalidArgument(format!(
-                "Quill '{}' does not have example content",
+                "Plate '{}' does not have example content",
                 quill.name
             ))
         })?;

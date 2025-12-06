@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import { Quillmark } from '@quillmark-wasm'
-import { loadQuill } from './quillLoader.js'
+import { loadPlate } from './plateLoader.js'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
@@ -31,7 +31,7 @@ const WASM_OUTPUT_PATH = path.join(__dirname, 'output', 'usaf_form_8_wasm_output
 let acroformEnabled = true
 try {
   const probeEngine = new Quillmark()
-  const probeQuill = loadQuill(USAF_FORM_8_QUILL_PATH)
+  const probeQuill = loadPlate(USAF_FORM_8_QUILL_PATH)
   // Attempt to register and then unregister the quill. If the backend is not
   // present, this will throw and we'll skip the tests below.
   probeEngine.registerQuill(probeQuill)
@@ -76,7 +76,7 @@ describe.skipIf(process.env.CI || !acroformEnabled)('WASM usaf_form_8 smoke test
 
     // Load the Quill structure
     console.log('Loading usaf_form_8 Quill...')
-    quillJson = loadQuill(USAF_FORM_8_QUILL_PATH)
+    quillJson = loadPlate(USAF_FORM_8_QUILL_PATH)
 
     // Load the markdown example
     const quillmark = new Quillmark()

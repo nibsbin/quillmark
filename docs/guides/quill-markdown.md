@@ -237,7 +237,7 @@ The `__metadata__` field is automatically created and includes all fields from t
 
 ## Validation
 
-Frontmatter can be validated against JSON schemas defined in your Quill's `Quill.toml`:
+Frontmatter can be validated against JSON schemas defined in your Quill's `Plate.toml`:
 
 ```toml
 [fields]

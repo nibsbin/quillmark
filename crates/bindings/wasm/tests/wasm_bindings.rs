@@ -8,7 +8,7 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 // A minimal JSON fixture that represents a very small quill
 const SMALL_QUILL_JSON: &str = r#"{
   "files": {
-    "Quill.toml": { "contents": "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill for WASM bindings\"\n" },
+    "Plate.toml": { "contents": "[Plate]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill for WASM bindings\"\n" },
     "glue.typ": { "contents": "= Title\n\nThis is a test." },
     "content.md": { "contents": "---\ntitle: Test\n---\n\n# Hello" }
   }
@@ -42,7 +42,7 @@ fn test_register_and_get_quill_info() {
 
     // Register quill
     engine
-        .register_quill(JsValue::from_str(SMALL_QUILL_JSON))
+        .register_plate(JsValue::from_str(SMALL_QUILL_JSON))
         .expect("register failed");
 
     // Get quill info
@@ -74,7 +74,7 @@ This is a test.
     // Step 2: Create engine and register quill
     let mut engine = Quillmark::new();
     engine
-        .register_quill(JsValue::from_str(SMALL_QUILL_JSON))
+        .register_plate(JsValue::from_str(SMALL_QUILL_JSON))
         .expect("register failed");
 
     // Step 3: Get quill info
@@ -98,7 +98,7 @@ fn engine_register_and_render_legacy() {
 
     // Register quill
     engine
-        .register_quill(JsValue::from_str(SMALL_QUILL_JSON))
+        .register_plate(JsValue::from_str(SMALL_QUILL_JSON))
         .expect("register failed");
 
     // Call process_glue on a small markdown

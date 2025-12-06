@@ -108,4 +108,4 @@ pub use quillmark_core::{
 pub mod orchestration;
 
 // Re-export types from orchestration module
-pub use orchestration::{QuillRef, Quillmark, Workflow};
+pub use orchestration::{PlateRef, Quillmark, Workflow};

@@ -14,10 +14,10 @@ Typst is a modern typesetting system designed as a better alternative to LaTeX. 
 
 ## Basic Usage
 
-Specify `backend = "typst"` in your `Quill.toml`:
+Specify `backend = "typst"` in your `Plate.toml`:
 
 ```toml
-[Quill]
+[Plate]
 name = "my-typst-quill"
 backend = "typst"
 description = "Document template using Typst"
@@ -174,7 +174,7 @@ Output (Typst):
 
 ## Typst Packages
 
-Typst packages extend functionality with pre-built templates and utilities. Specify packages in `Quill.toml`:
+Typst packages extend functionality with pre-built templates and utilities. Specify packages in `Plate.toml`:
 
 ```toml
 [typst]
@@ -363,7 +363,7 @@ Sincerely,
 1. **Test incrementally** - Build your template step-by-step
 2. **Use packages** - Leverage existing Typst packages when possible
 3. **Separate concerns** - Keep complex logic in Typst, data in frontmatter
-4. **Validate inputs** - Define field schemas in `Quill.toml`
+4. **Validate inputs** - Define field schemas in `Plate.toml`
 5. **Handle missing fields** - Use defaults for optional fields
 
 ## Resources

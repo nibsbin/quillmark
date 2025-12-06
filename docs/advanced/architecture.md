@@ -79,7 +79,7 @@ Foundation layer providing:
 - **Types**: `Backend`, `Artifact`, `OutputFormat`
 - **Parsing**: `ParsedDocument` with `from_markdown()` constructor
 - **Templating**: `Glue` + stable `filter_api`
-- **Template model**: `Quill` (+ `Quill.toml`)
+- **Template model**: `Quill` (+ `Plate.toml`)
 - **Errors & Diagnostics**: `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
 - **Utilities**: TOML⇄YAML conversion helpers
 
@@ -290,7 +290,7 @@ Compilation process:
 
 ```
 quill-template/
-├─ Quill.toml              # Metadata and configuration
+├─ Plate.toml              # Metadata and configuration
 ├─ glue.<ext>              # Template file (e.g., glue.typ)
 ├─ packages/               # Backend packages
 └─ assets/                 # Fonts, images, data

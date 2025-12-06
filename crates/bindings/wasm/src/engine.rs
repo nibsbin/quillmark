@@ -62,12 +62,12 @@ impl Quillmark {
         Ok(ParsedDocument { fields, quill_tag })
     }
 
-    /// Register a Quill template bundle
+    /// Register a Plate template bundle
     ///
-    /// Accepts either a JSON string or a JsValue object representing the Quill file tree.
+    /// Accepts either a JSON string or a JsValue object representing the Plate file tree.
     /// Validation happens automatically on registration.
     #[wasm_bindgen(js_name = registerQuill)]
-    pub fn register_quill(&mut self, quill_json: JsValue) -> Result<QuillInfo, JsValue> {
+    pub fn register_plate(&mut self, quill_json: JsValue) -> Result<QuillInfo, JsValue> {
         // Convert JsValue to JSON string
         let json_str = if quill_json.is_string() {
             quill_json.as_string().ok_or_else(|| {
@@ -76,34 +76,34 @@ impl Quillmark {
         } else {
             js_sys::JSON::stringify(&quill_json)
                 .map_err(|e| {
-                    WasmError::from(format!("Failed to serialize Quill JSON: {:?}", e))
+                    WasmError::from(format!("Failed to serialize Plate JSON: {:?}", e))
                         .to_js_value()
                 })?
                 .as_string()
                 .ok_or_else(|| WasmError::from("Failed to convert JSON to string").to_js_value())?
         };
 
-        // Parse and validate Quill
-        let quill = quillmark_core::Quill::from_json(&json_str)
-            .map_err(|e| WasmError::from(format!("Failed to parse Quill: {}", e)).to_js_value())?;
+        // Parse and validate Plate
+        let quill = quillmark_core::Plate::from_json(&json_str)
+            .map_err(|e| WasmError::from(format!("Failed to parse Plate: {}", e)).to_js_value())?;
         let name = quill.name.clone();
 
         // Register with backend validation
         self.inner
-            .register_quill(quill)
+            .register_plate(quill)
             .map_err(|e| WasmError::from(e).to_js_value())?;
 
         self.get_quill_info(&name)
     }
 
-    /// Get shallow information about a registered Quill
+    /// Get shallow information about a registered Plate
     ///
     /// This returns metadata, backend info, field schemas, and supported formats
     /// that consumers need to configure render options for the next step.
     #[wasm_bindgen(js_name = getQuillInfo)]
     pub fn get_quill_info(&self, name: &str) -> Result<QuillInfo, JsValue> {
         let quill = self.inner.get_quill(name).ok_or_else(|| {
-            WasmError::from(format!("Quill '{}' not registered", name)).to_js_value()
+            WasmError::from(format!("Plate '{}' not registered", name)).to_js_value()
         })?;
 
         // Get backend ID
@@ -170,7 +170,7 @@ impl Quillmark {
         })?;
 
         let workflow = self.inner.workflow(quill_name).map_err(|e| {
-            WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
+            WasmError::from(format!("Plate '{}' not found: {}", quill_name, e)).to_js_value()
         })?;
 
         workflow
@@ -180,7 +180,7 @@ impl Quillmark {
 
     /// Render a ParsedDocument to final artifacts (PDF, SVG, TXT)
     ///
-    /// Uses the Quill specified in options.quill_name if provided,
+    /// Uses the Plate specified in options.quill_name if provided,
     /// otherwise infers it from the ParsedDocument's quill_tag field.
     #[wasm_bindgen]
     pub fn render(
@@ -210,7 +210,7 @@ impl Quillmark {
 
         // Load the workflow
         let mut workflow = self.inner.workflow(&quill_name_to_use).map_err(|e| {
-            WasmError::from(format!("Quill '{}' not found: {}", quill_name_to_use, e)).to_js_value()
+            WasmError::from(format!("Plate '{}' not found: {}", quill_name_to_use, e)).to_js_value()
         })?;
 
         // Add assets if provided
@@ -256,7 +256,7 @@ impl Quillmark {
         })
     }
 
-    /// List registered Quill names
+    /// List registered Plate names
     #[wasm_bindgen(js_name = listQuills)]
     pub fn list_quills(&self) -> Vec<String> {
         self.inner
@@ -266,7 +266,7 @@ impl Quillmark {
             .collect()
     }
 
-    /// Unregister a Quill (free memory)
+    /// Unregister a Plate (free memory)
     #[wasm_bindgen(js_name = unregisterQuill)]
     pub fn unregister_quill(&mut self, name: &str) {
         self.inner.unregister_quill(name);

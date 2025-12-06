@@ -5,11 +5,11 @@
 //! ## Test Coverage
 //!
 //! This test suite verifies:
-//! - **Auto-registration** - Default quill registered when backend is registered
+//! - **Auto-registration** - Default plate registered when backend is registered
 //! - **Fallback behavior** - Documents without QUILL tag use __default__
 //! - **Override behavior** - Explicit QUILL tags take precedence over default
-//! - **Error messaging** - Clear errors when no quill is available
-//! - **Multiple backends** - First backend's default quill wins
+//! - **Error messaging** - Clear errors when no plate is available
+//! - **Multiple backends** - First backend's default plate wins
 //!
 //! ## Design Reference
 //!
@@ -19,17 +19,17 @@
 //! ## Testing Philosophy
 //!
 //! These tests validate the zero-config experience where users can render
-//! simple documents without explicitly selecting a quill template.
+//! simple documents without explicitly selecting a plate template.
 
 use quillmark::{ParsedDocument, Quillmark};
 use quillmark_core::OutputFormat;
 
 #[test]
-fn test_default_quill_registered_on_backend_registration() {
+fn test_default_plate_registered_on_backend_registration() {
     // Create engine with Typst backend
     let engine = Quillmark::new();
 
-    // Verify that __default__ quill is registered
+    // Verify that __default__ plate is registered
     let registered_quills = engine.registered_quills();
     assert!(
         registered_quills.contains(&"__default__"),
@@ -38,7 +38,7 @@ fn test_default_quill_registered_on_backend_registration() {
 }
 
 #[test]
-fn test_default_quill_used_when_no_quill_tag() {
+fn test_default_plate_used_when_no_quill_tag() {
     let markdown = r#"---
 title: Test Document
 author: Alice
@@ -51,7 +51,7 @@ This is a test document without a QUILL tag.
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
-    // Verify default quill tag is set
+    // Verify default plate tag is set
     assert_eq!(parsed.quill_tag(), "__default__");
 
     let engine = Quillmark::new();
@@ -61,7 +61,7 @@ This is a test document without a QUILL tag.
         .workflow(&parsed)
         .expect("Failed to load workflow with default Quill");
 
-    assert_eq!(workflow.quill_name(), "__default__");
+    assert_eq!(workflow.plate_name(), "__default__");
 }
 
 #[test]
@@ -70,14 +70,14 @@ fn test_explicit_quill_tag_takes_precedence_over_default() {
     use std::fs;
     use tempfile::TempDir;
 
-    // Create a custom quill
+    // Create a custom plate
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("custom-quill");
+    let quill_path = temp_dir.path().join("custom-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"custom_quill\"\nbackend = \"typst\"\ndescription = \"Custom test quill\"\n",
+        "[Quill]\nname = \"custom_quill\"\nbackend = \"typst\"\ndescription = \"Custom test plate\"\n",
     )
     .expect("Failed to write Quill.toml");
 
@@ -95,15 +95,15 @@ Content here.
     assert_eq!(parsed.quill_tag(), "custom_quill");
 
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
-    // Should use custom quill, not default
+    // Should use custom plate, not default
     let workflow = engine.workflow(&parsed).expect("Failed to load workflow");
 
-    assert_eq!(workflow.quill_name(), "custom_quill");
+    assert_eq!(workflow.plate_name(), "custom_quill");
 }
 
 #[test]
@@ -117,20 +117,20 @@ Content
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
-    // Verify default quill tag is set (always "__default__" when no QUILL directive)
+    // Verify default plate tag is set (always "__default__" when no QUILL directive)
     assert_eq!(parsed.quill_tag(), "__default__");
 
     // Note: In the current implementation with Typst backend auto-registered,
     // __default__ is always available. This test documents the expected behavior
     // when no default Quill exists, which would occur with a backend that doesn't
-    // provide default_quill() and no manually registered default.
+    // provide default_plate() and no manually registered default.
     //
     // The actual error scenario is tested indirectly through the improved error
     // message in workflow_from_quill_name when __default__ doesn't exist.
 }
 
 #[test]
-fn test_default_quill_renders_successfully() {
+fn test_default_plate_renders_successfully() {
     let markdown = r#"---
 title: Test Document
 author: Alice Smith
@@ -161,20 +161,20 @@ This is a **test** document with _formatting_.
 }
 
 #[test]
-fn test_default_quill_properties() {
+fn test_default_plate_properties() {
     let engine = Quillmark::new();
     let workflow = engine
         .workflow("__default__")
         .expect("Failed to load default workflow");
 
-    assert_eq!(workflow.quill_name(), "__default__");
+    assert_eq!(workflow.plate_name(), "__default__");
     assert_eq!(workflow.backend_id(), "typst");
     assert!(workflow.supported_formats().contains(&OutputFormat::Pdf));
     assert!(workflow.supported_formats().contains(&OutputFormat::Svg));
 }
 
 #[test]
-fn test_second_backend_with_default_quill_does_not_override() {
+fn test_second_backend_with_default_plate_does_not_override() {
     use quillmark::Quill;
     use quillmark_core::Backend;
     use quillmark_core::FileTreeNode;
@@ -211,7 +211,7 @@ fn test_second_backend_with_default_quill_does_not_override() {
             Ok(quillmark_core::RenderResult::new(vec![], OutputFormat::Txt))
         }
 
-        fn default_quill(&self) -> Option<Quill> {
+        fn default_plate(&self) -> Option<Quill> {
             // Create a simple default Quill for this backend
             let mut files = HashMap::new();
             files.insert(
@@ -222,7 +222,7 @@ fn test_second_backend_with_default_quill_does_not_override() {
             );
 
             let root = FileTreeNode::Directory { files };
-            Quill::from_tree(root, None).ok()
+            Plate::from_tree(root, None).ok()
         }
     }
 

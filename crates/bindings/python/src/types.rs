@@ -6,7 +6,7 @@ use pyo3::types::PyDict; // PyDict
 use pyo3::{Bound, PyAny}; // Bound, PyAny
 
 use quillmark::{
-    Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderResult, SerializableDiagnostic,
+    Location, OutputFormat, ParsedDocument, Plate, Quillmark, RenderResult, SerializableDiagnostic,
     Workflow,
 };
 use std::path::PathBuf;
@@ -17,7 +17,7 @@ use crate::errors::convert_render_error;
 // Quillmark Engine wrapper
 #[pyclass(name = "Quillmark")]
 pub struct PyQuillmark {
-    inner: Quillmark,
+    inner: Platemark,
 }
 
 #[pymethods]
@@ -25,13 +25,13 @@ impl PyQuillmark {
     #[new]
     fn new() -> Self {
         Self {
-            inner: Quillmark::new(),
+            inner: Platemark::new(),
         }
     }
 
-    fn register_quill(&mut self, quill: PyRef<PyQuill>) -> PyResult<()> {
+    fn register_plate(&mut self, plate: PyRef<PyQuill>) -> PyResult<()> {
         self.inner
-            .register_quill(quill.inner.clone())
+            .register_plate(quill.inner.clone())
             .map_err(convert_render_error)?;
         Ok(())
     }
@@ -65,7 +65,7 @@ impl PyQuillmark {
         }
 
         Err(pyo3::exceptions::PyTypeError::new_err(
-            "workflow() expects a string (quill name), Quill object, or ParsedDocument",
+            "workflow() expects a string (quill name), Plate object, or ParsedDocument",
         ))
     }
 
@@ -148,18 +148,18 @@ impl PyWorkflow {
     }
 }
 
-// Quill wrapper
-#[pyclass(name = "Quill")]
+// Plate wrapper
+#[pyclass(name = "Plate")]
 #[derive(Clone)]
 pub struct PyQuill {
-    pub(crate) inner: Quill,
+    pub(crate) inner: Plate,
 }
 
 #[pymethods]
 impl PyQuill {
     #[staticmethod]
     fn from_path(path: PathBuf) -> PyResult<Self> {
-        let quill = Quill::from_path(path)
+        let quill = Plate::from_path(path)
             .map_err(|e| PyErr::new::<crate::errors::QuillmarkError, _>(e.to_string()))?;
         Ok(PyQuill { inner: quill })
     }
@@ -242,7 +242,7 @@ impl PyQuill {
             .and_then(|v| v.as_str())
             .ok_or_else(|| {
                 PyErr::new::<crate::errors::QuillmarkError, _>(
-                    "Quill metadata missing 'backend' field",
+                    "Plate metadata missing 'backend' field",
                 )
             })?;
 

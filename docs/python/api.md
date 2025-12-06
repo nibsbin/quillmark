@@ -20,7 +20,7 @@ from quillmark import Quillmark, ParsedDocument, OutputFormat, Quill
 # Create engine and load quill
 engine = Quillmark()
 quill = Quill.from_path("path/to/quill")
-engine.register_quill(quill)
+engine.register_plate(quill)
 
 # Parse markdown
 markdown = """---
@@ -50,7 +50,7 @@ class Quillmark:
     def __init__(self) -> None:
         """Create engine with auto-registered backends."""
     
-    def register_quill(self, quill: Quill) -> None:
+    def register_plate(self, quill: Quill) -> None:
         """Register a quill template.
         
         Raises:
@@ -98,7 +98,7 @@ print(engine.registered_backends())  # ['typst', 'acroform']
 # Load and register quill
 from quillmark import Quill
 quill = Quill.from_path("my-quill/")
-engine.register_quill(quill)
+engine.register_plate(quill)
 
 # Check registered quills
 print(engine.registered_quills())  # ['my-quill', '__default__']
@@ -186,7 +186,7 @@ class Quill:
     
     @property
     def name(self) -> str:
-        """Quill name from Quill.toml."""
+        """Quill name from Plate.toml."""
     
     @property
     def backend(self) -> str | None:
@@ -499,7 +499,7 @@ def render_document(quill_path: str, markdown: str, output_path: str):
         
         # Load quill
         quill = Quill.from_path(quill_path)
-        engine.register_quill(quill)
+        engine.register_plate(quill)
         
         # Parse markdown
         parsed = ParsedDocument.from_markdown(markdown)

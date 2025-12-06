@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::workflow::Workflow;
-use super::QuillRef;
+use super::PlateRef;
 
 /// High-level engine for orchestrating backends and plates. See [module docs](super) for usage patterns.
 pub struct Quillmark {
@@ -96,7 +96,7 @@ impl Quillmark {
 
         // Check name uniqueness
         if self.plates.contains_key(&name) {
-            return Err(RenderError::QuillConfig {
+            return Err(RenderError::PlateConfig {
                 diag: Diagnostic::new(
                     Severity::Error,
                     format!("Plate '{}' is already registered", name),
@@ -111,7 +111,7 @@ impl Quillmark {
         let backend = self
             .backends
             .get(backend_id)
-            .ok_or_else(|| RenderError::QuillConfig {
+            .ok_or_else(|| RenderError::PlateConfig {
                 diag: Diagnostic::new(
                     Severity::Error,
                     format!(
@@ -135,7 +135,7 @@ impl Quillmark {
                 .unwrap_or_default();
 
             if !backend.glue_extension_types().contains(&extension.as_str()) {
-                return Err(RenderError::QuillConfig {
+                return Err(RenderError::PlateConfig {
                     diag: Diagnostic::new(
                         Severity::Error,
                         format!(
@@ -153,7 +153,7 @@ impl Quillmark {
             }
         } else {
             if !backend.allow_auto_glue() {
-                return Err(RenderError::QuillConfig {
+                return Err(RenderError::PlateConfig {
                     diag: Diagnostic::new(
                         Severity::Error,
                         format!(
@@ -200,13 +200,13 @@ impl Quillmark {
     /// ```
     pub fn workflow<'a>(
         &self,
-        quill_ref: impl Into<QuillRef<'a>>,
+        plate_ref: impl Into<PlateRef<'a>>,
     ) -> Result<Workflow, RenderError> {
-        let quill_ref = quill_ref.into();
+        let plate_ref = plate_ref.into();
 
         // Get the plate reference based on the parameter type
-        let plate = match quill_ref {
-            QuillRef::Name(name) => {
+        let plate = match plate_ref {
+            PlateRef::Name(name) => {
                 // Look up the plate by name
                 self.plates
                     .get(name)
@@ -215,18 +215,18 @@ impl Quillmark {
                             Severity::Error,
                             format!("Plate '{}' not registered", name),
                         )
-                        .with_code("engine::quill_not_found".to_string())
+                        .with_code("engine::plate_not_found".to_string())
                         .with_hint(format!(
                             "Available plates: {}",
                             self.plates.keys().cloned().collect::<Vec<_>>().join(", ")
                         )),
                     })?
             }
-            QuillRef::Object(plate) => {
+            PlateRef::Object(plate) => {
                 // Use the provided plate directly
                 plate
             }
-            QuillRef::Parsed(parsed) => {
+            PlateRef::Parsed(parsed) => {
                 // Extract plate tag from parsed document and look up by name
                 let plate_tag = parsed.quill_tag();
                 self.plates
@@ -236,7 +236,7 @@ impl Quillmark {
                             Severity::Error,
                             format!("Plate '{}' not registered", plate_tag),
                         )
-                        .with_code("engine::quill_not_found".to_string())
+                        .with_code("engine::plate_not_found".to_string())
                         .with_hint(format!(
                             "Available plates: {}",
                             self.plates.keys().cloned().collect::<Vec<_>>().join(", ")
@@ -341,11 +341,11 @@ impl Quillmark {
     /// ```no_run
     /// # use quillmark::Quillmark;
     /// # let mut engine = Quillmark::new();
-    /// if engine.unregister_quill("my-plate") {
+    /// if engine.unregister_plate("my-plate") {
     ///     println!("Plate unregistered");
     /// }
     /// ```
-    pub fn unregister_quill(&mut self, name: &str) -> bool {
+    pub fn unregister_plate(&mut self, name: &str) -> bool {
         self.plates.remove(name).is_some()
     }
 }
