@@ -6,7 +6,7 @@
 
 use acroform::{AcroFormDocument, FieldValue};
 use quillmark_core::{
-    Artifact, Backend, Diagnostic, Glue, OutputFormat, Quill, RenderError, RenderOptions,
+    Artifact, Backend, Diagnostic, Glue, OutputFormat, Plate, RenderError, RenderOptions,
     RenderResult, Severity,
 };
 use std::collections::HashMap;
@@ -40,7 +40,7 @@ impl Backend for AcroformBackend {
     fn compile(
         &self,
         glue_content: &str,
-        quill: &Quill,
+        plate: &Plate,
         opts: &RenderOptions,
     ) -> Result<RenderResult, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
@@ -86,16 +86,16 @@ impl Backend for AcroformBackend {
         replace_nulls_with_empty(&mut context);
 
         let form_pdf_bytes =
-            quill
+            plate
                 .files
                 .get_file("form.pdf")
                 .ok_or_else(|| RenderError::EngineCreation {
                     diag: Diagnostic::new(
                         Severity::Error,
-                        format!("form.pdf not found in quill '{}'", quill.name),
+                        format!("form.pdf not found in plate '{}'", plate.name),
                     )
                     .with_code("acroform::missing_form".to_string())
-                    .with_hint("Ensure form.pdf exists in the quill directory".to_string()),
+                    .with_hint("Ensure form.pdf exists in the plate directory".to_string()),
                 })?;
 
         let mut doc = AcroFormDocument::from_bytes(form_pdf_bytes.to_vec()).map_err(|e| {
