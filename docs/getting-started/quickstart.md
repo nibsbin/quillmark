@@ -28,7 +28,7 @@ Get started with Quillmark in your preferred language.
 
     # Load a quill template
     quill = Quill.from_path("path/to/quill")
-    engine.register_quill(quill)
+    engine.register_plate(quill)
 
     # Parse markdown
     markdown = """---
@@ -81,7 +81,7 @@ Get started with Quillmark in your preferred language.
 
         // Load a quill template
         let quill = Quill::from_path("path/to/quill")?;
-        engine.register_quill(quill);
+        engine.register_plate(quill);
 
         // Parse markdown
         let markdown = r#"---
@@ -133,8 +133,8 @@ Get started with Quillmark in your preferred language.
     // Load a quill template (as JSON)
     const quillJson = {
         files: {
-            "Quill.toml": {
-                contents: `[Quill]
+            "Plate.toml": {
+                contents: `[Plate]
 name = "my-quill"
 backend = "typst"
 description = "My template"

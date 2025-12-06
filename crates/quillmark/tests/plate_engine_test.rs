@@ -5,9 +5,9 @@
 //! ## Test Coverage
 //!
 //! This test suite validates:
-//! - **Engine creation and initialization** - Backend auto-registration, default quill setup
-//! - **Quill registration** - Custom quill loading and management
-//! - **Workflow creation** - Loading workflows by name, by quill object, and from parsed documents
+//! - **Engine creation and initialization** - Backend auto-registration, default plate setup
+//! - **Quill registration** - Custom plate loading and management
+//! - **Workflow creation** - Loading workflows by name, by plate object, and from parsed documents
 //! - **End-to-end rendering** - Complete parse → template → compile pipeline
 //! - **Error handling** - Missing quills, invalid backends, validation failures
 //! - **API ergonomics** - Different string types, QuillRef patterns
@@ -16,7 +16,7 @@
 //!
 //! - `api_rework_test.rs` - Focused API validation for new workflow methods
 //! - `backend_registration_test.rs` - Custom backend registration scenarios
-//! - `default_quill_test.rs` - Default quill system behavior
+//! - `default_plate_test.rs` - Default plate system behavior
 //!
 //! ## Test Philosophy
 //!
@@ -38,7 +38,7 @@ fn test_quill_engine_creation() {
     #[cfg(any(feature = "typst", feature = "acroform"))]
     assert!(backends.len() > 0);
 
-    // Check that default quill is registered when typst backend is enabled
+    // Check that default plate is registered when typst backend is enabled
     let quills = engine.registered_quills();
     #[cfg(feature = "typst")]
     assert_eq!(quills.len(), 1);
@@ -50,24 +50,24 @@ fn test_quill_engine_creation() {
 fn test_quill_engine_register_quill() {
     let mut engine = Quillmark::new();
 
-    // Create a test quill
+    // Create a test plate
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my_test_quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my_test_quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test plate\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
 
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
-    // Check that quill is registered (plus __default__)
+    // Check that plate is registered (plus __default__)
     let quills = engine.registered_quills();
     #[cfg(feature = "typst")]
     assert_eq!(quills.len(), 2); // __default__ + my_test_quill
@@ -80,14 +80,14 @@ fn test_quill_engine_register_quill() {
 fn test_quill_engine_get_workflow() {
     let mut engine = Quillmark::new();
 
-    // Create and register a test quill
+    // Create and register a test plate
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-plate\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test plate\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
@@ -96,18 +96,18 @@ fn test_quill_engine_get_workflow() {
     )
     .expect("Failed to write glue.typ");
 
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
-    // Load workflow by quill name using new load() method
+    // Load workflow by plate name using new load() method
     let workflow = engine
-        .workflow("my-test-quill")
+        .workflow("my-test-plate")
         .expect("Failed to load workflow");
 
     // Verify workflow properties
-    assert_eq!(workflow.quill_name(), "my-test-quill");
+    assert_eq!(workflow.plate_name(), "my-test-plate");
     assert_eq!(workflow.backend_id(), "typst");
     assert!(workflow.supported_formats().contains(&OutputFormat::Pdf));
 }
@@ -116,7 +116,7 @@ fn test_quill_engine_get_workflow() {
 fn test_quill_engine_workflow_not_found() {
     let engine = Quillmark::new();
 
-    // Try to load workflow for non-existent quill
+    // Try to load workflow for non-existent plate
     let result = engine.workflow("non-existent");
 
     assert!(result.is_err());
@@ -132,28 +132,28 @@ fn test_quill_engine_workflow_not_found() {
 fn test_quill_engine_backend_not_found() {
     let mut engine = Quillmark::new();
 
-    // Create a quill with non-existent backend
+    // Create a plate with non-existent backend
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"bad-backend-quill\"\nbackend = \"non-existent\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"bad-backend-plate\"\nbackend = \"non-existent\"\nglue_file = \"glue.typ\"\ndescription = \"Test plate\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
 
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
 
-    // Try to register quill with non-existent backend - should fail now
-    let result = engine.register_quill(quill);
+    // Try to register plate with non-existent backend - should fail now
+    let result = engine.register_plate(plate);
 
     assert!(result.is_err());
     match result {
         Err(quillmark::RenderError::QuillConfig { diag }) => {
             assert!(diag.message.contains("not registered"));
-            assert!(diag.code == Some("quill::backend_not_found".to_string()));
+            assert!(diag.code == Some("plate::backend_not_found".to_string()));
         }
         _ => panic!("Expected QuillConfig error with backend not registered message"),
     }
@@ -163,14 +163,14 @@ fn test_quill_engine_backend_not_found() {
 fn test_quill_engine_end_to_end() {
     let mut engine = Quillmark::new();
 
-    // Create and register a test quill
+    // Create and register a test plate
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-plate\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test plate\"\n",
     )
     .expect("Failed to write Quill.toml");
 
@@ -183,14 +183,14 @@ _By {{ author | String(default="Unknown") }}_
 "#;
     fs::write(quill_path.join("glue.typ"), glue_template).expect("Failed to write glue.typ");
 
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     // Load workflow and render
     let workflow = engine
-        .workflow("my-test-quill")
+        .workflow("my-test-plate")
         .expect("Failed to load workflow");
 
     let markdown = r#"---
@@ -218,14 +218,14 @@ This is a test document with some **bold** text.
 fn test_quill_engine_load_with_quill_object() {
     let mut engine = Quillmark::new();
 
-    // Create a test quill
+    // Create a test plate
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-plate\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test plate\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
@@ -234,16 +234,16 @@ fn test_quill_engine_load_with_quill_object() {
     )
     .expect("Failed to write glue.typ");
 
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill.clone())
-        .expect("Failed to register quill");
+        .register_plate(plate.clone())
+        .expect("Failed to register plate");
 
     // Load workflow by passing Quill object directly
-    let workflow = engine.workflow(&quill).expect("Failed to load workflow");
+    let workflow = engine.workflow(&plate).expect("Failed to load workflow");
 
     // Verify workflow properties
-    assert_eq!(workflow.quill_name(), "my-test-quill");
+    assert_eq!(workflow.plate_name(), "my-test-plate");
     assert_eq!(workflow.backend_id(), "typst");
     assert!(workflow.supported_formats().contains(&OutputFormat::Pdf));
 }
@@ -252,14 +252,14 @@ fn test_quill_engine_load_with_quill_object() {
 fn test_quill_engine_load_with_different_string_types() {
     let mut engine = Quillmark::new();
 
-    // Create and register a test quill
+    // Create and register a test plate
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-plate\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test plate\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
@@ -268,21 +268,21 @@ fn test_quill_engine_load_with_different_string_types() {
     )
     .expect("Failed to write glue.typ");
 
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     // Test with &str
     let workflow1 = engine
-        .workflow("my-test-quill")
+        .workflow("my-test-plate")
         .expect("Failed to load with &str");
-    assert_eq!(workflow1.quill_name(), "my-test-quill");
+    assert_eq!(workflow1.plate_name(), "my-test-plate");
 
     // Test with &String
-    let quill_name = String::from("my-test-quill");
+    let quill_name = String::from("my-test-plate");
     let workflow2 = engine
         .workflow(&quill_name)
         .expect("Failed to load with &String");
-    assert_eq!(workflow2.quill_name(), "my-test-quill");
+    assert_eq!(workflow2.plate_name(), "my-test-plate");
 }

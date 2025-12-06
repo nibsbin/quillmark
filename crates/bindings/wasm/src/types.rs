@@ -149,19 +149,19 @@ pub struct RenderResult {
     pub render_time_ms: f64,
 }
 
-/// Shallow information about a registered Quill
+/// Shallow information about a registered Plate
 ///
 /// This provides consumers with the necessary information to configure render options
-/// without exposing the entire Quill file tree.
+/// without exposing the entire Plate file tree.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct QuillInfo {
-    /// Quill name
+    /// Plate name
     pub name: String,
     /// Backend ID (e.g., "typst")
     pub backend: String,
-    /// Quill metadata (plain JavaScript object)
+    /// Plate metadata (plain JavaScript object)
     #[tsify(type = "Record<string, any>")]
     pub metadata: serde_json::Value,
     /// Loaded example markdown (if available)
@@ -377,7 +377,7 @@ mod tests {
         assert!(json_with_quill.contains("\"quillName\":\"test_quill\""));
 
         // Test deserialization with quill_name
-        let options_from_json_with_quill: RenderOptions =
+        let options_from_json_with_plate: RenderOptions =
             serde_json::from_str(r#"{"format":"pdf","quillName":"my_quill"}"#).unwrap();
         assert_eq!(
             options_from_json_with_quill.quill_name,

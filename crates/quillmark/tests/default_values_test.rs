@@ -35,18 +35,18 @@ use tempfile::TempDir;
 #[test]
 fn test_default_values_applied_to_missing_fields() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
 
     // Create Quill.toml with field defaults
     fs::write(
         quill_path.join("Quill.toml"),
         r#"[Quill]
-name = "test-quill"
+name = "test-plate"
 backend = "typst"
 glue_file = "glue.typ"
-description = "Test quill with defaults"
+description = "Test plate with defaults"
 
 [fields]
 title = { description = "Document title" }
@@ -64,13 +64,13 @@ version = { description = "Version number", default = 1 }
     .expect("Failed to write glue.typ");
 
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test-plate")
         .expect("Failed to load workflow");
 
     // Create document with only title (missing status and version)
@@ -97,17 +97,17 @@ title: My Document
 #[test]
 fn test_default_values_not_overriding_existing_fields() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
 
     fs::write(
         quill_path.join("Quill.toml"),
         r#"[Quill]
-name = "test-quill"
+name = "test-plate"
 backend = "typst"
 glue_file = "glue.typ"
-description = "Test quill with defaults"
+description = "Test plate with defaults"
 
 [fields]
 title = { description = "Document title" }
@@ -123,13 +123,13 @@ status = { description = "Document status", default = "draft" }
     .expect("Failed to write glue.typ");
 
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test-plate")
         .expect("Failed to load workflow");
 
     // Create document with explicit status value
@@ -155,18 +155,18 @@ status: published
 #[test]
 fn test_validation_with_defaults() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
 
-    // Create quill where all fields have defaults - validation should pass with empty doc
+    // Create plate where all fields have defaults - validation should pass with empty doc
     fs::write(
         quill_path.join("Quill.toml"),
         r#"[Quill]
-name = "test-quill"
+name = "test-plate"
 backend = "typst"
 glue_file = "glue.typ"
-description = "Test quill with defaults"
+description = "Test plate with defaults"
 
 [fields]
 title = { description = "Document title", default = "Untitled" }
@@ -182,13 +182,13 @@ status = { description = "Document status", default = "draft" }
     .expect("Failed to write glue.typ");
 
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test-plate")
         .expect("Failed to load workflow");
 
     // Create document with no fields - should validate because all have defaults
@@ -207,18 +207,18 @@ status = { description = "Document status", default = "draft" }
 #[test]
 fn test_validation_fails_without_defaults() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
 
-    // Create quill with required field (no default)
+    // Create plate with required field (no default)
     fs::write(
         quill_path.join("Quill.toml"),
         r#"[Quill]
-name = "test-quill"
+name = "test-plate"
 backend = "typst"
 glue_file = "glue.typ"
-description = "Test quill with required field"
+description = "Test plate with required field"
 
 [fields]
 title = { description = "Document title" }
@@ -234,13 +234,13 @@ status = { description = "Document status", default = "draft" }
     .expect("Failed to write glue.typ");
 
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test-plate")
         .expect("Failed to load workflow");
 
     // Create document missing required title field

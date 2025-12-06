@@ -8,7 +8,7 @@
 
 import { describe, it, expect, beforeAll } from 'vitest'
 import { Quillmark } from '@quillmark-wasm'
-import { loadQuill, loadQuillMarkdown } from './quillLoader.js'
+import { loadPlate, loadPlateMarkdown } from './plateLoader.js'
 import * as fs from 'fs'
 import * as path from 'path'
 import { fileURLToPath } from 'url'
@@ -57,7 +57,7 @@ describe.skipIf(process.env.CI)('WASM usaf_memo smoke test', () => {
 
     // Load the Quill structure
     console.log('Loading usaf_memo Quill...')
-    quillJson = loadQuill(USAF_MEMO_QUILL_PATH)
+    quillJson = loadPlate(USAF_MEMO_QUILL_PATH)
     
     // Load the markdown example
     const quillmark = new Quillmark()

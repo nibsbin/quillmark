@@ -53,8 +53,8 @@ use crate::value::QuillValue;
 /// The field name used to store the document body
 pub const BODY_FIELD: &str = "body";
 
-/// Reserved tag name for quill specification
-pub const QUILL_TAG: &str = "quill";
+/// Reserved tag name for plate specification
+pub const QUILL_TAG: &str = "plate";
 
 /// A parsed markdown document with frontmatter
 #[derive(Debug, Clone)]
@@ -72,7 +72,7 @@ impl ParsedDocument {
         }
     }
 
-    /// Create a ParsedDocument from fields and quill tag
+    /// Create a ParsedDocument from fields and plate tag
     pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: String) -> Self {
         Self { fields, quill_tag }
     }
@@ -82,7 +82,7 @@ impl ParsedDocument {
         decompose(markdown).map_err(|e| crate::error::ParseError::from(e))
     }
 
-    /// Get the quill tag (from QUILL key, or "__default__" if not specified)
+    /// Get the plate tag (from PLATE key, or "__default__" if not specified)
     pub fn quill_tag(&self) -> &str {
         &self.quill_tag
     }

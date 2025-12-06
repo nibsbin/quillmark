@@ -26,8 +26,8 @@ const engine = new Quillmark();
 // Register a quill from JSON
 const quillJson = {
   files: {
-    "Quill.toml": {
-      contents: `[Quill]
+    "Plate.toml": {
+      contents: `[Plate]
 name = "my-quill"
 backend = "typst"
 description = "My template"
@@ -129,8 +129,8 @@ Register a Quill template from JSON.
 ```javascript
 const quill = {
   files: {
-    "Quill.toml": {
-      contents: `[Quill]
+    "Plate.toml": {
+      contents: `[Plate]
 name = "demo"
 backend = "typst"
 description = "Demo quill"
@@ -425,9 +425,9 @@ Quills are represented as JSON with a `files` structure:
 ```javascript
 const quillJson = {
   files: {
-    // Required: Quill.toml configuration
-    "Quill.toml": { 
-      contents: `[Quill]
+    // Required: Plate.toml configuration
+    "Plate.toml": { 
+      contents: `[Plate]
 name = "my-quill"
 backend = "typst"
 description = "My template"
@@ -479,8 +479,8 @@ async function renderDocument() {
   // Load quill
   const quillJson = {
     files: {
-      "Quill.toml": {
-        contents: `[Quill]
+      "Plate.toml": {
+        contents: `[Plate]
 name = "simple-doc"
 backend = "typst"
 description = "Simple document template"

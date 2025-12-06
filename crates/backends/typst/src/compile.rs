@@ -11,19 +11,19 @@
 //!
 //! ```no_run
 //! use quillmark_typst::compile::compile_to_pdf;
-//! use quillmark_core::Quill;
+//! use quillmark_core::Plate;
 //!
-//! let quill = Quill::from_path("path/to/quill")?;
+//! let plate = Plate::from_path("path/to/plate")?;
 //! let typst_content = "#set document(title: \"Test\")\n= Hello";
 //!
-//! let pdf_bytes = compile_to_pdf(&quill, typst_content)?;
+//! let pdf_bytes = compile_to_pdf(&plate, typst_content)?;
 //! std::fs::write("output.pdf", pdf_bytes)?;
 //! # Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
 //! ```
 //!
 //! ## Process
 //!
-//! 1. Creates a `QuillWorld` with the quill's assets and packages
+//! 1. Creates a `PlateWorld` with the plate's assets and packages
 //! 2. Compiles the Typst document using the Typst compiler
 //! 3. Converts to target format (PDF or SVG)
 //! 4. Returns output bytes
@@ -35,12 +35,12 @@ use typst::layout::PagedDocument;
 use typst_pdf::PdfOptions;
 
 use crate::error_mapping::map_typst_errors;
-use crate::world::QuillWorld;
-use quillmark_core::{Diagnostic, Quill, RenderError, Severity};
+use crate::world::PlateWorld;
+use quillmark_core::{Diagnostic, Plate, RenderError, Severity};
 
 /// Compiles a Typst document to PDF format.
-pub fn compile_to_pdf(quill: &Quill, glued_content: &str) -> Result<Vec<u8>, RenderError> {
-    let world = QuillWorld::new(quill, glued_content).map_err(|e| RenderError::EngineCreation {
+pub fn compile_to_pdf(plate: &Plate, glued_content: &str) -> Result<Vec<u8>, RenderError> {
+    let world = PlateWorld::new(plate, glued_content).map_err(|e| RenderError::EngineCreation {
         diag: Diagnostic::new(
             Severity::Error,
             format!("Failed to create Typst compilation environment: {}", e),
@@ -65,8 +65,8 @@ pub fn compile_to_pdf(quill: &Quill, glued_content: &str) -> Result<Vec<u8>, Ren
 }
 
 /// Compiles a Typst document to SVG format (one file per page).
-pub fn compile_to_svg(quill: &Quill, glued_content: &str) -> Result<Vec<Vec<u8>>, RenderError> {
-    let world = QuillWorld::new(quill, glued_content).map_err(|e| RenderError::EngineCreation {
+pub fn compile_to_svg(plate: &Plate, glued_content: &str) -> Result<Vec<Vec<u8>>, RenderError> {
+    let world = PlateWorld::new(plate, glued_content).map_err(|e| RenderError::EngineCreation {
         diag: Diagnostic::new(
             Severity::Error,
             format!("Failed to create Typst compilation environment: {}", e),
@@ -87,7 +87,7 @@ pub fn compile_to_svg(quill: &Quill, glued_content: &str) -> Result<Vec<Vec<u8>>
 }
 
 /// Internal compilation function
-fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
+fn compile_document(world: &PlateWorld) -> Result<PagedDocument, RenderError> {
     let Warned { output, warnings } = typst::compile::<PagedDocument>(world);
 
     for warning in warnings {

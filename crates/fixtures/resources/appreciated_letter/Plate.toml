@@ -1,4 +1,4 @@
-[Quill]
+[Plate]
 name = "appreeciated_letter"
 backend = "typst"
 glue_file = "glue.typ"

@@ -7,7 +7,7 @@ use wasm_bindgen_test::*;
 
 const UI_QUILL_JSON: &str = r#"{
   "files": {
-    "Quill.toml": { "contents": "[Quill]\nname = \"ui-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill for UI metadata\"\n\n[fields.my_field]\ntype = \"string\"\n\n[fields.my_field.ui]\ngroup = \"Personal Info\"\ntooltip = \"Enter your name\"\n" },
+    "Plate.toml": { "contents": "[Plate]\nname = \"ui-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill for UI metadata\"\n\n[fields.my_field]\ntype = \"string\"\n\n[fields.my_field.ui]\ngroup = \"Personal Info\"\ntooltip = \"Enter your name\"\n" },
     "glue.typ": { "contents": "= Title" }
   }
 }"#;
@@ -16,7 +16,7 @@ const UI_QUILL_JSON: &str = r#"{
 fn test_metadata_retrieval() {
     let mut engine = Quillmark::new();
     engine
-        .register_quill(JsValue::from_str(UI_QUILL_JSON))
+        .register_plate(JsValue::from_str(UI_QUILL_JSON))
         .map_err(|e| {
             let error_obj: Value = serde_wasm_bindgen::from_value(e).unwrap();
             panic!("register failed: {:#?}", error_obj);

@@ -13,7 +13,7 @@
 //! ## AcroForm Backend
 //!
 //! The AcroForm backend fills PDF forms by:
-//! 1. Loading a PDF form from quill's `form.pdf` file
+//! 1. Loading a PDF form from plate's `form.pdf` file
 //! 2. Extracting field names and descriptions
 //! 3. Rendering field values using MiniJinja templates
 //! 4. Writing rendered values back to the PDF form
@@ -38,7 +38,7 @@ mod tests {
 
         let backend = AcroformBackend::default();
         let quill_path = quillmark_fixtures::quills_path("usaf_form_8");
-        let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+        let plate = Plate::from_path(quill_path).expect("Failed to load plate");
 
         let json_context = r#"{"test": "success!"}"#;
 
@@ -46,7 +46,7 @@ mod tests {
             output_format: Some(OutputFormat::Pdf),
         };
 
-        let result = backend.compile(json_context, &quill, &opts);
+        let result = backend.compile(json_context, &plate, &opts);
         assert!(result.is_ok(), "Compilation failed: {:?}", result.err());
 
         let render_result = result.unwrap();
@@ -62,7 +62,7 @@ mod tests {
 
         let backend = AcroformBackend::default();
         let quill_path = quillmark_fixtures::quills_path("usaf_form_8");
-        let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+        let plate = Plate::from_path(quill_path).expect("Failed to load plate");
 
         let json_context = r#"{
         "name": "John Doe",
@@ -75,7 +75,7 @@ mod tests {
             output_format: Some(OutputFormat::Pdf),
         };
 
-        let result = backend.compile(json_context, &quill, &opts);
+        let result = backend.compile(json_context, &plate, &opts);
         assert!(result.is_ok(), "Compilation failed: {:?}", result.err());
 
         let render_result = result.unwrap();

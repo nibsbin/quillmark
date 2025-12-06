@@ -1,11 +1,11 @@
 use quillmark::{ParsedDocument, Quill, Quillmark};
 
 fn main() {
-    // Create a simple quill in memory
+    // Create a simple plate in memory
     let quill_json = r#"{
         "files": {
             "Quill.toml": {
-                "contents": "[Quill]\nname = \"test-defaults\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n\n[fields]\ntitle = { description = \"Title\" }\nauthor = { description = \"Author\", default = \"Anonymous\" }\nstatus = { description = \"Status\", default = \"draft\" }\n"
+                "contents": "[Quill]\nname = \"test-defaults\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test plate\"\n\n[fields]\ntitle = { description = \"Title\" }\nauthor = { description = \"Author\", default = \"Anonymous\" }\nstatus = { description = \"Status\", default = \"draft\" }\n"
             },
             "glue.typ": {
                 "contents": "Title: {{ title }}\nAuthor: {{ author }}\nStatus: {{ status }}"
@@ -13,21 +13,21 @@ fn main() {
         }
     }"#;
 
-    let quill = Quill::from_json(quill_json).expect("Failed to load quill");
+    let plate = Plate::from_json(quill_json).expect("Failed to load plate");
 
-    println!("✓ Loaded quill: {}", quill.name);
+    println!("✓ Loaded plate: {}", plate.name);
     println!("✓ Default values from schema:");
-    let defaults = quill.extract_defaults();
+    let defaults = plate.extract_defaults();
     for (name, value) in defaults {
         println!("  - {}: default = {:?}", name, value.as_json());
     }
     println!();
 
-    // Create Quillmark engine and register the quill
+    // Create Quillmark engine and register the plate
     let mut engine = Quillmark::new();
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let workflow = engine
         .workflow("test-defaults")

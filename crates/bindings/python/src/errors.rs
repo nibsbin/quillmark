@@ -134,7 +134,7 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         }
         RenderError::QuillConfig { diag } => {
             let py_err =
-                QuillmarkError::new_err(format!("Quill configuration error: {}", diag.message));
+                QuillmarkError::new_err(format!("Plate configuration error: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
                 let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
                 let _ = exc.setattr("diagnostic", py_diag);

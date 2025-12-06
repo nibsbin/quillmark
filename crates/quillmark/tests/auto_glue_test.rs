@@ -22,7 +22,7 @@
 //!
 //! - **AcroForm backend** - Maps JSON to form fields
 //! - **Simple data backends** - Direct JSON consumption
-//! - **Testing and prototyping** - Quick quill creation without templates
+//! - **Testing and prototyping** - Quick plate creation without templates
 //!
 //! ## Design Reference
 //!
@@ -34,48 +34,48 @@ use tempfile::TempDir;
 
 #[test]
 fn test_auto_glue_without_glue_file() {
-    // Create a quill without a glue file
+    // Create a plate without a glue file
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("auto-quill");
+    let quill_path = temp_dir.path().join("auto-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
+        "[Quill]\nname = \"auto-plate\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
     )
     .expect("Failed to write Quill.toml");
 
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
 
     // Verify glue_file is None
     assert_eq!(
-        quill.metadata.get("glue_file").and_then(|v| v.as_str()),
+        plate.metadata.get("glue_file").and_then(|v| v.as_str()),
         None
     );
-    assert_eq!(quill.glue.clone().unwrap_or_default(), "");
+    assert_eq!(plate.glue.clone().unwrap_or_default(), "");
 
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let workflow = engine
-        .workflow("auto-quill")
+        .workflow("auto-plate")
         .expect("Failed to load workflow");
 
-    assert_eq!(workflow.quill_name(), "auto-quill");
+    assert_eq!(workflow.plate_name(), "auto-plate");
 }
 
 #[test]
 fn test_auto_glue_output() {
-    // Create a quill without a glue file
+    // Create a plate without a glue file
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("auto-quill");
+    let quill_path = temp_dir.path().join("auto-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
+        "[Quill]\nname = \"auto-plate\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
     )
     .expect("Failed to write Quill.toml");
 
@@ -96,13 +96,13 @@ This is a test document.
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let workflow = engine
-        .workflow("auto-quill")
+        .workflow("auto-plate")
         .expect("Failed to load workflow");
 
     let glue_output = workflow
@@ -125,12 +125,12 @@ This is a test document.
 #[test]
 fn test_auto_glue_with_nested_data() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("auto-quill");
+    let quill_path = temp_dir.path().join("auto-plate");
 
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).expect("Failed to create plate dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
+        "[Quill]\nname = \"auto-plate\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
     )
     .expect("Failed to write Quill.toml");
 
@@ -149,13 +149,13 @@ Content here.
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
     let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    let plate = Plate::from_path(quill_path).expect("Failed to load plate");
     engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
+        .register_plate(plate)
+        .expect("Failed to register plate");
 
     let workflow = engine
-        .workflow("auto-quill")
+        .workflow("auto-plate")
         .expect("Failed to load workflow");
 
     let glue_output = workflow

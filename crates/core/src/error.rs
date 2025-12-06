@@ -469,9 +469,9 @@ pub enum RenderError {
         diag: Diagnostic,
     },
 
-    /// Quill configuration error
+    /// Plate configuration error
     #[error("{diag}")]
-    QuillConfig {
+    PlateConfig {
         /// Diagnostic information
         diag: Diagnostic,
     },
@@ -495,7 +495,7 @@ impl RenderError {
             | RenderError::OutputTooLarge { diag }
             | RenderError::ValidationFailed { diag }
             | RenderError::InvalidSchema { diag }
-            | RenderError::QuillConfig { diag } => vec![diag],
+            | RenderError::PlateConfig { diag } => vec![diag],
         }
     }
 }
@@ -600,7 +600,7 @@ pub fn print_errors(err: &RenderError) {
         RenderError::OutputTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::ValidationFailed { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::InvalidSchema { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::QuillConfig { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::PlateConfig { diag } => eprintln!("{}", diag.fmt_pretty()),
     }
 }
 
