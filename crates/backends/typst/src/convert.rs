@@ -15,7 +15,7 @@
 //!
 //! let markdown = "This is **bold** and _italic_.";
 //! let typst = mark_to_typst(markdown).unwrap();
-//! // Output: "This is *bold* and _italic_.\n\n"
+//! // Output: "This is #strong[bold] and #emph[italic].\n\n"
 //! ```
 //!
 //! ## Detailed Documentation
@@ -96,31 +96,6 @@ enum StrongKind {
     Underline, // Source was __...__
 }
 
-/// Pushes `#{}` word-boundary guard if the next event is text starting with alphanumeric.
-///
-/// This prevents Typst from interpreting the end of emphasis/bold markers as part of
-/// a word when immediately followed by alphanumeric text (e.g., `*bold*text`).
-fn push_word_boundary_guard<'a, I>(output: &mut String, iter: &mut std::iter::Peekable<I>)
-where
-    I: Iterator<Item = (Event<'a>, Range<usize>)>,
-{
-    if let Some((Event::Text(text), _)) = iter.peek() {
-        if text.chars().next().map_or(false, |c| c.is_alphanumeric()) {
-            output.push_str("#{}");
-        }
-    }
-}
-
-/// Pushes `#{}` word-boundary guard if the output ends with alphanumeric.
-///
-/// This prevents Typst from interpreting the start of emphasis/bold markers as part of
-/// a word when immediately preceded by alphanumeric text (e.g., `text*bold*`).
-fn push_prefix_word_boundary_guard(output: &mut String) {
-    if output.chars().last().map_or(false, |c| c.is_alphanumeric()) {
-        output.push_str("#{}");
-    }
-}
-
 /// Converts an iterator of markdown events to Typst markup
 fn push_typst<'a, I>(output: &mut String, source: &str, iter: I) -> Result<(), ConversionError>
 where
@@ -194,9 +169,7 @@ where
                         }
                     }
                     Tag::Emphasis => {
-                        // Add word boundary guard before opening marker if preceded by alphanumeric
-                        push_prefix_word_boundary_guard(output);
-                        output.push('_');
+                        output.push_str("#emph[");
                         end_newline = false;
                     }
                     Tag::Strong => {
@@ -212,11 +185,7 @@ where
                         strong_stack.push(kind);
                         match kind {
                             StrongKind::Underline => output.push_str("#underline["),
-                            StrongKind::Bold => {
-                                // Add word boundary guard before opening marker if preceded by alphanumeric
-                                push_prefix_word_boundary_guard(output);
-                                output.push('*');
-                            }
+                            StrongKind::Bold => output.push_str("#strong["),
                         }
                         end_newline = false;
                     }
@@ -282,26 +251,17 @@ where
                         }
                     }
                     TagEnd::Emphasis => {
-                        output.push('_');
-                        // Check if next event is text starting with alphanumeric
-                        push_word_boundary_guard(output, &mut iter);
+                        output.push(']');
                         end_newline = false;
                     }
                     TagEnd::Strong => {
                         match strong_stack.pop() {
-                            Some(StrongKind::Bold) => {
-                                output.push('*');
-                                // Word-boundary handling only for bold
-                                push_word_boundary_guard(output, &mut iter);
-                            }
-                            Some(StrongKind::Underline) => {
+                            Some(StrongKind::Bold) | Some(StrongKind::Underline) => {
                                 output.push(']');
-                                // No word-boundary handling needed for function syntax
                             }
                             None => {
                                 // Malformed: more end tags than start tags
-                                // Default to bold behavior for robustness
-                                output.push('*');
+                                output.push(']');
                             }
                         }
                         end_newline = false;
@@ -446,23 +406,23 @@ mod tests {
         let typst = mark_to_typst(markdown).unwrap();
         assert_eq!(
             typst,
-            "This is *bold*, _italic_, and #strike[strikethrough] text.\n\n"
+            "This is #strong[bold], #emph[italic], and #strike[strikethrough] text.\n\n"
         );
     }
 
     #[test]
     fn test_bold_formatting() {
-        assert_eq!(mark_to_typst("**bold**").unwrap(), "*bold*\n\n");
+        assert_eq!(mark_to_typst("**bold**").unwrap(), "#strong[bold]\n\n");
         assert_eq!(
             mark_to_typst("This is **bold** text").unwrap(),
-            "This is *bold* text\n\n"
+            "This is #strong[bold] text\n\n"
         );
     }
 
     #[test]
     fn test_italic_formatting() {
-        assert_eq!(mark_to_typst("_italic_").unwrap(), "_italic_\n\n");
-        assert_eq!(mark_to_typst("*italic*").unwrap(), "_italic_\n\n");
+        assert_eq!(mark_to_typst("_italic_").unwrap(), "#emph[italic]\n\n");
+        assert_eq!(mark_to_typst("*italic*").unwrap(), "#emph[italic]\n\n");
     }
 
     #[test]
@@ -539,7 +499,7 @@ mod tests {
         // Lists end with extra newline per CONVERT.md examples
         assert_eq!(
             typst,
-            "A paragraph with *bold* and a #link(\"https://example.com\")[link].\n\nAnother paragraph with `inline code`.\n\n- A list item\n- Another item\n\n"
+            "A paragraph with #strong[bold] and a #link(\"https://example.com\")[link].\n\nAnother paragraph with `inline code`.\n\n- A list item\n- Another item\n\n"
         );
     }
 
@@ -615,14 +575,14 @@ mod tests {
     fn test_consecutive_formatting() {
         let markdown = "**bold** _italic_ ~~strike~~";
         let typst = mark_to_typst(markdown).unwrap();
-        assert_eq!(typst, "*bold* _italic_ #strike[strike]\n\n");
+        assert_eq!(typst, "#strong[bold] #emph[italic] #strike[strike]\n\n");
     }
 
     #[test]
     fn test_nested_formatting() {
         let markdown = "**bold _and italic_**";
         let typst = mark_to_typst(markdown).unwrap();
-        assert_eq!(typst, "*bold _and italic_*\n\n");
+        assert_eq!(typst, "#strong[bold #emph[and italic]]\n\n");
     }
 
     #[test]
@@ -630,7 +590,7 @@ mod tests {
         let markdown = "- **Bold** item\n- _Italic_ item\n- `Code` item";
         let typst = mark_to_typst(markdown).unwrap();
         // Lists end with extra newline
-        assert_eq!(typst, "- *Bold* item\n- _Italic_ item\n- `Code` item\n\n");
+        assert_eq!(typst, "- #strong[Bold] item\n- #emph[Italic] item\n- `Code` item\n\n");
     }
 
     #[test]
@@ -750,35 +710,32 @@ mod tests {
 
     #[test]
     fn test_italic_followed_by_alphanumeric() {
-        // Bug: When closing italic marker is followed by alphanumeric, Typst doesn't recognize it
+        // Function syntax (#emph[]) handles word boundaries naturally
         let markdown = "*Write y*our paragraphs here.";
         let typst = mark_to_typst(markdown).unwrap();
-        // Should add word boundary after closing underscore when followed by alphanumeric
-        assert_eq!(typst, "_Write y_#{}our paragraphs here.\n\n");
+        assert_eq!(typst, "#emph[Write y]our paragraphs here.\n\n");
     }
 
     #[test]
     fn test_italic_followed_by_space() {
-        // When followed by space, no word boundary needed
         let markdown = "*italic* text";
         let typst = mark_to_typst(markdown).unwrap();
-        assert_eq!(typst, "_italic_ text\n\n");
+        assert_eq!(typst, "#emph[italic] text\n\n");
     }
 
     #[test]
     fn test_italic_followed_by_punctuation() {
-        // When followed by punctuation, no word boundary needed
         let markdown = "*italic*.";
         let typst = mark_to_typst(markdown).unwrap();
-        assert_eq!(typst, "_italic_.\n\n");
+        assert_eq!(typst, "#emph[italic].\n\n");
     }
 
     #[test]
     fn test_bold_followed_by_alphanumeric() {
-        // Same issue can occur with bold
+        // Function syntax (#strong[]) handles word boundaries naturally
         let markdown = "**bold**text";
         let typst = mark_to_typst(markdown).unwrap();
-        assert_eq!(typst, "*bold*#{}text\n\n");
+        assert_eq!(typst, "#strong[bold]text\n\n");
     }
 
     // Tests for Headings
@@ -828,7 +785,7 @@ mod tests {
     fn test_heading_with_formatting() {
         let markdown = "## Heading with **bold** and _italic_";
         let typst = mark_to_typst(markdown).unwrap();
-        assert_eq!(typst, "== Heading with *bold* and _italic_\n\n");
+        assert_eq!(typst, "== Heading with #strong[bold] and #emph[italic]\n\n");
     }
 
     #[test]
@@ -888,7 +845,7 @@ mod tests {
     #[test]
     fn test_bold_unchanged() {
         // Verify ** still works as bold
-        assert_eq!(mark_to_typst("**bold**").unwrap(), "*bold*\n\n");
+        assert_eq!(mark_to_typst("**bold**").unwrap(), "#strong[bold]\n\n");
     }
 
     // Nesting Tests
@@ -896,7 +853,7 @@ mod tests {
     fn test_underline_containing_bold() {
         assert_eq!(
             mark_to_typst("__A **B** A__").unwrap(),
-            "#underline[A *B* A]\n\n"
+            "#underline[A #strong[B] A]\n\n"
         );
     }
 
@@ -904,7 +861,7 @@ mod tests {
     fn test_bold_containing_underline() {
         assert_eq!(
             mark_to_typst("**A __B__ A**").unwrap(),
-            "*A #underline[B] A*\n\n"
+            "#strong[A #underline[B] A]\n\n"
         );
     }
 
@@ -912,19 +869,19 @@ mod tests {
     fn test_deep_nesting() {
         assert_eq!(
             mark_to_typst("__A **B __C__ B** A__").unwrap(),
-            "#underline[A *B #underline[C] B* A]\n\n"
+            "#underline[A #strong[B #underline[C] B] A]\n\n"
         );
     }
 
     // Adjacent Styles Tests
     #[test]
     fn test_adjacent_underline_bold() {
-        assert_eq!(mark_to_typst("__A__**B**").unwrap(), "#underline[A]*B*\n\n");
+        assert_eq!(mark_to_typst("__A__**B**").unwrap(), "#underline[A]#strong[B]\n\n");
     }
 
     #[test]
     fn test_adjacent_bold_underline() {
-        assert_eq!(mark_to_typst("**A**__B__").unwrap(), "*A*#underline[B]\n\n");
+        assert_eq!(mark_to_typst("**A**__B__").unwrap(), "#strong[A]#underline[B]\n\n");
     }
 
     // Escaping Tests
@@ -994,7 +951,7 @@ mod tests {
     fn test_underline_with_italic() {
         assert_eq!(
             mark_to_typst("__underline *italic*__").unwrap(),
-            "#underline[underline _italic_]\n\n"
+            "#underline[underline #emph[italic]]\n\n"
         );
     }
 
@@ -1061,7 +1018,7 @@ mod robustness_tests {
     #[test]
     fn test_unicode_with_formatting() {
         let result = mark_to_typst("**你好** _世界_").unwrap();
-        assert_eq!(result, "*你好* _世界_\n\n");
+        assert_eq!(result, "#strong[你好] #emph[世界]\n\n");
     }
 
     #[test]
@@ -1156,7 +1113,7 @@ mod robustness_tests {
     #[test]
     fn test_link_with_special_chars_in_text() {
         let result = mark_to_typst("[*bold* link](https://example.com)").unwrap();
-        assert!(result.contains("_bold_"));
+        assert!(result.contains("#emph[bold]"));
     }
 
     // List edge cases
@@ -1265,13 +1222,13 @@ mod robustness_tests {
     fn test_adjacent_emphasis() {
         let result = mark_to_typst("*a**b*").unwrap();
         // Depends on how markdown parser handles this
-        assert!(result.contains("_"));
+        assert!(result.contains("#emph["));
     }
 
     #[test]
     fn test_emphasis_across_words() {
         let result = mark_to_typst("*multiple words here*").unwrap();
-        assert_eq!(result, "_multiple words here_\n\n");
+        assert_eq!(result, "#emph[multiple words here]\n\n");
     }
 
     #[test]
@@ -1300,7 +1257,7 @@ mod robustness_tests {
     #[test]
     fn test_alternating_bold_underline() {
         let result = mark_to_typst("**bold** __under__ **bold**").unwrap();
-        assert!(result.contains("*bold*"));
+        assert!(result.contains("#strong[bold]"));
         assert!(result.contains("#underline[under]"));
     }
 
@@ -1376,7 +1333,7 @@ mod robustness_tests {
     #[test]
     fn test_paragraph_with_only_formatting() {
         let result = mark_to_typst("**bold only**").unwrap();
-        assert_eq!(result, "*bold only*\n\n");
+        assert_eq!(result, "#strong[bold only]\n\n");
     }
 
     // Soft break and hard break
@@ -1394,13 +1351,13 @@ mod robustness_tests {
         assert_eq!(result, "a\nb\nc\n\n");
     }
 
-    // Word boundary handling
+    // Word boundary handling (no longer needed with function syntax)
 
     #[test]
     fn test_italic_before_number() {
         let result = mark_to_typst("*italic*1").unwrap();
-        // Should add word boundary before number
-        assert!(result.contains("_italic_#{}1"));
+        // Function syntax handles word boundaries naturally
+        assert!(result.contains("#emph[italic]1"));
     }
 
     #[test]
@@ -1409,14 +1366,13 @@ mod robustness_tests {
         // So it gets escaped in Typst output
         let result = mark_to_typst("**bold**_after").unwrap();
         // Underscore is escaped as literal text
-        assert!(result.contains("*bold*\\_after"));
+        assert!(result.contains("#strong[bold]\\_after"));
     }
 
     #[test]
     fn test_emphasis_at_end_of_text() {
-        // No next token, so no boundary check
         let result = mark_to_typst("*italic*").unwrap();
-        assert_eq!(result, "_italic_\n\n");
+        assert_eq!(result, "#emph[italic]\n\n");
     }
 
     // Complex real-world scenarios
@@ -1437,8 +1393,8 @@ More text with `inline code`."#;
         let result = mark_to_typst(markdown).unwrap();
         assert!(result.contains("= Title"));
         assert!(result.contains("== Section"));
-        assert!(result.contains("*bold*"));
-        assert!(result.contains("_italic_"));
+        assert!(result.contains("#strong[bold]"));
+        assert!(result.contains("#emph[italic]"));
         assert!(result.contains("- List item"));
         assert!(result.contains("#link"));
         assert!(result.contains("`inline code`"));
@@ -1455,42 +1411,39 @@ More text with `inline code`."#;
 
     #[test]
     fn test_midword_italic() {
-        // When emphasis starts after alphanumeric, need word boundary guard BEFORE opening marker
-        // and AFTER closing marker when followed by alphanumeric
+        // Function syntax handles mid-word emphasis naturally
         let markdown = "a*sdfasd*f";
         let result = mark_to_typst(markdown).unwrap();
-        assert_eq!(result, "a#{}_sdfasd_#{}f\n\n");
+        assert_eq!(result, "a#emph[sdfasd]f\n\n");
     }
 
     #[test]
     fn test_midword_bold() {
-        // Same applies to bold
+        // Function syntax handles mid-word bold naturally
         let markdown = "word**bold**more";
         let result = mark_to_typst(markdown).unwrap();
-        assert_eq!(result, "word#{}*bold*#{}more\n\n");
+        assert_eq!(result, "word#strong[bold]more\n\n");
     }
 
     #[test]
     fn test_emphasis_preceded_by_alphanumeric() {
-        // Only prefix guard needed when followed by non-alphanumeric
+        // Function syntax handles this naturally
         let markdown = "text*emph*";
         let result = mark_to_typst(markdown).unwrap();
-        assert_eq!(result, "text#{}_emph_\n\n");
+        assert_eq!(result, "text#emph[emph]\n\n");
     }
 
     #[test]
-    fn test_emphasis_no_prefix_guard_after_space() {
-        // No prefix guard needed when preceded by space
+    fn test_emphasis_after_space() {
         let markdown = "some *italic* text";
         let result = mark_to_typst(markdown).unwrap();
-        assert_eq!(result, "some _italic_ text\n\n");
+        assert_eq!(result, "some #emph[italic] text\n\n");
     }
 
     #[test]
-    fn test_emphasis_no_prefix_guard_after_punctuation() {
-        // No prefix guard needed when preceded by punctuation
+    fn test_emphasis_after_punctuation() {
         let markdown = "(*italic*)";
         let result = mark_to_typst(markdown).unwrap();
-        assert_eq!(result, "(_italic_)\n\n");
+        assert_eq!(result, "(#emph[italic])\n\n");
     }
 }
