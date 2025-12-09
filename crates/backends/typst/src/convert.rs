@@ -590,7 +590,10 @@ mod tests {
         let markdown = "- **Bold** item\n- _Italic_ item\n- `Code` item";
         let typst = mark_to_typst(markdown).unwrap();
         // Lists end with extra newline
-        assert_eq!(typst, "- #strong[Bold] item\n- #emph[Italic] item\n- `Code` item\n\n");
+        assert_eq!(
+            typst,
+            "- #strong[Bold] item\n- #emph[Italic] item\n- `Code` item\n\n"
+        );
     }
 
     #[test]
@@ -876,12 +879,18 @@ mod tests {
     // Adjacent Styles Tests
     #[test]
     fn test_adjacent_underline_bold() {
-        assert_eq!(mark_to_typst("__A__**B**").unwrap(), "#underline[A]#strong[B]\n\n");
+        assert_eq!(
+            mark_to_typst("__A__**B**").unwrap(),
+            "#underline[A]#strong[B]\n\n"
+        );
     }
 
     #[test]
     fn test_adjacent_bold_underline() {
-        assert_eq!(mark_to_typst("**A**__B__").unwrap(), "#strong[A]#underline[B]\n\n");
+        assert_eq!(
+            mark_to_typst("**A**__B__").unwrap(),
+            "#strong[A]#underline[B]\n\n"
+        );
     }
 
     // Escaping Tests
