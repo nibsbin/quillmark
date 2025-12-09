@@ -1,5 +1,5 @@
 use crate::errors::{CliError, Result};
-use crate::output::{derive_print_output_path, derive_output_path, OutputWriter};
+use crate::output::{derive_output_path, derive_print_output_path, OutputWriter};
 use clap::Parser;
 use quillmark::{ParsedDocument, Quill, Quillmark};
 use quillmark_core::OutputFormat;
