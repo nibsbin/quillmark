@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/@quillmark-test/wasm.svg?color=CB3837)](https://www.npmjs.com/package/@quillmark-test/wasm)
 [![Documentation](https://docs.rs/quillmark/badge.svg)](https://docs.rs/quillmark)
 
-A template-first Markdown rendering system that converts Markdown with YAML frontmatter into PDF, SVG, and other output formats.
+A template-first Markdown rendering system that converts Markdown with YAML frontmatter into PDF, SVG, and other output formats. Maintained by [TongueToQuill](https://www.tonguetoquill.com).
 
 !!! warning "Under Development"
     This project is under active development and APIs may change.
