@@ -111,6 +111,16 @@ where
     }
 }
 
+/// Pushes `#{}` word-boundary guard if the output ends with alphanumeric.
+///
+/// This prevents Typst from interpreting the start of emphasis/bold markers as part of
+/// a word when immediately preceded by alphanumeric text (e.g., `text*bold*`).
+fn push_prefix_word_boundary_guard(output: &mut String) {
+    if output.chars().last().map_or(false, |c| c.is_alphanumeric()) {
+        output.push_str("#{}");
+    }
+}
+
 /// Converts an iterator of markdown events to Typst markup
 fn push_typst<'a, I>(output: &mut String, source: &str, iter: I) -> Result<(), ConversionError>
 where
@@ -184,6 +194,8 @@ where
                         }
                     }
                     Tag::Emphasis => {
+                        // Add word boundary guard before opening marker if preceded by alphanumeric
+                        push_prefix_word_boundary_guard(output);
                         output.push('_');
                         end_newline = false;
                     }
@@ -201,6 +213,8 @@ where
                         match kind {
                             StrongKind::Underline => output.push_str("#underline["),
                             StrongKind::Bold => {
+                                // Add word boundary guard before opening marker if preceded by alphanumeric
+                                push_prefix_word_boundary_guard(output);
                                 output.push('*');
                             }
                         }
@@ -1437,5 +1451,46 @@ More text with `inline code`."#;
         let result = mark_to_typst(markdown).unwrap();
         assert!(result.contains("\\#set"));
         assert!(result.contains("\\$x^2\\$"));
+    }
+
+    #[test]
+    fn test_midword_italic() {
+        // When emphasis starts after alphanumeric, need word boundary guard BEFORE opening marker
+        // and AFTER closing marker when followed by alphanumeric
+        let markdown = "a*sdfasd*f";
+        let result = mark_to_typst(markdown).unwrap();
+        assert_eq!(result, "a#{}_sdfasd_#{}f\n\n");
+    }
+
+    #[test]
+    fn test_midword_bold() {
+        // Same applies to bold
+        let markdown = "word**bold**more";
+        let result = mark_to_typst(markdown).unwrap();
+        assert_eq!(result, "word#{}*bold*#{}more\n\n");
+    }
+
+    #[test]
+    fn test_emphasis_preceded_by_alphanumeric() {
+        // Only prefix guard needed when followed by non-alphanumeric
+        let markdown = "text*emph*";
+        let result = mark_to_typst(markdown).unwrap();
+        assert_eq!(result, "text#{}_emph_\n\n");
+    }
+
+    #[test]
+    fn test_emphasis_no_prefix_guard_after_space() {
+        // No prefix guard needed when preceded by space
+        let markdown = "some *italic* text";
+        let result = mark_to_typst(markdown).unwrap();
+        assert_eq!(result, "some _italic_ text\n\n");
+    }
+
+    #[test]
+    fn test_emphasis_no_prefix_guard_after_punctuation() {
+        // No prefix guard needed when preceded by punctuation
+        let markdown = "(*italic*)";
+        let result = mark_to_typst(markdown).unwrap();
+        assert_eq!(result, "(_italic_)\n\n");
     }
 }
