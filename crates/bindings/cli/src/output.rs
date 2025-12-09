@@ -54,10 +54,10 @@ pub fn derive_output_path(markdown_path: &Path, format: &str) -> PathBuf {
     output
 }
 
-/// Derive glue output filename from input markdown path
-pub fn derive_glue_output_path(markdown_path: &Path) -> PathBuf {
+/// Derive print output filename from input markdown path
+pub fn derive_print_output_path(markdown_path: &Path) -> PathBuf {
     let mut output = markdown_path.to_path_buf();
     let stem = output.file_stem().unwrap_or_default().to_string_lossy();
-    output.set_file_name(format!("{}_glue.typ", stem));
+    output.set_file_name(format!("{}_print.typ", stem));
     output
 }

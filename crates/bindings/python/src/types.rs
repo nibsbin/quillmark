@@ -122,9 +122,9 @@ impl PyWorkflow {
         Ok(PyRenderResult { inner: result })
     }
 
-    fn process_glue(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<String> {
+    fn render_plate(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<String> {
         self.inner
-            .process_glue(&parsed.inner)
+            .render_plate(&parsed.inner)
             .map_err(convert_render_error)
     }
 
@@ -184,8 +184,8 @@ impl PyQuill {
     }
 
     #[getter]
-    fn glue(&self) -> Option<String> {
-        self.inner.glue.clone()
+    fn plate(&self) -> Option<String> {
+        self.inner.plate.clone()
     }
 
     #[getter]

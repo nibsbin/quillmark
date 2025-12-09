@@ -159,11 +159,11 @@ impl Quillmark {
         })
     }
 
-    /// Process markdown through template engine (debugging)
+    /// Render markdown through plate template (debugging)
     ///
-    /// Returns template source code (Typst, LaTeX, etc.)
-    #[wasm_bindgen(js_name = processGlue)]
-    pub fn process_glue(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
+    /// Returns template source code (Typst, LaTeX, etc.) - the "print"
+    #[wasm_bindgen(js_name = renderPlate)]
+    pub fn render_plate(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
         // Parse markdown first
         let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
             WasmError::from(format!("Failed to parse markdown: {}", e)).to_js_value()
@@ -174,7 +174,7 @@ impl Quillmark {
         })?;
 
         workflow
-            .process_glue(&parsed)
+            .render_plate(&parsed)
             .map_err(|e| WasmError::from(e).to_js_value())
     }
 

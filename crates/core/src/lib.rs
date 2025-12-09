@@ -46,7 +46,7 @@ pub mod parse;
 pub use parse::{ParsedDocument, BODY_FIELD};
 
 pub mod templating;
-pub use templating::{Glue, TemplateError};
+pub use templating::{Plate, TemplateError};
 
 pub mod backend;
 pub use backend::Backend;

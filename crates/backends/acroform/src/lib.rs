@@ -6,7 +6,7 @@
 
 use acroform::{AcroFormDocument, FieldValue};
 use quillmark_core::{
-    Artifact, Backend, Diagnostic, Glue, OutputFormat, Quill, RenderError, RenderOptions,
+    Artifact, Backend, Diagnostic, OutputFormat, Plate, Quill, RenderError, RenderOptions,
     RenderResult, Severity,
 };
 use std::collections::HashMap;
@@ -24,22 +24,22 @@ impl Backend for AcroformBackend {
         &[OutputFormat::Pdf]
     }
 
-    fn glue_extension_types(&self) -> &'static [&'static str] {
-        // Only accept auto glue
+    fn plate_extension_types(&self) -> &'static [&'static str] {
+        // Only accept auto plate
         &[]
     }
 
-    fn allow_auto_glue(&self) -> bool {
+    fn allow_auto_plate(&self) -> bool {
         true
     }
 
-    fn register_filters(&self, _glue: &mut Glue) {
-        // No filters registered - we use default auto glue
+    fn register_filters(&self, _plate: &mut Plate) {
+        // No filters registered - we use default auto plate
     }
 
     fn compile(
         &self,
-        glue_content: &str,
+        print: &str,
         quill: &Quill,
         opts: &RenderOptions,
     ) -> Result<RenderResult, RenderError> {
@@ -56,7 +56,7 @@ impl Backend for AcroformBackend {
             });
         }
         let mut context: serde_json::Value =
-            serde_json::from_str(glue_content).map_err(|e| RenderError::InvalidFrontmatter {
+            serde_json::from_str(print).map_err(|e| RenderError::InvalidFrontmatter {
                 diag: Diagnostic::new(
                     Severity::Error,
                     format!("Failed to parse JSON context: {}", e),
@@ -229,8 +229,8 @@ mod tests {
         let backend = AcroformBackend::default();
         assert_eq!(backend.id(), "acroform");
         let empty_string_arr: [&str; 0] = [];
-        assert_eq!(backend.glue_extension_types(), &empty_string_arr);
-        assert!(backend.allow_auto_glue());
+        assert_eq!(backend.plate_extension_types(), &empty_string_arr);
+        assert!(backend.allow_auto_plate());
         assert!(backend.supported_formats().contains(&OutputFormat::Pdf));
     }
 
