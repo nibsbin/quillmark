@@ -87,10 +87,10 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Publishing WASM version: $VERSION"
 
-      - name: Publish @quillmark-test/wasm
+      - name: Publish @quillmark/wasm
         working-directory: pkg/bundler
-        run: npm publish --access public
+        run: npm publish --access public --provenance
 
       - name: Publish summary
         if: success()
-        run: echo "✓ @quillmark-test/wasm v${{ steps.version.outputs.version }} published to npm"
+        run: echo "✓ @quillmark/wasm v${{ steps.version.outputs.version }} published to npm"
