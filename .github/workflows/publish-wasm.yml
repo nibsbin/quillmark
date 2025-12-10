@@ -10,6 +10,7 @@ permissions:
   id-token: write
   contents: read
 
+
 env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
@@ -72,6 +73,10 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+
+      # npm 11.5.1+ required for Trusted Publishers (OIDC)
+      - name: Upgrade npm for Trusted Publishers
+        run: npm install -g npm@latest
 
       # Download the pre-built package
       - name: Download WASM artifacts
