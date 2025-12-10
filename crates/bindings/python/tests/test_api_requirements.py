@@ -41,9 +41,9 @@ def test_quill_properties(taro_quill_dir):
     # Verify all required properties are accessible
     assert quill.name == "taro"
     assert quill.backend == "typst"
-    assert quill.glue is not None
-    assert isinstance(quill.glue, str)
-    assert len(quill.glue) > 0
+    assert quill.plate is not None
+    assert isinstance(quill.plate, str)
+    assert len(quill.plate) > 0
 
     # Check metadata is accessible
     metadata = quill.metadata

@@ -21,11 +21,11 @@ const TEST_QUILL = {
       contents: `[Quill]
 name = "test_quill"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 description = "Test quill for smoke tests"
 `
     },
-    'glue.typ': {
+    'plate.typ': {
       contents: `= #{{ title | String }}
 
 #{{ body | Content }}`
@@ -86,15 +86,15 @@ describe('quillmark-wasm smoke tests', () => {
     expect(info.schema instanceof Object).toBe(true)
   })
 
-  it('should render glue template', () => {
+  it('should render plate template', () => {
     const engine = new Quillmark()
     engine.registerQuill(TEST_QUILL)
-    
-    const glue = engine.processGlue('test_quill', TEST_MARKDOWN)
-    
-    expect(glue).toBeDefined()
-    expect(typeof glue).toBe('string')
-    expect(glue).toContain('Test Document')
+
+    const print = engine.renderPlate('test_quill', TEST_MARKDOWN)
+
+    expect(print).toBeDefined()
+    expect(typeof print).toBe('string')
+    expect(print).toContain('Test Document')
   })
 
   it('should complete full workflow: parse → register → render', () => {
@@ -116,7 +116,7 @@ describe('quillmark-wasm smoke tests', () => {
     }
     catch(e){
       console.error("Render error:", e);
-      console.error("Glue content:", engine.processGlue('test_quill', TEST_MARKDOWN));
+      console.error("Print content:", engine.renderPlate('test_quill', TEST_MARKDOWN));
       throw e;
     }
     

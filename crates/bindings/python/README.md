@@ -78,7 +78,7 @@ quill = Quill.from_path("path/to/quill")
 # Properties
 quill.name              # Quill name
 quill.backend           # Backend identifier (e.g., "typst")
-quill.glue     # Template content
+quill.plate    # Plate template content
 quill.example           # Example markdown content
 quill.metadata          # Quill metadata dict
 quill.schemas            # Field documentation dict
@@ -113,8 +113,8 @@ workflow.quill_name           # "my_quill"
 workflow.backend_id           # "typst"
 workflow.supported_formats    # [OutputFormat.PDF, OutputFormat.SVG]
 
-# Process glue only (no compilation)
-glue_output = workflow.process_glue(parsed)
+# Process plate only (no compilation) - returns the print
+print_output = workflow.render_plate(parsed)
 ```
 
 **Note**: Dynamic asset and font injection is not currently supported in Python bindings. Assets must be included in the quill bundle.

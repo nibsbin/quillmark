@@ -20,18 +20,18 @@ def test_end_to_end_render(taro_quill_dir, taro_md):
     assert len(result.artifacts[0].bytes) > 0
 
 
-def test_process_glue(taro_quill_dir, taro_md):
-    """Test processing glue template."""
+def test_render_plate(taro_quill_dir, taro_md):
+    """Test rendering plate template to get the print."""
     engine = Quillmark()
     quill = Quill.from_path(str(taro_quill_dir))
     engine.register_quill(quill)
-    
+
     workflow = engine.workflow("taro")
     parsed = ParsedDocument.from_markdown(taro_md)
-    glue_output = workflow.process_glue(parsed)
-    
-    assert "nutty" in glue_output
-    assert "earthy" in glue_output
+    print_output = workflow.render_plate(parsed)
+
+    assert "nutty" in print_output
+    assert "earthy" in print_output
 
 
 def test_save_artifact(taro_quill_dir, taro_md, tmp_path):

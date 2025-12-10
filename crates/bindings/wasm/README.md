@@ -69,11 +69,11 @@ const engine = new Quillmark();
 
 const quillJson = {
   files: {
-    'Quill.toml': { 
-      contents: '[Quill]\nname = "my-quill"\nbackend = "typst"\nglue_file = "glue.typ"\ndescription = "My template"\n' 
+    'Quill.toml': {
+      contents: '[Quill]\nname = "my-quill"\nbackend = "typst"\nplate_file = "plate.typ"\ndescription = "My template"\n'
     },
-    'glue.typ': { 
-      contents: '= {{ title }}\n\n{{ body | Content }}' 
+    'plate.typ': {
+      contents: '= {{ title }}\n\n{{ body | Content }}'
     }
   }
 };
@@ -113,7 +113,7 @@ The main workflow for rendering documents:
 Additional methods for managing the engine and debugging:
 
 - `new Quillmark()` - Create a new engine instance
-- `processGlue(quillName, markdown)` - Debug helper that processes markdown through the template engine and returns the intermediate template source code (e.g., Typst, LaTeX) without compiling to final artifacts. Useful for inspecting template output during development.
+- `renderPlate(quillName, markdown)` - Debug helper that processes markdown through the plate template and returns the print (intermediate template source code, e.g., Typst, LaTeX) without compiling to final artifacts. Useful for inspecting template output during development.
 - `listQuills()` - List all registered Quill names
 - `unregisterQuill(name)` - Unregister a Quill to free memory
 

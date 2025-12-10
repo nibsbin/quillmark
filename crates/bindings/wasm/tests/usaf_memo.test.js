@@ -70,7 +70,7 @@ describe.skipIf(process.env.CI)('WASM usaf_memo smoke test', () => {
     expect(quillJson).toBeDefined()
     expect(quillJson.files).toBeDefined()
     expect(quillJson.files['Quill.toml']).toBeDefined()
-    expect(quillJson.files['glue.typ']).toBeDefined()
+    expect(quillJson.files['plate.typ']).toBeDefined()
     expect(quillJson.files['usaf_memo.md']).toBeDefined()
   })
 
