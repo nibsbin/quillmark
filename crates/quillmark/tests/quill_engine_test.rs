@@ -208,7 +208,7 @@ This is a test document with some **bold** text.
     let plated = workflow
         .process_plate(&parsed)
         .expect("Failed to process plate");
-    
+
     println!("DEBUG: Plated content:\n{}", plated);
 
     let result = workflow

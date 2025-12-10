@@ -781,12 +781,13 @@ impl Quill {
 
         // Read the plate content from plate file (if specified)
         let plate_content: Option<String> = if let Some(ref plate_file_name) = config.plate_file {
-            let plate_bytes = root
-                .get_file(plate_file_name)
-                .ok_or_else(|| format!("Plate file '{}' not found in file tree", plate_file_name))?;
+            let plate_bytes = root.get_file(plate_file_name).ok_or_else(|| {
+                format!("Plate file '{}' not found in file tree", plate_file_name)
+            })?;
 
-            let content = String::from_utf8(plate_bytes.to_vec())
-                .map_err(|e| format!("Plate file '{}' is not valid UTF-8: {}", plate_file_name, e))?;
+            let content = String::from_utf8(plate_bytes.to_vec()).map_err(|e| {
+                format!("Plate file '{}' is not valid UTF-8: {}", plate_file_name, e)
+            })?;
             Some(content)
         } else {
             // No plate file specified

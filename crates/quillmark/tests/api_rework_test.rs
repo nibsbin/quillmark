@@ -158,7 +158,8 @@ fn test_process_plate() {
         "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
-    fs::write(quill_path.join("plate.typ"), "Title: {{ title }}").expect("Failed to write plate.typ");
+    fs::write(quill_path.join("plate.typ"), "Title: {{ title }}")
+        .expect("Failed to write plate.typ");
 
     let markdown = r#"---
 title: Test Title

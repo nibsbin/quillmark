@@ -134,7 +134,10 @@ impl Quillmark {
                 .map(|e| format!(".{}", e))
                 .unwrap_or_default();
 
-            if !backend.plate_extension_types().contains(&extension.as_str()) {
+            if !backend
+                .plate_extension_types()
+                .contains(&extension.as_str())
+            {
                 return Err(RenderError::QuillConfig {
                     diag: Diagnostic::new(
                         Severity::Error,
