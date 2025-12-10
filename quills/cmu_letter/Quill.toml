@@ -1,0 +1,62 @@
+[Quill]
+name = "cmu_letter"
+backend = "typst"
+plate_file = "plate.typ"
+example_file = "cmu_letter.md"
+description = "Typeset letters that comply with Carnegie Mellon University letterhead standards."
+
+# ==========================================
+# Group 1: Essentials
+# (Recipient, Signature)
+# ==========================================
+
+[fields.recipient]
+description = "Recipient's name and address"
+type = "array"
+example = ["Mr. John Doe", "123 Main St", "Anytown, USA"]
+ui.group = "Essentials"
+ui.tooltip = "The recipient's name and full mailing address."
+
+[fields.signature_block]
+description = "Signature block lines"
+type = "array"
+example = ["First M. Last", "Title"]
+ui.group = "Essentials"
+ui.tooltip = "The signer's information. Line 1: Name. Line 2: Title."
+
+# ==========================================
+# Group 2: Letterhead
+# (Static Unit Branding)
+# ==========================================
+
+[fields.department]
+description = "Name of the department or unit"
+type = "string"
+example = "Department of Electrical and Computer Engineering"
+ui.group = "Letterhead"
+ui.tooltip = "The department or organizational unit name for the letterhead."
+
+[fields.address]
+description = "Sender's address lines"
+type = "array"
+example = ["5000 Forbes Avenue", "Pittsburgh, PA 15213-3890"]
+ui.group = "Letterhead"
+ui.tooltip = "The sender's institutional mailing address."
+
+[fields.url]
+description = "Department or university URL"
+type = "string"
+example = "www.ece.cmu.edu"
+ui.group = "Letterhead"
+ui.tooltip = "The department or university website URL."
+
+# ==========================================
+# Group 3: Advanced
+# (Date and Formatting)
+# ==========================================
+
+[fields.date]
+description = "Date of the letter"
+type = "date"
+ui.group = "Advanced"
+ui.tooltip = "The date to appear on the letter."
