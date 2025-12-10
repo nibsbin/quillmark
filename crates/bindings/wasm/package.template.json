@@ -6,7 +6,7 @@
   "license": "MIT OR Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/nibsbin/quillmark"
+    "url": "git+https://github.com/nibsbin/quillmark.git"
   },
   "files": [
     "wasm_bg.wasm",
