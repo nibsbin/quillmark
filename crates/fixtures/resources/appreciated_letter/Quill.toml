@@ -1,7 +1,7 @@
 [Quill]
 name = "appreeciated_letter"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 example_file = "appreciated_letter.md"
 description = "Professional letter template with appreciation styling"
 

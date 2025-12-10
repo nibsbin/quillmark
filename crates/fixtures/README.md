@@ -34,7 +34,7 @@ const sampleMd = await response.text();
 
 The package includes:
 
-- **Quill Templates**: Sample Quill templates with glue.typ, Quill.toml, and assets
+- **Quill Templates**: Sample Quill templates with plate.typ, Quill.toml, and assets
   - `appreciated_letter/` - A formal letter template
   - `usaf_memo/` - US Air Force memo template
   - `taro/` - Custom template example

@@ -69,7 +69,7 @@ cargo run --example appreciated_letter
 cargo run --example usaf_memo
 cargo run --example taro
 cargo run --example usaf_form_8
-cargo run --example auto_glue
+cargo run --example auto_plate
 cargo run --example test_defaults
 ```
 

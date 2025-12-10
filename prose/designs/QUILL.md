@@ -35,8 +35,8 @@ pub struct Quill {
     pub name: String,
     /// Backend identifier (e.g., "typst")
     pub backend: String,
-    /// Glue template content (optional)
-    pub glue: Option<String>,
+    /// Plate template content (optional)
+    pub plate: Option<String>,
     /// Markdown template content (optional)
     pub example: Option<String>,
     /// Field JSON schema (single source of truth for schema and defaults)
@@ -62,8 +62,8 @@ pub struct QuillConfig {
     pub author: Option<String>,
     /// Example markdown file
     pub example_file: Option<String>,
-    /// Glue file
-    pub glue_file: Option<String>,
+    /// Plate file
+    pub plate_file: Option<String>,
     /// Field schemas
     pub fields: HashMap<String, FieldSchema>,
     /// Additional metadata from [Quill] section (excluding standard fields)
@@ -98,7 +98,7 @@ The JSON format has a root object with a `files` key. The optional `metadata` ke
 {
   "files": {
     "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\n..." },
-    "glue.typ": { "contents": "= Template\n\n{{ body }}" },
+    "plate.typ": { "contents": "= Template\n\n{{ body }}" },
     "assets": {
       "logo.png": { "contents": [137, 80, 78, 71, ...] }
     }
@@ -119,7 +119,7 @@ The JSON format has a root object with a `files` key. The optional `metadata` ke
 2. File nodes MUST have a `contents` key (string or byte array)
 3. Directory nodes are objects without a `contents` key
 4. `Quill.toml` MUST exist and be valid
-5. The glue file referenced in `Quill.toml` MUST exist
+5. The plate file referenced in `Quill.toml` MUST exist
 
 ---
 
@@ -132,7 +132,7 @@ The JSON format has a root object with a `files` key. The optional `metadata` ke
 name = "my-quill"
 backend = "typst"
 description = "A beautiful template"  # required
-glue_file = "glue.typ"  # optional - if not provided, auto glue is used
+plate_file = "plate.typ"  # optional - if not provided, auto plate is used
 example_file = "example.md"  # optional
 version = "1.0.0"  # optional
 author = "Template Author"  # optional
@@ -185,7 +185,7 @@ let quill = Quill::from_path("path/to/my-quill")?;
 let json_data = r#"{
   "files": {
     "Quill.toml": { "contents": "[Quill]\nname = \"demo\"\nbackend = \"typst\"\ndescription = \"Demo quill\"" },
-    "glue.typ": { "contents": "#set document(title: \"{{ title }}\")\n\n{{ body | Content }}" }
+    "plate.typ": { "contents": "#set document(title: \"{{ title }}\")\n\n{{ body | Content }}" }
   }
 }"#;
 let quill = Quill::from_json(json_data)?;

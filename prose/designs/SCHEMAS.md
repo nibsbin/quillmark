@@ -10,8 +10,8 @@ The Backend trait defines the interface for implementing backends in the quillma
 
 - id -> str: Returns the backend identifier (e.g., "typst", "latex").
 - supported_formats -> str[]: Returns the supported output formats.
-- glue_extension_types -> str[]: Returns the glue file extensions (e.g., ".typ", ".tex"). Returns an empty array to disable custom glue files.
-- allow_auto_glue -> bool: Whether to allow automatic glue generation.
+- plate_extension_types -> str[]: Returns the plate file extensions (e.g., ".typ", ".tex"). Returns an empty array to disable custom plate files.
+- allow_auto_plate -> bool: Whether to allow automatic plate generation.
 
 ## Quill
 
@@ -24,9 +24,9 @@ Quills encapsulate the metadata, configuration, and behavior for generating a sp
     - Upon registering the Quill to a Quillmark instance, ensure the backend is already registered
 - author -> Option[str]: The author of the Quill.
 - version -> Option[str]: The version of the Quill.
-- glue_file -> Option[str]: Path to a custom glue file. If not provided, automatic glue generation is used. Validation:
-    - Ensure extension is in the backend's `glue_extension_types`
-    - If not provided, ensure `backend.allow_auto_glue` is true
+- plate_file -> Option[str]: Path to a custom plate file. If not provided, automatic plate generation is used. Validation:
+    - Ensure extension is in the backend's `plate_extension_types`
+    - If not provided, ensure `backend.allow_auto_plate` is true
 - example_file -> Option[str]: Path to an example markdown file demonstrating the Quill's capabilities. Developers should include usage instructions in the content for human and LLM consumers.
 
 ### Quill Field

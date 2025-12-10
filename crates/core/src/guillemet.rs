@@ -236,16 +236,67 @@ pub fn preprocess_markdown_guillemets(markdown: &str) -> String {
     preprocess_guillemets_impl(markdown, true)
 }
 
+/// Strips chevrons from text, extracting inner content: `<<text>>` → `text`
+///
+/// This is used for YAML field values where we want to interpolate the content
+/// without any surrounding markers (neither chevrons nor guillemets).
+///
+/// Constraints:
+/// - Content must be on a single line (no newlines between `<<` and `>>`)
+/// - Content must not exceed [`MAX_GUILLEMET_LENGTH`] bytes
+///
+/// # Examples
+///
+/// ```
+/// use quillmark_core::guillemet::strip_chevrons;
+///
+/// assert_eq!(strip_chevrons("<<hello>>"), "hello");
+/// assert_eq!(strip_chevrons("<< spaced >>"), "spaced");
+/// assert_eq!(strip_chevrons("no chevrons"), "no chevrons");
+/// assert_eq!(strip_chevrons("<<one>> and <<two>>"), "one and two");
+/// ```
+pub fn strip_chevrons(text: &str) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    let mut result = String::with_capacity(text.len());
+    let mut i = 0;
+
+    while i < chars.len() {
+        let ch = chars[i];
+
+        // Process << when found
+        if i + 1 < chars.len() && ch == '<' && chars[i + 1] == '<' {
+            // Find matching >>
+            if let Some(end_offset) = find_matching_guillemet_end(&chars[i + 2..]) {
+                let content_end = i + 2 + end_offset;
+                let content: String = chars[i + 2..content_end].iter().collect();
+
+                // Check constraints: same line and size limit
+                if !content.contains('\n') && content.len() <= MAX_GUILLEMET_LENGTH {
+                    // Output just the trimmed content (no chevrons, no guillemets)
+                    result.push_str(content.trim());
+                    i = content_end + 2; // Skip past >>
+                    continue;
+                }
+            }
+        }
+
+        // Regular character - just copy it
+        result.push(ch);
+        i += 1;
+    }
+
+    result
+}
+
 use crate::parse::BODY_FIELD;
 use crate::value::QuillValue;
 use std::collections::HashMap;
 
 /// Preprocess guillemets in a map of QuillValue fields.
 ///
-/// This function recursively processes all string values in the fields map,
-/// converting `<<text>>` to `«text»`. The body field is processed with
-/// markdown-awareness (skipping code blocks), while other fields use simple
-/// conversion.
+/// This function processes the body field to convert `<<text>>` to `«text»`
+/// with markdown-awareness (skipping code blocks). Other YAML field values
+/// have chevrons stripped to extract just the inner content (`<<text>>` → `text`).
 ///
 /// # Examples
 ///
@@ -259,7 +310,9 @@ use std::collections::HashMap;
 /// fields.insert("body".to_string(), QuillValue::from_json(serde_json::json!("<<world>>")));
 ///
 /// let result = preprocess_fields_guillemets(fields);
-/// assert_eq!(result.get("title").unwrap().as_str().unwrap(), "«hello»");
+/// // YAML fields have chevrons stripped
+/// assert_eq!(result.get("title").unwrap().as_str().unwrap(), "hello");
+/// // Body field converts to guillemets
 /// assert_eq!(result.get("body").unwrap().as_str().unwrap(), "«world»");
 /// ```
 pub fn preprocess_fields_guillemets(
@@ -276,14 +329,18 @@ pub fn preprocess_fields_guillemets(
 }
 
 /// Recursively preprocess guillemets in a JSON value.
-/// The `markdown_aware` flag is used for top-level strings and propagated to nested "body" fields.
-fn preprocess_json_value(value: serde_json::Value, markdown_aware: bool) -> serde_json::Value {
+/// The `is_body` flag indicates whether this is the body field or nested within it.
+/// Body content undergoes chevron-to-guillemet conversion (`<<text>>` → `«text»`).
+/// YAML field values have chevrons stripped, leaving just the inner content (`<<text>>` → `text`).
+fn preprocess_json_value(value: serde_json::Value, is_body: bool) -> serde_json::Value {
     match value {
         serde_json::Value::String(s) => {
-            let processed = if markdown_aware {
+            let processed = if is_body {
+                // Body field: convert <<text>> to «text»
                 preprocess_markdown_guillemets(&s)
             } else {
-                preprocess_guillemets(&s)
+                // YAML fields: strip chevrons, keep inner content
+                strip_chevrons(&s)
             };
             serde_json::Value::String(processed)
         }

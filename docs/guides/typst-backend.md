@@ -21,15 +21,15 @@ Specify `backend = "typst"` in your `Quill.toml`:
 name = "my-typst-quill"
 backend = "typst"
 description = "Document template using Typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 
 [typst]
 packages = ["@preview/appreciated-letter:0.1.0"]
 ```
 
-## Glue Templates
+## Plate Templates
 
-Typst glue templates use MiniJinja syntax to generate Typst code:
+Typst plate templates use MiniJinja syntax to generate Typst code:
 
 ```jinja
 #import "@preview/appreciated-letter:0.1.0": letter
@@ -185,7 +185,7 @@ packages = [
 ]
 ```
 
-Then import and use them in your glue template:
+Then import and use them in your plate template:
 
 ```jinja
 #import "@preview/appreciated-letter:0.1.0": letter
@@ -228,7 +228,7 @@ my-quill/
         └── CustomFont-Bold.ttf
 ```
 
-Reference them in your glue:
+Reference them in your plate:
 
 ```jinja
 #set text(font: "CustomFont")

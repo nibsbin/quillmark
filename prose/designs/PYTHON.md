@@ -62,7 +62,7 @@ result = workflow.render(parsed, OutputFormat.PDF)
 **Methods:**
 - `render(parsed, format)` - Render parsed document to artifacts
 - `render_processed(content, format)` - Render pre-composed content
-- `process_glue(parsed)` - Process through glue template
+- `process_plate(parsed)` - Process through plate template
 - `backend_id()` - Get backend identifier (property)
 - `supported_formats()` - Get supported output formats (property)
 - `quill_name()` - Get quill name (property)
@@ -83,7 +83,7 @@ backend = quill.backend
 - `from_path(path)` - Load quill from filesystem path
 
 **Properties:**
-- `name`, `backend`, `glue`, `metadata`, `schema`, `example`
+- `name`, `backend`, `plate`, `metadata`, `schema`, `example`
 
 #### 4. `ParsedDocument` - Parsed Markdown
 

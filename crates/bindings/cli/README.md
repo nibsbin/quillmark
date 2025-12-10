@@ -85,8 +85,8 @@ quillmark render memo.md
 # Output to stdout (useful for piping)
 quillmark render memo.md --quill ./quills/usaf_memo --stdout > output.pdf
 
-# Only process glue template (for debugging)
-quillmark render memo.md --quill ./quills/usaf_memo --glue-only -o glue_output.typ
+# Only process plate template (for debugging)
+quillmark render memo.md --quill ./quills/usaf_memo --plate-only -o plate_output.typ
 
 # Verbose output
 quillmark render memo.md --quill ./quills/usaf_memo --verbose
@@ -114,7 +114,7 @@ quillmark render [OPTIONS] <MARKDOWN_FILE>
 - `-o, --output <FILE>` - Output file path (default: derived from input filename)
 - `-f, --format <FORMAT>` - Output format: pdf, svg, txt (default: pdf)
 - `--stdout` - Write output to stdout instead of file
-- `--glue-only` - Only process glue template, don't render final output
+- `--plate-only` - Only process plate template, don't render final output
 - `-v, --verbose` - Show detailed processing information
 - `--quiet` - Suppress all non-error output
 
@@ -151,11 +151,11 @@ quillmark render memo.md --quill ./quills/usaf_memo --stdout > final.pdf
 ### Example: Debug Template Processing
 
 ```bash
-# Generate only the glue template to inspect intermediate Typst code
+# Generate only the plate template to inspect intermediate Typst code
 quillmark render memo.md \
   --quill ./quills/usaf_memo \
-  --glue-only \
-  -o debug_glue.typ
+  --plate-only \
+  -o debug_plate.typ
 ```
 
 ## Error Handling

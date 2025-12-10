@@ -33,7 +33,7 @@ backend = "typst"
 description = "My template"
 `
     },
-    "glue.typ": {
+    "plate.typ": {
       contents: "#set document(title: {{ title | String }})\n\n#{{ body | Content }}"
     }
   }
@@ -136,7 +136,7 @@ backend = "typst"
 description = "Demo quill"
 `
     },
-    "glue.typ": { contents: "#{{ body | Content }}" }
+    "plate.typ": { contents: "#{{ body | Content }}" }
   }
 };
 
@@ -167,24 +167,24 @@ console.log(info.backend);           // "typst"
 console.log(info.supportedFormats);  // ["pdf", "svg"]
 ```
 
-##### processGlue
+##### processPlate
 
 ```typescript
-processGlue(quillName: string, markdown: string): string
+processPlate(quillName: string, markdown: string): string
 ```
 
-Process markdown through glue template only (no compilation).
+Process markdown through plate template only (no compilation).
 
 **Parameters:**
 - `quillName` - Name of registered Quill
 - `markdown` - Markdown content
 
-**Returns:** Processed glue output (backend-specific code)
+**Returns:** Processed plate output (backend-specific code)
 
 **Example:**
 ```javascript
-const glue = engine.processGlue("my-quill", markdown);
-console.log(glue);  // Typst code
+const plate = engine.processPlate("my-quill", markdown);
+console.log(plate);  // Typst code
 ```
 
 ##### render
@@ -431,12 +431,12 @@ const quillJson = {
 name = "my-quill"
 backend = "typst"
 description = "My template"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 ` 
     },
     
-    // Required: Glue template
-    "glue.typ": { 
+    // Required: Plate template
+    "plate.typ": { 
       contents: "#set document(title: {{ title | String }})\n\n#{{ body | Content }}" 
     },
     
@@ -484,14 +484,14 @@ async function renderDocument() {
 name = "simple-doc"
 backend = "typst"
 description = "Simple document template"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 
 [fields]
 title = { description = "Document title", type = "str" }
 author = { description = "Author name", type = "str" }
 `
       },
-      "glue.typ": {
+      "plate.typ": {
         contents: `#set document(title: {{ title | String }}, author: {{ author | String }})
 #set page(margin: 1in)
 #set text(font: "Arial", size: 11pt)
