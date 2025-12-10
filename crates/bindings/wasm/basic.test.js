@@ -97,6 +97,61 @@ describe('quillmark-wasm smoke tests', () => {
     expect(plated).toContain('Test Document')
   })
 
+  it('should use TemplatePlate (not AutoPlate) when plate_file is specified', () => {
+    // This test verifies that when a Quill has a plate_file, the template
+    // is actually processed through MiniJinja, producing Typst syntax
+    const engine = new Quillmark()
+    engine.registerQuill(TEST_QUILL)
+
+    const plated = engine.processPlate('test_quill', TEST_MARKDOWN)
+
+    // The plated output should contain Typst template syntax from plate.typ
+    // (e.g., "= #{title}" becomes "= Test Document" after template processing)
+    // It should NOT be JSON (which AutoPlate would produce)
+    expect(plated).toContain('=') // Typst heading from template
+    expect(plated).not.toMatch(/^\s*\{/) // Should not start with JSON object
+    expect(plated).not.toContain('"title":') // Should not contain JSON keys
+    expect(plated).not.toContain('"body":') // Should not contain JSON keys
+  })
+
+  it('should use AutoPlate (JSON output) when plate_file is not specified', () => {
+    // A Quill without plate_file should fall back to AutoPlate, which outputs JSON
+    const quillWithoutPlate = {
+      files: {
+        'Quill.toml': {
+          contents: `[Quill]
+name = "no_plate_quill"
+backend = "typst"
+description = "Test quill without plate file"
+`
+        }
+      }
+    }
+
+    const markdownForNoPlate = `---
+title: AutoPlate Test
+author: Test Author
+QUILL: no_plate_quill
+---
+
+This is the body content.`
+
+    const engine = new Quillmark()
+    engine.registerQuill(quillWithoutPlate)
+
+    const plated = engine.processPlate('no_plate_quill', markdownForNoPlate)
+
+    // AutoPlate should produce valid JSON
+    expect(plated).toBeDefined()
+    expect(() => JSON.parse(plated)).not.toThrow()
+
+    const parsed = JSON.parse(plated)
+    expect(parsed.title).toBe('AutoPlate Test')
+    expect(parsed.author).toBe('Test Author')
+    expect(parsed.__metadata__).toBeDefined()
+    expect(parsed.__metadata__.title).toBe('AutoPlate Test')
+  })
+
   it('should complete full workflow: parse → register → render', () => {
     // Step 1: Parse markdown
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
