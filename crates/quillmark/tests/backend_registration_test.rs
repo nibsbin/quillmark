@@ -16,7 +16,7 @@
 //! Uses a minimal `MockBackend` implementation that:
 //! - Implements the full Backend trait
 //! - Supports TXT output format
-//! - Returns glue content as-is (for testing)
+//! - Returns plate content as-is (for testing)
 //! - Provides minimal filter registration
 //!
 //! ## Purpose
@@ -25,7 +25,7 @@
 //! third-party backends can integrate cleanly with the engine.
 
 use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark, RenderError};
-use quillmark_core::{Artifact, Backend, Glue, RenderOptions, RenderResult};
+use quillmark_core::{Artifact, Backend, Plate, RenderOptions, RenderResult};
 use std::fs;
 use tempfile::TempDir;
 
@@ -43,27 +43,27 @@ impl Backend for MockBackend {
         &[OutputFormat::Txt]
     }
 
-    fn glue_extension_types(&self) -> &'static [&'static str] {
+    fn plate_extension_types(&self) -> &'static [&'static str] {
         &[".txt"]
     }
 
-    fn allow_auto_glue(&self) -> bool {
+    fn allow_auto_plate(&self) -> bool {
         true
     }
 
-    fn register_filters(&self, _glue: &mut Glue) {
+    fn register_filters(&self, _plate: &mut Plate) {
         // No filters for this mock backend
     }
 
     fn compile(
         &self,
-        glue_content: &str,
+        plate_content: &str,
         _quill: &Quill,
         _opts: &RenderOptions,
     ) -> Result<RenderResult, RenderError> {
-        // Simple mock: just return the glue content as a text artifact
+        // Simple mock: just return the plate content as a text artifact
         let artifacts = vec![Artifact {
-            bytes: glue_content.as_bytes().to_vec(),
+            bytes: plate_content.as_bytes().to_vec(),
             output_format: OutputFormat::Txt,
         }];
         Ok(RenderResult::new(artifacts, OutputFormat::Txt))
@@ -131,11 +131,11 @@ fn test_workflow_with_custom_backend() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"custom-backend-quill\"\nbackend = \"mock-txt\"\nglue_file = \"glue.txt\"\ndescription = \"Test quill with custom backend\"\n",
+        "[Quill]\nname = \"custom-backend-quill\"\nbackend = \"mock-txt\"\nplate_file = \"plate.txt\"\ndescription = \"Test quill with custom backend\"\n",
     )
     .expect("Failed to write Quill.toml");
-    fs::write(quill_path.join("glue.txt"), "Test template: {{ title }}")
-        .expect("Failed to write glue.txt");
+    fs::write(quill_path.join("plate.txt"), "Test template: {{ title }}")
+        .expect("Failed to write plate.txt");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine

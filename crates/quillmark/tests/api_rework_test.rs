@@ -9,7 +9,7 @@
 //! - `Quillmark::workflow_from_quill_name()` - Load workflow by quill name
 //! - `Quillmark::workflow_from_quill()` - Load workflow from quill object
 //! - `Workflow::render()` - Full rendering pipeline
-//! - `Workflow::process_glue()` - Template processing only
+//! - `Workflow::render_plate()` - Template processing only (returns the print)
 //!
 //! ## Relationship to Other Tests
 //!
@@ -62,10 +62,10 @@ fn test_workflow_from_quill_name() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
-    fs::write(quill_path.join("glue.typ"), "{{ title }}").expect("Failed to write glue.typ");
+    fs::write(quill_path.join("plate.typ"), "{{ title }}").expect("Failed to write plate.typ");
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
@@ -88,10 +88,10 @@ fn test_workflow_from_quill() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
-    fs::write(quill_path.join("glue.typ"), "{{ title }}").expect("Failed to write glue.typ");
+    fs::write(quill_path.join("plate.typ"), "{{ title }}").expect("Failed to write plate.typ");
 
     let engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
@@ -109,14 +109,14 @@ fn test_render_with_parsed_document() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
-        quill_path.join("glue.typ"),
+        quill_path.join("plate.typ"),
         "#set page(width: 100pt, height: 100pt)\n= {{ title }}",
     )
-    .expect("Failed to write glue.typ");
+    .expect("Failed to write plate.typ");
 
     let markdown = r#"---
 title: My Document
@@ -148,17 +148,17 @@ This is the content.
 }
 
 #[test]
-fn test_process_glue() {
+fn test_render_plate() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let quill_path = temp_dir.path().join("test-quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
-    fs::write(quill_path.join("glue.typ"), "Title: {{ title }}").expect("Failed to write glue.typ");
+    fs::write(quill_path.join("plate.typ"), "Title: {{ title }}").expect("Failed to write plate.typ");
 
     let markdown = r#"---
 title: Test Title
@@ -179,9 +179,9 @@ Some content
         .workflow("test-quill")
         .expect("Failed to load workflow");
 
-    let glue = workflow
-        .process_glue(&parsed)
-        .expect("Failed to process glue");
+    let print_output = workflow
+        .render_plate(&parsed)
+        .expect("Failed to render plate");
 
-    assert!(glue.contains("Test Title"));
+    assert!(print_output.contains("Test Title"));
 }
