@@ -40,14 +40,15 @@ use quillmark_core::{Diagnostic, Quill, RenderError, Severity};
 
 /// Compiles a Typst document to PDF format.
 pub fn compile_to_pdf(quill: &Quill, plated_content: &str) -> Result<Vec<u8>, RenderError> {
-    let world = QuillWorld::new(quill, plated_content).map_err(|e| RenderError::EngineCreation {
-        diag: Diagnostic::new(
-            Severity::Error,
-            format!("Failed to create Typst compilation environment: {}", e),
-        )
-        .with_code("typst::world_creation".to_string())
-        .with_source(e),
-    })?;
+    let world =
+        QuillWorld::new(quill, plated_content).map_err(|e| RenderError::EngineCreation {
+            diag: Diagnostic::new(
+                Severity::Error,
+                format!("Failed to create Typst compilation environment: {}", e),
+            )
+            .with_code("typst::world_creation".to_string())
+            .with_source(e),
+        })?;
 
     let document = compile_document(&world)?;
 
@@ -66,14 +67,15 @@ pub fn compile_to_pdf(quill: &Quill, plated_content: &str) -> Result<Vec<u8>, Re
 
 /// Compiles a Typst document to SVG format (one file per page).
 pub fn compile_to_svg(quill: &Quill, plated_content: &str) -> Result<Vec<Vec<u8>>, RenderError> {
-    let world = QuillWorld::new(quill, plated_content).map_err(|e| RenderError::EngineCreation {
-        diag: Diagnostic::new(
-            Severity::Error,
-            format!("Failed to create Typst compilation environment: {}", e),
-        )
-        .with_code("typst::world_creation".to_string())
-        .with_source(e),
-    })?;
+    let world =
+        QuillWorld::new(quill, plated_content).map_err(|e| RenderError::EngineCreation {
+            diag: Diagnostic::new(
+                Severity::Error,
+                format!("Failed to create Typst compilation environment: {}", e),
+            )
+            .with_code("typst::world_creation".to_string())
+            .with_source(e),
+        })?;
 
     let document = compile_document(&world)?;
 
