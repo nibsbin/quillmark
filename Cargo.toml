@@ -32,7 +32,7 @@ serde = { version = "~1.0", features = ["derive"] }
 serde_yaml = "~0.9"
 serde_json = "~1.0"
 toml = "~0.9"
-toml_edit = "0.22"
+toml_edit = "0.23"
 
 thiserror = "~2.0"
 anyhow = "~1.0"
@@ -41,10 +41,10 @@ anyhow = "~1.0"
 glob = "0.3.3"
 
 # Templating
-minijinja = "~2.12"
+minijinja = "2.13"
 
 # Validation
-jsonschema = {version = "0.33", default-features = false}
+jsonschema = { version = "0.37", default-features = false }
 
 # Typst backend dependencies
 pulldown-cmark = "0.13.0"
@@ -69,7 +69,9 @@ tempfile = "~3.23"
 proptest = "~1.5"
 quillmark-fixtures = { path = "crates/fixtures" }
 
-cargo-husky = { version = "~1", default-features = false, features = ["user-hooks"] }
+cargo-husky = { version = "~1", default-features = false, features = [
+    "user-hooks",
+] }
 
 [workspace.metadata.workspaces]
 # Exclude fixtures from publishing since it's dev-only
@@ -89,25 +91,25 @@ panic = 'unwind'
 incremental = true
 codegen-units = 256
 rpath = false
-split-debuginfo = "unpacked"  # Faster on macOS/Linux
+split-debuginfo = "unpacked" # Faster on macOS/Linux
 [profile.dev.package."*"]
 debug = false
 opt-level = 0
 
 [profile.release]
-opt-level = 3           # Optimize for speed (not "z")
-lto = "thin"            # Good speed improvement, reasonable compile time
-codegen-units = 16      # Balance parallelization with optimization
-panic = "abort"         # Smaller binary, slightly faster
-strip = true            # Remove debug symbols (size)
+opt-level = 3      # Optimize for speed (not "z")
+lto = "thin"       # Good speed improvement, reasonable compile time
+codegen-units = 16 # Balance parallelization with optimization
+panic = "abort"    # Smaller binary, slightly faster
+strip = true       # Remove debug symbols (size)
 
 # WASM-specific optimizations
 [profile.wasm-release]
 inherits = "release"
-opt-level = "z"         # Optimize for size (WASM benefits greatly)
-lto = true              # Full LTO for maximum size reduction
-codegen-units = 1       # Single codegen unit for best optimization
-panic = "abort"         # Smaller binary
-strip = true            # Remove debug symbols
+opt-level = "z"      # Optimize for size (WASM benefits greatly)
+lto = true           # Full LTO for maximum size reduction
+codegen-units = 1    # Single codegen unit for best optimization
+panic = "abort"      # Smaller binary
+strip = true         # Remove debug symbols
 [profile.wasm-release.package."*"]
-opt-level = "z"         # Optimize all dependencies for size
+opt-level = "z" # Optimize all dependencies for size

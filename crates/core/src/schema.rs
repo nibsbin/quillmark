@@ -209,7 +209,7 @@ pub fn validate_document(
     match validation_result {
         Ok(_) => Ok(()),
         Err(error) => {
-            let path = error.instance_path.to_string();
+            let path = error.instance_path().to_string();
             let path_display = if path.is_empty() {
                 "document".to_string()
             } else {
