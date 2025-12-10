@@ -105,6 +105,7 @@ where
     let mut list_stack: Vec<ListType> = Vec::new();
     let mut strong_stack: Vec<StrongKind> = Vec::new();
     let mut in_list_item = false; // Track if we're inside a list item
+    let mut need_para_space = false; // Track if we need space before next paragraph in list item
     let mut depth = 0; // Track nesting depth for DoS prevention
     let mut iter = iter.peekable();
 
@@ -129,6 +130,10 @@ where
                                 output.push('\n');
                                 end_newline = true;
                             }
+                        } else if need_para_space {
+                            // Add space to join with previous paragraph in list item
+                            output.push(' ');
+                            end_newline = false;
                         }
                         // Typst doesn't need explicit paragraph tags for simple paragraphs
                     }
@@ -154,6 +159,7 @@ where
                     }
                     Tag::Item => {
                         in_list_item = true; // We're now inside a list item
+                        need_para_space = false; // Reset paragraph space tracker
                         if let Some(list_type) = list_stack.last() {
                             let indent = "  ".repeat(list_stack.len().saturating_sub(1));
 
@@ -226,8 +232,12 @@ where
                             output.push('\n');
                             output.push('\n'); // Extra newline for paragraph separation
                             end_newline = true;
+                        } else {
+                            // Mark that the next paragraph in this list item needs a space
+                            // This ensures "First line.\n\nSecond line." becomes "First line. Second line."
+                            // matching the behavior of soft breaks (single newline)
+                            need_para_space = true;
                         }
-                        // For paragraphs inside list items, we don't add extra spacing
                     }
                     TagEnd::CodeBlock => {
                         // Code blocks are handled, no special tracking needed
@@ -605,6 +615,17 @@ mod tests {
             typst,
             "- Bullet item\n\n+ Ordered item\n+ Another ordered\n\n"
         );
+    }
+
+    #[test]
+    fn test_list_item_paragraph_separation_with_space() {
+        // Two newlines in a list item should join text with a space
+        // (matching the behavior of single newlines / soft breaks)
+        let markdown = "- First line.\n\n  Second line.";
+        let typst = mark_to_typst(markdown).unwrap();
+        // Previously this was "- First line.Second line." (missing space)
+        // Now it should be "- First line. Second line."
+        assert_eq!(typst, "- First line. Second line.\n\n");
     }
 
     #[test]
