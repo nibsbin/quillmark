@@ -130,7 +130,9 @@
       // We use (4.5in - margin) because Typst's pad() is relative to the text area, not page edge
       #pad(left: 4.5in - spacing.margin)[
         #text(hyphenate: false)[
-          #signature-lines.join(linebreak())
+          #for line in signature-lines {
+            par(hanging-indent: 4 * 0.5em, line)
+          }
         ]
       ]
     ]

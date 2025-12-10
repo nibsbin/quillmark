@@ -1,110 +1,125 @@
 [Quill]
 name = "usaf_memo"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 example_file = "usaf_memo.md"
 description = "Typesetted USAF Official Memorandum"
 
-# Stationary Fields
-#===================
-
-[fields.letterhead_title]
-description = "Title in letterhead"
-type = "string"
-default = "DEPARTMENT OF THE AIR FORCE"
-ui.group = "Stationary"
-ui.tooltip = "The standard letterhead title. Only change this if you work at a Joint Command or DoD Agency."
-
-[fields.letterhead_caption]
-description = "Letterhead caption line(s)"
-type = "array"
-default = ["HEADQUARTERS [UNIT NAME]"]
-ui.group = "Stationary"
-ui.tooltip = "The full name of your organization. Spell out all words (e.g., 'HEADQUARTERS' not 'HQ'). Do not use abbreviations or office symbols."
-
-[fields.tag_line]
-description = "Tag line at bottom of memo"
-type = "string"
-default = "Aim High"
-ui.group = "Stationary"
-ui.tooltip = "The organizational motto displayed at the bottom of the page. 'Aim High' is the standard Air Force motto. Leave blank to omit."
-
-# Memo Header Fields
-#===================
-
-[fields.date]
-description = "Date of memo (YYYY-MM-DD); defaults to today"
-type = "string"
-default = ""
-ui.group = "Memo Header"
-ui.tooltip = "The memo date. Leave blank to automatically use today's date. Dates are formatted as '15 March 2024'."
+# ==========================================
+# Group 1: Essentials
+# (To, From, Subject, Signature)
+# ==========================================
 
 [fields.memo_for]
 description = "List of recipient organization(s)"
 type = "array"
 example = ["ORG1/SYMBOL", "ORG2/SYMBOL"]
-ui.group = "Memo Header"
-ui.tooltip = "The recipient's office symbol (e.g., 'CS/CC' or 'FSS/FSMC'). For multiple recipients, enter 'SEE DISTRIBUTION' and list all recipients in the Distribution field below."
+ui.group = "Essentials"
+ui.tooltip = "Organization/office symbol in UPPERCASE. To address a specific person, add their rank and name in parentheses (e.g., 'ORG/SYMBOL (LT COL JANE DOE)'). For numerous recipients, use 'DISTRIBUTION'."
 
 [fields.memo_from]
 description = "Sender information as array: [ORG/SYMBOL, 'Organization Name', 'Street Address', 'City State ZIP']"
 type = "array"
 example = ["ORG/SYMBOL", "Organization Name", "123 Street Ave", "City ST 12345-6789"]
-ui.group = "Memo Header"
-ui.tooltip = "Sender information in order: 1) Office symbol, 2) Organization name, 3) Street address, 4) City/State/ZIP. Only include the first line if the memo is internal to the installation."
+ui.group = "Essentials"
+ui.tooltip = "If recipients are on the same installation, use only the office symbol. For recipients on other installations, include the full mailing address to enable return correspondence."
 
 [fields.subject]
 description = "Subject of the memo"
 type = "string"
 example = "Subject of the Memorandum"
-ui.group = "Memo Header"
-ui.tooltip = "A clear, concise description of the memo's purpose. Capitalize The First Letter Of Each Major Word. Include suspense dates at the end: '(SUSPENSE: 15 JAN 25)'."
+ui.group = "Essentials"
+ui.tooltip = "Be brief and clear. Capitalize the first letter of each word except articles, prepositions, and conjunctions. Include suspense dates in parentheses if applicable."
 
 [fields.signature_block]
 description = "Signature block lines"
 type = "array"
 example = ["FIRST M. LAST, Rank, USSF", "Duty Title"]
-ui.group = "Memo Header"
-ui.tooltip = "The signer's information. Line 1: NAME (ALL CAPS), Rank, Service. Line 2: Official duty title. Verify the duty title matches official records."
+ui.group = "Essentials"
+ui.tooltip = "Line 1: Name in UPPERCASE as signed, grade, and service. Line 2: Duty title. Spell out 'Colonel' and general officer ranks."
 
-# Additional Information
-#======================
+# ==========================================
+# Group 2: Letterhead
+# (Static Unit Branding)
+# ==========================================
+
+[fields.letterhead_title]
+description = "Title in letterhead"
+type = "string"
+default = "DEPARTMENT OF THE AIR FORCE"
+ui.group = "Letterhead"
+ui.tooltip = "Standard title. Only change for Joint Commands or DoW Agencies."
+
+[fields.letterhead_caption]
+description = "Letterhead caption line(s)"
+type = "array"
+default = ["HEADQUARTERS [UNIT NAME]"]
+ui.group = "Letterhead"
+ui.tooltip = "The full organization name of your unit."
+
+[fields.tag_line]
+description = "Tag line at bottom of memo"
+type = "string"
+default = ""
+ui.group = "Letterhead"
+ui.tooltip = "Organizational motto at the bottom of the page."
+
+# ==========================================
+# Group 3: Advanced
+# (Routing, References, Formatting)
+# ==========================================
+
+[fields.date]
+description = "Date of memo (YYYY-MM-DD); defaults to today"
+type = "string"
+default = ""
+ui.group = "Advanced"
+ui.tooltip = "YYYY-MM-DD. Leave blank to use today's date."
+
 [fields.references]
 description = "References for the memo"
 type = "array"
 default = []
 example = ["AFM 33-326, 31 July 2019, Preparing Official Communications"]
-ui.group = "Additional Information"
-ui.tooltip = "Publications, regulations, or documents cited in the memo. Format: 'AFI 36-2903, 1 May 2018, Dress and Personal Appearance'. Leave blank if none."
+ui.group = "Advanced"
+ui.tooltip = "Cite by organization, type, date, and title."
 
 [fields.cc]
 description = "Carbon copy recipients"
 type = "array"
 default = []
 example = ["Rank and Name, ORG/SYMBOL"]
-ui.group = "Additional Information"
-ui.tooltip = "Additional recipients who should be informed but are not required to take action. List individuals or office symbols."
+ui.group = "Advanced"
+ui.tooltip = "List office symbols of recipients to receive copies."
 
 [fields.distribution]
 description = "Distribution list. Used when \"SEE DISTRIBUTION\" is specified in `memo_for`."
 type = "array"
 default = []
 example = ["ORG1/SYMBOL", "ORG2/SYMBOL"]
-ui.group = "Additional Information"
-ui.tooltip = "Complete list of recipients when 'SEE DISTRIBUTION' is used in the MEMO FOR field. Include all office symbols or addressees."
+ui.group = "Advanced"
+ui.tooltip = "Complete list of recipients if 'SEE DISTRIBUTION' is used in the 'Memo For' field."
 
 [fields.attachments]
 description = "List of attachments"
 type = "array"
 default = []
-example = ["Attachment description, YYYY MMM DD", "Another attachment, date"]
-ui.group = "Additional Information"
-ui.tooltip = "Documents attached to the memo. List each attachment without numbering—numbering is applied automatically."
+example = ["Attachment description, YYYY MMM DD"]
+ui.group = "Advanced"
+ui.tooltip = "List attachments in the order they are mentioned in the memo. Briefly describe each; do not use 'as stated' or abbreviations."
 
 [fields.classification]
 description = "Classification level of the memo that displays in the banner"
 type = "string"
 default = ""
-example = "<UNCLASSIFIED|CONFIDENTIAL|SECRET|TOP SECRET>//TAGS"
-ui.group = "Additional Information"
-ui.tooltip = "Classification marking for the document header and footer. Leave blank for unclassified memos. Only mark documents classified if you have proper training and derivative classification authority."
+example = "CONFIDENTIAL"
+ui.group = "Advanced"
+ui.tooltip = "Follow AFI 31-401 and applicable DoD guidance for classification markings. Leave blank for unclassified."
+
+[fields.font_size]
+description = "Font size for the memo text (int pt)"
+type = "number"
+default = 11
+example = 11
+ui.group = "Advanced"
+ui.tooltip = "Font size for the memo text (pt)."

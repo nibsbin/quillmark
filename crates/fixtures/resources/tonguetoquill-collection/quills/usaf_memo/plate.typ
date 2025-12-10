@@ -83,6 +83,7 @@
   cc: {{ ind.cc | Lines }},
   {% endif %}
   new_page: {{ ind.new_page | default(false) }},
+  informal: {{ ind.informal | default(false) }},
   {% if ind.date is defined %}
   date: {{ ind.date | String }},
   {% endif %}

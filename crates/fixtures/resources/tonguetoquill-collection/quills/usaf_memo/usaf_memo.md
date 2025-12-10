@@ -1,35 +1,36 @@
 ---
 #===Essential===
 QUILL: usaf_memo
-letterhead_title: DEPARTMENT OF THE AIR FORCE
+letterhead_title: DEPARTMENT OF THE AIR FORCE  # Only change for Joint Commands or DoD Agencies
 letterhead_caption:
-  - YOUR SQUADRON HERE
-date: 2504-10-05
+  - HEADQUARTERS YOUR UNIT NAME
+date: 2504-10-05  # YYYY-MM-DD format; leave blank to use today's date
 memo_for:
-  - 1st ORG/SYMBOL
-  #- 2nd ORG/SYMBOL
+  - ORG/SYMBOL  # Organization/office symbol in UPPERCASE
+  #- ORG/SYMBOL (LT COL JANE DOE)  # To address a specific person, add rank and name in parentheses
+  #- DISTRIBUTION  # For numerous recipients, use 'DISTRIBUTION' and list them below
 memo_from:
-  - ORG/SYMBOL
-  - Organization Name
-  - 123 Street Ave
+  - ORG/SYMBOL  # If recipients are on same installation, use only office symbol
+  - Organization Name  # For recipients on other installations, include full mailing address
+  - 123 Street Ave  # to enable return correspondence
   - City ST 12345-6789
-subject: Subject of the Memorandum
+subject: Subject of the Memorandum  # Be brief and clear; capitalize first letter of each word except articles, prepositions, and conjunctions
 
 #===Optional===
 references:
-  - Document, YYYY MMM DD, Description/Title
+  - AFM 33-326, 31 July 2019, Preparing Official Communications  # Cite by organization, type, date, and title
 cc:
-  - Rank Name, ORG/SYMBOL
+  - ORG/SYMBOL  # List office symbols of recipients to receive copies
 distribution:
-  - 1st ORG/SYMBOL
+  - 1st ORG/SYMBOL  # Used when "DISTRIBUTION" is specified in memo_for
   #- 2nd ORG/SYMBOL
 attachments:
-  - Attachment_Name, YYYY MMM DD
+  - Attachment description, YYYY MMM DD  # List in order mentioned; briefly describe each (do not use "as stated" or abbreviations)
 signature_block:
-  - FIRST M. LAST, Rank, USAF
-  #- Optional Duty Title
+  - FIRST M. LAST, Rank, USAF  # Line 1: Name in UPPERCASE as signed, grade, and service (spell out "Colonel" and general officer ranks)
+  - Duty Title  # Line 2: Duty title
 tag_line: Aim High
-classification: SECRET//FICTIONAL
+classification: SECRET//FICTIONAL  # Follow AFI 31-401 and applicable DoD guidance; leave blank for unclassified
 ---
 
 The `usaf_memo` Quill package takes care of many formatting details for AFH 33-337 official memorandums to let you focus on the content.

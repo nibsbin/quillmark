@@ -15,7 +15,7 @@
 		"name": "Letter of Counseling",
 		"description": "Letter of Counseling template",
 		"file": "loc.md",
-		"production": true
+		"production": false
 	},
 	{
 		"name": "Rebuttal",
@@ -30,9 +30,15 @@
 		"production": false
 	},
 	{
-		"name": "Fry's Aircrew Qualification Report",
-		"description": "Fry's Aircrew Qualification Report",
-		"file": "af8_fry.md",
+		"name": "CMU Letter",
+		"description": "Carnegie Mellon University academic letter template",
+		"file": "cmu_letter_template.md",
+		"production": true
+	},
+	{
+		"name": "Pass Request",
+		"description": "USAF special pass request memorandum template",
+		"file": "pass_request.md",
 		"production": true
 	}
 ]

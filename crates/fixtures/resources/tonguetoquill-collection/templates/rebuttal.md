@@ -1,18 +1,19 @@
 ---
 QUILL: usaf_memo
 letterhead_title: DEPARTMENT OF THE AIR FORCE
-letterhead_caption: YOUR SQUADRON HERE
+letterhead_caption: <<YOUR SQUADRON HERE>>
 memo_for:
-  - (Issuer's) Rank FIRST M. LAST
+  - <<Issuer's Rank FIRST M. LAST>>
 memo_from:
-  - (Subject's) ORG/SYMBOL
-subject: Response to Letter of Counseling, (date of LOC)
+  - <<Subject's ORG/SYMBOL>>
+subject: Response to Letter of Counseling, <<LOC's DD Month YYYY>>
 signature_block:
-  - (Subject's) FIRST M. LAST, Rank, USAF
+  - <<Subject's FIRST M. LAST, Rank, USAF>>
 tag_line: Aim High # Optional
 attachments:
   - Attachment 1, (Description)
   - Attachment 2, (Description)
+date: 2025-01-05
 ---
 
 <!-----------------------------------------------------
@@ -21,7 +22,7 @@ attachments:
   - State the date and subject matter clearly
   - Express intent to respond professionally
 ------------------------------------------------------>
-I received the Letter of Counseling dated _DD Month YYYY_ regarding my late arrival to formation on _DD Month YYYY_. I respectfully submit this response for your consideration.
+I received the Letter of Counseling dated 2 January 2025 regarding my late arrival to formation on 1 January 2025. I respectfully submit this response for your consideration.
 
 <!-----------------------------------------------------
 2. RESPONSE TO ALLEGATIONS
@@ -50,7 +51,7 @@ I respectfully request consideration of my overall service record. As a Cyber Tr
   - Additional training completed, procedural improvements, performance metrics
 ------------------------------------------------------>
 
-I have taken immediate corrective action to prevent recurrence. Effective _DD Month YYYY_, I adjusted my departure routine to arrive 30 minutes prior to scheduled formations and established a preventive vehicle maintenance schedule with documented monthly inspections. I have maintained perfect attendance with zero tardiness incidents in the 45 days following this event.
+I have taken immediate corrective action to prevent recurrence. Effective 4 January 2025, I adjusted my departure routine to arrive 30 minutes prior to scheduled formations and established a preventive vehicle maintenance schedule with documented monthly inspections. I have maintained perfect attendance with zero tardiness incidents in the 45 days following this event.
 
 <!-----------------------------------------------------
 5. CLOSING
