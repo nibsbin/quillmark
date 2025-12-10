@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "Building WASM module for @quillmark-test/wasm..."
+echo "Building WASM module for @quillmark/wasm..."
 
 cd "$(dirname "$0")/.."
 

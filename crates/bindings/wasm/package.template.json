@@ -1,5 +1,5 @@
 {
-  "name": "@quillmark-test/wasm",
+  "name": "@quillmark/wasm",
   "version": "VERSION_PLACEHOLDER",
   "description": "WebAssembly bindings for quillmark",
   "type": "module",
