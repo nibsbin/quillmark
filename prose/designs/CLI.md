@@ -63,7 +63,7 @@ quillmark render <MARKDOWN_FILE> [OPTIONS]
 - `-o, --output <FILE>` - Output file path (default: derived from input filename)
 - `-f, --format <FORMAT>` - Output format: pdf, svg, txt (default: pdf)
 - `--stdout` - Write output to stdout instead of file
-- `--glue-only` - Only process glue template, don't render final output
+- `--plate-only` - Only process plate template, don't render final output
 - `--verbose` - Show detailed processing information
 - `--quiet` - Suppress all non-error output
 
@@ -94,8 +94,8 @@ quillmark render memo.md --format svg
 # Output to specific file
 quillmark render memo.md -o output/final.pdf
 
-# Only process glue template
-quillmark render memo.md --glue-only -o glue_output.typ
+# Only process plate template
+quillmark render memo.md --plate-only -o plate_output.typ
 
 # Pipe output for further processing
 quillmark render memo.md --stdout > output.pdf

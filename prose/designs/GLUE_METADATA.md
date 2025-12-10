@@ -1,4 +1,4 @@
-# Glue Metadata Access
+# Plate Metadata Access
 
 This document details the design for exposing document metadata to MiniJinja templates through a dedicated `__metadata__` field.
 
@@ -6,7 +6,7 @@ This document details the design for exposing document metadata to MiniJinja tem
 
 ## Overview
 
-The glue templating system provides template authors with access to parsed document fields via MiniJinja expressions. Currently, all fields (including `body`) are available at the top level of the template context. This design introduces a special `__metadata__` field that aggregates all non-body fields for convenient metadata-only access.
+The plate templating system provides template authors with access to parsed document fields via MiniJinja expressions. Currently, all fields (including `body`) are available at the top level of the template context. This design introduces a special `__metadata__` field that aggregates all non-body fields for convenient metadata-only access.
 
 **Key capabilities:**
 - Access all frontmatter fields through `__metadata__` variable
@@ -88,7 +88,7 @@ ParsedDocument.fields()
 
 ### Implementation in `compose()`
 
-The `compose()` method in `TemplateGlue` and `AutoGlue` will be updated to:
+The `compose()` method in `TemplatePlate` and `AutoPlate` will be updated to:
 
 1. Create a metadata object containing all fields except `body`
 2. Add this object to the context under `__metadata__` key

@@ -145,7 +145,7 @@ Use `include_str!` and `include_bytes!` to embed files:
 ```rust
 mod embedded {
     pub const QUILL_TOML: &str = include_str!("../default_quill/Quill.toml");
-    pub const GLUE_TYP: &str = include_str!("../default_quill/glue.typ");
+    pub const GLUE_TYP: &str = include_str!("../default_quill/plate.typ");
     pub const EXAMPLE_MD: &str = include_str!("../default_quill/example.md");
 }
 
@@ -154,7 +154,7 @@ impl Backend for TypstBackend {
         // Build Quill from embedded files
         let mut files = HashMap::new();
         files.insert("Quill.toml".to_string(), FileTreeNode::File { contents: embedded::QUILL_TOML.as_bytes().to_vec() });
-        files.insert("glue.typ".to_string(), FileTreeNode::File { contents: embedded::GLUE_TYP.as_bytes().to_vec() });
+        files.insert("plate.typ".to_string(), FileTreeNode::File { contents: embedded::GLUE_TYP.as_bytes().to_vec() });
         files.insert("example.md".to_string(), FileTreeNode::File { contents: embedded::EXAMPLE_MD.as_bytes().to_vec() });
         
         let root = FileTreeNode::Directory { files };
@@ -198,7 +198,7 @@ This is a nice-to-have but not critical. Can be implemented as:
 4. Keep explicit Quills for feature-specific tests
 
 **Example Test Files to Review:**
-- `auto_glue_test.rs` - May not need explicit Quill
+- `auto_plate_test.rs` - May not need explicit Quill
 - `default_values_test.rs` - May benefit from default Quill
 - `dynamic_assets_test.rs` - May need explicit Quill for assets
 - `dynamic_fonts_test.rs` - May need explicit Quill for fonts
@@ -339,7 +339,7 @@ Content
 1. **Registration Order**: Initially, backend was registered after default Quill, causing validation to fail
    - **Solution**: Reordered to register backend first, then default Quill
    
-2. **Default Glue Template**: Initial template used `__metadata__` which output raw JSON
+2. **Default Plate Template**: Initial template used `__metadata__` which output raw JSON
    - **Solution**: Simplified to just render markdown body with minimal formatting
 
 3. **Test Retrofitting**: Considered updating existing tests to use default Quill
@@ -364,7 +364,7 @@ Content
 5. `quillmark/tests/quill_engine_test.rs` - Updated 2 tests to account for auto-registered default
 
 ### Assets
-6. `backends/quillmark-typst/default_quill/glue.typ` - Simplified default template
+6. `backends/quillmark-typst/default_quill/plate.typ` - Simplified default template
 
 ---
 

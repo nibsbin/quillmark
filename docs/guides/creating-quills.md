@@ -9,7 +9,7 @@ A Quill is a directory containing:
 ```
 my-quill/
 ├── Quill.toml          # Configuration and metadata
-├── glue.typ            # MiniJinja template (backend-specific)
+├── plate.typ            # MiniJinja template (backend-specific)
 ├── example.md          # Optional example document
 └── assets/             # Optional assets (fonts, images, etc.)
     ├── logo.png
@@ -26,7 +26,7 @@ The `Quill.toml` file defines your Quill's metadata and configuration:
 name = "my-quill"
 backend = "typst"
 description = "A professional document template"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 example_file = "example.md"
 version = "1.0.0"
 author = "Your Name"
@@ -50,7 +50,7 @@ date = { description = "Document date", type = "str" }
 
 ### Optional Fields
 
-- `glue_file` - Path to glue template (defaults to auto-generated glue)
+- `plate_file` - Path to plate template (defaults to auto-generated plate)
 - `example_file` - Path to example markdown file
 - `version` - Semantic version of your Quill
 - `author` - Creator of the Quill
@@ -89,9 +89,9 @@ Supported UI properties:
 - `group` - Group name for organizing fields
 - `tooltip` - Help text to display on hover
 
-## Glue Templates
+## Plate Templates
 
-Glue templates use MiniJinja syntax to compose backend-specific code. They have access to frontmatter data and special filters.
+Plate templates use MiniJinja syntax to compose backend-specific code. They have access to frontmatter data and special filters.
 
 ### Basic Example (Typst)
 
@@ -186,7 +186,7 @@ The AcroForm backend fills PDF forms. Place a `form.pdf` file in your Quill dire
 ```
 my-form-quill/
 ├── Quill.toml
-├── glue.jinja       # Template for field values
+├── plate.jinja       # Template for field values
 └── form.pdf         # PDF form to fill
 ```
 
@@ -206,7 +206,7 @@ my-quill/
         └── MyFont-Bold.ttf
 ```
 
-Reference them in your Typst glue:
+Reference them in your Typst plate:
 
 ```jinja
 #set text(font: "MyFont")
@@ -270,7 +270,7 @@ from quillmark import Quillmark, Quill
 quill_data = {
     "files": {
         "Quill.toml": {"contents": "..."},
-        "glue.typ": {"contents": "..."}
+        "plate.typ": {"contents": "..."}
     }
 }
 

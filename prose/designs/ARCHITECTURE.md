@@ -59,7 +59,7 @@ High-level data flow:
 
 * Types: `Backend`, `Artifact`, `OutputFormat`
 * Parsing: `ParsedDocument` with `from_markdown()` constructor
-* Templating: `Glue` + stable `filter_api`
+* Templating: `Plate` + stable `filter_api`
 * Template model: `Quill` (+ `Quill.toml`)
 * Errors & Diagnostics: `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
 * Utilities: TOML⇄YAML conversion helpers
@@ -122,7 +122,7 @@ High-level data flow:
 - **Quillmark** - High-level engine managing backends and quills
 - **Workflow** - Rendering pipeline orchestration (parse → template → compile)
 - **Backend** - Trait for implementing output formats (PDF, SVG, etc.)
-- **Quill** - Template bundle (glue template + assets/packages)
+- **Quill** - Template bundle (plate template + assets/packages)
 - **ParsedDocument** - Frontmatter + body from markdown
 - **Diagnostic** - Structured error information
 - **RenderResult** - Output artifacts + warnings
@@ -134,8 +134,8 @@ High-level data flow:
 The workflow follows a three-stage pipeline:
 
 1. **Parse** - Extract YAML frontmatter + body from markdown
-2. **Template** - Compose backend-specific glue via MiniJinja with registered filters
-3. **Compile** - Backend processes glue to generate output artifacts
+2. **Template** - Compose backend-specific plate via MiniJinja with registered filters
+3. **Compile** - Backend processes plate to generate output artifacts
 
 ### Key Concepts
 
@@ -264,7 +264,7 @@ The AcroForm backend implements PDF form filling:
 ```
 quill-template/
 ├─ Quill.toml              # Metadata and configuration
-├─ glue.<ext>              # Template file (e.g., glue.typ)
+├─ plate.<ext>              # Template file (e.g., plate.typ)
 ├─ packages/               # Backend packages
 └─ assets/                 # Fonts, images, data
 ```
@@ -303,7 +303,7 @@ External errors are converted to structured diagnostics preserving location and 
 
 ### New Backends
 
-Implement the `Backend` trait with required methods: `id()`, `supported_formats()`, `glue_extension_types()`, `allow_auto_glue()`, `register_filters()`, and `compile()`. Optionally provide `default_quill()` for zero-config support.
+Implement the `Backend` trait with required methods: `id()`, `supported_formats()`, `plate_extension_types()`, `allow_auto_plate()`, `register_filters()`, and `compile()`. Optionally provide `default_quill()` for zero-config support.
 
 **Requirements:** Thread-safe (`Send + Sync`), structured error reporting, format validation.
 
@@ -311,7 +311,7 @@ See `backends/quillmark-typst` for reference implementation.
 
 ### Custom Filters
 
-Register via `glue.register_filter(name, func)` using stable `filter_api` types. Return `Result<Value, Error>` for error handling.
+Register via `plate.register_filter(name, func)` using stable `filter_api` types. Return `Result<Value, Error>` for error handling.
 
 ---
 

@@ -136,8 +136,8 @@ class Workflow:
     ) -> RenderResult:
         """Render pre-composed content."""
     
-    def process_glue(self, parsed: ParsedDocument) -> str:
-        """Process glue template only."""
+    def process_plate(self, parsed: ParsedDocument) -> str:
+        """Process plate template only."""
     
     @property
     def backend_id(self) -> str:
@@ -166,7 +166,7 @@ result = workflow.render(parsed, OutputFormat.PDF)
 
 ### Quill
 
-Template bundle containing glue templates and assets.
+Template bundle containing plate templates and assets.
 
 ```python
 class Quill:
@@ -193,8 +193,8 @@ class Quill:
         """Backend identifier."""
     
     @property
-    def glue(self) -> str:
-        """Glue template content."""
+    def plate(self) -> str:
+        """Plate template content."""
     
     @property
     def example(self) -> str | None:

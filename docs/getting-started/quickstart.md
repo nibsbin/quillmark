@@ -140,7 +140,7 @@ backend = "typst"
 description = "My template"
 `
             },
-            "glue.typ": { contents: "..." },
+            "plate.typ": { contents: "..." },
             // ... other files
         }
     };

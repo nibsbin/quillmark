@@ -11,14 +11,14 @@ Quillmark is a flexible, **template-first** Markdown rendering system that conve
 ```
 Markdown + YAML → Parse → Template → Compile → Artifacts
                     ↓        ↓          ↓
-              ParsedDocument  Glue   PDF/SVG/TXT
+              ParsedDocument  Plate   PDF/SVG/TXT
 ```
 
 The workflow follows three main stages:
 
 1. **Parse** - Extract YAML frontmatter and body from markdown
-2. **Template** - Compose backend-specific glue via MiniJinja with registered filters
-3. **Compile** - Backend processes glue to generate output artifacts
+2. **Template** - Compose backend-specific plate via MiniJinja with registered filters
+3. **Compile** - Backend processes plate to generate output artifacts
 
 ## Core Design Principles
 
@@ -78,7 +78,7 @@ Foundation layer providing:
 
 - **Types**: `Backend`, `Artifact`, `OutputFormat`
 - **Parsing**: `ParsedDocument` with `from_markdown()` constructor
-- **Templating**: `Glue` + stable `filter_api`
+- **Templating**: `Plate` + stable `filter_api`
 - **Template model**: `Quill` (+ `Quill.toml`)
 - **Errors & Diagnostics**: `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
 - **Utilities**: TOML⇄YAML conversion helpers
@@ -174,7 +174,7 @@ Fuzz testing suite for:
 
 **Backend Trait** - Interface for implementing output formats (PDF, SVG, etc.)
 
-**Quill** - Template bundle (glue template + assets/packages)
+**Quill** - Template bundle (plate template + assets/packages)
 
 **ParsedDocument** - Frontmatter + body from markdown
 
@@ -291,7 +291,7 @@ Compilation process:
 ```
 quill-template/
 ├─ Quill.toml              # Metadata and configuration
-├─ glue.<ext>              # Template file (e.g., glue.typ)
+├─ plate.<ext>              # Template file (e.g., plate.typ)
 ├─ packages/               # Backend packages
 └─ assets/                 # Fonts, images, data
 ```
@@ -344,10 +344,10 @@ Implement the `Backend` trait with required methods:
 
 - `id()` - Backend identifier
 - `supported_formats()` - Output formats
-- `glue_extension_types()` - Template file extensions
-- `allow_auto_glue()` - Whether auto-glue is supported
+- `plate_extension_types()` - Template file extensions
+- `allow_auto_plate()` - Whether auto-plate is supported
 - `register_filters()` - Register template filters
-- `compile()` - Compile glue to artifacts
+- `compile()` - Compile plate to artifacts
 
 Optionally provide:
 
@@ -361,7 +361,7 @@ Requirements:
 
 ### Custom Filters
 
-Register via `glue.register_filter(name, func)` using stable `filter_api` types. Return `Result<Value, Error>` for error handling.
+Register via `plate.register_filter(name, func)` using stable `filter_api` types. Return `Result<Value, Error>` for error handling.
 
 ## Key Design Decisions
 

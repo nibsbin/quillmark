@@ -26,7 +26,7 @@ JSON format with a root object containing a `files` key:
 {
   "files": {
     "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\n..." },
-    "glue.typ": { "contents": "= Template\n\n{{ body }}" },
+    "plate.typ": { "contents": "= Template\n\n{{ body }}" },
     "assets": {
       "logo.png": { "contents": [137, 80, 78, 71, ...] }
     }
@@ -52,7 +52,7 @@ class Quillmark {
   static parseMarkdown(markdown: string): ParsedDocument;
   registerQuill(quillJson: string | object): void;
   getQuillInfo(name: string): QuillInfo;
-  processGlue(quillName: string, markdown: string): string;
+  processPlate(quillName: string, markdown: string): string;
   render(parsedDoc: ParsedDocument, options?: RenderOptions): RenderResult;
   listQuills(): string[];
   unregisterQuill(name: string): void;

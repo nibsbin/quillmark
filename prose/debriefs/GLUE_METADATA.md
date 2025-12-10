@@ -1,4 +1,4 @@
-# Implementation Debrief: Glue Metadata Access
+# Implementation Debrief: Plate Metadata Access
 
 **Status**: ✅ **COMPLETED**
 
@@ -16,8 +16,8 @@ Successfully implemented the `__metadata__` field feature that exposes all non-b
 
 1. **quillmark-core/src/templating.rs**
    - Added `BODY_FIELD` import from `parse.rs`
-   - Updated `TemplateGlue::compose` to create and inject `__metadata__` field
-   - Updated `AutoGlue::compose` to include `__metadata__` in JSON output
+   - Updated `TemplatePlate::compose` to create and inject `__metadata__` field
+   - Updated `AutoPlate::compose` to include `__metadata__` in JSON output
    - Added 8 comprehensive unit tests
 
 ### Key Changes
@@ -28,13 +28,13 @@ use crate::parse::BODY_FIELD;
 use std::collections::BTreeMap;
 ```
 
-#### 2. TemplateGlue::compose Update
+#### 2. TemplatePlate::compose Update
 - Filters out `body` field to create metadata subset
 - Converts metadata HashMap to BTreeMap
 - Uses `Value::from_object()` to create iterable MiniJinja object
 - Injects as `__metadata__` key in context
 
-#### 3. AutoGlue::compose Update
+#### 3. AutoPlate::compose Update
 - Creates separate metadata JSON object
 - Includes `__metadata__` in JSON output
 - Maintains all existing fields for backward compatibility
@@ -48,7 +48,7 @@ use std::collections::BTreeMap;
 3. `test_metadata_field_empty_when_only_body` - Tests empty metadata case
 4. `test_backward_compatibility_top_level_access` - Ensures existing templates work
 5. `test_metadata_iteration_in_template` - Tests iteration over metadata
-6. `test_auto_glue_metadata_field` - Verifies JSON output
+6. `test_auto_plate_metadata_field` - Verifies JSON output
 7. `test_metadata_with_nested_objects` - Tests nested metadata access
 8. `test_metadata_with_arrays` - Tests array metadata
 
@@ -125,7 +125,7 @@ Author: {{ __metadata__.author }}
 {% endif %}
 ```
 
-### JSON Output (AutoGlue)
+### JSON Output (AutoPlate)
 ```json
 {
   "__metadata__": {
