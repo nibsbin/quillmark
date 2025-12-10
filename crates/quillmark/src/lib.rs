@@ -17,7 +17,7 @@
 //! - [`Quillmark`] - High-level engine for managing backends and quills
 //! - [`Workflow`] - Sealed rendering API for executing the render pipeline
 //! - [`QuillRef`] - Ergonomic references to quills (by name or object)
-//! - [`Quill`] - Template bundle containing glue templates and assets
+//! - [`Quill`] - Template bundle containing plate templates and assets
 //!
 //! ## Quick Start
 //!
@@ -73,14 +73,14 @@
 //!
 //! ```no_run
 //! use quillmark::{Quillmark, Backend};
-//! # use quillmark_core::{Glue, OutputFormat, Quill, RenderOptions, Artifact, RenderError, RenderResult};
+//! # use quillmark_core::{OutputFormat, Plate, Quill, RenderOptions, Artifact, RenderError, RenderResult};
 //! # struct MyCustomBackend;
 //! # impl Backend for MyCustomBackend {
 //! #     fn id(&self) -> &'static str { "custom" }
 //! #     fn supported_formats(&self) -> &'static [OutputFormat] { &[OutputFormat::Txt] }
-//! #     fn glue_extension_types(&self) -> &'static [&'static str] { &[".txt"] }
-//! #     fn allow_auto_glue(&self) -> bool { true }
-//! #     fn register_filters(&self, _glue: &mut Glue) {}
+//! #     fn plate_extension_types(&self) -> &'static [&'static str] { &[".txt"] }
+//! #     fn allow_auto_plate(&self) -> bool { true }
+//! #     fn register_filters(&self, _plate: &mut Plate) {}
 //! #     fn compile(&self, content: &str, _quill: &Quill, _opts: &RenderOptions) -> Result<RenderResult, RenderError> {
 //! #         let artifacts = vec![Artifact { bytes: content.as_bytes().to_vec(), output_format: OutputFormat::Txt }];
 //! #         Ok(RenderResult::new(artifacts, OutputFormat::Txt))
@@ -100,7 +100,7 @@
 
 // Re-export all core types for convenience
 pub use quillmark_core::{
-    Artifact, Backend, Diagnostic, Glue, Location, OutputFormat, ParseError, ParsedDocument, Quill,
+    Artifact, Backend, Diagnostic, Location, OutputFormat, ParseError, ParsedDocument, Plate, Quill,
     RenderError, RenderResult, SerializableDiagnostic, Severity, TemplateError, BODY_FIELD,
 };
 

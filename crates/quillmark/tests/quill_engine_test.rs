@@ -57,10 +57,10 @@ fn test_quill_engine_register_quill() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my_test_quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my_test_quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
-    fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
+    fs::write(quill_path.join("plate.typ"), "Test template").expect("Failed to write plate.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
@@ -87,14 +87,14 @@ fn test_quill_engine_get_workflow() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
-        quill_path.join("glue.typ"),
+        quill_path.join("plate.typ"),
         "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",
     )
-    .expect("Failed to write glue.typ");
+    .expect("Failed to write plate.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
@@ -139,10 +139,10 @@ fn test_quill_engine_backend_not_found() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"bad-backend-quill\"\nbackend = \"non-existent\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"bad-backend-quill\"\nbackend = \"non-existent\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
-    fs::write(quill_path.join("glue.typ"), "Test template").expect("Failed to write glue.typ");
+    fs::write(quill_path.join("plate.typ"), "Test template").expect("Failed to write plate.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 
@@ -170,18 +170,18 @@ fn test_quill_engine_end_to_end() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
 
-    let glue_template = r#"
+    let plate_template = r#"
 = {{ title | String(default="Untitled") }}
 
 _By {{ author | String(default="Unknown") }}_
 
 {{ body | Content }}
 "#;
-    fs::write(quill_path.join("glue.typ"), glue_template).expect("Failed to write glue.typ");
+    fs::write(quill_path.join("plate.typ"), plate_template).expect("Failed to write plate.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
@@ -205,8 +205,14 @@ This is a test document with some **bold** text.
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
+    let plated = workflow
+        .process_plate(&parsed)
+        .expect("Failed to process plate");
+    
+    println!("DEBUG: Plated content:\n{}", plated);
+
     let result = workflow
-        .render(&parsed, Some(OutputFormat::Pdf))
+        .render_plate(&plated, Some(OutputFormat::Pdf))
         .expect("Failed to render");
 
     assert!(!result.artifacts.is_empty());
@@ -225,14 +231,14 @@ fn test_quill_engine_load_with_quill_object() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
-        quill_path.join("glue.typ"),
+        quill_path.join("plate.typ"),
         "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",
     )
-    .expect("Failed to write glue.typ");
+    .expect("Failed to write plate.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
@@ -259,14 +265,14 @@ fn test_quill_engine_load_with_different_string_types() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
-        quill_path.join("glue.typ"),
+        quill_path.join("plate.typ"),
         "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",
     )
-    .expect("Failed to write glue.typ");
+    .expect("Failed to write plate.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine

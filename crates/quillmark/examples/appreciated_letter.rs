@@ -6,7 +6,7 @@ fn main() {
     // Use the fixtures demo helper which centralizes file IO and printing.
     demo(
         "appreciated_letter",
-        "appreciated_letter_glue.typ",
+        "appreciated_letter_plate.typ",
         "appreciated_letter_output.pdf",
         true,
     )

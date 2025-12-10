@@ -5,9 +5,9 @@ fn main() {
     let quill_json = r#"{
         "files": {
             "Quill.toml": {
-                "contents": "[Quill]\nname = \"test-defaults\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n\n[fields]\ntitle = { description = \"Title\" }\nauthor = { description = \"Author\", default = \"Anonymous\" }\nstatus = { description = \"Status\", default = \"draft\" }\n"
+                "contents": "[Quill]\nname = \"test-defaults\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n\n[fields]\ntitle = { description = \"Title\" }\nauthor = { description = \"Author\", default = \"Anonymous\" }\nstatus = { description = \"Status\", default = \"draft\" }\n"
             },
-            "glue.typ": {
+            "plate.typ": {
                 "contents": "Title: {{ title }}\nAuthor: {{ author }}\nStatus: {{ status }}"
             }
         }
@@ -49,20 +49,20 @@ This is a test.
     }
     println!();
 
-    // Process through glue - this applies defaults
-    let glue_output = workflow
-        .process_glue(&parsed)
-        .expect("Failed to process glue");
+    // Process through plate - this applies defaults
+    let plate_output = workflow
+        .process_plate(&parsed)
+        .expect("Failed to process plate");
 
-    println!("✓ Glue output (with defaults applied):");
-    println!("{}", glue_output);
+    println!("✓ Plate output (with defaults applied):");
+    println!("{}", plate_output);
     println!();
 
     // Verify defaults were applied
-    if glue_output.contains("Author: Anonymous") {
+    if plate_output.contains("Author: Anonymous") {
         println!("✓ SUCCESS: Default author was applied!");
     }
-    if glue_output.contains("Status: draft") {
+    if plate_output.contains("Status: draft") {
         println!("✓ SUCCESS: Default status was applied!");
     }
 }

@@ -13,12 +13,12 @@
 //! pub trait Backend: Send + Sync {
 //!     fn id(&self) -> &'static str;
 //!     fn supported_formats(&self) -> &'static [OutputFormat];
-//!     fn glue_extension_types(&self) -> &'static [&'static str];
-//!     fn allow_auto_glue(&self) -> bool;
-//!     fn register_filters(&self, glue: &mut Glue);
+//!     fn plate_extension_types(&self) -> &'static [&'static str];
+//!     fn allow_auto_plate(&self) -> bool;
+//!     fn register_filters(&self, plate: &mut Plate);
 //!     fn compile(
 //!         &self,
-//!         glue_content: &str,
+//!         plated: &str,
 //!         quill: &Quill,
 //!         opts: &RenderOptions,
 //!     ) -> Result<RenderResult, RenderError>;
@@ -35,33 +35,33 @@
 //! #### `supported_formats()`
 //! Return a slice of [`OutputFormat`] variants this backend supports.
 //!
-//! #### `glue_extension_types()`
-//! Return the file extensions for glue files (e.g., &[".typ"], &[".tex"]).
-//! Return an empty array to disable custom glue files.
+//! #### `plate_extension_types()`
+//! Return the file extensions for plate files (e.g., &[".typ"], &[".tex"]).
+//! Return an empty array to disable custom plate files.
 //!
-//! #### `allow_auto_glue()`
-//! Return whether automatic JSON glue generation is allowed.
+//! #### `allow_auto_plate()`
+//! Return whether automatic JSON plate generation is allowed.
 //!
 //! #### `register_filters()`
-//! Register backend-specific filters with the glue environment.
+//! Register backend-specific filters with the plate environment.
 //!
 //! ```no_run
-//! # use quillmark_core::{Glue, templating::filter_api::{State, Value, Kwargs, Error}};
+//! # use quillmark_core::{Plate, templating::filter_api::{State, Value, Kwargs, Error}};
 //! # fn string_filter(_: &State, v: Value, _: Kwargs) -> Result<Value, Error> { Ok(v) }
 //! # fn content_filter(_: &State, v: Value, _: Kwargs) -> Result<Value, Error> { Ok(v) }
 //! # fn lines_filter(_: &State, v: Value, _: Kwargs) -> Result<Value, Error> { Ok(v) }
 //! # struct MyBackend;
 //! # impl MyBackend {
-//! fn register_filters(&self, glue: &mut Glue) {
-//!     glue.register_filter("String", string_filter);
-//!     glue.register_filter("Content", content_filter);
-//!     glue.register_filter("Lines", lines_filter);
+//! fn register_filters(&self, plate: &mut Plate) {
+//!     plate.register_filter("String", string_filter);
+//!     plate.register_filter("Content", content_filter);
+//!     plate.register_filter("Lines", lines_filter);
 //! }
 //! # }
 //! ```
 //!
 //! #### `compile()`
-//! Compile glue content into final artifacts.
+//! Compile plated content into final artifacts.
 //!
 //! ```no_run
 //! # use quillmark_core::{Quill, RenderOptions, Artifact, OutputFormat, RenderError, RenderResult};
@@ -69,13 +69,13 @@
 //! # impl MyBackend {
 //! fn compile(
 //!     &self,
-//!     glue_content: &str,
+//!     plated: &str,
 //!     quill: &Quill,
 //!     opts: &RenderOptions,
 //! ) -> Result<RenderResult, RenderError> {
 //!     // 1. Create compilation environment
 //!     // 2. Load assets from quill
-//!     // 3. Compile glue content
+//!     // 3. Compile plated content
 //!     // 4. Handle errors and map to Diagnostics
 //!     // 5. Return RenderResult with artifacts and output format
 //!     # let compiled_pdf = vec![];
@@ -101,7 +101,7 @@
 //! All backend implementations must be thread-safe.
 
 use crate::error::RenderError;
-use crate::templating::Glue;
+use crate::templating::Plate;
 use crate::{OutputFormat, Quill, RenderOptions};
 
 /// Backend trait for rendering different output formats
@@ -112,20 +112,20 @@ pub trait Backend: Send + Sync {
     /// Get supported output formats
     fn supported_formats(&self) -> &'static [OutputFormat];
 
-    /// Get the glue file extensions accepted by this backend (e.g., &[".typ", ".tex"])
-    /// Returns an empty array to disable custom glue files.
-    fn glue_extension_types(&self) -> &'static [&'static str];
+    /// Get the plate file extensions accepted by this backend (e.g., &[".typ", ".tex"])
+    /// Returns an empty array to disable custom plate files.
+    fn plate_extension_types(&self) -> &'static [&'static str];
 
-    /// Whether this backend allows automatic JSON glue generation
-    fn allow_auto_glue(&self) -> bool;
+    /// Whether this backend allows automatic JSON plate generation
+    fn allow_auto_plate(&self) -> bool;
 
-    /// Register backend-specific filters with the glue environment
-    fn register_filters(&self, glue: &mut Glue);
+    /// Register backend-specific filters with the plate environment
+    fn register_filters(&self, plate: &mut Plate);
 
-    /// Compile the glue content into final artifacts
+    /// Compile the plated content into final artifacts
     fn compile(
         &self,
-        glue_content: &str,
+        plated: &str,
         quill: &Quill,
         opts: &RenderOptions,
     ) -> Result<crate::RenderResult, RenderError>;
@@ -145,9 +145,9 @@ pub trait Backend: Send + Sync {
     /// # impl Backend for MyBackend {
     /// #     fn id(&self) -> &'static str { "my" }
     /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
-    /// #     fn glue_extension_types(&self) -> &'static [&'static str] { &[] }
-    /// #     fn allow_auto_glue(&self) -> bool { true }
-    /// #     fn register_filters(&self, _: &mut quillmark_core::Glue) {}
+    /// #     fn plate_extension_types(&self) -> &'static [&'static str] { &[] }
+    /// #     fn allow_auto_plate(&self) -> bool { true }
+    /// #     fn register_filters(&self, _: &mut quillmark_core::Plate) {}
     /// #     fn compile(&self, _: &str, _: &Quill, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> { todo!() }
     /// fn default_quill(&self) -> Option<Quill> {
     ///     // Build embedded default Quill from files

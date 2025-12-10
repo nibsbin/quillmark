@@ -45,7 +45,7 @@ fn test_default_values_applied_to_missing_fields() {
         r#"[Quill]
 name = "test-quill"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 description = "Test quill with defaults"
 
 [fields]
@@ -56,12 +56,12 @@ version = { description = "Version number", default = 1 }
     )
     .expect("Failed to write Quill.toml");
 
-    // Create glue template that uses default fields
+    // Create plate template that uses default fields
     fs::write(
-        quill_path.join("glue.typ"),
+        quill_path.join("plate.typ"),
         "Title: {{ title }}\nStatus: {{ status }}\nVersion: {{ version }}",
     )
-    .expect("Failed to write glue.typ");
+    .expect("Failed to write plate.typ");
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
@@ -83,15 +83,15 @@ title: My Document
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
-    // Process through glue - defaults should be applied
-    let glue_output = workflow
-        .process_glue(&parsed)
-        .expect("Failed to process glue");
+    // Process through plate - defaults should be applied
+    let plate_output = workflow
+        .process_plate(&parsed)
+        .expect("Failed to process plate");
 
     // Verify defaults were applied in the output
-    assert!(glue_output.contains("Title: My Document"));
-    assert!(glue_output.contains("Status: draft"));
-    assert!(glue_output.contains("Version: 1"));
+    assert!(plate_output.contains("Title: My Document"));
+    assert!(plate_output.contains("Status: draft"));
+    assert!(plate_output.contains("Version: 1"));
 }
 
 #[test]
@@ -106,7 +106,7 @@ fn test_default_values_not_overriding_existing_fields() {
         r#"[Quill]
 name = "test-quill"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 description = "Test quill with defaults"
 
 [fields]
@@ -117,10 +117,10 @@ status = { description = "Document status", default = "draft" }
     .expect("Failed to write Quill.toml");
 
     fs::write(
-        quill_path.join("glue.typ"),
+        quill_path.join("plate.typ"),
         "Title: {{ title }}\nStatus: {{ status }}",
     )
-    .expect("Failed to write glue.typ");
+    .expect("Failed to write plate.typ");
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
@@ -142,14 +142,14 @@ status: published
 "#;
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-    let glue_output = workflow
-        .process_glue(&parsed)
-        .expect("Failed to process glue");
+    let plate_output = workflow
+        .process_plate(&parsed)
+        .expect("Failed to process plate");
 
     // Verify existing value was preserved, not replaced with default
-    assert!(glue_output.contains("Title: My Document"));
-    assert!(glue_output.contains("Status: published"));
-    assert!(!glue_output.contains("Status: draft"));
+    assert!(plate_output.contains("Title: My Document"));
+    assert!(plate_output.contains("Status: published"));
+    assert!(!plate_output.contains("Status: draft"));
 }
 
 #[test]
@@ -165,7 +165,7 @@ fn test_validation_with_defaults() {
         r#"[Quill]
 name = "test-quill"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 description = "Test quill with defaults"
 
 [fields]
@@ -176,10 +176,10 @@ status = { description = "Document status", default = "draft" }
     .expect("Failed to write Quill.toml");
 
     fs::write(
-        quill_path.join("glue.typ"),
+        quill_path.join("plate.typ"),
         "Title: {{ title }}\nStatus: {{ status }}",
     )
-    .expect("Failed to write glue.typ");
+    .expect("Failed to write plate.typ");
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
@@ -195,13 +195,13 @@ status = { description = "Document status", default = "draft" }
     let markdown = r#"# Content"#;
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-    let glue_output = workflow
-        .process_glue(&parsed)
+    let plate_output = workflow
+        .process_plate(&parsed)
         .expect("Validation should pass with defaults");
 
     // Verify defaults were applied
-    assert!(glue_output.contains("Title: Untitled"));
-    assert!(glue_output.contains("Status: draft"));
+    assert!(plate_output.contains("Title: Untitled"));
+    assert!(plate_output.contains("Status: draft"));
 }
 
 #[test]
@@ -217,7 +217,7 @@ fn test_validation_fails_without_defaults() {
         r#"[Quill]
 name = "test-quill"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 description = "Test quill with required field"
 
 [fields]
@@ -228,10 +228,10 @@ status = { description = "Document status", default = "draft" }
     .expect("Failed to write Quill.toml");
 
     fs::write(
-        quill_path.join("glue.typ"),
+        quill_path.join("plate.typ"),
         "Title: {{ title }}\nStatus: {{ status }}",
     )
-    .expect("Failed to write glue.typ");
+    .expect("Failed to write plate.typ");
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
@@ -252,7 +252,7 @@ status: published
 "#;
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-    let result = workflow.process_glue(&parsed);
+    let result = workflow.process_plate(&parsed);
 
     // Should fail validation because title is required (no default)
     assert!(result.is_err());

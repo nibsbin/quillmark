@@ -1,19 +1,19 @@
-//! # Auto Glue Tests
+//! # Auto Plate Tests
 //!
-//! Tests for automatic JSON glue generation for backends that support it.
+//! Tests for automatic JSON plate generation for backends that support it.
 //!
 //! ## Test Coverage
 //!
 //! This test suite validates:
-//! - **Auto glue generation** - Quills without glue_file use automatic JSON glue
-//! - **Backend support** - Backends that set `allow_auto_glue() = true`
+//! - **Auto plate generation** - Quills without plate_file use automatic JSON plate
+//! - **Backend support** - Backends that set `allow_auto_plate() = true`
 //! - **Field rendering** - Frontmatter fields rendered as JSON context
-//! - **Template validation** - Auto glue works with backend compilation
+//! - **Template validation** - Auto plate works with backend compilation
 //!
-//! ## Auto Glue Mechanism
+//! ## Auto Plate Mechanism
 //!
-//! When a Quill doesn't specify a `glue_file` in Quill.toml:
-//! 1. Engine checks `backend.allow_auto_glue()`
+//! When a Quill doesn't specify a `plate_file` in Quill.toml:
+//! 1. Engine checks `backend.allow_auto_plate()`
 //! 2. If true, generates JSON representation of parsed document
 //! 3. Backend receives JSON for compilation
 //! 4. Backend interprets JSON according to its needs
@@ -33,27 +33,27 @@ use std::fs;
 use tempfile::TempDir;
 
 #[test]
-fn test_auto_glue_without_glue_file() {
-    // Create a quill without a glue file
+fn test_auto_plate_without_plate_file() {
+    // Create a quill without a plate file
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let quill_path = temp_dir.path().join("auto-quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
+        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto plate\"\n",
     )
     .expect("Failed to write Quill.toml");
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 
-    // Verify glue_file is None
+    // Verify plate_file is None
     assert_eq!(
-        quill.metadata.get("glue_file").and_then(|v| v.as_str()),
+        quill.metadata.get("plate_file").and_then(|v| v.as_str()),
         None
     );
-    assert_eq!(quill.glue.clone().unwrap_or_default(), "");
+    assert_eq!(quill.plate.clone().unwrap_or_default(), "");
 
     engine
         .register_quill(quill)
@@ -67,15 +67,15 @@ fn test_auto_glue_without_glue_file() {
 }
 
 #[test]
-fn test_auto_glue_output() {
-    // Create a quill without a glue file
+fn test_auto_plate_output() {
+    // Create a quill without a plate file
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let quill_path = temp_dir.path().join("auto-quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
+        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto plate\"\n",
     )
     .expect("Failed to write Quill.toml");
 
@@ -105,13 +105,13 @@ This is a test document.
         .workflow("auto-quill")
         .expect("Failed to load workflow");
 
-    let glue_output = workflow
-        .process_glue(&parsed)
-        .expect("Failed to process glue");
+    let plated_output = workflow
+        .process_plate(&parsed)
+        .expect("Failed to process plate");
 
     // Parse the output as JSON
     let json: serde_json::Value =
-        serde_json::from_str(&glue_output).expect("Output is not valid JSON");
+        serde_json::from_str(&plated_output).expect("Output is not valid JSON");
 
     // Verify the structure
     assert_eq!(json["title"], "Test Document");
@@ -123,14 +123,14 @@ This is a test document.
 }
 
 #[test]
-fn test_auto_glue_with_nested_data() {
+fn test_auto_plate_with_nested_data() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let quill_path = temp_dir.path().join("auto-quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto glue\"\n",
+        "[Quill]\nname = \"auto-quill\"\nbackend = \"typst\"\ndescription = \"Test auto plate\"\n",
     )
     .expect("Failed to write Quill.toml");
 
@@ -158,13 +158,13 @@ Content here.
         .workflow("auto-quill")
         .expect("Failed to load workflow");
 
-    let glue_output = workflow
-        .process_glue(&parsed)
-        .expect("Failed to process glue");
+    let plated_output = workflow
+        .process_plate(&parsed)
+        .expect("Failed to process plate");
 
     // Parse the output as JSON
     let json: serde_json::Value =
-        serde_json::from_str(&glue_output).expect("Output is not valid JSON");
+        serde_json::from_str(&plated_output).expect("Output is not valid JSON");
 
     // Verify nested structure
     assert_eq!(json["metadata"]["version"], "1.0");

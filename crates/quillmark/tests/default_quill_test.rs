@@ -192,15 +192,15 @@ fn test_second_backend_with_default_quill_does_not_override() {
             &[OutputFormat::Txt]
         }
 
-        fn glue_extension_types(&self) -> &'static [&'static str] {
+        fn plate_extension_types(&self) -> &'static [&'static str] {
             &[".txt"]
         }
 
-        fn allow_auto_glue(&self) -> bool {
+        fn allow_auto_plate(&self) -> bool {
             true
         }
 
-        fn register_filters(&self, _: &mut quillmark_core::Glue) {}
+        fn register_filters(&self, _: &mut quillmark_core::Plate) {}
 
         fn compile(
             &self,

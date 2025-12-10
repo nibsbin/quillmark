@@ -46,7 +46,7 @@ mod world;
 /// Embedded default Quill files
 mod embedded {
     pub const QUILL_TOML: &str = include_str!("../default_quill/Quill.toml");
-    pub const GLUE_TYP: &str = include_str!("../default_quill/glue.typ");
+    pub const PLATE_TYP: &str = include_str!("../default_quill/plate.typ");
     pub const EXAMPLE_MD: &str = include_str!("../default_quill/example.md");
 }
 
@@ -61,7 +61,7 @@ use filters::{
     asset_filter, content_filter, date_filter, dict_filter, lines_filter, string_filter,
 };
 use quillmark_core::{
-    Artifact, Backend, Diagnostic, Glue, OutputFormat, Quill, RenderError, RenderOptions,
+    Artifact, Backend, Diagnostic, OutputFormat, Plate, Quill, RenderError, RenderOptions,
     RenderResult, Severity,
 };
 use std::collections::HashMap;
@@ -78,28 +78,28 @@ impl Backend for TypstBackend {
         &[OutputFormat::Pdf, OutputFormat::Svg]
     }
 
-    fn glue_extension_types(&self) -> &'static [&'static str] {
+    fn plate_extension_types(&self) -> &'static [&'static str] {
         &["typ"]
     }
 
-    fn allow_auto_glue(&self) -> bool {
+    fn allow_auto_plate(&self) -> bool {
         true
     }
 
-    fn register_filters(&self, glue: &mut Glue) {
+    fn register_filters(&self, plate: &mut Plate) {
         // Register basic filters (simplified for now)
-        glue.register_filter("String", string_filter);
-        glue.register_filter("Lines", lines_filter);
-        glue.register_filter("Date", date_filter);
-        glue.register_filter("Dict", dict_filter);
-        glue.register_filter("Content", content_filter);
-        glue.register_filter("Asset", asset_filter);
-        glue.register_filter("Json", filters::json_filter);
+        plate.register_filter("String", string_filter);
+        plate.register_filter("Lines", lines_filter);
+        plate.register_filter("Date", date_filter);
+        plate.register_filter("Dict", dict_filter);
+        plate.register_filter("Content", content_filter);
+        plate.register_filter("Asset", asset_filter);
+        plate.register_filter("Json", filters::json_filter);
     }
 
     fn compile(
         &self,
-        glued_content: &str,
+        plated: &str,
         quill: &Quill,
         opts: &RenderOptions,
     ) -> Result<RenderResult, RenderError> {
@@ -119,7 +119,7 @@ impl Backend for TypstBackend {
 
         match format {
             OutputFormat::Pdf => {
-                let bytes = compile::compile_to_pdf(quill, glued_content)?;
+                let bytes = compile::compile_to_pdf(quill, plated)?;
                 let artifacts = vec![Artifact {
                     bytes,
                     output_format: OutputFormat::Pdf,
@@ -127,7 +127,7 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
             }
             OutputFormat::Svg => {
-                let svg_pages = compile::compile_to_svg(quill, glued_content)?;
+                let svg_pages = compile::compile_to_svg(quill, plated)?;
                 let artifacts = svg_pages
                     .into_iter()
                     .map(|bytes| Artifact {
@@ -160,9 +160,9 @@ impl Backend for TypstBackend {
             },
         );
         files.insert(
-            "glue.typ".to_string(),
+            "plate.typ".to_string(),
             FileTreeNode::File {
-                contents: embedded::GLUE_TYP.as_bytes().to_vec(),
+                contents: embedded::PLATE_TYP.as_bytes().to_vec(),
             },
         );
         files.insert(
@@ -193,7 +193,7 @@ mod tests {
     fn test_backend_info() {
         let backend = TypstBackend::default();
         assert_eq!(backend.id(), "typst");
-        assert!(backend.allow_auto_glue());
+        assert!(backend.allow_auto_plate());
         assert!(backend.supported_formats().contains(&OutputFormat::Pdf));
         assert!(backend.supported_formats().contains(&OutputFormat::Svg));
     }

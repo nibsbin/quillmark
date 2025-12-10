@@ -50,9 +50,9 @@ impl Quillmark {
     /// # impl Backend for CustomBackend {
     /// #     fn id(&self) -> &'static str { "custom" }
     /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
-    /// #     fn glue_extension_types(&self) -> &'static [&'static str] { &[".custom"] }
-    /// #     fn allow_auto_glue(&self) -> bool { true }
-    /// #     fn register_filters(&self, _: &mut quillmark_core::Glue) {}
+    /// #     fn plate_extension_types(&self) -> &'static [&'static str] { &[".custom"] }
+    /// #     fn allow_auto_plate(&self) -> bool { true }
+    /// #     fn register_filters(&self, _: &mut quillmark_core::Plate) {}
     /// #     fn compile(&self, _: &str, _: &quillmark_core::Quill, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
     /// #         Ok(quillmark_core::RenderResult::new(vec![], quillmark_core::OutputFormat::Txt))
     /// #     }
@@ -88,8 +88,8 @@ impl Quillmark {
     ///
     /// Validates the quill configuration against the registered backend, including:
     /// - Backend exists and is registered
-    /// - Glue file extension matches backend requirements
-    /// - Auto-glue is allowed if no glue file is specified
+    /// - Plate file extension matches backend requirements
+    /// - Auto-plate is allowed if no plate file is specified
     /// - Quill name is unique
     pub fn register_quill(&mut self, quill: Quill) -> Result<(), RenderError> {
         let name = quill.name.clone();
@@ -126,45 +126,45 @@ impl Quillmark {
                 )),
             })?;
 
-        // Validate glue_file extension or auto_glue
-        if let Some(glue_file) = &quill.metadata.get("glue_file").and_then(|v| v.as_str()) {
-            let extension = std::path::Path::new(glue_file)
+        // Validate plate_file extension or auto_plate
+        if let Some(plate_file) = &quill.metadata.get("plate_file").and_then(|v| v.as_str()) {
+            let extension = std::path::Path::new(plate_file)
                 .extension()
                 .and_then(|e| e.to_str())
                 .map(|e| format!(".{}", e))
                 .unwrap_or_default();
 
-            if !backend.glue_extension_types().contains(&extension.as_str()) {
+            if !backend.plate_extension_types().contains(&extension.as_str()) {
                 return Err(RenderError::QuillConfig {
                     diag: Diagnostic::new(
                         Severity::Error,
                         format!(
-                            "Glue file '{}' has extension '{}' which is not supported by backend '{}'",
-                            glue_file, extension, backend_id
+                            "Plate file '{}' has extension '{}' which is not supported by backend '{}'",
+                            plate_file, extension, backend_id
                         ),
                     )
-                    .with_code("quill::glue_extension_mismatch".to_string())
+                    .with_code("quill::plate_extension_mismatch".to_string())
                     .with_hint(format!(
                         "Supported extensions for '{}' backend: {}",
                         backend_id,
-                        backend.glue_extension_types().join(", ")
+                        backend.plate_extension_types().join(", ")
                     )),
                 });
             }
         } else {
-            if !backend.allow_auto_glue() {
+            if !backend.allow_auto_plate() {
                 return Err(RenderError::QuillConfig {
                     diag: Diagnostic::new(
                         Severity::Error,
                         format!(
-                            "Backend '{}' does not support automatic glue generation, but quill '{}' does not specify a glue file",
+                            "Backend '{}' does not support automatic plate generation, but quill '{}' does not specify a plate file",
                             backend_id, name
                         ),
                     )
-                    .with_code("quill::auto_glue_not_allowed".to_string())
+                    .with_code("quill::auto_plate_not_allowed".to_string())
                     .with_hint(format!(
-                        "Add a glue file with one of these extensions: {}",
-                        backend.glue_extension_types().join(", ")
+                        "Add a plate file with one of these extensions: {}",
+                        backend.plate_extension_types().join(", ")
                     )),
                 });
             }

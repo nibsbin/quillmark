@@ -55,15 +55,15 @@ The default Quill supports:
     println!("Backend: {}", workflow.backend_id());
     println!("Supported formats: {:?}\n", workflow.supported_formats());
 
-    // Process glue output
-    let glue_output = workflow.process_glue(&parsed)?;
-    write_example_output("default_quill_glue.json", glue_output.as_bytes())?;
+    // Process plate output
+    let plate_output = workflow.process_plate(&parsed)?;
+    write_example_output("default_quill_plate.json", plate_output.as_bytes())?;
 
     let output_dir = PathBuf::from("crates/fixtures/output/");
 
     println!(
-        "Wrote glue output to: {}",
-        output_dir.join("default_quill_glue.json").display()
+        "Wrote plate output to: {}",
+        output_dir.join("default_quill_plate.json").display()
     );
 
     // Render to PDF

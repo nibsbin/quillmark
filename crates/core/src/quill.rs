@@ -440,8 +440,8 @@ pub struct Quill {
     pub name: String,
     /// Backend identifier (e.g., "typst")
     pub backend: String,
-    /// Glue template content (optional)
-    pub glue: Option<String>,
+    /// Plate template content (optional)
+    pub plate: Option<String>,
     /// Markdown template content (optional)
     pub example: Option<String>,
     /// Field JSON schema (single source of truth for schema and defaults)
@@ -469,8 +469,8 @@ pub struct QuillConfig {
     pub author: Option<String>,
     /// Example markdown file
     pub example_file: Option<String>,
-    /// Glue file
-    pub glue_file: Option<String>,
+    /// Plate file
+    pub plate_file: Option<String>,
     /// Field schemas
     pub fields: HashMap<String, FieldSchema>,
     /// Additional metadata from [Quill] section (excluding standard fields)
@@ -540,8 +540,8 @@ impl QuillConfig {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        let glue_file = quill_section
-            .get("glue_file")
+        let plate_file = quill_section
+            .get("plate_file")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
@@ -556,7 +556,7 @@ impl QuillConfig {
                     && key != "version"
                     && key != "author"
                     && key != "example_file"
-                    && key != "glue_file"
+                    && key != "plate_file"
                 {
                     match QuillValue::from_toml(value) {
                         Ok(quill_value) => {
@@ -646,7 +646,7 @@ impl QuillConfig {
             version,
             author,
             example_file,
-            glue_file,
+            plate_file,
             fields,
             metadata,
             typst_config,
@@ -706,7 +706,7 @@ impl Quill {
     /// Returns an error if:
     /// - Quill.toml is not found in the file tree
     /// - Quill.toml is not valid UTF-8 or TOML
-    /// - The glue file specified in Quill.toml is not found or not valid UTF-8
+    /// - The plate file specified in Quill.toml is not found or not valid UTF-8
     /// - Validation fails
     pub fn from_tree(
         root: FileTreeNode,
@@ -740,7 +740,7 @@ impl Quill {
     /// # Errors
     ///
     /// Returns an error if:
-    /// - The glue file specified in config is not found or not valid UTF-8
+    /// - The plate file specified in config is not found or not valid UTF-8
     /// - The example file specified in config is not found or not valid UTF-8
     /// - Schema generation fails
     fn from_config(
@@ -779,17 +779,17 @@ impl Quill {
         let schema = build_schema_from_fields(&config.fields)
             .map_err(|e| format!("Failed to build JSON schema from field schemas: {}", e))?;
 
-        // Read the glue content from glue file (if specified)
-        let glue_content: Option<String> = if let Some(ref glue_file_name) = config.glue_file {
-            let glue_bytes = root
-                .get_file(glue_file_name)
-                .ok_or_else(|| format!("Glue file '{}' not found in file tree", glue_file_name))?;
+        // Read the plate content from plate file (if specified)
+        let plate_content: Option<String> = if let Some(ref plate_file_name) = config.plate_file {
+            let plate_bytes = root
+                .get_file(plate_file_name)
+                .ok_or_else(|| format!("Plate file '{}' not found in file tree", plate_file_name))?;
 
-            let content = String::from_utf8(glue_bytes.to_vec())
-                .map_err(|e| format!("Glue file '{}' is not valid UTF-8: {}", glue_file_name, e))?;
+            let content = String::from_utf8(plate_bytes.to_vec())
+                .map_err(|e| format!("Plate file '{}' is not valid UTF-8: {}", plate_file_name, e))?;
             Some(content)
         } else {
-            // No glue file specified
+            // No plate file specified
             None
         };
 
@@ -818,11 +818,11 @@ impl Quill {
             metadata,
             name: config.name,
             backend: config.backend,
-            glue: glue_content,
+            plate: plate_content,
             example: example_content,
             schema,
             defaults,
-            examples,
+            examples: examples,
             files: root,
         };
 
@@ -1250,8 +1250,8 @@ author = "Test Author"
         assert!(quill.metadata.contains_key("author"));
         assert!(!quill.metadata.contains_key("version")); // version should be excluded
 
-        // Test that glue template content is loaded correctly
-        assert!(quill.glue.unwrap().contains("Custom Template"));
+        // Test that plate template content is loaded correctly
+        assert!(quill.plate.unwrap().contains("Custom Template"));
     }
 
     #[test]
@@ -1263,7 +1263,7 @@ author = "Test Author"
 [Quill]
 name = "test-quill"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 description = "Test quill for packages"
 
 [typst]
@@ -1271,7 +1271,7 @@ packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
 "#;
 
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
-        fs::write(quill_dir.join("glue.typ"), "test").unwrap();
+        fs::write(quill_dir.join("plate.typ"), "test").unwrap();
 
         let quill = Quill::from_path(quill_dir).unwrap();
         let packages = quill.typst_packages();
@@ -1290,12 +1290,12 @@ packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
         let toml_content = r#"[Quill]
 name = "test-with-template"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 example_file = "example.md"
 description = "Test quill with template"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
-        fs::write(quill_dir.join("glue.typ"), "glue content").unwrap();
+        fs::write(quill_dir.join("plate.typ"), "plate content").unwrap();
         fs::write(
             quill_dir.join("example.md"),
             "---\ntitle: Test\n---\n\nThis is a test template.",
@@ -1311,8 +1311,8 @@ description = "Test quill with template"
         assert!(example.contains("title: Test"));
         assert!(example.contains("This is a test template"));
 
-        // Test that glue template is still loaded
-        assert_eq!(quill.glue.unwrap(), "glue content");
+        // Test that plate template is still loaded
+        assert_eq!(quill.plate.unwrap(), "plate content");
     }
 
     #[test]
@@ -1324,11 +1324,11 @@ description = "Test quill with template"
         let toml_content = r#"[Quill]
 name = "test-without-template"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 description = "Test quill without template"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
-        fs::write(quill_dir.join("glue.typ"), "glue content").unwrap();
+        fs::write(quill_dir.join("plate.typ"), "plate content").unwrap();
 
         // Load quill
         let quill = Quill::from_path(quill_dir).unwrap();
@@ -1336,8 +1336,8 @@ description = "Test quill without template"
         // Test that example fields are None
         assert_eq!(quill.example, None);
 
-        // Test that glue template is still loaded
-        assert_eq!(quill.glue.unwrap(), "glue content");
+        // Test that plate template is still loaded
+        assert_eq!(quill.plate.unwrap(), "plate content");
     }
 
     #[test]
@@ -1349,7 +1349,7 @@ description = "Test quill without template"
         let quill_toml = r#"[Quill]
 name = "test-from-tree"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 description = "A test quill from tree"
 "#;
         root_files.insert(
@@ -1359,12 +1359,12 @@ description = "A test quill from tree"
             },
         );
 
-        // Add glue file
-        let glue_content = "= Test Template\n\nThis is a test.";
+        // Add plate file
+        let plate_content = "= Test Template\n\nThis is a test.";
         root_files.insert(
-            "glue.typ".to_string(),
+            "plate.typ".to_string(),
             FileTreeNode::File {
-                contents: glue_content.as_bytes().to_vec(),
+                contents: plate_content.as_bytes().to_vec(),
             },
         );
 
@@ -1375,7 +1375,7 @@ description = "A test quill from tree"
 
         // Validate the quill
         assert_eq!(quill.name, "test-from-tree");
-        assert_eq!(quill.glue.unwrap(), glue_content);
+        assert_eq!(quill.plate.unwrap(), plate_content);
         assert!(quill.metadata.contains_key("backend"));
         assert!(quill.metadata.contains_key("description"));
     }
@@ -1388,7 +1388,7 @@ description = "A test quill from tree"
         let quill_toml = r#"[Quill]
 name = "test-tree-template"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 example_file = "template.md"
 description = "Test tree with template"
 "#;
@@ -1399,11 +1399,11 @@ description = "Test tree with template"
             },
         );
 
-        // Add glue file
+        // Add plate file
         root_files.insert(
-            "glue.typ".to_string(),
+            "plate.typ".to_string(),
             FileTreeNode::File {
-                contents: b"glue content".to_vec(),
+                contents: b"plate content".to_vec(),
             },
         );
 
@@ -1434,10 +1434,10 @@ description = "Test tree with template"
             },
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill from JSON\"\n"
+                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill from JSON\"\n"
                 },
-                "glue.typ": {
-                    "contents": "= Test Glue\n\nThis is test content."
+                "plate.typ": {
+                    "contents": "= Test Plate\n\nThis is test content."
                 }
             }
         }"#;
@@ -1447,7 +1447,7 @@ description = "Test tree with template"
 
         // Validate the quill
         assert_eq!(quill.name, "test-from-json");
-        assert!(quill.glue.unwrap().contains("Test Glue"));
+        assert!(quill.plate.unwrap().contains("Test Plate"));
         assert!(quill.metadata.contains_key("backend"));
     }
 
@@ -1457,10 +1457,10 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": [91, 81, 117, 105, 108, 108, 93, 10, 110, 97, 109, 101, 32, 61, 32, 34, 116, 101, 115, 116, 34, 10, 98, 97, 99, 107, 101, 110, 100, 32, 61, 32, 34, 116, 121, 112, 115, 116, 34, 10, 103, 108, 117, 101, 95, 102, 105, 108, 101, 32, 61, 32, 34, 103, 108, 117, 101, 46, 116, 121, 112, 34, 10, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 32, 61, 32, 34, 84, 101, 115, 116, 32, 113, 117, 105, 108, 108, 34, 10]
+                    "contents": "[Quill]\nname = \"test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n"
                 },
-                "glue.typ": {
-                    "contents": "test glue"
+                "plate.typ": {
+                    "contents": "test plate"
                 }
             }
         }"#;
@@ -1470,7 +1470,7 @@ description = "Test tree with template"
 
         // Validate the quill was created
         assert_eq!(quill.name, "test");
-        assert_eq!(quill.glue.unwrap(), "test glue");
+        assert_eq!(quill.plate.unwrap(), "test plate");
     }
 
     #[test]
@@ -1494,10 +1494,10 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test tree JSON\"\n"
+                    "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test tree JSON\"\n"
                 },
-                "glue.typ": {
-                    "contents": "= Test Glue\n\nTree structure content."
+                "plate.typ": {
+                    "contents": "= Test Plate\n\nTree structure content."
                 }
             }
         }"#;
@@ -1505,7 +1505,7 @@ description = "Test tree with template"
         let quill = Quill::from_json(json_str).unwrap();
 
         assert_eq!(quill.name, "test-tree-json");
-        assert!(quill.glue.unwrap().contains("Tree structure content"));
+        assert!(quill.plate.unwrap().contains("Tree structure content"));
         assert!(quill.metadata.contains_key("backend"));
     }
 
@@ -1515,10 +1515,10 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Nested test\"\n"
+                    "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Nested test\"\n"
                 },
-                "glue.typ": {
-                    "contents": "glue"
+                "plate.typ": {
+                    "contents": "plate"
                 },
                 "src": {
                     "main.rs": {
@@ -1551,15 +1551,15 @@ description = "Test tree with template"
             "Quill.toml".to_string(),
             FileTreeNode::File {
                 contents:
-                    b"[Quill]\nname = \"direct-tree\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Direct tree test\"\n"
+                    b"[Quill]\nname = \"direct-tree\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Direct tree test\"\n"
                         .to_vec(),
             },
         );
 
         root_files.insert(
-            "glue.typ".to_string(),
+            "plate.typ".to_string(),
             FileTreeNode::File {
-                contents: b"glue content".to_vec(),
+                contents: b"plate content".to_vec(),
             },
         );
 
@@ -1583,7 +1583,7 @@ description = "Test tree with template"
 
         assert_eq!(quill.name, "direct-tree");
         assert!(quill.file_exists("src/main.rs"));
-        assert!(quill.file_exists("glue.typ"));
+        assert!(quill.file_exists("plate.typ"));
     }
 
     #[test]
@@ -1595,10 +1595,10 @@ description = "Test tree with template"
             },
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"toml-name\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"TOML name test\"\n"
+                    "contents": "[Quill]\nname = \"toml-name\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"TOML name test\"\n"
                 },
-                "glue.typ": {
-                    "contents": "= glue"
+                "plate.typ": {
+                    "contents": "= plate"
                 }
             }
         }"#;
@@ -1615,10 +1615,10 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"empty-dir-test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Empty directory test\"\n"
+                    "contents": "[Quill]\nname = \"empty-dir-test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Empty directory test\"\n"
                 },
-                "glue.typ": {
-                    "contents": "glue"
+                "plate.typ": {
+                    "contents": "plate"
                 },
                 "empty_dir": {}
             }
@@ -1638,16 +1638,16 @@ description = "Test tree with template"
         root_files.insert(
             "Quill.toml".to_string(),
             FileTreeNode::File {
-                contents: b"[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"\n"
+                contents: b"[Quill]\nname = \"test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n"
                     .to_vec(),
             },
         );
 
-        // Add glue file
+        // Add plate file
         root_files.insert(
-            "glue.typ".to_string(),
+            "plate.typ".to_string(),
             FileTreeNode::File {
-                contents: b"glue content".to_vec(),
+                contents: b"plate content".to_vec(),
             },
         );
 
@@ -1702,19 +1702,19 @@ description = "Test tree with template"
         assert!(quill.dir_exists("assets/fonts"));
         assert!(quill.dir_exists("empty"));
         assert!(!quill.dir_exists("nonexistent"));
-        assert!(!quill.dir_exists("glue.typ")); // file, not directory
+        assert!(!quill.dir_exists("plate.typ")); // file, not directory
 
         // Test file_exists
-        assert!(quill.file_exists("glue.typ"));
+        assert!(quill.file_exists("plate.typ"));
         assert!(quill.file_exists("assets/logo.png"));
         assert!(quill.file_exists("assets/fonts/font.ttf"));
         assert!(!quill.file_exists("assets")); // directory, not file
 
         // Test list_files
         let root_files_list = quill.list_files("");
-        assert_eq!(root_files_list.len(), 2); // Quill.toml and glue.typ
+        assert_eq!(root_files_list.len(), 2); // Quill.toml and plate.typ
         assert!(root_files_list.contains(&"Quill.toml".to_string()));
-        assert!(root_files_list.contains(&"glue.typ".to_string()));
+        assert!(root_files_list.contains(&"plate.typ".to_string()));
 
         let assets_files_list = quill.list_files("assets");
         assert_eq!(assets_files_list.len(), 2); // logo.png and icon.svg
@@ -1743,7 +1743,7 @@ description = "Test tree with template"
         let quill_toml = r#"[Quill]
 name = "taro"
 backend = "typst"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 example_file = "taro.md"
 description = "Test template for field schemas"
 
@@ -1759,12 +1759,12 @@ title = {description = "title of document" }
             },
         );
 
-        // Add glue file
-        let glue_content = "= Test Template\n\nThis is a test.";
+        // Add plate file
+        let plate_content = "= Test Template\n\nThis is a test.";
         root_files.insert(
-            "glue.typ".to_string(),
+            "plate.typ".to_string(),
             FileTreeNode::File {
-                contents: glue_content.as_bytes().to_vec(),
+                contents: plate_content.as_bytes().to_vec(),
             },
         );
 
@@ -1842,15 +1842,15 @@ default: "Default value"
     }
 
     #[test]
-    fn test_quill_without_glue_file() {
-        // Test creating a Quill without specifying a glue file
+    fn test_quill_without_plate_file() {
+        // Test creating a Quill without specifying a plate file
         let mut root_files = HashMap::new();
 
-        // Add Quill.toml without glue field
+        // Add Quill.toml without plate field
         let quill_toml = r#"[Quill]
-name = "test-no-glue"
+name = "test-no-plate"
 backend = "typst"
-description = "Test quill without glue file"
+description = "Test quill without plate file"
 "#;
         root_files.insert(
             "Quill.toml".to_string(),
@@ -1864,9 +1864,9 @@ description = "Test quill without glue file"
         // Create Quill from tree
         let quill = Quill::from_tree(root, None).unwrap();
 
-        // Validate that glue is null (will use auto glue)
-        assert!(quill.glue.clone().is_none());
-        assert_eq!(quill.name, "test-no-glue");
+        // Validate that plate is null (will use auto plate)
+        assert!(quill.plate.clone().is_none());
+        assert_eq!(quill.name, "test-no-plate");
     }
 
     #[test]
@@ -1878,7 +1878,7 @@ backend = "typst"
 description = "Test configuration parsing"
 version = "1.0.0"
 author = "Test Author"
-glue_file = "glue.typ"
+plate_file = "plate.typ"
 example_file = "example.md"
 
 [typst]
@@ -1899,7 +1899,7 @@ author = {description = "Document author"}
         // Verify optional fields
         assert_eq!(config.version, Some("1.0.0".to_string()));
         assert_eq!(config.author, Some("Test Author".to_string()));
-        assert_eq!(config.glue_file, Some("glue.typ".to_string()));
+        assert_eq!(config.plate_file, Some("plate.typ".to_string()));
         assert_eq!(config.example_file, Some("example.md".to_string()));
 
         // Verify typst config

@@ -1,5 +1,5 @@
 use quillmark_core::{
-    preprocess_fields_guillemets, Backend, Diagnostic, Glue, OutputFormat, ParsedDocument, Quill,
+    preprocess_fields_guillemets, Backend, Diagnostic, OutputFormat, ParsedDocument, Plate, Quill,
     RenderError, RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;
@@ -31,28 +31,28 @@ impl Workflow {
         parsed: &ParsedDocument,
         format: Option<OutputFormat>,
     ) -> Result<RenderResult, RenderError> {
-        let glue_output = self.process_glue(parsed)?;
+        let plated_output = self.process_plate(parsed)?;
 
         // Prepare quill with dynamic assets
         let prepared_quill = self.prepare_quill_with_assets();
 
         // Pass prepared quill to backend
-        self.render_processed_with_quill(&glue_output, format, &prepared_quill)
+        self.render_plate_with_quill(&plated_output, format, &prepared_quill)
     }
 
-    /// Render pre-processed glue content, skipping parsing and template composition.
-    pub fn render_processed(
+    /// Render pre-processed plate content, skipping parsing and template composition.
+    pub fn render_plate(
         &self,
         content: &str,
         format: Option<OutputFormat>,
     ) -> Result<RenderResult, RenderError> {
         // Prepare quill with dynamic assets
         let prepared_quill = self.prepare_quill_with_assets();
-        self.render_processed_with_quill(content, format, &prepared_quill)
+        self.render_plate_with_quill(content, format, &prepared_quill)
     }
 
     /// Internal method to render content with a specific quill
-    fn render_processed_with_quill(
+    fn render_plate_with_quill(
         &self,
         content: &str,
         format: Option<OutputFormat>,
@@ -77,8 +77,8 @@ impl Workflow {
         self.backend.compile(content, quill, &render_opts)
     }
 
-    /// Process a parsed document through the glue template without compilation
-    pub fn process_glue(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
+    /// Process a parsed document through the plate template without compilation
+    pub fn process_plate(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
         // Apply defaults from JSON schema
         let defaults = self.quill.extract_defaults();
         let parsed_with_defaults = parsed.with_defaults(&defaults);
@@ -94,19 +94,20 @@ impl Workflow {
         let fields_with_guillemets =
             preprocess_fields_guillemets(parsed_with_defaults.fields().clone());
 
-        // Create appropriate glue based on whether template is provided
-        let mut glue = match &self.quill.glue {
-            Some(s) if !s.is_empty() => Glue::new(s.to_string()),
-            _ => Glue::new_auto(),
+        // Create appropriate plate based on whether template is provided
+        let mut plate = match &self.quill.plate {
+            Some(s) if !s.is_empty() => Plate::new(s.to_string()),
+            _ => Plate::new_auto(),
         };
-        self.backend.register_filters(&mut glue);
-        let glue_output =
-            glue.compose(fields_with_guillemets)
+        self.backend.register_filters(&mut plate);
+        let plated_output =
+            plate
+                .compose(fields_with_guillemets)
                 .map_err(|e| RenderError::TemplateFailed {
                     diag: Diagnostic::new(Severity::Error, e.to_string())
                         .with_code("template::compose".to_string()),
                 })?;
-        Ok(glue_output)
+        Ok(plated_output)
     }
 
     /// Validate a ParsedDocument against the Quill's schema

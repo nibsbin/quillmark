@@ -32,15 +32,15 @@ test: "Hello from Example!"
     // Build workflow
     let workflow = engine.workflow(&quill).expect("Failed to create workflow");
 
-    // Compose glue output (JSON)
-    let glue_output = workflow.process_glue(&parsed)?;
-    write_example_output("usaf_form_8_glue.json", glue_output.as_bytes())?;
+    // Compose plate output (JSON)
+    let plate_output = workflow.process_plate(&parsed)?;
+    write_example_output("usaf_form_8_plate.json", plate_output.as_bytes())?;
 
     let output_dir = PathBuf::from("crates/fixtures/output/");
 
     println!(
-        "Wrote glue output to examples output directory: {}",
-        output_dir.join("usaf_form_8_glue.json").display()
+        "Wrote plate output to examples output directory: {}",
+        output_dir.join("usaf_form_8_plate.json").display()
     );
 
     // Render to PDF

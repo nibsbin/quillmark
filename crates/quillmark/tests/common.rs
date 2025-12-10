@@ -12,7 +12,7 @@
 //! The `demo()` helper simplifies the common pattern of:
 //! 1. Loading a quill from a path
 //! 2. Using the quill's example markdown
-//! 3. Processing through the glue template
+//! 3. Processing through the plate template
 //! 4. Rendering to final output
 //! 5. Writing outputs to example directory
 //!
@@ -31,7 +31,7 @@ use std::error::Error;
 /// It loads the quill and uses its markdown template, then processes and renders it.
 pub fn demo(
     quill_dir: &str,
-    glue_output: &str,
+    plate_output: &str,
     render_output: &str,
     use_resource_path: bool,
 ) -> Result<(), Box<dyn Error>> {
@@ -57,16 +57,16 @@ pub fn demo(
     let engine = quillmark::Quillmark::new();
     let workflow = engine.workflow(&quill).expect("Failed to load workflow");
 
-    // process glue
-    let glued = workflow.process_glue(&parsed)?;
+    // process plate
+    let plated = workflow.process_plate(&parsed)?;
 
     // write outputs
-    let glued_bytes = glued.into_bytes();
-    write_example_output(glue_output, &glued_bytes)?;
+    let plated_bytes = plated.into_bytes();
+    write_example_output(plate_output, &plated_bytes)?;
 
     println!(
-        "Glue outputted to: {}",
-        example_output_dir().join(glue_output).display()
+        "Plate outputted to: {}",
+        example_output_dir().join(plate_output).display()
     );
 
     // render output
@@ -77,8 +77,8 @@ pub fn demo(
 
     println!("------------------------------");
     println!(
-        "Access glue output: {}",
-        example_output_dir().join(glue_output).display()
+        "Access plate output: {}",
+        example_output_dir().join(plate_output).display()
     );
     println!(
         "Access render output: {}",

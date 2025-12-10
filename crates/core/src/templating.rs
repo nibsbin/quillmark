@@ -4,12 +4,12 @@
 //!
 //! ## Overview
 //!
-//! The `templating` module provides the [`Glue`] type for template rendering and a stable
+//! The `templating` module provides the [`Plate`] type for template rendering and a stable
 //! filter API for backends to register custom filters.
 //!
 //! ## Key Types
 //!
-//! - [`Glue`]: Template rendering engine wrapper
+//! - [`Plate`]: Template rendering engine wrapper
 //! - [`TemplateError`]: Template-specific error types
 //! - [`filter_api`]: Stable API for filter registration (no direct minijinja dependency)
 //!
@@ -18,7 +18,7 @@
 //! ### Basic Template Rendering
 //!
 //! ```no_run
-//! use quillmark_core::{Glue, QuillValue};
+//! use quillmark_core::{Plate, QuillValue};
 //! use std::collections::HashMap;
 //!
 //! let template = r#"
@@ -27,25 +27,25 @@
 //! {{ body | Content }}
 //! "#;
 //!
-//! let mut glue = Glue::new(template.to_string());
+//! let mut plate = Plate::new(template.to_string());
 //!
 //! // Register filters (done by backends)
-//! // glue.register_filter("String", string_filter);
-//! // glue.register_filter("Content", content_filter);
+//! // plate.register_filter("String", string_filter);
+//! // plate.register_filter("Content", content_filter);
 //!
 //! let mut context = HashMap::new();
 //! context.insert("title".to_string(), QuillValue::from_json(serde_json::json!("My Doc")));
 //! context.insert("body".to_string(), QuillValue::from_json(serde_json::json!("Content")));
 //!
-//! let output = glue.compose(context).unwrap();
+//! let output = plate.compose(context).unwrap();
 //! ```
 //!
 //! ### Custom Filter Implementation
 //!
 //! ```no_run
 //! use quillmark_core::templating::filter_api::{State, Value, Kwargs, Error, ErrorKind};
-//! # use quillmark_core::Glue;
-//! # let mut glue = Glue::new("template".to_string());
+//! # use quillmark_core::Plate;
+//! # let mut plate = Plate::new("template".to_string());
 //!
 //! fn uppercase_filter(
 //!     _state: &State,
@@ -58,8 +58,8 @@
 //!     Ok(Value::from(s.to_uppercase()))
 //! }
 //!
-//! // Register with glue
-//! glue.register_filter("uppercase", uppercase_filter);
+//! // Register with plate
+//! plate.register_filter("uppercase", uppercase_filter);
 //! ```
 //!
 //! ## Filter API
@@ -122,8 +122,8 @@ type FilterFn = fn(
     filter_api::Kwargs,
 ) -> Result<filter_api::Value, MjError>;
 
-/// Trait for glue engines that compose context into output
-pub trait GlueEngine {
+/// Trait for plate engines that compose context into output
+pub trait PlateEngine {
     /// Register a filter with the engine
     fn register_filter(&mut self, name: &str, func: FilterFn);
 
@@ -131,27 +131,27 @@ pub trait GlueEngine {
     fn compose(&mut self, context: HashMap<String, QuillValue>) -> Result<String, TemplateError>;
 }
 
-/// Template-based glue engine using MiniJinja
-pub struct TemplateGlue {
+/// Template-based plate engine using MiniJinja
+pub struct TemplatePlate {
     template: String,
     filters: HashMap<String, FilterFn>,
 }
 
-/// Auto glue engine that outputs context as JSON
-pub struct AutoGlue {
+/// Auto plate engine that outputs context as JSON
+pub struct AutoPlate {
     filters: HashMap<String, FilterFn>,
 }
 
-/// Glue type that can be either template-based or auto
-pub enum Glue {
-    /// Template-based glue using MiniJinja
-    Template(TemplateGlue),
-    /// Auto glue that outputs context as JSON
-    Auto(AutoGlue),
+/// Plate type that can be either template-based or auto
+pub enum Plate {
+    /// Template-based plate using MiniJinja
+    Template(TemplatePlate),
+    /// Auto plate that outputs context as JSON
+    Auto(AutoPlate),
 }
 
-impl TemplateGlue {
-    /// Create a new TemplateGlue instance with a template string
+impl TemplatePlate {
+    /// Create a new TemplatePlate instance with a template string
     pub fn new(template: String) -> Self {
         Self {
             template,
@@ -160,7 +160,7 @@ impl TemplateGlue {
     }
 }
 
-impl GlueEngine for TemplateGlue {
+impl PlateEngine for TemplatePlate {
     /// Register a filter with the template environment
     fn register_filter(&mut self, name: &str, func: FilterFn) {
         self.filters.insert(name.to_string(), func);
@@ -217,8 +217,8 @@ impl GlueEngine for TemplateGlue {
     }
 }
 
-impl AutoGlue {
-    /// Create a new AutoGlue instance
+impl AutoPlate {
+    /// Create a new AutoPlate instance
     pub fn new() -> Self {
         Self {
             filters: HashMap::new(),
@@ -226,8 +226,8 @@ impl AutoGlue {
     }
 }
 
-impl GlueEngine for AutoGlue {
-    /// Register a filter with the auto glue (ignored for JSON output)
+impl PlateEngine for AutoPlate {
+    /// Register a filter with the auto plate (ignored for JSON output)
     fn register_filter(&mut self, name: &str, func: FilterFn) {
         // Store filters even though they're not used for JSON output
         // This maintains consistency with the trait interface
@@ -274,22 +274,22 @@ impl GlueEngine for AutoGlue {
     }
 }
 
-impl Glue {
-    /// Create a new template-based Glue instance
+impl Plate {
+    /// Create a new template-based Plate instance
     pub fn new(template: String) -> Self {
-        Glue::Template(TemplateGlue::new(template))
+        Plate::Template(TemplatePlate::new(template))
     }
 
-    /// Create a new auto glue instance
+    /// Create a new auto plate instance
     pub fn new_auto() -> Self {
-        Glue::Auto(AutoGlue::new())
+        Plate::Auto(AutoPlate::new())
     }
 
-    /// Register a filter with the glue engine
+    /// Register a filter with the plate engine
     pub fn register_filter(&mut self, name: &str, func: FilterFn) {
         match self {
-            Glue::Template(engine) => engine.register_filter(name, func),
-            Glue::Auto(engine) => engine.register_filter(name, func),
+            Plate::Template(engine) => engine.register_filter(name, func),
+            Plate::Auto(engine) => engine.register_filter(name, func),
         }
     }
 
@@ -299,8 +299,8 @@ impl Glue {
         context: HashMap<String, QuillValue>,
     ) -> Result<String, TemplateError> {
         match self {
-            Glue::Template(engine) => engine.compose(context),
-            Glue::Auto(engine) => engine.compose(context),
+            Plate::Template(engine) => engine.compose(context),
+            Plate::Auto(engine) => engine.compose(context),
         }
     }
 }
@@ -336,14 +336,14 @@ mod tests {
     use std::collections::HashMap;
 
     #[test]
-    fn test_glue_creation() {
-        let _glue = Glue::new("Hello {{ name }}".to_string());
+    fn test_plate_creation() {
+        let _plate = Plate::new("Hello {{ name }}".to_string());
         assert!(true);
     }
 
     #[test]
     fn test_compose_simple_template() {
-        let mut glue = Glue::new("Hello {{ name }}! Body: {{ body }}".to_string());
+        let mut plate = Plate::new("Hello {{ name }}! Body: {{ body }}".to_string());
         let mut context = HashMap::new();
         context.insert(
             "name".to_string(),
@@ -354,14 +354,14 @@ mod tests {
             QuillValue::from_json(serde_json::Value::String("Hello content".to_string())),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
         assert!(result.contains("Hello World!"));
         assert!(result.contains("Body: Hello content"));
     }
 
     #[test]
     fn test_field_with_dash() {
-        let mut glue = Glue::new("Field: {{ letterhead_title }}".to_string());
+        let mut plate = Plate::new("Field: {{ letterhead_title }}".to_string());
         let mut context = HashMap::new();
         context.insert(
             "letterhead_title".to_string(),
@@ -372,14 +372,14 @@ mod tests {
             QuillValue::from_json(serde_json::Value::String("body".to_string())),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
         assert!(result.contains("TEST VALUE"));
     }
 
     #[test]
     fn test_compose_with_dash_in_template() {
         // Templates must reference the exact key names provided by the context.
-        let mut glue = Glue::new("Field: {{ letterhead_title }}".to_string());
+        let mut plate = Plate::new("Field: {{ letterhead_title }}".to_string());
         let mut context = HashMap::new();
         context.insert(
             "letterhead_title".to_string(),
@@ -390,7 +390,7 @@ mod tests {
             QuillValue::from_json(serde_json::Value::String("body".to_string())),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
         assert!(result.contains("DASHED"));
     }
 
@@ -400,7 +400,7 @@ mod tests {
         // We can't easily create 50MB+ output in a test, so we'll use a smaller test
         // that validates the check exists
         let template = "{{ content }}".to_string();
-        let mut glue = Glue::new(template);
+        let mut plate = Plate::new(template);
 
         let mut context = HashMap::new();
         // Create a large string (simulate large output)
@@ -411,14 +411,14 @@ mod tests {
             QuillValue::from_json(serde_json::Value::String("test".to_string())),
         );
 
-        let result = glue.compose(context);
+        let result = plate.compose(context);
         // This should succeed as it's well under the limit
         assert!(result.is_ok());
     }
 
     #[test]
-    fn test_auto_glue_basic() {
-        let mut glue = Glue::new_auto();
+    fn test_auto_plate_basic() {
+        let mut plate = Plate::new_auto();
         let mut context = HashMap::new();
         context.insert(
             "name".to_string(),
@@ -429,7 +429,7 @@ mod tests {
             QuillValue::from_json(serde_json::Value::String("Hello content".to_string())),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
 
         // Parse the result as JSON to verify it's valid
         let json: serde_json::Value = serde_json::from_str(&result).unwrap();
@@ -438,8 +438,8 @@ mod tests {
     }
 
     #[test]
-    fn test_auto_glue_with_nested_data() {
-        let mut glue = Glue::new_auto();
+    fn test_auto_plate_with_nested_data() {
+        let mut plate = Plate::new_auto();
         let mut context = HashMap::new();
 
         // Add nested object
@@ -453,7 +453,7 @@ mod tests {
         let tags = serde_json::json!(["tag1", "tag2", "tag3"]);
         context.insert("tags".to_string(), QuillValue::from_json(tags));
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
 
         // Parse the result as JSON to verify structure
         let json: serde_json::Value = serde_json::from_str(&result).unwrap();
@@ -464,9 +464,9 @@ mod tests {
     }
 
     #[test]
-    fn test_auto_glue_filter_registration() {
+    fn test_auto_plate_filter_registration() {
         // Test that filters can be registered (even though they're not used)
-        let mut glue = Glue::new_auto();
+        let mut plate = Plate::new_auto();
 
         fn dummy_filter(
             _state: &filter_api::State,
@@ -477,7 +477,7 @@ mod tests {
         }
 
         // Should not panic
-        glue.register_filter("dummy", dummy_filter);
+        plate.register_filter("dummy", dummy_filter);
 
         let mut context = HashMap::new();
         context.insert(
@@ -485,7 +485,7 @@ mod tests {
             QuillValue::from_json(serde_json::Value::String("value".to_string())),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
         let json: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert_eq!(json["test"], "value");
     }
@@ -493,7 +493,7 @@ mod tests {
     #[test]
     fn test_metadata_field_excludes_body() {
         let template = "{% for key in __metadata__ %}{{ key }},{% endfor %}";
-        let mut glue = Glue::new(template.to_string());
+        let mut plate = Plate::new(template.to_string());
 
         let mut context = HashMap::new();
         context.insert(
@@ -509,7 +509,7 @@ mod tests {
             QuillValue::from_json(serde_json::json!("Body content")),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
 
         // Should contain title and author, but not body
         assert!(result.contains("title"));
@@ -524,7 +524,7 @@ mod tests {
 {{ key }}
 {% endfor -%}
 "#;
-        let mut glue = Glue::new(template.to_string());
+        let mut plate = Plate::new(template.to_string());
 
         let mut context = HashMap::new();
         context.insert(
@@ -544,7 +544,7 @@ mod tests {
             QuillValue::from_json(serde_json::json!("Document body")),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
 
         // All metadata fields should be present as keys
         assert!(result.contains("title"));
@@ -557,7 +557,7 @@ mod tests {
     #[test]
     fn test_metadata_field_empty_when_only_body() {
         let template = "Metadata count: {{ __metadata__ | length }}";
-        let mut glue = Glue::new(template.to_string());
+        let mut plate = Plate::new(template.to_string());
 
         let mut context = HashMap::new();
         context.insert(
@@ -565,7 +565,7 @@ mod tests {
             QuillValue::from_json(serde_json::json!("Only body content")),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
 
         // Should have 0 metadata fields when only body is present
         assert!(result.contains("Metadata count: 0"));
@@ -574,7 +574,7 @@ mod tests {
     #[test]
     fn test_backward_compatibility_top_level_access() {
         let template = "Title: {{ title }}, Author: {{ author }}, Body: {{ body }}";
-        let mut glue = Glue::new(template.to_string());
+        let mut plate = Plate::new(template.to_string());
 
         let mut context = HashMap::new();
         context.insert(
@@ -590,7 +590,7 @@ mod tests {
             QuillValue::from_json(serde_json::json!("Body text")),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
 
         // Top-level access should still work
         assert!(result.contains("Title: My Title"));
@@ -608,7 +608,7 @@ Metadata fields: {{ metadata_count }}
 {%- endfor %}
 Body present: {{ body | length > 0 }}
 "#;
-        let mut glue = Glue::new(template.to_string());
+        let mut plate = Plate::new(template.to_string());
 
         let mut context = HashMap::new();
         context.insert(
@@ -624,7 +624,7 @@ Body present: {{ body | length > 0 }}
             QuillValue::from_json(serde_json::json!("Content")),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
 
         // Should have exactly 2 metadata fields
         assert!(result.contains("Metadata fields: 2"));
@@ -633,8 +633,8 @@ Body present: {{ body | length > 0 }}
     }
 
     #[test]
-    fn test_auto_glue_metadata_field() {
-        let mut glue = Glue::new_auto();
+    fn test_auto_plate_metadata_field() {
+        let mut plate = Plate::new_auto();
 
         let mut context = HashMap::new();
         context.insert(
@@ -650,7 +650,7 @@ Body present: {{ body | length > 0 }}
             QuillValue::from_json(serde_json::json!("Content here")),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
 
         // Parse as JSON
         let json: serde_json::Value = serde_json::from_str(&result).unwrap();
@@ -670,7 +670,7 @@ Body present: {{ body | length > 0 }}
     #[test]
     fn test_metadata_with_nested_objects() {
         let template = "{{ __metadata__.author.name }}";
-        let mut glue = Glue::new(template.to_string());
+        let mut plate = Plate::new(template.to_string());
 
         let mut context = HashMap::new();
         context.insert(
@@ -685,7 +685,7 @@ Body present: {{ body | length > 0 }}
             QuillValue::from_json(serde_json::json!("Text")),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
 
         // Should access nested metadata via __metadata__
         assert!(result.contains("John Doe"));
@@ -694,7 +694,7 @@ Body present: {{ body | length > 0 }}
     #[test]
     fn test_metadata_with_arrays() {
         let template = "Tags: {{ __metadata__.tags | length }}";
-        let mut glue = Glue::new(template.to_string());
+        let mut plate = Plate::new(template.to_string());
 
         let mut context = HashMap::new();
         context.insert(
@@ -706,7 +706,7 @@ Body present: {{ body | length > 0 }}
             QuillValue::from_json(serde_json::json!("Content")),
         );
 
-        let result = glue.compose(context).unwrap();
+        let result = plate.compose(context).unwrap();
 
         // Should show 3 tags
         assert!(result.contains("Tags: 3"));

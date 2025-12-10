@@ -49,15 +49,9 @@ output as JSON instead of being processed through a template.
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 
     println!("Quill name: {}", quill.name);
-    println!(
-        "Glue file: {:?}",
-        quill.metadata.get("glue_file").and_then(|v| v.as_str())
-    );
-    println!(
-        "Glue template empty: {}",
-        quill.glue.clone().unwrap_or_default().is_empty()
-    );
-    println!();
+    // Verify plate is empty (will trigger auto plate)
+    println!("Plate field: {:?}", quill.plate.clone());
+    println!("Backend supports auto plate: Yes (Typst backend)\n");
 
     engine
         .register_quill(quill)
@@ -68,10 +62,11 @@ output as JSON instead of being processed through a template.
         .workflow("auto-example")
         .expect("Failed to load workflow");
 
+    // Process plate output (will be JSON)
     let json_output = workflow
-        .process_glue(&parsed)
-        .expect("Failed to process glue");
+        .process_plate(&parsed)
+        .expect("Failed to process plate");
 
-    println!("JSON Output:");
+    println!("Generated Auto Plate (JSON):");
     println!("{}", json_output);
 }

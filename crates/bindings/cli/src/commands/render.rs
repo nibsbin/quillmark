@@ -1,5 +1,5 @@
 use crate::errors::{CliError, Result};
-use crate::output::{derive_glue_output_path, derive_output_path, OutputWriter};
+use crate::output::{derive_output_path, derive_plate_output_path, OutputWriter};
 use clap::Parser;
 use quillmark::{ParsedDocument, Quill, Quillmark};
 use quillmark_core::OutputFormat;
@@ -28,9 +28,9 @@ pub struct RenderArgs {
     #[arg(long)]
     stdout: bool,
 
-    /// Only process glue template, don't render final output
+    /// Only process plate template, don't render final output
     #[arg(long)]
-    glue_only: bool,
+    plate_only: bool,
 
     /// Show detailed processing information
     #[arg(short, long)]
@@ -170,27 +170,27 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         println!("Workflow created for backend: {}", workflow.backend_id());
     }
 
-    // Handle glue-only mode
-    if args.glue_only {
+    // Handle plate-only mode
+    if args.plate_only {
         if args.verbose {
-            println!("Processing glue template...");
+            println!("Processing plate template...");
         }
 
-        let glued = workflow.process_glue(&parsed)?;
+        let plated = workflow.process_plate(&parsed)?;
 
-        let glued_bytes = glued.into_bytes();
+        let plated_bytes = plated.into_bytes();
 
         // Determine output path
         let output_path = args.output.unwrap_or_else(|| {
             if let Some(ref path) = markdown_path_for_output {
-                derive_glue_output_path(path)
+                derive_plate_output_path(path)
             } else {
-                PathBuf::from("example_glue.typ")
+                PathBuf::from("example_plate.typ")
             }
         });
 
         let writer = OutputWriter::new(args.stdout, Some(output_path), args.quiet);
-        writer.write(&glued_bytes)?;
+        writer.write(&plated_bytes)?;
 
         return Ok(());
     }

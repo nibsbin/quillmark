@@ -108,8 +108,8 @@ class Workflow:
     ) -> RenderResult:
         """Render pre-composed content (skip template processing)."""
     
-    def process_glue(self, parsed: ParsedDocument) -> str:
-        """Process parsed document through glue template."""
+    def process_plate(self, parsed: ParsedDocument) -> str:
+        """Process parsed document through plate template."""
     
     @property
     def backend_id(self) -> str:
@@ -143,8 +143,8 @@ class Quill:
         """Backend identifier from metadata"""
     
     @property
-    def glue(self) -> str:
-        """Glue template content"""
+    def plate(self) -> str:
+        """Plate template content"""
 
     @property
     def example(self) -> str | None:
