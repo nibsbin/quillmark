@@ -93,7 +93,7 @@
 //!
 //! 1. **Full render** ([`Workflow::render()`]) - Compose with template → Compile to artifacts (parsing done separately)
 //! 2. **Content render** ([`Workflow::render_processed()`]) - Skip parsing, render pre-composed content
-//! 3. **Glue only** ([`Workflow::process_glue()`]) - Compose from parsed document, return template output
+//! 3. **Plate only** ([`Workflow::process_plate()`]) - Compose from parsed document, return template output
 //!
 //! ## Examples
 //!

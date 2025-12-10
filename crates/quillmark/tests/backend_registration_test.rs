@@ -16,7 +16,7 @@
 //! Uses a minimal `MockBackend` implementation that:
 //! - Implements the full Backend trait
 //! - Supports TXT output format
-//! - Returns glue content as-is (for testing)
+//! - Returns plate content as-is (for testing)
 //! - Provides minimal filter registration
 //!
 //! ## Purpose

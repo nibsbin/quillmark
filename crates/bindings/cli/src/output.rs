@@ -54,10 +54,10 @@ pub fn derive_output_path(markdown_path: &Path, format: &str) -> PathBuf {
     output
 }
 
-/// Derive plate output filename from input markdown path
-pub fn derive_plate_output_path(markdown_path: &Path) -> PathBuf {
+/// Derive plated output filename from input markdown path
+pub fn derive_plated_output_path(markdown_path: &Path) -> PathBuf {
     let mut output = markdown_path.to_path_buf();
     let stem = output.file_stem().unwrap_or_default().to_string_lossy();
-    output.set_file_name(format!("{}_plate.typ", stem));
+    output.set_file_name(format!("{}_plated.typ", stem));
     output
 }

@@ -1,5 +1,5 @@
 use crate::errors::{CliError, Result};
-use crate::output::{derive_output_path, derive_plate_output_path, OutputWriter};
+use crate::output::{derive_output_path, derive_plated_output_path, OutputWriter};
 use clap::Parser;
 use quillmark::{ParsedDocument, Quill, Quillmark};
 use quillmark_core::OutputFormat;
@@ -183,9 +183,9 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         // Determine output path
         let output_path = args.output.unwrap_or_else(|| {
             if let Some(ref path) = markdown_path_for_output {
-                derive_plate_output_path(path)
+                derive_plated_output_path(path)
             } else {
-                PathBuf::from("example_plate.typ")
+                PathBuf::from("example_plated.typ")
             }
         });
 

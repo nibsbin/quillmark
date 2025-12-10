@@ -84,14 +84,14 @@ title: My Document
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
     // Process through plate - defaults should be applied
-    let plate_output = workflow
+    let plated = workflow
         .process_plate(&parsed)
         .expect("Failed to process plate");
 
     // Verify defaults were applied in the output
-    assert!(plate_output.contains("Title: My Document"));
-    assert!(plate_output.contains("Status: draft"));
-    assert!(plate_output.contains("Version: 1"));
+    assert!(plated.contains("Title: My Document"));
+    assert!(plated.contains("Status: draft"));
+    assert!(plated.contains("Version: 1"));
 }
 
 #[test]
@@ -142,14 +142,14 @@ status: published
 "#;
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-    let plate_output = workflow
+    let plated = workflow
         .process_plate(&parsed)
         .expect("Failed to process plate");
 
     // Verify existing value was preserved, not replaced with default
-    assert!(plate_output.contains("Title: My Document"));
-    assert!(plate_output.contains("Status: published"));
-    assert!(!plate_output.contains("Status: draft"));
+    assert!(plated.contains("Title: My Document"));
+    assert!(plated.contains("Status: published"));
+    assert!(!plated.contains("Status: draft"));
 }
 
 #[test]
@@ -195,13 +195,13 @@ status = { description = "Document status", default = "draft" }
     let markdown = r#"# Content"#;
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-    let plate_output = workflow
+    let plated = workflow
         .process_plate(&parsed)
         .expect("Validation should pass with defaults");
 
     // Verify defaults were applied
-    assert!(plate_output.contains("Title: Untitled"));
-    assert!(plate_output.contains("Status: draft"));
+    assert!(plated.contains("Title: Untitled"));
+    assert!(plated.contains("Status: draft"));
 }
 
 #[test]

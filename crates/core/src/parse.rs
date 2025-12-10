@@ -1872,13 +1872,13 @@ mod demo_file_test {
     }
 
     // Tests for guillemet preservation in parsing (guillemets are NOT converted during parsing)
-    // Guillemet conversion now happens in process_glue, not during parsing
+    // Guillemet conversion now happens in process_plate, not during parsing
     #[test]
     fn test_chevrons_preserved_in_body_no_frontmatter() {
         let markdown = "Use <<raw content>> here.";
         let doc = decompose(markdown).unwrap();
 
-        // Body should preserve chevrons (conversion happens later in process_glue)
+        // Body should preserve chevrons (conversion happens later in process_plate)
         assert_eq!(doc.body(), Some("Use <<raw content>> here."));
     }
 

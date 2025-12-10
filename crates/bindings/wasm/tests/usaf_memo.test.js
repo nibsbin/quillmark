@@ -58,7 +58,7 @@ describe.skipIf(process.env.CI)('WASM usaf_memo smoke test', () => {
     // Load the Quill structure
     console.log('Loading usaf_memo Quill...')
     quillJson = loadQuill(USAF_MEMO_QUILL_PATH)
-    
+
     // Load the markdown example
     const quillmark = new Quillmark()
     let quillInfo = quillmark.registerQuill(quillJson)
@@ -70,13 +70,13 @@ describe.skipIf(process.env.CI)('WASM usaf_memo smoke test', () => {
     expect(quillJson).toBeDefined()
     expect(quillJson.files).toBeDefined()
     expect(quillJson.files['Quill.toml']).toBeDefined()
-    expect(quillJson.files['glue.typ']).toBeDefined()
+    expect(quillJson.files['plate.typ']).toBeDefined()
     expect(quillJson.files['usaf_memo.md']).toBeDefined()
   })
 
   it('should parse usaf_memo markdown', () => {
     const parsed = Quillmark.parseMarkdown(markdown)
-    
+
     expect(parsed).toBeDefined()
     expect(parsed.fields).toBeDefined()
     expect(parsed.quillTag).toBe('usaf_memo')
@@ -87,11 +87,11 @@ describe.skipIf(process.env.CI)('WASM usaf_memo smoke test', () => {
 
   it('should register usaf_memo Quill', () => {
     const engine = new Quillmark()
-    
+
     expect(() => {
       engine.registerQuill(quillJson)
     }).not.toThrow()
-    
+
     const quills = engine.listQuills()
     expect(quills).toContain('usaf_memo')
   })
@@ -99,9 +99,9 @@ describe.skipIf(process.env.CI)('WASM usaf_memo smoke test', () => {
   it('should get usaf_memo Quill info', () => {
     const engine = new Quillmark()
     engine.registerQuill(quillJson)
-    
+
     const info = engine.getQuillInfo('usaf_memo')
-    
+
     expect(info).toBeDefined()
     expect(info.name).toBe('usaf_memo')
     expect(info.backend).toBe('typst')
@@ -112,9 +112,9 @@ describe.skipIf(process.env.CI)('WASM usaf_memo smoke test', () => {
     const parsed = Quillmark.parseMarkdown(markdown)
     const engine = new Quillmark()
     engine.registerQuill(quillJson)
-    
+
     const result = engine.render(parsed, { format: 'pdf' })
-    
+
     expect(result).toBeDefined()
     expect(result.artifacts).toBeDefined()
     expect(result.artifacts.length).toBe(1)
@@ -134,7 +134,7 @@ describe.skipIf(process.env.CI)('WASM usaf_memo smoke test', () => {
     const parsed = Quillmark.parseMarkdown(markdown)
     const engine = new Quillmark()
     engine.registerQuill(quillJson)
-    
+
     const result = engine.render(parsed, { format: 'pdf' })
     const wasmPdf = Buffer.from(result.artifacts[0].bytes)
 
@@ -153,17 +153,17 @@ describe.skipIf(process.env.CI)('WASM usaf_memo smoke test', () => {
     // 1. Random font subset prefixes (e.g., QGBEVL vs DYJZLR)
     // 2. Random document IDs and instance IDs in XMP metadata
     // These are generated fresh on each Typst compilation.
-    
+
     // Verify both PDFs are valid and similar size
     expect(wasmPdf.length).toBeGreaterThan(1000000) // At least 1MB
     expect(cargoOutputPdf.length).toBeGreaterThan(1000000)
-    
+
     // Size should be within 1% of each other (allows for minor variations in compression/encoding)
     const sizeDiff = Math.abs(wasmPdf.length - cargoOutputPdf.length)
     const sizeRatio = sizeDiff / cargoOutputPdf.length
     console.log(`Size difference: ${sizeDiff} bytes (${(sizeRatio * 100).toFixed(2)}%)`)
     expect(sizeRatio).toBeLessThan(0.05) // Within 5%
-    
+
     // Both should be valid PDFs (start with %PDF-1.7)
     const cargoHeader = cargoOutputPdf.toString('utf8', 0, 10)
     const wasmHeader = wasmPdf.toString('utf8', 0, 10)

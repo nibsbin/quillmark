@@ -31,7 +31,7 @@ use std::error::Error;
 /// It loads the quill and uses its markdown template, then processes and renders it.
 pub fn demo(
     quill_dir: &str,
-    plate_output: &str,
+    plated_output: &str,
     render_output: &str,
     use_resource_path: bool,
 ) -> Result<(), Box<dyn Error>> {
@@ -62,11 +62,11 @@ pub fn demo(
 
     // write outputs
     let plated_bytes = plated.into_bytes();
-    write_example_output(plate_output, &plated_bytes)?;
+    write_example_output(plated_output, &plated_bytes)?;
 
     println!(
-        "Plate outputted to: {}",
-        example_output_dir().join(plate_output).display()
+        "Plated outputted to: {}",
+        example_output_dir().join(plated_output).display()
     );
 
     // render output
@@ -77,8 +77,8 @@ pub fn demo(
 
     println!("------------------------------");
     println!(
-        "Access plate output: {}",
-        example_output_dir().join(plate_output).display()
+        "Access plated output: {}",
+        example_output_dir().join(plated_output).display()
     );
     println!(
         "Access render output: {}",

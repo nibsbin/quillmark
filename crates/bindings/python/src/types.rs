@@ -109,7 +109,7 @@ impl PyWorkflow {
     }
 
     #[pyo3(signature = (content, format=None))]
-    fn render_processed(
+    fn render_plated(
         &self,
         content: &str,
         format: Option<PyOutputFormat>,
@@ -117,7 +117,7 @@ impl PyWorkflow {
         let rust_format = format.map(|f| f.into());
         let result = self
             .inner
-            .render_processed(content, rust_format)
+            .render_plate(content, rust_format)
             .map_err(convert_render_error)?;
         Ok(PyRenderResult { inner: result })
     }

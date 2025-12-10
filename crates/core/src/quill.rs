@@ -1114,10 +1114,10 @@ node_modules/
         // Create test files
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
-        fs::write(quill_dir.join("glue.typ"), "test glue").unwrap();
+        fs::write(quill_dir.join("plate.typ"), "test plate").unwrap();
 
         let assets_dir = quill_dir.join("assets");
         fs::create_dir_all(&assets_dir).unwrap();
@@ -1131,7 +1131,7 @@ node_modules/
         let quill = Quill::from_path(quill_dir).unwrap();
 
         // Test file access
-        assert!(quill.file_exists("glue.typ"));
+        assert!(quill.file_exists("plate.typ"));
         assert!(quill.file_exists("assets/test.txt"));
         assert!(quill.file_exists("packages/package.typ"));
         assert!(!quill.file_exists("nonexistent.txt"));
@@ -1157,10 +1157,10 @@ node_modules/
         // Create test files
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
-        fs::write(quill_dir.join("glue.typ"), "test template").unwrap();
+        fs::write(quill_dir.join("plate.typ"), "test template").unwrap();
         fs::write(quill_dir.join("should_ignore.tmp"), "ignored").unwrap();
 
         let target_dir = quill_dir.join("target");
@@ -1171,7 +1171,7 @@ node_modules/
         let quill = Quill::from_path(quill_dir).unwrap();
 
         // Test that ignored files are not loaded
-        assert!(quill.file_exists("glue.typ"));
+        assert!(quill.file_exists("plate.typ"));
         assert!(!quill.file_exists("should_ignore.tmp"));
         assert!(!quill.file_exists("target/debug.txt"));
     }
@@ -1184,10 +1184,10 @@ node_modules/
         // Create test directory structure
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill\"",
+            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
-        fs::write(quill_dir.join("glue.typ"), "template").unwrap();
+        fs::write(quill_dir.join("plate.typ"), "template").unwrap();
 
         let assets_dir = quill_dir.join("assets");
         fs::create_dir_all(&assets_dir).unwrap();
@@ -1207,7 +1207,7 @@ node_modules/
 
         let typ_files = quill.find_files("*.typ");
         assert_eq!(typ_files.len(), 1);
-        assert!(typ_files.contains(&PathBuf::from("glue.typ")));
+        assert!(typ_files.contains(&PathBuf::from("plate.typ")));
     }
 
     #[test]
@@ -1219,13 +1219,13 @@ node_modules/
         let toml_content = r#"[Quill]
 name = "my-custom-quill"
 backend = "typst"
-glue_file = "custom_glue.typ"
+plate_file = "custom_plate.typ"
 description = "Test quill with new format"
 author = "Test Author"
 "#;
         fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
         fs::write(
-            quill_dir.join("custom_glue.typ"),
+            quill_dir.join("custom_plate.typ"),
             "= Custom Template\n\nThis is a custom template.",
         )
         .unwrap();

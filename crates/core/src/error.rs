@@ -158,7 +158,7 @@ pub enum Severity {
 /// Location information for diagnostics
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Location {
-    /// Source file name (e.g., "glue.typ", "template.typ", "input.md")
+    /// Source file name (e.g., "plate.typ", "template.typ", "input.md")
     pub file: String,
     /// Line number (1-indexed)
     pub line: u32,

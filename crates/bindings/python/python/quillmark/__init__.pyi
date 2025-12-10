@@ -101,12 +101,12 @@ class Workflow:
             CompilationError: If backend compilation fails
         """
     
-    def render_processed(
+    def render_plated(
         self,
         content: str,
         format: OutputFormat | None = None
     ) -> RenderResult:
-        """Render pre-composed content (skip template processing)."""
+        """Render pre-composed plate content (skip template processing)."""
     
     def process_plate(self, parsed: ParsedDocument) -> str:
         """Process parsed document through plate template."""
@@ -124,7 +124,7 @@ class Workflow:
         """Get quill name."""
 
 class Quill:
-    """Template bundle containing glue templates and assets."""
+    """Template bundle containing plate templates and assets."""
     
     @staticmethod
     def from_path(path: str | Path) -> Quill:

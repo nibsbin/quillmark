@@ -8,8 +8,8 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 // A minimal JSON fixture that represents a very small quill
 const SMALL_QUILL_JSON: &str = r#"{
   "files": {
-    "Quill.toml": { "contents": "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nglue_file = \"glue.typ\"\ndescription = \"Test quill for WASM bindings\"\n" },
-    "glue.typ": { "contents": "= Title\n\nThis is a test." },
+    "Quill.toml": { "contents": "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill for WASM bindings\"\n" },
+    "plate.typ": { "contents": "= Title\n\nThis is a test." },
     "content.md": { "contents": "---\ntitle: Test\n---\n\n# Hello" }
   }
 }"#;
@@ -101,9 +101,9 @@ fn engine_register_and_render_legacy() {
         .register_quill(JsValue::from_str(SMALL_QUILL_JSON))
         .expect("register failed");
 
-    // Call process_glue on a small markdown
-    let glue_out = engine
-        .process_glue("test-quill", "---\ntitle: Glue\n---\n\n# X")
-        .expect("process_glue failed");
-    assert!(glue_out.len() > 0);
+    // Call process_plate on a small markdown
+    let plated = engine
+        .process_plate("test-quill", "---\ntitle: Plated\n---\n\n# X")
+        .expect("process_plate failed");
+    assert!(plated.len() > 0);
 }
