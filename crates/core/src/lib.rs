@@ -70,4 +70,5 @@ pub mod schema;
 pub mod guillemet;
 pub use guillemet::{
     preprocess_fields_guillemets, preprocess_guillemets, preprocess_markdown_guillemets,
+    strip_chevrons,
 };
