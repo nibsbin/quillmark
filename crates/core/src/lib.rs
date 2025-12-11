@@ -72,3 +72,6 @@ pub use guillemet::{
     preprocess_fields_guillemets, preprocess_guillemets, preprocess_markdown_guillemets,
     strip_chevrons,
 };
+
+pub mod normalize;
+pub use normalize::{normalize_fields, normalize_markdown, strip_bidi_formatting};

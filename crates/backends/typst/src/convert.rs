@@ -63,33 +63,6 @@ pub fn escape_markup(s: &str) -> String {
         .replace('@', "\\@")
 }
 
-/// Strips Unicode bidirectional formatting characters that can interfere with markdown parsing.
-///
-/// These characters (LRO, RLO, LRE, RLE, PDF, LRM, RLM, LRI, RLI, FSI, PDI) are invisible
-/// control characters used for bidirectional text layout. When placed adjacent to markdown
-/// delimiters like `**`, they can prevent the parser from recognizing the delimiters,
-/// causing bold/italic text to render as literal asterisks/underscores.
-fn strip_bidi_formatting(s: &str) -> String {
-    s.chars()
-        .filter(|c| {
-            !matches!(
-                *c,
-                '\u{200E}' // LEFT-TO-RIGHT MARK (LRM)
-                | '\u{200F}' // RIGHT-TO-LEFT MARK (RLM)
-                | '\u{202A}' // LEFT-TO-RIGHT EMBEDDING (LRE)
-                | '\u{202B}' // RIGHT-TO-LEFT EMBEDDING (RLE)
-                | '\u{202C}' // POP DIRECTIONAL FORMATTING (PDF)
-                | '\u{202D}' // LEFT-TO-RIGHT OVERRIDE (LRO)
-                | '\u{202E}' // RIGHT-TO-LEFT OVERRIDE (RLO)
-                | '\u{2066}' // LEFT-TO-RIGHT ISOLATE (LRI)
-                | '\u{2067}' // RIGHT-TO-LEFT ISOLATE (RLI)
-                | '\u{2068}' // FIRST STRONG ISOLATE (FSI)
-                | '\u{2069}' // POP DIRECTIONAL ISOLATE (PDI)
-            )
-        })
-        .collect()
-}
-
 /// Escapes text for embedding in Typst string literals.
 pub fn escape_string(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
@@ -356,21 +329,16 @@ where
 ///
 /// Returns an error if nesting depth exceeds the maximum allowed.
 ///
-/// Note: Guillemet preprocessing (`<<text>>` → `«text»`) is expected to be done
-/// by the caller (e.g., via `ParsedDocument::from_markdown` in quillmark-core).
+/// Note: Input normalization (bidi stripping, guillemet preprocessing) is expected
+/// to be done by the caller via `quillmark_core::normalize_fields` in the workflow.
 pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
-    // Strip Unicode bidirectional formatting characters that interfere with markdown parsing.
-    // These invisible characters (e.g., U+202D LRO) can appear when copying text from certain
-    // sources and prevent delimiters like ** from being recognized as bold markers.
-    let cleaned = strip_bidi_formatting(markdown);
-
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
 
-    let parser = Parser::new_ext(&cleaned, options);
+    let parser = Parser::new_ext(markdown, options);
     let mut typst_output = String::new();
 
-    push_typst(&mut typst_output, &cleaned, parser.into_offset_iter())?;
+    push_typst(&mut typst_output, markdown, parser.into_offset_iter())?;
     Ok(typst_output)
 }
 
@@ -1507,74 +1475,5 @@ More text with `inline code`."#;
         let markdown = "(*italic*)";
         let result = mark_to_typst(markdown).unwrap();
         assert_eq!(result, "(#emph[italic])\n\n");
-    }
-
-    // Unicode bidirectional formatting character tests
-
-    #[test]
-    fn test_bidi_lro_before_bold() {
-        // U+202D (LEFT-TO-RIGHT OVERRIDE) before ** should be stripped
-        // so the bold is recognized
-        let markdown = "**asdf** or \u{202D}**(1234**";
-        let result = mark_to_typst(markdown).unwrap();
-        // Both should be bold, not just the first one
-        assert_eq!(result, "#strong[asdf] or #strong[(1234]\n\n");
-    }
-
-    #[test]
-    fn test_bidi_rlo_before_italic() {
-        // U+202E (RIGHT-TO-LEFT OVERRIDE) before * should be stripped
-        let markdown = "*italic* and \u{202E}*more*";
-        let result = mark_to_typst(markdown).unwrap();
-        assert_eq!(result, "#emph[italic] and #emph[more]\n\n");
-    }
-
-    #[test]
-    fn test_bidi_lrm_before_bold() {
-        // U+200E (LEFT-TO-RIGHT MARK) before ** should be stripped
-        // Note: with a space separator, both bold sections are recognized
-        let markdown = "**first** \u{200E}**second**";
-        let result = mark_to_typst(markdown).unwrap();
-        assert_eq!(result, "#strong[first] #strong[second]\n\n");
-    }
-
-    #[test]
-    fn test_bidi_rlm_before_emphasis() {
-        // U+200F (RIGHT-TO-LEFT MARK) before * should be stripped
-        // Note: with a space separator, both italic sections are recognized
-        let markdown = "*first* \u{200F}*second*";
-        let result = mark_to_typst(markdown).unwrap();
-        assert_eq!(result, "#emph[first] #emph[second]\n\n");
-    }
-
-    #[test]
-    fn test_multiple_bidi_chars_stripped() {
-        // Multiple bidi chars should all be stripped
-        let markdown = "\u{202A}\u{202B}**bold**\u{202C}\u{202D}\u{202E}";
-        let result = mark_to_typst(markdown).unwrap();
-        assert_eq!(result, "#strong[bold]\n\n");
-    }
-
-    #[test]
-    fn test_bidi_isolates_stripped() {
-        // U+2066-U+2069 (LRI, RLI, FSI, PDI) should be stripped
-        let markdown = "\u{2066}**bold**\u{2069} \u{2067}*italic*\u{2069}";
-        let result = mark_to_typst(markdown).unwrap();
-        assert_eq!(result, "#strong[bold] #emph[italic]\n\n");
-    }
-
-    #[test]
-    fn test_strip_bidi_helper() {
-        // Direct test of the strip_bidi_formatting helper
-        assert_eq!(strip_bidi_formatting("hello"), "hello");
-        assert_eq!(strip_bidi_formatting("he\u{202D}llo"), "hello");
-        assert_eq!(
-            strip_bidi_formatting("\u{200E}\u{200F}\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}"),
-            ""
-        );
-        assert_eq!(
-            strip_bidi_formatting("\u{2066}\u{2067}\u{2068}\u{2069}"),
-            ""
-        );
     }
 }
