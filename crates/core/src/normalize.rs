@@ -52,6 +52,41 @@ use crate::parse::BODY_FIELD;
 use crate::value::QuillValue;
 use std::collections::HashMap;
 
+/// Maximum nesting depth for JSON value normalization to prevent stack overflow
+const MAX_NESTING_DEPTH: usize = 100;
+
+/// Errors that can occur during normalization
+#[derive(Debug, thiserror::Error)]
+pub enum NormalizationError {
+    /// JSON nesting depth exceeded maximum allowed
+    #[error("JSON nesting too deep: {depth} levels (max: {max} levels)")]
+    NestingTooDeep {
+        /// Actual depth
+        depth: usize,
+        /// Maximum allowed depth
+        max: usize,
+    },
+}
+
+/// Check if a character is a Unicode bidirectional formatting character
+#[inline]
+fn is_bidi_char(c: char) -> bool {
+    matches!(
+        c,
+        '\u{200E}' // LEFT-TO-RIGHT MARK (LRM)
+        | '\u{200F}' // RIGHT-TO-LEFT MARK (RLM)
+        | '\u{202A}' // LEFT-TO-RIGHT EMBEDDING (LRE)
+        | '\u{202B}' // RIGHT-TO-LEFT EMBEDDING (RLE)
+        | '\u{202C}' // POP DIRECTIONAL FORMATTING (PDF)
+        | '\u{202D}' // LEFT-TO-RIGHT OVERRIDE (LRO)
+        | '\u{202E}' // RIGHT-TO-LEFT OVERRIDE (RLO)
+        | '\u{2066}' // LEFT-TO-RIGHT ISOLATE (LRI)
+        | '\u{2067}' // RIGHT-TO-LEFT ISOLATE (RLI)
+        | '\u{2068}' // FIRST STRONG ISOLATE (FSI)
+        | '\u{2069}' // POP DIRECTIONAL ISOLATE (PDI)
+    )
+}
+
 /// Strips Unicode bidirectional formatting characters that can interfere with markdown parsing.
 ///
 /// These invisible control characters are used for bidirectional text layout but can
@@ -87,24 +122,12 @@ use std::collections::HashMap;
 /// assert_eq!(strip_bidi_formatting(input), "");
 /// ```
 pub fn strip_bidi_formatting(s: &str) -> String {
-    s.chars()
-        .filter(|c| {
-            !matches!(
-                *c,
-                '\u{200E}' // LEFT-TO-RIGHT MARK (LRM)
-                | '\u{200F}' // RIGHT-TO-LEFT MARK (RLM)
-                | '\u{202A}' // LEFT-TO-RIGHT EMBEDDING (LRE)
-                | '\u{202B}' // RIGHT-TO-LEFT EMBEDDING (RLE)
-                | '\u{202C}' // POP DIRECTIONAL FORMATTING (PDF)
-                | '\u{202D}' // LEFT-TO-RIGHT OVERRIDE (LRO)
-                | '\u{202E}' // RIGHT-TO-LEFT OVERRIDE (RLO)
-                | '\u{2066}' // LEFT-TO-RIGHT ISOLATE (LRI)
-                | '\u{2067}' // RIGHT-TO-LEFT ISOLATE (RLI)
-                | '\u{2068}' // FIRST STRONG ISOLATE (FSI)
-                | '\u{2069}' // POP DIRECTIONAL ISOLATE (PDI)
-            )
-        })
-        .collect()
+    // Early return optimization: avoid allocation if no bidi characters present
+    if !s.chars().any(is_bidi_char) {
+        return s.to_string();
+    }
+
+    s.chars().filter(|c| !is_bidi_char(*c)).collect()
 }
 
 /// Normalizes markdown content by applying all preprocessing steps.
@@ -146,27 +169,59 @@ fn normalize_string(s: &str, is_body: bool) -> String {
     }
 }
 
-/// Recursively normalize a JSON value.
-fn normalize_json_value(value: serde_json::Value, is_body: bool) -> serde_json::Value {
+/// Recursively normalize a JSON value with depth tracking.
+///
+/// Returns an error if nesting exceeds MAX_NESTING_DEPTH to prevent stack overflow.
+fn normalize_json_value_inner(
+    value: serde_json::Value,
+    is_body: bool,
+    depth: usize,
+) -> Result<serde_json::Value, NormalizationError> {
+    if depth > MAX_NESTING_DEPTH {
+        return Err(NormalizationError::NestingTooDeep {
+            depth,
+            max: MAX_NESTING_DEPTH,
+        });
+    }
+
     match value {
-        serde_json::Value::String(s) => serde_json::Value::String(normalize_string(&s, is_body)),
-        serde_json::Value::Array(arr) => serde_json::Value::Array(
-            arr.into_iter()
-                .map(|v| normalize_json_value(v, false))
-                .collect(),
-        ),
+        serde_json::Value::String(s) => {
+            Ok(serde_json::Value::String(normalize_string(&s, is_body)))
+        }
+        serde_json::Value::Array(arr) => {
+            let normalized: Result<Vec<_>, _> = arr
+                .into_iter()
+                .map(|v| normalize_json_value_inner(v, false, depth + 1))
+                .collect();
+            Ok(serde_json::Value::Array(normalized?))
+        }
         serde_json::Value::Object(map) => {
-            let processed_map: serde_json::Map<String, serde_json::Value> = map
+            let processed: Result<serde_json::Map<String, serde_json::Value>, _> = map
                 .into_iter()
                 .map(|(k, v)| {
                     let is_body = k == BODY_FIELD;
-                    (k, normalize_json_value(v, is_body))
+                    normalize_json_value_inner(v, is_body, depth + 1).map(|nv| (k, nv))
                 })
                 .collect();
-            serde_json::Value::Object(processed_map)
+            Ok(serde_json::Value::Object(processed?))
         }
         // Pass through other types unchanged (numbers, booleans, null)
-        other => other,
+        other => Ok(other),
+    }
+}
+
+/// Recursively normalize a JSON value.
+///
+/// This is a convenience wrapper that starts depth tracking at 0.
+/// Logs a warning and returns the original value if depth is exceeded.
+fn normalize_json_value(value: serde_json::Value, is_body: bool) -> serde_json::Value {
+    match normalize_json_value_inner(value.clone(), is_body, 0) {
+        Ok(normalized) => normalized,
+        Err(e) => {
+            // Log warning but don't fail - return original value
+            eprintln!("Warning: {}", e);
+            value
+        }
     }
 }
 
@@ -408,5 +463,40 @@ mod tests {
         let result = normalize_fields(fields);
         assert_eq!(result.get("count").unwrap().as_i64().unwrap(), 42);
         assert!(result.get("enabled").unwrap().as_bool().unwrap());
+    }
+
+    // Tests for depth limiting
+
+    #[test]
+    fn test_normalize_json_value_inner_depth_exceeded() {
+        // Create a deeply nested JSON structure that exceeds MAX_NESTING_DEPTH
+        let mut value = serde_json::json!("leaf");
+        for _ in 0..=super::MAX_NESTING_DEPTH {
+            value = serde_json::json!([value]);
+        }
+
+        // The inner function should return an error
+        let result = super::normalize_json_value_inner(value, false, 0);
+        assert!(result.is_err());
+
+        if let Err(NormalizationError::NestingTooDeep { depth, max }) = result {
+            assert!(depth > max);
+            assert_eq!(max, super::MAX_NESTING_DEPTH);
+        } else {
+            panic!("Expected NestingTooDeep error");
+        }
+    }
+
+    #[test]
+    fn test_normalize_json_value_inner_within_limit() {
+        // Create a nested structure just within the limit
+        let mut value = serde_json::json!("leaf");
+        for _ in 0..50 {
+            value = serde_json::json!([value]);
+        }
+
+        // This should succeed
+        let result = super::normalize_json_value_inner(value, false, 0);
+        assert!(result.is_ok());
     }
 }

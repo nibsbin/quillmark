@@ -74,4 +74,6 @@ pub use guillemet::{
 };
 
 pub mod normalize;
-pub use normalize::{normalize_fields, normalize_markdown, strip_bidi_formatting};
+pub use normalize::{
+    normalize_fields, normalize_markdown, strip_bidi_formatting, NormalizationError,
+};
