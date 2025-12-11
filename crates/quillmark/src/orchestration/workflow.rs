@@ -1,6 +1,6 @@
 use quillmark_core::{
-    normalize_fields, Backend, Diagnostic, OutputFormat, ParsedDocument, Plate, Quill,
-    RenderError, RenderOptions, RenderResult, Severity,
+    normalize_fields, Backend, Diagnostic, OutputFormat, ParsedDocument, Plate, Quill, RenderError,
+    RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;
 use std::sync::Arc;

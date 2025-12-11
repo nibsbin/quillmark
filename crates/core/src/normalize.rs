@@ -406,10 +406,7 @@ mod tests {
         );
 
         let result = normalize_fields(fields);
-        assert_eq!(
-            result.get("count").unwrap().as_i64().unwrap(),
-            42
-        );
+        assert_eq!(result.get("count").unwrap().as_i64().unwrap(), 42);
         assert!(result.get("enabled").unwrap().as_bool().unwrap());
     }
 }
