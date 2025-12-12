@@ -1,6 +1,6 @@
 use quillmark_core::{
-    preprocess_fields_guillemets, Backend, Diagnostic, OutputFormat, ParsedDocument, Plate, Quill,
-    RenderError, RenderOptions, RenderResult, Severity,
+    normalize_fields, Backend, Diagnostic, OutputFormat, ParsedDocument, Plate, Quill, RenderError,
+    RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -89,10 +89,11 @@ impl Workflow {
         // Validate document against schema
         self.validate_document(&parsed_with_defaults)?;
 
-        // Preprocess guillemets: convert <<text>> to «text»
-        // This is done here so ParsedDocument accurately represents the source document
-        let fields_with_guillemets =
-            preprocess_fields_guillemets(parsed_with_defaults.fields().clone());
+        // Normalize fields: strip bidi characters and process guillemets
+        // - Strips Unicode bidirectional formatting characters that interfere with markdown parsing
+        // - Converts <<text>> to «text» in body (guillemets)
+        // - Strips chevrons in other fields (<<text>> → text)
+        let normalized_fields = normalize_fields(parsed_with_defaults.fields().clone());
 
         // Create appropriate plate based on whether template is provided
         let mut plate = match &self.quill.plate {
@@ -102,7 +103,7 @@ impl Workflow {
         self.backend.register_filters(&mut plate);
         let plated_output =
             plate
-                .compose(fields_with_guillemets)
+                .compose(normalized_fields)
                 .map_err(|e| RenderError::TemplateFailed {
                     diag: Diagnostic::new(Severity::Error, e.to_string())
                         .with_code("template::compose".to_string()),

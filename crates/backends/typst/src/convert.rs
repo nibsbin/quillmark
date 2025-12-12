@@ -329,8 +329,8 @@ where
 ///
 /// Returns an error if nesting depth exceeds the maximum allowed.
 ///
-/// Note: Guillemet preprocessing (`<<text>>` → `«text»`) is expected to be done
-/// by the caller (e.g., via `ParsedDocument::from_markdown` in quillmark-core).
+/// Note: Input normalization (bidi stripping, guillemet preprocessing) is expected
+/// to be done by the caller via `quillmark_core::normalize_fields` in the workflow.
 pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
