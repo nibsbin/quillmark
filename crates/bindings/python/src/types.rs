@@ -128,6 +128,15 @@ impl PyWorkflow {
             .map_err(convert_render_error)
     }
 
+    /// Perform a dry run validation without backend compilation.
+    ///
+    /// Raises QuillmarkError with diagnostic payload on validation failure.
+    fn dry_run(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<()> {
+        self.inner
+            .dry_run(&parsed.inner)
+            .map_err(convert_render_error)
+    }
+
     #[getter]
     fn backend_id(&self) -> &str {
         self.inner.backend_id()
