@@ -9,23 +9,27 @@
     "url": "git+https://github.com/nibsbin/quillmark.git"
   },
   "files": [
-    "wasm_bg.wasm",
-    "wasm_bg.js",
-    "wasm_bg.wasm.d.ts",
-    "wasm.js",
-    "wasm.d.ts"
+    "bundler/wasm_bg.wasm",
+    "bundler/wasm_bg.js",
+    "bundler/wasm_bg.wasm.d.ts",
+    "bundler/wasm.js",
+    "bundler/wasm.d.ts",
+    "nodejs/wasm_bg.wasm",
+    "nodejs/wasm.js",
+    "nodejs/wasm.d.ts"
   ],
-  "main": "./wasm.js",
-  "module": "./wasm.js",
-  "types": "./wasm.d.ts",
+  "main": "./nodejs/wasm.js",
+  "module": "./bundler/wasm.js",
+  "types": "./bundler/wasm.d.ts",
   "exports": {
     ".": {
-      "types": "./wasm.d.ts",
-      "import": "./wasm.js",
-      "default": "./wasm.js"
+      "types": "./bundler/wasm.d.ts",
+      "node": "./nodejs/wasm.js",
+      "import": "./bundler/wasm.js",
+      "default": "./bundler/wasm.js"
     }
   },
   "sideEffects": [
-    "./wasm.js"
+    "./bundler/wasm.js"
   ]
 }
