@@ -67,7 +67,8 @@ enabled = { description = "Enable feature", type = "bool", default = false }
 ```
 
 Each field can specify:
-- `description` - Human-readable description
+- `title` - Short label for the field
+- `description` - Detailed description of the field
 - `type` - Data type (`"str"`, `"int"`, `"bool"`, etc.)
 - `default` - Default value if not provided
 - `examples` - Array of example values
@@ -78,16 +79,16 @@ You can provide additional metadata for UI generators (like wizards or form buil
 
 ```toml
 [fields.sender]
+title = "Sender Name"
+description = "The full name of the person sending the letter, including any titles or suffixes."
 type = "string"
 
 [fields.sender.ui]
 group = "Sender Information"
-tooltip = "The name of the person sending the letter"
 ```
 
 Supported UI properties:
-- `group` - Group name for organizing fields
-- `tooltip` - Help text to display on hover
+- `group` - Group name for organizing fields in the UI
 
 ## Plate Templates
 
