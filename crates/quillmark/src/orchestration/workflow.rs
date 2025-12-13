@@ -117,7 +117,7 @@ impl Workflow {
     /// The schema is built from the TOML `[fields]` section converted to JSON Schema.
     ///
     /// If no schema is defined, this returns Ok(()).
-    pub fn validate(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
+    pub fn validate_schema(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
         self.validate_document(parsed)
     }
 
