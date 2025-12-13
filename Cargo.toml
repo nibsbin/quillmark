@@ -49,10 +49,10 @@ jsonschema = { version = "0.37", default-features = false }
 # Typst backend dependencies
 pulldown-cmark = "0.13.0"
 time = { version = "0.3.44", features = ["formatting", "parsing"] }
-typst = "0.14.0"
-typst-kit = { version = "0.14.0", default-features = false }
-typst-pdf = "0.14.0"
-typst-svg = "0.14.0"
+typst = "0.14.2"
+typst-kit = { version = "0.14.2", default-features = false }
+typst-pdf = "0.14.2"
+typst-svg = "0.14.2"
 dirs = "6.0"
 
 # AcroForm backend dependencies
