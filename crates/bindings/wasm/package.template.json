@@ -15,6 +15,8 @@
     "bundler/wasm.js",
     "bundler/wasm.d.ts",
     "node-esm/wasm_bg.wasm",
+    "node-esm/wasm_bg.js",
+    "node-esm/wasm_bg.wasm.d.ts",
     "node-esm/wasm.js",
     "node-esm/wasm.d.ts"
   ],
