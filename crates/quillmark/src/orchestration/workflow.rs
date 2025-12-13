@@ -111,6 +111,19 @@ impl Workflow {
         Ok(plated_output)
     }
 
+    /// Perform a dry run validation without backend compilation.
+    ///
+    /// Executes parsing, schema validation, and template composition to
+    /// surface input errors quickly. Returns `Ok(())` on success, or
+    /// `Err(RenderError)` with structured diagnostics on failure.
+    ///
+    /// This is useful for fast feedback loops in LLM-driven document generation,
+    /// where you want to validate inputs before incurring compilation costs.
+    pub fn dry_run(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
+        self.process_plate(parsed)?;
+        Ok(())
+    }
+
     /// Validate a ParsedDocument against the Quill's schema
     ///
     /// Validates the document's fields against the schema defined in the Quill.

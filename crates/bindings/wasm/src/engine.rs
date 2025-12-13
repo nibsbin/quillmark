@@ -178,6 +178,29 @@ impl Quillmark {
             .map_err(|e| WasmError::from(e).to_js_value())
     }
 
+    /// Perform a dry run validation without backend compilation.
+    ///
+    /// Executes parsing, schema validation, and template composition to
+    /// surface input errors quickly. Returns successfully on valid input,
+    /// or throws an error with diagnostic payload on failure.
+    ///
+    /// This is useful for fast feedback loops in LLM-driven document generation.
+    #[wasm_bindgen(js_name = dryRun)]
+    pub fn dry_run(&mut self, quill_name: &str, markdown: &str) -> Result<(), JsValue> {
+        // Parse markdown first
+        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
+            WasmError::from(format!("Failed to parse markdown: {}", e)).to_js_value()
+        })?;
+
+        let workflow = self.inner.workflow(quill_name).map_err(|e| {
+            WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
+        })?;
+
+        workflow
+            .dry_run(&parsed)
+            .map_err(|e| WasmError::from(e).to_js_value())
+    }
+
     /// Render a ParsedDocument to final artifacts (PDF, SVG, TXT)
     ///
     /// Uses the Quill specified in options.quill_name if provided,
