@@ -102,7 +102,6 @@ impl FieldSchema {
                     match key.as_str() {
                         "group" => {}
                         _ => {
-                            // Log warning but don't fail
                             eprintln!(
                                 "Warning: Unknown UI property '{}'. Only 'group' is supported.",
                                 key
@@ -2124,5 +2123,37 @@ group = "Author Info"
         let ui = author_field.ui.as_ref().unwrap();
         assert_eq!(ui.group, Some("Author Info".to_string()));
         assert_eq!(ui.order, Some(0)); // First field should have order 0
+    }
+    #[test]
+    fn test_field_schema_with_title_and_description() {
+        // Test parsing field with new schema format (title + description, no tooltip)
+        let yaml = r#"
+title: "Field Title"
+description: "Detailed field description"
+type: "string"
+examples:
+  - "Example value"
+ui:
+  group: "Test Group"
+"#;
+        let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
+        let schema = FieldSchema::from_quill_value("test_field".to_string(), &quill_value).unwrap();
+
+        assert_eq!(schema.title, Some("Field Title".to_string()));
+        assert_eq!(schema.description, "Detailed field description");
+
+        assert_eq!(
+            schema
+                .examples
+                .as_ref()
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|v| v.as_str()),
+            Some("Example value")
+        );
+
+        let ui = schema.ui.as_ref().unwrap();
+        assert_eq!(ui.group, Some("Test Group".to_string()));
     }
 }
