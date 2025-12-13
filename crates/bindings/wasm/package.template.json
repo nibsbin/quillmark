@@ -14,17 +14,17 @@
     "bundler/wasm_bg.wasm.d.ts",
     "bundler/wasm.js",
     "bundler/wasm.d.ts",
-    "nodejs/wasm_bg.wasm",
-    "nodejs/wasm.js",
-    "nodejs/wasm.d.ts"
+    "node-esm/wasm_bg.wasm",
+    "node-esm/wasm.js",
+    "node-esm/wasm.d.ts"
   ],
-  "main": "./nodejs/wasm.js",
+  "main": "./node-esm/wasm.js",
   "module": "./bundler/wasm.js",
   "types": "./bundler/wasm.d.ts",
   "exports": {
     ".": {
       "types": "./bundler/wasm.d.ts",
-      "node": "./nodejs/wasm.js",
+      "node": "./node-esm/wasm.js",
       "import": "./bundler/wasm.js",
       "default": "./bundler/wasm.js"
     }

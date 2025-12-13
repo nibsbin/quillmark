@@ -32,12 +32,12 @@ wasm-bindgen \
     --target bundler
 
 echo "Generating JS bindings for nodejs..."
-mkdir -p pkg/nodejs
+mkdir -p pkg/node-esm
 wasm-bindgen \
     target/wasm32-unknown-unknown/wasm-release/quillmark_wasm.wasm \
-    --out-dir pkg/nodejs \
+    --out-dir pkg/node-esm \
     --out-name wasm \
-    --target nodejs
+    --target experimental-nodejs-module
 
 # Step 3: Extract version from Cargo.toml
 VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "quillmark-wasm") | .version')
@@ -75,7 +75,7 @@ if [ -f "pkg/bundler/wasm_bg.wasm" ]; then
     SIZE=$(du -h pkg/bundler/wasm_bg.wasm | cut -f1)
     echo "WASM size (bundler): $SIZE"
 fi
-if [ -f "pkg/nodejs/wasm_bg.wasm" ]; then
-    SIZE=$(du -h pkg/nodejs/wasm_bg.wasm | cut -f1)
+if [ -f "pkg/node-esm/wasm_bg.wasm" ]; then
+    SIZE=$(du -h pkg/node-esm/wasm_bg.wasm | cut -f1)
     echo "WASM size (nodejs): $SIZE"
 fi
