@@ -42,6 +42,11 @@ pub fn build_schema_from_fields(
             }
         }
 
+        // Add title if specified
+        if let Some(ref title) = field_schema.title {
+            property.insert("title".to_string(), Value::String(title.clone()));
+        }
+
         // Add description
         property.insert(
             "description".to_string(),
@@ -56,29 +61,22 @@ pub fn build_schema_from_fields(
                 ui_obj.insert("group".to_string(), Value::String(group.clone()));
             }
 
-            if let Some(ref tooltip) = ui.tooltip {
-                ui_obj.insert("tooltip".to_string(), Value::String(tooltip.clone()));
-            }
-
             if let Some(order) = ui.order {
                 ui_obj.insert("order".to_string(), json!(order));
             }
 
-            property.insert("x-ui".to_string(), Value::Object(ui_obj));
+            if !ui_obj.is_empty() {
+                property.insert("x-ui".to_string(), Value::Object(ui_obj));
+            }
         }
 
-        let mut examples_array = if let Some(ref examples) = field_schema.examples {
-            examples.as_array().cloned().unwrap_or_else(Vec::new)
-        } else {
-            Vec::new()
-        };
-
-        // Add example (singular) if specified after examples
-        if let Some(ref example) = field_schema.example {
-            examples_array.push(example.as_json().clone());
-        }
-        if !examples_array.is_empty() {
-            property.insert("examples".to_string(), Value::Array(examples_array));
+        // Add examples if specified
+        if let Some(ref examples) = field_schema.examples {
+            if let Some(examples_array) = examples.as_array() {
+                if !examples_array.is_empty() {
+                    property.insert("examples".to_string(), Value::Array(examples_array.clone()));
+                }
+            }
         }
 
         // Add default if specified
@@ -520,12 +518,15 @@ mod tests {
             "List of recipient organization symbols".to_string(),
         );
         schema.r#type = Some("array".to_string());
-        schema.example = Some(QuillValue::from_json(json!(["ORG1/SYMBOL", "ORG2/SYMBOL"])));
+        schema.examples = Some(QuillValue::from_json(json!([[
+            "ORG1/SYMBOL",
+            "ORG2/SYMBOL"
+        ]])));
         fields.insert("memo_for".to_string(), schema);
 
         let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
 
-        // Verify that example field is present in the schema
+        // Verify that examples field is present in the schema
         assert!(json_schema["properties"]["memo_for"]
             .as_object()
             .unwrap()

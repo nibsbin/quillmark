@@ -12,8 +12,6 @@ use crate::value::QuillValue;
 pub struct UiSchema {
     /// Group name for organizing fields (e.g., "Personal Info", "Preferences")
     pub group: Option<String>,
-    /// Short tooltip text for the field (concise hint, unlike verbose description)
-    pub tooltip: Option<String>,
     /// Order of the field in the UI (automatically generated based on field position in Quill.toml)
     pub order: Option<i32>,
 }
@@ -22,14 +20,14 @@ pub struct UiSchema {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldSchema {
     pub name: String,
+    /// Short label for the field (used in JSON Schema title)
+    pub title: Option<String>,
     /// Field type hint (e.g., "string", "number", "boolean", "object", "array")
     pub r#type: Option<String>,
-    /// Description of the field
+    /// Detailed description of the field (used in JSON Schema description)
     pub description: String,
     /// Default value for the field
     pub default: Option<QuillValue>,
-    /// Example value for the field
-    pub example: Option<QuillValue>,
     /// Example values for the field
     pub examples: Option<QuillValue>,
     /// UI-specific metadata for rendering
@@ -41,10 +39,10 @@ impl FieldSchema {
     pub fn new(name: String, description: String) -> Self {
         Self {
             name,
+            title: None,
             r#type: None,
             description,
             default: None,
-            example: None,
             examples: None,
             ui: None,
         }
@@ -59,7 +57,7 @@ impl FieldSchema {
         //Ensure only known keys are present
         for key in obj.keys() {
             match key.as_str() {
-                "name" | "type" | "description" | "example" | "default" | "ui" => {}
+                "name" | "title" | "type" | "description" | "examples" | "default" | "ui" => {}
                 _ => {
                     // Log warning but don't fail
                     eprintln!("Warning: Unknown key '{}' in field schema", key);
@@ -68,6 +66,11 @@ impl FieldSchema {
         }
 
         let name = key.clone();
+
+        let title = obj
+            .get("title")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
 
         let description = obj
             .get("description")
@@ -82,8 +85,6 @@ impl FieldSchema {
 
         let default = obj.get("default").map(|v| QuillValue::from_json(v.clone()));
 
-        let example = obj.get("example").map(|v| QuillValue::from_json(v.clone()));
-
         let examples = obj
             .get("examples")
             .map(|v| QuillValue::from_json(v.clone()));
@@ -96,25 +97,22 @@ impl FieldSchema {
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
-                let tooltip = ui_obj
-                    .get("tooltip")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-
                 // Validate that only known UI properties are present
                 for key in ui_obj.keys() {
                     match key.as_str() {
-                        "group" | "tooltip" => {}
+                        "group" => {}
                         _ => {
                             // Log warning but don't fail
-                            eprintln!("Warning: Unknown UI property '{}'. Only 'group' and 'tooltip' are supported.", key);
+                            eprintln!(
+                                "Warning: Unknown UI property '{}'. Only 'group' is supported.",
+                                key
+                            );
                         }
                     }
                 }
 
                 Some(UiSchema {
                     group,
-                    tooltip,
                     order: None, // Order is determined by position in Quill.toml
                 })
             } else {
@@ -126,10 +124,10 @@ impl FieldSchema {
 
         Ok(Self {
             name,
+            title,
             r#type: field_type,
             description,
             default,
-            example,
             examples,
             ui,
         })
@@ -611,7 +609,6 @@ impl QuillConfig {
                                     if schema.ui.is_none() {
                                         schema.ui = Some(UiSchema {
                                             group: None,
-                                            tooltip: None,
                                             order: Some(order),
                                         });
                                     } else if let Some(ui) = &mut schema.ui {
@@ -1816,14 +1813,15 @@ title = {description = "title of document" }
         let schema1 = FieldSchema::new("test_name".to_string(), "Test description".to_string());
         assert_eq!(schema1.description, "Test description");
         assert_eq!(schema1.r#type, None);
-        assert_eq!(schema1.example, None);
+        assert_eq!(schema1.examples, None);
         assert_eq!(schema1.default, None);
 
         // Test parsing FieldSchema from YAML with all fields
         let yaml_str = r#"
 description: "Full field schema"
 type: "string"
-example: "Example value"
+examples:
+  - "Example value"
 default: "Default value"
 "#;
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml_str).unwrap();
@@ -1833,7 +1831,12 @@ default: "Default value"
         assert_eq!(schema2.description, "Full field schema");
         assert_eq!(schema2.r#type, Some("string".to_string()));
         assert_eq!(
-            schema2.example.as_ref().and_then(|v| v.as_str()),
+            schema2
+                .examples
+                .as_ref()
+                .and_then(|v| v.as_array())
+                .and_then(|arr| arr.first())
+                .and_then(|v| v.as_str()),
             Some("Example value")
         );
         assert_eq!(
@@ -2113,7 +2116,6 @@ type = "str"
 
 [fields.author.ui]
 group = "Author Info"
-tooltip = "Your full name"
 "#;
 
         let config = QuillConfig::from_toml(toml_content).unwrap();
@@ -2121,7 +2123,6 @@ tooltip = "Your full name"
         let author_field = &config.fields["author"];
         let ui = author_field.ui.as_ref().unwrap();
         assert_eq!(ui.group, Some("Author Info".to_string()));
-        assert_eq!(ui.tooltip, Some("Your full name".to_string()));
         assert_eq!(ui.order, Some(0)); // First field should have order 0
     }
 }

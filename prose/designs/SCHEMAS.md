@@ -35,22 +35,21 @@ Developers can define the schema for ParsedDocument input within the `[fields]` 
 
 Field properties:
 - name -> str: This is the key; e.g., for the TOML section `[fields.title]`, the name would be "title".
-- description -> str: A description of the field.
+- title -> Option[str]: Short label for the field (used in JSON Schema `title` property).
+- description -> str: Detailed description of the field (used in JSON Schema `description` property).
 - type -> "str", "array", "dict", "date", "datetime", or "number": The value type of the field.
 - default -> any: The default value for the field. If defined, this makes the field optional (not required).
-- example -> any: An example value for the field (added to the examples array in the JSON schema).
+- examples -> any[]: Example values for the field (used in JSON Schema `examples` array).
 - ui -> Option[Table]: A table containing UI-specific metadata (see below).
 
 **UI Configuration (Nested `[ui]` table):**
 - group -> Option[str]: UI group/section name for organizing fields (e.g., "Personal Info").
-- tooltip -> Option[str]: Short hint text for the field (concise hint, unlike verbose description).
 - order -> Option[int]: Ordering index for sorting fields in the UI (auto-generated from TOML field position).
 
 **Implementation Status:**
 | Property | Status |
 |----------|--------|
 | group | ✅ Implemented |
-| tooltip | ✅ Implemented |
 | order | ✅ Implemented (auto-generated) |
 | component | ❌ Not yet implemented |
 
@@ -70,7 +69,7 @@ Field properties:
 
 Field schemas support a custom `x-ui` property for UI metadata that is included in the generated JSON schema. This property contains the serialized content of the `[ui]` table from the TOML configuration.
 
-- `x-ui`: An object containing UI metadata (group, tooltip, order, etc.)
+- `x-ui`: An object containing UI metadata (group, order)
 
 This property follows the JSON Schema specification for custom extensions. Validation logic ignores this property, but frontend UIs consume it for dynamic wizard generation.
 
@@ -81,11 +80,12 @@ This property follows the JSON Schema specification for custom extensions. Valid
   "properties": {
     "author": {
       "type": "string",
-      "description": "The full name of the document author...",
+      "title": "Author Name",
+      "description": "The full name of the document author. Include middle initial if applicable.",
       "default": "Anonymous",
+      "examples": ["John Doe", "Jane Smith"],
       "x-ui": {
         "group": "Author Info",
-        "tooltip": "Your full name",
         "order": 1
       }
     }

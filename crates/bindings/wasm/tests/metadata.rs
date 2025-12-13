@@ -7,7 +7,7 @@ use wasm_bindgen_test::*;
 
 const UI_QUILL_JSON: &str = r#"{
   "files": {
-    "Quill.toml": { "contents": "[Quill]\nname = \"ui-test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill for UI metadata\"\n\n[fields.my_field]\ntype = \"string\"\n\n[fields.my_field.ui]\ngroup = \"Personal Info\"\ntooltip = \"Enter your name\"\n" },
+    "Quill.toml": { "contents": "[Quill]\nname = \"ui-test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill for UI metadata\"\n\n[fields.my_field]\ntype = \"string\"\n\n[fields.my_field.ui]\ngroup = \"Personal Info\"\n" },
     "plate.typ": { "contents": "= Title" }
   }
 }"#;
@@ -34,6 +34,5 @@ fn test_metadata_retrieval() {
         .expect("x-ui not found");
 
     assert_eq!(x_ui["group"], "Personal Info");
-    assert_eq!(x_ui["tooltip"], "Enter your name");
     assert_eq!(x_ui["order"], 0);
 }
