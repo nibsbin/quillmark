@@ -93,7 +93,7 @@ jobs:
           echo "Publishing WASM version: $VERSION"
 
       - name: Publish @quillmark/wasm
-        working-directory: pkg/bundler
+        working-directory: pkg
         run: npm publish --access public --provenance
 
       - name: Publish summary
