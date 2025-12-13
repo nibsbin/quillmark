@@ -11,18 +11,18 @@ description = "Typeset letters that comply with Carnegie Mellon University lette
 # ==========================================
 
 [fields.recipient]
-description = "Recipient's name and address"
+title = "Recipient's name and address"
 type = "array"
-example = ["Mr. John Doe", "123 Main St", "Anytown, USA"]
+examples = [["Mr. John Doe", "123 Main St", "Anytown, USA"]]
 ui.group = "Essentials"
-ui.tooltip = "The recipient's name and full mailing address."
+description = "The recipient's name and full mailing address."
 
 [fields.signature_block]
-description = "Signature block lines"
+title = "Signature block lines"
 type = "array"
-example = ["First M. Last", "Title"]
+examples = [["First M. Last", "Title"]]
 ui.group = "Essentials"
-ui.tooltip = "The signer's information. Line 1: Name. Line 2: Title."
+description = "The signer's information. Line 1: Name. Line 2: Title."
 
 # ==========================================
 # Group 2: Letterhead
@@ -30,25 +30,25 @@ ui.tooltip = "The signer's information. Line 1: Name. Line 2: Title."
 # ==========================================
 
 [fields.department]
-description = "Name of the department or unit"
+title = "Name of the department or unit"
 type = "string"
-example = "Department of Electrical and Computer Engineering"
+examples = ["Department of Electrical and Computer Engineering"]
 ui.group = "Letterhead"
-ui.tooltip = "The department or organizational unit name for the letterhead."
+description = "The department or organizational unit name for the letterhead."
 
 [fields.address]
-description = "Sender's address lines"
+title = "Sender's address lines"
 type = "array"
-example = ["5000 Forbes Avenue", "Pittsburgh, PA 15213-3890"]
+examples = [["5000 Forbes Avenue", "Pittsburgh, PA 15213-3890"]]
 ui.group = "Letterhead"
-ui.tooltip = "The sender's institutional mailing address."
+description = "The sender's institutional mailing address."
 
 [fields.url]
-description = "Department or university URL"
+title = "Department or university URL"
 type = "string"
-example = "www.ece.cmu.edu"
+examples = ["www.ece.cmu.edu"]
 ui.group = "Letterhead"
-ui.tooltip = "The department or university website URL."
+description = "The department or university website URL."
 
 # ==========================================
 # Group 3: Advanced
@@ -56,7 +56,7 @@ ui.tooltip = "The department or university website URL."
 # ==========================================
 
 [fields.date]
-description = "Date of the letter"
+title = "Date of the letter"
 type = "date"
 ui.group = "Advanced"
-ui.tooltip = "The date to appear on the letter."
+description = "The date to appear on the letter."
