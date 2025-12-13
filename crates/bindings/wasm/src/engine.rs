@@ -184,13 +184,18 @@ impl Quillmark {
     /// surface input errors quickly. Returns successfully on valid input,
     /// or throws an error with diagnostic payload on failure.
     ///
+    /// The quill name is inferred from the markdown's QUILL tag (or defaults to "__default__").
+    ///
     /// This is useful for fast feedback loops in LLM-driven document generation.
     #[wasm_bindgen(js_name = dryRun)]
-    pub fn dry_run(&mut self, quill_name: &str, markdown: &str) -> Result<(), JsValue> {
+    pub fn dry_run(&mut self, markdown: &str) -> Result<(), JsValue> {
         // Parse markdown first
         let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
             WasmError::from(format!("Failed to parse markdown: {}", e)).to_js_value()
         })?;
+
+        // Infer quill name from parsed document's quill_tag
+        let quill_name = parsed.quill_tag();
 
         let workflow = self.inner.workflow(quill_name).map_err(|e| {
             WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
@@ -208,18 +213,16 @@ impl Quillmark {
     #[wasm_bindgen]
     pub fn render(
         &mut self,
-        parsed_wasm: ParsedDocument,
+        parsed: ParsedDocument,
         opts: RenderOptions,
     ) -> Result<RenderResult, JsValue> {
-        // Determine which quill name to use (before consuming parsed_wasm)
-        let quill_name_to_use = opts
-            .quill_name
-            .unwrap_or_else(|| parsed_wasm.quill_tag.clone());
+        // Determine which quill name to use (before consuming parsed)
+        let quill_name_to_use = opts.quill_name.unwrap_or_else(|| parsed.quill_tag.clone());
 
         // Reconstruct a core ParsedDocument from the WASM type
         // Convert JSON value to HashMap<String, QuillValue>
-        let fields_json = parsed_wasm.fields;
-        let quill_tag = parsed_wasm.quill_tag; // Move quill_tag out
+        let fields_json = parsed.fields;
+        let quill_tag = parsed.quill_tag; // Move quill_tag out
 
         let mut fields = std::collections::HashMap::new();
 
