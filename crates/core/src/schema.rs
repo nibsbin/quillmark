@@ -219,6 +219,125 @@ pub fn extract_examples_from_schema(
     examples
 }
 
+/// Extract default values for scope item fields from a JSON Schema
+///
+/// For scope-typed fields (type = "array" with items.properties), extracts
+/// any default values defined for item properties.
+///
+/// # Arguments
+///
+/// * `schema` - A JSON Schema object (must have "properties" field)
+///
+/// # Returns
+///
+/// A HashMap of scope field names to their item defaults:
+/// `HashMap<scope_field_name, HashMap<item_field_name, default_value>>`
+pub fn extract_scope_item_defaults(
+    schema: &QuillValue,
+) -> HashMap<String, HashMap<String, QuillValue>> {
+    let mut scope_defaults = HashMap::new();
+
+    // Get the properties object from the schema
+    if let Some(properties) = schema.as_json().get("properties") {
+        if let Some(properties_obj) = properties.as_object() {
+            for (field_name, field_schema) in properties_obj {
+                // Check if this is a scope-typed field (array with items)
+                let is_array = field_schema
+                    .get("type")
+                    .and_then(|t| t.as_str())
+                    .map(|t| t == "array")
+                    .unwrap_or(false);
+
+                if !is_array {
+                    continue;
+                }
+
+                // Get items schema
+                if let Some(items_schema) = field_schema.get("items") {
+                    // Get properties of items
+                    if let Some(item_props) = items_schema.get("properties") {
+                        if let Some(item_props_obj) = item_props.as_object() {
+                            let mut item_defaults = HashMap::new();
+
+                            for (item_field_name, item_field_schema) in item_props_obj {
+                                // Extract default value if present
+                                if let Some(default_value) = item_field_schema.get("default") {
+                                    item_defaults.insert(
+                                        item_field_name.clone(),
+                                        QuillValue::from_json(default_value.clone()),
+                                    );
+                                }
+                            }
+
+                            if !item_defaults.is_empty() {
+                                scope_defaults.insert(field_name.clone(), item_defaults);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    scope_defaults
+}
+
+/// Apply default values to scope item fields in a document
+///
+/// For each scope-typed field (arrays), iterates through items and
+/// inserts default values for missing fields.
+///
+/// # Arguments
+///
+/// * `fields` - The document fields containing scope arrays
+/// * `scope_defaults` - Defaults for scope items from `extract_scope_item_defaults`
+///
+/// # Returns
+///
+/// A new HashMap with default values applied to scope items
+pub fn apply_scope_item_defaults(
+    fields: &HashMap<String, QuillValue>,
+    scope_defaults: &HashMap<String, HashMap<String, QuillValue>>,
+) -> HashMap<String, QuillValue> {
+    let mut result = fields.clone();
+
+    for (scope_name, item_defaults) in scope_defaults {
+        if let Some(scope_value) = result.get(scope_name) {
+            // Get the array of items
+            if let Some(items_array) = scope_value.as_array() {
+                let mut updated_items: Vec<serde_json::Value> = Vec::new();
+
+                for item in items_array {
+                    // Get item as object
+                    if let Some(item_obj) = item.as_object() {
+                        let mut new_item = item_obj.clone();
+
+                        // Apply defaults for missing fields
+                        for (default_field, default_value) in item_defaults {
+                            if !new_item.contains_key(default_field) {
+                                new_item
+                                    .insert(default_field.clone(), default_value.as_json().clone());
+                            }
+                        }
+
+                        updated_items.push(serde_json::Value::Object(new_item));
+                    } else {
+                        // Item is not an object, keep as-is
+                        updated_items.push(item.clone());
+                    }
+                }
+
+                result.insert(
+                    scope_name.clone(),
+                    QuillValue::from_json(serde_json::Value::Array(updated_items)),
+                );
+            }
+        }
+    }
+
+    result
+}
+
 /// Validate a document's fields against a JSON Schema
 pub fn validate_document(
     schema: &QuillValue,
@@ -1112,5 +1231,211 @@ mod tests {
 
         // Verify additionalProperties is set
         assert_eq!(items_schema["additionalProperties"], true);
+    }
+
+    #[test]
+    fn test_extract_scope_item_defaults() {
+        // Create a JSON schema with scope items that have defaults
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "endorsements": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": { "type": "string" },
+                            "org": { "type": "string", "default": "Unknown Org" },
+                            "rank": { "type": "string", "default": "N/A" }
+                        }
+                    }
+                },
+                "title": { "type": "string" }
+            }
+        });
+
+        let scope_defaults = extract_scope_item_defaults(&QuillValue::from_json(schema));
+
+        // Should have one scope field with defaults
+        assert_eq!(scope_defaults.len(), 1);
+        assert!(scope_defaults.contains_key("endorsements"));
+
+        let endorsements_defaults = scope_defaults.get("endorsements").unwrap();
+        assert_eq!(endorsements_defaults.len(), 2); // org and rank have defaults
+        assert!(!endorsements_defaults.contains_key("name")); // name has no default
+        assert_eq!(
+            endorsements_defaults.get("org").unwrap().as_str(),
+            Some("Unknown Org")
+        );
+        assert_eq!(
+            endorsements_defaults.get("rank").unwrap().as_str(),
+            Some("N/A")
+        );
+    }
+
+    #[test]
+    fn test_extract_scope_item_defaults_empty() {
+        // Schema with no scope fields
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "title": { "type": "string" }
+            }
+        });
+
+        let scope_defaults = extract_scope_item_defaults(&QuillValue::from_json(schema));
+        assert!(scope_defaults.is_empty());
+    }
+
+    #[test]
+    fn test_extract_scope_item_defaults_no_item_defaults() {
+        // Schema with scope field but no item defaults
+        let schema = json!({
+            "type": "object",
+            "properties": {
+                "endorsements": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": { "type": "string" },
+                            "org": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        });
+
+        let scope_defaults = extract_scope_item_defaults(&QuillValue::from_json(schema));
+        assert!(scope_defaults.is_empty()); // No defaults defined
+    }
+
+    #[test]
+    fn test_apply_scope_item_defaults() {
+        // Set up scope defaults
+        let mut item_defaults = HashMap::new();
+        item_defaults.insert(
+            "org".to_string(),
+            QuillValue::from_json(json!("Default Org")),
+        );
+
+        let mut scope_defaults = HashMap::new();
+        scope_defaults.insert("endorsements".to_string(), item_defaults);
+
+        // Set up document fields with scope items missing the 'org' field
+        let mut fields = HashMap::new();
+        fields.insert(
+            "endorsements".to_string(),
+            QuillValue::from_json(json!([
+                { "name": "John Doe" },
+                { "name": "Jane Smith", "org": "Custom Org" }
+            ])),
+        );
+
+        let result = apply_scope_item_defaults(&fields, &scope_defaults);
+
+        // Verify defaults were applied
+        let endorsements = result.get("endorsements").unwrap().as_array().unwrap();
+        assert_eq!(endorsements.len(), 2);
+
+        // First item should have default applied
+        assert_eq!(endorsements[0]["name"], "John Doe");
+        assert_eq!(endorsements[0]["org"], "Default Org");
+
+        // Second item should preserve existing value
+        assert_eq!(endorsements[1]["name"], "Jane Smith");
+        assert_eq!(endorsements[1]["org"], "Custom Org");
+    }
+
+    #[test]
+    fn test_apply_scope_item_defaults_empty_scope() {
+        let mut item_defaults = HashMap::new();
+        item_defaults.insert(
+            "org".to_string(),
+            QuillValue::from_json(json!("Default Org")),
+        );
+
+        let mut scope_defaults = HashMap::new();
+        scope_defaults.insert("endorsements".to_string(), item_defaults);
+
+        // Empty endorsements array
+        let mut fields = HashMap::new();
+        fields.insert("endorsements".to_string(), QuillValue::from_json(json!([])));
+
+        let result = apply_scope_item_defaults(&fields, &scope_defaults);
+
+        // Should still be empty array
+        let endorsements = result.get("endorsements").unwrap().as_array().unwrap();
+        assert!(endorsements.is_empty());
+    }
+
+    #[test]
+    fn test_apply_scope_item_defaults_no_matching_scope() {
+        let mut item_defaults = HashMap::new();
+        item_defaults.insert(
+            "org".to_string(),
+            QuillValue::from_json(json!("Default Org")),
+        );
+
+        let mut scope_defaults = HashMap::new();
+        scope_defaults.insert("endorsements".to_string(), item_defaults);
+
+        // Document has different scope field
+        let mut fields = HashMap::new();
+        fields.insert(
+            "reviews".to_string(),
+            QuillValue::from_json(json!([{ "author": "Bob" }])),
+        );
+
+        let result = apply_scope_item_defaults(&fields, &scope_defaults);
+
+        // reviews should be unchanged
+        let reviews = result.get("reviews").unwrap().as_array().unwrap();
+        assert_eq!(reviews.len(), 1);
+        assert_eq!(reviews[0]["author"], "Bob");
+        assert!(reviews[0].get("org").is_none());
+    }
+
+    #[test]
+    fn test_scope_validation_with_required_fields() {
+        // Test that JSON Schema validation rejects scope items missing required fields
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "endorsements": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": { "type": "string" },
+                            "org": { "type": "string", "default": "Unknown" }
+                        },
+                        "required": ["name"]
+                    }
+                }
+            }
+        });
+
+        // Valid: has required 'name' field
+        let mut valid_fields = HashMap::new();
+        valid_fields.insert(
+            "endorsements".to_string(),
+            QuillValue::from_json(json!([{ "name": "John" }])),
+        );
+
+        let result = validate_document(&QuillValue::from_json(schema.clone()), &valid_fields);
+        assert!(result.is_ok());
+
+        // Invalid: missing required 'name' field
+        let mut invalid_fields = HashMap::new();
+        invalid_fields.insert(
+            "endorsements".to_string(),
+            QuillValue::from_json(json!([{ "org": "SomeOrg" }])),
+        );
+
+        let result = validate_document(&QuillValue::from_json(schema), &invalid_fields);
+        assert!(result.is_err());
     }
 }

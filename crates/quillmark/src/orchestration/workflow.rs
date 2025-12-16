@@ -79,9 +79,17 @@ impl Workflow {
 
     /// Process a parsed document through the plate template without compilation
     pub fn process_plate(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
-        // Apply defaults from JSON schema
+        use quillmark_core::schema;
+
+        // Apply defaults from JSON schema (document-level)
         let defaults = self.quill.extract_defaults();
         let parsed_with_defaults = parsed.with_defaults(&defaults);
+
+        // Apply scope item defaults (for each item in scope arrays)
+        let scope_item_defaults = schema::extract_scope_item_defaults(&self.quill.schema);
+        let fields_with_scope_defaults =
+            schema::apply_scope_item_defaults(parsed_with_defaults.fields(), &scope_item_defaults);
+        let parsed_with_defaults = ParsedDocument::new(fields_with_scope_defaults);
 
         // Apply coercion based on schema
         let parsed_with_defaults = parsed_with_defaults.with_coercion(&self.quill.schema);

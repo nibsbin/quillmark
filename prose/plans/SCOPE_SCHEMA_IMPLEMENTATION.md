@@ -60,23 +60,44 @@
 
 ---
 
-## Phase 2: Validation Integration
+## Phase 2: Validation Integration ✅
 
-### Changes Required
+> **Status**: Completed (2025-12-15)
 
-1. **Scope Field Validation**
-   - During document parsing, detect scope-typed fields
-   - Validate each scope item against `items.*` schema
-   - Apply default values to missing item fields
+### Changes Implemented
 
-2. **Error Handling**
-   - Generate validation errors with scope context (field name, item index)
-   - Use existing error infrastructure from [ERROR.md](../designs/ERROR.md)
+1. **Scope Item Defaults Extraction** (`schema.rs`)
+   - Added `extract_scope_item_defaults()` function
+   - Extracts default values from `items.properties.*.default` in JSON Schema
+   - Returns `HashMap<scope_name, HashMap<item_field, default_value>>`
+
+2. **Scope Item Defaults Application** (`schema.rs`)
+   - Added `apply_scope_item_defaults()` function
+   - Applies defaults to each item in scope arrays
+   - Preserves existing values, only fills missing fields
+
+3. **Integration in Workflow** (`workflow.rs`)
+   - Updated `process_plate()` to apply scope item defaults
+   - Applied after document-level defaults, before coercion
+
+4. **Validation**
+   - JSON Schema validation (via `jsonschema` crate) already validates scope items
+   - Required item fields checked via `items.required` array in schema
 
 ### Affected Files
 
-- `crates/core/src/parse.rs` - Add validation hooks after scope aggregation
-- `crates/core/src/schema.rs` - Add scope item validation
+- `crates/core/src/schema.rs` - Added scope item default functions
+- `crates/quillmark/src/orchestration/workflow.rs` - Integrated scope defaults
+
+### Tests Added
+
+- `test_extract_scope_item_defaults` - Extracts defaults from scope items
+- `test_extract_scope_item_defaults_empty` - No scope fields
+- `test_extract_scope_item_defaults_no_item_defaults` - Scope without item defaults
+- `test_apply_scope_item_defaults` - Apply defaults to scope items
+- `test_apply_scope_item_defaults_empty_scope` - Empty scope array
+- `test_apply_scope_item_defaults_no_matching_scope` - Unrelated scope field
+- `test_scope_validation_with_required_fields` - JSON Schema required field validation
 
 ---
 
