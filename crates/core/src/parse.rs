@@ -468,10 +468,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
         // Check for global frontmatter (no tag and no quill directive)
         if block.tag.is_none() && block.quill_name.is_none() {
             if has_global_frontmatter {
-                return Err(
-                    "Multiple global frontmatter blocks found: only one untagged block allowed"
-                        .into(),
-                );
+                return Err(Box::new(crate::error::ParseError::missing_card_directive()));
             }
             has_global_frontmatter = true;
             global_frontmatter_index = Some(idx);
@@ -1330,10 +1327,20 @@ More body"#;
 
         let result = decompose(markdown);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Multiple global frontmatter"));
+
+        // Verify the error message contains CARD hint
+        let err = result.unwrap_err();
+        let err_str = err.to_string();
+        assert!(
+            err_str.contains("CARD"),
+            "Error should mention CARD directive: {}",
+            err_str
+        );
+        assert!(
+            err_str.contains("missing"),
+            "Error should indicate missing directive: {}",
+            err_str
+        );
     }
 
     #[test]

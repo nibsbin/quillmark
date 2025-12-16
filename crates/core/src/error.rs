@@ -351,9 +351,33 @@ pub enum ParseError {
     #[error("Invalid YAML structure: {0}")]
     InvalidStructure(String),
 
+    /// Missing CARD directive in inline metadata block
+    #[error("{}", .diag.message)]
+    MissingCardDirective {
+        /// Diagnostic information with hint
+        diag: Diagnostic,
+    },
+
     /// Other parsing errors
     #[error("{0}")]
     Other(String),
+}
+
+impl ParseError {
+    /// Create a MissingCardDirective error with helpful hint
+    pub fn missing_card_directive() -> Self {
+        let diag = Diagnostic::new(
+            Severity::Error,
+            "Inline metadata block missing CARD directive".to_string(),
+        )
+        .with_code("parse::missing_card".to_string())
+        .with_hint(
+            "Add 'CARD: <card_type>' to specify which card this block belongs to. \
+            Example:\n---\nCARD: my_card_type\nfield: value\n---"
+                .to_string(),
+        );
+        ParseError::MissingCardDirective { diag }
+    }
 }
 
 impl From<Box<dyn std::error::Error + Send + Sync>> for ParseError {
