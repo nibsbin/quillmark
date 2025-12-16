@@ -123,7 +123,6 @@ fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
 
     def.insert("properties".to_string(), Value::Object(properties));
     def.insert("required".to_string(), Value::Array(required));
-    def.insert("additionalProperties".to_string(), Value::Bool(true));
 
     def
 }
@@ -207,7 +206,6 @@ pub fn build_schema(
         "required".to_string(),
         Value::Array(required_fields.into_iter().map(Value::String).collect()),
     );
-    schema_map.insert("additionalProperties".to_string(), Value::Bool(true));
 
     let schema = Value::Object(schema_map);
 
@@ -1341,8 +1339,8 @@ mod tests {
         assert!(required.contains(&json!("name")));
         assert!(!required.contains(&json!("org")));
 
-        // Verify additionalProperties is set
-        assert_eq!(card_def["additionalProperties"], true);
+        // Verify additionalProperties is NOT set (defaults to true implicitly)
+        assert!(card_def.get("additionalProperties").is_none());
     }
 
     #[test]
