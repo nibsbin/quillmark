@@ -142,10 +142,10 @@ mod tests {
     fn test_missing_card_directive_conversion() {
         let diag = Diagnostic::new(Severity::Error, "Missing CARD".to_string())
             .with_code("parse::missing_card".to_string());
-        
+
         let err = ParseError::MissingCardDirective { diag };
         let wasm_err: WasmError = err.into();
-        
+
         match wasm_err {
             WasmError::Diagnostic { diagnostic } => {
                 assert_eq!(diagnostic.code.as_deref(), Some("parse::missing_card"));
