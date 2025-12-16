@@ -38,6 +38,6 @@ The `usaf_memo` Quill package takes care of all 33-337 formatting details. Focus
 **Numbering** Top-level paragraphs like this one are automatically numbered. NEVER manually number your paragraphs.
 
 - Use bullets for hierarchical paragraph nesting. These are automatically numbered or lettered as well.
-  - Up to five nested levels are supported
+  - Up to five levels of paragraphs are supported
 
 Do not include a complimentary close (e.g. "Respectfully,") in official memorandums.
