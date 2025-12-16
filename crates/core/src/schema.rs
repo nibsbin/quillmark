@@ -31,8 +31,8 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
                 let item_property = build_field_property(item_schema);
                 item_properties.insert(item_name.clone(), Value::Object(item_property));
 
-                // Item fields without defaults are required
-                if item_schema.default.is_none() {
+                // Item fields are required if explicitly marked as required = true
+                if item_schema.required {
                     item_required.push(Value::String(item_name.clone()));
                 }
             }
@@ -122,10 +122,9 @@ pub fn build_schema_from_fields(
         let property = build_field_property(field_schema);
         properties.insert(field_name.clone(), Value::Object(property));
 
-        // Determine if field is required based on the spec:
-        // - If default is present → field is optional
-        // - If default is absent → field is required
-        if field_schema.default.is_none() {
+        // Field is required if explicitly marked as required = true
+        // Fields are optional by default (JSON Schema standard)
+        if field_schema.required {
             required_fields.push(field_name.clone());
         }
     }
@@ -1198,6 +1197,7 @@ mod tests {
         // Add item schemas
         let mut name_schema = FieldSchema::new("name".to_string(), "Endorser name".to_string());
         name_schema.r#type = Some("string".to_string());
+        name_schema.required = true; // Explicitly mark as required
 
         let mut org_schema = FieldSchema::new("org".to_string(), "Organization".to_string());
         org_schema.r#type = Some("string".to_string());
@@ -1224,7 +1224,7 @@ mod tests {
         assert_eq!(items_schema["properties"]["org"]["type"], "string");
         assert_eq!(items_schema["properties"]["org"]["default"], "Unknown");
 
-        // Verify required propagation: name is required (no default), org is optional (has default)
+        // Verify required propagation: name has required=true, org is optional
         let required = items_schema["required"].as_array().unwrap();
         assert!(required.contains(&json!("name")));
         assert!(!required.contains(&json!("org")));

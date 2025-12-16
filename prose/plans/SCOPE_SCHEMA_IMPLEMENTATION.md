@@ -101,16 +101,30 @@
 
 ---
 
-## Phase 3: Documentation and Migration
+## Phase 3: Documentation and Migration ✅
 
-### Changes Required
+> **Status**: Completed (2025-12-15)
 
-1. **Update Example Quills**
-   - Add `type = "scope"` fields to USAF memo quill
-   - Add `[fields.X.items.*]` field definitions
+### Changes Implemented
+
+1. **Updated USAF Memo Quill**
+   - Added `indorsements` field with `type = "scope"`
+   - Added 8 item field definitions under `[fields.indorsements.items.*]`:
+     - `from` (string) - From office/symbol
+     - `for` (string) - To office/symbol
+     - `signature_block` (array) - Signature block lines
+     - `attachments` (array, default: []) - Attachments for endorsement
+     - `cc` (array, default: []) - Carbon copy recipients
+     - `date` (string, default: "") - Date of endorsement
+     - `new_page` (boolean, default: false) - Start on new page
+     - `informal` (boolean, default: false) - Informal format
 
 2. **Binding Updates**
    - No API changes needed (scopes are just fields)
+
+### Affected Files
+
+- `crates/fixtures/.../usaf_memo/Quill.toml` - Added indorsements scope field
 
 ---
 

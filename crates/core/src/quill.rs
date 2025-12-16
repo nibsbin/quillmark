@@ -34,6 +34,8 @@ pub struct FieldSchema {
     pub ui: Option<UiSchema>,
     /// Nested item field schemas (only valid when type = "scope")
     pub items: Option<HashMap<String, FieldSchema>>,
+    /// Whether this field is required (fields are optional by default)
+    pub required: bool,
 }
 
 impl FieldSchema {
@@ -48,6 +50,7 @@ impl FieldSchema {
             examples: None,
             ui: None,
             items: None,
+            required: false,
         }
     }
 
@@ -70,7 +73,7 @@ impl FieldSchema {
         for key in obj.keys() {
             match key.as_str() {
                 "name" | "title" | "type" | "description" | "examples" | "default" | "ui"
-                | "items" => {}
+                | "items" | "required" => {}
                 _ => {
                     // Log warning but don't fail
                     eprintln!("Warning: Unknown key '{}' in field schema", key);
@@ -109,6 +112,12 @@ impl FieldSchema {
         let examples = obj
             .get("examples")
             .map(|v| QuillValue::from_json(v.clone()));
+
+        // Parse required field (fields are optional by default)
+        let required = obj
+            .get("required")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
 
         // Parse UI metadata if present
         let ui = if let Some(ui_value) = obj.get("ui") {
@@ -180,6 +189,7 @@ impl FieldSchema {
             examples,
             ui,
             items,
+            required,
         })
     }
 }

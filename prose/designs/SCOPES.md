@@ -1,6 +1,6 @@
 # Scope Schema Configuration
 
-> **Status**: Design Phase
+> **Status**: Implemented
 >
 > This document defines how SCOPE blocks are configured as fields with `type = "scope"` in Quill.toml.
 
@@ -74,11 +74,12 @@ ui.group = "Routing"
 type = "string"
 title = "Endorser Name"
 description = "Name of the endorsing official"
+required = true  # Explicitly required
 
 [fields.endorsements.items.org]
 type = "string"
 title = "Organization"
-default = "Unknown"
+default = "Unknown"  # Optional (has default)
 ```
 
 ---
@@ -104,12 +105,14 @@ default = "Unknown"
 
 ### Required Field Propagation
 
-| Item Field Configuration | JSON Schema Result |
-|--------------------------|--------------------|
-| Has `default` value | Optional (not in `required`) |
-| No `default` value | Required (in `items.required` array) |
+Fields are **optional by default** (aligns with JSON Schema standard). Use `required = true` to mark mandatory fields:
 
-Item fields follow the same required logic as document-level fields: presence of `default` makes a field optional.
+| Item Field Configuration | JSON Schema Result |
+|--------------------------|-------------------|
+| `required = true` | In `items.required` array |
+| No `required` (or `required = false`) | Not in `required` array (optional) |
+
+This applies to both document-level fields and scope item fields.
 
 ### Not Supported in v1
 
