@@ -3,7 +3,8 @@
 //! This module provides utilities for converting TOML field definitions to JSON Schema
 //! and validating ParsedDocument data against schemas.
 
-use crate::{quill::FieldSchema, QuillValue, RenderError};
+use crate::quill::{CardSchema, FieldSchema};
+use crate::{QuillValue, RenderError};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
@@ -14,44 +15,13 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
     // Add name
     property.insert("name".to_string(), Value::String(field_schema.name.clone()));
 
-    // Handle card type specially - generates array with items object
-    if field_schema.r#type.as_deref() == Some("card") {
-        property.insert("type".to_string(), Value::String("array".to_string()));
-        // Mark as card for LLM consumption
-        property.insert("x-card".to_string(), Value::Bool(true));
-
-        // Build items schema for card
-        let mut items_schema = Map::new();
-        items_schema.insert("type".to_string(), Value::String("object".to_string()));
-
-        if let Some(ref items) = field_schema.items {
-            let mut item_properties = Map::new();
-            let mut item_required = Vec::new();
-
-            for (item_name, item_schema) in items {
-                // Recursively build property for each item field
-                let item_property = build_field_property(item_schema);
-                item_properties.insert(item_name.clone(), Value::Object(item_property));
-
-                // Item fields are required if explicitly marked as required = true
-                if item_schema.required {
-                    item_required.push(Value::String(item_name.clone()));
-                }
-            }
-
-            items_schema.insert("properties".to_string(), Value::Object(item_properties));
-            if !item_required.is_empty() {
-                items_schema.insert("required".to_string(), Value::Array(item_required));
-            }
-            items_schema.insert("additionalProperties".to_string(), Value::Bool(true));
-        }
-
-        property.insert("items".to_string(), Value::Object(items_schema));
-    } else if let Some(ref field_type) = field_schema.r#type {
-        // Regular type handling
+    // Map field type to JSON Schema type
+    if let Some(ref field_type) = field_schema.r#type {
         let json_type = match field_type.as_str() {
             "str" => "string",
+            "string" => "string",
             "number" => "number",
+            "boolean" => "boolean",
             "array" => "array",
             "dict" => "object",
             "date" => "string",
@@ -113,23 +83,117 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
     property
 }
 
-/// Convert a HashMap of FieldSchema to a JSON Schema object
-pub fn build_schema_from_fields(
+/// Build a card schema definition for `$defs`
+fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
+    let mut def = Map::new();
+
+    def.insert("type".to_string(), Value::String("object".to_string()));
+
+    // Add title if specified
+    if let Some(ref title) = card.title {
+        def.insert("title".to_string(), Value::String(title.clone()));
+    }
+
+    // Add description
+    if !card.description.is_empty() {
+        def.insert(
+            "description".to_string(),
+            Value::String(card.description.clone()),
+        );
+    }
+
+    // Build properties
+    let mut properties = Map::new();
+    let mut required = vec![Value::String("CARD".to_string())];
+
+    // Add CARD discriminator property
+    let mut card_prop = Map::new();
+    card_prop.insert("const".to_string(), Value::String(name.to_string()));
+    properties.insert("CARD".to_string(), Value::Object(card_prop));
+
+    // Add card field properties
+    for (field_name, field_schema) in &card.fields {
+        let field_prop = build_field_property(field_schema);
+        properties.insert(field_name.clone(), Value::Object(field_prop));
+
+        if field_schema.required {
+            required.push(Value::String(field_name.clone()));
+        }
+    }
+
+    def.insert("properties".to_string(), Value::Object(properties));
+    def.insert("required".to_string(), Value::Array(required));
+    def.insert("additionalProperties".to_string(), Value::Bool(true));
+
+    def
+}
+
+/// Build a JSON Schema from field and card schemas
+///
+/// Generates a JSON Schema with:
+/// - Regular fields in `properties`
+/// - Card schemas in `$defs`
+/// - `CARDS` array with `oneOf` refs and `x-discriminator`
+pub fn build_schema(
     field_schemas: &HashMap<String, FieldSchema>,
+    card_schemas: &HashMap<String, CardSchema>,
 ) -> Result<QuillValue, RenderError> {
     let mut properties = Map::new();
     let mut required_fields = Vec::new();
+    let mut defs = Map::new();
 
+    // Build field properties
     for (field_name, field_schema) in field_schemas {
         let property = build_field_property(field_schema);
-
-        // All fields (including cards) go into properties
         properties.insert(field_name.clone(), Value::Object(property));
 
-        // Track required fields (cards are typically not required)
         if field_schema.required {
             required_fields.push(field_name.clone());
         }
+    }
+
+    // Build card definitions and CARDS array
+    if !card_schemas.is_empty() {
+        let mut one_of = Vec::new();
+        let mut discriminator_mapping = Map::new();
+
+        for (card_name, card_schema) in card_schemas {
+            let def_name = format!("{}_card", card_name);
+            let ref_path = format!("#/$defs/{}", def_name);
+
+            // Add to $defs
+            defs.insert(
+                def_name.clone(),
+                Value::Object(build_card_def(card_name, card_schema)),
+            );
+
+            // Add to oneOf
+            let mut ref_obj = Map::new();
+            ref_obj.insert("$ref".to_string(), Value::String(ref_path.clone()));
+            one_of.push(Value::Object(ref_obj));
+
+            // Add to discriminator mapping
+            discriminator_mapping.insert(card_name.clone(), Value::String(ref_path));
+        }
+
+        // Build CARDS array property
+        let mut items_schema = Map::new();
+        items_schema.insert("oneOf".to_string(), Value::Array(one_of));
+
+        // Add x-discriminator
+        let mut discriminator = Map::new();
+        discriminator.insert(
+            "propertyName".to_string(),
+            Value::String("CARD".to_string()),
+        );
+        discriminator.insert("mapping".to_string(), Value::Object(discriminator_mapping));
+        items_schema.insert("x-discriminator".to_string(), Value::Object(discriminator));
+
+        let mut cards_property = Map::new();
+        cards_property.insert("type".to_string(), Value::String("array".to_string()));
+        cards_property.insert("items".to_string(), Value::Object(items_schema));
+
+        properties.insert("CARDS".to_string(), Value::Object(cards_property));
     }
 
     // Build the complete JSON Schema
@@ -139,8 +203,13 @@ pub fn build_schema_from_fields(
         Value::String("https://json-schema.org/draft/2019-09/schema".to_string()),
     );
     schema_map.insert("type".to_string(), Value::String("object".to_string()));
-    schema_map.insert("properties".to_string(), Value::Object(properties));
 
+    // Add $defs if there are card schemas
+    if !defs.is_empty() {
+        schema_map.insert("$defs".to_string(), Value::Object(defs));
+    }
+
+    schema_map.insert("properties".to_string(), Value::Object(properties));
     schema_map.insert(
         "required".to_string(),
         Value::Array(required_fields.into_iter().map(Value::String).collect()),
@@ -150,6 +219,13 @@ pub fn build_schema_from_fields(
     let schema = Value::Object(schema_map);
 
     Ok(QuillValue::from_json(schema))
+}
+
+/// Backwards-compatible wrapper for build_schema (no cards)
+pub fn build_schema_from_fields(
+    field_schemas: &HashMap<String, FieldSchema>,
+) -> Result<QuillValue, RenderError> {
+    build_schema(field_schemas, &HashMap::new())
 }
 
 /// Extract default values from a JSON Schema
@@ -1170,82 +1246,115 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_card_generates_array() {
-        // Test that type = "card" generates JSON Schema with type = "array"
-        let mut fields = HashMap::new();
-        let mut card_schema = FieldSchema::new(
-            "endorsements".to_string(),
-            "Chain of endorsements".to_string(),
-        );
-        card_schema.r#type = Some("card".to_string());
-        card_schema.title = Some("Endorsements".to_string());
-        fields.insert("endorsements".to_string(), card_schema);
+    fn test_schema_card_in_defs() {
+        // Test that cards are generated in $defs with discriminator
+        use crate::quill::CardSchema;
 
-        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
+        let fields = HashMap::new();
+        let mut cards = HashMap::new();
 
-        // Verify the card field is in properties with x-card marker
-        let endorsements = &json_schema["properties"]["endorsements"];
-        assert_eq!(endorsements["type"], "array");
-        assert_eq!(endorsements["x-card"], true);
-        assert_eq!(endorsements["name"], "endorsements");
-        assert_eq!(endorsements["title"], "Endorsements");
-        assert_eq!(endorsements["description"], "Chain of endorsements");
+        let mut name_schema = FieldSchema::new("name".to_string(), "Name field".to_string());
+        name_schema.r#type = Some("string".to_string());
 
-        // Verify items is an object type
-        assert_eq!(endorsements["items"]["type"], "object");
+        let mut card_fields = HashMap::new();
+        card_fields.insert("name".to_string(), name_schema);
+
+        let card = CardSchema {
+            name: "endorsements".to_string(),
+            title: Some("Endorsements".to_string()),
+            description: "Chain of endorsements".to_string(),
+            ui: None,
+            fields: card_fields,
+        };
+        cards.insert("endorsements".to_string(), card);
+
+        let json_schema = build_schema(&fields, &cards).unwrap().as_json().clone();
+
+        // Verify $defs exists
+        assert!(json_schema["$defs"].is_object());
+        assert!(json_schema["$defs"]["endorsements_card"].is_object());
+
+        // Verify card in $defs has correct structure
+        let card_def = &json_schema["$defs"]["endorsements_card"];
+        assert_eq!(card_def["type"], "object");
+        assert_eq!(card_def["title"], "Endorsements");
+        assert_eq!(card_def["description"], "Chain of endorsements");
+
+        // Verify CARD discriminator const
+        assert_eq!(card_def["properties"]["CARD"]["const"], "endorsements");
+
+        // Verify field is in properties
+        assert!(card_def["properties"]["name"].is_object());
+        assert_eq!(card_def["properties"]["name"]["type"], "string");
+
+        // Verify CARD is required
+        let required = card_def["required"].as_array().unwrap();
+        assert!(required.contains(&json!("CARD")));
     }
 
     #[test]
-    fn test_schema_card_items_properties() {
-        // Test that card items generate nested properties in JSON Schema
-        let mut fields = HashMap::new();
+    fn test_schema_cards_array_with_discriminator() {
+        // Test that CARDS array is generated with oneOf and x-discriminator
+        use crate::quill::CardSchema;
 
-        let mut card_schema = FieldSchema::new(
-            "endorsements".to_string(),
-            "Chain of endorsements".to_string(),
-        );
-        card_schema.r#type = Some("card".to_string());
+        let fields = HashMap::new();
+        let mut cards = HashMap::new();
 
-        // Add item schemas
         let mut name_schema = FieldSchema::new("name".to_string(), "Endorser name".to_string());
         name_schema.r#type = Some("string".to_string());
-        name_schema.required = true; // Explicitly mark as required
+        name_schema.required = true;
 
         let mut org_schema = FieldSchema::new("org".to_string(), "Organization".to_string());
         org_schema.r#type = Some("string".to_string());
         org_schema.default = Some(QuillValue::from_json(json!("Unknown")));
 
-        let mut items = HashMap::new();
-        items.insert("name".to_string(), name_schema);
-        items.insert("org".to_string(), org_schema);
-        card_schema.items = Some(items);
+        let mut card_fields = HashMap::new();
+        card_fields.insert("name".to_string(), name_schema);
+        card_fields.insert("org".to_string(), org_schema);
 
-        fields.insert("endorsements".to_string(), card_schema);
+        let card = CardSchema {
+            name: "endorsements".to_string(),
+            title: Some("Endorsements".to_string()),
+            description: "Chain of endorsements".to_string(),
+            ui: None,
+            fields: card_fields,
+        };
+        cards.insert("endorsements".to_string(), card);
 
-        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
-        let endorsements = &json_schema["properties"]["endorsements"];
+        let json_schema = build_schema(&fields, &cards).unwrap().as_json().clone();
 
-        // Verify x-card marker
-        assert_eq!(endorsements["x-card"], true);
+        // Verify CARDS array property exists
+        let cards_prop = &json_schema["properties"]["CARDS"];
+        assert_eq!(cards_prop["type"], "array");
 
-        // Verify items has properties
-        let items_schema = &endorsements["items"];
-        assert_eq!(items_schema["type"], "object");
-        assert!(items_schema["properties"]["name"].is_object());
-        assert!(items_schema["properties"]["org"].is_object());
+        // Verify items has oneOf with $ref
+        let items = &cards_prop["items"];
+        assert!(items["oneOf"].is_array());
+        let one_of = items["oneOf"].as_array().unwrap();
+        assert!(!one_of.is_empty());
+        assert_eq!(one_of[0]["$ref"], "#/$defs/endorsements_card");
 
-        // Verify item field types
-        assert_eq!(items_schema["properties"]["name"]["type"], "string");
-        assert_eq!(items_schema["properties"]["org"]["type"], "string");
-        assert_eq!(items_schema["properties"]["org"]["default"], "Unknown");
+        // Verify x-discriminator
+        let discriminator = &items["x-discriminator"];
+        assert_eq!(discriminator["propertyName"], "CARD");
+        assert_eq!(
+            discriminator["mapping"]["endorsements"],
+            "#/$defs/endorsements_card"
+        );
 
-        // Verify required propagation: name has required=true, org is optional
-        let required = items_schema["required"].as_array().unwrap();
+        // Verify card field properties in $defs
+        let card_def = &json_schema["$defs"]["endorsements_card"];
+        assert_eq!(card_def["properties"]["name"]["type"], "string");
+        assert_eq!(card_def["properties"]["org"]["default"], "Unknown");
+
+        // Verify required includes name (marked as required) and CARD
+        let required = card_def["required"].as_array().unwrap();
+        assert!(required.contains(&json!("CARD")));
         assert!(required.contains(&json!("name")));
         assert!(!required.contains(&json!("org")));
 
         // Verify additionalProperties is set
-        assert_eq!(items_schema["additionalProperties"], true);
+        assert_eq!(card_def["additionalProperties"], true);
     }
 
     #[test]

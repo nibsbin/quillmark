@@ -61,7 +61,7 @@ Field properties:
 - "dict" → "object"
 - "date" → "string" with format "date"
 - "datetime" → "string" with format "date-time"
-- "scope" → "array" with `items` containing object schema (see [SCOPES.md](SCOPES.md))
+- "scope" → See [CARDS.md](CARDS.md) for card type handling
 
 **Required Field Logic:**
 - Fields are **optional by default** (aligns with JSON Schema standard)
