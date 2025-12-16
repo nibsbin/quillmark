@@ -28,11 +28,8 @@ output*.pdf
 output*.svg
 **/out/
 **/output/
-examples/output/
 examples/converted/
 **/.DS_Store
-
-crates/fixtures/output/
 
 # WASM build outputs
 pkg/
