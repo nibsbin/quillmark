@@ -12,7 +12,7 @@
 - No validation or defaults applied to scope fields
 - No JSON Schema generated for scopes
 - Quill.toml only supports flat `[fields.*]` without nested item schemas
-- **Partial implementation exists**: Separate `[scopes.*]` approach (to be removed)
+- `FieldSchema.from_quill_value()` validates known keys: `name`, `title`, `type`, `description`, `examples`, `default`, `ui`
 
 ---
 
@@ -30,12 +30,16 @@
 
 ### Changes Required
 
-1. **Extend FieldSchema**
+1. **Extend FieldSchema struct** (`quill.rs` line 21-35)
    - Add `items: Option<HashMap<String, FieldSchema>>` for scope item fields
-   - Update `from_quill_value` to recognize `items` key and recursively parse nested field schemas
-   - Parse `[fields.X.items.*]` sections when `type = "scope"`
+   - Add `"items"` to known keys list (line 60)
 
-2. **Update JSON Schema Generation**
+2. **Update `from_quill_value`** (`quill.rs` line 51-133)
+   - Recognize `items` key and recursively parse nested field schemas
+   - Parse `[fields.X.items.*]` sections when `type = "scope"`
+   - Validate that `items` is only present when `type = "scope"`
+
+3. **Update JSON Schema Generation** (`schema.rs`)
    - When `type = "scope"`, generate `{ "type": "array", "items": { ... } }`
    - Recursively call existing field schema building for items
 
@@ -83,12 +87,36 @@
 
 ### Unit Tests
 
-- Parse Quill.toml with `type = "scope"` fields
-- Parse nested `[fields.X.items.*]` sections
-- Generate JSON Schema with array-typed properties
-- Validate scope items against item schemas
-- Apply defaults to scope item fields
-- Handle unknown scope names (lenient mode)
+Add to `crates/core/src/quill.rs` tests:
+
+- `test_parse_scope_field_type` - Parse Quill.toml with `type = "scope"` field
+- `test_parse_scope_items` - Parse nested `[fields.X.items.*]` sections
+- `test_scope_items_inherit_ui_order` - Verify item fields get sequential order
+- `test_scope_items_error_without_scope_type` - Error when `items` present on non-scope field
+- `test_scope_nested_scope_error` - Error when `type = "scope"` appears in items (v1)
+
+Add to `crates/core/src/schema.rs` tests:
+
+- `test_schema_scope_generates_array` - Generate JSON Schema with array-typed properties
+- `test_schema_scope_items_properties` - Item fields appear in schema items.properties
+- `test_schema_scope_required_propagation` - Required item fields appear in items.required
+
+### Edge Cases
+
+| Scenario | Expected Behavior |
+|----------|-------------------|
+| `items` on non-scope field | Error: "items only valid for scope type" |
+| Empty `items` table | Valid: produces `{ "items": { "properties": {} } }` |
+| Nested scope (`type = "scope"` in items) | Error: "Nested scopes not supported in v1" |
+| Missing `type` with `items` present | Error: requires explicit `type = "scope"` |
+
+### Error Message Format
+
+```
+Field 'endorsements.items.name': description is required
+Scope 'endorsements' item 0: missing required field 'name'
+Field 'author': 'items' is only valid when type = "scope"
+```
 
 ### Integration Tests
 

@@ -60,6 +60,7 @@ Field properties:
 - "dict" → "object"
 - "date" → "string" with format "date"
 - "datetime" → "string" with format "date-time"
+- "scope" → "array" with `items` containing object schema (see [SCOPES.md](SCOPES.md))
 
 **Required Field Logic:**
 - If a field has a `default` value: field is optional

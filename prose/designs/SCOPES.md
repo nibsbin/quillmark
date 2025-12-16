@@ -32,9 +32,10 @@ Scopes are fields with `type = "scope"`. No separate `[scopes.*]` namespace exis
 
 All scopes are collections. Multiple markdown SCOPE blocks with the same name become items in an array. Zero blocks produce an empty array.
 
-### 3. Lenient Unknown Scopes
+### 3. Lenient Unknown Scope Items
 
-Unknown scope names (not defined as scope-typed fields) are allowed and default to collection behavior with no validation.
+> [!IMPORTANT]
+> **Design Decision**: Unknown scope names (not defined as scope-typed fields) are allowed and default to collection behavior with no validation. This supports forward compatibility and mixed-version workflows.
 
 ### 4. Consistent Schema Reuse
 
@@ -47,6 +48,10 @@ Nested scope field definitions use `[fields.X.items.*]` syntax because:
 1. **JSON Schema alignment** - Arrays use `items` to define element schema
 2. **Avoids confusion** - Parent is already `[fields.*]`, reusing `fields` would be ambiguous
 3. **Concise** - `scope_fields` is verbose without adding clarity
+
+### 6. No Nested Scopes (v1)
+
+Scope items cannot themselves be scopes. If `type = "scope"` appears within `[fields.X.items.*]`, parsing fails with an error. This simplification is intentional for v1; nested structures can be reconsidered post-launch.
 
 ---
 
@@ -93,7 +98,18 @@ default = "Unknown"
 
 - Fields with `type = "scope"` validate each item against `[fields.X.items.*]`
 - Default values are applied to each item
-- Unknown fields within scope items are allowed (lenient)
+
+> [!IMPORTANT]
+> **Design Decision**: Unknown fields within scope items are allowed (lenient). This mirrors document-level field leniency and prevents breakage when scope schemas evolve.
+
+### Required Field Propagation
+
+| Item Field Configuration | JSON Schema Result |
+|--------------------------|--------------------|
+| Has `default` value | Optional (not in `required`) |
+| No `default` value | Required (in `items.required` array) |
+
+Item fields follow the same required logic as document-level fields: presence of `default` makes a field optional.
 
 ### Not Supported in v1
 
