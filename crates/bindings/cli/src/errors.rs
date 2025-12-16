@@ -70,7 +70,7 @@ pub fn print_cli_error(err: &CliError) {
             quillmark_core::error::print_errors(render_err);
         }
         CliError::Parse(parse_err) => {
-            eprintln!("[ERROR] Parse error: {}", parse_err);
+            eprintln!("{}", parse_err.to_diagnostic().fmt_pretty());
         }
         CliError::Io(io_err) => {
             eprintln!("[ERROR] I/O error: {}", io_err);

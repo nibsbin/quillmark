@@ -51,9 +51,9 @@ impl Quillmark {
     /// the parsed YAML frontmatter fields and the quill_tag (from QUILL field or "__default__").
     #[wasm_bindgen(js_name = parseMarkdown)]
     pub fn parse_markdown(markdown: &str) -> Result<ParsedDocument, JsValue> {
-        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
-            WasmError::from(format!("Failed to parse markdown: {}", e)).to_js_value()
-        })?;
+        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
+            .map_err(WasmError::from)
+            .map_err(|e| e.to_js_value())?;
 
         // Convert to WASM type
         let quill_tag = parsed.quill_tag().to_string();
@@ -171,9 +171,9 @@ impl Quillmark {
     #[wasm_bindgen(js_name = processPlate)]
     pub fn process_plate(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
         // Parse markdown first
-        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
-            WasmError::from(format!("Failed to parse markdown: {}", e)).to_js_value()
-        })?;
+        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
+            .map_err(WasmError::from)
+            .map_err(|e| e.to_js_value())?;
 
         let workflow = self.inner.workflow(quill_name).map_err(|e| {
             WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
@@ -196,9 +196,9 @@ impl Quillmark {
     #[wasm_bindgen(js_name = dryRun)]
     pub fn dry_run(&mut self, markdown: &str) -> Result<(), JsValue> {
         // Parse markdown first
-        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown).map_err(|e| {
-            WasmError::from(format!("Failed to parse markdown: {}", e)).to_js_value()
-        })?;
+        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
+            .map_err(WasmError::from)
+            .map_err(|e| e.to_js_value())?;
 
         // Infer quill name from parsed document's quill_tag
         let quill_name = parsed.quill_tag();

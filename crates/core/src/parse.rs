@@ -79,7 +79,7 @@ impl ParsedDocument {
 
     /// Create a ParsedDocument from markdown string
     pub fn from_markdown(markdown: &str) -> Result<Self, crate::error::ParseError> {
-        decompose(markdown).map_err(crate::error::ParseError::from)
+        decompose(markdown)
     }
 
     /// Get the quill tag (from QUILL key, or "__default__" if not specified)
@@ -192,9 +192,7 @@ fn is_valid_tag_name(name: &str) -> bool {
 }
 
 /// Find all metadata blocks in the document
-fn find_metadata_blocks(
-    markdown: &str,
-) -> Result<Vec<MetadataBlock>, Box<dyn std::error::Error + Send + Sync>> {
+fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::error::ParseError> {
     let mut blocks = Vec::new();
     let mut pos = 0;
 
@@ -295,12 +293,10 @@ fn find_metadata_blocks(
 
                 // Check YAML size limit
                 if content.len() > crate::error::MAX_YAML_SIZE {
-                    return Err(format!(
-                        "YAML block too large: {} bytes (max: {} bytes)",
-                        content.len(),
-                        crate::error::MAX_YAML_SIZE
-                    )
-                    .into());
+                    return Err(crate::error::ParseError::InputTooLarge {
+                        size: content.len(),
+                        max: crate::error::MAX_YAML_SIZE,
+                    });
                 }
 
                 // Parse YAML content to check for reserved keys (QUILL, SCOPE)
@@ -320,10 +316,10 @@ fn find_metadata_blocks(
 
                                 // CARD and SCOPE are aliases - can't use both
                                 if has_card && has_scope {
-                                    return Err(
+                                    return Err(crate::error::ParseError::InvalidStructure(
                                         "Cannot specify both CARD and SCOPE in the same block (SCOPE is an alias for CARD)"
-                                            .into(),
-                                    );
+                                            .to_string(),
+                                    ));
                                 }
 
                                 let effective_card_key = if has_card {
@@ -335,10 +331,10 @@ fn find_metadata_blocks(
                                 };
 
                                 if has_quill && effective_card_key.is_some() {
-                                    return Err(
+                                    return Err(crate::error::ParseError::InvalidStructure(
                                         "Cannot specify both QUILL and CARD/SCOPE in the same block"
-                                            .into(),
-                                    );
+                                            .to_string(),
+                                    ));
                                 }
 
                                 if has_quill {
@@ -349,11 +345,10 @@ fn find_metadata_blocks(
                                         .ok_or("QUILL value must be a string")?;
 
                                     if !is_valid_tag_name(quill_name_str) {
-                                        return Err(format!(
+                                        return Err(crate::error::ParseError::InvalidStructure(format!(
                                             "Invalid quill name '{}': must match pattern [a-z_][a-z0-9_]*",
                                             quill_name_str
-                                        )
-                                        .into());
+                                        )));
                                     }
 
                                     // Remove QUILL from the YAML value for processing
@@ -374,19 +369,17 @@ fn find_metadata_blocks(
                                         .ok_or("CARD/SCOPE value must be a string")?;
 
                                     if !is_valid_tag_name(field_name) {
-                                        return Err(format!(
+                                        return Err(crate::error::ParseError::InvalidStructure(format!(
                                             "Invalid card field name '{}': must match pattern [a-z_][a-z0-9_]*",
                                             field_name
-                                        )
-                                        .into());
+                                        )));
                                     }
 
                                     if field_name == BODY_FIELD {
-                                        return Err(format!(
+                                        return Err(crate::error::ParseError::InvalidStructure(format!(
                                             "Cannot use reserved field name '{}' as CARD/SCOPE value",
                                             BODY_FIELD
-                                        )
-                                        .into());
+                                        )));
                                     }
 
                                     // Remove CARD/SCOPE from the YAML value for processing
@@ -410,7 +403,7 @@ fn find_metadata_blocks(
                         }
                         Err(e) => {
                             // YAML parsing failed - return error with context
-                            return Err(format!("Invalid YAML frontmatter: {}", e).into());
+                            return Err(crate::error::ParseError::YamlError(e));
                         }
                     }
                 } else {
@@ -429,7 +422,9 @@ fn find_metadata_blocks(
                 pos = abs_closing_pos + closing_len;
             } else if abs_pos == 0 {
                 // Frontmatter started but not closed
-                return Err("Frontmatter started but not closed with ---".into());
+                return Err(crate::error::ParseError::InvalidStructure(
+                    "Frontmatter started but not closed with ---".to_string(),
+                ));
             } else {
                 // Not a valid metadata block, skip this position
                 pos = abs_pos + 3;
@@ -443,15 +438,13 @@ fn find_metadata_blocks(
 }
 
 /// Decompose markdown into frontmatter fields and body
-fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error + Send + Sync>> {
+fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError> {
     // Check input size limit
     if markdown.len() > crate::error::MAX_INPUT_SIZE {
-        return Err(format!(
-            "Input too large: {} bytes (max: {} bytes)",
-            markdown.len(),
-            crate::error::MAX_INPUT_SIZE
-        )
-        .into());
+        return Err(crate::error::ParseError::InputTooLarge {
+            size: markdown.len(),
+            max: crate::error::MAX_INPUT_SIZE,
+        });
     }
 
     let mut fields = HashMap::new();
@@ -487,11 +480,11 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
         } else {
             // Inline blocks (idx > 0): MUST have CARD, cannot have QUILL
             if block.quill_name.is_some() {
-                return Err("QUILL directive can only appear in the top-level frontmatter, not in inline blocks. Use CARD instead.".into());
+                return Err(crate::error::ParseError::InvalidStructure("QUILL directive can only appear in the top-level frontmatter, not in inline blocks. Use CARD instead.".to_string()));
             }
             if block.tag.is_none() {
                 // Inline block without CARD
-                return Err(Box::new(crate::error::ParseError::missing_card_directive()));
+                return Err(crate::error::ParseError::missing_card_directive());
             }
         }
     }
@@ -512,7 +505,9 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
             }
             Some(_) => {
                 // Non-mapping, non-null YAML (e.g., scalar, sequence) - this is an error for frontmatter
-                return Err("Invalid YAML frontmatter: expected a mapping".into());
+                return Err(crate::error::ParseError::InvalidStructure(
+                    "Invalid YAML frontmatter: expected a mapping".to_string(),
+                ));
             }
             None => HashMap::new(),
         };
@@ -524,11 +519,10 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
                 if let Some(global_value) = yaml_fields.get(tag) {
                     // Check if the global value is an array
                     if global_value.as_sequence().is_none() {
-                        return Err(format!(
+                        return Err(crate::error::ParseError::InvalidStructure(format!(
                             "Name collision: global field '{}' conflicts with tagged attribute",
                             tag
-                        )
-                        .into());
+                        )));
                     }
                 }
             }
@@ -555,18 +549,19 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
                         HashMap::new()
                     }
                     _ => {
-                        return Err("Invalid YAML in quill block: expected a mapping".into());
+                        return Err(crate::error::ParseError::InvalidStructure(
+                            "Invalid YAML in quill block: expected a mapping".to_string(),
+                        ));
                     }
                 };
 
                 // Check for conflicts with existing fields
                 for key in yaml_fields.keys() {
                     if fields.contains_key(key) {
-                        return Err(format!(
+                        return Err(crate::error::ParseError::InvalidStructure(format!(
                             "Name collision: quill block field '{}' conflicts with existing field",
                             key
-                        )
-                        .into());
+                        )));
                     }
                 }
 
@@ -583,11 +578,10 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
         if let Some(ref tag_name) = block.tag {
             // Card names cannot conflict with frontmatter field names
             if fields.contains_key(tag_name) {
-                return Err(format!(
+                return Err(crate::error::ParseError::InvalidStructure(format!(
                     "Name collision: CARD type '{}' conflicts with frontmatter field name",
                     tag_name
-                )
-                .into());
+                )));
             }
 
             // Get YAML metadata directly (already parsed in find_metadata_blocks)
@@ -601,11 +595,10 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
                     HashMap::new()
                 }
                 Some(_) => {
-                    return Err(format!(
+                    return Err(crate::error::ParseError::InvalidStructure(format!(
                         "Invalid YAML in card block '{}': expected a mapping",
                         tag_name
-                    )
-                    .into());
+                    )));
                 }
                 None => HashMap::new(),
             };
@@ -1008,7 +1001,7 @@ Content here."#;
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Invalid YAML frontmatter"));
+            .contains("YAML parsing error"));
     }
 
     #[test]
@@ -1856,7 +1849,7 @@ mod demo_file_test {
         assert!(result.is_err());
 
         let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("YAML block too large"));
+        assert!(err_msg.contains("Input too large"));
     }
 
     #[test]
