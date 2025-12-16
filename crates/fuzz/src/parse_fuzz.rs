@@ -81,7 +81,7 @@ proptest! {
         let result = ParsedDocument::from_markdown(&markdown);
         if let Ok(doc) = result {
             // Should be able to access all fields
-            assert!(doc.fields().len() <= size + 1); // +1 for body field
+            assert!(doc.fields().len() <= size + 2); // +1 for body field, +1 for CARDS field
         }
     }
 
