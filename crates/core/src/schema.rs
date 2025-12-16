@@ -7,6 +7,110 @@ use crate::{quill::FieldSchema, QuillValue, RenderError};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
+/// Build a single field property JSON Schema object from a FieldSchema
+fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
+    let mut property = Map::new();
+
+    // Add name
+    property.insert("name".to_string(), Value::String(field_schema.name.clone()));
+
+    // Handle scope type specially - generates array with items object
+    if field_schema.r#type.as_deref() == Some("scope") {
+        property.insert("type".to_string(), Value::String("array".to_string()));
+
+        // Build items schema for scope
+        let mut items_schema = Map::new();
+        items_schema.insert("type".to_string(), Value::String("object".to_string()));
+
+        if let Some(ref items) = field_schema.items {
+            let mut item_properties = Map::new();
+            let mut item_required = Vec::new();
+
+            for (item_name, item_schema) in items {
+                // Recursively build property for each item field
+                let item_property = build_field_property(item_schema);
+                item_properties.insert(item_name.clone(), Value::Object(item_property));
+
+                // Item fields without defaults are required
+                if item_schema.default.is_none() {
+                    item_required.push(Value::String(item_name.clone()));
+                }
+            }
+
+            items_schema.insert("properties".to_string(), Value::Object(item_properties));
+            if !item_required.is_empty() {
+                items_schema.insert("required".to_string(), Value::Array(item_required));
+            }
+            items_schema.insert("additionalProperties".to_string(), Value::Bool(true));
+        }
+
+        property.insert("items".to_string(), Value::Object(items_schema));
+    } else if let Some(ref field_type) = field_schema.r#type {
+        // Regular type handling
+        let json_type = match field_type.as_str() {
+            "str" => "string",
+            "number" => "number",
+            "array" => "array",
+            "dict" => "object",
+            "date" => "string",
+            "datetime" => "string",
+            _ => "string", // default to string for unknown types
+        };
+        property.insert("type".to_string(), Value::String(json_type.to_string()));
+
+        // Add format for date types
+        if field_type == "date" {
+            property.insert("format".to_string(), Value::String("date".to_string()));
+        } else if field_type == "datetime" {
+            property.insert("format".to_string(), Value::String("date-time".to_string()));
+        }
+    }
+
+    // Add title if specified
+    if let Some(ref title) = field_schema.title {
+        property.insert("title".to_string(), Value::String(title.clone()));
+    }
+
+    // Add description
+    property.insert(
+        "description".to_string(),
+        Value::String(field_schema.description.clone()),
+    );
+
+    // Add UI metadata as x-ui property if present
+    if let Some(ref ui) = field_schema.ui {
+        let mut ui_obj = Map::new();
+
+        if let Some(ref group) = ui.group {
+            ui_obj.insert("group".to_string(), Value::String(group.clone()));
+        }
+
+        if let Some(order) = ui.order {
+            ui_obj.insert("order".to_string(), json!(order));
+        }
+
+        if !ui_obj.is_empty() {
+            property.insert("x-ui".to_string(), Value::Object(ui_obj));
+        }
+    }
+
+    // Add examples if specified
+    if let Some(ref examples) = field_schema.examples {
+        if let Some(examples_array) = examples.as_array() {
+            if !examples_array.is_empty() {
+                property.insert("examples".to_string(), Value::Array(examples_array.clone()));
+            }
+        }
+    }
+
+    // Add default if specified
+    if let Some(ref default) = field_schema.default {
+        property.insert("default".to_string(), default.as_json().clone());
+    }
+
+    property
+}
+
 /// Convert a HashMap of FieldSchema to a JSON Schema object
 pub fn build_schema_from_fields(
     field_schemas: &HashMap<String, FieldSchema>,
@@ -15,75 +119,7 @@ pub fn build_schema_from_fields(
     let mut required_fields = Vec::new();
 
     for (field_name, field_schema) in field_schemas {
-        // Build property schema
-        let mut property = Map::new();
-
-        // Add name
-        property.insert("name".to_string(), Value::String(field_schema.name.clone()));
-
-        // Add type if specified
-        if let Some(ref field_type) = field_schema.r#type {
-            let json_type = match field_type.as_str() {
-                "str" => "string",
-                "number" => "number",
-                "array" => "array",
-                "dict" => "object",
-                "date" => "string",
-                "datetime" => "string",
-                _ => "string", // default to string for unknown types
-            };
-            property.insert("type".to_string(), Value::String(json_type.to_string()));
-
-            // Add format for date types
-            if field_type == "date" {
-                property.insert("format".to_string(), Value::String("date".to_string()));
-            } else if field_type == "datetime" {
-                property.insert("format".to_string(), Value::String("date-time".to_string()));
-            }
-        }
-
-        // Add title if specified
-        if let Some(ref title) = field_schema.title {
-            property.insert("title".to_string(), Value::String(title.clone()));
-        }
-
-        // Add description
-        property.insert(
-            "description".to_string(),
-            Value::String(field_schema.description.clone()),
-        );
-
-        // Add UI metadata as x-ui property if present
-        if let Some(ref ui) = field_schema.ui {
-            let mut ui_obj = Map::new();
-
-            if let Some(ref group) = ui.group {
-                ui_obj.insert("group".to_string(), Value::String(group.clone()));
-            }
-
-            if let Some(order) = ui.order {
-                ui_obj.insert("order".to_string(), json!(order));
-            }
-
-            if !ui_obj.is_empty() {
-                property.insert("x-ui".to_string(), Value::Object(ui_obj));
-            }
-        }
-
-        // Add examples if specified
-        if let Some(ref examples) = field_schema.examples {
-            if let Some(examples_array) = examples.as_array() {
-                if !examples_array.is_empty() {
-                    property.insert("examples".to_string(), Value::Array(examples_array.clone()));
-                }
-            }
-        }
-
-        // Add default if specified
-        if let Some(ref default) = field_schema.default {
-            property.insert("default".to_string(), default.as_json().clone());
-        }
-
+        let property = build_field_property(field_schema);
         properties.insert(field_name.clone(), Value::Object(property));
 
         // Determine if field is required based on the spec:
@@ -1002,5 +1038,79 @@ mod tests {
         let items_array = items.as_array().unwrap();
         assert_eq!(items_array.len(), 1);
         assert!(items_array[0].as_object().is_some());
+    }
+
+    #[test]
+    fn test_schema_scope_generates_array() {
+        // Test that type = "scope" generates JSON Schema with type = "array"
+        let mut fields = HashMap::new();
+        let mut scope_schema = FieldSchema::new(
+            "endorsements".to_string(),
+            "Chain of endorsements".to_string(),
+        );
+        scope_schema.r#type = Some("scope".to_string());
+        scope_schema.title = Some("Endorsements".to_string());
+        fields.insert("endorsements".to_string(), scope_schema);
+
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
+
+        // Verify the scope field generates array type
+        let endorsements = &json_schema["properties"]["endorsements"];
+        assert_eq!(endorsements["type"], "array");
+        assert_eq!(endorsements["name"], "endorsements");
+        assert_eq!(endorsements["title"], "Endorsements");
+        assert_eq!(endorsements["description"], "Chain of endorsements");
+
+        // Verify items is an object type
+        assert_eq!(endorsements["items"]["type"], "object");
+    }
+
+    #[test]
+    fn test_schema_scope_items_properties() {
+        // Test that scope items generate nested properties in JSON Schema
+        let mut fields = HashMap::new();
+
+        let mut scope_schema = FieldSchema::new(
+            "endorsements".to_string(),
+            "Chain of endorsements".to_string(),
+        );
+        scope_schema.r#type = Some("scope".to_string());
+
+        // Add item schemas
+        let mut name_schema = FieldSchema::new("name".to_string(), "Endorser name".to_string());
+        name_schema.r#type = Some("string".to_string());
+
+        let mut org_schema = FieldSchema::new("org".to_string(), "Organization".to_string());
+        org_schema.r#type = Some("string".to_string());
+        org_schema.default = Some(QuillValue::from_json(json!("Unknown")));
+
+        let mut items = HashMap::new();
+        items.insert("name".to_string(), name_schema);
+        items.insert("org".to_string(), org_schema);
+        scope_schema.items = Some(items);
+
+        fields.insert("endorsements".to_string(), scope_schema);
+
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
+        let endorsements = &json_schema["properties"]["endorsements"];
+
+        // Verify items has properties
+        let items_schema = &endorsements["items"];
+        assert_eq!(items_schema["type"], "object");
+        assert!(items_schema["properties"]["name"].is_object());
+        assert!(items_schema["properties"]["org"].is_object());
+
+        // Verify item field types
+        assert_eq!(items_schema["properties"]["name"]["type"], "string");
+        assert_eq!(items_schema["properties"]["org"]["type"], "string");
+        assert_eq!(items_schema["properties"]["org"]["default"], "Unknown");
+
+        // Verify required propagation: name is required (no default), org is optional (has default)
+        let required = items_schema["required"].as_array().unwrap();
+        assert!(required.contains(&json!("name")));
+        assert!(!required.contains(&json!("org")));
+
+        // Verify additionalProperties is set
+        assert_eq!(items_schema["additionalProperties"], true);
     }
 }

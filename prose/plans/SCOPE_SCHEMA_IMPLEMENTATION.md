@@ -26,27 +26,37 @@
 
 ---
 
-## Phase 1: Implement Unified Configuration
+## Phase 1: Implement Unified Configuration ✅
+
+> **Status**: Completed (2025-12-15)
 
 ### Changes Required
 
-1. **Extend FieldSchema struct** (`quill.rs` line 21-35)
+1. **Extend FieldSchema struct** (`quill.rs` line 21-35) ✅
    - Add `items: Option<HashMap<String, FieldSchema>>` for scope item fields
    - Add `"items"` to known keys list (line 60)
 
-2. **Update `from_quill_value`** (`quill.rs` line 51-133)
+2. **Update `from_quill_value`** (`quill.rs` line 51-133) ✅
    - Recognize `items` key and recursively parse nested field schemas
    - Parse `[fields.X.items.*]` sections when `type = "scope"`
    - Validate that `items` is only present when `type = "scope"`
+   - Validate that nested scopes are rejected (no `type = "scope"` in items)
 
-3. **Update JSON Schema Generation** (`schema.rs`)
+3. **Update JSON Schema Generation** (`schema.rs`) ✅
    - When `type = "scope"`, generate `{ "type": "array", "items": { ... } }`
    - Recursively call existing field schema building for items
+   - Propagate required fields to items.required array
 
 ### Affected Files
 
 - `crates/core/src/quill.rs` - Extend FieldSchema with items field
 - `crates/core/src/schema.rs` - Update build_schema_from_fields for scope type
+
+### Tests Added
+
+- `quill.rs`: `test_parse_scope_field_type`, `test_parse_scope_items`, `test_scope_items_error_without_scope_type`, `test_scope_nested_scope_error`
+- `schema.rs`: `test_schema_scope_generates_array`, `test_schema_scope_items_properties`
+
 
 ---
 

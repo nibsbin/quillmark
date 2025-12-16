@@ -22,7 +22,7 @@ pub struct FieldSchema {
     pub name: String,
     /// Short label for the field (used in JSON Schema title)
     pub title: Option<String>,
-    /// Field type hint (e.g., "string", "number", "boolean", "object", "array")
+    /// Field type hint (e.g., "string", "number", "boolean", "object", "array", "scope")
     pub r#type: Option<String>,
     /// Detailed description of the field (used in JSON Schema description)
     pub description: String,
@@ -32,6 +32,8 @@ pub struct FieldSchema {
     pub examples: Option<QuillValue>,
     /// UI-specific metadata for rendering
     pub ui: Option<UiSchema>,
+    /// Nested item field schemas (only valid when type = "scope")
+    pub items: Option<HashMap<String, FieldSchema>>,
 }
 
 impl FieldSchema {
@@ -45,11 +47,21 @@ impl FieldSchema {
             default: None,
             examples: None,
             ui: None,
+            items: None,
         }
     }
 
     /// Parse a FieldSchema from a QuillValue
     pub fn from_quill_value(key: String, value: &QuillValue) -> Result<Self, String> {
+        Self::from_quill_value_internal(key, value, false)
+    }
+
+    /// Internal parsing function that tracks whether we're parsing inside a scope's items
+    fn from_quill_value_internal(
+        key: String,
+        value: &QuillValue,
+        inside_scope_items: bool,
+    ) -> Result<Self, String> {
         let obj = value
             .as_object()
             .ok_or_else(|| "Field schema must be an object".to_string())?;
@@ -57,7 +69,8 @@ impl FieldSchema {
         //Ensure only known keys are present
         for key in obj.keys() {
             match key.as_str() {
-                "name" | "title" | "type" | "description" | "examples" | "default" | "ui" => {}
+                "name" | "title" | "type" | "description" | "examples" | "default" | "ui"
+                | "items" => {}
                 _ => {
                     // Log warning but don't fail
                     eprintln!("Warning: Unknown key '{}' in field schema", key);
@@ -82,6 +95,14 @@ impl FieldSchema {
             .get("type")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
+
+        // Validate: nested scopes are not allowed
+        if inside_scope_items && field_type.as_deref() == Some("scope") {
+            return Err(format!(
+                "Field '{}': nested scopes are not supported (type = \"scope\" in items)",
+                name
+            ));
+        }
 
         let default = obj.get("default").map(|v| QuillValue::from_json(v.clone()));
 
@@ -121,6 +142,35 @@ impl FieldSchema {
             None
         };
 
+        // Parse items for scope-typed fields
+        let items = if let Some(items_value) = obj.get("items") {
+            // Validate: items is only valid when type = "scope"
+            if field_type.as_deref() != Some("scope") {
+                return Err(format!(
+                    "Field '{}': 'items' is only valid when type = \"scope\"",
+                    name
+                ));
+            }
+
+            if let Some(items_obj) = items_value.as_object() {
+                let mut item_schemas = HashMap::new();
+                for (item_name, item_value) in items_obj {
+                    // Recursively parse with inside_scope_items = true
+                    let item_schema = Self::from_quill_value_internal(
+                        item_name.clone(),
+                        &QuillValue::from_json(item_value.clone()),
+                        true,
+                    )?;
+                    item_schemas.insert(item_name.clone(), item_schema);
+                }
+                Some(item_schemas)
+            } else {
+                return Err(format!("Field '{}': 'items' must be an object", name));
+            }
+        } else {
+            None
+        };
+
         Ok(Self {
             name,
             title,
@@ -129,6 +179,7 @@ impl FieldSchema {
             default,
             examples,
             ui,
+            items,
         })
     }
 }
@@ -2155,5 +2206,107 @@ ui:
 
         let ui = schema.ui.as_ref().unwrap();
         assert_eq!(ui.group, Some("Test Group".to_string()));
+    }
+
+    #[test]
+    fn test_parse_scope_field_type() {
+        // Test parsing a field with type = "scope"
+        let yaml = r#"
+type: "scope"
+title: "Endorsements"
+description: "Chain of endorsements for routing"
+"#;
+        let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
+        let schema =
+            FieldSchema::from_quill_value("endorsements".to_string(), &quill_value).unwrap();
+
+        assert_eq!(schema.name, "endorsements");
+        assert_eq!(schema.r#type, Some("scope".to_string()));
+        assert_eq!(schema.title, Some("Endorsements".to_string()));
+        assert_eq!(schema.description, "Chain of endorsements for routing");
+        assert!(schema.items.is_none()); // No items defined
+    }
+
+    #[test]
+    fn test_parse_scope_items() {
+        // Test parsing scope with nested items
+        let yaml = r#"
+type: "scope"
+title: "Endorsements"
+description: "Chain of endorsements"
+items:
+  name:
+    type: "string"
+    title: "Endorser Name"
+    description: "Name of the endorsing official"
+  org:
+    type: "string"
+    title: "Organization"
+    description: "Endorser's organization"
+    default: "Unknown"
+"#;
+        let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
+        let schema =
+            FieldSchema::from_quill_value("endorsements".to_string(), &quill_value).unwrap();
+
+        assert_eq!(schema.r#type, Some("scope".to_string()));
+        assert!(schema.items.is_some());
+
+        let items = schema.items.as_ref().unwrap();
+        assert_eq!(items.len(), 2);
+
+        // Verify name item
+        let name_item = items.get("name").unwrap();
+        assert_eq!(name_item.r#type, Some("string".to_string()));
+        assert_eq!(name_item.title, Some("Endorser Name".to_string()));
+        assert!(name_item.default.is_none());
+
+        // Verify org item with default
+        let org_item = items.get("org").unwrap();
+        assert_eq!(org_item.r#type, Some("string".to_string()));
+        assert!(org_item.default.is_some());
+        assert_eq!(org_item.default.as_ref().unwrap().as_str(), Some("Unknown"));
+    }
+
+    #[test]
+    fn test_scope_items_error_without_scope_type() {
+        // Test that items on non-scope field produces error
+        let yaml = r#"
+type: "string"
+description: "A string field"
+items:
+  sub_field:
+    type: "string"
+    description: "Nested field"
+"#;
+        let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
+        let result = FieldSchema::from_quill_value("author".to_string(), &quill_value);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("'items' is only valid when type = \"scope\""));
+    }
+
+    #[test]
+    fn test_scope_nested_scope_error() {
+        // Test that nested scopes (type = "scope" inside items) produce error
+        let yaml = r#"
+type: "scope"
+description: "Outer scope"
+items:
+  inner:
+    type: "scope"
+    description: "Illegal nested scope"
+"#;
+        let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
+        let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
+        let result = FieldSchema::from_quill_value("outer".to_string(), &quill_value);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("nested scopes are not supported"));
     }
 }
