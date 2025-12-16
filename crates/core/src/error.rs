@@ -347,6 +347,10 @@ pub enum ParseError {
     #[error("YAML parsing error: {0}")]
     YamlError(#[from] serde_yaml::Error),
 
+    /// JSON parsing/conversion error
+    #[error("JSON error: {0}")]
+    JsonError(#[from] serde_json::Error),
+
     /// Invalid YAML structure
     #[error("Invalid YAML structure: {0}")]
     InvalidStructure(String),
@@ -378,6 +382,36 @@ impl ParseError {
         );
         ParseError::MissingCardDirective { diag }
     }
+
+    /// Convert the parse error into a structured diagnostic
+    pub fn to_diagnostic(&self) -> Diagnostic {
+        match self {
+            ParseError::MissingCardDirective { diag } => Diagnostic {
+                severity: diag.severity,
+                code: diag.code.clone(),
+                message: diag.message.clone(),
+                primary: diag.primary.clone(),
+                hint: diag.hint.clone(),
+                source: None, // Cannot clone trait object, but it's empty in this case usually
+            },
+            ParseError::InputTooLarge { size, max } => Diagnostic::new(
+                Severity::Error,
+                format!("Input too large: {} bytes (max: {} bytes)", size, max),
+            )
+            .with_code("parse::input_too_large".to_string()),
+            ParseError::YamlError(e) => {
+                Diagnostic::new(Severity::Error, format!("YAML parsing error: {}", e))
+                    .with_code("parse::yaml_error".to_string())
+            } // serde_yaml::Error implements Error+Clone? No, usually Error is not Clone.
+            ParseError::JsonError(e) => {
+                Diagnostic::new(Severity::Error, format!("JSON conversion error: {}", e))
+                    .with_code("parse::json_error".to_string())
+            }
+            ParseError::InvalidStructure(msg) => Diagnostic::new(Severity::Error, msg.clone())
+                .with_code("parse::invalid_structure".to_string()),
+            ParseError::Other(msg) => Diagnostic::new(Severity::Error, msg.clone()),
+        }
+    }
 }
 
 impl From<Box<dyn std::error::Error + Send + Sync>> for ParseError {
@@ -389,6 +423,12 @@ impl From<Box<dyn std::error::Error + Send + Sync>> for ParseError {
 impl From<String> for ParseError {
     fn from(msg: String) -> Self {
         ParseError::Other(msg)
+    }
+}
+
+impl From<&str> for ParseError {
+    fn from(msg: &str) -> Self {
+        ParseError::Other(msg.to_string())
     }
 }
 

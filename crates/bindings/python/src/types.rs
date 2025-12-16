@@ -276,8 +276,17 @@ pub struct PyParsedDocument {
 impl PyParsedDocument {
     #[staticmethod]
     fn from_markdown(markdown: &str) -> PyResult<Self> {
-        let parsed = ParsedDocument::from_markdown(markdown)
-            .map_err(|e| PyErr::new::<crate::errors::ParseError, _>(e.to_string()))?;
+        let parsed = ParsedDocument::from_markdown(markdown).map_err(|e| {
+            let py_err = PyErr::new::<crate::errors::ParseError, _>(e.to_string());
+            Python::attach(|py| {
+                if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                    let diag = e.to_diagnostic();
+                    let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                    let _ = exc.setattr("diagnostic", py_diag);
+                }
+            });
+            py_err
+        })?;
         Ok(PyParsedDocument { inner: parsed })
     }
 
