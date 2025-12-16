@@ -38,7 +38,8 @@ Field properties:
 - title -> Option[str]: Short label for the field (used in JSON Schema `title` property).
 - description -> str: Detailed description of the field (used in JSON Schema `description` property).
 - type -> "str", "array", "dict", "date", "datetime", or "number": The value type of the field.
-- default -> any: The default value for the field. If defined, this makes the field optional (not required).
+- default -> any: The default value for the field.
+- required -> bool: Whether this field is required (default: false).
 - examples -> any[]: Example values for the field (used in JSON Schema `examples` array).
 - ui -> Option[Table]: A table containing UI-specific metadata (see below).
 
@@ -60,10 +61,12 @@ Field properties:
 - "dict" → "object"
 - "date" → "string" with format "date"
 - "datetime" → "string" with format "date-time"
+- "scope" → "array" with `items` containing object schema (see [SCOPES.md](SCOPES.md))
 
 **Required Field Logic:**
-- If a field has a `default` value: field is optional
-- If a field has no `default` value: field is required
+- Fields are **optional by default** (aligns with JSON Schema standard)
+- Use `required = true` to mark mandatory fields
+- This applies to both document-level fields and scope item fields
 
 ### JSON Schema Custom Properties
 

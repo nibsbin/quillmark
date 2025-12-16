@@ -28,12 +28,7 @@ pub const MAX_GUILLEMET_LENGTH: usize = 64 * 1024;
 
 /// Finds the position of `>>` that matches an opening `<<`, returns offset from search start
 fn find_matching_guillemet_end(chars: &[char]) -> Option<usize> {
-    for i in 0..chars.len().saturating_sub(1) {
-        if chars[i] == '>' && chars[i + 1] == '>' {
-            return Some(i);
-        }
-    }
-    None
+    (0..chars.len().saturating_sub(1)).find(|&i| chars[i] == '>' && chars[i + 1] == '>')
 }
 
 /// Counts consecutive occurrences of a character from the start of the slice.

@@ -154,23 +154,21 @@ impl Quillmark {
                     )),
                 });
             }
-        } else {
-            if !backend.allow_auto_plate() {
-                return Err(RenderError::QuillConfig {
-                    diag: Diagnostic::new(
-                        Severity::Error,
-                        format!(
-                            "Backend '{}' does not support automatic plate generation, but quill '{}' does not specify a plate file",
-                            backend_id, name
-                        ),
-                    )
-                    .with_code("quill::auto_plate_not_allowed".to_string())
-                    .with_hint(format!(
-                        "Add a plate file with one of these extensions: {}",
-                        backend.plate_extension_types().join(", ")
-                    )),
-                });
-            }
+        } else if !backend.allow_auto_plate() {
+            return Err(RenderError::QuillConfig {
+                diag: Diagnostic::new(
+                    Severity::Error,
+                    format!(
+                        "Backend '{}' does not support automatic plate generation, but quill '{}' does not specify a plate file",
+                        backend_id, name
+                    ),
+                )
+                .with_code("quill::auto_plate_not_allowed".to_string())
+                .with_hint(format!(
+                    "Add a plate file with one of these extensions: {}",
+                    backend.plate_extension_types().join(", ")
+                )),
+            });
         }
 
         self.quills.insert(name, quill);

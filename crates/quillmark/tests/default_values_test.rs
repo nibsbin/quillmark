@@ -211,7 +211,7 @@ fn test_validation_fails_without_defaults() {
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
 
-    // Create quill with required field (no default)
+    // Create quill with required field (explicit required = true)
     fs::write(
         quill_path.join("Quill.toml"),
         r#"[Quill]
@@ -221,7 +221,7 @@ plate_file = "plate.typ"
 description = "Test quill with required field"
 
 [fields]
-title = { description = "Document title" }
+title = { description = "Document title", required = true }
 status = { description = "Document status", default = "draft" }
 "#,
     )

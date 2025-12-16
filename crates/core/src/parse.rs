@@ -79,7 +79,7 @@ impl ParsedDocument {
 
     /// Create a ParsedDocument from markdown string
     pub fn from_markdown(markdown: &str) -> Result<Self, crate::error::ParseError> {
-        decompose(markdown).map_err(|e| crate::error::ParseError::from(e))
+        decompose(markdown).map_err(crate::error::ParseError::from)
     }
 
     /// Get the quill tag (from QUILL key, or "__default__" if not specified)
@@ -201,13 +201,10 @@ fn find_metadata_blocks(
     while pos < markdown.len() {
         // Look for opening "---\n" or "---\r\n"
         let search_str = &markdown[pos..];
-        let delimiter_result = if let Some(p) = search_str.find("---\n") {
-            Some((p, 4, "\n"))
-        } else if let Some(p) = search_str.find("---\r\n") {
-            Some((p, 5, "\r\n"))
-        } else {
-            None
-        };
+        let delimiter_result = search_str
+            .find("---\n")
+            .map(|p| (p, 4, "\n"))
+            .or_else(|| search_str.find("---\r\n").map(|p| (p, 5, "\r\n")));
 
         if let Some((delimiter_pos, delimiter_len, _line_ending)) = delimiter_result {
             let abs_pos = pos + delimiter_pos;
@@ -331,7 +328,7 @@ fn find_metadata_blocks(
                                     let quill_value = mapping.get(&quill_key).unwrap();
                                     let quill_name_str = quill_value
                                         .as_str()
-                                        .ok_or_else(|| "QUILL value must be a string")?;
+                                        .ok_or("QUILL value must be a string")?;
 
                                     if !is_valid_tag_name(quill_name_str) {
                                         return Err(format!(
@@ -356,7 +353,7 @@ fn find_metadata_blocks(
                                     let scope_value = mapping.get(&scope_key).unwrap();
                                     let field_name = scope_value
                                         .as_str()
-                                        .ok_or_else(|| "SCOPE value must be a string")?;
+                                        .ok_or("SCOPE value must be a string")?;
 
                                     if !is_valid_tag_name(field_name) {
                                         return Err(format!(
@@ -620,7 +617,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
             // Add to collection
             tagged_attributes
                 .entry(tag_name.clone())
-                .or_insert_with(Vec::new)
+                .or_default()
                 .push(item_value);
         }
     }
