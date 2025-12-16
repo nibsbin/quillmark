@@ -141,19 +141,16 @@ description = "Chain of routing endorsements. Each endorsement block adds an off
 [cards.indorsements.fields.from]
 title = "From office/symbol"
 type = "string"
-required = true
 description = "Office symbol or organization of the endorsing official (e.g., 'ORG/SYMBOL')."
 
 [cards.indorsements.fields.for]
 title = "To office/symbol"
 type = "string"
-required = true
 description = "Office symbol or organization receiving the endorsed memo."
 
 [cards.indorsements.fields.signature_block]
 title = "Signature block lines"
 type = "array"
-required = true
 examples = [["FIRST M. LAST, Rank, USAF", "Duty Title"]]
 description = "Line 1: Name in UPPERCASE as signed, grade, and service. Line 2: Duty title."
 
