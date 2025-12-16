@@ -9,19 +9,19 @@ I love Taro ice cream for its subtly sweet, nutty flavor and creamy, earthy unde
 
 
 ---
-SCOPE: quotes
+CARD: quotes
 author: Albert Einstein
 ---
 Without taro ice cream, life would be a mistake.
 
 ---
-SCOPE: quotes
+CARD: quotes
 author: Friedrich Nietzsche
 ---
 He who has taro ice cream in his heart will never be alone.
 
 ---
-SCOPE: quotes
+CARD: quotes
 author: Mark Twain
 ---
 The secret of getting ahead is getting started... with taro ice cream.

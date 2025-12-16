@@ -36,7 +36,7 @@ The following information required by the Privacy Act is provided for your infor
 You will acknowledge receipt of this letter immediately by signing the first indorsement. Within 3 duty days from the day you received this letter, you will provide your response by signing the second indorsement below. Any comments or documents you wish to be considered concerning this letter must be submitted at that time, and will become part of the record, consistent with AFI 36-2907, Adverse Administrative Actions, paragraph 2.4.2.5. After receiving your response, I intend to notify you of my final disposition of this action within 3 duty days.
 
 ---
-SCOPE: indorsements
+CARD: indorsements
 for: (Issuer's) ORG/SYMBOL
 from: (Subject's) Rank FIRST M. LAST
 signature_block: (Subject's) FIRST M. LAST, Rank, USAF
@@ -47,7 +47,7 @@ new_page: true # Omit to keep on same page
 I acknowledge receipt and understanding of this letter on ________________ at ___________ hours. I understand that I have 3 duty days from the date I received this letter to provide a response and that I must include in my response any comments or documents I wish to be considered concerning this Letter of Counseling.
 
 ---
-SCOPE: indorsements
+CARD: indorsements
 from: (Subject's) Rank FIRST M. LAST
 for: (Issuer's) ORG/SYMBOL
 signature_block: (Subject's) FIRST M. LAST, Rank, USAF
@@ -58,7 +58,7 @@ date: "Date: _____________"
 I have reviewed the allegations contained in this Letter of Counseling. _I am submitting the attached documents in response_ / _I hereby waive my right to respond_.
 
 ---
-SCOPE: indorsements
+CARD: indorsements
 from: (Issuer's) Rank FIRST M. LAST
 for: (Subject's) Rank FIRST M. LAST
 signature_block: (Issuer's) FIRST M. LAST, Rank, USAF
@@ -69,7 +69,7 @@ date: "Date: _____________"
 _I have considered the response you submitted_ / _You waived your right to submit a response to this action_. I have decided to _withdraw_ / _sustain_ the Letter of Counseling.
 
 ---
-SCOPE: indorsements
+CARD: indorsements
 from: (Subject's) Rank FIRST M. LAST
 for: (Issuer's) ORG/SYMBOL
 signature_block: (Subject's) FIRST M. LAST, Rank, USAF

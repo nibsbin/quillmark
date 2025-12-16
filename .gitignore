@@ -17,3 +17,5 @@ release-artifacts/
 *.key
 
 outputs/
+
+MIGRATION.md
