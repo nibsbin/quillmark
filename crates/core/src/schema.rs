@@ -180,14 +180,7 @@ pub fn build_schema(
         let mut items_schema = Map::new();
         items_schema.insert("oneOf".to_string(), Value::Array(one_of));
 
-        // Add x-discriminator
-        let mut discriminator = Map::new();
-        discriminator.insert(
-            "propertyName".to_string(),
-            Value::String("CARD".to_string()),
-        );
-        discriminator.insert("mapping".to_string(), Value::Object(discriminator_mapping));
-        items_schema.insert("x-discriminator".to_string(), Value::Object(discriminator));
+        // x-discriminator removed in favor of const polymorphism
 
         let mut cards_property = Map::new();
         cards_property.insert("type".to_string(), Value::String("array".to_string()));
@@ -1293,8 +1286,8 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_cards_array_with_discriminator() {
-        // Test that CARDS array is generated with oneOf and x-discriminator
+    fn test_schema_cards_array() {
+        // Test that CARDS array is generated with oneOf but without x-discriminator
         use crate::quill::CardSchema;
 
         let fields = HashMap::new();
@@ -1334,13 +1327,8 @@ mod tests {
         assert!(!one_of.is_empty());
         assert_eq!(one_of[0]["$ref"], "#/$defs/endorsements_card");
 
-        // Verify x-discriminator
-        let discriminator = &items["x-discriminator"];
-        assert_eq!(discriminator["propertyName"], "CARD");
-        assert_eq!(
-            discriminator["mapping"]["endorsements"],
-            "#/$defs/endorsements_card"
-        );
+        // Verify x-discriminator is NOT present
+        assert!(items.get("x-discriminator").is_none());
 
         // Verify card field properties in $defs
         let card_def = &json_schema["$defs"]["endorsements_card"];

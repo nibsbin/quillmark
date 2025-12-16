@@ -54,7 +54,7 @@ pub fn build_schema(
 Changes:
 1. Build `$defs` section with card schemas
 2. Add `properties.CARDS` array with `oneOf` refs
-3. Add `x-discriminator` with mapping
+3. Remove `x-discriminator` (rely on `const` for polymorphism)
 4. Each card schema has `"CARD": { "const": "..." }`
 
 #### [NEW] build_card_def
