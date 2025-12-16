@@ -17,8 +17,10 @@
 #{{ body | Content }}
 
 // Present each sub-document programatically
-{% for quote in quotes %}
-*#{{ quote.author | String }}*: _#{{ quote.body | Content }}_
+{% for card in CARDS %}
+{% if card.CARD == "quotes" %}
+*#{{ card.author | String }}*: _#{{ card.body | Content }}_
+{% endif %}
 {% endfor %}
 
 

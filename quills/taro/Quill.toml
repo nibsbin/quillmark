@@ -9,3 +9,12 @@ description = "A simple document template for testing"
 author = {title = "Author of document"}
 ice_cream = {title = "favorite ice cream flavor", default = "taro"}
 title = {title = "title of document"}
+
+[cards.quotes]
+title = "Inspirational Quotes"
+description = "A collection of quotes about taro ice cream"
+
+[cards.quotes.fields.author]
+title = "Quote author"
+type = "string"
+description = "The person who said this quote"
