@@ -17,6 +17,8 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
     // Handle card type specially - generates array with items object
     if field_schema.r#type.as_deref() == Some("card") {
         property.insert("type".to_string(), Value::String("array".to_string()));
+        // Mark as card for LLM consumption
+        property.insert("x-card".to_string(), Value::Bool(true));
 
         // Build items schema for card
         let mut items_schema = Map::new();
@@ -116,23 +118,17 @@ pub fn build_schema_from_fields(
     field_schemas: &HashMap<String, FieldSchema>,
 ) -> Result<QuillValue, RenderError> {
     let mut properties = Map::new();
-    let mut cards = Map::new();
     let mut required_fields = Vec::new();
 
     for (field_name, field_schema) in field_schemas {
         let property = build_field_property(field_schema);
 
-        if field_schema.r#type.as_deref() == Some("card") {
-            // Add to CARDS object
-            cards.insert(field_name.clone(), Value::Object(property));
-        } else {
-            // Add to regular properties
-            properties.insert(field_name.clone(), Value::Object(property));
+        // All fields (including cards) go into properties
+        properties.insert(field_name.clone(), Value::Object(property));
 
-            // Regular fields checks (cards handled separately or via items)
-            if field_schema.required {
-                required_fields.push(field_name.clone());
-            }
+        // Track required fields (cards are typically not required)
+        if field_schema.required {
+            required_fields.push(field_name.clone());
         }
     }
 
@@ -144,10 +140,6 @@ pub fn build_schema_from_fields(
     );
     schema_map.insert("type".to_string(), Value::String("object".to_string()));
     schema_map.insert("properties".to_string(), Value::Object(properties));
-
-    if !cards.is_empty() {
-        schema_map.insert("CARDS".to_string(), Value::Object(cards));
-    }
 
     schema_map.insert(
         "required".to_string(),
@@ -1191,9 +1183,10 @@ mod tests {
 
         let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
 
-        // Verify the card field generates array type
-        let endorsements = &json_schema["CARDS"]["endorsements"];
+        // Verify the card field is in properties with x-card marker
+        let endorsements = &json_schema["properties"]["endorsements"];
         assert_eq!(endorsements["type"], "array");
+        assert_eq!(endorsements["x-card"], true);
         assert_eq!(endorsements["name"], "endorsements");
         assert_eq!(endorsements["title"], "Endorsements");
         assert_eq!(endorsements["description"], "Chain of endorsements");
@@ -1230,7 +1223,10 @@ mod tests {
         fields.insert("endorsements".to_string(), card_schema);
 
         let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
-        let endorsements = &json_schema["CARDS"]["endorsements"];
+        let endorsements = &json_schema["properties"]["endorsements"];
+
+        // Verify x-card marker
+        assert_eq!(endorsements["x-card"], true);
 
         // Verify items has properties
         let items_schema = &endorsements["items"];
