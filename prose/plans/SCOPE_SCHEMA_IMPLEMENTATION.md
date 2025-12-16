@@ -32,11 +32,12 @@
 
 1. **Extend FieldSchema**
    - Add `items: Option<HashMap<String, FieldSchema>>` for scope item fields
+   - Update `from_quill_value` to recognize `items` key and recursively parse nested field schemas
    - Parse `[fields.X.items.*]` sections when `type = "scope"`
 
 2. **Update JSON Schema Generation**
    - When `type = "scope"`, generate `{ "type": "array", "items": { ... } }`
-   - Reuse existing field schema building for items
+   - Recursively call existing field schema building for items
 
 ### Affected Files
 

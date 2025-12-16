@@ -40,6 +40,14 @@ Unknown scope names (not defined as scope-typed fields) are allowed and default 
 
 Scope item fields use the same `FieldSchema` structure as document fields (see [SCHEMAS.md](SCHEMAS.md)).
 
+### 5. Naming: `items` over `fields` or `scope_fields`
+
+Nested scope field definitions use `[fields.X.items.*]` syntax because:
+
+1. **JSON Schema alignment** - Arrays use `items` to define element schema
+2. **Avoids confusion** - Parent is already `[fields.*]`, reusing `fields` would be ambiguous
+3. **Concise** - `scope_fields` is verbose without adding clarity
+
 ---
 
 ## Quill.toml Structure
