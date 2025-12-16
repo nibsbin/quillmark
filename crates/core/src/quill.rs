@@ -543,13 +543,23 @@ impl QuillConfig {
             .map_err(|e| format!("Failed to parse Quill.toml: {}", e))?;
 
         // Parse with toml_edit to get field order
-        let field_order: Vec<String> = toml_content
+        let (field_order, scope_order): (Vec<String>, Vec<String>) = toml_content
             .parse::<toml_edit::DocumentMut>()
             .ok()
-            .and_then(|doc| {
-                doc.get("fields")
+            .map(|doc| {
+                let f_order = doc
+                    .get("fields")
                     .and_then(|item| item.as_table())
                     .map(|table| table.iter().map(|(k, _)| k.to_string()).collect())
+                    .unwrap_or_default();
+
+                let s_order = doc
+                    .get("scopes")
+                    .and_then(|item| item.as_table())
+                    .map(|table| table.iter().map(|(k, _)| k.to_string()).collect())
+                    .unwrap_or_default();
+
+                (f_order, s_order)
             })
             .unwrap_or_default();
 
@@ -688,6 +698,100 @@ impl QuillConfig {
                             eprintln!(
                                 "Warning: Failed to convert field schema '{}': {}",
                                 field_name, e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Extract [scopes] section (optional)
+        if let Some(scopes_section) = quill_toml.get("scopes") {
+            if let toml::Value::Table(scopes_table) = scopes_section {
+                let current_field_count = fields.len() as i32;
+                let mut order_counter = 0;
+
+                for (scope_name, scope_schema) in scopes_table {
+                    // Check for name collision with existing fields
+                    if fields.contains_key(scope_name) {
+                        return Err(format!(
+                            "Scope definition '{}' conflicts with an existing field name",
+                            scope_name
+                        )
+                        .into());
+                    }
+
+                    // Determine order (append after fields)
+                    let order = if let Some(idx) = scope_order.iter().position(|k| k == scope_name)
+                    {
+                        current_field_count + idx as i32
+                    } else {
+                        let o = current_field_count + scope_order.len() as i32 + order_counter;
+                        order_counter += 1;
+                        o
+                    };
+
+                    match QuillValue::from_toml(scope_schema) {
+                        Ok(quill_value) => {
+                            // Enforce type="scope"
+                            let mut json_val = quill_value.into_json();
+
+                            if let Some(obj) = json_val.as_object_mut() {
+                                if let Some(type_val) = obj.get("type") {
+                                    if type_val.as_str() != Some("scope") {
+                                        return Err(format!(
+                                            "Scope '{}' must have type=\"scope\" (found {:?})",
+                                            scope_name,
+                                            type_val.as_str()
+                                        )
+                                        .into());
+                                    }
+                                } else {
+                                    // Inject type="scope" if missing
+                                    obj.insert(
+                                        "type".to_string(),
+                                        serde_json::Value::String("scope".to_string()),
+                                    );
+                                }
+                            } else {
+                                return Err(format!(
+                                    "Scope definition '{}' must be an object",
+                                    scope_name
+                                )
+                                .into());
+                            }
+
+                            let final_quill_value = QuillValue::from_json(json_val);
+
+                            match FieldSchema::from_quill_value(
+                                scope_name.clone(),
+                                &final_quill_value,
+                            ) {
+                                Ok(mut schema) => {
+                                    // Set UI order
+                                    if schema.ui.is_none() {
+                                        schema.ui = Some(UiSchema {
+                                            group: None,
+                                            order: Some(order),
+                                        });
+                                    } else if let Some(ui) = &mut schema.ui {
+                                        ui.order = Some(order);
+                                    }
+
+                                    fields.insert(scope_name.clone(), schema);
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "Warning: Failed to parse scope schema '{}': {}",
+                                        scope_name, e
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "Warning: Failed to convert scope schema '{}': {}",
+                                scope_name, e
                             );
                         }
                     }
@@ -2317,5 +2421,147 @@ items:
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("nested scopes are not supported"));
+    }
+
+    #[test]
+    fn test_quill_config_with_scopes_section() {
+        let toml_content = r#"[Quill]
+name = "scopes-test"
+backend = "typst"
+description = "Test [scopes] section"
+
+[fields.regular]
+description = "Regular field"
+type = "string"
+
+[scopes.indorsements]
+title = "Routing Indorsements"
+description = "Chain of endorsements"
+items = { name = { title = "Name", type = "string", description = "Name" } }
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+
+        // Check regular field
+        assert!(config.fields.contains_key("regular"));
+        let regular = config.fields.get("regular").unwrap();
+        assert_eq!(regular.r#type, Some("string".to_string()));
+
+        // Check scope field
+        assert!(config.fields.contains_key("indorsements"));
+        let scope = config.fields.get("indorsements").unwrap();
+        assert_eq!(scope.r#type, Some("scope".to_string()));
+        assert_eq!(scope.title, Some("Routing Indorsements".to_string()));
+        assert!(scope.items.is_some());
+        assert!(scope.items.as_ref().unwrap().contains_key("name"));
+    }
+
+    #[test]
+    fn test_quill_config_scopes_auto_type() {
+        // Test that type="scope" is automatically injected
+        let toml_content = r#"[Quill]
+name = "scopes-auto-type-test"
+backend = "typst"
+description = "Test [scopes] auto type"
+
+[scopes.myscope]
+description = "My scope"
+items = {}
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let scope = config.fields.get("myscope").unwrap();
+        assert_eq!(scope.r#type, Some("scope".to_string()));
+    }
+
+    #[test]
+    fn test_quill_config_scope_collision() {
+        // Test that scope name colliding with field name is an error
+        let toml_content = r#"[Quill]
+name = "collision-test"
+backend = "typst"
+description = "Test collision"
+
+[fields.conflict]
+description = "Field"
+type = "string"
+
+[scopes.conflict]
+description = "Scope"
+items = {}
+"#;
+
+        let result = QuillConfig::from_toml(toml_content);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("conflicts with an existing field name"));
+    }
+
+    #[test]
+    fn test_quill_config_scope_wrong_type() {
+        // Test that type!="scope" in [scopes] is an error
+        let toml_content = r#"[Quill]
+name = "wrong-type-test"
+backend = "typst"
+description = "Test wrong type"
+
+[scopes.bad]
+type = "string"
+description = "Should be scope"
+"#;
+
+        let result = QuillConfig::from_toml(toml_content);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must have type=\"scope\""));
+    }
+
+    #[test]
+    fn test_quill_config_ordering_with_scopes() {
+        // Test that scopes are ordered after fields
+        let toml_content = r#"[Quill]
+name = "ordering-test"
+backend = "typst"
+description = "Test ordering"
+
+[fields.first]
+description = "First"
+
+[scopes.second]
+description = "Second"
+items = {}
+
+[fields.zero]
+description = "Zero"
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+
+        let first = config.fields.get("first").unwrap();
+        let zero = config.fields.get("zero").unwrap();
+        let second = config.fields.get("second").unwrap();
+
+        // Check relative ordering
+        let ord_first = first.ui.as_ref().unwrap().order.unwrap();
+        let ord_zero = zero.ui.as_ref().unwrap().order.unwrap();
+        let ord_second = second.ui.as_ref().unwrap().order.unwrap();
+
+        // toml_edit validation:
+        // fields keys: ["first", "zero"] (0, 1)
+        // scopes keys: ["second"] (2)
+
+        assert!(ord_first < ord_second);
+        assert!(ord_zero < ord_second);
+
+        // Within fields, "first" is before "zero"
+        assert!(ord_first < ord_zero);
+
+        assert_eq!(ord_first, 0);
+        assert_eq!(ord_zero, 1);
+        assert_eq!(ord_second, 2);
     }
 }
