@@ -104,13 +104,13 @@ title: Global Metadata
 Main document body.
 
 ---
-SCOPE: sub_documents
+CARD: sub_documents
 title: First Sub-Document
 ---
 Body of first sub-document.
 
 ---
-SCOPE: sub_documents
+CARD: sub_documents
 title: Second Sub-Document
 ---
 Body of second sub-document.
@@ -121,21 +121,21 @@ Body of second sub-document.
 {
   "title": "Global Metadata",
   "body": "Main document body.",
-  "sub_documents": [
-    {"title": "First Sub-Document", "body": "Body of first sub-document."},
-    {"title": "Second Sub-Document", "body": "Body of second sub-document."}
+  "CARDS": [
+    {"CARD": "sub_documents", "title": "First Sub-Document", "body": "Body of first sub-document."},
+    {"CARD": "sub_documents", "title": "Second Sub-Document", "body": "Body of second sub-document."}
   ]
 }
 ```
 
 ### Rules
 
-- **SCOPE key**: Creates collections - blocks with same scope name are aggregated into arrays
+- **CARD key**: Creates collections - blocks with same card name are aggregated into the `CARDS` array
 - **QUILL key**: Specifies which quill template to use (defaults to `__default__` if not specified)
-- **Scope names**: Must match `[a-z_][a-z0-9_]*` pattern
-- **Reserved names**: Cannot use `body` as scope name
-- **Single global**: Only one block without SCOPE/QUILL allowed
-- **No collisions**: Global field names cannot conflict with scope names
+- **Card names**: Must match `[a-z_][a-z0-9_]*` pattern
+- **Reserved names**: Cannot use `body` as card name
+- **Single global**: Only one block without CARD/QUILL allowed
+- **No collisions**: Global field names cannot conflict with card names
 - **Horizontal rule disambiguation**: `---` with blank lines above AND below is treated as markdown horizontal rule
 - **Default quill tag**: When no QUILL directive is present, ParsedDocument.quill_tag is set to `__default__` at parse time
 
@@ -143,14 +143,14 @@ Body of second sub-document.
 
 1. Scan document for all `---` delimiters
 2. Parse global frontmatter (if present)
-3. Parse scoped metadata blocks
-4. Assemble final structure with merged global fields and scoped arrays
+3. Parse card metadata blocks
+4. Assemble final structure with merged global fields and `CARDS` array
 
 ### Validation
 
 The parser validates:
 - Multiple global frontmatter blocks → error
-- Name collisions between global fields and scoped attributes → error
-- Reserved field names in scopes → error
-- Invalid scope name syntax → error
-- Both SCOPE and QUILL in same block → error
+- Name collisions between global fields and card names → error
+- Reserved field names in cards → error
+- Invalid card name syntax → error
+- Both CARD and QUILL in same block → error

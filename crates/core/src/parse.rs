@@ -40,7 +40,7 @@
 //! - Malformed YAML syntax
 //! - Unclosed frontmatter blocks
 //! - Multiple global frontmatter blocks
-//! - Both QUILL and SCOPE specified in the same block
+//! - Both QUILL and CARD specified in the same block
 //! - Reserved field name usage
 //! - Name collisions
 //!
@@ -165,7 +165,7 @@ struct MetadataBlock {
     start: usize,                          // Position of opening "---"
     end: usize,                            // Position after closing "---\n"
     yaml_value: Option<serde_yaml::Value>, // Parsed YAML (None if empty or parse failed)
-    tag: Option<String>,                   // Field name from SCOPE key
+    tag: Option<String>,                   // Field name from CARD key
     quill_name: Option<String>,            // Quill name from QUILL key
 }
 
@@ -311,14 +311,14 @@ fn find_metadata_blocks(
                         Ok(parsed_yaml) => {
                             if let Some(mapping) = parsed_yaml.as_mapping() {
                                 let quill_key = serde_yaml::Value::String("QUILL".to_string());
-                                let scope_key = serde_yaml::Value::String("SCOPE".to_string());
+                                let card_key = serde_yaml::Value::String("CARD".to_string());
 
                                 let has_quill = mapping.contains_key(&quill_key);
-                                let has_scope = mapping.contains_key(&scope_key);
+                                let has_card = mapping.contains_key(&card_key);
 
-                                if has_quill && has_scope {
+                                if has_quill && has_card {
                                     return Err(
-                                        "Cannot specify both QUILL and SCOPE in the same block"
+                                        "Cannot specify both QUILL and CARD in the same block"
                                             .into(),
                                     );
                                 }
@@ -348,12 +348,11 @@ fn find_metadata_blocks(
                                     };
 
                                     (None, Some(quill_name_str.to_string()), new_value)
-                                } else if has_scope {
+                                } else if has_card {
                                     // Extract scope field name
-                                    let scope_value = mapping.get(&scope_key).unwrap();
-                                    let field_name = scope_value
-                                        .as_str()
-                                        .ok_or("SCOPE value must be a string")?;
+                                    let card_value = mapping.get(&card_key).unwrap();
+                                    let field_name =
+                                        card_value.as_str().ok_or("CARD value must be a string")?;
 
                                     if !is_valid_tag_name(field_name) {
                                         return Err(format!(
@@ -365,15 +364,15 @@ fn find_metadata_blocks(
 
                                     if field_name == BODY_FIELD {
                                         return Err(format!(
-                                            "Cannot use reserved field name '{}' as SCOPE value",
+                                            "Cannot use reserved field name '{}' as CARD value",
                                             BODY_FIELD
                                         )
                                         .into());
                                     }
 
-                                    // Remove SCOPE from the YAML value for processing
+                                    // Remove CARD from the YAML value for processing
                                     let mut new_mapping = mapping.clone();
-                                    new_mapping.remove(&scope_key);
+                                    new_mapping.remove(&card_key);
                                     let new_value = if new_mapping.is_empty() {
                                         None
                                     } else {
@@ -624,17 +623,17 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
 
     // Extract global body
     // Body starts after global frontmatter or quill block (whichever comes first)
-    // Body ends at the first scope block or EOF
-    let first_non_scope_block_idx = blocks
+    // Body ends at the first card block or EOF
+    let first_non_card_block_idx = blocks
         .iter()
         .position(|b| b.tag.is_none() && b.quill_name.is_none())
         .or_else(|| blocks.iter().position(|b| b.quill_name.is_some()));
 
-    let (body_start, body_end) = if let Some(idx) = first_non_scope_block_idx {
-        // Body starts after the first non-scope block (global frontmatter or quill)
+    let (body_start, body_end) = if let Some(idx) = first_non_card_block_idx {
+        // Body starts after the first non-card block (global frontmatter or quill)
         let start = blocks[idx].end;
 
-        // Body ends at the first scope block after this, or EOF
+        // Body ends at the first card block after this, or EOF
         let end = blocks
             .iter()
             .skip(idx + 1)
@@ -644,7 +643,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
 
         (start, end)
     } else {
-        // No global frontmatter or quill block - body is everything before the first scope block
+        // No global frontmatter or quill block - body is everything before the first card block
         let end = blocks
             .iter()
             .find(|b| b.tag.is_some())
@@ -1051,7 +1050,7 @@ title: Main Document
 Main body content.
 
 ---
-SCOPE: items
+CARD: items
 name: Item 1
 ---
 
@@ -1079,7 +1078,7 @@ Body of item 1."#;
     #[test]
     fn test_multiple_tagged_blocks() {
         let markdown = r#"---
-SCOPE: items
+CARD: items
 name: Item 1
 tags: [a, b]
 ---
@@ -1087,7 +1086,7 @@ tags: [a, b]
 First item body.
 
 ---
-SCOPE: items
+CARD: items
 name: Item 2
 tags: [c, d]
 ---
@@ -1116,14 +1115,14 @@ author: John Doe
 Global body.
 
 ---
-SCOPE: sections
+CARD: sections
 title: Section 1
 ---
 
 Section 1 content.
 
 ---
-SCOPE: sections
+CARD: sections
 title: Section 2
 ---
 
@@ -1141,7 +1140,7 @@ Section 2 content."#;
     #[test]
     fn test_empty_tagged_metadata() {
         let markdown = r#"---
-SCOPE: items
+CARD: items
 ---
 
 Body without metadata."#;
@@ -1161,7 +1160,7 @@ Body without metadata."#;
     #[test]
     fn test_tagged_block_without_body() {
         let markdown = r#"---
-SCOPE: items
+CARD: items
 name: Item
 ---"#;
 
@@ -1183,7 +1182,7 @@ items: "global value"
 Body
 
 ---
-SCOPE: items
+CARD: items
 name: Item
 ---
 
@@ -1195,9 +1194,9 @@ Item body"#;
     }
 
     #[test]
-    fn test_global_array_merged_with_scope() {
+    fn test_global_array_merged_with_card() {
         // When global frontmatter has an array field with the same name as a SCOPE,
-        // the SCOPE items should be added to the array
+        // the CARD items should be added to the array
         let markdown = r#"---
 items:
   - name: Global Item 1
@@ -1209,7 +1208,7 @@ items:
 Global body
 
 ---
-SCOPE: items
+CARD: items
 name: Scope Item 1
 value: 300
 ---
@@ -1217,7 +1216,7 @@ value: 300
 Scope item 1 body
 
 ---
-SCOPE: items
+CARD: items
 name: Scope Item 2
 value: 400
 ---
@@ -1245,7 +1244,7 @@ Scope item 2 body"#;
         );
         assert_eq!(item2.get("value").unwrap().as_i64().unwrap(), 200);
 
-        // Verify last two items (from SCOPE blocks)
+        // Verify last two items (from CARD blocks)
         let item3 = items[2].as_object().unwrap();
         assert_eq!(item3.get("name").unwrap().as_str().unwrap(), "Scope Item 1");
         assert_eq!(item3.get("value").unwrap().as_i64().unwrap(), 300);
@@ -1264,7 +1263,7 @@ Scope item 2 body"#;
     }
 
     #[test]
-    fn test_empty_global_array_with_scope() {
+    fn test_empty_global_array_with_card() {
         // Edge case: global frontmatter has an empty array
         let markdown = r#"---
 items: []
@@ -1273,7 +1272,7 @@ items: []
 Global body
 
 ---
-SCOPE: items
+CARD: items
 name: Item 1
 ---
 
@@ -1291,7 +1290,7 @@ Item 1 body"#;
     #[test]
     fn test_reserved_field_name() {
         let markdown = r#"---
-SCOPE: body
+CARD: body
 content: Test
 ---"#;
 
@@ -1303,7 +1302,7 @@ content: Test
     #[test]
     fn test_invalid_tag_syntax() {
         let markdown = r#"---
-SCOPE: Invalid-Name
+CARD: Invalid-Name
 title: Test
 ---"#;
 
@@ -1340,14 +1339,14 @@ More body"#;
     #[test]
     fn test_adjacent_blocks_different_tags() {
         let markdown = r#"---
-SCOPE: items
+CARD: items
 name: Item 1
 ---
 
 Item 1 body
 
 ---
-SCOPE: sections
+CARD: sections
 title: Section 1
 ---
 
@@ -1368,21 +1367,21 @@ Section 1 body"#;
     #[test]
     fn test_order_preservation() {
         let markdown = r#"---
-SCOPE: items
+CARD: items
 id: 1
 ---
 
 First
 
 ---
-SCOPE: items
+CARD: items
 id: 2
 ---
 
 Second
 
 ---
-SCOPE: items
+CARD: items
 id: 3
 ---
 
@@ -1411,7 +1410,7 @@ date: 2024-01-01
 This is the main catalog description.
 
 ---
-SCOPE: products
+CARD: products
 name: Widget A
 price: 19.99
 sku: WID-001
@@ -1420,7 +1419,7 @@ sku: WID-001
 The **Widget A** is our most popular product.
 
 ---
-SCOPE: products
+CARD: products
 name: Gadget B
 price: 29.99
 sku: GAD-002
@@ -1429,7 +1428,7 @@ sku: GAD-002
 The **Gadget B** is perfect for professionals.
 
 ---
-SCOPE: reviews
+CARD: reviews
 product: Widget A
 rating: 5
 ---
@@ -1437,7 +1436,7 @@ rating: 5
 "Excellent product! Highly recommended."
 
 ---
-SCOPE: reviews
+CARD: reviews
 product: Gadget B
 rating: 4
 ---
@@ -1514,7 +1513,7 @@ This is the memo body."#;
     }
 
     #[test]
-    fn test_quill_with_scope_blocks() {
+    fn test_quill_with_card_blocks() {
         let markdown = r#"---
 QUILL: document
 title: Test Document
@@ -1523,7 +1522,7 @@ title: Test Document
 Main body.
 
 ---
-SCOPE: sections
+CARD: sections
 name: Section 1
 ---
 
@@ -1540,7 +1539,7 @@ Section 1 body."#;
             "Test Document"
         );
 
-        // Verify scope blocks work
+        // Verify card blocks work
         let sections = doc.get_field("sections").unwrap().as_sequence().unwrap();
         assert_eq!(sections.len(), 1);
 
@@ -1595,9 +1594,9 @@ QUILL: 123
     }
 
     #[test]
-    fn test_scope_wrong_value_type() {
+    fn test_card_wrong_value_type() {
         let markdown = r#"---
-SCOPE: 123
+CARD: 123
 ---"#;
 
         let result = decompose(markdown);
@@ -1605,14 +1604,14 @@ SCOPE: 123
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("SCOPE value must be a string"));
+            .contains("CARD value must be a string"));
     }
 
     #[test]
-    fn test_both_quill_and_scope_error() {
+    fn test_both_quill_and_card_error() {
         let markdown = r#"---
 QUILL: test
-SCOPE: items
+CARD: items
 ---"#;
 
         let result = decompose(markdown);
@@ -1620,7 +1619,7 @@ SCOPE: items
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Cannot specify both QUILL and SCOPE"));
+            .contains("Cannot specify both QUILL and CARD"));
     }
 
     #[test]
@@ -1662,9 +1661,9 @@ This is the body."#;
 
     #[test]
     fn test_blank_lines_in_scope_blocks() {
-        // Blank lines should be allowed in SCOPE blocks too
+        // Blank lines should be allowed in CARD blocks too
         let markdown = r#"---
-SCOPE: items
+CARD: items
 name: Item 1
 
 price: 19.99
@@ -1976,7 +1975,7 @@ title: Main
 Main body.
 
 ---
-SCOPE: items
+CARD: items
 name: Item 1
 ---
 
@@ -1999,7 +1998,7 @@ title: Main
 Main body.
 
 ---
-SCOPE: items
+CARD: items
 description: "<<tagged yaml>>"
 ---
 
@@ -2264,12 +2263,12 @@ Body."#;
         assert_eq!(db.get("port").unwrap().as_i64().unwrap(), 5432);
     }
 
-    // SCOPE block edge cases
+    // CARD block edge cases
 
     #[test]
-    fn test_scope_with_empty_body() {
+    fn test_card_with_empty_body() {
         let markdown = r#"---
-SCOPE: items
+CARD: items
 name: Item
 ---"#;
         let doc = decompose(markdown).unwrap();
@@ -2280,13 +2279,13 @@ name: Item
     }
 
     #[test]
-    fn test_scope_consecutive_blocks() {
+    fn test_card_consecutive_blocks() {
         let markdown = r#"---
-SCOPE: a
+CARD: a
 id: 1
 ---
 ---
-SCOPE: a
+CARD: a
 id: 2
 ---"#;
         let doc = decompose(markdown).unwrap();
@@ -2295,9 +2294,9 @@ id: 2
     }
 
     #[test]
-    fn test_scope_with_body_containing_dashes() {
+    fn test_card_with_body_containing_dashes() {
         let markdown = r#"---
-SCOPE: items
+CARD: items
 name: Item
 ---
 
@@ -2350,7 +2349,7 @@ Body content."#;
 
     #[test]
     fn test_invalid_scope_name_uppercase() {
-        let markdown = "---\nSCOPE: ITEMS\n---\n\nBody.";
+        let markdown = "---\nCARD: ITEMS\n---\n\nBody.";
         let result = decompose(markdown);
         assert!(result.is_err());
         assert!(result
@@ -2361,14 +2360,14 @@ Body content."#;
 
     #[test]
     fn test_invalid_scope_name_starts_with_number() {
-        let markdown = "---\nSCOPE: 123items\n---\n\nBody.";
+        let markdown = "---\nCARD: 123items\n---\n\nBody.";
         let result = decompose(markdown);
         assert!(result.is_err());
     }
 
     #[test]
     fn test_invalid_scope_name_with_hyphen() {
-        let markdown = "---\nSCOPE: my-items\n---\n\nBody.";
+        let markdown = "---\nCARD: my-items\n---\n\nBody.";
         let result = decompose(markdown);
         assert!(result.is_err());
     }

@@ -11,15 +11,15 @@ The extended standard allows you to define inline metadata sections throughout y
 ## Features Demonstrated
 
 ---
-SCOPE: features
+CARD: features
 name: Tag Directives
 status: implemented
 ---
 
-Use `SCOPE: tag_name` syntax to create collections of related items. Each tagged block creates an entry in an array.
+Use `CARD: tag_name` syntax to create collections of related items. Each tagged block creates an entry in an array.
 
 ---
-SCOPE: features
+CARD: features
 name: Structured Content
 status: implemented
 ---
@@ -27,7 +27,7 @@ status: implemented
 Break your document into logical sections with their own metadata. Perfect for catalogs, lists, and structured documents.
 
 ---
-SCOPE: features
+CARD: features
 name: Backward Compatible
 status: stable
 ---
@@ -37,7 +37,7 @@ Documents without tag directives continue to work exactly as before. No breaking
 ## Use Cases
 
 ---
-SCOPE: use_cases
+CARD: use_cases
 category: Documentation
 example: Technical specifications with multiple sections
 ---
@@ -45,7 +45,7 @@ example: Technical specifications with multiple sections
 Perfect for API documentation, user manuals, and technical guides where you need structured metadata for each section.
 
 ---
-SCOPE: use_cases
+CARD: use_cases
 category: Content Management
 example: Product catalogs, blog posts, portfolios
 ---
