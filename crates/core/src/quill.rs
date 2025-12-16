@@ -455,8 +455,7 @@ impl QuillIgnore {
     /// Simple pattern matching (supports * wildcard and directory patterns)
     fn matches_pattern(&self, pattern: &str, path: &str) -> bool {
         // Handle directory patterns
-        if pattern.ends_with('/') {
-            let pattern_prefix = &pattern[..pattern.len() - 1];
+        if let Some(pattern_prefix) = pattern.strip_suffix('/') {
             return path.starts_with(pattern_prefix)
                 && (path.len() == pattern_prefix.len()
                     || path.chars().nth(pattern_prefix.len()) == Some('/'));
@@ -880,7 +879,7 @@ impl Quill {
             example: example_content,
             schema,
             defaults,
-            examples: examples,
+            examples,
             files: root,
         };
 
@@ -899,7 +898,7 @@ impl Quill {
         let json: JsonValue =
             serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {}", e))?;
 
-        let obj = json.as_object().ok_or_else(|| "Root must be an object")?;
+        let obj = json.as_object().ok_or("Root must be an object")?;
 
         // Extract metadata (optional)
         let default_name = obj
@@ -912,7 +911,7 @@ impl Quill {
         let files_obj = obj
             .get("files")
             .and_then(|v| v.as_object())
-            .ok_or_else(|| "Missing or invalid 'files' key")?;
+            .ok_or("Missing or invalid 'files' key")?;
 
         // Parse file tree
         let mut root_files = HashMap::new();

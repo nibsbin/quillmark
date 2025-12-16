@@ -83,7 +83,7 @@ impl Workflow {
 
         // Apply defaults from JSON schema (document-level)
         let defaults = self.quill.extract_defaults();
-        let parsed_with_defaults = parsed.with_defaults(&defaults);
+        let parsed_with_defaults = parsed.with_defaults(defaults);
 
         // Apply scope item defaults (for each item in scope arrays)
         let scope_item_defaults = schema::extract_scope_item_defaults(&self.quill.schema);

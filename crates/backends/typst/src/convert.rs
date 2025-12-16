@@ -109,7 +109,7 @@ where
     let mut depth = 0; // Track nesting depth for DoS prevention
     let mut iter = iter.peekable();
 
-    while let Some((event, range)) = iter.next() {
+    for (event, range) in iter {
         match event {
             Event::Start(tag) => {
                 // Track nesting depth

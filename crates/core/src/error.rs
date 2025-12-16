@@ -136,7 +136,7 @@ use crate::OutputFormat;
 pub const MAX_INPUT_SIZE: usize = 10 * 1024 * 1024;
 
 /// Maximum YAML size (1 MB)
-pub const MAX_YAML_SIZE: usize = 1 * 1024 * 1024;
+pub const MAX_YAML_SIZE: usize = 1024 * 1024;
 
 /// Maximum nesting depth for markdown structures (100 levels)
 pub const MAX_NESTING_DEPTH: usize = 100;

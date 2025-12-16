@@ -226,6 +226,12 @@ impl AutoPlate {
     }
 }
 
+impl Default for AutoPlate {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl PlateEngine for AutoPlate {
     /// Register a filter with the auto plate (ignored for JSON output)
     fn register_filter(&mut self, name: &str, func: FilterFn) {

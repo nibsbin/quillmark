@@ -41,7 +41,7 @@ impl QuillWorld {
         // so it acts as a stable fallback across platforms.
         #[cfg(feature = "embed-default-font")]
         {
-            fn load_embedded(byte_array: &[u8], book: &mut FontBook, fonts: &mut Vec<Font>) -> () {
+            fn load_embedded(byte_array: &[u8], book: &mut FontBook, fonts: &mut Vec<Font>) {
                 let bytes = Bytes::new(byte_array.to_vec());
                 for font in Font::iter(bytes) {
                     book.push(font.info().clone());

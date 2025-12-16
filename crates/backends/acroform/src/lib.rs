@@ -152,7 +152,7 @@ impl Backend for AcroformBackend {
 
             if let Some(source) = &render_processed {
                 let rendered_value =
-                    env.render_str(&source, &context)
+                    env.render_str(source, &context)
                         .map_err(|e| RenderError::TemplateFailed {
                             diag: Diagnostic::new(
                                 Severity::Error,
