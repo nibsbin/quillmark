@@ -29,6 +29,12 @@ pub struct Quillmark {
     inner: quillmark::Quillmark,
 }
 
+impl Default for Quillmark {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[wasm_bindgen]
 impl Quillmark {
     /// JavaScript constructor: `new Quillmark()`
@@ -240,30 +246,28 @@ impl Quillmark {
         })?;
 
         // Add assets if provided
-        if let Some(assets_json) = opts.assets {
+        if let Some(serde_json::Value::Object(assets_map)) = opts.assets {
             // assets is now a serde_json::Value representing a plain JavaScript object
             // We need to convert it to an iterator of (filename, bytes)
-            if let serde_json::Value::Object(assets_map) = assets_json {
-                for (filename, value) in assets_map {
-                    // Extract bytes from the value
-                    // Bytes can be either an array of numbers or a Uint8Array
-                    let bytes = if let Some(arr) = value.as_array() {
-                        // Array of numbers [0, 1, 2, ...]
-                        arr.iter()
-                            .filter_map(|v| v.as_u64().map(|n| n as u8))
-                            .collect::<Vec<u8>>()
-                    } else {
-                        return Err(WasmError::from(format!(
-                            "Invalid asset format for '{}': expected byte array",
-                            filename
-                        ))
-                        .to_js_value());
-                    };
+            for (filename, value) in assets_map {
+                // Extract bytes from the value
+                // Bytes can be either an array of numbers or a Uint8Array
+                let bytes = if let Some(arr) = value.as_array() {
+                    // Array of numbers [0, 1, 2, ...]
+                    arr.iter()
+                        .filter_map(|v| v.as_u64().map(|n| n as u8))
+                        .collect::<Vec<u8>>()
+                } else {
+                    return Err(WasmError::from(format!(
+                        "Invalid asset format for '{}': expected byte array",
+                        filename
+                    ))
+                    .to_js_value());
+                };
 
-                    workflow.add_asset(filename, bytes).map_err(|e| {
-                        WasmError::from(format!("Failed to add asset: {}", e)).to_js_value()
-                    })?;
-                }
+                workflow.add_asset(filename, bytes).map_err(|e| {
+                    WasmError::from(format!("Failed to add asset: {}", e)).to_js_value()
+                })?;
             }
         }
 

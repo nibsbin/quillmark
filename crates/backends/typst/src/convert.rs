@@ -107,7 +107,7 @@ where
     let mut in_list_item = false; // Track if we're inside a list item
     let mut need_para_space = false; // Track if we need space before next paragraph in list item
     let mut depth = 0; // Track nesting depth for DoS prevention
-    let mut iter = iter.peekable();
+    let iter = iter.peekable();
 
     for (event, range) in iter {
         match event {
