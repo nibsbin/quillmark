@@ -1,6 +1,6 @@
 # Scope Schema Implementation Plan
 
-**Goal**: Implement `[scopes.*]` configuration in Quill.toml to enable field validation, defaults, and JSON Schema generation for SCOPE blocks.
+**Goal**: Implement `type = "scope"` for fields in Quill.toml to enable validation, defaults, and JSON Schema generation for SCOPE blocks.
 
 **Design Reference**: [SCOPES.md](../designs/SCOPES.md)
 
@@ -11,41 +11,37 @@
 - SCOPE blocks are parsed as collections (arrays) per [PARSE.md](../designs/PARSE.md)
 - No validation or defaults applied to scope fields
 - No JSON Schema generated for scopes
-- Quill.toml only supports `[fields.*]` for document-level schemas
+- Quill.toml only supports flat `[fields.*]` without nested item schemas
+- **Partial implementation exists**: Separate `[scopes.*]` approach (to be removed)
 
 ---
 
 ## Desired State
 
-- `[scopes.*]` sections in Quill.toml define scope field schemas
-- Scope items are validated against their schemas during parsing
-- Default values are applied to scope fields
-- JSON Schema includes scope definitions
-- UI metadata is available for scope wizards
+- Fields with `type = "scope"` define scope item schemas via `[fields.X.items.*]`
+- Scope items are validated against their item schemas during parsing
+- Default values are applied to scope item fields
+- JSON Schema generates array properties for scope-typed fields
+- No separate `scopes` namespace or structs
 
 ---
 
-## Phase 1: Configuration Loading
+## Phase 1: Implement Unified Configuration
 
 ### Changes Required
 
-1. **Extend Quill.toml Parser**
-   - Parse `[scopes.*]` sections alongside `[fields.*]`
-   - Build `ScopeConfig` with description, fields, and UI metadata
-   - Reuse existing `FieldSchema` parsing for scope fields
+1. **Extend FieldSchema**
+   - Add `items: Option<HashMap<String, FieldSchema>>` for scope item fields
+   - Parse `[fields.X.items.*]` sections when `type = "scope"`
 
-2. **Extend QuillConfig**
-   - Add `scopes: HashMap<String, ScopeConfig>` field
-   - Serialize scope configurations to Quill struct
-
-3. **Extend Quill Struct**
-   - Add `scope_schemas` for JSON Schema per scope
-   - Add `scope_defaults` for cached default values
+2. **Update JSON Schema Generation**
+   - When `type = "scope"`, generate `{ "type": "array", "items": { ... } }`
+   - Reuse existing field schema building for items
 
 ### Affected Files
 
-- `crates/quillmark-core/src/quill.rs` - QuillConfig and Quill struct extensions
-- `crates/quillmark-core/src/schema.rs` - ScopeConfig type definition (if separate)
+- `crates/core/src/quill.rs` - Extend FieldSchema with items field
+- `crates/core/src/schema.rs` - Update build_schema_from_fields for scope type
 
 ---
 
@@ -54,54 +50,31 @@
 ### Changes Required
 
 1. **Scope Field Validation**
-   - During document parsing, look up scope schema from Quill
-   - Validate each scope item against its field schema
-   - Apply default values to missing fields
+   - During document parsing, detect scope-typed fields
+   - Validate each scope item against `items.*` schema
+   - Apply default values to missing item fields
 
 2. **Error Handling**
-   - Generate validation errors with scope context (scope name, item index)
+   - Generate validation errors with scope context (field name, item index)
    - Use existing error infrastructure from [ERROR.md](../designs/ERROR.md)
 
 ### Affected Files
 
-- `crates/quillmark-core/src/parse.rs` - Add validation hooks after scope aggregation
-- `crates/quillmark-core/src/workflow.rs` - Wire validation into render workflow
+- `crates/core/src/parse.rs` - Add validation hooks after scope aggregation
+- `crates/core/src/schema.rs` - Add scope item validation
 
 ---
 
-## Phase 3: JSON Schema Generation
+## Phase 3: Documentation and Migration
 
 ### Changes Required
 
-1. **Scope Schema Generation**
-   - Generate array-of-objects schema for each defined scope
-   - Include `x-ui` metadata for scope-level UI configuration
-   - Merge scope schemas into main JSON Schema output
+1. **Update Example Quills**
+   - Add `type = "scope"` fields to USAF memo quill
+   - Add `[fields.X.items.*]` field definitions
 
-2. **Schema API**
-   - Extend `Quill::schema()` to include scope definitions
-   - Provide `Quill::scope_schema(name)` for individual scope schemas
-
-### Affected Files
-
-- `crates/quillmark-core/src/quill.rs` - Schema generation methods
-
----
-
-## Phase 4: Documentation and Migration
-
-### Changes Required
-
-1. **Update Design Index**
-   - Add SCOPES.md to [INDEX.md](../designs/INDEX.md)
-
-2. **Update Example Quills**
-   - Add `[scopes.*]` configuration to USAF memo quill
-   - Add examples demonstrating scope field validation
-
-3. **Binding Updates**
-   - Ensure WASM bindings expose scope schema methods
-   - Update Python bindings if applicable
+2. **Binding Updates**
+   - No API changes needed (scopes are just fields)
 
 ---
 
@@ -109,12 +82,12 @@
 
 ### Unit Tests
 
-- Parse Quill.toml with `[scopes.*]` sections
-- Validate scope items against defined schemas
-- Apply defaults to scope fields
-- Generate JSON Schema including scopes
+- Parse Quill.toml with `type = "scope"` fields
+- Parse nested `[fields.X.items.*]` sections
+- Generate JSON Schema with array-typed properties
+- Validate scope items against item schemas
+- Apply defaults to scope item fields
 - Handle unknown scope names (lenient mode)
-- Handle malformed scope configurations (error cases)
 
 ### Integration Tests
 
@@ -124,4 +97,4 @@
 ### Manual Verification
 
 - Render USAF memo with endorsements and verify output
-- Inspect generated JSON Schema for scope definitions
+- Inspect generated JSON Schema for scope array properties

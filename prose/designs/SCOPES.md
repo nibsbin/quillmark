@@ -2,7 +2,7 @@
 
 > **Status**: Design Phase
 >
-> This document defines the schema configuration for SCOPE blocks in Quill.toml.
+> This document defines how SCOPE blocks are configured as fields with `type = "scope"` in Quill.toml.
 
 > **Related Documents**:
 > - [SCHEMAS.md](SCHEMAS.md) - Field validation and JSON Schema generation
@@ -13,57 +13,59 @@
 
 ## Overview
 
-SCOPE blocks (documented in [PARSE.md](PARSE.md)) are always parsed as **collections** (arrays of objects). This design adds schema annotations for scope fields via `[scopes.*]` sections in Quill.toml, enabling:
+SCOPE blocks (documented in [PARSE.md](PARSE.md)) are always parsed as **collections** (arrays of objects). This design unifies scope configuration into the existing `[fields.*]` structure using `type = "scope"`, enabling:
 
-1. Field validation for scope items
-2. Default values for scope fields
-3. UI metadata for scope wizards
-4. JSON Schema generation for scopes
+1. Unified mental model - scopes are just fields with array-of-objects type
+2. Field validation for scope items
+3. Default values for scope fields  
+4. JSON Schema generation as array properties
 
 ---
 
 ## Design Principles
 
-### 1. Collections Only
+### 1. Unified Field Model
+
+Scopes are fields with `type = "scope"`. No separate `[scopes.*]` namespace exists.
+
+### 2. Collections Only
 
 All scopes are collections. Multiple markdown SCOPE blocks with the same name become items in an array. Zero blocks produce an empty array.
 
-### 2. Lenient Unknown Scopes
+### 3. Lenient Unknown Scopes
 
-Unknown scope names (not defined in `[scopes.*]`) are allowed and default to collection behavior with no validation.
+Unknown scope names (not defined as scope-typed fields) are allowed and default to collection behavior with no validation.
 
-### 3. Consistent Field Schema
+### 4. Consistent Schema Reuse
 
-Scope fields use the same schema format as document fields (see [SCHEMAS.md](SCHEMAS.md)):
-- Same type mappings (`str`, `array`, `dict`, `date`, `datetime`, `number`)
-- Same UI metadata (`group`, `order`)
-- Same default/required logic
+Scope item fields use the same `FieldSchema` structure as document fields (see [SCHEMAS.md](SCHEMAS.md)).
 
 ---
 
 ## Quill.toml Structure
 
-### Scope Definition
-
-```toml
-[scopes.NAME]
-description = "Human-readable description"
-ui.group = "UI grouping"            # optional
-ui.icon = "icon-name"               # optional
-ui.add_button_text = "Add Item"     # optional
-ui.item_label = "{{ordinal}} Item"  # optional
-```
-
 ### Scope Field Definition
 
 ```toml
-[scopes.NAME.fields.FIELD_NAME]
-type = "str"                        # required: str, number, array, dict, date, datetime
-title = "Field Label"               # optional
-description = "Field description"   # optional
-default = "default value"           # optional: makes field optional
-examples = ["example1"]             # optional
-ui.group = "Field Group"            # optional
+[fields.endorsements]
+type = "scope"
+title = "Endorsements"
+description = "Chain of endorsements for routing"
+ui.group = "Routing"
+```
+
+### Scope Item Field Definition
+
+```toml
+[fields.endorsements.items.name]
+type = "string"
+title = "Endorser Name"
+description = "Name of the endorsing official"
+
+[fields.endorsements.items.org]
+type = "string"
+title = "Organization"
+default = "Unknown"
 ```
 
 ---
@@ -74,14 +76,14 @@ ui.group = "Field Group"            # optional
 
 | Scenario | Behavior |
 |----------|----------|
-| Zero SCOPE blocks | Empty array: `scope_name = []` |
-| One SCOPE block | Single-item array: `scope_name = [{...}]` |
-| Multiple SCOPE blocks | Multi-item array: `scope_name = [{...}, {...}]` |
+| Zero SCOPE blocks | Empty array: `endorsements = []` |
+| One SCOPE block | Single-item array: `endorsements = [{...}]` |
+| Multiple SCOPE blocks | Multi-item array: `endorsements = [{...}, {...}]` |
 | Unknown scope name | Collection behavior, no validation |
 
 ### Validation
 
-- Each item in a scope collection is validated against `[scopes.X.fields.*]`
+- Fields with `type = "scope"` validate each item against `[fields.X.items.*]`
 - Default values are applied to each item
 - Unknown fields within scope items are allowed (lenient)
 
@@ -94,20 +96,22 @@ ui.group = "Field Group"            # optional
 
 ## JSON Schema Generation
 
-Scope schemas generate as arrays with object items:
+Scope-typed fields generate as array properties:
 
 ```json
 {
-  "scope_name": {
+  "endorsements": {
     "type": "array",
-    "description": "Scope description",
+    "title": "Endorsements",
+    "description": "Chain of endorsements for routing",
     "items": {
       "type": "object",
       "properties": {
-        "field_name": { "type": "string", ... }
+        "name": { "type": "string", ... },
+        "org": { "type": "string", "default": "Unknown", ... }
       }
     },
-    "x-ui": { "group": "...", "icon": "..." }
+    "x-ui": { "group": "Routing" }
   }
 }
 ```
@@ -116,41 +120,35 @@ Scope schemas generate as arrays with object items:
 
 ## Data Model Changes
 
-### QuillConfig Extension
+### FieldSchema Extension
 
-Add to existing `QuillConfig` struct (see [QUILL.md](QUILL.md)):
+Extend existing `FieldSchema` struct (see [QUILL.md](QUILL.md)):
 
-- `scopes`: Map of scope name → `ScopeConfig`
+- Add `items: Option<HashMap<String, FieldSchema>>` for scope item fields
 
-### ScopeConfig
+### Type Recognition
 
-New configuration type for scope metadata:
+- `type = "scope"` indicates array-of-objects behavior
+- Presence of `items` sub-fields enables item validation
 
-- `description`: Human-readable description
-- `fields`: Map of field name → `FieldSchema` (same as document fields)
-- `ui`: Optional UI metadata table
+### No Separate Structs
 
-### Quill Extension
-
-Add to existing `Quill` struct:
-
-- `scope_schemas`: Map of scope name → JSON Schema (for each scope)
-- `scope_defaults`: Cached defaults for scope fields
+- No `ScopeConfig` struct needed
+- No `scopes` dictionary in `QuillConfig`
+- No `scope_schemas` / `scope_defaults` in `Quill`
 
 ---
 
 ## UI Metadata
 
-Scope-level UI metadata enables rich wizard experiences:
+Scope-typed fields use the same UI metadata as other fields:
 
 | Property | Purpose |
 |----------|---------|
-| `group` | Groups scopes in UI sidebar |
-| `icon` | Icon for scope type |
-| `add_button_text` | Text for "add item" button |
-| `item_label` | Template for item labels (supports `{{ordinal}}`) |
+| `ui.group` | Groups scope in UI sidebar |
+| `ui.order` | Display order (from position in Quill.toml) |
 
-Field-level UI metadata uses the same structure as document fields (see [SCHEMAS.md](SCHEMAS.md)).
+Item fields within scopes also use the same UI structure.
 
 ---
 
