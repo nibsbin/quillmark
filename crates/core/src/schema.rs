@@ -445,8 +445,56 @@ pub fn validate_document(
             let path_display = if path.is_empty() {
                 "document".to_string()
             } else {
-                path
+                path.clone()
             };
+
+            // Check for potential invalid card type error
+            if path.starts_with("/CARDS/") && error.to_string().contains("oneOf") {
+                // Try to parse the index from path /CARDS/n
+                if let Some(rest) = path.strip_prefix("/CARDS/") {
+                    // path might be just "/CARDS/0" or "/CARDS/0/some/field"
+                    // We only want to intervene if the error is about the card item itself failing oneOf
+                    let is_item_error = !rest.contains('/');
+
+                    if is_item_error {
+                        if let Ok(idx) = rest.parse::<usize>() {
+                            if let Some(cards) = doc_value.get("CARDS").and_then(|v| v.as_array()) {
+                                if let Some(item) = cards.get(idx) {
+                                    // Check if the item has a CARD field
+                                    if let Some(card_type) =
+                                        item.get("CARD").and_then(|v| v.as_str())
+                                    {
+                                        // Collect valid card types from schema definitions
+                                        let mut valid_types = Vec::new();
+                                        if let Some(defs) = schema
+                                            .as_json()
+                                            .get("$defs")
+                                            .and_then(|v| v.as_object())
+                                        {
+                                            for key in defs.keys() {
+                                                if let Some(name) = key.strip_suffix("_card") {
+                                                    valid_types.push(name.to_string());
+                                                }
+                                            }
+                                        }
+
+                                        // If we found valid types and the current type is NOT in the list
+                                        if !valid_types.is_empty()
+                                            && !valid_types.contains(&card_type.to_string())
+                                        {
+                                            valid_types.sort();
+                                            let valid_list = valid_types.join(", ");
+                                            let message = format!("Validation error at {}: Invalid card type '{}'. Valid types are: [{}]", path_display, card_type, valid_list);
+                                            return Err(vec![message]);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             let message = format!("Validation error at {}: {}", path_display, error);
             Err(vec![message])
         }
@@ -1549,5 +1597,50 @@ mod tests {
 
         let result = validate_document(&QuillValue::from_json(schema), &invalid_fields);
         assert!(result.is_err());
+    }
+    #[test]
+    fn test_validate_document_invalid_card_type() {
+        use crate::quill::{CardSchema, FieldSchema, UiSchema};
+
+        let mut card_fields = HashMap::new();
+        card_fields.insert(
+            "field1".to_string(),
+            FieldSchema::new("f1".to_string(), "desc".to_string()),
+        );
+        let mut card_schemas = HashMap::new();
+        card_schemas.insert(
+            "valid_card".to_string(),
+            CardSchema {
+                name: "valid_card".to_string(),
+                title: None,
+                ui: Some(UiSchema {
+                    group: None,
+                    order: None,
+                }),
+                description: "".to_string(),
+                fields: card_fields,
+            },
+        );
+
+        let schema = build_schema(&HashMap::new(), &card_schemas).unwrap();
+
+        let mut fields = HashMap::new();
+        // invalid card
+        let invalid_card = json!({
+            "CARD": "invalid_type",
+            "field1": "value" // field1 is valid for valid_card but type is wrong
+        });
+        fields.insert(
+            "CARDS".to_string(),
+            QuillValue::from_json(json!([invalid_card])),
+        );
+
+        let result = validate_document(&QuillValue::from_json(schema.as_json().clone()), &fields);
+        assert!(result.is_err());
+        let errs = result.unwrap_err();
+        // Check for specific improved message
+        let err_msg = &errs[0];
+        assert!(err_msg.contains("Invalid card type 'invalid_type'"));
+        assert!(err_msg.contains("Valid types are: [valid_card]"));
     }
 }

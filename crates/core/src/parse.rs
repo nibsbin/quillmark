@@ -312,13 +312,31 @@ fn find_metadata_blocks(
                             if let Some(mapping) = parsed_yaml.as_mapping() {
                                 let quill_key = serde_yaml::Value::String("QUILL".to_string());
                                 let card_key = serde_yaml::Value::String("CARD".to_string());
+                                let scope_key = serde_yaml::Value::String("SCOPE".to_string()); // Backwards compatibility alias
 
                                 let has_quill = mapping.contains_key(&quill_key);
                                 let has_card = mapping.contains_key(&card_key);
+                                let has_scope = mapping.contains_key(&scope_key);
 
-                                if has_quill && has_card {
+                                // CARD and SCOPE are aliases - can't use both
+                                if has_card && has_scope {
                                     return Err(
-                                        "Cannot specify both QUILL and CARD in the same block"
+                                        "Cannot specify both CARD and SCOPE in the same block (SCOPE is an alias for CARD)"
+                                            .into(),
+                                    );
+                                }
+
+                                let effective_card_key = if has_card {
+                                    Some(&card_key)
+                                } else if has_scope {
+                                    Some(&scope_key)
+                                } else {
+                                    None
+                                };
+
+                                if has_quill && effective_card_key.is_some() {
+                                    return Err(
+                                        "Cannot specify both QUILL and CARD/SCOPE in the same block"
                                             .into(),
                                     );
                                 }
@@ -348,15 +366,16 @@ fn find_metadata_blocks(
                                     };
 
                                     (None, Some(quill_name_str.to_string()), new_value)
-                                } else if has_card {
-                                    // Extract scope field name
-                                    let card_value = mapping.get(&card_key).unwrap();
-                                    let field_name =
-                                        card_value.as_str().ok_or("CARD value must be a string")?;
+                                } else if let Some(card_key_used) = effective_card_key {
+                                    // Extract card field name (handles both CARD and SCOPE)
+                                    let card_value = mapping.get(card_key_used).unwrap();
+                                    let field_name = card_value
+                                        .as_str()
+                                        .ok_or("CARD/SCOPE value must be a string")?;
 
                                     if !is_valid_tag_name(field_name) {
                                         return Err(format!(
-                                            "Invalid field name '{}': must match pattern [a-z_][a-z0-9_]*",
+                                            "Invalid card field name '{}': must match pattern [a-z_][a-z0-9_]*",
                                             field_name
                                         )
                                         .into());
@@ -364,15 +383,15 @@ fn find_metadata_blocks(
 
                                     if field_name == BODY_FIELD {
                                         return Err(format!(
-                                            "Cannot use reserved field name '{}' as CARD value",
+                                            "Cannot use reserved field name '{}' as CARD/SCOPE value",
                                             BODY_FIELD
                                         )
                                         .into());
                                     }
 
-                                    // Remove CARD from the YAML value for processing
+                                    // Remove CARD/SCOPE from the YAML value for processing
                                     let mut new_mapping = mapping.clone();
-                                    new_mapping.remove(&card_key);
+                                    new_mapping.remove(card_key_used);
                                     let new_value = if new_mapping.is_empty() {
                                         None
                                     } else {
@@ -1245,7 +1264,7 @@ title: Test
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Invalid field name"));
+            .contains("Invalid card field name"));
     }
 
     #[test]
@@ -1569,7 +1588,7 @@ CARD: 123
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("CARD value must be a string"));
+            .contains("CARD/SCOPE value must be a string"));
     }
 
     #[test]
@@ -2371,7 +2390,7 @@ Body content."#;
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Invalid field name"));
+            .contains("Invalid card field name"));
     }
 
     #[test]
