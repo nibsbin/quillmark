@@ -87,7 +87,7 @@ Update type mapping to reference CARDS.md for card types.
 
 ---
 
-## Phase 5: Parser SCOPE→CARD Rename
+## Phase 5: Parser SCOPE→CARD Rename [COMPLETED]
 
 ### `crates/core/src/parse.rs`
 
