@@ -41,6 +41,9 @@ The error handling system is designed to:
 - Format/backend support errors
 - Resource collision errors
 - Size limit violations
+- Schema validation failures
+- Invalid schema definitions
+- Quill configuration errors
 
 **`SerializableDiagnostic`**: Cross-language compatible version of `Diagnostic` with flattened source chain for Python and WASM bindings
 
@@ -49,7 +52,7 @@ The error handling system is designed to:
 Language bindings (Python and WASM) **delegate error handling to core types** rather than creating wrapper error types:
 
 - **Python bindings**: Use `PyDiagnostic` which wraps `SerializableDiagnostic` from core, converting `RenderError` to Python exceptions with attached diagnostic payloads
-- **WASM bindings**: Use `SerializableDiagnostic` from core directly, serializing to JSON for JavaScript consumption via `serde_wasm_bindgen`
+- **WASM bindings**: Use a lightweight `WasmError` wrapper around `SerializableDiagnostic` (single or multiple), serializing to JSON for JavaScript consumption via `serde_wasm_bindgen`. This preserves the structured diagnostic data including error codes and hints.
 
 This approach ensures:
 - **Consistency**: All error information originates from core types
