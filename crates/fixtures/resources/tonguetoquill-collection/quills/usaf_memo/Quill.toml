@@ -133,55 +133,55 @@ description = "Font size for the memo text (pt)."
 # (Routing endorsements for multi-level correspondence)
 # ==========================================
 
-[scopes.indorsements]
+[cards.indorsements]
 title = "Routing Indorsements"
 ui.group = "Indorsements"
 description = "Chain of routing endorsements. Each endorsement block adds an official response or forwarding action to the original memo."
 
-[scopes.indorsements.items.from]
+[cards.indorsements.items.from]
 title = "From office/symbol"
 type = "string"
 required = true
 description = "Office symbol or organization of the endorsing official (e.g., 'ORG/SYMBOL')."
 
-[scopes.indorsements.items.for]
+[cards.indorsements.items.for]
 title = "To office/symbol"
 type = "string"
 required = true
 description = "Office symbol or organization receiving the endorsed memo."
 
-[scopes.indorsements.items.signature_block]
+[cards.indorsements.items.signature_block]
 title = "Signature block lines"
 type = "array"
 required = true
 examples = [["FIRST M. LAST, Rank, USAF", "Duty Title"]]
 description = "Line 1: Name in UPPERCASE as signed, grade, and service. Line 2: Duty title."
 
-[scopes.indorsements.items.attachments]
+[cards.indorsements.items.attachments]
 title = "Attachments for this endorsement"
 type = "array"
 default = []
 description = "List of attachments specific to this endorsement."
 
-[scopes.indorsements.items.cc]
+[cards.indorsements.items.cc]
 title = "Carbon copy recipients"
 type = "array"
 default = []
 description = "List of office symbols to receive copies of this endorsement."
 
-[scopes.indorsements.items.date]
+[cards.indorsements.items.date]
 title = "Date of endorsement (YYYY-MM-DD)"
 type = "string"
 default = ""
 description = "Date of the endorsement. Leave blank to omit."
 
-[scopes.indorsements.items.new_page]
+[cards.indorsements.items.new_page]
 title = "Start on new page"
 type = "boolean"
 default = false
 description = "If true, this endorsement starts on a new page."
 
-[scopes.indorsements.items.informal]
+[cards.indorsements.items.informal]
 title = "Informal endorsement"
 type = "boolean"
 default = false

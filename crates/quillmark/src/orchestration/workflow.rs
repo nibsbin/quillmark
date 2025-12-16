@@ -86,9 +86,9 @@ impl Workflow {
         let parsed_with_defaults = parsed.with_defaults(defaults);
 
         // Apply scope item defaults (for each item in scope arrays)
-        let scope_item_defaults = schema::extract_scope_item_defaults(&self.quill.schema);
+        let scope_item_defaults = schema::extract_card_item_defaults(&self.quill.schema);
         let fields_with_scope_defaults =
-            schema::apply_scope_item_defaults(parsed_with_defaults.fields(), &scope_item_defaults);
+            schema::apply_card_item_defaults(parsed_with_defaults.fields(), &scope_item_defaults);
         let parsed_with_defaults = ParsedDocument::new(fields_with_scope_defaults);
 
         // Apply coercion based on schema

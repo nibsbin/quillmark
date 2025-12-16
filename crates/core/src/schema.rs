@@ -14,13 +14,11 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
     // Add name
     property.insert("name".to_string(), Value::String(field_schema.name.clone()));
 
-    // Handle scope type specially - generates array with items object
-    if field_schema.r#type.as_deref() == Some("scope") {
+    // Handle card type specially - generates array with items object
+    if field_schema.r#type.as_deref() == Some("card") {
         property.insert("type".to_string(), Value::String("array".to_string()));
-        // Add x-scope marker for consumers to easily identify scope fields
-        property.insert("x-scope".to_string(), Value::Bool(true));
 
-        // Build items schema for scope
+        // Build items schema for card
         let mut items_schema = Map::new();
         items_schema.insert("type".to_string(), Value::String("object".to_string()));
 
@@ -118,27 +116,46 @@ pub fn build_schema_from_fields(
     field_schemas: &HashMap<String, FieldSchema>,
 ) -> Result<QuillValue, RenderError> {
     let mut properties = Map::new();
+    let mut cards = Map::new();
     let mut required_fields = Vec::new();
 
     for (field_name, field_schema) in field_schemas {
         let property = build_field_property(field_schema);
-        properties.insert(field_name.clone(), Value::Object(property));
 
-        // Field is required if explicitly marked as required = true
-        // Fields are optional by default (JSON Schema standard)
-        if field_schema.required {
-            required_fields.push(field_name.clone());
+        if field_schema.r#type.as_deref() == Some("card") {
+            // Add to CARDS object
+            cards.insert(field_name.clone(), Value::Object(property));
+        } else {
+            // Add to regular properties
+            properties.insert(field_name.clone(), Value::Object(property));
+
+            // Regular fields checks (cards handled separately or via items)
+            if field_schema.required {
+                required_fields.push(field_name.clone());
+            }
         }
     }
 
     // Build the complete JSON Schema
-    let schema = json!({
-        "$schema": "https://json-schema.org/draft/2019-09/schema",
-        "type": "object",
-        "properties": properties,
-        "required": required_fields,
-        "additionalProperties": true
-    });
+    let mut schema_map = Map::new();
+    schema_map.insert(
+        "$schema".to_string(),
+        Value::String("https://json-schema.org/draft/2019-09/schema".to_string()),
+    );
+    schema_map.insert("type".to_string(), Value::String("object".to_string()));
+    schema_map.insert("properties".to_string(), Value::Object(properties));
+
+    if !cards.is_empty() {
+        schema_map.insert("CARDS".to_string(), Value::Object(cards));
+    }
+
+    schema_map.insert(
+        "required".to_string(),
+        Value::Array(required_fields.into_iter().map(Value::String).collect()),
+    );
+    schema_map.insert("additionalProperties".to_string(), Value::Bool(true));
+
+    let schema = Value::Object(schema_map);
 
     Ok(QuillValue::from_json(schema))
 }
@@ -220,9 +237,9 @@ pub fn extract_examples_from_schema(
     examples
 }
 
-/// Extract default values for scope item fields from a JSON Schema
+/// Extract default values for card item fields from a JSON Schema
 ///
-/// For scope-typed fields (type = "array" with items.properties), extracts
+/// For card-typed fields (type = "array" with items.properties), extracts
 /// any default values defined for item properties.
 ///
 /// # Arguments
@@ -231,18 +248,18 @@ pub fn extract_examples_from_schema(
 ///
 /// # Returns
 ///
-/// A HashMap of scope field names to their item defaults:
-/// `HashMap<scope_field_name, HashMap<item_field_name, default_value>>`
-pub fn extract_scope_item_defaults(
+/// A HashMap of card field names to their item defaults:
+/// `HashMap<card_field_name, HashMap<item_field_name, default_value>>`
+pub fn extract_card_item_defaults(
     schema: &QuillValue,
 ) -> HashMap<String, HashMap<String, QuillValue>> {
-    let mut scope_defaults = HashMap::new();
+    let mut card_defaults = HashMap::new();
 
     // Get the properties object from the schema
     if let Some(properties) = schema.as_json().get("properties") {
         if let Some(properties_obj) = properties.as_object() {
             for (field_name, field_schema) in properties_obj {
-                // Check if this is a scope-typed field (array with items)
+                // Check if this is a card-typed field (array with items)
                 let is_array = field_schema
                     .get("type")
                     .and_then(|t| t.as_str())
@@ -271,7 +288,7 @@ pub fn extract_scope_item_defaults(
                             }
 
                             if !item_defaults.is_empty() {
-                                scope_defaults.insert(field_name.clone(), item_defaults);
+                                card_defaults.insert(field_name.clone(), item_defaults);
                             }
                         }
                     }
@@ -280,32 +297,32 @@ pub fn extract_scope_item_defaults(
         }
     }
 
-    scope_defaults
+    card_defaults
 }
 
-/// Apply default values to scope item fields in a document
+/// Apply default values to card item fields in a document
 ///
-/// For each scope-typed field (arrays), iterates through items and
+/// For each card-typed field (arrays), iterates through items and
 /// inserts default values for missing fields.
 ///
 /// # Arguments
 ///
-/// * `fields` - The document fields containing scope arrays
-/// * `scope_defaults` - Defaults for scope items from `extract_scope_item_defaults`
+/// * `fields` - The document fields containing card arrays
+/// * `card_defaults` - Defaults for card items from `extract_card_item_defaults`
 ///
 /// # Returns
 ///
-/// A new HashMap with default values applied to scope items
-pub fn apply_scope_item_defaults(
+/// A new HashMap with default values applied to card items
+pub fn apply_card_item_defaults(
     fields: &HashMap<String, QuillValue>,
-    scope_defaults: &HashMap<String, HashMap<String, QuillValue>>,
+    card_defaults: &HashMap<String, HashMap<String, QuillValue>>,
 ) -> HashMap<String, QuillValue> {
     let mut result = fields.clone();
 
-    for (scope_name, item_defaults) in scope_defaults {
-        if let Some(scope_value) = result.get(scope_name) {
+    for (card_name, item_defaults) in card_defaults {
+        if let Some(card_value) = result.get(card_name) {
             // Get the array of items
-            if let Some(items_array) = scope_value.as_array() {
+            if let Some(items_array) = card_value.as_array() {
                 let mut updated_items: Vec<serde_json::Value> = Vec::new();
 
                 for item in items_array {
@@ -329,7 +346,7 @@ pub fn apply_scope_item_defaults(
                 }
 
                 result.insert(
-                    scope_name.clone(),
+                    card_name.clone(),
                     QuillValue::from_json(serde_json::Value::Array(updated_items)),
                 );
             }
@@ -1161,21 +1178,21 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_scope_generates_array() {
-        // Test that type = "scope" generates JSON Schema with type = "array"
+    fn test_schema_card_generates_array() {
+        // Test that type = "card" generates JSON Schema with type = "array"
         let mut fields = HashMap::new();
-        let mut scope_schema = FieldSchema::new(
+        let mut card_schema = FieldSchema::new(
             "endorsements".to_string(),
             "Chain of endorsements".to_string(),
         );
-        scope_schema.r#type = Some("scope".to_string());
-        scope_schema.title = Some("Endorsements".to_string());
-        fields.insert("endorsements".to_string(), scope_schema);
+        card_schema.r#type = Some("card".to_string());
+        card_schema.title = Some("Endorsements".to_string());
+        fields.insert("endorsements".to_string(), card_schema);
 
         let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
 
-        // Verify the scope field generates array type
-        let endorsements = &json_schema["properties"]["endorsements"];
+        // Verify the card field generates array type
+        let endorsements = &json_schema["CARDS"]["endorsements"];
         assert_eq!(endorsements["type"], "array");
         assert_eq!(endorsements["name"], "endorsements");
         assert_eq!(endorsements["title"], "Endorsements");
@@ -1186,15 +1203,15 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_scope_items_properties() {
-        // Test that scope items generate nested properties in JSON Schema
+    fn test_schema_card_items_properties() {
+        // Test that card items generate nested properties in JSON Schema
         let mut fields = HashMap::new();
 
-        let mut scope_schema = FieldSchema::new(
+        let mut card_schema = FieldSchema::new(
             "endorsements".to_string(),
             "Chain of endorsements".to_string(),
         );
-        scope_schema.r#type = Some("scope".to_string());
+        card_schema.r#type = Some("card".to_string());
 
         // Add item schemas
         let mut name_schema = FieldSchema::new("name".to_string(), "Endorser name".to_string());
@@ -1208,12 +1225,12 @@ mod tests {
         let mut items = HashMap::new();
         items.insert("name".to_string(), name_schema);
         items.insert("org".to_string(), org_schema);
-        scope_schema.items = Some(items);
+        card_schema.items = Some(items);
 
-        fields.insert("endorsements".to_string(), scope_schema);
+        fields.insert("endorsements".to_string(), card_schema);
 
         let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
-        let endorsements = &json_schema["properties"]["endorsements"];
+        let endorsements = &json_schema["CARDS"]["endorsements"];
 
         // Verify items has properties
         let items_schema = &endorsements["items"];
@@ -1236,8 +1253,8 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_scope_item_defaults() {
-        // Create a JSON schema with scope items that have defaults
+    fn test_extract_card_item_defaults() {
+        // Create a JSON schema with card items that have defaults
         let schema = json!({
             "$schema": "https://json-schema.org/draft/2019-09/schema",
             "type": "object",
@@ -1257,13 +1274,13 @@ mod tests {
             }
         });
 
-        let scope_defaults = extract_scope_item_defaults(&QuillValue::from_json(schema));
+        let card_defaults = extract_card_item_defaults(&QuillValue::from_json(schema));
 
-        // Should have one scope field with defaults
-        assert_eq!(scope_defaults.len(), 1);
-        assert!(scope_defaults.contains_key("endorsements"));
+        // Should have one card field with defaults
+        assert_eq!(card_defaults.len(), 1);
+        assert!(card_defaults.contains_key("endorsements"));
 
-        let endorsements_defaults = scope_defaults.get("endorsements").unwrap();
+        let endorsements_defaults = card_defaults.get("endorsements").unwrap();
         assert_eq!(endorsements_defaults.len(), 2); // org and rank have defaults
         assert!(!endorsements_defaults.contains_key("name")); // name has no default
         assert_eq!(
@@ -1277,8 +1294,8 @@ mod tests {
     }
 
     #[test]
-    fn test_extract_scope_item_defaults_empty() {
-        // Schema with no scope fields
+    fn test_extract_card_item_defaults_empty() {
+        // Schema with no card fields
         let schema = json!({
             "type": "object",
             "properties": {
@@ -1286,13 +1303,13 @@ mod tests {
             }
         });
 
-        let scope_defaults = extract_scope_item_defaults(&QuillValue::from_json(schema));
-        assert!(scope_defaults.is_empty());
+        let card_defaults = extract_card_item_defaults(&QuillValue::from_json(schema));
+        assert!(card_defaults.is_empty());
     }
 
     #[test]
-    fn test_extract_scope_item_defaults_no_item_defaults() {
-        // Schema with scope field but no item defaults
+    fn test_extract_card_item_defaults_no_item_defaults() {
+        // Schema with card field but no item defaults
         let schema = json!({
             "type": "object",
             "properties": {
@@ -1309,23 +1326,23 @@ mod tests {
             }
         });
 
-        let scope_defaults = extract_scope_item_defaults(&QuillValue::from_json(schema));
-        assert!(scope_defaults.is_empty()); // No defaults defined
+        let card_defaults = extract_card_item_defaults(&QuillValue::from_json(schema));
+        assert!(card_defaults.is_empty()); // No defaults defined
     }
 
     #[test]
-    fn test_apply_scope_item_defaults() {
-        // Set up scope defaults
+    fn test_apply_card_item_defaults() {
+        // Set up card defaults
         let mut item_defaults = HashMap::new();
         item_defaults.insert(
             "org".to_string(),
             QuillValue::from_json(json!("Default Org")),
         );
 
-        let mut scope_defaults = HashMap::new();
-        scope_defaults.insert("endorsements".to_string(), item_defaults);
+        let mut card_defaults = HashMap::new();
+        card_defaults.insert("endorsements".to_string(), item_defaults);
 
-        // Set up document fields with scope items missing the 'org' field
+        // Set up document fields with card items missing the 'org' field
         let mut fields = HashMap::new();
         fields.insert(
             "endorsements".to_string(),
@@ -1335,7 +1352,7 @@ mod tests {
             ])),
         );
 
-        let result = apply_scope_item_defaults(&fields, &scope_defaults);
+        let result = apply_card_item_defaults(&fields, &card_defaults);
 
         // Verify defaults were applied
         let endorsements = result.get("endorsements").unwrap().as_array().unwrap();
@@ -1351,21 +1368,21 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_scope_item_defaults_empty_scope() {
+    fn test_apply_card_item_defaults_empty_card() {
         let mut item_defaults = HashMap::new();
         item_defaults.insert(
             "org".to_string(),
             QuillValue::from_json(json!("Default Org")),
         );
 
-        let mut scope_defaults = HashMap::new();
-        scope_defaults.insert("endorsements".to_string(), item_defaults);
+        let mut card_defaults = HashMap::new();
+        card_defaults.insert("endorsements".to_string(), item_defaults);
 
         // Empty endorsements array
         let mut fields = HashMap::new();
         fields.insert("endorsements".to_string(), QuillValue::from_json(json!([])));
 
-        let result = apply_scope_item_defaults(&fields, &scope_defaults);
+        let result = apply_card_item_defaults(&fields, &card_defaults);
 
         // Should still be empty array
         let endorsements = result.get("endorsements").unwrap().as_array().unwrap();
@@ -1373,24 +1390,24 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_scope_item_defaults_no_matching_scope() {
+    fn test_apply_card_item_defaults_no_matching_card() {
         let mut item_defaults = HashMap::new();
         item_defaults.insert(
             "org".to_string(),
             QuillValue::from_json(json!("Default Org")),
         );
 
-        let mut scope_defaults = HashMap::new();
-        scope_defaults.insert("endorsements".to_string(), item_defaults);
+        let mut card_defaults = HashMap::new();
+        card_defaults.insert("endorsements".to_string(), item_defaults);
 
-        // Document has different scope field
+        // Document has different card field
         let mut fields = HashMap::new();
         fields.insert(
             "reviews".to_string(),
             QuillValue::from_json(json!([{ "author": "Bob" }])),
         );
 
-        let result = apply_scope_item_defaults(&fields, &scope_defaults);
+        let result = apply_card_item_defaults(&fields, &card_defaults);
 
         // reviews should be unchanged
         let reviews = result.get("reviews").unwrap().as_array().unwrap();
@@ -1400,8 +1417,8 @@ mod tests {
     }
 
     #[test]
-    fn test_scope_validation_with_required_fields() {
-        // Test that JSON Schema validation rejects scope items missing required fields
+    fn test_card_validation_with_required_fields() {
+        // Test that JSON Schema validation rejects card items missing required fields
         let schema = json!({
             "$schema": "https://json-schema.org/draft/2019-09/schema",
             "type": "object",
