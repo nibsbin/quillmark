@@ -69,26 +69,26 @@
   {% endif %}
 )
 
-// Indorsements
-{% if indorsements is defined %}
-{% for ind in indorsements %}
+// Indorsements - iterate through CARDS array and filter by CARD type
+{% for card in CARDS %}
+{% if card.CARD == "indorsements" %}
 #indorsement(
-  from: {{ ind.from | String }},
-  to: {{ ind.for | String }},
-  signature_block: {{ ind.signature_block | Lines }},
-  {% if ind.attachments is defined %}
-  attachments: {{ ind.attachments | Lines }},
+  from: {{ card.from | String }},
+  to: {{ card.for | String }},
+  signature_block: {{ card.signature_block | Lines }},
+  {% if card.attachments is defined %}
+  attachments: {{ card.attachments | Lines }},
   {% endif %}
-  {% if ind.cc is defined %}
-  cc: {{ ind.cc | Lines }},
+  {% if card.cc is defined %}
+  cc: {{ card.cc | Lines }},
   {% endif %}
-  new_page: {{ ind.new_page | default(false) }},
-  informal: {{ ind.informal | default(false) }},
-  {% if ind.date is defined %}
-  date: {{ ind.date | String }},
+  new_page: {{ card.new_page | default(false) }},
+  informal: {{ card.informal | default(false) }},
+  {% if card.date is defined %}
+  date: {{ card.date | String }},
   {% endif %}
 )[
-  #{{ ind.body | Content }}
+  #{{ card.body | Content }}
 ]
-{% endfor %}
 {% endif %}
+{% endfor %}
