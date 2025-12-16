@@ -1,45 +1,91 @@
 # Quill.toml Configuration Enhancement Proposal
-## Support for Scoped Collection Schema Annotations
+## Support for Scope Schema Annotations (Atomic & Collections)
 
-**Date:** 2025-12-15
-**Context:** Enable schema annotation for SCOPE collections (e.g., `indorsements`) in USAF memo quill
+**Date:** 2025-12-16 (Updated)
+**Context:** Enable schema annotation for SCOPE blocks in quills (e.g., `indorsements`, `appendix`)
 **Design Focus:** Ergonomic, scalable, implementation-agnostic
 
 ---
 
 ## Problem Statement
 
-Currently, Quill.toml supports schema annotation only for main document fields via `[fields.*]` sections. However, many quills use the SCOPE feature to create collections (arrays of structured objects), such as:
+Currently, Quill.toml supports schema annotation only for main document fields via `[fields.*]` sections. However, many quills use the SCOPE feature to create:
 
-- **Endorsements** (`indorsements`) in USAF/USSF memos
-- **Products** in catalogs
-- **Authors** in multi-author documents
-- **Sections** in structured reports
+1. **Collections** (arrays of objects): Multiple SCOPE blocks with same name
+   - **Endorsements** (`indorsements`) in USAF/USSF memos
+   - **Products** in catalogs
+   - **Authors** in multi-author documents
+   - **Sections** in structured reports
 
-These scoped collections have their own field schemas (e.g., endorsement fields: `from`, `to`, `signature_block`, `new_page`, `date`, `attachments`, `cc`, `informal`), but there's currently no way to:
+2. **Atomic scopes** (single objects): One SCOPE block
+   - **Appendix** - Supplementary materials section
+   - **Cover Letter** - Transmittal letter
+   - **Abstract** - Document summary
+   - **Dedication** - Book dedication
 
-1. ✗ Define validation rules for collection item fields
-2. ✗ Specify default values for collection item fields
-3. ✗ Provide UI metadata (groups, ordering) for collection wizards
-4. ✗ Generate JSON Schema for collections
-5. ✗ Auto-document available fields for collection items
+These scoped blocks have their own field schemas, but there's currently no way to:
+
+1. ✗ Define validation rules for scope fields
+2. ✗ Specify default values for scope fields
+3. ✗ Provide UI metadata (groups, ordering) for scope wizards
+4. ✗ Generate JSON Schema for scopes
+5. ✗ Auto-document available fields for scopes
+6. ✗ Distinguish atomic scopes (single object) from collections (arrays)
+
+---
+
+## Final Design Summary
+
+**Chosen Approach:** `[scopes.*]` section with `singular` flag
+
+### Core Semantics
+- **Section name**: `[scopes.*]` (generic, works for both collections and atomic scopes)
+- **Default behavior**: Collection (array) - backward compatible with existing SCOPE usage
+- **Atomic scopes**: Use `singular = true` flag to create single object instead of array
+- **Unknown scopes**: Allowed (lenient mode) - defaults to collection behavior
+- **Validation**: Strict enforcement for singular scopes (error if multiple blocks found)
+- **Required scopes**: Not supported - all scopes are optional
+- **Collection constraints**: No `min_items` requirement
+
+### Quick Example
+```toml
+# Collection scope (default): Multiple blocks → array
+[scopes.indorsements]
+description = "Endorsements"
+[scopes.indorsements.fields.from]
+type = "string"
+
+# Atomic scope: Single block → object
+[scopes.appendix]
+singular = true
+description = "Appendix section"
+[scopes.appendix.fields.title]
+type = "string"
+```
+
+See **QUILL_SCOPES_SEMANTIC_DESIGN.md** for complete semantic specification.
 
 ---
 
 ## Design Principles
 
 1. **Ergonomic** - Easy to read, write, and maintain
-2. **Scalable** - Works for any SCOPE collection type
+2. **Scalable** - Works for both collection and atomic scopes
 3. **Consistent** - Follows existing `[fields.*]` patterns
 4. **Declarative** - Schema-first, not code-first
-5. **Extensible** - Room for future enhancements (nested collections, constraints)
+5. **Extensible** - Room for future enhancements (nested scopes, constraints)
 6. **Type-safe** - Full JSON Schema generation support
+7. **Lenient** - Unknown scopes allowed, defaults are sensible
 
 ---
 
-## Design Options
+## Recommended Design
 
-### Option A: Dedicated `[collections]` Section (RECOMMENDED)
+### `[scopes]` Section with `singular` Flag
+
+**Design Decision:** Use `[scopes.*]` for all SCOPE blocks (both collections and atomic)
+- **Collections** (default): Multiple blocks → array
+- **Atomic** (`singular = true`): Single block → object
 
 **Syntax:**
 ```toml
@@ -61,16 +107,21 @@ title = "List of recipient organization(s)"
 type = "array"
 # ...
 
-# NEW: Collection definitions
-[collections.indorsements]
+# ===========================================
+# SCOPES (NEW)
+# ===========================================
+
+# Collection scope (default): Multiple endorsements → array
+[scopes.indorsements]
+# singular = false (implicit default)
 description = "Endorsements (forwarding/response) appended to the memo per AFH 33-337"
 ui.group = "Endorsements"
 ui.icon = "mail-forward"  # Optional: UI icon hint
 ui.add_button_text = "Add Endorsement"  # Optional: Custom button text
-ui.item_label = "{{ordinal}} Endorsement"  # Optional: Template for item labels (uses {{ordinal}}, {{index}}, or field values)
+ui.item_label = "{{ordinal}} Indorsement"  # Optional: Template for item labels
 
-# Collection item fields
-[collections.indorsements.fields.from]
+# Fields for each endorsement item
+[scopes.indorsements.fields.from]
 title = "Sender organization"
 type = "string"
 examples = ["ORG/SYMBOL"]
@@ -84,28 +135,28 @@ examples = ["ORG/SYMBOL"]
 ui.group = "Header"
 description = "Organization receiving this endorsement (typically the previous endorser or originator)."
 
-[collections.indorsements.fields.signature_block]
+[scopes.indorsements.fields.signature_block]
 title = "Signature block lines"
 type = "array"
 examples = [["FIRST M. LAST, Rank, USAF", "Duty Title"]]
 ui.group = "Signature"
 description = "Line 1: Name in UPPERCASE, grade, service. Line 2: Duty title."
 
-[collections.indorsements.fields.new_page]
+[scopes.indorsements.fields.new_page]
 title = "Start on new page"
 type = "boolean"
 default = false
 ui.group = "Formatting"
 description = "Whether to start this endorsement on a new page."
 
-[collections.indorsements.fields.date]
+[scopes.indorsements.fields.date]
 title = "Endorsement date (YYYY-MM-DD)"
 type = "date"
 default = ""  # Empty string means "use today's date"
 ui.group = "Header"
 description = "Date of this endorsement. Leave blank to use today's date."
 
-[collections.indorsements.fields.attachments]
+[scopes.indorsements.fields.attachments]
 title = "List of attachments"
 type = "array"
 default = []
@@ -113,7 +164,7 @@ examples = [["Attachment description, YYYY MMM DD"]]
 ui.group = "Routing"
 description = "Attachments specific to this endorsement (not the original memo)."
 
-[collections.indorsements.fields.cc]
+[scopes.indorsements.fields.cc]
 title = "Carbon copy recipients"
 type = "array"
 default = []
@@ -121,12 +172,41 @@ examples = [["Rank and Name, ORG/SYMBOL"]]
 ui.group = "Routing"
 description = "Additional recipients to receive copies of this endorsement."
 
-[collections.indorsements.fields.informal]
+[scopes.indorsements.fields.informal]
 title = "Informal endorsement"
 type = "boolean"
 default = false
 ui.group = "Formatting"
 description = "Use informal format (omits from/to headers). Rarely used."
+
+# Atomic scope: Single appendix → object
+[scopes.appendix]
+singular = true  # Only one appendix allowed
+description = "Appendix with supplementary technical details"
+ui.group = "Appendix"
+ui.icon = "document-attachment"
+
+[scopes.appendix.fields.title]
+title = "Appendix title"
+type = "string"
+default = "APPENDIX"
+ui.group = "Header"
+description = "Title displayed at the start of the appendix"
+
+[scopes.appendix.fields.classification]
+title = "Classification marking"
+type = "string"
+default = ""
+examples = ["CONFIDENTIAL"]
+ui.group = "Header"
+description = "Classification level for appendix (if different from main document)"
+
+[scopes.appendix.fields.page_break]
+title = "Start on new page"
+type = "boolean"
+default = true
+ui.group = "Formatting"
+description = "Whether appendix starts on a new page"
 ```
 
 **JSON Schema Output:**
@@ -206,6 +286,36 @@ description = "Use informal format (omits from/to headers). Rarely used."
         },
         "required": ["from", "to", "signature_block"]
       }
+    },
+    "appendix": {
+      "type": "object",
+      "description": "Appendix with supplementary technical details",
+      "x-ui": {
+        "group": "Appendix",
+        "icon": "document-attachment"
+      },
+      "properties": {
+        "title": {
+          "type": "string",
+          "title": "Appendix title",
+          "default": "APPENDIX",
+          "description": "Title displayed at the start of the appendix",
+          "x-ui": { "group": "Header", "order": 1 }
+        },
+        "classification": {
+          "type": "string",
+          "title": "Classification marking",
+          "default": "",
+          "examples": ["CONFIDENTIAL"],
+          "x-ui": { "group": "Header", "order": 2 }
+        },
+        "page_break": {
+          "type": "boolean",
+          "title": "Start on new page",
+          "default": true,
+          "x-ui": { "group": "Formatting", "order": 3 }
+        }
+      }
     }
   },
   "required": ["subject", "memo_for"],
@@ -213,7 +323,7 @@ description = "Use informal format (omits from/to headers). Rarely used."
 }
 ```
 
-**Markdown Usage (Unchanged):**
+**Markdown Usage:**
 ```markdown
 ---
 QUILL: usaf_memo
@@ -243,23 +353,63 @@ signature_block: ["ROBERT JONES, Brig Gen, USAF", "Commander"]
 ---
 
 Request approved.
+
+---
+SCOPE: appendix
+title: "Technical Specifications"
+classification: "UNCLASSIFIED"
+---
+
+## Equipment Details
+
+- Model: XYZ-2000
+- Cost: $50,000
+- Delivery: 90 days
 ```
 
-**Advantages:**
-- ✅ Clear separation between main fields and collections
-- ✅ Self-documenting: `[collections.*]` signals "this is an array"
-- ✅ Supports collection-level metadata (UI hints, description)
-- ✅ Mirrors existing `[fields.*]` pattern for consistency
-- ✅ Easy to extend with collection-level constraints (min/max items, etc.)
-- ✅ Natural mapping to JSON Schema `items.properties`
+**Parsed Result:**
+```json
+{
+  "subject": "Request for Equipment Authorization",
+  "indorsements": [
+    {"from": "INSTALLATION/CC", "to": "SQUADRON/CC", ...},
+    {"from": "MAJCOM/CC", "to": "INSTALLATION/CC", ...}
+  ],
+  "appendix": {
+    "title": "Technical Specifications",
+    "classification": "UNCLASSIFIED",
+    "body": "## Equipment Details\n\n- Model: XYZ-2000..."
+  }
+}
+```
 
-**Disadvantages:**
-- Requires new top-level `[collections]` section
+**Key Points:**
+- `indorsements` is an **array** (collection scope, default behavior)
+- `appendix` is an **object** (atomic scope, `singular = true`)
+- Unknown scopes are allowed (lenient mode)
+
+**Advantages:**
+- ✅ Clear separation between main fields and scopes
+- ✅ Single section `[scopes.*]` for both collections and atomic scopes
+- ✅ Simple `singular` flag distinguishes arrays from objects
+- ✅ Supports scope-level metadata (UI hints, description)
+- ✅ Mirrors existing `[fields.*]` pattern for consistency
+- ✅ Natural mapping to JSON Schema
+- ✅ Backward compatible (default = array)
+- ✅ Strict enforcement for atomic scopes prevents errors
+
+**Trade-offs:**
+- Requires new top-level `[scopes]` section
 - Slightly more verbose than inline approach
+- Parser must track singular flag during SCOPE block aggregation
 
 ---
 
-### Option B: Inline Array Schema (Alternative)
+## Alternative Designs Considered
+
+The following options were evaluated during the design process. The `[scopes.*]` approach above was chosen based on ergonomics, clarity, and the ability to support both collection and atomic scopes with a simple `singular` flag.
+
+### Option B: Inline Array Schema (Historical Alternative)
 
 **Syntax:**
 ```toml
