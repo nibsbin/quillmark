@@ -2,7 +2,7 @@
 
 Move from current CARDS design to: unified CARDS array, separate CardSchema, and OpenAPI 3.0 discriminator.
 
-## Phase 1: Rust Data Model
+## Phase 1: Rust Data Model [COMPLETED]
 
 ### `crates/core/src/quill.rs`
 
@@ -36,7 +36,7 @@ Update `[cards]` parsing to:
 
 ---
 
-## Phase 2: JSON Schema Generation
+## Phase 2: JSON Schema Generation [COMPLETED]
 
 ### `crates/core/src/schema.rs`
 
@@ -67,7 +67,7 @@ fn build_card_def(card: &CardSchema) -> Map<String, Value>
 
 ---
 
-## Phase 3: Quill.toml Migration
+## Phase 3: Quill.toml Migration [COMPLETED]
 
 ### `crates/fixtures/resources/tonguetoquill-collection/quills/usaf_memo/Quill.toml`
 
@@ -75,7 +75,7 @@ Change `[cards.X.items.Y]` to `[cards.X.fields.Y]`.
 
 ---
 
-## Phase 4: Design Doc Updates
+## Phase 4: Design Doc Updates [COMPLETED]
 
 ### `prose/designs/INDEX.md`
 
