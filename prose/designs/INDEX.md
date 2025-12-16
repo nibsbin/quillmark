@@ -13,6 +13,7 @@ This directory contains design documents that describe the architecture and comp
 - **[QUILL.md](QUILL.md)** - Quill template bundle structure, file tree API, and JSON contract
 - **[QUILL_VALUE.md](QUILL_VALUE.md)** - Unified value type for TOML/YAML/JSON conversions
 - **[SCHEMAS.md](SCHEMAS.md)** - Configuration schemas and field validation
+- **[SCOPES.md](SCOPES.md)** - Scope schema configuration for SCOPE block validation
 - **[TEMPLATE_DRY_RUN.md](TEMPLATE_DRY_RUN.md)** - Template dry run for lightweight validation
 - **[GLUE_METADATA.md](GLUE_METADATA.md)** - Template metadata access via `__metadata__` field
 - **[DEFAULT_QUILL.md](DEFAULT_QUILL.md)** - Default quill system for zero-config rendering
