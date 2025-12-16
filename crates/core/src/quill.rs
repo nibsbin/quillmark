@@ -722,8 +722,7 @@ impl QuillConfig {
                     }
 
                     // Determine order (append after fields)
-                    let order = if let Some(idx) = card_order.iter().position(|k| k == card_name)
-                    {
+                    let order = if let Some(idx) = card_order.iter().position(|k| k == card_name) {
                         current_field_count + idx as i32
                     } else {
                         let o = current_field_count + card_order.len() as i32 + order_counter;
