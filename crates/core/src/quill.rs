@@ -22,7 +22,7 @@ pub struct FieldSchema {
     pub name: String,
     /// Short label for the field (used in JSON Schema title)
     pub title: Option<String>,
-    /// Field type hint (e.g., "string", "number", "boolean", "object", "array", "scope")
+    /// Field type hint (e.g., "string", "number", "boolean", "object", "array", "card")
     pub r#type: Option<String>,
     /// Detailed description of the field (used in JSON Schema description)
     pub description: String,
@@ -32,7 +32,7 @@ pub struct FieldSchema {
     pub examples: Option<QuillValue>,
     /// UI-specific metadata for rendering
     pub ui: Option<UiSchema>,
-    /// Nested item field schemas (only valid when type = "scope")
+    /// Nested item field schemas (only valid when type = "card")
     pub items: Option<HashMap<String, FieldSchema>>,
     /// Whether this field is required (fields are optional by default)
     pub required: bool,
@@ -63,7 +63,7 @@ impl FieldSchema {
     fn from_quill_value_internal(
         key: String,
         value: &QuillValue,
-        inside_scope_items: bool,
+        inside_card_items: bool,
     ) -> Result<Self, String> {
         let obj = value
             .as_object()
@@ -99,10 +99,10 @@ impl FieldSchema {
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
-        // Validate: nested scopes are not allowed
-        if inside_scope_items && field_type.as_deref() == Some("scope") {
+        // Validate: nested cards are not allowed
+        if inside_card_items && field_type.as_deref() == Some("card") {
             return Err(format!(
-                "Field '{}': nested scopes are not supported (type = \"scope\" in items)",
+                "Field '{}': nested cards are not supported (type = \"scope\" in items)",
                 name
             ));
         }
@@ -153,8 +153,8 @@ impl FieldSchema {
 
         // Parse items for scope-typed fields
         let items = if let Some(items_value) = obj.get("items") {
-            // Validate: items is only valid when type = "scope"
-            if field_type.as_deref() != Some("scope") {
+            // Validate: items is only valid when type = "card"
+            if field_type.as_deref() != Some("card") {
                 return Err(format!(
                     "Field '{}': 'items' is only valid when type = \"scope\"",
                     name
@@ -164,7 +164,7 @@ impl FieldSchema {
             if let Some(items_obj) = items_value.as_object() {
                 let mut item_schemas = HashMap::new();
                 for (item_name, item_value) in items_obj {
-                    // Recursively parse with inside_scope_items = true
+                    // Recursively parse with inside_card_items = true
                     let item_schema = Self::from_quill_value_internal(
                         item_name.clone(),
                         &QuillValue::from_json(item_value.clone()),
@@ -543,13 +543,23 @@ impl QuillConfig {
             .map_err(|e| format!("Failed to parse Quill.toml: {}", e))?;
 
         // Parse with toml_edit to get field order
-        let field_order: Vec<String> = toml_content
+        let (field_order, card_order): (Vec<String>, Vec<String>) = toml_content
             .parse::<toml_edit::DocumentMut>()
             .ok()
-            .and_then(|doc| {
-                doc.get("fields")
+            .map(|doc| {
+                let f_order = doc
+                    .get("fields")
                     .and_then(|item| item.as_table())
                     .map(|table| table.iter().map(|(k, _)| k.to_string()).collect())
+                    .unwrap_or_default();
+
+                let s_order = doc
+                    .get("cards")
+                    .and_then(|item| item.as_table())
+                    .map(|table| table.iter().map(|(k, _)| k.to_string()).collect())
+                    .unwrap_or_default();
+
+                (f_order, s_order)
             })
             .unwrap_or_default();
 
@@ -688,6 +698,99 @@ impl QuillConfig {
                             eprintln!(
                                 "Warning: Failed to convert field schema '{}': {}",
                                 field_name, e
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Extract [cards] section (optional)
+        if let Some(cards_section) = quill_toml.get("cards") {
+            if let toml::Value::Table(cards_table) = cards_section {
+                let current_field_count = fields.len() as i32;
+                let mut order_counter = 0;
+
+                for (card_name, card_schema) in cards_table {
+                    // Check for name collision with existing fields
+                    if fields.contains_key(card_name) {
+                        return Err(format!(
+                            "Card definition '{}' conflicts with an existing field name",
+                            card_name
+                        )
+                        .into());
+                    }
+
+                    // Determine order (append after fields)
+                    let order = if let Some(idx) = card_order.iter().position(|k| k == card_name) {
+                        current_field_count + idx as i32
+                    } else {
+                        let o = current_field_count + card_order.len() as i32 + order_counter;
+                        order_counter += 1;
+                        o
+                    };
+
+                    match QuillValue::from_toml(card_schema) {
+                        Ok(quill_value) => {
+                            // Enforce type="card"
+                            let mut json_val = quill_value.into_json();
+
+                            if let Some(obj) = json_val.as_object_mut() {
+                                if let Some(type_val) = obj.get("type") {
+                                    if type_val.as_str() != Some("card") {
+                                        return Err(format!(
+                                            "Card '{}' must have type=\"scope\" (found {:?})",
+                                            card_name,
+                                            type_val.as_str()
+                                        )
+                                        .into());
+                                    }
+                                } else {
+                                    // Inject type="card" if missing
+                                    obj.insert(
+                                        "type".to_string(),
+                                        serde_json::Value::String("card".to_string()),
+                                    );
+                                }
+                            } else {
+                                return Err(format!(
+                                    "Card definition '{}' must be an object",
+                                    card_name
+                                )
+                                .into());
+                            }
+
+                            let final_quill_value = QuillValue::from_json(json_val);
+
+                            match FieldSchema::from_quill_value(
+                                card_name.clone(),
+                                &final_quill_value,
+                            ) {
+                                Ok(mut schema) => {
+                                    // Set UI order
+                                    if schema.ui.is_none() {
+                                        schema.ui = Some(UiSchema {
+                                            group: None,
+                                            order: Some(order),
+                                        });
+                                    } else if let Some(ui) = &mut schema.ui {
+                                        ui.order = Some(order);
+                                    }
+
+                                    fields.insert(card_name.clone(), schema);
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "Warning: Failed to parse scope schema '{}': {}",
+                                        card_name, e
+                                    );
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "Warning: Failed to convert scope schema '{}': {}",
+                                card_name, e
                             );
                         }
                     }
@@ -2218,10 +2321,10 @@ ui:
     }
 
     #[test]
-    fn test_parse_scope_field_type() {
-        // Test parsing a field with type = "scope"
+    fn test_parse_card_field_type() {
+        // Test parsing a field with type = "card"
         let yaml = r#"
-type: "scope"
+type: "card"
 title: "Endorsements"
 description: "Chain of endorsements for routing"
 "#;
@@ -2231,17 +2334,17 @@ description: "Chain of endorsements for routing"
             FieldSchema::from_quill_value("endorsements".to_string(), &quill_value).unwrap();
 
         assert_eq!(schema.name, "endorsements");
-        assert_eq!(schema.r#type, Some("scope".to_string()));
+        assert_eq!(schema.r#type, Some("card".to_string()));
         assert_eq!(schema.title, Some("Endorsements".to_string()));
         assert_eq!(schema.description, "Chain of endorsements for routing");
         assert!(schema.items.is_none()); // No items defined
     }
 
     #[test]
-    fn test_parse_scope_items() {
+    fn test_parse_card_items() {
         // Test parsing scope with nested items
         let yaml = r#"
-type: "scope"
+type: "card"
 title: "Endorsements"
 description: "Chain of endorsements"
 items:
@@ -2260,7 +2363,7 @@ items:
         let schema =
             FieldSchema::from_quill_value("endorsements".to_string(), &quill_value).unwrap();
 
-        assert_eq!(schema.r#type, Some("scope".to_string()));
+        assert_eq!(schema.r#type, Some("card".to_string()));
         assert!(schema.items.is_some());
 
         let items = schema.items.as_ref().unwrap();
@@ -2280,7 +2383,7 @@ items:
     }
 
     #[test]
-    fn test_scope_items_error_without_scope_type() {
+    fn test_card_items_error_without_card_type() {
         // Test that items on non-scope field produces error
         let yaml = r#"
 type: "string"
@@ -2300,14 +2403,14 @@ items:
     }
 
     #[test]
-    fn test_scope_nested_scope_error() {
-        // Test that nested scopes (type = "scope" inside items) produce error
+    fn test_card_nested_card_error() {
+        // Test that nested cards (type = "card" inside items) produce error
         let yaml = r#"
-type: "scope"
+type: "card"
 description: "Outer scope"
 items:
   inner:
-    type: "scope"
+    type: "card"
     description: "Illegal nested scope"
 "#;
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
@@ -2316,6 +2419,148 @@ items:
 
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("nested scopes are not supported"));
+        assert!(err.contains("nested cards are not supported"));
+    }
+
+    #[test]
+    fn test_quill_config_with_cards_section() {
+        let toml_content = r#"[Quill]
+name = "cards-test"
+backend = "typst"
+description = "Test [cards] section"
+
+[fields.regular]
+description = "Regular field"
+type = "string"
+
+[cards.indorsements]
+title = "Routing Indorsements"
+description = "Chain of endorsements"
+items = { name = { title = "Name", type = "string", description = "Name" } }
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+
+        // Check regular field
+        assert!(config.fields.contains_key("regular"));
+        let regular = config.fields.get("regular").unwrap();
+        assert_eq!(regular.r#type, Some("string".to_string()));
+
+        // Check scope field
+        assert!(config.fields.contains_key("indorsements"));
+        let scope = config.fields.get("indorsements").unwrap();
+        assert_eq!(scope.r#type, Some("card".to_string()));
+        assert_eq!(scope.title, Some("Routing Indorsements".to_string()));
+        assert!(scope.items.is_some());
+        assert!(scope.items.as_ref().unwrap().contains_key("name"));
+    }
+
+    #[test]
+    fn test_quill_config_cards_auto_type() {
+        // Test that type="card" is automatically injected
+        let toml_content = r#"[Quill]
+name = "cards-auto-type-test"
+backend = "typst"
+description = "Test [cards] auto type"
+
+[cards.myscope]
+description = "My scope"
+items = {}
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let scope = config.fields.get("myscope").unwrap();
+        assert_eq!(scope.r#type, Some("card".to_string()));
+    }
+
+    #[test]
+    fn test_quill_config_card_collision() {
+        // Test that scope name colliding with field name is an error
+        let toml_content = r#"[Quill]
+name = "collision-test"
+backend = "typst"
+description = "Test collision"
+
+[fields.conflict]
+description = "Field"
+type = "string"
+
+[cards.conflict]
+description = "Card"
+items = {}
+"#;
+
+        let result = QuillConfig::from_toml(toml_content);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("conflicts with an existing field name"));
+    }
+
+    #[test]
+    fn test_quill_config_card_wrong_type() {
+        // Test that type!="card" in [cards] is an error
+        let toml_content = r#"[Quill]
+name = "wrong-type-test"
+backend = "typst"
+description = "Test wrong type"
+
+[cards.bad]
+type = "string"
+description = "Should be scope"
+"#;
+
+        let result = QuillConfig::from_toml(toml_content);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must have type=\"scope\""));
+    }
+
+    #[test]
+    fn test_quill_config_ordering_with_cards() {
+        // Test that cards are ordered after fields
+        let toml_content = r#"[Quill]
+name = "ordering-test"
+backend = "typst"
+description = "Test ordering"
+
+[fields.first]
+description = "First"
+
+[cards.second]
+description = "Second"
+items = {}
+
+[fields.zero]
+description = "Zero"
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+
+        let first = config.fields.get("first").unwrap();
+        let zero = config.fields.get("zero").unwrap();
+        let second = config.fields.get("second").unwrap();
+
+        // Check relative ordering
+        let ord_first = first.ui.as_ref().unwrap().order.unwrap();
+        let ord_zero = zero.ui.as_ref().unwrap().order.unwrap();
+        let ord_second = second.ui.as_ref().unwrap().order.unwrap();
+
+        // toml_edit validation:
+        // fields keys: ["first", "zero"] (0, 1)
+        // cards keys: ["second"] (2)
+
+        assert!(ord_first < ord_second);
+        assert!(ord_zero < ord_second);
+
+        // Within fields, "first" is before "zero"
+        assert!(ord_first < ord_zero);
+
+        assert_eq!(ord_first, 0);
+        assert_eq!(ord_zero, 1);
+        assert_eq!(ord_second, 2);
     }
 }
