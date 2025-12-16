@@ -605,16 +605,14 @@ impl QuillConfig {
 
         // Extract [typst] section (optional)
         let mut typst_config = HashMap::new();
-        if let Some(typst_section) = quill_toml.get("typst") {
-            if let toml::Value::Table(table) = typst_section {
-                for (key, value) in table {
-                    match QuillValue::from_toml(value) {
-                        Ok(quill_value) => {
-                            typst_config.insert(key.clone(), quill_value);
-                        }
-                        Err(e) => {
-                            eprintln!("Warning: Failed to convert typst field '{}': {}", key, e);
-                        }
+        if let Some(toml::Value::Table(table)) = quill_toml.get("typst") {
+            for (key, value) in table {
+                match QuillValue::from_toml(value) {
+                    Ok(quill_value) => {
+                        typst_config.insert(key.clone(), quill_value);
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to convert typst field '{}': {}", key, e);
                     }
                 }
             }
@@ -622,50 +620,47 @@ impl QuillConfig {
 
         // Extract [fields] section (optional)
         let mut fields = HashMap::new();
-        if let Some(fields_section) = quill_toml.get("fields") {
-            if let toml::Value::Table(fields_table) = fields_section {
-                let mut order_counter = 0;
-                for (field_name, field_schema) in fields_table {
-                    // Determine order
-                    let order = if let Some(idx) = field_order.iter().position(|k| k == field_name)
-                    {
-                        idx as i32
-                    } else {
-                        let o = field_order.len() as i32 + order_counter;
-                        order_counter += 1;
-                        o
-                    };
+        if let Some(toml::Value::Table(fields_table)) = quill_toml.get("fields") {
+            let mut order_counter = 0;
+            for (field_name, field_schema) in fields_table {
+                // Determine order
+                let order = if let Some(idx) = field_order.iter().position(|k| k == field_name) {
+                    idx as i32
+                } else {
+                    let o = field_order.len() as i32 + order_counter;
+                    order_counter += 1;
+                    o
+                };
 
-                    match QuillValue::from_toml(field_schema) {
-                        Ok(quill_value) => {
-                            match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
-                                Ok(mut schema) => {
-                                    // Always set ui.order based on position in Quill.toml
-                                    if schema.ui.is_none() {
-                                        schema.ui = Some(UiSchema {
-                                            group: None,
-                                            order: Some(order),
-                                        });
-                                    } else if let Some(ui) = &mut schema.ui {
-                                        ui.order = Some(order);
-                                    }
+                match QuillValue::from_toml(field_schema) {
+                    Ok(quill_value) => {
+                        match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
+                            Ok(mut schema) => {
+                                // Always set ui.order based on position in Quill.toml
+                                if schema.ui.is_none() {
+                                    schema.ui = Some(UiSchema {
+                                        group: None,
+                                        order: Some(order),
+                                    });
+                                } else if let Some(ui) = &mut schema.ui {
+                                    ui.order = Some(order);
+                                }
 
-                                    fields.insert(field_name.clone(), schema);
-                                }
-                                Err(e) => {
-                                    eprintln!(
-                                        "Warning: Failed to parse field schema '{}': {}",
-                                        field_name, e
-                                    );
-                                }
+                                fields.insert(field_name.clone(), schema);
+                            }
+                            Err(e) => {
+                                eprintln!(
+                                    "Warning: Failed to parse field schema '{}': {}",
+                                    field_name, e
+                                );
                             }
                         }
-                        Err(e) => {
-                            eprintln!(
-                                "Warning: Failed to convert field schema '{}': {}",
-                                field_name, e
-                            );
-                        }
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "Warning: Failed to convert field schema '{}': {}",
+                            field_name, e
+                        );
                     }
                 }
             }
@@ -673,111 +668,108 @@ impl QuillConfig {
 
         // Extract [cards] section (optional)
         let mut cards: HashMap<String, CardSchema> = HashMap::new();
-        if let Some(cards_section) = quill_toml.get("cards") {
-            if let toml::Value::Table(cards_table) = cards_section {
-                let current_field_count = fields.len() as i32;
-                let mut order_counter = 0;
+        if let Some(toml::Value::Table(cards_table)) = quill_toml.get("cards") {
+            let current_field_count = fields.len() as i32;
+            let mut order_counter = 0;
 
-                for (card_name, card_value) in cards_table {
-                    // Check for name collision with existing fields
-                    if fields.contains_key(card_name) {
-                        return Err(format!(
-                            "Card definition '{}' conflicts with an existing field name",
-                            card_name
-                        )
-                        .into());
-                    }
+            for (card_name, card_value) in cards_table {
+                // Check for name collision with existing fields
+                if fields.contains_key(card_name) {
+                    return Err(format!(
+                        "Card definition '{}' conflicts with an existing field name",
+                        card_name
+                    )
+                    .into());
+                }
 
-                    // Determine order (append after fields)
-                    let order = if let Some(idx) = card_order.iter().position(|k| k == card_name) {
-                        current_field_count + idx as i32
-                    } else {
-                        let o = current_field_count + card_order.len() as i32 + order_counter;
-                        order_counter += 1;
-                        o
-                    };
+                // Determine order (append after fields)
+                let order = if let Some(idx) = card_order.iter().position(|k| k == card_name) {
+                    current_field_count + idx as i32
+                } else {
+                    let o = current_field_count + card_order.len() as i32 + order_counter;
+                    order_counter += 1;
+                    o
+                };
 
-                    // Parse card schema
-                    let card_table = card_value.as_table().ok_or_else(|| {
-                        format!("Card definition '{}' must be a table", card_name)
-                    })?;
+                // Parse card schema
+                let card_table = card_value
+                    .as_table()
+                    .ok_or_else(|| format!("Card definition '{}' must be a table", card_name))?;
 
-                    let title = card_table
-                        .get("title")
-                        .and_then(|v| v.as_str())
-                        .map(|s| s.to_string());
+                let title = card_table
+                    .get("title")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
 
-                    let description = card_table
-                        .get("description")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
+                let description = card_table
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
 
-                    // Parse UI metadata
-                    let ui = if let Some(ui_value) = card_table.get("ui") {
-                        if let Some(ui_table) = ui_value.as_table() {
-                            let group = ui_table
-                                .get("group")
-                                .and_then(|v| v.as_str())
-                                .map(|s| s.to_string());
-                            Some(UiSchema {
-                                group,
-                                order: Some(order),
-                            })
-                        } else {
-                            None
-                        }
-                    } else {
+                // Parse UI metadata
+                let ui = if let Some(ui_value) = card_table.get("ui") {
+                    if let Some(ui_table) = ui_value.as_table() {
+                        let group = ui_table
+                            .get("group")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string());
                         Some(UiSchema {
-                            group: None,
+                            group,
                             order: Some(order),
                         })
-                    };
+                    } else {
+                        None
+                    }
+                } else {
+                    Some(UiSchema {
+                        group: None,
+                        order: Some(order),
+                    })
+                };
 
-                    // Parse [cards.X.fields.Y] - card field definitions
-                    let mut card_fields: HashMap<String, FieldSchema> = HashMap::new();
-                    if let Some(fields_value) = card_table.get("fields") {
-                        if let Some(fields_table) = fields_value.as_table() {
-                            for (field_name, field_value) in fields_table {
-                                match QuillValue::from_toml(field_value) {
-                                    Ok(quill_value) => {
-                                        match FieldSchema::from_quill_value(
-                                            field_name.clone(),
-                                            &quill_value,
-                                        ) {
-                                            Ok(field_schema) => {
-                                                card_fields
-                                                    .insert(field_name.clone(), field_schema);
-                                            }
-                                            Err(e) => {
-                                                eprintln!(
-                                                    "Warning: Failed to parse card field '{}.{}': {}",
-                                                    card_name, field_name, e
-                                                );
-                                            }
+                // Parse [cards.X.fields.Y] - card field definitions
+                let mut card_fields: HashMap<String, FieldSchema> = HashMap::new();
+                if let Some(fields_value) = card_table.get("fields") {
+                    if let Some(fields_table) = fields_value.as_table() {
+                        for (field_name, field_value) in fields_table {
+                            match QuillValue::from_toml(field_value) {
+                                Ok(quill_value) => {
+                                    match FieldSchema::from_quill_value(
+                                        field_name.clone(),
+                                        &quill_value,
+                                    ) {
+                                        Ok(field_schema) => {
+                                            card_fields.insert(field_name.clone(), field_schema);
+                                        }
+                                        Err(e) => {
+                                            eprintln!(
+                                                "Warning: Failed to parse card field '{}.{}': {}",
+                                                card_name, field_name, e
+                                            );
                                         }
                                     }
-                                    Err(e) => {
-                                        eprintln!(
-                                            "Warning: Failed to convert card field '{}.{}': {}",
-                                            card_name, field_name, e
-                                        );
-                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "Warning: Failed to convert card field '{}.{}': {}",
+                                        card_name, field_name, e
+                                    );
                                 }
                             }
                         }
                     }
-
-                    let card_schema = CardSchema {
-                        name: card_name.clone(),
-                        title,
-                        description,
-                        ui,
-                        fields: card_fields,
-                    };
-
-                    cards.insert(card_name.clone(), card_schema);
                 }
+
+                let card_schema = CardSchema {
+                    name: card_name.clone(),
+                    title,
+                    description,
+                    ui,
+                    fields: card_fields,
+                };
+
+                cards.insert(card_name.clone(), card_schema);
             }
         }
 
@@ -1168,7 +1160,7 @@ impl Quill {
         };
 
         // Recursively search the tree for matching files
-        self.find_files_recursive(&self.files, Path::new(""), &glob_pattern, &mut matches);
+        Self::find_files_recursive(&self.files, Path::new(""), &glob_pattern, &mut matches);
 
         matches.sort();
         matches
@@ -1176,7 +1168,6 @@ impl Quill {
 
     /// Helper method to recursively search for files matching a pattern
     fn find_files_recursive(
-        &self,
         node: &FileTreeNode,
         current_path: &Path,
         pattern: &glob::Pattern,
@@ -1196,7 +1187,7 @@ impl Quill {
                     } else {
                         current_path.join(name)
                     };
-                    self.find_files_recursive(child_node, &child_path, pattern, matches);
+                    Self::find_files_recursive(child_node, &child_path, pattern, matches);
                 }
             }
         }

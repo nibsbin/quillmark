@@ -344,7 +344,6 @@ mod tests {
     #[test]
     fn test_plate_creation() {
         let _plate = Plate::new("Hello {{ name }}".to_string());
-        assert!(true);
     }
 
     #[test]

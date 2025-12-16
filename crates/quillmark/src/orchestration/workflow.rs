@@ -113,8 +113,10 @@ impl Workflow {
             plate
                 .compose(normalized_fields)
                 .map_err(|e| RenderError::TemplateFailed {
-                    diag: Diagnostic::new(Severity::Error, e.to_string())
-                        .with_code("template::compose".to_string()),
+                    diag: Box::new(
+                        Diagnostic::new(Severity::Error, e.to_string())
+                            .with_code("template::compose".to_string()),
+                    ),
                 })?;
         Ok(plated_output)
     }
@@ -159,12 +161,14 @@ impl Workflow {
             Err(errors) => {
                 let error_message = errors.join("\n");
                 Err(RenderError::ValidationFailed {
-                    diag: Diagnostic::new(Severity::Error, error_message)
-                        .with_code("validation::document_invalid".to_string())
-                        .with_hint(
-                            "Ensure all required fields are present and have correct types"
-                                .to_string(),
-                        ),
+                    diag: Box::new(
+                        Diagnostic::new(Severity::Error, error_message)
+                            .with_code("validation::document_invalid".to_string())
+                            .with_hint(
+                                "Ensure all required fields are present and have correct types"
+                                    .to_string(),
+                            ),
+                    ),
                 })
             }
         }
@@ -204,15 +208,17 @@ impl Workflow {
         // Check for collision
         if self.dynamic_assets.contains_key(&filename) {
             return Err(RenderError::DynamicAssetCollision {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!(
+                diag: Box::new(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!(
                         "Dynamic asset '{}' already exists. Each asset filename must be unique.",
                         filename
                     ),
-                )
-                .with_code("workflow::asset_collision".to_string())
-                .with_hint("Use unique filenames for each dynamic asset".to_string()),
+                    )
+                    .with_code("workflow::asset_collision".to_string())
+                    .with_hint("Use unique filenames for each dynamic asset".to_string()),
+                ),
             });
         }
 
@@ -255,15 +261,17 @@ impl Workflow {
         // Check for collision
         if self.dynamic_fonts.contains_key(&filename) {
             return Err(RenderError::DynamicFontCollision {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!(
-                        "Dynamic font '{}' already exists. Each font filename must be unique.",
-                        filename
-                    ),
-                )
-                .with_code("workflow::font_collision".to_string())
-                .with_hint("Use unique filenames for each dynamic font".to_string()),
+                diag: Box::new(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "Dynamic font '{}' already exists. Each font filename must be unique.",
+                            filename
+                        ),
+                    )
+                    .with_code("workflow::font_collision".to_string())
+                    .with_hint("Use unique filenames for each dynamic font".to_string()),
+                ),
             });
         }
 

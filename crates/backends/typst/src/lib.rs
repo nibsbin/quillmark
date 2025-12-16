@@ -108,12 +108,14 @@ impl Backend for TypstBackend {
         // Check if format is supported
         if !self.supported_formats().contains(&format) {
             return Err(RenderError::FormatNotSupported {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!("{:?} not supported by {} backend", format, self.id()),
-                )
-                .with_code("backend::format_not_supported".to_string())
-                .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
+                diag: Box::new(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!("{:?} not supported by {} backend", format, self.id()),
+                    )
+                    .with_code("backend::format_not_supported".to_string())
+                    .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
+                ),
             });
         }
 
@@ -138,12 +140,14 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Svg))
             }
             OutputFormat::Txt => Err(RenderError::FormatNotSupported {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!("Text output not supported by {} backend", self.id()),
-                )
-                .with_code("backend::format_not_supported".to_string())
-                .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
+                diag: Box::new(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!("Text output not supported by {} backend", self.id()),
+                    )
+                    .with_code("backend::format_not_supported".to_string())
+                    .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
+                ),
             }),
         }
     }
@@ -191,7 +195,7 @@ mod tests {
 
     #[test]
     fn test_backend_info() {
-        let backend = TypstBackend::default();
+        let backend = TypstBackend;
         assert_eq!(backend.id(), "typst");
         assert!(backend.allow_auto_plate());
         assert!(backend.supported_formats().contains(&OutputFormat::Pdf));

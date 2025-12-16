@@ -429,7 +429,9 @@ mod tests {
             })
             .with_hint("This is a hint".to_string());
 
-        let render_err = quillmark_core::RenderError::TemplateFailed { diag };
+        let render_err = quillmark_core::RenderError::TemplateFailed {
+            diag: Box::new(diag),
+        };
         let wasm_err: WasmError = render_err.into();
 
         // Serialize to JSON and verify structure

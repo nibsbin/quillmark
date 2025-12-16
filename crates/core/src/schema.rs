@@ -1067,8 +1067,8 @@ mod tests {
 
         let coerced = coerce_document(&QuillValue::from_json(schema), &fields);
 
-        assert_eq!(coerced.get("active").unwrap().as_bool().unwrap(), true);
-        assert_eq!(coerced.get("enabled").unwrap().as_bool().unwrap(), false);
+        assert!(coerced.get("active").unwrap().as_bool().unwrap());
+        assert!(!coerced.get("enabled").unwrap().as_bool().unwrap());
     }
 
     #[test]
@@ -1090,9 +1090,9 @@ mod tests {
 
         let coerced = coerce_document(&QuillValue::from_json(schema), &fields);
 
-        assert_eq!(coerced.get("flag1").unwrap().as_bool().unwrap(), false);
-        assert_eq!(coerced.get("flag2").unwrap().as_bool().unwrap(), true);
-        assert_eq!(coerced.get("flag3").unwrap().as_bool().unwrap(), true);
+        assert!(!coerced.get("flag1").unwrap().as_bool().unwrap());
+        assert!(coerced.get("flag2").unwrap().as_bool().unwrap());
+        assert!(coerced.get("flag3").unwrap().as_bool().unwrap());
     }
 
     #[test]
@@ -1117,11 +1117,11 @@ mod tests {
 
         let coerced = coerce_document(&QuillValue::from_json(schema), &fields);
 
-        assert_eq!(coerced.get("flag1").unwrap().as_bool().unwrap(), false);
-        assert_eq!(coerced.get("flag2").unwrap().as_bool().unwrap(), true);
-        assert_eq!(coerced.get("flag3").unwrap().as_bool().unwrap(), true);
+        assert!(!coerced.get("flag1").unwrap().as_bool().unwrap());
+        assert!(coerced.get("flag2").unwrap().as_bool().unwrap());
+        assert!(coerced.get("flag3").unwrap().as_bool().unwrap());
         // Very small numbers are considered false due to epsilon comparison
-        assert_eq!(coerced.get("flag4").unwrap().as_bool().unwrap(), false);
+        assert!(!coerced.get("flag4").unwrap().as_bool().unwrap());
     }
 
     #[test]
@@ -1227,7 +1227,7 @@ mod tests {
 
         // Verify coercions
         assert_eq!(coerced.get("tags").unwrap().as_array().unwrap().len(), 1);
-        assert_eq!(coerced.get("active").unwrap().as_bool().unwrap(), true);
+        assert!(coerced.get("active").unwrap().as_bool().unwrap());
         assert_eq!(coerced.get("count").unwrap().as_i64().unwrap(), 42);
         assert_eq!(
             coerced.get("title").unwrap().as_str().unwrap(),

@@ -16,7 +16,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::InvalidFrontmatter { diag } => {
             let py_err = ParseError::new_err(diag.message.clone());
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -24,7 +26,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::TemplateFailed { diag } => {
             let py_err = TemplateError::new_err(diag.message.clone());
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -46,7 +50,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::DynamicAssetCollision { diag } => {
             let py_err = QuillmarkError::new_err(format!("Asset collision: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -54,7 +60,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::DynamicFontCollision { diag } => {
             let py_err = QuillmarkError::new_err(format!("Font collision: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -63,7 +71,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
             let py_err =
                 QuillmarkError::new_err(format!("Engine creation failed: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -71,7 +81,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::FormatNotSupported { diag } => {
             let py_err = QuillmarkError::new_err(format!("Format not supported: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -79,7 +91,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::UnsupportedBackend { diag } => {
             let py_err = QuillmarkError::new_err(format!("Unsupported backend: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -87,7 +101,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::InputTooLarge { diag } => {
             let py_err = QuillmarkError::new_err(format!("Input too large: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -95,7 +111,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::YamlTooLarge { diag } => {
             let py_err = QuillmarkError::new_err(format!("YAML too large: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -103,7 +121,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::NestingTooDeep { diag } => {
             let py_err = QuillmarkError::new_err(format!("Nesting too deep: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -111,7 +131,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::OutputTooLarge { diag } => {
             let py_err = QuillmarkError::new_err(format!("Output too large: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -119,7 +141,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::ValidationFailed { diag } => {
             let py_err = QuillmarkError::new_err(format!("Validation failed: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -127,7 +151,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::InvalidSchema { diag } => {
             let py_err = QuillmarkError::new_err(format!("Invalid schema: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err
@@ -136,7 +162,9 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
             let py_err =
                 QuillmarkError::new_err(format!("Quill configuration error: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
                 let _ = exc.setattr("diagnostic", py_diag);
             }
             py_err

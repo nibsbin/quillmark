@@ -954,10 +954,7 @@ Content here."#;
 
         let coerced_doc = doc.with_coercion(&schema);
 
-        assert_eq!(
-            coerced_doc.get_field("active").unwrap().as_bool().unwrap(),
-            true
-        );
+        assert!(coerced_doc.get_field("active").unwrap().as_bool().unwrap());
     }
 
     #[test]
@@ -1867,7 +1864,7 @@ mod demo_file_test {
         // Create YAML block well within the limit
         let markdown = "---\ntitle: Test\nauthor: John Doe\n---\n\nBody content";
 
-        let result = decompose(&markdown);
+        let result = decompose(markdown);
         assert!(result.is_ok());
     }
 
@@ -2041,7 +2038,7 @@ active: true
 
 Body."#;
         let doc = decompose(markdown).unwrap();
-        assert_eq!(doc.get_field("active").unwrap().as_bool().unwrap(), true);
+        assert!(doc.get_field("active").unwrap().as_bool().unwrap());
     }
 
     #[test]
@@ -2507,7 +2504,7 @@ Body."#;
         let doc = decompose(markdown).unwrap();
         assert_eq!(doc.get_field("count").unwrap().as_i64().unwrap(), 42);
         assert_eq!(doc.get_field("price").unwrap().as_f64().unwrap(), 19.99);
-        assert_eq!(doc.get_field("active").unwrap().as_bool().unwrap(), true);
+        assert!(doc.get_field("active").unwrap().as_bool().unwrap());
     }
 
     #[test]

@@ -359,7 +359,7 @@ pub enum ParseError {
     #[error("{}", .diag.message)]
     MissingCardDirective {
         /// Diagnostic information with hint
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Other parsing errors
@@ -380,7 +380,9 @@ impl ParseError {
             Example:\n---\nCARD: my_card_type\nfield: value\n---"
                 .to_string(),
         );
-        ParseError::MissingCardDirective { diag }
+        ParseError::MissingCardDirective {
+            diag: Box::new(diag),
+        }
     }
 
     /// Convert the parse error into a structured diagnostic
@@ -439,21 +441,21 @@ pub enum RenderError {
     #[error("{diag}")]
     EngineCreation {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Invalid YAML frontmatter in markdown document
     #[error("{diag}")]
     InvalidFrontmatter {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Template rendering failed
     #[error("{diag}")]
     TemplateFailed {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Backend compilation failed with one or more errors
@@ -467,77 +469,77 @@ pub enum RenderError {
     #[error("{diag}")]
     FormatNotSupported {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Backend not registered with engine
     #[error("{diag}")]
     UnsupportedBackend {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Dynamic asset filename collision
     #[error("{diag}")]
     DynamicAssetCollision {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Dynamic font filename collision
     #[error("{diag}")]
     DynamicFontCollision {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Input size limits exceeded
     #[error("{diag}")]
     InputTooLarge {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// YAML size exceeded maximum allowed
     #[error("{diag}")]
     YamlTooLarge {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Nesting depth exceeded maximum allowed
     #[error("{diag}")]
     NestingTooDeep {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Template output exceeded maximum size
     #[error("{diag}")]
     OutputTooLarge {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Validation failed for parsed document
     #[error("{diag}")]
     ValidationFailed {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Invalid schema definition
     #[error("{diag}")]
     InvalidSchema {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 
     /// Quill configuration error
     #[error("{diag}")]
     QuillConfig {
         /// Diagnostic information
-        diag: Diagnostic,
+        diag: Box<Diagnostic>,
     },
 }
 
@@ -559,7 +561,7 @@ impl RenderError {
             | RenderError::OutputTooLarge { diag }
             | RenderError::ValidationFailed { diag }
             | RenderError::InvalidSchema { diag }
-            | RenderError::QuillConfig { diag } => vec![diag],
+            | RenderError::QuillConfig { diag } => vec![diag.as_ref()],
         }
     }
 }
@@ -621,7 +623,9 @@ impl From<minijinja::Error> for RenderError {
         // Preserve the original error as source
         diag = diag.with_source(Box::new(e));
 
-        RenderError::TemplateFailed { diag }
+        RenderError::TemplateFailed {
+            diag: Box::new(diag),
+        }
     }
 }
 
@@ -733,7 +737,7 @@ mod tests {
 
     #[test]
     fn test_diagnostic_fmt_pretty_with_source() {
-        let root_err = std::io::Error::new(std::io::ErrorKind::Other, "Underlying error");
+        let root_err = std::io::Error::other("Underlying error");
         let diag = Diagnostic::new(Severity::Error, "Top-level error".to_string())
             .with_code("E002".to_string())
             .with_source(Box::new(root_err));

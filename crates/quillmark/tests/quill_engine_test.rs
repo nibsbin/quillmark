@@ -36,7 +36,7 @@ fn test_quill_engine_creation() {
     // Check that at least one backend is registered (if default features enabled)
     let backends = engine.registered_backends();
     #[cfg(any(feature = "typst", feature = "acroform"))]
-    assert!(backends.len() > 0);
+    assert!(!backends.is_empty());
 
     // Check that default quill is registered when typst backend is enabled
     let quills = engine.registered_quills();

@@ -97,12 +97,14 @@ impl Quillmark {
         // Check name uniqueness
         if self.quills.contains_key(&name) {
             return Err(RenderError::QuillConfig {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!("Quill '{}' is already registered", name),
-                )
-                .with_code("quill::name_collision".to_string())
-                .with_hint("Each quill must have a unique name".to_string()),
+                diag: Box::new(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!("Quill '{}' is already registered", name),
+                    )
+                    .with_code("quill::name_collision".to_string())
+                    .with_hint("Each quill must have a unique name".to_string()),
+                ),
             });
         }
 
@@ -112,18 +114,20 @@ impl Quillmark {
             .backends
             .get(backend_id)
             .ok_or_else(|| RenderError::QuillConfig {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!(
-                        "Backend '{}' specified in quill '{}' is not registered",
-                        backend_id, name
-                    ),
-                )
-                .with_code("quill::backend_not_found".to_string())
-                .with_hint(format!(
-                    "Available backends: {}",
-                    self.backends.keys().cloned().collect::<Vec<_>>().join(", ")
-                )),
+                diag: Box::new(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!(
+                            "Backend '{}' specified in quill '{}' is not registered",
+                            backend_id, name
+                        ),
+                    )
+                    .with_code("quill::backend_not_found".to_string())
+                    .with_hint(format!(
+                        "Available backends: {}",
+                        self.backends.keys().cloned().collect::<Vec<_>>().join(", ")
+                    )),
+                ),
             })?;
 
         // Validate plate_file extension or auto_plate
@@ -139,7 +143,7 @@ impl Quillmark {
                 .contains(&extension.as_str())
             {
                 return Err(RenderError::QuillConfig {
-                    diag: Diagnostic::new(
+                    diag: Box::new(Diagnostic::new(
                         Severity::Error,
                         format!(
                             "Plate file '{}' has extension '{}' which is not supported by backend '{}'",
@@ -151,12 +155,12 @@ impl Quillmark {
                         "Supported extensions for '{}' backend: {}",
                         backend_id,
                         backend.plate_extension_types().join(", ")
-                    )),
+                    ))),
                 });
             }
         } else if !backend.allow_auto_plate() {
             return Err(RenderError::QuillConfig {
-                diag: Diagnostic::new(
+                diag: Box::new(Diagnostic::new(
                     Severity::Error,
                     format!(
                         "Backend '{}' does not support automatic plate generation, but quill '{}' does not specify a plate file",
@@ -167,7 +171,7 @@ impl Quillmark {
                 .with_hint(format!(
                     "Add a plate file with one of these extensions: {}",
                     backend.plate_extension_types().join(", ")
-                )),
+                ))),
             });
         }
 
@@ -212,15 +216,17 @@ impl Quillmark {
                 self.quills
                     .get(name)
                     .ok_or_else(|| RenderError::UnsupportedBackend {
-                        diag: Diagnostic::new(
-                            Severity::Error,
-                            format!("Quill '{}' not registered", name),
-                        )
-                        .with_code("engine::quill_not_found".to_string())
-                        .with_hint(format!(
-                            "Available quills: {}",
-                            self.quills.keys().cloned().collect::<Vec<_>>().join(", ")
-                        )),
+                        diag: Box::new(
+                            Diagnostic::new(
+                                Severity::Error,
+                                format!("Quill '{}' not registered", name),
+                            )
+                            .with_code("engine::quill_not_found".to_string())
+                            .with_hint(format!(
+                                "Available quills: {}",
+                                self.quills.keys().cloned().collect::<Vec<_>>().join(", ")
+                            )),
+                        ),
                     })?
             }
             QuillRef::Object(quill) => {
@@ -233,15 +239,17 @@ impl Quillmark {
                 self.quills
                     .get(quill_tag)
                     .ok_or_else(|| RenderError::UnsupportedBackend {
-                        diag: Diagnostic::new(
-                            Severity::Error,
-                            format!("Quill '{}' not registered", quill_tag),
-                        )
-                        .with_code("engine::quill_not_found".to_string())
-                        .with_hint(format!(
-                            "Available quills: {}",
-                            self.quills.keys().cloned().collect::<Vec<_>>().join(", ")
-                        )),
+                        diag: Box::new(
+                            Diagnostic::new(
+                                Severity::Error,
+                                format!("Quill '{}' not registered", quill_tag),
+                            )
+                            .with_code("engine::quill_not_found".to_string())
+                            .with_hint(format!(
+                                "Available quills: {}",
+                                self.quills.keys().cloned().collect::<Vec<_>>().join(", ")
+                            )),
+                        ),
                     })?
             }
         };
@@ -252,13 +260,16 @@ impl Quillmark {
             .get("backend")
             .and_then(|v| v.as_str())
             .ok_or_else(|| RenderError::EngineCreation {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!("Quill '{}' does not specify a backend", quill.name),
-                )
-                .with_code("engine::missing_backend".to_string())
-                .with_hint(
-                    "Add 'backend = \"typst\"' to the [Quill] section of Quill.toml".to_string(),
+                diag: Box::new(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!("Quill '{}' does not specify a backend", quill.name),
+                    )
+                    .with_code("engine::missing_backend".to_string())
+                    .with_hint(
+                        "Add 'backend = \"typst\"' to the [Quill] section of Quill.toml"
+                            .to_string(),
+                    ),
                 ),
             })?;
 
@@ -267,15 +278,17 @@ impl Quillmark {
             self.backends
                 .get(backend_id)
                 .ok_or_else(|| RenderError::UnsupportedBackend {
-                    diag: Diagnostic::new(
-                        Severity::Error,
-                        format!("Backend '{}' not registered or not enabled", backend_id),
-                    )
-                    .with_code("engine::backend_not_found".to_string())
-                    .with_hint(format!(
-                        "Available backends: {}",
-                        self.backends.keys().cloned().collect::<Vec<_>>().join(", ")
-                    )),
+                    diag: Box::new(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!("Backend '{}' not registered or not enabled", backend_id),
+                        )
+                        .with_code("engine::backend_not_found".to_string())
+                        .with_hint(format!(
+                            "Available backends: {}",
+                            self.backends.keys().cloned().collect::<Vec<_>>().join(", ")
+                        )),
+                    ),
                 })?;
 
         // Clone the Arc reference to the backend and the quill for the workflow

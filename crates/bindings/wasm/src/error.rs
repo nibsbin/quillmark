@@ -33,7 +33,7 @@ impl From<ParseError> for WasmError {
     fn from(error: ParseError) -> Self {
         match error {
             ParseError::MissingCardDirective { diag } => WasmError::Diagnostic {
-                diagnostic: diag.into(),
+                diagnostic: (*diag).into(),
             },
             ParseError::YamlError(e) => WasmError::Diagnostic {
                 diagnostic: SerializableDiagnostic {
@@ -143,7 +143,9 @@ mod tests {
         let diag = Diagnostic::new(Severity::Error, "Missing CARD".to_string())
             .with_code("parse::missing_card".to_string());
 
-        let err = ParseError::MissingCardDirective { diag };
+        let err = ParseError::MissingCardDirective {
+            diag: Box::new(diag),
+        };
         let wasm_err: WasmError = err.into();
 
         match wasm_err {

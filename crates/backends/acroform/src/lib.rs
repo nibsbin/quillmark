@@ -47,22 +47,26 @@ impl Backend for AcroformBackend {
 
         if !self.supported_formats().contains(&format) {
             return Err(RenderError::FormatNotSupported {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!("{:?} not supported by {} backend", format, self.id()),
-                )
-                .with_code("backend::format_not_supported".to_string())
-                .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
+                diag: Box::new(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!("{:?} not supported by {} backend", format, self.id()),
+                    )
+                    .with_code("backend::format_not_supported".to_string())
+                    .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
+                ),
             });
         }
         let mut context: serde_json::Value =
             serde_json::from_str(plated).map_err(|e| RenderError::InvalidFrontmatter {
-                diag: Diagnostic::new(
-                    Severity::Error,
-                    format!("Failed to parse JSON context: {}", e),
-                )
-                .with_code("acroform::json_parse".to_string())
-                .with_source(Box::new(e)),
+                diag: Box::new(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!("Failed to parse JSON context: {}", e),
+                    )
+                    .with_code("acroform::json_parse".to_string())
+                    .with_source(Box::new(e)),
+                ),
             })?;
 
         // Replace all null values with empty strings
@@ -90,21 +94,25 @@ impl Backend for AcroformBackend {
                 .files
                 .get_file("form.pdf")
                 .ok_or_else(|| RenderError::EngineCreation {
-                    diag: Diagnostic::new(
-                        Severity::Error,
-                        format!("form.pdf not found in quill '{}'", quill.name),
-                    )
-                    .with_code("acroform::missing_form".to_string())
-                    .with_hint("Ensure form.pdf exists in the quill directory".to_string()),
+                    diag: Box::new(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!("form.pdf not found in quill '{}'", quill.name),
+                        )
+                        .with_code("acroform::missing_form".to_string())
+                        .with_hint("Ensure form.pdf exists in the quill directory".to_string()),
+                    ),
                 })?;
 
         let mut doc = AcroFormDocument::from_bytes(form_pdf_bytes.to_vec()).map_err(|e| {
             RenderError::EngineCreation {
-                diag: Diagnostic::new(Severity::Error, format!("Failed to load PDF form: {}", e))
-                    .with_code("acroform::load_failed".to_string())
-                    .with_hint(
-                        "Check that form.pdf is a valid PDF with AcroForm fields".to_string(),
-                    ),
+                diag: Box::new(
+                    Diagnostic::new(Severity::Error, format!("Failed to load PDF form: {}", e))
+                        .with_code("acroform::load_failed".to_string())
+                        .with_hint(
+                            "Check that form.pdf is a valid PDF with AcroForm fields".to_string(),
+                        ),
+                ),
             }
         })?;
 
@@ -112,11 +120,13 @@ impl Backend for AcroformBackend {
         env.set_undefined_behavior(minijinja::UndefinedBehavior::Chainable);
 
         let fields = doc.fields().map_err(|e| RenderError::EngineCreation {
-            diag: Diagnostic::new(
-                Severity::Error,
-                format!("Failed to get PDF form fields: {}", e),
-            )
-            .with_code("acroform::fields_failed".to_string()),
+            diag: Box::new(
+                Diagnostic::new(
+                    Severity::Error,
+                    format!("Failed to get PDF form fields: {}", e),
+                )
+                .with_code("acroform::fields_failed".to_string()),
+            ),
         })?;
 
         let mut values_to_fill = HashMap::new();
@@ -154,13 +164,15 @@ impl Backend for AcroformBackend {
                 let rendered_value =
                     env.render_str(source, &context)
                         .map_err(|e| RenderError::TemplateFailed {
-                            diag: Diagnostic::new(
-                                Severity::Error,
-                                format!("Failed to render template for field '{}'", field.name),
-                            )
-                            .with_code("acroform::template".to_string())
-                            .with_source(Box::new(e))
-                            .with_hint(format!("Template: {}", source)),
+                            diag: Box::new(
+                                Diagnostic::new(
+                                    Severity::Error,
+                                    format!("Failed to render template for field '{}'", field.name),
+                                )
+                                .with_code("acroform::template".to_string())
+                                .with_source(Box::new(e))
+                                .with_hint(format!("Template: {}", source)),
+                            ),
                         })?;
 
                 // Normalize newlines to \n to ensure consistency across platforms (e.g. WASM vs Native)
@@ -226,7 +238,7 @@ mod tests {
 
     #[test]
     fn test_backend_info() {
-        let backend = AcroformBackend::default();
+        let backend = AcroformBackend;
         assert_eq!(backend.id(), "acroform");
         let empty_string_arr: [&str; 0] = [];
         assert_eq!(backend.plate_extension_types(), &empty_string_arr);
