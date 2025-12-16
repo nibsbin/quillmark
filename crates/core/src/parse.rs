@@ -449,29 +449,31 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
         return Ok(ParsedDocument::new(fields));
     }
 
-    // Track which attributes are used for tagged blocks
-    let mut tagged_attributes: HashMap<String, Vec<serde_yaml::Value>> = HashMap::new();
-    let mut has_global_frontmatter = false;
+    // Collect all card items into unified CARDS array
+    let mut cards_array: Vec<serde_json::Value> = Vec::new();
     let mut global_frontmatter_index: Option<usize> = None;
     let mut quill_name: Option<String> = None;
 
     // First pass: identify global frontmatter, quill directive, and validate
     for (idx, block) in blocks.iter().enumerate() {
-        // Check for quill directive
-        if let Some(ref name) = block.quill_name {
-            if quill_name.is_some() {
-                return Err("Multiple quill directives found: only one allowed".into());
+        if idx == 0 {
+            // Top-level frontmatter: can have QUILL or neither (not considered a card)
+            if let Some(ref name) = block.quill_name {
+                quill_name = Some(name.clone());
             }
-            quill_name = Some(name.clone());
-        }
-
-        // Check for global frontmatter (no tag and no quill directive)
-        if block.tag.is_none() && block.quill_name.is_none() {
-            if has_global_frontmatter {
+            // If it has neither QUILL nor CARD, it's global frontmatter
+            if block.tag.is_none() && block.quill_name.is_none() {
+                global_frontmatter_index = Some(idx);
+            }
+        } else {
+            // Inline blocks (idx > 0): MUST have CARD, cannot have QUILL
+            if block.quill_name.is_some() {
+                return Err("QUILL directive can only appear in the top-level frontmatter, not in inline blocks. Use CARD instead.".into());
+            }
+            if block.tag.is_none() {
+                // Inline block without CARD
                 return Err(Box::new(crate::error::ParseError::missing_card_directive()));
             }
-            has_global_frontmatter = true;
-            global_frontmatter_index = Some(idx);
         }
     }
 
@@ -557,19 +559,16 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
         }
     }
 
-    // Parse tagged blocks
+    // Parse tagged blocks (CARD blocks)
     for (idx, block) in blocks.iter().enumerate() {
         if let Some(ref tag_name) = block.tag {
-            // Check if this conflicts with global fields
-            // Exception: if the global field is an array, allow it (we'll merge later)
-            if let Some(existing_value) = fields.get(tag_name) {
-                if existing_value.as_array().is_none() {
-                    return Err(format!(
-                        "Name collision: tagged attribute '{}' conflicts with global field",
-                        tag_name
-                    )
-                    .into());
-                }
+            // Card names cannot conflict with frontmatter field names
+            if fields.contains_key(tag_name) {
+                return Err(format!(
+                    "Name collision: CARD type '{}' conflicts with frontmatter field name",
+                    tag_name
+                )
+                .into());
             }
 
             // Get YAML metadata directly (already parsed in find_metadata_blocks)
@@ -584,7 +583,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
                 }
                 Some(_) => {
                     return Err(format!(
-                        "Invalid YAML in tagged block '{}': expected a mapping",
+                        "Invalid YAML in card block '{}': expected a mapping",
                         tag_name
                     )
                     .into());
@@ -592,7 +591,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
                 None => HashMap::new(),
             };
 
-            // Extract body for this tagged block
+            // Extract body for this card block
             let body_start = block.end;
             let body_end = if idx + 1 < blocks.len() {
                 blocks[idx + 1].start
@@ -607,14 +606,16 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
                 serde_yaml::Value::String(body.to_string()),
             );
 
-            // Convert HashMap to serde_yaml::Value::Mapping
-            let item_value = serde_yaml::to_value(item_fields)?;
+            // Add CARD discriminator field
+            item_fields.insert(
+                "CARD".to_string(),
+                serde_yaml::Value::String(tag_name.clone()),
+            );
 
-            // Add to collection
-            tagged_attributes
-                .entry(tag_name.clone())
-                .or_default()
-                .push(item_value);
+            // Convert to JSON and add to CARDS array
+            let item_json = serde_json::to_value(&item_fields)
+                .map_err(|e| format!("Failed to convert card to JSON: {}", e))?;
+            cards_array.push(item_json);
         }
     }
 
@@ -657,43 +658,11 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, Box<dyn std::error::Error
         QuillValue::from_json(serde_json::Value::String(global_body.to_string())),
     );
 
-    // Add all tagged collections to fields (convert to QuillValue)
-    // If a field already exists and is an array, merge the new items into it
-    for (tag_name, items) in tagged_attributes {
-        if let Some(existing_value) = fields.get(&tag_name) {
-            // The existing value must be an array (checked earlier)
-            if let Some(existing_array) = existing_value.as_array() {
-                // Convert new items from YAML to JSON
-                let new_items_json: Vec<serde_json::Value> = items
-                    .into_iter()
-                    .map(|yaml_val| {
-                        serde_json::to_value(&yaml_val)
-                            .map_err(|e| format!("Failed to convert YAML to JSON: {}", e))
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                // Combine existing and new items
-                let mut merged_array = existing_array.clone();
-                merged_array.extend(new_items_json);
-
-                // Create QuillValue from merged JSON array
-                let quill_value = QuillValue::from_json(serde_json::Value::Array(merged_array));
-                fields.insert(tag_name, quill_value);
-            } else {
-                // This should not happen due to earlier validation, but handle it gracefully
-                return Err(format!(
-                    "Internal error: field '{}' exists but is not an array",
-                    tag_name
-                )
-                .into());
-            }
-        } else {
-            // No existing field, just create a new sequence
-            // Note: guillemets in items were already preprocessed when the items were created
-            let quill_value = QuillValue::from_yaml(serde_yaml::Value::Sequence(items))?;
-            fields.insert(tag_name, quill_value);
-        }
-    }
+    // Always add CARDS array to fields (may be empty)
+    fields.insert(
+        "CARDS".to_string(),
+        QuillValue::from_json(serde_json::Value::Array(cards_array)),
+    );
 
     let quill_tag = quill_name.unwrap_or_else(|| "__default__".to_string());
     let parsed = ParsedDocument::with_quill_tag(fields, quill_tag);
@@ -738,7 +707,7 @@ This is the body."#;
             doc.get_field("author").unwrap().as_str().unwrap(),
             "Test Author"
         );
-        assert_eq!(doc.fields().len(), 3); // title, author, body
+        assert_eq!(doc.fields().len(), 4); // title, author, body, CARDS
                                            // Verify default quill tag is set when no QUILL directive
         assert_eq!(doc.quill_tag(), "__default__");
     }
@@ -1061,10 +1030,12 @@ Body of item 1."#;
             "Main Document"
         );
 
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 1);
+        // Cards are now in CARDS array with CARD discriminator
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 1);
 
-        let item = items[0].as_object().unwrap();
+        let item = cards[0].as_object().unwrap();
+        assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
         assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
         assert_eq!(
             item.get("body").unwrap().as_str().unwrap(),
@@ -1092,13 +1063,16 @@ Second item body."#;
 
         let doc = decompose(markdown).unwrap();
 
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 2);
+        // Cards are in CARDS array
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 2);
 
-        let item1 = items[0].as_object().unwrap();
+        let item1 = cards[0].as_object().unwrap();
+        assert_eq!(item1.get("CARD").unwrap().as_str().unwrap(), "items");
         assert_eq!(item1.get("name").unwrap().as_str().unwrap(), "Item 1");
 
-        let item2 = items[1].as_object().unwrap();
+        let item2 = cards[1].as_object().unwrap();
+        assert_eq!(item2.get("CARD").unwrap().as_str().unwrap(), "items");
         assert_eq!(item2.get("name").unwrap().as_str().unwrap(), "Item 2");
     }
 
@@ -1130,8 +1104,19 @@ Section 2 content."#;
         assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Global");
         assert_eq!(doc.body(), Some("\nGlobal body.\n\n"));
 
-        let sections = doc.get_field("sections").unwrap().as_sequence().unwrap();
-        assert_eq!(sections.len(), 2);
+        // Cards are in unified CARDS array
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 2);
+        assert_eq!(
+            cards[0]
+                .as_object()
+                .unwrap()
+                .get("CARD")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "sections"
+        );
     }
 
     #[test]
@@ -1144,10 +1129,11 @@ Body without metadata."#;
 
         let doc = decompose(markdown).unwrap();
 
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 1);
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 1);
 
-        let item = items[0].as_object().unwrap();
+        let item = cards[0].as_object().unwrap();
+        assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
         assert_eq!(
             item.get("body").unwrap().as_str().unwrap(),
             "\nBody without metadata."
@@ -1163,10 +1149,11 @@ name: Item
 
         let doc = decompose(markdown).unwrap();
 
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 1);
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 1);
 
-        let item = items[0].as_object().unwrap();
+        let item = cards[0].as_object().unwrap();
+        assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
         assert_eq!(item.get("body").unwrap().as_str().unwrap(), "");
     }
 
@@ -1191,15 +1178,12 @@ Item body"#;
     }
 
     #[test]
-    fn test_global_array_merged_with_card() {
-        // When global frontmatter has an array field with the same name as a SCOPE,
-        // the CARD items should be added to the array
+    fn test_card_name_collision_with_array_field() {
+        // CARD type names cannot conflict with any frontmatter field names (including arrays)
         let markdown = r#"---
 items:
   - name: Global Item 1
     value: 100
-  - name: Global Item 2
-    value: 200
 ---
 
 Global body
@@ -1207,61 +1191,18 @@ Global body
 ---
 CARD: items
 name: Scope Item 1
-value: 300
 ---
 
-Scope item 1 body
+Scope item 1 body"#;
 
----
-CARD: items
-name: Scope Item 2
-value: 400
----
-
-Scope item 2 body"#;
-
-        let doc = decompose(markdown).unwrap();
-
-        // Verify the items array has all 4 items (2 from global + 2 from SCOPE)
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 4);
-
-        // Verify first two items (from global array)
-        let item1 = items[0].as_object().unwrap();
-        assert_eq!(
-            item1.get("name").unwrap().as_str().unwrap(),
-            "Global Item 1"
-        );
-        assert_eq!(item1.get("value").unwrap().as_i64().unwrap(), 100);
-
-        let item2 = items[1].as_object().unwrap();
-        assert_eq!(
-            item2.get("name").unwrap().as_str().unwrap(),
-            "Global Item 2"
-        );
-        assert_eq!(item2.get("value").unwrap().as_i64().unwrap(), 200);
-
-        // Verify last two items (from CARD blocks)
-        let item3 = items[2].as_object().unwrap();
-        assert_eq!(item3.get("name").unwrap().as_str().unwrap(), "Scope Item 1");
-        assert_eq!(item3.get("value").unwrap().as_i64().unwrap(), 300);
-        assert_eq!(
-            item3.get("body").unwrap().as_str().unwrap(),
-            "\nScope item 1 body\n\n"
-        );
-
-        let item4 = items[3].as_object().unwrap();
-        assert_eq!(item4.get("name").unwrap().as_str().unwrap(), "Scope Item 2");
-        assert_eq!(item4.get("value").unwrap().as_i64().unwrap(), 400);
-        assert_eq!(
-            item4.get("body").unwrap().as_str().unwrap(),
-            "\nScope item 2 body"
-        );
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("collision"));
     }
 
     #[test]
     fn test_empty_global_array_with_card() {
-        // Edge case: global frontmatter has an empty array
+        // CARD type names cannot conflict with any frontmatter field names (even empty arrays)
         let markdown = r#"---
 items: []
 ---
@@ -1275,13 +1216,9 @@ name: Item 1
 
 Item 1 body"#;
 
-        let doc = decompose(markdown).unwrap();
-
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 1);
-
-        let item = items[0].as_object().unwrap();
-        assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("collision"));
     }
 
     #[test]
@@ -1361,14 +1298,19 @@ Section 1 body"#;
 
         let doc = decompose(markdown).unwrap();
 
-        assert!(doc.get_field("items").is_some());
-        assert!(doc.get_field("sections").is_some());
+        // All cards in unified CARDS array
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 2);
 
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 1);
+        // First card is "items" type
+        let item = cards[0].as_object().unwrap();
+        assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
+        assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
 
-        let sections = doc.get_field("sections").unwrap().as_sequence().unwrap();
-        assert_eq!(sections.len(), 1);
+        // Second card is "sections" type
+        let section = cards[1].as_object().unwrap();
+        assert_eq!(section.get("CARD").unwrap().as_str().unwrap(), "sections");
+        assert_eq!(section.get("title").unwrap().as_str().unwrap(), "Section 1");
     }
 
     #[test]
@@ -1396,11 +1338,12 @@ Third"#;
 
         let doc = decompose(markdown).unwrap();
 
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 3);
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 3);
 
-        for (i, item) in items.iter().enumerate() {
-            let mapping = item.as_object().unwrap();
+        for (i, card) in cards.iter().enumerate() {
+            let mapping = card.as_object().unwrap();
+            assert_eq!(mapping.get("CARD").unwrap().as_str().unwrap(), "items");
             let id = mapping.get("id").unwrap().as_i64().unwrap();
             assert_eq!(id, (i + 1) as i64);
         }
@@ -1469,27 +1412,31 @@ rating: 4
         // Verify global body
         assert!(doc.body().unwrap().contains("main catalog description"));
 
-        // Verify products collection
-        let products = doc.get_field("products").unwrap().as_sequence().unwrap();
-        assert_eq!(products.len(), 2);
+        // All cards in unified CARDS array
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 4); // 2 products + 2 reviews
 
-        let product1 = products[0].as_object().unwrap();
+        // First 2 are products
+        let product1 = cards[0].as_object().unwrap();
+        assert_eq!(product1.get("CARD").unwrap().as_str().unwrap(), "products");
         assert_eq!(product1.get("name").unwrap().as_str().unwrap(), "Widget A");
         assert_eq!(product1.get("price").unwrap().as_f64().unwrap(), 19.99);
 
-        // Verify reviews collection
-        let reviews = doc.get_field("reviews").unwrap().as_sequence().unwrap();
-        assert_eq!(reviews.len(), 2);
+        let product2 = cards[1].as_object().unwrap();
+        assert_eq!(product2.get("CARD").unwrap().as_str().unwrap(), "products");
+        assert_eq!(product2.get("name").unwrap().as_str().unwrap(), "Gadget B");
 
-        let review1 = reviews[0].as_object().unwrap();
+        // Last 2 are reviews
+        let review1 = cards[2].as_object().unwrap();
+        assert_eq!(review1.get("CARD").unwrap().as_str().unwrap(), "reviews");
         assert_eq!(
             review1.get("product").unwrap().as_str().unwrap(),
             "Widget A"
         );
         assert_eq!(review1.get("rating").unwrap().as_i64().unwrap(), 5);
 
-        // Total fields: title, author, date, body, products, reviews = 6
-        assert_eq!(doc.fields().len(), 6);
+        // Total fields: title, author, date, body, CARDS = 5
+        assert_eq!(doc.fields().len(), 5);
     }
 
     #[test]
@@ -1546,9 +1493,19 @@ Section 1 body."#;
             "Test Document"
         );
 
-        // Verify card blocks work
-        let sections = doc.get_field("sections").unwrap().as_sequence().unwrap();
-        assert_eq!(sections.len(), 1);
+        // Verify card blocks work via CARDS array
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(
+            cards[0]
+                .as_object()
+                .unwrap()
+                .get("CARD")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "sections"
+        );
 
         // Verify body
         assert_eq!(doc.body(), Some("\nMain body.\n\n"));
@@ -1566,10 +1523,11 @@ QUILL: second
 
         let result = decompose(markdown);
         assert!(result.is_err());
+        // QUILL in inline block is now an error (must appear in top-level frontmatter only)
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Multiple quill directives"));
+            .contains("top-level frontmatter"));
     }
 
     #[test]
@@ -1684,10 +1642,12 @@ Body of item 1."#;
 
         let doc = decompose(markdown).unwrap();
 
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 1);
+        // Cards are in CARDS array
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 1);
 
-        let item = items[0].as_object().unwrap();
+        let item = cards[0].as_object().unwrap();
+        assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
         assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
         assert_eq!(item.get("price").unwrap().as_f64().unwrap(), 19.99);
 
@@ -1808,16 +1768,41 @@ mod demo_file_test {
             .unwrap()
             .contains("extended YAML metadata standard"));
 
-        // Verify features collection
-        let features = doc.get_field("features").unwrap().as_sequence().unwrap();
-        assert_eq!(features.len(), 3);
+        // All cards are now in unified CARDS array
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 5); // 3 features + 2 use_cases
 
-        // Verify use_cases collection
-        let use_cases = doc.get_field("use_cases").unwrap().as_sequence().unwrap();
-        assert_eq!(use_cases.len(), 2);
+        // Count features and use_cases cards
+        let features_count = cards
+            .iter()
+            .filter(|c| {
+                c.as_object()
+                    .unwrap()
+                    .get("CARD")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    == "features"
+            })
+            .count();
+        let use_cases_count = cards
+            .iter()
+            .filter(|c| {
+                c.as_object()
+                    .unwrap()
+                    .get("CARD")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    == "use_cases"
+            })
+            .count();
+        assert_eq!(features_count, 3);
+        assert_eq!(use_cases_count, 2);
 
-        // Check first feature
-        let feature1 = features[0].as_object().unwrap();
+        // Check first card is a feature
+        let feature1 = cards[0].as_object().unwrap();
+        assert_eq!(feature1.get("CARD").unwrap().as_str().unwrap(), "features");
         assert_eq!(
             feature1.get("name").unwrap().as_str().unwrap(),
             "Tag Directives"
@@ -1989,8 +1974,9 @@ name: Item 1
 Use <<raw>> here."#;
         let doc = decompose(markdown).unwrap();
 
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        let item = items[0].as_object().unwrap();
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        let item = cards[0].as_object().unwrap();
+        assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
         let item_body = item.get("body").unwrap().as_str().unwrap();
         // Tagged block body should preserve chevrons
         assert!(item_body.contains("<<raw>>"));
@@ -2012,8 +1998,9 @@ description: "<<tagged yaml>>"
 Item body."#;
         let doc = decompose(markdown).unwrap();
 
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        let item = items[0].as_object().unwrap();
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        let item = cards[0].as_object().unwrap();
+        assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
         // Tagged block YAML should preserve chevrons
         assert_eq!(
             item.get("description").unwrap().as_str().unwrap(),
@@ -2150,8 +2137,8 @@ mod robustness_tests {
         let markdown = "---\n \n---\n\nBody content.";
         let doc = decompose(markdown).unwrap();
         assert!(doc.body().unwrap().contains("Body content."));
-        // Should only have body field
-        assert_eq!(doc.fields().len(), 1);
+        // Should have body and CARDS fields
+        assert_eq!(doc.fields().len(), 2);
     }
 
     #[test]
@@ -2279,9 +2266,10 @@ CARD: items
 name: Item
 ---"#;
         let doc = decompose(markdown).unwrap();
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 1);
-        let item = items[0].as_object().unwrap();
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 1);
+        let item = cards[0].as_object().unwrap();
+        assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
         assert_eq!(item.get("body").unwrap().as_str().unwrap(), "");
     }
 
@@ -2296,8 +2284,28 @@ CARD: a
 id: 2
 ---"#;
         let doc = decompose(markdown).unwrap();
-        let items = doc.get_field("a").unwrap().as_sequence().unwrap();
-        assert_eq!(items.len(), 2);
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 2);
+        assert_eq!(
+            cards[0]
+                .as_object()
+                .unwrap()
+                .get("CARD")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "a"
+        );
+        assert_eq!(
+            cards[1]
+                .as_object()
+                .unwrap()
+                .get("CARD")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "a"
+        );
     }
 
     #[test]
@@ -2309,8 +2317,9 @@ name: Item
 
 Some text with --- dashes in it."#;
         let doc = decompose(markdown).unwrap();
-        let items = doc.get_field("items").unwrap().as_sequence().unwrap();
-        let item = items[0].as_object().unwrap();
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        let item = cards[0].as_object().unwrap();
+        assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
         let body = item.get("body").unwrap().as_str().unwrap();
         assert!(body.contains("--- dashes"));
     }
