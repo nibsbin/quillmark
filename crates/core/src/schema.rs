@@ -17,6 +17,8 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
     // Handle scope type specially - generates array with items object
     if field_schema.r#type.as_deref() == Some("scope") {
         property.insert("type".to_string(), Value::String("array".to_string()));
+        // Add x-scope marker for consumers to easily identify scope fields
+        property.insert("x-scope".to_string(), Value::Bool(true));
 
         // Build items schema for scope
         let mut items_schema = Map::new();
