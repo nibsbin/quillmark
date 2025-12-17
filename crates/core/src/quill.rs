@@ -58,8 +58,6 @@ pub struct CardSchema {
     pub title: Option<String>,
     /// Detailed description of this card type
     pub description: String,
-    /// UI-specific metadata for rendering
-    pub ui: Option<UiSchema>,
     /// Field definitions for this card type
     pub fields: HashMap<String, FieldSchema>,
 }
@@ -625,23 +623,13 @@ impl QuillConfig {
             .map_err(|e| format!("Failed to parse Quill.toml: {}", e))?;
 
         // Parse with toml_edit to get field order
-        let (field_order, card_order): (Vec<String>, Vec<String>) = toml_content
+        let field_order: Vec<String> = toml_content
             .parse::<toml_edit::DocumentMut>()
             .ok()
-            .map(|doc| {
-                let f_order = doc
-                    .get("fields")
+            .and_then(|doc| {
+                doc.get("fields")
                     .and_then(|item| item.as_table())
                     .map(|table| table.iter().map(|(k, _)| k.to_string()).collect())
-                    .unwrap_or_default();
-
-                let s_order = doc
-                    .get("cards")
-                    .and_then(|item| item.as_table())
-                    .map(|table| table.iter().map(|(k, _)| k.to_string()).collect())
-                    .unwrap_or_default();
-
-                (f_order, s_order)
             })
             .unwrap_or_default();
 
@@ -785,9 +773,6 @@ impl QuillConfig {
         // Extract [cards] section (optional)
         let mut cards: HashMap<String, CardSchema> = HashMap::new();
         if let Some(toml::Value::Table(cards_table)) = quill_toml.get("cards") {
-            let current_field_count = fields.len() as i32;
-            let mut order_counter = 0;
-
             for (card_name, card_value) in cards_table {
                 // Check for name collision with existing fields
                 if fields.contains_key(card_name) {
@@ -797,15 +782,6 @@ impl QuillConfig {
                     )
                     .into());
                 }
-
-                // Determine order (append after fields)
-                let order = if let Some(idx) = card_order.iter().position(|k| k == card_name) {
-                    current_field_count + idx as i32
-                } else {
-                    let o = current_field_count + card_order.len() as i32 + order_counter;
-                    order_counter += 1;
-                    o
-                };
 
                 // Parse card schema
                 let card_table = card_value
@@ -823,31 +799,11 @@ impl QuillConfig {
                     .unwrap_or("")
                     .to_string();
 
-                // Parse UI metadata
-                let ui = if let Some(ui_value) = card_table.get("ui") {
-                    if let Some(ui_table) = ui_value.as_table() {
-                        let group = ui_table
-                            .get("group")
-                            .and_then(|v| v.as_str())
-                            .map(|s| s.to_string());
-                        Some(UiSchema {
-                            group,
-                            order: Some(order),
-                        })
-                    } else {
-                        None
-                    }
-                } else {
-                    Some(UiSchema {
-                        group: None,
-                        order: Some(order),
-                    })
-                };
-
-                // Parse [cards.X.fields.Y] - card field definitions
+                // Parse [cards.X.fields.Y] - card field definitions with order assignment
                 let mut card_fields: HashMap<String, FieldSchema> = HashMap::new();
                 if let Some(fields_value) = card_table.get("fields") {
                     if let Some(fields_table) = fields_value.as_table() {
+                        let mut field_order_counter = 0;
                         for (field_name, field_value) in fields_table {
                             match QuillValue::from_toml(field_value) {
                                 Ok(quill_value) => {
@@ -855,7 +811,18 @@ impl QuillConfig {
                                         field_name.clone(),
                                         &quill_value,
                                     ) {
-                                        Ok(field_schema) => {
+                                        Ok(mut field_schema) => {
+                                            // Assign ui.order based on field position (matching document-level fields)
+                                            if field_schema.ui.is_none() {
+                                                field_schema.ui = Some(UiSchema {
+                                                    group: None,
+                                                    order: Some(field_order_counter),
+                                                });
+                                            } else if let Some(ui) = &mut field_schema.ui {
+                                                ui.order = Some(field_order_counter);
+                                            }
+                                            field_order_counter += 1;
+
                                             card_fields.insert(field_name.clone(), field_schema);
                                         }
                                         Err(e) => {
@@ -881,7 +848,6 @@ impl QuillConfig {
                     name: card_name.clone(),
                     title,
                     description,
-                    ui,
                     fields: card_fields,
                 };
 
@@ -2586,7 +2552,7 @@ items = {}
 
     #[test]
     fn test_quill_config_ordering_with_cards() {
-        // Test that cards have proper UI ordering
+        // Test that fields have proper UI ordering (cards no longer have card-level ordering)
         let toml_content = r#"[Quill]
 name = "ordering-test"
 backend = "typst"
@@ -2598,6 +2564,9 @@ description = "First"
 [cards.second]
 description = "Second"
 
+[cards.second.fields.card_field]
+description = "A card field"
+
 [fields.zero]
 description = "Zero"
 "#;
@@ -2606,25 +2575,20 @@ description = "Zero"
 
         let first = config.fields.get("first").unwrap();
         let zero = config.fields.get("zero").unwrap();
-        let second = config.cards.get("second").unwrap(); // Cards are in config.cards now
+        let second = config.cards.get("second").unwrap();
 
-        // Check relative ordering
+        // Check field ordering
         let ord_first = first.ui.as_ref().unwrap().order.unwrap();
         let ord_zero = zero.ui.as_ref().unwrap().order.unwrap();
-        let ord_second = second.ui.as_ref().unwrap().order.unwrap();
-
-        // toml_edit validation:
-        // fields keys: ["first", "zero"] (0, 1)
-        // cards keys: ["second"] (2)
-
-        assert!(ord_first < ord_second);
-        assert!(ord_zero < ord_second);
 
         // Within fields, "first" is before "zero"
         assert!(ord_first < ord_zero);
-
         assert_eq!(ord_first, 0);
         assert_eq!(ord_zero, 1);
-        assert_eq!(ord_second, 2);
+
+        // Card fields should also have ordering
+        let card_field = second.fields.get("card_field").unwrap();
+        let ord_card_field = card_field.ui.as_ref().unwrap().order.unwrap();
+        assert_eq!(ord_card_field, 0); // First (and only) field in this card
     }
 }
