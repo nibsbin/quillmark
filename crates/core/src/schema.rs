@@ -1477,7 +1477,6 @@ mod tests {
             name: "endorsements".to_string(),
             title: Some("Endorsements".to_string()),
             description: "Chain of endorsements".to_string(),
-            ui: None,
             fields: card_fields,
         };
         cards.insert("endorsements".to_string(), card);
@@ -1530,7 +1529,6 @@ mod tests {
             name: "endorsements".to_string(),
             title: Some("Endorsements".to_string()),
             description: "Chain of endorsements".to_string(),
-            ui: None,
             fields: card_fields,
         };
         cards.insert("endorsements".to_string(), card);
@@ -1773,7 +1771,7 @@ mod tests {
     }
     #[test]
     fn test_validate_document_invalid_card_type() {
-        use crate::quill::{CardSchema, FieldSchema, UiSchema};
+        use crate::quill::{CardSchema, FieldSchema};
 
         let mut card_fields = HashMap::new();
         card_fields.insert(
@@ -1786,10 +1784,6 @@ mod tests {
             CardSchema {
                 name: "valid_card".to_string(),
                 title: None,
-                ui: Some(UiSchema {
-                    group: None,
-                    order: None,
-                }),
                 description: "".to_string(),
                 fields: card_fields,
             },
@@ -1834,7 +1828,6 @@ mod tests {
             CardSchema {
                 name: "test_card".to_string(),
                 title: None,
-                ui: None,
                 description: "Test card".to_string(),
                 fields: card_fields,
             },
@@ -1875,7 +1868,6 @@ mod tests {
             CardSchema {
                 name: "test_card".to_string(),
                 title: None,
-                ui: None,
                 description: "Test card".to_string(),
                 fields: card_fields,
             },
@@ -1907,5 +1899,38 @@ mod tests {
             "Did not find specific error msg in: {:?}",
             errs
         );
+    }
+
+    #[test]
+    fn test_card_field_ui_metadata() {
+        // Verify that card fields with ui.group produce x-ui in JSON schema
+        use crate::quill::{CardSchema, UiSchema};
+
+        let mut field_schema = FieldSchema::new("from".to_string(), "Sender".to_string());
+        field_schema.r#type = Some(FieldType::String);
+        field_schema.ui = Some(UiSchema {
+            group: Some("Header".to_string()),
+            order: Some(0),
+        });
+
+        let mut card_fields = HashMap::new();
+        card_fields.insert("from".to_string(), field_schema);
+
+        let card = CardSchema {
+            name: "indorsement".to_string(),
+            title: Some("Indorsement".to_string()),
+            description: "An indorsement".to_string(),
+            fields: card_fields,
+        };
+
+        let mut cards = HashMap::new();
+        cards.insert("indorsement".to_string(), card);
+
+        let schema = build_schema(&HashMap::new(), &cards).unwrap();
+        let card_def = &schema.as_json()["$defs"]["indorsement_card"];
+        let from_field = &card_def["properties"]["from"];
+
+        assert_eq!(from_field["x-ui"]["group"], "Header");
+        assert_eq!(from_field["x-ui"]["order"], 0);
     }
 }
