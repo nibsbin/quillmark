@@ -30,14 +30,66 @@ pub struct CardSchema {
     pub fields: HashMap<String, FieldSchema>,
 }
 
+/// Field type hint enum for type-safe field type definitions
+#[derive(Debug, Clone, PartialEq)]
+pub enum FieldType {
+    /// String type (alias: "string")
+    String,
+    /// String type (alias: "str")
+    Str,
+    /// Numeric type
+    Number,
+    /// Boolean type
+    Boolean,
+    /// Array type
+    Array,
+    /// Dictionary/object type
+    Dict,
+    /// Date type (formatted as string with date format)
+    Date,
+    /// DateTime type (formatted as string with date-time format)
+    DateTime,
+}
+
+impl FieldType {
+    /// Parse a FieldType from a string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "string" => Some(FieldType::String),
+            "str" => Some(FieldType::Str),
+            "number" => Some(FieldType::Number),
+            "boolean" => Some(FieldType::Boolean),
+            "array" => Some(FieldType::Array),
+            "dict" => Some(FieldType::Dict),
+            "date" => Some(FieldType::Date),
+            "datetime" => Some(FieldType::DateTime),
+            _ => None,
+        }
+    }
+
+    /// Get the canonical string representation for this type
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            FieldType::String => "string",
+            FieldType::Str => "str",
+            FieldType::Number => "number",
+            FieldType::Boolean => "boolean",
+            FieldType::Array => "array",
+            FieldType::Dict => "dict",
+            FieldType::Date => "date",
+            FieldType::DateTime => "datetime",
+        }
+    }
+}
+
 /// Schema definition for a template field
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldSchema {
     pub name: String,
     /// Short label for the field (used in JSON Schema title)
     pub title: Option<String>,
-    /// Field type hint (e.g., "string", "number", "boolean", "object", "array")
-    pub r#type: Option<String>,
+    /// Field type hint (e.g., String, Number, Boolean, Dict, Array)
+    pub r#type: Option<FieldType>,
     /// Detailed description of the field (used in JSON Schema description)
     pub description: String,
     /// Default value for the field
@@ -99,10 +151,13 @@ impl FieldSchema {
             .unwrap_or("")
             .to_string();
 
-        let field_type = obj
-            .get("type")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+        let field_type = obj.get("type").and_then(|v| v.as_str()).and_then(|s| {
+            let parsed = FieldType::from_str(s);
+            if parsed.is_none() {
+                eprintln!("Warning: Unknown field type '{}', ignoring", s);
+            }
+            parsed
+        });
 
         let default = obj.get("default").map(|v| QuillValue::from_json(v.clone()));
 
@@ -1981,7 +2036,7 @@ default: "Default value"
         let schema2 = FieldSchema::from_quill_value("test_name".to_string(), &quill_value).unwrap();
         assert_eq!(schema2.name, "test_name");
         assert_eq!(schema2.description, "Full field schema");
-        assert_eq!(schema2.r#type, Some("string".to_string()));
+        assert_eq!(schema2.r#type, Some(FieldType::String));
         assert_eq!(
             schema2
                 .examples
@@ -2068,7 +2123,7 @@ author = {description = "Document author"}
 
         let title_field = &config.fields["title"];
         assert_eq!(title_field.description, "Document title");
-        assert_eq!(title_field.r#type, Some("string".to_string()));
+        assert_eq!(title_field.r#type, Some(FieldType::String));
     }
 
     #[test]
@@ -2324,7 +2379,7 @@ description: "A simple string field"
             FieldSchema::from_quill_value("simple_field".to_string(), &quill_value).unwrap();
 
         assert_eq!(schema.name, "simple_field");
-        assert_eq!(schema.r#type, Some("string".to_string()));
+        assert_eq!(schema.r#type, Some(FieldType::String));
         assert_eq!(schema.title, Some("Simple Field".to_string()));
         assert_eq!(schema.description, "A simple string field");
     }
@@ -2368,12 +2423,12 @@ default = "Unknown"
         assert_eq!(card.fields.len(), 2);
 
         let name_field = card.fields.get("name").unwrap();
-        assert_eq!(name_field.r#type, Some("string".to_string()));
+        assert_eq!(name_field.r#type, Some(FieldType::String));
         assert_eq!(name_field.title, Some("Endorser Name".to_string()));
         assert!(name_field.required);
 
         let org_field = card.fields.get("org").unwrap();
-        assert_eq!(org_field.r#type, Some("string".to_string()));
+        assert_eq!(org_field.r#type, Some(FieldType::String));
         assert!(org_field.default.is_some());
         assert_eq!(
             org_field.default.as_ref().unwrap().as_str(),
@@ -2400,7 +2455,7 @@ items:
         // The parsing should succeed, items is now just an unknown field
         assert!(result.is_ok());
         let schema = result.unwrap();
-        assert_eq!(schema.r#type, Some("string".to_string()));
+        assert_eq!(schema.r#type, Some(FieldType::String));
     }
 
     #[test]
@@ -2429,7 +2484,7 @@ description = "Name field"
         // Check regular field
         assert!(config.fields.contains_key("regular"));
         let regular = config.fields.get("regular").unwrap();
-        assert_eq!(regular.r#type, Some("string".to_string()));
+        assert_eq!(regular.r#type, Some(FieldType::String));
 
         // Check card is in config.cards (not config.fields)
         assert!(config.cards.contains_key("indorsements"));
