@@ -130,10 +130,98 @@ pub fn strip_bidi_formatting(s: &str) -> String {
     s.chars().filter(|c| !is_bidi_char(*c)).collect()
 }
 
+/// Fixes HTML comment closing fences to prevent content loss.
+///
+/// According to CommonMark, HTML block type 2 (comments) ends with the line containing `-->`.
+/// This means any text on the same line after `-->` is included in the HTML block and would
+/// be discarded by markdown parsers that ignore HTML blocks.
+///
+/// This function inserts a newline after `-->` when followed by non-whitespace content,
+/// ensuring the trailing text is parsed as regular markdown.
+///
+/// # Examples
+///
+/// ```
+/// use quillmark_core::normalize::fix_html_comment_fences;
+///
+/// // Text on same line as --> is moved to next line
+/// assert_eq!(
+///     fix_html_comment_fences("<!-- comment -->Some text"),
+///     "<!-- comment -->\nSome text"
+/// );
+///
+/// // Already on separate line - no change
+/// assert_eq!(
+///     fix_html_comment_fences("<!-- comment -->\nSome text"),
+///     "<!-- comment -->\nSome text"
+/// );
+///
+/// // Only whitespace after --> - no change needed
+/// assert_eq!(
+///     fix_html_comment_fences("<!-- comment -->   \nSome text"),
+///     "<!-- comment -->   \nSome text"
+/// );
+///
+/// // Multi-line comments with trailing text
+/// assert_eq!(
+///     fix_html_comment_fences("<!--\nmultiline\n-->Trailing text"),
+///     "<!--\nmultiline\n-->\nTrailing text"
+/// );
+/// ```
+pub fn fix_html_comment_fences(s: &str) -> String {
+    // Early return if no HTML comment closing fence present
+    if !s.contains("-->") {
+        return s.to_string();
+    }
+
+    let mut result = String::with_capacity(s.len() + 16); // Extra capacity for potential newlines
+    let mut remaining = s;
+
+    while let Some(fence_pos) = remaining.find("-->") {
+        let after_fence = fence_pos + 3; // Position after "-->"
+
+        // Copy everything up to and including "-->"
+        result.push_str(&remaining[..after_fence]);
+
+        // Check what comes after the fence
+        let after_content = &remaining[after_fence..];
+
+        if after_content.is_empty() {
+            // End of string, nothing to do
+            remaining = "";
+        } else if after_content.starts_with('\n') || after_content.starts_with("\r\n") {
+            // Already has a newline, continue normally
+            remaining = after_content;
+        } else {
+            // Check if there's only whitespace until end of line or end of string
+            let next_newline = after_content.find('\n');
+            let until_newline = match next_newline {
+                Some(pos) => &after_content[..pos],
+                None => after_content,
+            };
+
+            if until_newline.trim().is_empty() {
+                // Only whitespace after -->, keep as-is
+                remaining = after_content;
+            } else {
+                // Non-whitespace content after -->, insert newline
+                result.push('\n');
+                remaining = after_content;
+            }
+        }
+    }
+
+    // Append any remaining content after the last fence (or all content if no fence)
+    result.push_str(remaining);
+
+    result
+}
+
 /// Normalizes markdown content by applying all preprocessing steps.
 ///
 /// This function applies normalizations in the correct order:
 /// 1. Strip Unicode bidirectional formatting characters
+/// 2. Fix HTML comment closing fences (ensure text after `-->` is preserved)
 ///
 /// Note: Guillemet preprocessing (`<<text>>` → `«text»`) is handled separately
 /// in [`normalize_fields`] because it needs to be applied after schema defaults
@@ -148,22 +236,31 @@ pub fn strip_bidi_formatting(s: &str) -> String {
 /// let input = "**bold** \u{202D}**more**";
 /// let normalized = normalize_markdown(input);
 /// assert_eq!(normalized, "**bold** **more**");
+///
+/// // HTML comment trailing text is preserved
+/// let with_comment = "<!-- comment -->Some text";
+/// let normalized = normalize_markdown(with_comment);
+/// assert_eq!(normalized, "<!-- comment -->\nSome text");
 /// ```
 pub fn normalize_markdown(markdown: &str) -> String {
-    strip_bidi_formatting(markdown)
+    let cleaned = strip_bidi_formatting(markdown);
+    fix_html_comment_fences(&cleaned)
 }
 
 /// Normalizes a string value by stripping bidi characters and optionally processing guillemets.
 ///
 /// - For body content: applies `preprocess_markdown_guillemets` (converts `<<text>>` to `«text»`)
+///   and `fix_html_comment_fences` to preserve text after `-->`
 /// - For other fields: applies `strip_chevrons` (removes chevrons entirely)
 fn normalize_string(s: &str, is_body: bool) -> String {
     // First strip bidi formatting characters
     let cleaned = strip_bidi_formatting(s);
 
-    // Then apply guillemet preprocessing
+    // Then apply content-specific normalization
     if is_body {
-        preprocess_markdown_guillemets(&cleaned)
+        // Fix HTML comment fences first, then convert guillemets
+        let fixed = fix_html_comment_fences(&cleaned);
+        preprocess_markdown_guillemets(&fixed)
     } else {
         strip_chevrons(&cleaned)
     }
@@ -343,6 +440,111 @@ mod tests {
         assert_eq!(
             normalize_markdown("**bold** \u{202D}**more**"),
             "**bold** **more**"
+        );
+    }
+
+    #[test]
+    fn test_normalize_markdown_html_comment() {
+        assert_eq!(
+            normalize_markdown("<!-- comment -->Some text"),
+            "<!-- comment -->\nSome text"
+        );
+    }
+
+    // Tests for fix_html_comment_fences
+
+    #[test]
+    fn test_fix_html_comment_no_comment() {
+        assert_eq!(fix_html_comment_fences("hello world"), "hello world");
+        assert_eq!(fix_html_comment_fences("**bold** text"), "**bold** text");
+        assert_eq!(fix_html_comment_fences(""), "");
+    }
+
+    #[test]
+    fn test_fix_html_comment_single_line_trailing_text() {
+        // Text on same line as --> should be moved to next line
+        assert_eq!(
+            fix_html_comment_fences("<!-- comment -->Same line text"),
+            "<!-- comment -->\nSame line text"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_already_newline() {
+        // Already has newline after --> - no change
+        assert_eq!(
+            fix_html_comment_fences("<!-- comment -->\nNext line text"),
+            "<!-- comment -->\nNext line text"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_only_whitespace_after() {
+        // Only whitespace after --> until newline - no change needed
+        assert_eq!(
+            fix_html_comment_fences("<!-- comment -->   \nSome text"),
+            "<!-- comment -->   \nSome text"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_multiline_trailing_text() {
+        // Multi-line comment with text on closing line
+        assert_eq!(
+            fix_html_comment_fences("<!--\nmultiline\ncomment\n-->Trailing text"),
+            "<!--\nmultiline\ncomment\n-->\nTrailing text"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_multiline_proper() {
+        // Multi-line comment with proper newline after -->
+        assert_eq!(
+            fix_html_comment_fences("<!--\nmultiline\n-->\n\nParagraph text"),
+            "<!--\nmultiline\n-->\n\nParagraph text"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_multiple_comments() {
+        // Multiple comments in the same document
+        assert_eq!(
+            fix_html_comment_fences("<!-- first -->Text\n\n<!-- second -->More text"),
+            "<!-- first -->\nText\n\n<!-- second -->\nMore text"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_end_of_string() {
+        // Comment at end of string - no trailing content
+        assert_eq!(
+            fix_html_comment_fences("Some text before <!-- comment -->"),
+            "Some text before <!-- comment -->"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_only_comment() {
+        // Just a comment with nothing after
+        assert_eq!(
+            fix_html_comment_fences("<!-- comment -->"),
+            "<!-- comment -->"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_arrow_not_comment() {
+        // --> that's not part of a comment (standalone)
+        // Still gets a newline if followed by non-whitespace (conservative approach)
+        assert_eq!(fix_html_comment_fences("-->some text"), "-->\nsome text");
+    }
+
+    #[test]
+    fn test_fix_html_comment_crlf() {
+        // CRLF line endings
+        assert_eq!(
+            fix_html_comment_fences("<!-- comment -->\r\nSome text"),
+            "<!-- comment -->\r\nSome text"
         );
     }
 
