@@ -6,6 +6,40 @@ use std::path::{Path, PathBuf};
 
 use crate::value::QuillValue;
 
+/// Semantic constants for field schema keys used in parsing and JSON Schema generation.
+/// Using constants provides IDE support (find references, autocomplete) and ensures
+/// consistency between parsing and output.
+pub mod field_key {
+    /// Field name identifier
+    pub const NAME: &str = "name";
+    /// Short label for the field
+    pub const TITLE: &str = "title";
+    /// Field type (string, number, boolean, array, etc.)
+    pub const TYPE: &str = "type";
+    /// Detailed field description
+    pub const DESCRIPTION: &str = "description";
+    /// Default value for the field
+    pub const DEFAULT: &str = "default";
+    /// Example values for the field
+    pub const EXAMPLES: &str = "examples";
+    /// UI-specific metadata
+    pub const UI: &str = "ui";
+    /// Whether the field is required
+    pub const REQUIRED: &str = "required";
+    /// Enum values for string fields
+    pub const ENUM: &str = "enum";
+    /// Date format specifier (JSON Schema)
+    pub const FORMAT: &str = "format";
+}
+
+/// Semantic constants for UI schema keys
+pub mod ui_key {
+    /// Group name for field organization
+    pub const GROUP: &str = "group";
+    /// Display order within the UI
+    pub const ORDER: &str = "order";
+}
+
 /// UI-specific metadata for field rendering
 #[derive(Debug, Clone, PartialEq)]
 pub struct UiSchema {
@@ -30,14 +64,66 @@ pub struct CardSchema {
     pub fields: HashMap<String, FieldSchema>,
 }
 
+/// Field type hint enum for type-safe field type definitions
+#[derive(Debug, Clone, PartialEq)]
+pub enum FieldType {
+    /// String type (alias: "string")
+    String,
+    /// String type (alias: "str")
+    Str,
+    /// Numeric type
+    Number,
+    /// Boolean type
+    Boolean,
+    /// Array type
+    Array,
+    /// Dictionary/object type
+    Dict,
+    /// Date type (formatted as string with date format)
+    Date,
+    /// DateTime type (formatted as string with date-time format)
+    DateTime,
+}
+
+impl FieldType {
+    /// Parse a FieldType from a string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "string" => Some(FieldType::String),
+            "str" => Some(FieldType::Str),
+            "number" => Some(FieldType::Number),
+            "boolean" => Some(FieldType::Boolean),
+            "array" => Some(FieldType::Array),
+            "dict" => Some(FieldType::Dict),
+            "date" => Some(FieldType::Date),
+            "datetime" => Some(FieldType::DateTime),
+            _ => None,
+        }
+    }
+
+    /// Get the canonical string representation for this type
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            FieldType::String => "string",
+            FieldType::Str => "str",
+            FieldType::Number => "number",
+            FieldType::Boolean => "boolean",
+            FieldType::Array => "array",
+            FieldType::Dict => "dict",
+            FieldType::Date => "date",
+            FieldType::DateTime => "datetime",
+        }
+    }
+}
+
 /// Schema definition for a template field
 #[derive(Debug, Clone, PartialEq)]
 pub struct FieldSchema {
     pub name: String,
     /// Short label for the field (used in JSON Schema title)
     pub title: Option<String>,
-    /// Field type hint (e.g., "string", "number", "boolean", "object", "array")
-    pub r#type: Option<String>,
+    /// Field type hint (e.g., String, Number, Boolean, Dict, Array)
+    pub r#type: Option<FieldType>,
     /// Detailed description of the field (used in JSON Schema description)
     pub description: String,
     /// Default value for the field
@@ -48,6 +134,8 @@ pub struct FieldSchema {
     pub ui: Option<UiSchema>,
     /// Whether this field is required (fields are optional by default)
     pub required: bool,
+    /// Enum values for string fields (restricts valid values)
+    pub enum_values: Option<Vec<String>>,
 }
 
 impl FieldSchema {
@@ -62,6 +150,7 @@ impl FieldSchema {
             examples: None,
             ui: None,
             required: false,
+            enum_values: None,
         }
     }
 
@@ -74,8 +163,15 @@ impl FieldSchema {
         //Ensure only known keys are present
         for key in obj.keys() {
             match key.as_str() {
-                "name" | "title" | "type" | "description" | "examples" | "default" | "ui"
-                | "required" => {}
+                field_key::NAME
+                | field_key::TITLE
+                | field_key::TYPE
+                | field_key::DESCRIPTION
+                | field_key::EXAMPLES
+                | field_key::DEFAULT
+                | field_key::UI
+                | field_key::REQUIRED
+                | field_key::ENUM => {}
                 _ => {
                     // Log warning but don't fail
                     eprintln!("Warning: Unknown key '{}' in field schema", key);
@@ -86,45 +182,64 @@ impl FieldSchema {
         let name = key.clone();
 
         let title = obj
-            .get("title")
+            .get(field_key::TITLE)
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
         let description = obj
-            .get("description")
+            .get(field_key::DESCRIPTION)
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
 
         let field_type = obj
-            .get("type")
+            .get(field_key::TYPE)
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+            .and_then(|s| {
+                let parsed = FieldType::from_str(s);
+                if parsed.is_none() {
+                    eprintln!("Warning: Unknown field type '{}', ignoring", s);
+                }
+                parsed
+            });
 
-        let default = obj.get("default").map(|v| QuillValue::from_json(v.clone()));
+        let default = obj
+            .get(field_key::DEFAULT)
+            .map(|v| QuillValue::from_json(v.clone()));
 
         let examples = obj
-            .get("examples")
+            .get(field_key::EXAMPLES)
             .map(|v| QuillValue::from_json(v.clone()));
 
         // Parse required field (fields are optional by default)
         let required = obj
-            .get("required")
+            .get(field_key::REQUIRED)
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
+        // Parse enum values (only valid for string types)
+        let enum_values = obj
+            .get(field_key::ENUM)
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            })
+            .filter(|v| !v.is_empty());
+
         // Parse UI metadata if present
-        let ui = if let Some(ui_value) = obj.get("ui") {
+        let ui = if let Some(ui_value) = obj.get(field_key::UI) {
             if let Some(ui_obj) = ui_value.as_object() {
                 let group = ui_obj
-                    .get("group")
+                    .get(ui_key::GROUP)
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
                 // Validate that only known UI properties are present
                 for key in ui_obj.keys() {
                     match key.as_str() {
-                        "group" => {}
+                        ui_key::GROUP => {}
                         _ => {
                             eprintln!(
                                 "Warning: Unknown UI property '{}'. Only 'group' is supported.",
@@ -154,6 +269,7 @@ impl FieldSchema {
             examples,
             ui,
             required,
+            enum_values,
         })
     }
 }
@@ -1966,7 +2082,7 @@ default: "Default value"
         let schema2 = FieldSchema::from_quill_value("test_name".to_string(), &quill_value).unwrap();
         assert_eq!(schema2.name, "test_name");
         assert_eq!(schema2.description, "Full field schema");
-        assert_eq!(schema2.r#type, Some("string".to_string()));
+        assert_eq!(schema2.r#type, Some(FieldType::String));
         assert_eq!(
             schema2
                 .examples
@@ -2053,7 +2169,7 @@ author = {description = "Document author"}
 
         let title_field = &config.fields["title"];
         assert_eq!(title_field.description, "Document title");
-        assert_eq!(title_field.r#type, Some("string".to_string()));
+        assert_eq!(title_field.r#type, Some(FieldType::String));
     }
 
     #[test]
@@ -2309,7 +2425,7 @@ description: "A simple string field"
             FieldSchema::from_quill_value("simple_field".to_string(), &quill_value).unwrap();
 
         assert_eq!(schema.name, "simple_field");
-        assert_eq!(schema.r#type, Some("string".to_string()));
+        assert_eq!(schema.r#type, Some(FieldType::String));
         assert_eq!(schema.title, Some("Simple Field".to_string()));
         assert_eq!(schema.description, "A simple string field");
     }
@@ -2353,12 +2469,12 @@ default = "Unknown"
         assert_eq!(card.fields.len(), 2);
 
         let name_field = card.fields.get("name").unwrap();
-        assert_eq!(name_field.r#type, Some("string".to_string()));
+        assert_eq!(name_field.r#type, Some(FieldType::String));
         assert_eq!(name_field.title, Some("Endorser Name".to_string()));
         assert!(name_field.required);
 
         let org_field = card.fields.get("org").unwrap();
-        assert_eq!(org_field.r#type, Some("string".to_string()));
+        assert_eq!(org_field.r#type, Some(FieldType::String));
         assert!(org_field.default.is_some());
         assert_eq!(
             org_field.default.as_ref().unwrap().as_str(),
@@ -2385,7 +2501,7 @@ items:
         // The parsing should succeed, items is now just an unknown field
         assert!(result.is_ok());
         let schema = result.unwrap();
-        assert_eq!(schema.r#type, Some("string".to_string()));
+        assert_eq!(schema.r#type, Some(FieldType::String));
     }
 
     #[test]
@@ -2414,7 +2530,7 @@ description = "Name field"
         // Check regular field
         assert!(config.fields.contains_key("regular"));
         let regular = config.fields.get("regular").unwrap();
-        assert_eq!(regular.r#type, Some("string".to_string()));
+        assert_eq!(regular.r#type, Some(FieldType::String));
 
         // Check card is in config.cards (not config.fields)
         assert!(config.cards.contains_key("indorsements"));
