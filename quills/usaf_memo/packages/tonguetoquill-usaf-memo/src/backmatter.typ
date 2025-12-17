@@ -17,7 +17,7 @@
   distribution: none,
   leading_pagebreak: false,
 ) = {
-  assert(signature_block != none, message: "signature_block is required")
+
 
   // Set backmatter state to disable paragraph numbering
   IN_BACKMATTER_STATE.update(true)

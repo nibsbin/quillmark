@@ -13,8 +13,6 @@ signature_block:
 tag_line: Aim High
 ---
 
-Click "Wizard" to edit header, signature block, and more.
-
 Write your paragraphs here. Separate them with two new lines.
 
 - Use bullets to nest paragraphs.

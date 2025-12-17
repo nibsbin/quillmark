@@ -6,7 +6,7 @@ example_file = "usaf_memo.md"
 description = "Typesetted USAF Official Memorandum"
 
 # ==========================================
-# Group 1: Essentials
+# Group 1: Addressing
 # (To, From, Subject, Signature)
 # ==========================================
 
@@ -15,15 +15,22 @@ title = "List of recipient organization(s)"
 type = "array"
 required = true
 examples = [["ORG1/SYMBOL", "ORG2/SYMBOL"]]
-ui.group = "Essentials"
+ui.group = "Addressing"
 description = "Organization/office symbol in UPPERCASE. To address a specific person, add their rank and name in parentheses (e.g., 'ORG/SYMBOL (LT COL JANE DOE)'). For numerous recipients, use 'DISTRIBUTION'."
 
 [fields.memo_from]
 title = "Sender information as array: [ORG/SYMBOL, 'Organization Name', 'Street Address', 'City State ZIP']"
 type = "array"
 required = true
-examples = [["ORG/SYMBOL", "Organization Name", "123 Street Ave", "City ST 12345-6789"]]
-ui.group = "Essentials"
+examples = [
+    [
+        "ORG/SYMBOL",
+        "Organization Name",
+        "123 Street Ave",
+        "City ST 12345-6789",
+    ],
+]
+ui.group = "Addressing"
 description = "If recipients are on the same installation, use only the office symbol. For recipients on other installations, include the full mailing address to enable return correspondence."
 
 [fields.subject]
@@ -31,7 +38,7 @@ title = "Subject of the memo"
 type = "string"
 required = true
 examples = ["Subject of the Memorandum"]
-ui.group = "Essentials"
+ui.group = "Addressing"
 description = "Be brief and clear. Capitalize the first letter of each word except articles, prepositions, and conjunctions. Include suspense dates in parentheses if applicable."
 
 [fields.signature_block]
@@ -39,7 +46,7 @@ title = "Signature block lines"
 type = "array"
 required = true
 examples = [["FIRST M. LAST, Rank, USSF", "Duty Title"]]
-ui.group = "Essentials"
+ui.group = "Addressing"
 description = "Line 1: Name in UPPERCASE as signed, grade, and service. Line 2: Duty title. Spell out 'Colonel' and general officer ranks."
 
 # ==========================================
@@ -69,7 +76,7 @@ ui.group = "Letterhead"
 description = "Organizational motto at the bottom of the page."
 
 # ==========================================
-# Group 3: Advanced
+# Group 3: Additional
 # (Routing, References, Formatting)
 # ==========================================
 
@@ -77,7 +84,7 @@ description = "Organizational motto at the bottom of the page."
 title = "Date of memo (YYYY-MM-DD); defaults to today"
 type = "string"
 default = ""
-ui.group = "Advanced"
+ui.group = "Additional"
 description = "YYYY-MM-DD. Leave blank to use today's date."
 
 [fields.references]
@@ -85,7 +92,7 @@ title = "References for the memo"
 type = "array"
 default = []
 examples = [["AFM 33-326, 31 July 2019, Preparing Official Communications"]]
-ui.group = "Advanced"
+ui.group = "Additional"
 description = "Cite by organization, type, date, and title."
 
 [fields.cc]
@@ -93,7 +100,7 @@ title = "Carbon copy recipients"
 type = "array"
 default = []
 examples = [["Rank and Name, ORG/SYMBOL"]]
-ui.group = "Advanced"
+ui.group = "Additional"
 description = "List office symbols of recipients to receive copies."
 
 [fields.distribution]
@@ -101,7 +108,7 @@ title = "Distribution list. Used when \"SEE DISTRIBUTION\" is specified in `memo
 type = "array"
 default = []
 examples = [["ORG1/SYMBOL", "ORG2/SYMBOL"]]
-ui.group = "Advanced"
+ui.group = "Additional"
 description = "Complete list of recipients if 'SEE DISTRIBUTION' is used in the 'Memo For' field."
 
 [fields.attachments]
@@ -109,7 +116,7 @@ title = "List of attachments"
 type = "array"
 default = []
 examples = [["Attachment description, YYYY MMM DD"]]
-ui.group = "Advanced"
+ui.group = "Additional"
 description = "List attachments in the order they are mentioned in the memo. Briefly describe each; do not use 'as stated' or abbreviations."
 
 [fields.classification]
@@ -117,7 +124,7 @@ title = "Classification level of the memo that displays in the banner"
 type = "string"
 default = ""
 examples = ["CONFIDENTIAL"]
-ui.group = "Advanced"
+ui.group = "Additional"
 description = "Follow AFI 31-401 and applicable DoD guidance for classification markings. Leave blank for unclassified."
 
 [fields.font_size]
@@ -125,61 +132,65 @@ title = "Font size for the memo text (int pt)"
 type = "number"
 default = 11
 examples = [11]
-ui.group = "Advanced"
+ui.group = "Additional"
 description = "Font size for the memo text (pt)."
 
 # ==========================================
-# Indorsements (Scope Field)
+# indorsement (Scope Field)
 # (Routing endorsements for multi-level correspondence)
 # ==========================================
 
-[cards.indorsements]
-title = "Routing Indorsements"
-ui.group = "Indorsements"
+[cards.indorsement]
+title = "Routing indorsement"
+ui.group = "indorsement"
 description = "Chain of routing endorsements. Each endorsement block adds an official response or forwarding action to the original memo."
 
-[cards.indorsements.fields.from]
+[cards.indorsement.fields.from]
 title = "From office/symbol"
 type = "string"
+ui.group = "Addressing"
 description = "Office symbol or organization of the endorsing official (e.g., 'ORG/SYMBOL')."
 
-[cards.indorsements.fields.for]
+[cards.indorsement.fields.for]
 title = "To office/symbol"
 type = "string"
+ui.group = "Addressing"
 description = "Office symbol or organization receiving the endorsed memo."
 
-[cards.indorsements.fields.signature_block]
+[cards.indorsement.fields.signature_block]
 title = "Signature block lines"
 type = "array"
 examples = [["FIRST M. LAST, Rank, USAF", "Duty Title"]]
+ui.group = "Addressing"
 description = "Line 1: Name in UPPERCASE as signed, grade, and service. Line 2: Duty title."
+required = true
+default = ["FIRST M. LAST, Rank, USAF", "Duty Title"]
 
-[cards.indorsements.fields.attachments]
+[cards.indorsement.fields.format]
+title = "Indorsement format"
+type = "string"
+default = "standard"
+enum = ["standard", "informal", "separate_page"]
+ui.group = "Additional"
+description = "Format style: 'standard' (formal on same page), 'informal' (less formal routing), or 'separate_page' (starts on new page)."
+
+[cards.indorsement.fields.attachments]
 title = "Attachments for this endorsement"
 type = "array"
 default = []
+ui.group = "Additional"
 description = "List of attachments specific to this endorsement."
 
-[cards.indorsements.fields.cc]
+[cards.indorsement.fields.cc]
 title = "Carbon copy recipients"
 type = "array"
 default = []
+ui.group = "Additional"
 description = "List of office symbols to receive copies of this endorsement."
 
-[cards.indorsements.fields.date]
+[cards.indorsement.fields.date]
 title = "Date of endorsement (YYYY-MM-DD)"
 type = "string"
 default = ""
+ui.group = "Additional"
 description = "Date of the endorsement. Leave blank to omit."
-
-[cards.indorsements.fields.new_page]
-title = "Start on new page"
-type = "boolean"
-default = false
-description = "If true, this endorsement starts on a new page."
-
-[cards.indorsements.fields.informal]
-title = "Informal endorsement"
-type = "boolean"
-default = false
-description = "If true, uses informal endorsement format (less formal routing)."
