@@ -80,6 +80,15 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
         property.insert("default".to_string(), default.as_json().clone());
     }
 
+    // Add enum constraint if specified (for string types)
+    if let Some(ref enum_values) = field_schema.enum_values {
+        let enum_array: Vec<Value> = enum_values
+            .iter()
+            .map(|s| Value::String(s.clone()))
+            .collect();
+        property.insert("enum".to_string(), Value::Array(enum_array));
+    }
+
     property
 }
 

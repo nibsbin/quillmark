@@ -48,6 +48,8 @@ pub struct FieldSchema {
     pub ui: Option<UiSchema>,
     /// Whether this field is required (fields are optional by default)
     pub required: bool,
+    /// Enum values for string fields (restricts valid values)
+    pub enum_values: Option<Vec<String>>,
 }
 
 impl FieldSchema {
@@ -62,6 +64,7 @@ impl FieldSchema {
             examples: None,
             ui: None,
             required: false,
+            enum_values: None,
         }
     }
 
@@ -75,7 +78,7 @@ impl FieldSchema {
         for key in obj.keys() {
             match key.as_str() {
                 "name" | "title" | "type" | "description" | "examples" | "default" | "ui"
-                | "required" => {}
+                | "required" | "enum" => {}
                 _ => {
                     // Log warning but don't fail
                     eprintln!("Warning: Unknown key '{}' in field schema", key);
@@ -112,6 +115,17 @@ impl FieldSchema {
             .get("required")
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
+
+        // Parse enum values (only valid for string types)
+        let enum_values = obj
+            .get("enum")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect::<Vec<String>>()
+            })
+            .filter(|v| !v.is_empty());
 
         // Parse UI metadata if present
         let ui = if let Some(ui_value) = obj.get("ui") {
@@ -154,6 +168,7 @@ impl FieldSchema {
             examples,
             ui,
             required,
+            enum_values,
         })
     }
 }
