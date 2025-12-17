@@ -3,7 +3,7 @@
 //! This module provides utilities for converting TOML field definitions to JSON Schema
 //! and validating ParsedDocument data against schemas.
 
-use crate::quill::{CardSchema, FieldSchema, FieldType};
+use crate::quill::{field_key, ui_key, CardSchema, FieldSchema, FieldType};
 use crate::{QuillValue, RenderError};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -13,7 +13,10 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
     let mut property = Map::new();
 
     // Add name
-    property.insert("name".to_string(), Value::String(field_schema.name.clone()));
+    property.insert(
+        field_key::NAME.to_string(),
+        Value::String(field_schema.name.clone()),
+    );
 
     // Map field type to JSON Schema type
     if let Some(ref field_type) = field_schema.r#type {
@@ -26,22 +29,28 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
             FieldType::Date => ("string", Some("date")),
             FieldType::DateTime => ("string", Some("date-time")),
         };
-        property.insert("type".to_string(), Value::String(json_type.to_string()));
+        property.insert(
+            field_key::TYPE.to_string(),
+            Value::String(json_type.to_string()),
+        );
 
         // Add format for date types
         if let Some(fmt) = format {
-            property.insert("format".to_string(), Value::String(fmt.to_string()));
+            property.insert(
+                field_key::FORMAT.to_string(),
+                Value::String(fmt.to_string()),
+            );
         }
     }
 
     // Add title if specified
     if let Some(ref title) = field_schema.title {
-        property.insert("title".to_string(), Value::String(title.clone()));
+        property.insert(field_key::TITLE.to_string(), Value::String(title.clone()));
     }
 
     // Add description
     property.insert(
-        "description".to_string(),
+        field_key::DESCRIPTION.to_string(),
         Value::String(field_schema.description.clone()),
     );
 
@@ -50,11 +59,11 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
         let mut ui_obj = Map::new();
 
         if let Some(ref group) = ui.group {
-            ui_obj.insert("group".to_string(), Value::String(group.clone()));
+            ui_obj.insert(ui_key::GROUP.to_string(), Value::String(group.clone()));
         }
 
         if let Some(order) = ui.order {
-            ui_obj.insert("order".to_string(), json!(order));
+            ui_obj.insert(ui_key::ORDER.to_string(), json!(order));
         }
 
         if !ui_obj.is_empty() {
@@ -66,14 +75,17 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
     if let Some(ref examples) = field_schema.examples {
         if let Some(examples_array) = examples.as_array() {
             if !examples_array.is_empty() {
-                property.insert("examples".to_string(), Value::Array(examples_array.clone()));
+                property.insert(
+                    field_key::EXAMPLES.to_string(),
+                    Value::Array(examples_array.clone()),
+                );
             }
         }
     }
 
     // Add default if specified
     if let Some(ref default) = field_schema.default {
-        property.insert("default".to_string(), default.as_json().clone());
+        property.insert(field_key::DEFAULT.to_string(), default.as_json().clone());
     }
 
     // Add enum constraint if specified (for string types)
@@ -82,7 +94,7 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
             .iter()
             .map(|s| Value::String(s.clone()))
             .collect();
-        property.insert("enum".to_string(), Value::Array(enum_array));
+        property.insert(field_key::ENUM.to_string(), Value::Array(enum_array));
     }
 
     property

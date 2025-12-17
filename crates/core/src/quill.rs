@@ -6,6 +6,40 @@ use std::path::{Path, PathBuf};
 
 use crate::value::QuillValue;
 
+/// Semantic constants for field schema keys used in parsing and JSON Schema generation.
+/// Using constants provides IDE support (find references, autocomplete) and ensures
+/// consistency between parsing and output.
+pub mod field_key {
+    /// Field name identifier
+    pub const NAME: &str = "name";
+    /// Short label for the field
+    pub const TITLE: &str = "title";
+    /// Field type (string, number, boolean, array, etc.)
+    pub const TYPE: &str = "type";
+    /// Detailed field description
+    pub const DESCRIPTION: &str = "description";
+    /// Default value for the field
+    pub const DEFAULT: &str = "default";
+    /// Example values for the field
+    pub const EXAMPLES: &str = "examples";
+    /// UI-specific metadata
+    pub const UI: &str = "ui";
+    /// Whether the field is required
+    pub const REQUIRED: &str = "required";
+    /// Enum values for string fields
+    pub const ENUM: &str = "enum";
+    /// Date format specifier (JSON Schema)
+    pub const FORMAT: &str = "format";
+}
+
+/// Semantic constants for UI schema keys
+pub mod ui_key {
+    /// Group name for field organization
+    pub const GROUP: &str = "group";
+    /// Display order within the UI
+    pub const ORDER: &str = "order";
+}
+
 /// UI-specific metadata for field rendering
 #[derive(Debug, Clone, PartialEq)]
 pub struct UiSchema {
@@ -129,8 +163,15 @@ impl FieldSchema {
         //Ensure only known keys are present
         for key in obj.keys() {
             match key.as_str() {
-                "name" | "title" | "type" | "description" | "examples" | "default" | "ui"
-                | "required" | "enum" => {}
+                field_key::NAME
+                | field_key::TITLE
+                | field_key::TYPE
+                | field_key::DESCRIPTION
+                | field_key::EXAMPLES
+                | field_key::DEFAULT
+                | field_key::UI
+                | field_key::REQUIRED
+                | field_key::ENUM => {}
                 _ => {
                     // Log warning but don't fail
                     eprintln!("Warning: Unknown key '{}' in field schema", key);
@@ -141,39 +182,44 @@ impl FieldSchema {
         let name = key.clone();
 
         let title = obj
-            .get("title")
+            .get(field_key::TITLE)
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
 
         let description = obj
-            .get("description")
+            .get(field_key::DESCRIPTION)
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
 
-        let field_type = obj.get("type").and_then(|v| v.as_str()).and_then(|s| {
-            let parsed = FieldType::from_str(s);
-            if parsed.is_none() {
-                eprintln!("Warning: Unknown field type '{}', ignoring", s);
-            }
-            parsed
-        });
+        let field_type = obj
+            .get(field_key::TYPE)
+            .and_then(|v| v.as_str())
+            .and_then(|s| {
+                let parsed = FieldType::from_str(s);
+                if parsed.is_none() {
+                    eprintln!("Warning: Unknown field type '{}', ignoring", s);
+                }
+                parsed
+            });
 
-        let default = obj.get("default").map(|v| QuillValue::from_json(v.clone()));
+        let default = obj
+            .get(field_key::DEFAULT)
+            .map(|v| QuillValue::from_json(v.clone()));
 
         let examples = obj
-            .get("examples")
+            .get(field_key::EXAMPLES)
             .map(|v| QuillValue::from_json(v.clone()));
 
         // Parse required field (fields are optional by default)
         let required = obj
-            .get("required")
+            .get(field_key::REQUIRED)
             .and_then(|v| v.as_bool())
             .unwrap_or(false);
 
         // Parse enum values (only valid for string types)
         let enum_values = obj
-            .get("enum")
+            .get(field_key::ENUM)
             .and_then(|v| v.as_array())
             .map(|arr| {
                 arr.iter()
@@ -183,17 +229,17 @@ impl FieldSchema {
             .filter(|v| !v.is_empty());
 
         // Parse UI metadata if present
-        let ui = if let Some(ui_value) = obj.get("ui") {
+        let ui = if let Some(ui_value) = obj.get(field_key::UI) {
             if let Some(ui_obj) = ui_value.as_object() {
                 let group = ui_obj
-                    .get("group")
+                    .get(ui_key::GROUP)
                     .and_then(|v| v.as_str())
                     .map(|s| s.to_string());
 
                 // Validate that only known UI properties are present
                 for key in ui_obj.keys() {
                     match key.as_str() {
-                        "group" => {}
+                        ui_key::GROUP => {}
                         _ => {
                             eprintln!(
                                 "Warning: Unknown UI property '{}'. Only 'group' is supported.",
