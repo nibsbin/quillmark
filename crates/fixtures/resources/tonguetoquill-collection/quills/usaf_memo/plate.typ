@@ -5,7 +5,7 @@
   // Letterhead configuration
   letterhead_title: {{ letterhead_title | String(default="letterhead-title") }},
   letterhead_caption: {{ letterhead_caption | Lines(default=["letterhead-caption"]) }},
-  letterhead_seal: image("assets/dow_seal.png"),
+  letterhead_seal: image("assets/dow_seal.jpg"),
 
   // Date
   date: {{ date | Date }},
@@ -71,7 +71,7 @@
 
 // Indorsements - iterate through CARDS array and filter by CARD type
 {% for card in CARDS %}
-{% if card.CARD == "indorsements" %}
+{% if card.CARD == "indorsement" %}
 #indorsement(
   from: {{ card.from | String }},
   to: {{ card.for | String }},
@@ -82,8 +82,7 @@
   {% if card.cc is defined %}
   cc: {{ card.cc | Lines }},
   {% endif %}
-  new_page: {{ card.new_page | default(false) }},
-  informal: {{ card.informal | default(false) }},
+  format: {{ card.format | String(default="standard") }},
   {% if card.date is defined %}
   date: {{ card.date | String }},
   {% endif %}

@@ -19,63 +19,69 @@
   signature_blank_lines: 4,
   attachments: none,
   cc: none,
-  new_page: false,
   date: none,
-  informal: false,
-  content
+  // Format of indorsement: "standard" (same page), "informal" (no header), or "separate_page" (starts on new page)
+  format: "standard",
+  content,
 ) = {
-  if not informal {
+  // Validate format parameter
+  assert(
+    format in ("standard", "informal", "separate_page"),
+    message: "format must be \"standard\", \"informal\", or \"separate_page\"",
+  )
+
+  if format != "informal" {
     assert(from != none, message: "from is required")
     assert(to != none, message: "to is required")
   }
-  assert(signature_block != none, message: "signature_block is required")
+
 
   let actual_date = if date == none { datetime.today() } else { date }
   let ind_from = first-or-value(from)
   let ind_for = to
 
-  if not informal {
+  if format != "informal" {
     // Step the counter BEFORE the context block to avoid read-then-update loop
     counters.indorsement.step()
-    
+
     context {
-    let config = query(metadata).last().value
-    let original_subject = config.subject
-    let original_date = config.original_date
-    let original_from = config.original_from
+      let config = query(metadata).last().value
+      let original_subject = config.subject
+      let original_date = config.original_date
+      let original_from = config.original_from
 
-    // Read the counter value (already stepped above)
-    let indorsement_number = counters.indorsement.get().at(0, default: 1)
-    let indorsement_label = format-indorsement-number(indorsement_number)
+      // Read the counter value (already stepped above)
+      let indorsement_number = counters.indorsement.get().at(0, default: 1)
+      let indorsement_label = format-indorsement-number(indorsement_number)
 
-    if new_page {
-      pagebreak()
-      [#indorsement_label to #original_from, #display-date(original_date), #original_subject]
+      if format == "separate_page" {
+        pagebreak()
+        [#indorsement_label to #original_from, #display-date(original_date), #original_subject]
 
-      blank-line()
-      grid(
-        columns: (auto, 1fr),
-        ind_from, align(right)[#display-date(actual_date)],
-      )
+        blank-line()
+        grid(
+          columns: (auto, 1fr),
+          ind_from, align(right)[#display-date(actual_date)],
+        )
 
-      blank-line()
-      grid(
-        columns: (auto, auto, 1fr),
-        "MEMORANDUM FOR", "  ", ind_for,
-      )
-    } else {
-      blank-line()
-      grid(
-        columns: (auto, 1fr),
-        [#indorsement_label, #ind_from], align(right)[#display-date(actual_date)],
-      )
+        blank-line()
+        grid(
+          columns: (auto, auto, 1fr),
+          "MEMORANDUM FOR", "  ", ind_for,
+        )
+      } else {
+        blank-line()
+        grid(
+          columns: (auto, 1fr),
+          [#indorsement_label, #ind_from], align(right)[#display-date(actual_date)],
+        )
 
-      blank-line()
-      grid(
-        columns: (auto, auto, 1fr),
-        "MEMORANDUM FOR", "  ", ind_for,
-      )
-    }
+        blank-line()
+        grid(
+          columns: (auto, auto, 1fr),
+          "MEMORANDUM FOR", "  ", ind_for,
+        )
+      }
     }
     blank-line()
   }
@@ -83,7 +89,7 @@
   // Enable paragraph numbering for indorsement body (same as mainmatter)
   IN_BACKMATTER_STATE.update(false)
   render-paragraph-body(content)
-  
+
 
   // Disable paragraph numbering for indorsement backmatter sections
   IN_BACKMATTER_STATE.update(true)

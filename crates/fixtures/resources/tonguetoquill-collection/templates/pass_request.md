@@ -22,7 +22,6 @@ In the data above, edit;
   - Signature Block
   - Subject
 ---------------->
-
 **PURPOSE:** The purpose of the memorandum is to request a 4-day pass, in accordance with DAFI 36-3003, for traveling to <<Area 51 for personal research>>.
 
 <!-------------
@@ -37,9 +36,9 @@ In Narrative section below, edit:
 If you have any questions, please contact me at <<airman.snuffy@us.af.mil>> or <<(123) 456-7890>>.
 
 ---
-CARD: indorsements
+CARD: indorsement
 signature_block:
   - ROBERT T. CHANCE, Lt Col, USAF
   - Commander
-informal: true
+format: informal
 ---

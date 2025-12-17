@@ -28,8 +28,9 @@
         #place(
           center + top,
           align(center)[
-            #text(12pt, font: font, fill: LETTERHEAD_COLOR)[#title]\
-            #text(10.5pt, font: font, fill: LETTERHEAD_COLOR)[#caption]
+            #set text(12pt, font: font, fill: LETTERHEAD_COLOR)
+            #title\
+            #text(10.5pt)[#caption]
           ],
         )
       ],
@@ -119,6 +120,7 @@
 // AFH 33-337 "Do not place the signature element on a continuation page by itself"
 
 #let render-signature-block(signature-lines, signature-blank-lines: 4) = {
+  signature-lines = ensure-array(signature-lines)
   // AFH 33-337: "The signature block is never on a page by itself"
   // Note: Perfect enforcement isn't feasible without over-engineering
   // We use weak: false spacing and breakable: false to discourage orphaning
