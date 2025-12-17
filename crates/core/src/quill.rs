@@ -617,21 +617,90 @@ pub struct QuillConfig {
 }
 
 impl QuillConfig {
+    /// Parse fields from a TOML table, assigning ui.order based on key_order.
+    ///
+    /// This helper ensures consistent field ordering logic for both top-level
+    /// fields and card fields.
+    ///
+    /// # Arguments
+    /// * `fields_table` - The TOML table containing field definitions
+    /// * `key_order` - Vector of field names in their definition order (from toml_edit)
+    /// * `context` - Context string for error messages (e.g., "field" or "card 'indorsement' field")
+    fn parse_fields_with_order(
+        fields_table: &toml::value::Table,
+        key_order: &[String],
+        context: &str,
+    ) -> HashMap<String, FieldSchema> {
+        let mut fields = HashMap::new();
+        let mut fallback_counter = 0;
+
+        for (field_name, field_value) in fields_table {
+            // Determine order from key_order, or use fallback counter
+            let order = if let Some(idx) = key_order.iter().position(|k| k == field_name) {
+                idx as i32
+            } else {
+                let o = key_order.len() as i32 + fallback_counter;
+                fallback_counter += 1;
+                o
+            };
+
+            match QuillValue::from_toml(field_value) {
+                Ok(quill_value) => {
+                    match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
+                        Ok(mut schema) => {
+                            // Always set ui.order based on position
+                            if schema.ui.is_none() {
+                                schema.ui = Some(UiSchema {
+                                    group: None,
+                                    order: Some(order),
+                                });
+                            } else if let Some(ui) = &mut schema.ui {
+                                ui.order = Some(order);
+                            }
+
+                            fields.insert(field_name.clone(), schema);
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "Warning: Failed to parse {} '{}': {}",
+                                context, field_name, e
+                            );
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Failed to convert {} '{}': {}",
+                        context, field_name, e
+                    );
+                }
+            }
+        }
+
+        fields
+    }
+
+    /// Extract key order from a toml_edit table at the given path.
+    ///
+    /// Returns a vector of key names in their definition order.
+    fn get_key_order(doc: Option<&toml_edit::DocumentMut>, path: &[&str]) -> Vec<String> {
+        doc.and_then(|d| {
+            let mut current: &dyn toml_edit::TableLike = d.as_table();
+            for segment in path {
+                current = current.get(*segment)?.as_table()?;
+            }
+            Some(current.iter().map(|(k, _)| k.to_string()).collect())
+        })
+        .unwrap_or_default()
+    }
+
     /// Parse QuillConfig from TOML content
     pub fn from_toml(toml_content: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         let quill_toml: toml::Value = toml::from_str(toml_content)
             .map_err(|e| format!("Failed to parse Quill.toml: {}", e))?;
 
-        // Parse with toml_edit to get field order
-        let field_order: Vec<String> = toml_content
-            .parse::<toml_edit::DocumentMut>()
-            .ok()
-            .and_then(|doc| {
-                doc.get("fields")
-                    .and_then(|item| item.as_table())
-                    .map(|table| table.iter().map(|(k, _)| k.to_string()).collect())
-            })
-            .unwrap_or_default();
+        // Parse with toml_edit to preserve field order
+        let toml_edit_doc = toml_content.parse::<toml_edit::DocumentMut>().ok();
 
         // Extract [Quill] section (required)
         let quill_section = quill_toml
@@ -722,53 +791,13 @@ impl QuillConfig {
             }
         }
 
-        // Extract [fields] section (optional)
-        let mut fields = HashMap::new();
-        if let Some(toml::Value::Table(fields_table)) = quill_toml.get("fields") {
-            let mut order_counter = 0;
-            for (field_name, field_schema) in fields_table {
-                // Determine order
-                let order = if let Some(idx) = field_order.iter().position(|k| k == field_name) {
-                    idx as i32
-                } else {
-                    let o = field_order.len() as i32 + order_counter;
-                    order_counter += 1;
-                    o
-                };
-
-                match QuillValue::from_toml(field_schema) {
-                    Ok(quill_value) => {
-                        match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
-                            Ok(mut schema) => {
-                                // Always set ui.order based on position in Quill.toml
-                                if schema.ui.is_none() {
-                                    schema.ui = Some(UiSchema {
-                                        group: None,
-                                        order: Some(order),
-                                    });
-                                } else if let Some(ui) = &mut schema.ui {
-                                    ui.order = Some(order);
-                                }
-
-                                fields.insert(field_name.clone(), schema);
-                            }
-                            Err(e) => {
-                                eprintln!(
-                                    "Warning: Failed to parse field schema '{}': {}",
-                                    field_name, e
-                                );
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "Warning: Failed to convert field schema '{}': {}",
-                            field_name, e
-                        );
-                    }
-                }
-            }
-        }
+        // Extract [fields] section (optional) using shared helper
+        let fields = if let Some(toml::Value::Table(fields_table)) = quill_toml.get("fields") {
+            let field_order = Self::get_key_order(toml_edit_doc.as_ref(), &["fields"]);
+            Self::parse_fields_with_order(fields_table, &field_order, "field schema")
+        } else {
+            HashMap::new()
+        };
 
         // Extract [cards] section (optional)
         let mut cards: HashMap<String, CardSchema> = HashMap::new();
@@ -799,50 +828,21 @@ impl QuillConfig {
                     .unwrap_or("")
                     .to_string();
 
-                // Parse [cards.X.fields.Y] - card field definitions with order assignment
-                let mut card_fields: HashMap<String, FieldSchema> = HashMap::new();
-                if let Some(fields_value) = card_table.get("fields") {
-                    if let Some(fields_table) = fields_value.as_table() {
-                        let mut field_order_counter = 0;
-                        for (field_name, field_value) in fields_table {
-                            match QuillValue::from_toml(field_value) {
-                                Ok(quill_value) => {
-                                    match FieldSchema::from_quill_value(
-                                        field_name.clone(),
-                                        &quill_value,
-                                    ) {
-                                        Ok(mut field_schema) => {
-                                            // Assign ui.order based on field position (matching document-level fields)
-                                            if field_schema.ui.is_none() {
-                                                field_schema.ui = Some(UiSchema {
-                                                    group: None,
-                                                    order: Some(field_order_counter),
-                                                });
-                                            } else if let Some(ui) = &mut field_schema.ui {
-                                                ui.order = Some(field_order_counter);
-                                            }
-                                            field_order_counter += 1;
-
-                                            card_fields.insert(field_name.clone(), field_schema);
-                                        }
-                                        Err(e) => {
-                                            eprintln!(
-                                                "Warning: Failed to parse card field '{}.{}': {}",
-                                                card_name, field_name, e
-                                            );
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    eprintln!(
-                                        "Warning: Failed to convert card field '{}.{}': {}",
-                                        card_name, field_name, e
-                                    );
-                                }
-                            }
-                        }
-                    }
-                }
+                // Parse card fields using shared helper
+                let card_fields =
+                    if let Some(toml::Value::Table(card_fields_table)) = card_table.get("fields") {
+                        let card_field_order = Self::get_key_order(
+                            toml_edit_doc.as_ref(),
+                            &["cards", card_name, "fields"],
+                        );
+                        Self::parse_fields_with_order(
+                            card_fields_table,
+                            &card_field_order,
+                            &format!("card '{}' field", card_name),
+                        )
+                    } else {
+                        HashMap::new()
+                    };
 
                 let card_schema = CardSchema {
                     name: card_name.clone(),
@@ -2590,5 +2590,42 @@ description = "Zero"
         let card_field = second.fields.get("card_field").unwrap();
         let ord_card_field = card_field.ui.as_ref().unwrap().order.unwrap();
         assert_eq!(ord_card_field, 0); // First (and only) field in this card
+    }
+    #[test]
+    fn test_card_field_order_preservation() {
+        // Test that card fields preserve definition order (not alphabetical)
+        // defined: z_first, then a_second
+        // alphabetical: a_second, then z_first
+        let toml_content = r#"[Quill]
+name = "card-order-test"
+backend = "typst"
+description = "Test card field order"
+
+[cards.mycard]
+description = "Test card"
+
+[cards.mycard.fields.z_first]
+type = "string"
+description = "Defined first"
+
+[cards.mycard.fields.a_second]
+type = "string"
+description = "Defined second"
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let card = config.cards.get("mycard").unwrap();
+
+        let z_first = card.fields.get("z_first").unwrap();
+        let a_second = card.fields.get("a_second").unwrap();
+
+        // Check orders
+        let z_order = z_first.ui.as_ref().unwrap().order.unwrap();
+        let a_order = a_second.ui.as_ref().unwrap().order.unwrap();
+
+        // If strict file order is preserved:
+        // z_first should be 0, a_second should be 1
+        assert_eq!(z_order, 0, "z_first should be 0 (defined first)");
+        assert_eq!(a_order, 1, "a_second should be 1 (defined second)");
     }
 }
