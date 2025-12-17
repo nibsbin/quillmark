@@ -634,7 +634,68 @@ pub fn coerce_document(
         coerced_fields.insert(field_name.clone(), field_value.clone());
     }
 
+    // Recursively coerce cards if the CARDS field is present
+    if let Some(cards_value) = coerced_fields.get("CARDS") {
+        if let Some(cards_array) = cards_value.as_array() {
+            let coerced_cards = coerce_cards_array(schema, cards_array);
+            coerced_fields.insert(
+                "CARDS".to_string(),
+                QuillValue::from_json(Value::Array(coerced_cards)),
+            );
+        }
+    }
+
     coerced_fields
+}
+
+/// Helper to recursively coerce an array of card objects
+fn coerce_cards_array(document_schema: &QuillValue, cards_array: &[Value]) -> Vec<Value> {
+    let mut coerced_cards = Vec::new();
+
+    // Get definitions for card schemas
+    let defs = document_schema
+        .as_json()
+        .get("$defs")
+        .and_then(|v| v.as_object());
+
+    for card in cards_array {
+        // We only process objects that have a CARD discriminator
+        if let Some(card_obj) = card.as_object() {
+            if let Some(card_type) = card_obj.get("CARD").and_then(|v| v.as_str()) {
+                // Construct the definition name: {type}_card
+                let def_name = format!("{}_card", card_type);
+
+                // Look up the schema for this card type
+                if let Some(card_schema_json) = defs.and_then(|d| d.get(&def_name)) {
+                    // Convert the card object to HashMap<String, QuillValue> for coerce_document
+                    let mut card_fields = HashMap::new();
+                    for (k, v) in card_obj {
+                        card_fields.insert(k.clone(), QuillValue::from_json(v.clone()));
+                    }
+
+                    // Recursively coerce this card's fields
+                    let coerced_card_fields = coerce_document(
+                        &QuillValue::from_json(card_schema_json.clone()),
+                        &card_fields,
+                    );
+
+                    // Convert back to JSON Value
+                    let mut coerced_card_obj = Map::new();
+                    for (k, v) in coerced_card_fields {
+                        coerced_card_obj.insert(k, v.into_json());
+                    }
+
+                    coerced_cards.push(Value::Object(coerced_card_obj));
+                    continue;
+                }
+            }
+        }
+
+        // If not an object, no CARD type, or no matching schema, keep as-is
+        coerced_cards.push(card.clone());
+    }
+
+    coerced_cards
 }
 
 #[cfg(test)]
@@ -1642,5 +1703,50 @@ mod tests {
         let err_msg = &errs[0];
         assert!(err_msg.contains("Invalid card type 'invalid_type'"));
         assert!(err_msg.contains("Valid types are: [valid_card]"));
+    }
+
+    #[test]
+    fn test_coerce_document_cards() {
+        let mut card_fields = HashMap::new();
+        let mut count_schema = FieldSchema::new("Count".to_string(), "A number".to_string());
+        count_schema.r#type = Some("number".to_string());
+        card_fields.insert("count".to_string(), count_schema);
+
+        let mut active_schema = FieldSchema::new("Active".to_string(), "A boolean".to_string());
+        active_schema.r#type = Some("boolean".to_string());
+        card_fields.insert("active".to_string(), active_schema);
+
+        let mut card_schemas = HashMap::new();
+        card_schemas.insert(
+            "test_card".to_string(),
+            CardSchema {
+                name: "test_card".to_string(),
+                title: None,
+                ui: None,
+                description: "Test card".to_string(),
+                fields: card_fields,
+            },
+        );
+
+        let schema = build_schema(&HashMap::new(), &card_schemas).unwrap();
+
+        let mut fields = HashMap::new();
+        let card_value = json!({
+            "CARD": "test_card",
+            "count": "42",
+            "active": "true"
+        });
+        fields.insert(
+            "CARDS".to_string(),
+            QuillValue::from_json(json!([card_value])),
+        );
+
+        let coerced_fields = coerce_document(&schema, &fields);
+
+        let cards_array = coerced_fields.get("CARDS").unwrap().as_array().unwrap();
+        let coerced_card = cards_array[0].as_object().unwrap();
+
+        assert_eq!(coerced_card.get("count").unwrap().as_i64(), Some(42));
+        assert_eq!(coerced_card.get("active").unwrap().as_bool(), Some(true));
     }
 }
