@@ -687,6 +687,22 @@ fn coerce_value(value: &QuillValue, expected_type: &str) -> QuillValue {
             // Can't coerce, return as-is
             value.clone()
         }
+        "string" => {
+            // If already a string, return as-is
+            if json_value.is_string() {
+                return value.clone();
+            }
+            // Coerce from single-item array (unwrap)
+            if let Some(arr) = json_value.as_array() {
+                if arr.len() == 1 {
+                    if let Some(s) = arr[0].as_str() {
+                        return QuillValue::from_json(Value::String(s.to_string()));
+                    }
+                }
+            }
+            // Can't coerce, return as-is
+            value.clone()
+        }
         _ => {
             // For other types (string, object, etc.), no coercion needed
             value.clone()
@@ -1372,6 +1388,42 @@ mod tests {
 
         // Field should remain unchanged when no type is specified
         assert_eq!(coerced.get("title").unwrap().as_str().unwrap(), "Test");
+    }
+
+    #[test]
+    fn test_coerce_array_to_string() {
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "tags": {"type": "string"} // Incorrectly typed as string, but input is array
+            }
+        });
+
+        let mut fields = HashMap::new();
+        // Case 1: Single item string array -> should unwrap
+        fields.insert(
+            "title".to_string(),
+            QuillValue::from_json(json!(["Wrapped Title"])),
+        );
+        // Case 2: Multi-item array -> should NOT unwrap
+        fields.insert(
+            "tags".to_string(),
+            QuillValue::from_json(json!(["tag1", "tag2"])),
+        );
+
+        let coerced = coerce_document(&QuillValue::from_json(schema), &fields);
+
+        // Verify unwrapping
+        assert_eq!(
+            coerced.get("title").unwrap().as_str().unwrap(),
+            "Wrapped Title"
+        );
+
+        // Verify others left alone
+        assert!(coerced.get("tags").unwrap().as_array().is_some());
+        assert_eq!(coerced.get("tags").unwrap().as_array().unwrap().len(), 2);
     }
 
     #[test]
