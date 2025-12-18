@@ -28,7 +28,7 @@
 //!
 //! See `prose/designs/ARCHITECTURE.md` section on Template System Design.
 
-use quillmark::{ParsedDocument, Quill, Quillmark};
+use quillmark::{ParsedDocument, Quill, Quillmark, BODY_FIELD};
 use std::fs;
 use tempfile::TempDir;
 
@@ -119,7 +119,7 @@ This is a test document.
     assert!(json["tags"].is_array());
     assert_eq!(json["tags"].as_array().unwrap().len(), 3);
     assert_eq!(json["tags"][0], "markdown");
-    assert!(json["body"].is_string());
+    assert!(json[BODY_FIELD].is_string());
 }
 
 #[test]

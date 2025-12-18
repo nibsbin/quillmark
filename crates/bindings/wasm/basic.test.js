@@ -111,7 +111,7 @@ describe('quillmark-wasm smoke tests', () => {
     expect(plated).toContain('=') // Typst heading from template
     expect(plated).not.toMatch(/^\s*\{/) // Should not start with JSON object
     expect(plated).not.toContain('"title":') // Should not contain JSON keys
-    expect(plated).not.toContain('"body":') // Should not contain JSON keys
+    expect(plated).not.toContain('"BODY":') // Should not contain JSON keys
   })
 
   it('should use AutoPlate (JSON output) when plate_file is not specified', () => {

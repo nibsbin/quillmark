@@ -51,10 +51,7 @@ use std::collections::HashMap;
 use crate::value::QuillValue;
 
 /// The field name used to store the document body
-pub const BODY_FIELD: &str = "body";
-
-/// Reserved tag name for quill specification
-pub const QUILL_TAG: &str = "quill";
+pub const BODY_FIELD: &str = "BODY";
 
 /// A parsed markdown document with frontmatter
 #[derive(Debug, Clone)]
@@ -372,13 +369,6 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                                         return Err(crate::error::ParseError::InvalidStructure(format!(
                                             "Invalid card field name '{}': must match pattern [a-z_][a-z0-9_]*",
                                             field_name
-                                        )));
-                                    }
-
-                                    if field_name == BODY_FIELD {
-                                        return Err(crate::error::ParseError::InvalidStructure(format!(
-                                            "Cannot use reserved field name '{}' as CARD/SCOPE value",
-                                            BODY_FIELD
                                         )));
                                     }
 
@@ -1023,7 +1013,7 @@ Body of item 1."#;
         assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
         assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
         assert_eq!(
-            item.get("body").unwrap().as_str().unwrap(),
+            item.get(BODY_FIELD).unwrap().as_str().unwrap(),
             "\nBody of item 1."
         );
     }
@@ -1120,7 +1110,7 @@ Body without metadata."#;
         let item = cards[0].as_object().unwrap();
         assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
         assert_eq!(
-            item.get("body").unwrap().as_str().unwrap(),
+            item.get(BODY_FIELD).unwrap().as_str().unwrap(),
             "\nBody without metadata."
         );
     }
@@ -1139,7 +1129,7 @@ name: Item
 
         let item = cards[0].as_object().unwrap();
         assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-        assert_eq!(item.get("body").unwrap().as_str().unwrap(), "");
+        assert_eq!(item.get(BODY_FIELD).unwrap().as_str().unwrap(), "");
     }
 
     #[test]
@@ -1213,12 +1203,14 @@ Item 1 body"#;
     fn test_reserved_field_name() {
         let markdown = r#"---
 CARD: body
-content: Test
+BODY: Test
 ---"#;
 
         let result = decompose(markdown);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("reserved"));
+        assert!(
+            result.is_ok(),
+            "Reserved field name should be allowed as card name"
+        );
     }
 
     #[test]
@@ -1965,7 +1957,7 @@ Use <<raw>> here."#;
         let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
         let item = cards[0].as_object().unwrap();
         assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-        let item_body = item.get("body").unwrap().as_str().unwrap();
+        let item_body = item.get(BODY_FIELD).unwrap().as_str().unwrap();
         // Tagged block body should preserve chevrons
         assert!(item_body.contains("<<raw>>"));
     }
@@ -2258,7 +2250,7 @@ name: Item
         assert_eq!(cards.len(), 1);
         let item = cards[0].as_object().unwrap();
         assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-        assert_eq!(item.get("body").unwrap().as_str().unwrap(), "");
+        assert_eq!(item.get(BODY_FIELD).unwrap().as_str().unwrap(), "");
     }
 
     #[test]
@@ -2308,7 +2300,7 @@ Some text with --- dashes in it."#;
         let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
         let item = cards[0].as_object().unwrap();
         assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-        let body = item.get("body").unwrap().as_str().unwrap();
+        let body = item.get(BODY_FIELD).unwrap().as_str().unwrap();
         assert!(body.contains("--- dashes"));
     }
 

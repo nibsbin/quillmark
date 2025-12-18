@@ -302,13 +302,13 @@ use std::collections::HashMap;
 ///
 /// let mut fields = HashMap::new();
 /// fields.insert("title".to_string(), QuillValue::from_json(serde_json::json!("<<hello>>")));
-/// fields.insert("body".to_string(), QuillValue::from_json(serde_json::json!("<<world>>")));
+/// fields.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("<<world>>")));
 ///
 /// let result = preprocess_fields_guillemets(fields);
 /// // YAML fields have chevrons stripped
 /// assert_eq!(result.get("title").unwrap().as_str().unwrap(), "hello");
 /// // Body field converts to guillemets
-/// assert_eq!(result.get("body").unwrap().as_str().unwrap(), "«world»");
+/// assert_eq!(result.get("BODY").unwrap().as_str().unwrap(), "«world»");
 /// ```
 pub fn preprocess_fields_guillemets(
     fields: HashMap<String, QuillValue>,

@@ -41,7 +41,7 @@ Only YAML frontmatter is supported. Backends can convert to their native formats
 ### ParsedDocument
 
 Stores both frontmatter fields and document body in a single `HashMap<String, QuillValue>`.
-- Body is stored under special `BODY_FIELD = "body"` constant
+- Body is stored under special `BODY_FIELD = "BODY"` constant
 - Quill tag is stored as a non-optional String, defaulting to `__default__`
 - Private fields enforce access through validated methods
 
@@ -120,10 +120,10 @@ Body of second sub-document.
 ```json
 {
   "title": "Global Metadata",
-  "body": "Main document body.",
+  "BODY": "Main document body.",
   "CARDS": [
-    {"CARD": "sub_documents", "title": "First Sub-Document", "body": "Body of first sub-document."},
-    {"CARD": "sub_documents", "title": "Second Sub-Document", "body": "Body of second sub-document."}
+    {"CARD": "sub_documents", "title": "First Sub-Document", "BODY": "Body of first sub-document."},
+    {"CARD": "sub_documents", "title": "Second Sub-Document", "BODY": "Body of second sub-document."}
   ]
 }
 ```
