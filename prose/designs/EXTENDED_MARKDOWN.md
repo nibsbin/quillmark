@@ -1,69 +1,93 @@
 # Extended YAML Metadata Standard
 
-This document defines the extended markdown syntax for embedding structured metadata in Quillmark documents.
+This document defines the extended markdown syntax for embedding structured metadata in Quillmark documents. It is intended to be authoritative and implementable in any system.
 
-> **Implementation**: `quillmark-core/src/parse.rs`
+## Definitions
 
-## Overview
+- **Metadata block**: A YAML section delimited by `---` markers
+- **Global block**: The frontmatter at the document start (no CARD key)
+- **Card block**: A metadata block containing a `CARD` key
+- **Body**: Markdown content following a metadata block, up to the next block or end of document
 
-The extended standard allows metadata blocks to appear anywhere in the document using **CARD** and **QUILL** special keys.
+## Metadata Block Syntax
 
-**Motivation**: Support structured sub-documents, repeated elements, and hierarchical content.
+A metadata block begins and ends with a line containing exactly `---` (three hyphens, no other content).
 
-## Syntax
+```
+---
+key: value
+---
+```
+
+## Horizontal Rule Disambiguation
+
+A `---` line is treated as a **horizontal rule** (not a metadata block delimiter) if:
+- It is NOT at the start of the document, AND
+- The preceding line is blank
+
+Otherwise, `---` is treated as a metadata block delimiter.
+
+## Special Keys
+
+| Key | Purpose | Constraints |
+|-----|---------|-------------|
+| `CARD` | Declares a card block with a named type | Value must match `[a-z_][a-z0-9_]*` |
+| `QUILL` | Specifies which quill template to use | Only valid in global block |
+| `BODY` | Reserved for body content | Cannot be used in YAML |
+
+## Document Structure
+
+### Global Block (Optional)
+
+The first metadata block in a document, if it lacks a `CARD` key, is the global block. Only one global block is permitted.
+
+### Card Blocks
+
+Metadata blocks containing a `CARD` key are aggregated into a `CARDS` array in parse order.
+
+### Body Content
+
+Content between a metadata block's closing `---` and the next metadata block (or end of document) becomes that block's `BODY` field.
+
+## Example
 
 ```markdown
 ---
-title: Global Metadata
+title: My Document
+QUILL: blog_post
 ---
 Main document body.
 
 ---
-CARD: sub_documents
-title: First Sub-Document
+CARD: section
+heading: Introduction
 ---
-Body of first sub-document.
+Introduction content.
 
 ---
-CARD: sub_documents
-title: Second Sub-Document
+CARD: section
+heading: Conclusion
 ---
-Body of second sub-document.
+Conclusion content.
 ```
 
-**Resulting structure:**
+**Parsed structure:**
 ```json
 {
-  "title": "Global Metadata",
+  "title": "My Document",
+  "QUILL": "blog_post",
   "BODY": "Main document body.",
   "CARDS": [
-    {"CARD": "sub_document", "title": "First Sub-Document", "BODY": "Body of first sub-document."},
-    {"CARD": "sub_document", "title": "Second Sub-Document", "BODY": "Body of second sub-document."}
+    {"CARD": "section", "heading": "Introduction", "BODY": "Introduction content."},
+    {"CARD": "section", "heading": "Conclusion", "BODY": "Conclusion content."}
   ]
 }
 ```
 
-## Rules
+## Validation Rules
 
-- **CARD key**: Creates collections - blocks with same card name are aggregated into the `CARDS` array
-- **QUILL key**: Specifies which quill template to use (defaults to `__default__` if not specified)
-- **Card names**: Must match `[a-z_][a-z0-9_]*` pattern
-- **Single global**: Only one block (the global frontmatter at top of document) without CARD allowed
-- **Independent names**: Global field names and card names are independent namespaces (can share names)
-- **Horizontal rule disambiguation**: `---` with blank lines above AND below is treated as markdown horizontal rule
-- **Default quill tag**: When no QUILL directive is present, ParsedDocument.quill_tag is set to `__default__` at parse time
-
-## Parsing Flow
-
-1. Scan document for all `---` delimiters
-2. Parse global frontmatter (if present)
-3. Parse card metadata blocks
-4. Assemble final structure with merged global fields and `CARDS` array
-
-## Validation
-
-The parser validates:
-- Multiple global frontmatter blocks → error
-- Reserved field names in cards → error
-- Invalid card name syntax → error
-- Both CARD and QUILL in same block → error
+1. **Single global block**: Multiple blocks without `CARD` key → error
+2. **Reserved field names**: Using `BODY` or `CARDS` in YAML → error
+3. **Invalid card name**: Card name not matching `[a-z_][a-z0-9_]*` → error
+4. **Conflicting keys**: Both `CARD` and `QUILL` in same block → error
+5. **Unclosed block**: Opening `---` without closing `---` → error
