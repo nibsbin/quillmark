@@ -269,4 +269,18 @@ mod tests {
         let quill_val = QuillValue::from_json(serde_json::Value::Null);
         assert!(quill_val.is_null());
     }
+
+    #[test]
+    fn test_yaml_custom_tags_ignored() {
+        // User-defined YAML tags should be accepted and ignored
+        // The value should be parsed as if the tag were not present
+        let yaml_str = "memo_from: !fill 2d lt example";
+        let quill_val = QuillValue::from_yaml_str(yaml_str).unwrap();
+
+        // The tag !fill should be ignored, value parsed as string
+        assert_eq!(
+            quill_val.get("memo_from").as_ref().and_then(|v| v.as_str()),
+            Some("2d lt example")
+        );
+    }
 }

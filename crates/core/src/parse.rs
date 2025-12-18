@@ -2498,4 +2498,28 @@ Body
             .expect("Card not found");
         assert_eq!(card.get("title").unwrap().as_str().unwrap(), "My Card");
     }
+
+    #[test]
+    fn test_yaml_custom_tags_in_frontmatter() {
+        // User-defined YAML tags like !fill should be accepted and ignored
+        let markdown = r#"---
+memo_from: !fill 2d lt example
+regular_field: normal value
+---
+
+Body content."#;
+        let doc = decompose(markdown).unwrap();
+
+        // The tag !fill should be ignored, value parsed as string "2d lt example"
+        assert_eq!(
+            doc.get_field("memo_from").unwrap().as_str().unwrap(),
+            "2d lt example"
+        );
+        // Regular fields should still work
+        assert_eq!(
+            doc.get_field("regular_field").unwrap().as_str().unwrap(),
+            "normal value"
+        );
+        assert_eq!(doc.body(), Some("\nBody content."));
+    }
 }
