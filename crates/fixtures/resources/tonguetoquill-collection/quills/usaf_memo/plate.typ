@@ -46,7 +46,7 @@
 // Mainmatter configuration
 #show: mainmatter
 
-#{{ body | Content }}
+#{{ BODY | Content }}
 
 // Backmatter
 #backmatter(

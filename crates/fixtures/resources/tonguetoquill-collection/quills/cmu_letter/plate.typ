@@ -11,7 +11,7 @@
 
 #show: mainmatter
 
-#{{ body | Content }}
+#{{ BODY | Content }}
 
 #backmatter(
   signature_block: {{ signature_block | Lines(default=["First M. Last", "Title"]) }}
