@@ -65,7 +65,7 @@ Content
 - ✅ Allowed (lenient mode)
 - Defaults to **collection scope** (array)
 - No validation applied
-- Result: `unknown_scope = [{foo: "bar", body: "Content"}]`
+- Result: `unknown_scope = [{foo: "bar", BODY: "Content"}]`
 
 ### 2. Collection Scope (Array)
 
@@ -102,8 +102,8 @@ Gadget description
 ```json
 {
   "products": [
-    {"name": "Widget", "price": 19.99, "body": "Widget description"},
-    {"name": "Gadget", "price": 29.99, "body": "Gadget description"}
+    {"name": "Widget", "price": 19.99, "BODY": "Widget description"},
+    {"name": "Gadget", "price": 29.99, "BODY": "Gadget description"}
   ]
 }
 ```
@@ -221,7 +221,7 @@ Request approved.
 {
   "subject": "Request for Equipment Authorization",
   "memo_for": ["INSTALLATION/CC"],
-  "body": "# Request Background\n\nThis memo requests authorization for...",
+  "BODY": "# Request Background\n\nThis memo requests authorization for...",
 
   "indorsements": [
     {
@@ -229,14 +229,14 @@ Request approved.
       "to": "SQUADRON/CC",
       "signature_block": ["JANE SMITH, Col, USAF", "Installation Commander"],
       "new_page": true,
-      "body": "I approve this request and forward to MAJCOM/CC."
+      "BODY": "I approve this request and forward to MAJCOM/CC."
     },
     {
       "from": "MAJCOM/CC",
       "to": "INSTALLATION/CC",
       "signature_block": ["ROBERT JONES, Brig Gen, USAF", "Commander"],
       "new_page": false,
-      "body": "Request approved."
+      "BODY": "Request approved."
     }
   ]
 }

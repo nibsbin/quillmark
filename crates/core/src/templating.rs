@@ -35,7 +35,7 @@
 //!
 //! let mut context = HashMap::new();
 //! context.insert("title".to_string(), QuillValue::from_json(serde_json::json!("My Doc")));
-//! context.insert("body".to_string(), QuillValue::from_json(serde_json::json!("Content")));
+//! context.insert(BODY_FIELD.to_string(), QuillValue::from_json(serde_json::json!("Content")));
 //!
 //! let output = plate.compose(context).unwrap();
 //! ```
@@ -348,14 +348,14 @@ mod tests {
 
     #[test]
     fn test_compose_simple_template() {
-        let mut plate = Plate::new("Hello {{ name }}! Body: {{ body }}".to_string());
+        let mut plate = Plate::new("Hello {{ name }}! Body: {{ BODY }}".to_string());
         let mut context = HashMap::new();
         context.insert(
             "name".to_string(),
             QuillValue::from_json(serde_json::Value::String("World".to_string())),
         );
         context.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::Value::String("Hello content".to_string())),
         );
 
@@ -373,8 +373,8 @@ mod tests {
             QuillValue::from_json(serde_json::Value::String("TEST VALUE".to_string())),
         );
         context.insert(
-            "body".to_string(),
-            QuillValue::from_json(serde_json::Value::String("body".to_string())),
+            BODY_FIELD.to_string(),
+            QuillValue::from_json(serde_json::Value::String(BODY_FIELD.to_string())),
         );
 
         let result = plate.compose(context).unwrap();
@@ -391,8 +391,8 @@ mod tests {
             QuillValue::from_json(serde_json::Value::String("DASHED".to_string())),
         );
         context.insert(
-            "body".to_string(),
-            QuillValue::from_json(serde_json::Value::String("body".to_string())),
+            BODY_FIELD.to_string(),
+            QuillValue::from_json(serde_json::Value::String(BODY_FIELD.to_string())),
         );
 
         let result = plate.compose(context).unwrap();
@@ -430,7 +430,7 @@ mod tests {
             QuillValue::from_json(serde_json::Value::String("World".to_string())),
         );
         context.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::Value::String("Hello content".to_string())),
         );
 
@@ -439,7 +439,7 @@ mod tests {
         // Parse the result as JSON to verify it's valid
         let json: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert_eq!(json["name"], "World");
-        assert_eq!(json["body"], "Hello content");
+        assert_eq!(json[BODY_FIELD], "Hello content");
     }
 
     #[test]
@@ -510,7 +510,7 @@ mod tests {
             QuillValue::from_json(serde_json::json!("John")),
         );
         context.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("Body content")),
         );
 
@@ -519,7 +519,7 @@ mod tests {
         // Should contain title and author, but not body
         assert!(result.contains("title"));
         assert!(result.contains("author"));
-        assert!(!result.contains("body"));
+        assert!(!result.contains(BODY_FIELD));
     }
 
     #[test]
@@ -545,7 +545,7 @@ mod tests {
             QuillValue::from_json(serde_json::json!("2024-01-01")),
         );
         context.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("Document body")),
         );
 
@@ -556,7 +556,7 @@ mod tests {
         assert!(result.contains("author"));
         assert!(result.contains("date"));
         // Body should not be in metadata iteration
-        assert!(!result.contains("body"));
+        assert!(!result.contains(BODY_FIELD));
     }
 
     #[test]
@@ -566,7 +566,7 @@ mod tests {
 
         let mut context = HashMap::new();
         context.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("Only body content")),
         );
 
@@ -578,7 +578,7 @@ mod tests {
 
     #[test]
     fn test_backward_compatibility_top_level_access() {
-        let template = "Title: {{ title }}, Author: {{ author }}, Body: {{ body }}";
+        let template = "Title: {{ title }}, Author: {{ author }}, Body: {{ BODY }}";
         let mut plate = Plate::new(template.to_string());
 
         let mut context = HashMap::new();
@@ -591,7 +591,7 @@ mod tests {
             QuillValue::from_json(serde_json::json!("Author Name")),
         );
         context.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("Body text")),
         );
 
@@ -611,7 +611,7 @@ Metadata fields: {{ metadata_count }}
 {%- for key in __metadata__ %}
 - {{ key }}: {{ __metadata__[key] }}
 {%- endfor %}
-Body present: {{ body | length > 0 }}
+Body present: {{ BODY | length > 0 }}
 "#;
         let mut plate = Plate::new(template.to_string());
 
@@ -625,7 +625,7 @@ Body present: {{ body | length > 0 }}
             QuillValue::from_json(serde_json::json!("1.0")),
         );
         context.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("Content")),
         );
 
@@ -651,7 +651,7 @@ Body present: {{ body | length > 0 }}
             QuillValue::from_json(serde_json::json!("Writer")),
         );
         context.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("Content here")),
         );
 
@@ -666,10 +666,10 @@ Body present: {{ body | length > 0 }}
         assert_eq!(json["__metadata__"]["author"], "Writer");
 
         // Body should not be in metadata
-        assert!(json["__metadata__"]["body"].is_null());
+        assert!(json["__metadata__"][BODY_FIELD].is_null());
 
         // But body should be at top level
-        assert_eq!(json["body"], "Content here");
+        assert_eq!(json[BODY_FIELD], "Content here");
     }
 
     #[test]
@@ -686,7 +686,7 @@ Body present: {{ body | length > 0 }}
             })),
         );
         context.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("Text")),
         );
 
@@ -707,7 +707,7 @@ Body present: {{ body | length > 0 }}
             QuillValue::from_json(serde_json::json!(["rust", "markdown", "template"])),
         );
         context.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("Content")),
         );
 

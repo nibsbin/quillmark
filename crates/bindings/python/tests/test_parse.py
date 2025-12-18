@@ -38,4 +38,4 @@ def test_fields_access(taro_md):
     fields = parsed.fields
     assert "title" in fields
     assert "Ice Cream" in fields["title"]
-    assert "body" in fields
+    assert "BODY" in fields

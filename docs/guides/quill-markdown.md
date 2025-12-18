@@ -184,8 +184,8 @@ The scoped blocks are collected into an array accessible as `products`:
 ```python
 # Access in template or code
 products = parsed.get_field("products")
-# Returns: [{"name": "Widget", "price": 19.99, "body": "Widget description."}, 
-#           {"name": "Gadget", "price": 29.99, "body": "Gadget description."}]
+# Returns: [{"name": "Widget", "price": 19.99, "BODY": "Widget description."}, 
+#           {"name": "Gadget", "price": 29.99, "BODY": "Gadget description."}]
 ```
 
 ### QUILL Key

@@ -344,7 +344,7 @@ fn normalize_json_value(value: serde_json::Value, is_body: bool) -> serde_json::
 ///
 /// let mut fields = HashMap::new();
 /// fields.insert("title".to_string(), QuillValue::from_json(serde_json::json!("<<hello>>")));
-/// fields.insert("body".to_string(), QuillValue::from_json(serde_json::json!("**bold** \u{202D}**more**")));
+/// fields.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("**bold** \u{202D}**more**")));
 ///
 /// let result = normalize_fields(fields);
 ///
@@ -352,7 +352,7 @@ fn normalize_json_value(value: serde_json::Value, is_body: bool) -> serde_json::
 /// assert_eq!(result.get("title").unwrap().as_str().unwrap(), "hello");
 ///
 /// // Body has bidi chars stripped (guillemet would apply if there were any <<>>)
-/// assert_eq!(result.get("body").unwrap().as_str().unwrap(), "**bold** **more**");
+/// assert_eq!(result.get("BODY").unwrap().as_str().unwrap(), "**bold** **more**");
 /// ```
 pub fn normalize_fields(fields: HashMap<String, QuillValue>) -> HashMap<String, QuillValue> {
     fields
@@ -554,13 +554,13 @@ mod tests {
     fn test_normalize_fields_body_bidi() {
         let mut fields = HashMap::new();
         fields.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("**bold** \u{202D}**more**")),
         );
 
         let result = normalize_fields(fields);
         assert_eq!(
-            result.get("body").unwrap().as_str().unwrap(),
+            result.get(BODY_FIELD).unwrap().as_str().unwrap(),
             "**bold** **more**"
         );
     }
@@ -569,26 +569,26 @@ mod tests {
     fn test_normalize_fields_body_guillemets() {
         let mut fields = HashMap::new();
         fields.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("<<raw>>")),
         );
 
         let result = normalize_fields(fields);
-        assert_eq!(result.get("body").unwrap().as_str().unwrap(), "«raw»");
+        assert_eq!(result.get(BODY_FIELD).unwrap().as_str().unwrap(), "«raw»");
     }
 
     #[test]
     fn test_normalize_fields_body_both() {
         let mut fields = HashMap::new();
         fields.insert(
-            "body".to_string(),
+            BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("<<raw>> \u{202D}**bold**")),
         );
 
         let result = normalize_fields(fields);
         // Bidi stripped first, then guillemets converted
         assert_eq!(
-            result.get("body").unwrap().as_str().unwrap(),
+            result.get(BODY_FIELD).unwrap().as_str().unwrap(),
             "«raw» **bold**"
         );
     }
@@ -638,16 +638,19 @@ mod tests {
             "meta".to_string(),
             QuillValue::from_json(serde_json::json!({
                 "title": "<<hello>>",
-                "body": "<<content>>"
+                BODY_FIELD: "<<content>>"
             })),
         );
 
         let result = normalize_fields(fields);
         let meta = result.get("meta").unwrap();
         let meta_obj = meta.as_object().unwrap();
-        // Nested "body" key should be recognized
+        // Nested "BODY" key should be recognized
         assert_eq!(meta_obj.get("title").unwrap().as_str().unwrap(), "hello");
-        assert_eq!(meta_obj.get("body").unwrap().as_str().unwrap(), "«content»");
+        assert_eq!(
+            meta_obj.get(BODY_FIELD).unwrap().as_str().unwrap(),
+            "«content»"
+        );
     }
 
     #[test]

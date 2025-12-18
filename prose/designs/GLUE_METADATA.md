@@ -6,34 +6,34 @@ This document details the design for exposing document metadata to MiniJinja tem
 
 ## Overview
 
-The plate templating system provides template authors with access to parsed document fields via MiniJinja expressions. Currently, all fields (including `body`) are available at the top level of the template context. This design introduces a special `__metadata__` field that aggregates all non-body fields for convenient metadata-only access.
+The plate templating system provides template authors with access to parsed document fields via MiniJinja expressions. Currently, all fields (including `BODY`) are available at the top level of the template context. This design introduces a special `__metadata__` field that aggregates all non-BODY fields for convenient metadata-only access.
 
 **Key capabilities:**
 - Access all frontmatter fields through `__metadata__` variable
-- Separate metadata from body content for clearer template semantics
+- Separate metadata from BODY content for clearer template semantics
 - Maintain backward compatibility with existing top-level field access
-- Enable metadata iteration and inspection without including body content
+- Enable metadata iteration and inspection without including BODY content
 
 ## Design Principles
 
 ### 1. Convenience Without Breaking Changes
 
 The `__metadata__` field is **additive**: existing templates continue to work as-is. Template authors can choose between:
-- Top-level access: `{{ title }}`, `{{ author }}`, `{{ body }}`
+- Top-level access: `{{ title }}`, `{{ author }}`, `{{ BODY }}`
 - Metadata object access: `{{ __metadata__.title }}`, `{{ __metadata__.author }}`
-- Body-only access: `{{ body }}` (not in `__metadata__`)
+- Body-only access: `{{ BODY }}` (not in `__metadata__`)
 
 ### 2. Semantic Clarity
 
 The `__metadata__` field makes template intent clearer:
 ```jinja
 {% for key, value in __metadata__ %}
-  {# Iterate over all metadata fields, excluding body #}
+  {# Iterate over all metadata fields, excluding BODY #}
   {{ key }}: {{ value }}
 {% endfor %}
 ```
 
-This is more semantically clear than iterating over all fields and manually filtering out `body`.
+This is more semantically clear than iterating over all fields and manually filtering out `BODY`.
 
 ### 3. Reserved Naming Convention
 
@@ -49,7 +49,7 @@ The `__metadata__` name uses double underscore prefix to signal:
 ```
 ParsedDocument.fields()
     ↓
-    ├─ body field → context["body"]
+    ├─ BODY field → context["BODY"]
     └─ all other fields → context["__metadata__"]
                     └─ also in top-level context (backward compat)
 ```
@@ -66,7 +66,7 @@ ParsedDocument.fields()
    - Creates dependency from templating → parse
    
 2. **Duplicate Constant** (Current Independence)
-   - Define `BODY_FIELD = "body"` in both modules
+   - Define `BODY_FIELD = "BODY"` in both modules
    - Keeps modules independent
    - Risk of drift if constant changes
    
@@ -90,14 +90,14 @@ ParsedDocument.fields()
 
 The `compose()` method in `TemplatePlate` and `AutoPlate` will be updated to:
 
-1. Create a metadata object containing all fields except `body`
+1. Create a metadata object containing all fields except `BODY`
 2. Add this object to the context under `__metadata__` key
-3. Continue adding all fields (including `body`) to top-level context
+3. Continue adding all fields (including `BODY`) to top-level context
 
 **Pseudocode:**
 ```rust
 fn compose(context: HashMap<String, QuillValue>) -> Result<String, TemplateError> {
-    // Separate metadata from body
+    // Separate metadata from BODY
     let metadata_fields: HashMap<String, QuillValue> = context
         .iter()
         .filter(|(key, _)| key.as_str() != BODY_FIELD)
@@ -154,18 +154,18 @@ Metadata fields: {{ __metadata__ | length }}
 {% endfor %}
 
 {# Body content separately #}
-{{ body | Content }}
+{{ BODY | Content }}
 ```
 
 ## Edge Cases
 
 ### Empty Metadata
-- If document has only `body` field: `__metadata__` is an empty object `{}`
+- If document has only `BODY` field: `__metadata__` is an empty object `{}`
 - Templates can check: `{% if __metadata__ | length > 0 %}`
 
 ### Extended YAML Metadata Standard
 - SCOPE-based collections appear in `__metadata__` (not filtered out)
-- Only the `body` field is excluded
+- Only the `BODY` field is excluded
 - Example: `{ title: "...", products: [...] }` → `__metadata__` contains both `title` and `products`
 
 ### Reserved Field Name Collision
@@ -187,14 +187,14 @@ Future system-generated fields could include:
 Could introduce additional groupings:
 - `__frontmatter__`: Only top-level global fields
 - `__scoped__`: Only SCOPE-based collections
-- `__all__`: Everything including body (for completeness)
+- `__all__`: Everything including BODY (for completeness)
 
 ## Testing Strategy
 
 ### Unit Tests
 
-1. Test `__metadata__` contains all non-body fields
-2. Test `__metadata__` excludes body field
+1. Test `__metadata__` contains all non-BODY fields
+2. Test `__metadata__` excludes BODY field
 3. Test backward compatibility (top-level access still works)
 4. Test empty metadata scenario
 5. Test extended metadata with SCOPE collections
@@ -219,7 +219,7 @@ Templates that iterate over fields to build headers/preambles can simplify:
 **Before:**
 ```jinja
 {% for key, value in context %}
-  {% if key != "body" %}
+  {% if key != "BODY" %}
     #set document({{ key }}: {{ value | String }})
   {% endif %}
 {% endfor %}
