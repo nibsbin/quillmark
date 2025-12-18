@@ -296,7 +296,7 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                     });
                 }
 
-                // Parse YAML content to check for reserved keys (QUILL, SCOPE)
+                // Parse YAML content to check for reserved keys (QUILL, CARD)
                 // First, try to parse as YAML
                 let (tag, quill_name, yaml_value) = if !content.is_empty() {
                     // Try to parse the YAML to check for reserved keys
@@ -305,31 +305,13 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                             if let Some(mapping) = parsed_yaml.as_object() {
                                 let quill_key = "QUILL";
                                 let card_key = "CARD";
-                                let scope_key = "SCOPE"; // Backwards compatibility alias
 
                                 let has_quill = mapping.contains_key(quill_key);
                                 let has_card = mapping.contains_key(card_key);
-                                let has_scope = mapping.contains_key(scope_key);
 
-                                // CARD and SCOPE are aliases - can't use both
-                                if has_card && has_scope {
+                                if has_quill && has_card {
                                     return Err(crate::error::ParseError::InvalidStructure(
-                                        "Cannot specify both CARD and SCOPE in the same block (SCOPE is an alias for CARD)"
-                                            .to_string(),
-                                    ));
-                                }
-
-                                let effective_card_key = if has_card {
-                                    Some(card_key)
-                                } else if has_scope {
-                                    Some(scope_key)
-                                } else {
-                                    None
-                                };
-
-                                if has_quill && effective_card_key.is_some() {
-                                    return Err(crate::error::ParseError::InvalidStructure(
-                                        "Cannot specify both QUILL and CARD/SCOPE in the same block"
+                                        "Cannot specify both QUILL and CARD in the same block"
                                             .to_string(),
                                     ));
                                 }
@@ -358,12 +340,11 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                                     };
 
                                     (None, Some(quill_name_str.to_string()), new_value)
-                                } else if let Some(card_key_used) = effective_card_key {
-                                    // Extract card field name (handles both CARD and SCOPE)
-                                    let card_value = mapping.get(card_key_used).unwrap();
-                                    let field_name = card_value
-                                        .as_str()
-                                        .ok_or("CARD/SCOPE value must be a string")?;
+                                } else if has_card {
+                                    // Extract card field name
+                                    let card_value = mapping.get(card_key).unwrap();
+                                    let field_name =
+                                        card_value.as_str().ok_or("CARD value must be a string")?;
 
                                     if !is_valid_tag_name(field_name) {
                                         return Err(crate::error::ParseError::InvalidStructure(format!(
@@ -372,9 +353,9 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                                         )));
                                     }
 
-                                    // Remove CARD/SCOPE from the YAML value for processing
+                                    // Remove CARD from the YAML value for processing
                                     let mut new_mapping = mapping.clone();
-                                    new_mapping.remove(card_key_used);
+                                    new_mapping.remove(card_key);
                                     let new_value = if new_mapping.is_empty() {
                                         None
                                     } else {
@@ -1546,7 +1527,7 @@ CARD: 123
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("CARD/SCOPE value must be a string"));
+            .contains("CARD value must be a string"));
     }
 
     #[test]
