@@ -21,6 +21,9 @@ enum Commands {
 
     /// Output the JSON schema for a quill
     Schema(commands::schema::SchemaArgs),
+
+    /// Validate a quill's configuration (including defaults)
+    Validate(commands::validate::ValidateArgs),
 }
 
 fn main() {
@@ -29,6 +32,7 @@ fn main() {
     let result = match cli.command {
         Commands::Render(args) => commands::render::execute(args),
         Commands::Schema(args) => commands::schema::execute(args),
+        Commands::Validate(args) => commands::validate::execute(args),
     };
 
     if let Err(e) = result {
