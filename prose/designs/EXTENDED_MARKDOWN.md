@@ -56,7 +56,7 @@ All other YAML 1.2 features are supported, including anchors, aliases, flow/bloc
 | Key | Purpose | Constraints |
 |-----|---------|-------------|
 | `CARD` | Declares a card block with a named type | Value must match `[a-z_][a-z0-9_]*` |
-| `QUILL` | Specifies which quill template to use | Only valid in global block |
+| `QUILL` | Specifies which quill template to use | Only valid in global block; defaults to `__default__` |
 | `BODY` | Reserved for body content | Cannot be used in YAML |
 
 ## Document Structure
