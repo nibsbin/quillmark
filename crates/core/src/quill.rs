@@ -740,15 +740,6 @@ impl QuillConfig {
                 .ok_or("'cards' section must be a table")?;
 
             for (card_name, card_value) in cards_table {
-                // Check for name collision with existing fields
-                if fields.contains_key(card_name) {
-                    return Err(format!(
-                        "Card definition '{}' conflicts with an existing field name",
-                        card_name
-                    )
-                    .into());
-                }
-
                 // Parse card basic info using serde
                 let card_def: CardSchemaDef = card_value
                     .clone()
@@ -2453,8 +2444,8 @@ description = "My scope"
     }
 
     #[test]
-    fn test_quill_config_card_collision() {
-        // Test that scope name colliding with field name is an error
+    fn test_quill_config_allows_card_collision() {
+        // Test that scope name colliding with field name is ALLOWED
         let toml_content = r#"[Quill]
 name = "collision-test"
 backend = "typst"
@@ -2466,15 +2457,20 @@ type = "string"
 
 [cards.conflict]
 description = "Card"
-items = {}
 "#;
 
         let result = QuillConfig::from_toml(toml_content);
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("conflicts with an existing field name"));
+        if let Err(e) = &result {
+            panic!(
+                "Card name collision should be allowed, but got error: {}",
+                e
+            );
+        }
+        assert!(result.is_ok());
+
+        let config = result.unwrap();
+        assert!(config.fields.contains_key("conflict"));
+        assert!(config.cards.contains_key("conflict"));
     }
 
     #[test]
