@@ -146,10 +146,7 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
         Ok(quill) => {
             if args.verbose {
                 println!("  Schema generated successfully");
-                println!(
-                    "  Defaults extracted: {}",
-                    quill.extract_defaults().len()
-                );
+                println!("  Defaults extracted: {}", quill.extract_defaults().len());
             }
 
             // Step 6: Validate extracted defaults match schema types
@@ -254,11 +251,7 @@ fn validate_field_schemas(
     }
 }
 
-fn validate_card_schema(
-    card_name: &str,
-    card_schema: &CardSchema,
-    result: &mut ValidationResult,
-) {
+fn validate_card_schema(card_name: &str, card_schema: &CardSchema, result: &mut ValidationResult) {
     // Warn about missing description
     if card_schema.description.trim().is_empty() {
         result.add_warning(format!(
@@ -395,10 +388,7 @@ fn print_validation_result(result: &ValidationResult, verbose: bool) {
     if error_count == 0 && warning_count == 0 {
         println!("Validation passed: quill configuration is valid");
     } else if error_count == 0 {
-        println!(
-            "Validation passed with {} warning(s)",
-            warning_count
-        );
+        println!("Validation passed with {} warning(s)", warning_count);
     } else {
         eprintln!(
             "Validation failed: {} error(s), {} warning(s)",
