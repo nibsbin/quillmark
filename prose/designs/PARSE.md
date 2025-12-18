@@ -133,9 +133,7 @@ Body of second sub-document.
 - **CARD key**: Creates collections - blocks with same card name are aggregated into the `CARDS` array
 - **QUILL key**: Specifies which quill template to use (defaults to `__default__` if not specified)
 - **Card names**: Must match `[a-z_][a-z0-9_]*` pattern
-- **Reserved names**: Cannot use `body` as card name
-- **Single global**: Only one block without CARD/QUILL allowed
-- **Single global**: Only one block without CARD/QUILL allowed
+- **Single global**: Only one block (the global frontmatter at top of document) without CARD allowed
 - **Independent names**: Global field names and card names are independent namespaces (can share names)
 - **Horizontal rule disambiguation**: `---` with blank lines above AND below is treated as markdown horizontal rule
 - **Default quill tag**: When no QUILL directive is present, ParsedDocument.quill_tag is set to `__default__` at parse time
