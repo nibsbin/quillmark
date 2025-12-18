@@ -1,69 +1,135 @@
 # Extended YAML Metadata Standard
 
-This document defines the extended markdown syntax for embedding structured metadata in Quillmark documents.
+This document defines the extended markdown syntax for embedding structured metadata in Quillmark documents. It is intended to be authoritative and implementable in any system.
 
-> **Implementation**: `quillmark-core/src/parse.rs`
+## Definitions
 
-## Overview
+- **Metadata block**: A YAML section delimited by `---` markers
+- **Global block**: The frontmatter at the document start (no CARD key)
+- **Card block**: A metadata block containing a `CARD` key
+- **Body**: Markdown content following a metadata block, up to the next block or end of document
 
-The extended standard allows metadata blocks to appear anywhere in the document using **CARD** and **QUILL** special keys.
+## Metadata Block Syntax
 
-**Motivation**: Support structured sub-documents, repeated elements, and hierarchical content.
+A metadata block begins and ends with a line containing **exactly** `---` (three hyphens, no leading/trailing whitespace, no other content on the line).
 
-## Syntax
+```
+---
+key: value
+---
+```
+
+### Delimiter Rules
+
+- **`---` is reserved for metadata blocks only** — never treated as a thematic break
+- **Exact match required** — `---` with any other characters on the same line is not a delimiter
+- **Fenced code blocks** — `---` inside fenced code blocks (`` ``` `` or `~~~`) is not processed as a delimiter
+- **No `...` closer** — only `---` closes a metadata block (unlike Pandoc)
+
+## CommonMark Compatibility
+
+### Thematic Breaks (Horizontal Rules)
+
+Use `***` or `___` for horizontal rules. The `---` syntax is not available for thematic breaks.
+
+- ✅ `***` (supported)
+- ✅ `___` (supported)
+- ❌ `---` (reserved for metadata blocks)
+
+### Setext Headers
+
+**Setext-style headers are not supported.** In standard CommonMark, a line of `---` under text creates an h2 header. This conflicts with metadata block syntax.
+
+- ✅ `# Heading` (ATX-style, supported)
+- ❌ `Heading\n---` (setext-style, not supported)
+
+## YAML Subset
+
+Metadata blocks follow **YAML 1.2** with one exception:
+
+- **Tags (`!`) are not supported** — custom and standard tags are ignored
+
+All other YAML 1.2 features are supported, including anchors, aliases, flow/block styles, and multi-line strings.
+
+## Special Keys
+
+| Key | Purpose | Constraints |
+|-----|---------|-------------|
+| `CARD` | Declares a card block with a named type | Value must match `[a-z_][a-z0-9_]*` |
+| `QUILL` | Specifies which quill template to use | Only valid in global block; defaults to `__default__` |
+| `BODY` | Reserved for body content | Cannot be used in YAML |
+
+## Document Structure
+
+### No Frontmatter
+
+If a document has no metadata blocks, the entire document content becomes the body with no fields and no cards.
+
+### Global Block (Optional)
+
+The first metadata block in a document, if it lacks a `CARD` key, is the global block. Only one global block is permitted. An empty global block (no YAML content) is valid.
+
+**If the first block contains a `CARD` key**, no global block exists. The document has no global fields, the global body is empty, and that first block becomes the first card.
+
+### Card Blocks
+
+Metadata blocks containing a `CARD` key are aggregated into a `CARDS` array in parse order. A non-global metadata block without a `CARD` key is invalid.
+
+### Body Extraction Rules
+
+Body content is extracted verbatim from the line after a block's closing `---` to the line before the next metadata block (or end of document).
+
+- **Whitespace preservation**: Leading and trailing blank lines are preserved exactly as written
+- **Empty body**: If no content exists between blocks, BODY is an empty string (`""`)
+- **No trimming**: Implementations must not trim or normalize whitespace
+
+### Flat Structure
+
+Cards are collected into a flat `CARDS` array. Nested or hierarchical card structures are not supported.
+
+## Example
 
 ```markdown
 ---
-title: Global Metadata
+title: My Document
+QUILL: blog_post
 ---
 Main document body.
 
----
-CARD: sub_documents
-title: First Sub-Document
----
-Body of first sub-document.
+***
+
+More content after horizontal rule.
 
 ---
-CARD: sub_documents
-title: Second Sub-Document
+CARD: section
+heading: Introduction
 ---
-Body of second sub-document.
+Introduction content.
+
+---
+CARD: section
+heading: Conclusion
+---
+Conclusion content.
 ```
 
-**Resulting structure:**
+**Parsed structure:**
 ```json
 {
-  "title": "Global Metadata",
-  "BODY": "Main document body.",
+  "title": "My Document",
+  "QUILL": "blog_post",
+  "BODY": "Main document body.\n\n***\n\nMore content after horizontal rule.",
   "CARDS": [
-    {"CARD": "sub_document", "title": "First Sub-Document", "BODY": "Body of first sub-document."},
-    {"CARD": "sub_document", "title": "Second Sub-Document", "BODY": "Body of second sub-document."}
+    {"CARD": "section", "heading": "Introduction", "BODY": "Introduction content."},
+    {"CARD": "section", "heading": "Conclusion", "BODY": "Conclusion content."}
   ]
 }
 ```
 
-## Rules
+## Validation Rules
 
-- **CARD key**: Creates collections - blocks with same card name are aggregated into the `CARDS` array
-- **QUILL key**: Specifies which quill template to use (defaults to `__default__` if not specified)
-- **Card names**: Must match `[a-z_][a-z0-9_]*` pattern
-- **Single global**: Only one block (the global frontmatter at top of document) without CARD allowed
-- **Independent names**: Global field names and card names are independent namespaces (can share names)
-- **Horizontal rule disambiguation**: `---` with blank lines above AND below is treated as markdown horizontal rule
-- **Default quill tag**: When no QUILL directive is present, ParsedDocument.quill_tag is set to `__default__` at parse time
-
-## Parsing Flow
-
-1. Scan document for all `---` delimiters
-2. Parse global frontmatter (if present)
-3. Parse card metadata blocks
-4. Assemble final structure with merged global fields and `CARDS` array
-
-## Validation
-
-The parser validates:
-- Multiple global frontmatter blocks → error
-- Reserved field names in cards → error
-- Invalid card name syntax → error
-- Both CARD and QUILL in same block → error
+1. **Single global block**: Multiple blocks without `CARD` key → error
+2. **Reserved field names**: Using `BODY` or `CARDS` in YAML → error
+3. **Invalid card name**: Card name not matching `[a-z_][a-z0-9_]*` → error
+4. **Conflicting keys**: Both `CARD` and `QUILL` in same block → error
+5. **Unclosed block**: Opening `---` without closing `---` → error

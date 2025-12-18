@@ -1,90 +1,38 @@
-# Markdown Parsing and Decomposition
+# Quillmark Parser Implementation
 
-This document details the markdown parsing system in Quillmark.
+Implementation notes for `quillmark-core/src/parse.rs`.
 
-> **Implementation**: `quillmark-core/src/parse.rs`
->
-> **Extended Syntax**: See [EXTENDED_MARKDOWN.md](./EXTENDED_MARKDOWN.md) for the extended YAML metadata standard
+> **Specification**: See [EXTENDED_MARKDOWN.md](./EXTENDED_MARKDOWN.md) for the authoritative syntax standard.
 
-## Overview
-
-Quillmark uses a **frontmatter-aware markdown parser** that separates YAML metadata from document content.
-
-**Key capabilities:**
-- Parse YAML frontmatter delimited by `---` markers
-- Support inline metadata sections with CARD/QUILL keys (Extended YAML Metadata Standard)
-- Aggregate scoped blocks into collections (arrays of objects)
-- Extract frontmatter fields into `HashMap<String, QuillValue>`
-- Preserve markdown body content separately
-- Cross-platform line ending support (`\n` and `\r\n`)
-- Horizontal rule disambiguation
-
-## Design Principles
-
-### 1. Separation of Concerns
-
-The parser decomposes markdown documents into:
-- **Frontmatter fields**: YAML key-value pairs accessible via `HashMap<String, QuillValue>`
-- **Body content**: Raw markdown text stored under the reserved `BODY_FIELD` constant
-
-### 2. Error Handling Strategy
-
-**Strict fail-fast** for malformed YAML:
-- **Invalid YAML**: Returns error with descriptive message
-- **Unclosed frontmatter**: Returns error if `---` opening exists but closing marker is missing
-- **No frontmatter**: Gracefully treats entire content as body (not an error)
-
-### 3. YAML-Only Policy
-
-Only YAML frontmatter is supported. Backends can convert to their native formats via filters.
-
-## Core Data Structures
+## Architecture
 
 ### ParsedDocument
 
-Stores both frontmatter fields and document body in a single `HashMap<String, QuillValue>`.
-- Body is stored under special `BODY_FIELD = "BODY"` constant
-- Quill tag is stored as a non-optional String, defaulting to `__default__`
-- Private fields enforce access through validated methods
+Stores fields and body in a single `HashMap<String, QuillValue>`.
 
-**Public API:**
-- `new(fields)` - Constructor (sets quill_tag to `__default__`)
-- `with_quill_tag(fields, quill_tag)` - Constructor with explicit quill tag
-- `body()` - Returns `Option<&str>` for document body
-- `get_field(name)` - Returns `Option<&QuillValue>` for any field
-- `fields()` - Returns reference to entire field map
-- `quill_tag()` - Returns `&str` for the quill tag (never None)
+- Body stored under `BODY_FIELD = "BODY"`
+- Quill tag defaults to `__default__` when not specified
+- Access via `body()`, `get_field()`, `fields()`, `quill_tag()`
 
-## Parsing Algorithm
+### Parsing Flow
 
-### High-Level Flow
+1. Scan for `---` delimiters
+2. Classify as metadata block or horizontal rule (per disambiguation rules)
+3. Parse YAML, extract CARD/QUILL keys
+4. Extract body content between blocks
+5. Aggregate card blocks into `CARDS` array
+6. Validate and assemble result
 
-1. **Metadata block discovery** - Scan for all `---` delimiters
-2. **Block classification** - Distinguish metadata blocks from horizontal rules
-3. **Scope/Quill key extraction** - Parse YAML to check for special keys
-4. **YAML parsing** - Convert YAML content to `QuillValue`
-5. **Body extraction** - Extract body content between blocks
-6. **Collection aggregation** - Group blocks with same scope name
-7. **Validation** - Check for collisions, reserved names, invalid syntax
-8. **Result assembly** - Merge global fields, body, and tagged collections
+## Design Decisions
 
-## Edge Cases
+### Error Handling
 
-The parser handles various edge cases:
+Fail-fast on malformed YAML. No frontmatter is valid (entire content becomes body).
 
-1. **Empty Frontmatter** - Returns empty frontmatter map with body starting at first blank line
-2. **No Frontmatter** - Entire content becomes body
-3. **Unclosed Frontmatter** - Returns error to prevent ambiguous interpretation
-4. **Nested YAML Structures** - Full YAML support including nested maps, arrays, and all scalar types
-5. **Line Endings** - Supports both Unix (`\n`) and Windows (`\r\n`) line endings
-6. **Horizontal Rules** - `---` with blank lines both above and below is treated as markdown horizontal rule, not metadata delimiter
+### Line Endings
 
-## Usage
+Supports both `\n` and `\r\n`.
 
-See `quillmark-core/src/parse.rs` for complete API documentation and examples.
+### YAML Parsing
 
-Basic usage:
-- `ParsedDocument::from_markdown(markdown)` - Parse markdown with frontmatter
-- `doc.body()` - Access body content
-- `doc.get_field(name)` - Access frontmatter fields
-- `doc.fields()` - Access all fields
+Uses `serde-saphyr` for YAML → `serde_json::Value` conversion, then converts to `QuillValue`.

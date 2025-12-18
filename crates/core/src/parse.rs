@@ -188,6 +188,31 @@ fn is_valid_tag_name(name: &str) -> bool {
     true
 }
 
+/// Check if a position is inside a fenced code block
+///
+/// This uses a simple count-based approach: count opening fences before the position.
+/// An odd count means we're inside a fenced block.
+fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
+    let before = &markdown[..pos];
+
+    // Count fences that appear at the start of lines
+    let mut fence_count = 0;
+
+    // Check if document starts with a fence
+    if before.starts_with("```") || before.starts_with("~~~") {
+        fence_count += 1;
+    }
+
+    // Count fences after newlines
+    fence_count += before.matches("\n```").count();
+    fence_count += before.matches("\n~~~").count();
+    fence_count += before.matches("\r\n```").count();
+    fence_count += before.matches("\r\n~~~").count();
+
+    // Odd count means we're inside a fenced block
+    fence_count % 2 == 1
+}
+
 /// Find all metadata blocks in the document
 fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::error::ParseError> {
     let mut blocks = Vec::new();
@@ -214,6 +239,12 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
 
             if !is_start_of_line {
                 pos = abs_pos + 1;
+                continue;
+            }
+
+            // Skip if inside a fenced code block
+            if is_inside_fenced_block(markdown, abs_pos) {
+                pos = abs_pos + 3;
                 continue;
             }
 
@@ -314,6 +345,19 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                                         "Cannot specify both QUILL and CARD in the same block"
                                             .to_string(),
                                     ));
+                                }
+
+                                // Check for reserved field names (BODY, CARDS)
+                                const RESERVED_FIELDS: &[&str] = &["BODY", "CARDS"];
+                                for reserved in RESERVED_FIELDS {
+                                    if mapping.contains_key(*reserved) {
+                                        return Err(crate::error::ParseError::InvalidStructure(
+                                            format!(
+                                                "Reserved field name '{}' cannot be used in YAML frontmatter",
+                                                reserved
+                                            ),
+                                        ));
+                                    }
                                 }
 
                                 if has_quill {
@@ -1178,17 +1222,77 @@ Item 1 body"#;
     }
 
     #[test]
-    fn test_reserved_field_name() {
+    fn test_reserved_field_body_rejected() {
         let markdown = r#"---
-CARD: body
+CARD: section
 BODY: Test
 ---"#;
 
         let result = decompose(markdown);
-        assert!(
-            result.is_ok(),
-            "Reserved field name should be allowed as card name"
-        );
+        assert!(result.is_err(), "BODY is a reserved field name");
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Reserved field name"));
+    }
+
+    #[test]
+    fn test_reserved_field_cards_rejected() {
+        let markdown = r#"---
+title: Test
+CARDS: []
+---"#;
+
+        let result = decompose(markdown);
+        assert!(result.is_err(), "CARDS is a reserved field name");
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Reserved field name"));
+    }
+
+    #[test]
+    fn test_delimiter_inside_fenced_code_block_backticks() {
+        let markdown = r#"---
+title: Test
+---
+Here is some code:
+
+```yaml
+---
+fake: frontmatter
+---
+```
+
+More content.
+"#;
+
+        let doc = decompose(markdown).unwrap();
+        // The --- inside the code block should NOT be parsed as metadata
+        assert!(doc.body().unwrap().contains("fake: frontmatter"));
+        assert!(doc.get_field("fake").is_none());
+    }
+
+    #[test]
+    fn test_delimiter_inside_fenced_code_block_tildes() {
+        let markdown = r#"---
+title: Test
+---
+Here is some code:
+
+~~~yaml
+---
+fake: frontmatter
+---
+~~~
+
+More content.
+"#;
+
+        let doc = decompose(markdown).unwrap();
+        // The --- inside the code block should NOT be parsed as metadata
+        assert!(doc.body().unwrap().contains("fake: frontmatter"));
+        assert!(doc.get_field("fake").is_none());
     }
 
     #[test]
@@ -2521,5 +2625,75 @@ Body content."#;
             "normal value"
         );
         assert_eq!(doc.body(), Some("\nBody content."));
+    }
+
+    /// Test the exact example from EXTENDED_MARKDOWN.md (lines 92-127)
+    #[test]
+    fn test_spec_example() {
+        let markdown = r#"---
+title: My Document
+QUILL: blog_post
+---
+Main document body.
+
+***
+
+More content after horizontal rule.
+
+---
+CARD: section
+heading: Introduction
+---
+Introduction content.
+
+---
+CARD: section
+heading: Conclusion
+---
+Conclusion content.
+"#;
+
+        let doc = decompose(markdown).unwrap();
+
+        // Verify global fields
+        assert_eq!(
+            doc.get_field("title").unwrap().as_str().unwrap(),
+            "My Document"
+        );
+        assert_eq!(doc.quill_tag(), "blog_post");
+
+        // Verify body contains horizontal rule (*** preserved)
+        let body = doc.body().unwrap();
+        assert!(body.contains("Main document body."));
+        assert!(body.contains("***"));
+        assert!(body.contains("More content after horizontal rule."));
+
+        // Verify CARDS array
+        let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
+        assert_eq!(cards.len(), 2);
+
+        // First card
+        let card1 = cards[0].as_object().unwrap();
+        assert_eq!(card1.get("CARD").unwrap().as_str().unwrap(), "section");
+        assert_eq!(
+            card1.get("heading").unwrap().as_str().unwrap(),
+            "Introduction"
+        );
+        assert_eq!(
+            card1.get("BODY").unwrap().as_str().unwrap(),
+            "Introduction content.\n\n"
+        );
+
+        // Second card
+        let card2 = cards[1].as_object().unwrap();
+        assert_eq!(card2.get("CARD").unwrap().as_str().unwrap(), "section");
+        assert_eq!(
+            card2.get("heading").unwrap().as_str().unwrap(),
+            "Conclusion"
+        );
+        assert_eq!(
+            card2.get("BODY").unwrap().as_str().unwrap(),
+            "Conclusion content.\n"
+        );
     }
 }
