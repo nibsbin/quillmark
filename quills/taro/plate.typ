@@ -14,7 +14,7 @@
 *Favorite Ice Cream: #{{ ice_cream | String}}*__
 
 
-#{{ body | Content }}
+#{{ BODY | Content }}
 
 // Present each sub-document programatically
 {% for card in CARDS %}
