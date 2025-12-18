@@ -87,7 +87,7 @@
   date: {{ card.date | String }},
   {% endif %}
 )[
-  #{{ card.body | Content }}
+  #{{ card.BODY | Content }}
 ]
 {% endif %}
 {% endfor %}
