@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 use crate::value::QuillValue;
 
 /// Semantic constants for field schema keys used in parsing and JSON Schema generation.
@@ -41,7 +43,8 @@ pub mod ui_key {
 }
 
 /// UI-specific metadata for field rendering
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct UiSchema {
     /// Group name for organizing fields (e.g., "Personal Info", "Preferences")
     pub group: Option<String>,
@@ -63,11 +66,13 @@ pub struct CardSchema {
 }
 
 /// Field type hint enum for type-safe field type definitions
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum FieldType {
     /// String type (alias: "string")
     String,
     /// String type (alias: "str")
+    #[serde(alias = "str")]
     Str,
     /// Numeric type
     Number,
@@ -136,6 +141,22 @@ pub struct FieldSchema {
     pub enum_values: Option<Vec<String>>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FieldSchemaDef {
+    pub title: Option<String>,
+    pub r#type: Option<FieldType>,
+    #[serde(default)]
+    pub description: String,
+    pub default: Option<QuillValue>,
+    pub examples: Option<QuillValue>,
+    pub ui: Option<UiSchema>,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(rename = "enum")]
+    pub enum_values: Option<Vec<String>>,
+}
+
 impl FieldSchema {
     /// Create a new FieldSchema with default values
     pub fn new(name: String, description: String) -> Self {
@@ -154,120 +175,19 @@ impl FieldSchema {
 
     /// Parse a FieldSchema from a QuillValue
     pub fn from_quill_value(key: String, value: &QuillValue) -> Result<Self, String> {
-        let obj = value
-            .as_object()
-            .ok_or_else(|| "Field schema must be an object".to_string())?;
-
-        //Ensure only known keys are present
-        for key in obj.keys() {
-            match key.as_str() {
-                field_key::NAME
-                | field_key::TITLE
-                | field_key::TYPE
-                | field_key::DESCRIPTION
-                | field_key::EXAMPLES
-                | field_key::DEFAULT
-                | field_key::UI
-                | field_key::REQUIRED
-                | field_key::ENUM => {}
-                _ => {
-                    // Log warning but don't fail
-                    eprintln!("Warning: Unknown key '{}' in field schema", key);
-                }
-            }
-        }
-
-        let name = key.clone();
-
-        let title = obj
-            .get(field_key::TITLE)
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
-
-        let description = obj
-            .get(field_key::DESCRIPTION)
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-
-        let field_type = obj
-            .get(field_key::TYPE)
-            .and_then(|v| v.as_str())
-            .and_then(|s| {
-                let parsed = FieldType::from_str(s);
-                if parsed.is_none() {
-                    eprintln!("Warning: Unknown field type '{}', ignoring", s);
-                }
-                parsed
-            });
-
-        let default = obj
-            .get(field_key::DEFAULT)
-            .map(|v| QuillValue::from_json(v.clone()));
-
-        let examples = obj
-            .get(field_key::EXAMPLES)
-            .map(|v| QuillValue::from_json(v.clone()));
-
-        // Parse required field (fields are optional by default)
-        let required = obj
-            .get(field_key::REQUIRED)
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-
-        // Parse enum values (only valid for string types)
-        let enum_values = obj
-            .get(field_key::ENUM)
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect::<Vec<String>>()
-            })
-            .filter(|v| !v.is_empty());
-
-        // Parse UI metadata if present
-        let ui = if let Some(ui_value) = obj.get(field_key::UI) {
-            if let Some(ui_obj) = ui_value.as_object() {
-                let group = ui_obj
-                    .get(ui_key::GROUP)
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-
-                // Validate that only known UI properties are present
-                for key in ui_obj.keys() {
-                    match key.as_str() {
-                        ui_key::GROUP => {}
-                        _ => {
-                            eprintln!(
-                                "Warning: Unknown UI property '{}'. Only 'group' is supported.",
-                                key
-                            );
-                        }
-                    }
-                }
-
-                Some(UiSchema {
-                    group,
-                    order: None, // Order is determined by position in Quill.toml
-                })
-            } else {
-                return Err("UI field must be an object".to_string());
-            }
-        } else {
-            None
-        };
+        let def: FieldSchemaDef = serde_json::from_value(value.clone().into_json())
+            .map_err(|e| format!("Failed to parse field schema: {}", e))?;
 
         Ok(Self {
-            name,
-            title,
-            r#type: field_type,
-            description,
-            default,
-            examples,
-            ui,
-            required,
-            enum_values,
+            name: key,
+            title: def.title,
+            r#type: def.r#type,
+            description: def.description,
+            default: def.default,
+            examples: def.examples,
+            ui: def.ui,
+            required: def.required,
+            enum_values: def.enum_values,
         })
     }
 }
@@ -616,6 +536,15 @@ pub struct QuillConfig {
     pub typst_config: HashMap<String, QuillValue>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CardSchemaDef {
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: String,
+    pub fields: Option<toml::value::Table>,
+}
+
 impl QuillConfig {
     /// Parse fields from a TOML table, assigning ui.order based on key_order.
     ///
@@ -800,8 +729,16 @@ impl QuillConfig {
         };
 
         // Extract [cards] section (optional)
+        // Extract [cards] section (optional)
         let mut cards: HashMap<String, CardSchema> = HashMap::new();
-        if let Some(toml::Value::Table(cards_table)) = quill_toml.get("cards") {
+        if let Some(cards_value) = quill_toml.get("cards") {
+            // Need to parse cards manually to some extent because we need to process 'fields'
+            // and check for collisions
+
+            let cards_table = cards_value
+                .as_table()
+                .ok_or("'cards' section must be a table")?;
+
             for (card_name, card_value) in cards_table {
                 // Check for name collision with existing fields
                 if fields.contains_key(card_name) {
@@ -812,42 +749,32 @@ impl QuillConfig {
                     .into());
                 }
 
-                // Parse card schema
-                let card_table = card_value
-                    .as_table()
-                    .ok_or_else(|| format!("Card definition '{}' must be a table", card_name))?;
-
-                let title = card_table
-                    .get("title")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-
-                let description = card_table
-                    .get("description")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
+                // Parse card basic info using serde
+                let card_def: CardSchemaDef = card_value
+                    .clone()
+                    .try_into()
+                    .map_err(|e| format!("Failed to parse card '{}': {}", card_name, e))?;
 
                 // Parse card fields using shared helper
-                let card_fields =
-                    if let Some(toml::Value::Table(card_fields_table)) = card_table.get("fields") {
-                        let card_field_order = Self::get_key_order(
-                            toml_edit_doc.as_ref(),
-                            &["cards", card_name, "fields"],
-                        );
-                        Self::parse_fields_with_order(
-                            card_fields_table,
-                            &card_field_order,
-                            &format!("card '{}' field", card_name),
-                        )
-                    } else {
-                        HashMap::new()
-                    };
+                let card_fields = if let Some(card_fields_table) = &card_def.fields {
+                    let card_field_order = Self::get_key_order(
+                        toml_edit_doc.as_ref(),
+                        &["cards", card_name, "fields"],
+                    );
+
+                    Self::parse_fields_with_order(
+                        card_fields_table,
+                        &card_field_order,
+                        &format!("card '{}' field", card_name),
+                    )
+                } else {
+                    HashMap::new()
+                };
 
                 let card_schema = CardSchema {
                     name: card_name.clone(),
-                    title,
-                    description,
+                    title: card_def.title,
+                    description: card_def.description,
                     fields: card_fields,
                 };
 
@@ -2449,8 +2376,8 @@ default = "Unknown"
     }
 
     #[test]
-    fn test_field_schema_ignores_unknown_keys() {
-        // Test that unknown keys like "items" are now just warnings
+    fn test_field_schema_rejects_unknown_keys() {
+        // Test that unknown keys like "items" are rejected (strict mode)
         let yaml = r#"
 type: "string"
 description: "A string field"
@@ -2461,13 +2388,13 @@ items:
 "#;
         let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
         let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
-        // This should now succeed since items is just an unknown key (warning only)
+
         let result = FieldSchema::from_quill_value("author".to_string(), &quill_value);
 
-        // The parsing should succeed, items is now just an unknown field
-        assert!(result.is_ok());
-        let schema = result.unwrap();
-        assert_eq!(schema.r#type, Some(FieldType::String));
+        // The parsing should fail due to deny_unknown_fields
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.contains("unknown field `items`"), "Error was: {}", err);
     }
 
     #[test]
