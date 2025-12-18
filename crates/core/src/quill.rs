@@ -1961,8 +1961,7 @@ examples:
   - "Example value"
 default: "Default value"
 "#;
-        let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml_str).unwrap();
-        let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
+        let quill_value = QuillValue::from_yaml_str(yaml_str).unwrap();
         let schema2 = FieldSchema::from_quill_value("test_name".to_string(), &quill_value).unwrap();
         assert_eq!(schema2.name, "test_name");
         assert_eq!(schema2.description, "Full field schema");
@@ -2274,8 +2273,7 @@ examples:
 ui:
   group: "Test Group"
 "#;
-        let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
-        let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
+        let quill_value = QuillValue::from_yaml_str(yaml).unwrap();
         let schema = FieldSchema::from_quill_value("test_field".to_string(), &quill_value).unwrap();
 
         assert_eq!(schema.title, Some("Field Title".to_string()));
@@ -2303,8 +2301,7 @@ type: "string"
 title: "Simple Field"
 description: "A simple string field"
 "#;
-        let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
-        let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
+        let quill_value = QuillValue::from_yaml_str(yaml).unwrap();
         let schema =
             FieldSchema::from_quill_value("simple_field".to_string(), &quill_value).unwrap();
 
@@ -2377,8 +2374,7 @@ items:
     type: "string"
     description: "Nested field"
 "#;
-        let yaml_value: serde_yaml::Value = serde_yaml::from_str(yaml).unwrap();
-        let quill_value = QuillValue::from_yaml(yaml_value).unwrap();
+        let quill_value = QuillValue::from_yaml_str(yaml).unwrap();
 
         let result = FieldSchema::from_quill_value("author".to_string(), &quill_value);
 

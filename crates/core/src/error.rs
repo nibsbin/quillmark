@@ -345,7 +345,7 @@ pub enum ParseError {
 
     /// YAML parsing error
     #[error("YAML parsing error: {0}")]
-    YamlError(#[from] serde_yaml::Error),
+    YamlError(#[from] serde_saphyr::Error),
 
     /// JSON parsing/conversion error
     #[error("JSON error: {0}")]
@@ -404,7 +404,7 @@ impl ParseError {
             ParseError::YamlError(e) => {
                 Diagnostic::new(Severity::Error, format!("YAML parsing error: {}", e))
                     .with_code("parse::yaml_error".to_string())
-            } // serde_yaml::Error implements Error+Clone? No, usually Error is not Clone.
+            } // serde_saphyr::Error implements Error+Clone? No, usually Error is not Clone.
             ParseError::JsonError(e) => {
                 Diagnostic::new(Severity::Error, format!("JSON conversion error: {}", e))
                     .with_code("parse::json_error".to_string())
