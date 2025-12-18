@@ -11,7 +11,7 @@ This document defines the extended markdown syntax for embedding structured meta
 
 ## Metadata Block Syntax
 
-A metadata block begins and ends with a line containing exactly `---` (three hyphens, no other content).
+A metadata block begins and ends with a line containing **exactly** `---` (three hyphens, no leading/trailing whitespace, no other content on the line).
 
 ```
 ---
@@ -19,13 +19,37 @@ key: value
 ---
 ```
 
-## Horizontal Rule Disambiguation
+### Delimiter Rules
 
-A `---` line is treated as a **horizontal rule** (not a metadata block delimiter) if:
-- It is NOT at the start of the document, AND
-- The preceding line is blank
+- **`---` is reserved for metadata blocks only** — never treated as a thematic break
+- **Exact match required** — `---` with any other characters on the same line is not a delimiter
+- **Fenced code blocks** — `---` inside fenced code blocks (`` ``` `` or `~~~`) is not processed as a delimiter
+- **No `...` closer** — only `---` closes a metadata block (unlike Pandoc)
 
-Otherwise, `---` is treated as a metadata block delimiter.
+## CommonMark Compatibility
+
+### Thematic Breaks (Horizontal Rules)
+
+Use `***` or `___` for horizontal rules. The `---` syntax is not available for thematic breaks.
+
+- ✅ `***` (supported)
+- ✅ `___` (supported)
+- ❌ `---` (reserved for metadata blocks)
+
+### Setext Headers
+
+**Setext-style headers are not supported.** In standard CommonMark, a line of `---` under text creates an h2 header. This conflicts with metadata block syntax.
+
+- ✅ `# Heading` (ATX-style, supported)
+- ❌ `Heading\n---` (setext-style, not supported)
+
+## YAML Subset
+
+Metadata blocks follow **YAML 1.2** with one exception:
+
+- **Tags (`!`) are not supported** — custom and standard tags are ignored
+
+All other YAML 1.2 features are supported, including anchors, aliases, flow/block styles, and multi-line strings.
 
 ## Special Keys
 
@@ -37,17 +61,31 @@ Otherwise, `---` is treated as a metadata block delimiter.
 
 ## Document Structure
 
+### No Frontmatter
+
+If a document has no metadata blocks, the entire document content becomes the body with no fields and no cards.
+
 ### Global Block (Optional)
 
-The first metadata block in a document, if it lacks a `CARD` key, is the global block. Only one global block is permitted.
+The first metadata block in a document, if it lacks a `CARD` key, is the global block. Only one global block is permitted. An empty global block (no YAML content) is valid.
+
+**If the first block contains a `CARD` key**, no global block exists. The document has no global fields, the global body is empty, and that first block becomes the first card.
 
 ### Card Blocks
 
-Metadata blocks containing a `CARD` key are aggregated into a `CARDS` array in parse order.
+Metadata blocks containing a `CARD` key are aggregated into a `CARDS` array in parse order. A non-global metadata block without a `CARD` key is invalid.
 
-### Body Content
+### Body Extraction Rules
 
-Content between a metadata block's closing `---` and the next metadata block (or end of document) becomes that block's `BODY` field.
+Body content is extracted verbatim from the line after a block's closing `---` to the line before the next metadata block (or end of document).
+
+- **Whitespace preservation**: Leading and trailing blank lines are preserved exactly as written
+- **Empty body**: If no content exists between blocks, BODY is an empty string (`""`)
+- **No trimming**: Implementations must not trim or normalize whitespace
+
+### Flat Structure
+
+Cards are collected into a flat `CARDS` array. Nested or hierarchical card structures are not supported.
 
 ## Example
 
@@ -57,6 +95,10 @@ title: My Document
 QUILL: blog_post
 ---
 Main document body.
+
+***
+
+More content after horizontal rule.
 
 ---
 CARD: section
@@ -76,7 +118,7 @@ Conclusion content.
 {
   "title": "My Document",
   "QUILL": "blog_post",
-  "BODY": "Main document body.",
+  "BODY": "Main document body.\n\n***\n\nMore content after horizontal rule.",
   "CARDS": [
     {"CARD": "section", "heading": "Introduction", "BODY": "Introduction content."},
     {"CARD": "section", "heading": "Conclusion", "BODY": "Conclusion content."}
