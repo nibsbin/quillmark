@@ -122,8 +122,8 @@ Body of second sub-document.
   "title": "Global Metadata",
   "BODY": "Main document body.",
   "CARDS": [
-    {"CARD": "sub_documents", "title": "First Sub-Document", "BODY": "Body of first sub-document."},
-    {"CARD": "sub_documents", "title": "Second Sub-Document", "BODY": "Body of second sub-document."}
+    {"CARD": "sub_document", "title": "First Sub-Document", "BODY": "Body of first sub-document."},
+    {"CARD": "sub_document", "title": "Second Sub-Document", "BODY": "Body of second sub-document."}
   ]
 }
 ```
