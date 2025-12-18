@@ -161,7 +161,7 @@ impl ParsedDocument {
 struct MetadataBlock {
     start: usize,                          // Position of opening "---"
     end: usize,                            // Position after closing "---\n"
-    yaml_value: Option<serde_yaml::Value>, // Parsed YAML (None if empty or parse failed)
+    yaml_value: Option<serde_json::Value>, // Parsed YAML as JSON (None if empty or parse failed)
     tag: Option<String>,                   // Field name from CARD key
     quill_name: Option<String>,            // Quill name from QUILL key
 }
@@ -296,47 +296,29 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                     });
                 }
 
-                // Parse YAML content to check for reserved keys (QUILL, SCOPE)
+                // Parse YAML content to check for reserved keys (QUILL, CARD)
                 // First, try to parse as YAML
                 let (tag, quill_name, yaml_value) = if !content.is_empty() {
                     // Try to parse the YAML to check for reserved keys
-                    match serde_yaml::from_str::<serde_yaml::Value>(content) {
+                    match serde_saphyr::from_str::<serde_json::Value>(content) {
                         Ok(parsed_yaml) => {
-                            if let Some(mapping) = parsed_yaml.as_mapping() {
-                                let quill_key = serde_yaml::Value::String("QUILL".to_string());
-                                let card_key = serde_yaml::Value::String("CARD".to_string());
-                                let scope_key = serde_yaml::Value::String("SCOPE".to_string()); // Backwards compatibility alias
+                            if let Some(mapping) = parsed_yaml.as_object() {
+                                let quill_key = "QUILL";
+                                let card_key = "CARD";
 
-                                let has_quill = mapping.contains_key(&quill_key);
-                                let has_card = mapping.contains_key(&card_key);
-                                let has_scope = mapping.contains_key(&scope_key);
+                                let has_quill = mapping.contains_key(quill_key);
+                                let has_card = mapping.contains_key(card_key);
 
-                                // CARD and SCOPE are aliases - can't use both
-                                if has_card && has_scope {
+                                if has_quill && has_card {
                                     return Err(crate::error::ParseError::InvalidStructure(
-                                        "Cannot specify both CARD and SCOPE in the same block (SCOPE is an alias for CARD)"
-                                            .to_string(),
-                                    ));
-                                }
-
-                                let effective_card_key = if has_card {
-                                    Some(&card_key)
-                                } else if has_scope {
-                                    Some(&scope_key)
-                                } else {
-                                    None
-                                };
-
-                                if has_quill && effective_card_key.is_some() {
-                                    return Err(crate::error::ParseError::InvalidStructure(
-                                        "Cannot specify both QUILL and CARD/SCOPE in the same block"
+                                        "Cannot specify both QUILL and CARD in the same block"
                                             .to_string(),
                                     ));
                                 }
 
                                 if has_quill {
                                     // Extract quill name
-                                    let quill_value = mapping.get(&quill_key).unwrap();
+                                    let quill_value = mapping.get(quill_key).unwrap();
                                     let quill_name_str = quill_value
                                         .as_str()
                                         .ok_or("QUILL value must be a string")?;
@@ -350,20 +332,19 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
 
                                     // Remove QUILL from the YAML value for processing
                                     let mut new_mapping = mapping.clone();
-                                    new_mapping.remove(&quill_key);
+                                    new_mapping.remove(quill_key);
                                     let new_value = if new_mapping.is_empty() {
                                         None
                                     } else {
-                                        Some(serde_yaml::Value::Mapping(new_mapping))
+                                        Some(serde_json::Value::Object(new_mapping))
                                     };
 
                                     (None, Some(quill_name_str.to_string()), new_value)
-                                } else if let Some(card_key_used) = effective_card_key {
-                                    // Extract card field name (handles both CARD and SCOPE)
-                                    let card_value = mapping.get(card_key_used).unwrap();
-                                    let field_name = card_value
-                                        .as_str()
-                                        .ok_or("CARD/SCOPE value must be a string")?;
+                                } else if has_card {
+                                    // Extract card field name
+                                    let card_value = mapping.get(card_key).unwrap();
+                                    let field_name =
+                                        card_value.as_str().ok_or("CARD value must be a string")?;
 
                                     if !is_valid_tag_name(field_name) {
                                         return Err(crate::error::ParseError::InvalidStructure(format!(
@@ -372,13 +353,13 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                                         )));
                                     }
 
-                                    // Remove CARD/SCOPE from the YAML value for processing
+                                    // Remove CARD from the YAML value for processing
                                     let mut new_mapping = mapping.clone();
-                                    new_mapping.remove(card_key_used);
+                                    new_mapping.remove(card_key);
                                     let new_value = if new_mapping.is_empty() {
                                         None
                                     } else {
-                                        Some(serde_yaml::Value::Mapping(new_mapping))
+                                        Some(serde_json::Value::Object(new_mapping))
                                     };
 
                                     (Some(field_name.to_string()), None, new_value)
@@ -483,13 +464,13 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
     if let Some(idx) = global_frontmatter_index {
         let block = &blocks[idx];
 
-        // Get parsed YAML fields directly (already parsed in find_metadata_blocks)
-        let yaml_fields: HashMap<String, serde_yaml::Value> = match &block.yaml_value {
-            Some(serde_yaml::Value::Mapping(mapping)) => mapping
+        // Get parsed JSON fields directly (already parsed in find_metadata_blocks)
+        let json_fields: HashMap<String, serde_json::Value> = match &block.yaml_value {
+            Some(serde_json::Value::Object(mapping)) => mapping
                 .iter()
-                .filter_map(|(k, v)| k.as_str().map(|key| (key.to_string(), v.clone())))
+                .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
-            Some(serde_yaml::Value::Null) => {
+            Some(serde_json::Value::Null) => {
                 // Null value (from whitespace-only YAML) - treat as empty mapping
                 HashMap::new()
             }
@@ -502,9 +483,9 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
             None => HashMap::new(),
         };
 
-        // Convert YAML values to QuillValue at boundary
-        for (key, value) in yaml_fields {
-            fields.insert(key, QuillValue::from_yaml(value)?);
+        // Convert JSON values to QuillValue at boundary
+        for (key, value) in json_fields {
+            fields.insert(key, QuillValue::from_json(value));
         }
     }
 
@@ -512,13 +493,13 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
     for block in &blocks {
         if block.quill_name.is_some() {
             // Quill directive blocks can have YAML content (becomes part of frontmatter)
-            if let Some(ref yaml_val) = block.yaml_value {
-                let yaml_fields: HashMap<String, serde_yaml::Value> = match yaml_val {
-                    serde_yaml::Value::Mapping(mapping) => mapping
+            if let Some(ref json_val) = block.yaml_value {
+                let json_fields: HashMap<String, serde_json::Value> = match json_val {
+                    serde_json::Value::Object(mapping) => mapping
                         .iter()
-                        .filter_map(|(k, v)| k.as_str().map(|key| (key.to_string(), v.clone())))
+                        .map(|(k, v)| (k.clone(), v.clone()))
                         .collect(),
-                    serde_yaml::Value::Null => {
+                    serde_json::Value::Null => {
                         // Null value (from whitespace-only YAML) - treat as empty mapping
                         HashMap::new()
                     }
@@ -530,7 +511,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
                 };
 
                 // Check for conflicts with existing fields
-                for key in yaml_fields.keys() {
+                for key in json_fields.keys() {
                     if fields.contains_key(key) {
                         return Err(crate::error::ParseError::InvalidStructure(format!(
                             "Name collision: quill block field '{}' conflicts with existing field",
@@ -539,9 +520,9 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
                     }
                 }
 
-                // Convert YAML values to QuillValue at boundary
-                for (key, value) in yaml_fields {
-                    fields.insert(key, QuillValue::from_yaml(value)?);
+                // Convert JSON values to QuillValue at boundary
+                for (key, value) in json_fields {
+                    fields.insert(key, QuillValue::from_json(value));
                 }
             }
         }
@@ -551,23 +532,22 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
     for (idx, block) in blocks.iter().enumerate() {
         if let Some(ref tag_name) = block.tag {
             // Get YAML metadata directly (already parsed in find_metadata_blocks)
-            let mut item_fields: HashMap<String, serde_yaml::Value> = match &block.yaml_value {
-                Some(serde_yaml::Value::Mapping(mapping)) => mapping
-                    .iter()
-                    .filter_map(|(k, v)| k.as_str().map(|key| (key.to_string(), v.clone())))
-                    .collect(),
-                Some(serde_yaml::Value::Null) => {
-                    // Null value (from whitespace-only YAML) - treat as empty mapping
-                    HashMap::new()
-                }
-                Some(_) => {
-                    return Err(crate::error::ParseError::InvalidStructure(format!(
-                        "Invalid YAML in card block '{}': expected a mapping",
-                        tag_name
-                    )));
-                }
-                None => HashMap::new(),
-            };
+            // Get JSON metadata directly (already parsed in find_metadata_blocks)
+            let mut item_fields: serde_json::Map<String, serde_json::Value> =
+                match &block.yaml_value {
+                    Some(serde_json::Value::Object(mapping)) => mapping.clone(),
+                    Some(serde_json::Value::Null) => {
+                        // Null value (from whitespace-only YAML) - treat as empty mapping
+                        serde_json::Map::new()
+                    }
+                    Some(_) => {
+                        return Err(crate::error::ParseError::InvalidStructure(format!(
+                            "Invalid YAML in card block '{}': expected a mapping",
+                            tag_name
+                        )));
+                    }
+                    None => serde_json::Map::new(),
+                };
 
             // Extract body for this card block
             let body_start = block.end;
@@ -581,19 +561,17 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
             // Add body to item fields
             item_fields.insert(
                 BODY_FIELD.to_string(),
-                serde_yaml::Value::String(body.to_string()),
+                serde_json::Value::String(body.to_string()),
             );
 
             // Add CARD discriminator field
             item_fields.insert(
                 "CARD".to_string(),
-                serde_yaml::Value::String(tag_name.clone()),
+                serde_json::Value::String(tag_name.clone()),
             );
 
-            // Convert to JSON and add to CARDS array
-            let item_json = serde_json::to_value(&item_fields)
-                .map_err(|e| format!("Failed to convert card to JSON: {}", e))?;
-            cards_array.push(item_json);
+            // Add to CARDS array
+            cards_array.push(serde_json::Value::Object(item_fields));
         }
     }
 
@@ -1549,7 +1527,7 @@ CARD: 123
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("CARD/SCOPE value must be a string"));
+            .contains("CARD value must be a string"));
     }
 
     #[test]
@@ -2519,5 +2497,29 @@ Body
             .find(|v| v.get("CARD").and_then(|c| c.as_str()) == Some("my_card"))
             .expect("Card not found");
         assert_eq!(card.get("title").unwrap().as_str().unwrap(), "My Card");
+    }
+
+    #[test]
+    fn test_yaml_custom_tags_in_frontmatter() {
+        // User-defined YAML tags like !fill should be accepted and ignored
+        let markdown = r#"---
+memo_from: !fill 2d lt example
+regular_field: normal value
+---
+
+Body content."#;
+        let doc = decompose(markdown).unwrap();
+
+        // The tag !fill should be ignored, value parsed as string "2d lt example"
+        assert_eq!(
+            doc.get_field("memo_from").unwrap().as_str().unwrap(),
+            "2d lt example"
+        );
+        // Regular fields should still work
+        assert_eq!(
+            doc.get_field("regular_field").unwrap().as_str().unwrap(),
+            "normal value"
+        );
+        assert_eq!(doc.body(), Some("\nBody content."));
     }
 }

@@ -16,12 +16,14 @@ quillmark = { workspace = true }
 # Ensure the Typst backend is built for WASM with the embedded default font, but
 # without the `native` feature (which would pull in native-only code).
 # This explicitly sets quillmark-typst's features for this crate.
-quillmark-typst = { workspace = true, default-features = false, features = ["embed-default-font"] }
+quillmark-typst = { workspace = true, default-features = false, features = [
+    "embed-default-font",
+] }
 quillmark-core = { workspace = true }
 wasm-bindgen = "0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
+serde-saphyr = { workspace = true }
 toml = { workspace = true }
 serde-wasm-bindgen = "0.6"
 tsify = { version = "0.4.5", features = ["js"] }
