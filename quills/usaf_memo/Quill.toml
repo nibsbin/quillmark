@@ -142,7 +142,6 @@ description = "Font size for the memo text (pt)."
 
 [cards.indorsement]
 title = "Routing indorsement"
-ui.group = "indorsement"
 description = "Chain of routing endorsements. Each endorsement block adds an official response or forwarding action to the original memo."
 
 [cards.indorsement.fields.from]
