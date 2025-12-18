@@ -35,7 +35,7 @@
 //!
 //! let mut context = HashMap::new();
 //! context.insert("title".to_string(), QuillValue::from_json(serde_json::json!("My Doc")));
-//! context.insert(BODY_FIELD.to_string(), QuillValue::from_json(serde_json::json!("Content")));
+//! context.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("Content")));
 //!
 //! let output = plate.compose(context).unwrap();
 //! ```
