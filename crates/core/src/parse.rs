@@ -512,22 +512,6 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
             None => HashMap::new(),
         };
 
-        // Check that all tagged blocks don't conflict with global fields
-        // Exception: if the global field is an array, allow it (we'll merge later)
-        for other_block in &blocks {
-            if let Some(ref tag) = other_block.tag {
-                if let Some(global_value) = yaml_fields.get(tag) {
-                    // Check if the global value is an array
-                    if global_value.as_sequence().is_none() {
-                        return Err(crate::error::ParseError::InvalidStructure(format!(
-                            "Name collision: global field '{}' conflicts with tagged attribute",
-                            tag
-                        )));
-                    }
-                }
-            }
-        }
-
         // Convert YAML values to QuillValue at boundary
         for (key, value) in yaml_fields {
             fields.insert(key, QuillValue::from_yaml(value)?);
@@ -576,14 +560,6 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
     // Parse tagged blocks (CARD blocks)
     for (idx, block) in blocks.iter().enumerate() {
         if let Some(ref tag_name) = block.tag {
-            // Card names cannot conflict with frontmatter field names
-            if fields.contains_key(tag_name) {
-                return Err(crate::error::ParseError::InvalidStructure(format!(
-                    "Name collision: CARD type '{}' conflicts with frontmatter field name",
-                    tag_name
-                )));
-            }
-
             // Get YAML metadata directly (already parsed in find_metadata_blocks)
             let mut item_fields: HashMap<String, serde_yaml::Value> = match &block.yaml_value {
                 Some(serde_yaml::Value::Mapping(mapping)) => mapping
@@ -1182,13 +1158,12 @@ name: Item
 Item body"#;
 
         let result = decompose(markdown);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("collision"));
+        assert!(result.is_ok(), "Name collision should be allowed now");
     }
 
     #[test]
     fn test_card_name_collision_with_array_field() {
-        // CARD type names cannot conflict with any frontmatter field names (including arrays)
+        // CARD type names CAN now conflict with frontmatter field names
         let markdown = r#"---
 items:
   - name: Global Item 1
@@ -1205,13 +1180,15 @@ name: Scope Item 1
 Scope item 1 body"#;
 
         let result = decompose(markdown);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("collision"));
+        assert!(
+            result.is_ok(),
+            "Collision with array field should be allowed"
+        );
     }
 
     #[test]
     fn test_empty_global_array_with_card() {
-        // CARD type names cannot conflict with any frontmatter field names (even empty arrays)
+        // CARD type names CAN now conflict with frontmatter field names
         let markdown = r#"---
 items: []
 ---
@@ -1226,8 +1203,10 @@ name: Item 1
 Item 1 body"#;
 
         let result = decompose(markdown);
-        assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("collision"));
+        assert!(
+            result.is_ok(),
+            "Collision with empty array field should be allowed"
+        );
     }
 
     #[test]
@@ -2517,5 +2496,36 @@ Body."#;
             doc.get_field("title").unwrap().as_str().unwrap(),
             "Already «converted»"
         );
+    }
+
+    #[test]
+    fn test_allowed_card_field_collision() {
+        let markdown = r#"---
+my_card: "some global value"
+---
+
+---
+CARD: my_card
+title: "My Card"
+---
+Body
+"#;
+        // This should SUCCEED according to new PARSE.md
+        let doc = decompose(markdown).unwrap();
+
+        // Verify global field exists
+        assert_eq!(
+            doc.get_field("my_card").unwrap().as_str().unwrap(),
+            "some global value"
+        );
+
+        // Verify Card exists in CARDS array
+        let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
+        assert!(!cards.is_empty());
+        let card = cards
+            .iter()
+            .find(|v| v.get("CARD").and_then(|c| c.as_str()) == Some("my_card"))
+            .expect("Card not found");
+        assert_eq!(card.get("title").unwrap().as_str().unwrap(), "My Card");
     }
 }
