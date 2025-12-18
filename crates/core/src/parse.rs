@@ -2626,4 +2626,74 @@ Body content."#;
         );
         assert_eq!(doc.body(), Some("\nBody content."));
     }
+
+    /// Test the exact example from EXTENDED_MARKDOWN.md (lines 92-127)
+    #[test]
+    fn test_spec_example() {
+        let markdown = r#"---
+title: My Document
+QUILL: blog_post
+---
+Main document body.
+
+***
+
+More content after horizontal rule.
+
+---
+CARD: section
+heading: Introduction
+---
+Introduction content.
+
+---
+CARD: section
+heading: Conclusion
+---
+Conclusion content.
+"#;
+
+        let doc = decompose(markdown).unwrap();
+
+        // Verify global fields
+        assert_eq!(
+            doc.get_field("title").unwrap().as_str().unwrap(),
+            "My Document"
+        );
+        assert_eq!(doc.quill_tag(), "blog_post");
+
+        // Verify body contains horizontal rule (*** preserved)
+        let body = doc.body().unwrap();
+        assert!(body.contains("Main document body."));
+        assert!(body.contains("***"));
+        assert!(body.contains("More content after horizontal rule."));
+
+        // Verify CARDS array
+        let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
+        assert_eq!(cards.len(), 2);
+
+        // First card
+        let card1 = cards[0].as_object().unwrap();
+        assert_eq!(card1.get("CARD").unwrap().as_str().unwrap(), "section");
+        assert_eq!(
+            card1.get("heading").unwrap().as_str().unwrap(),
+            "Introduction"
+        );
+        assert_eq!(
+            card1.get("BODY").unwrap().as_str().unwrap(),
+            "Introduction content.\n\n"
+        );
+
+        // Second card
+        let card2 = cards[1].as_object().unwrap();
+        assert_eq!(card2.get("CARD").unwrap().as_str().unwrap(), "section");
+        assert_eq!(
+            card2.get("heading").unwrap().as_str().unwrap(),
+            "Conclusion"
+        );
+        assert_eq!(
+            card2.get("BODY").unwrap().as_str().unwrap(),
+            "Conclusion content.\n"
+        );
+    }
 }
