@@ -147,12 +147,14 @@ description = "Chain of routing endorsements. Each endorsement block adds an off
 [cards.indorsement.fields.from]
 title = "From office/symbol"
 type = "string"
+default = "ORG/SYMBOL"
 ui.group = "Addressing"
-description = "Office symbol or organization of the endorsing official (e.g., 'ORG/SYMBOL')."
+description = "Office symbol or Rank Name of the endorsing official (e.g., 'ORG/SYMBOL')."
 
 [cards.indorsement.fields.for]
 title = "To office/symbol"
 type = "string"
+default = "ORG/SYMBOL"
 ui.group = "Addressing"
 description = "Office symbol or organization receiving the endorsed memo."
 
@@ -168,7 +170,6 @@ default = ["FIRST M. LAST, Rank, USAF", "Duty Title"]
 [cards.indorsement.fields.format]
 title = "Indorsement format"
 type = "string"
-default = "standard"
 enum = ["standard", "informal", "separate_page"]
 ui.group = "Additional"
 description = "Format style: 'standard' (formal on same page), 'informal' (less formal routing), or 'separate_page' (starts on new page)."
@@ -176,20 +177,17 @@ description = "Format style: 'standard' (formal on same page), 'informal' (less 
 [cards.indorsement.fields.attachments]
 title = "Attachments for this endorsement"
 type = "array"
-default = []
 ui.group = "Additional"
 description = "List of attachments specific to this endorsement."
 
 [cards.indorsement.fields.cc]
 title = "Carbon copy recipients"
 type = "array"
-default = []
 ui.group = "Additional"
 description = "List of office symbols to receive copies of this endorsement."
 
 [cards.indorsement.fields.date]
 title = "Date of endorsement (YYYY-MM-DD)"
 type = "string"
-default = ""
 ui.group = "Additional"
 description = "Date of the endorsement. Leave blank to omit."
