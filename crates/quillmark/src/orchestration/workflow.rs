@@ -78,30 +78,22 @@ impl Workflow {
     }
 
     /// Process a parsed document through the plate template without compilation
+    ///
+    /// Note: Default values from the schema are NOT automatically injected.
+    /// This follows JSON Schema semantics where `default` is purely informational.
+    /// Typst plates should handle missing optional fields via `.at("field", default: ...)`.
     pub fn process_plate(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
-        use quillmark_core::schema;
-
-        // Apply defaults from JSON schema (document-level)
-        let defaults = self.quill.extract_defaults();
-        let parsed_with_defaults = parsed.with_defaults(defaults);
-
-        // Apply scope item defaults (for each item in scope arrays)
-        let scope_item_defaults = schema::extract_card_item_defaults(&self.quill.schema);
-        let fields_with_scope_defaults =
-            schema::apply_card_item_defaults(parsed_with_defaults.fields(), &scope_item_defaults);
-        let parsed_with_defaults = ParsedDocument::new(fields_with_scope_defaults);
-
-        // Apply coercion based on schema
-        let parsed_with_defaults = parsed_with_defaults.with_coercion(&self.quill.schema);
+        // Apply coercion based on schema (no default imputation - aligns with JSON Schema semantics)
+        let parsed_coerced = parsed.with_coercion(&self.quill.schema);
 
         // Validate document against schema
-        self.validate_document(&parsed_with_defaults)?;
+        self.validate_document(&parsed_coerced)?;
 
         // Normalize fields: strip bidi characters and process guillemets
         // - Strips Unicode bidirectional formatting characters that interfere with markdown parsing
         // - Converts <<text>> to «text» in body (guillemets)
         // - Strips chevrons in other fields (<<text>> → text)
-        let normalized_fields = normalize_fields(parsed_with_defaults.fields().clone());
+        let normalized_fields = normalize_fields(parsed_coerced.fields().clone());
 
         // Create appropriate plate based on whether template is provided
         let mut plate = match &self.quill.plate {
