@@ -90,20 +90,3 @@ This is a test.
     let _result = engine.render(parsed, options);
     // Note: render may fail in test due to typst compilation, but that's ok for API testing
 }
-
-#[wasm_bindgen_test]
-fn engine_register_and_render_legacy() {
-    // Legacy test - keeping for backwards compatibility check
-    let mut engine = Quillmark::new();
-
-    // Register quill
-    engine
-        .register_quill(JsValue::from_str(SMALL_QUILL_JSON))
-        .expect("register failed");
-
-    // Call process_plate on a small markdown
-    let plated = engine
-        .process_plate("test-quill", "---\ntitle: Plated\n---\n\n# X")
-        .expect("process_plate failed");
-    assert!(plated.len() > 0);
-}

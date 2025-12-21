@@ -6,15 +6,13 @@
 //!
 //! This test suite validates the public API for creating and using workflows:
 //! - `ParsedDocument::from_markdown()` - Markdown parsing
-//! - `Quillmark::workflow_from_quill_name()` - Load workflow by quill name
-//! - `Quillmark::workflow_from_quill()` - Load workflow from quill object
 //! - `Workflow::render()` - Full rendering pipeline
 //! - `Workflow::process_plate()` - Template processing only
 //!
 //! ## Relationship to Other Tests
 //!
 //! These tests complement `quill_engine_test.rs` by focusing specifically on
-//! workflow creation and usage patterns. While `quill_engine_test.rs` provides
+//! parsing and high-level rendering workflows. While `quill_engine_test.rs` provides
 //! comprehensive integration coverage, these tests validate specific API methods
 //! and their contracts.
 //!
@@ -23,7 +21,6 @@
 //! - Use minimal quills to reduce test complexity
 //! - Focus on API method signatures and behavior
 //! - Validate error-free execution paths
-//! - Tests intentionally overlap with `quill_engine_test.rs` for redundancy
 
 use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark};
 use std::fs;
@@ -52,53 +49,6 @@ This is a test.
         Some("John Doe")
     );
     assert!(parsed.body().is_some());
-}
-
-#[test]
-fn test_workflow_from_quill_name() {
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
-
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-    fs::write(
-        quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
-    )
-    .expect("Failed to write Quill.toml");
-    fs::write(quill_path.join("plate.typ"), "{{ title }}").expect("Failed to write plate.typ");
-
-    let mut engine = Quillmark::new();
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
-
-    let workflow = engine
-        .workflow("test-quill")
-        .expect("Failed to load workflow");
-
-    assert_eq!(workflow.quill_name(), "test-quill");
-}
-
-#[test]
-fn test_workflow_from_quill() {
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
-
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-    fs::write(
-        quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
-    )
-    .expect("Failed to write Quill.toml");
-    fs::write(quill_path.join("plate.typ"), "{{ title }}").expect("Failed to write plate.typ");
-
-    let engine = Quillmark::new();
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-
-    let workflow = engine.workflow(&quill).expect("Failed to load workflow");
-
-    assert_eq!(workflow.quill_name(), "test-quill");
 }
 
 #[test]
