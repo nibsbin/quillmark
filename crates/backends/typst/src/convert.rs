@@ -325,6 +325,152 @@ where
     Ok(())
 }
 
+/// Iterator that post-processes markdown events to enable intraword underscore emphasis.
+///
+/// CommonMark disables `__` emphasis when it starts or ends in the middle of a word.
+/// This iterator coalesces adjacent `Text` events and synthesizes `Strong` events for `__...__` patterns.
+struct EmphasisFixer<'a, I: Iterator<Item = (Event<'a>, Range<usize>)>> {
+    inner: std::iter::Peekable<I>,
+    source: &'a str,
+    /// Buffer of events to emit before pulling from inner
+    buffer: Vec<(Event<'a>, Range<usize>)>,
+}
+
+impl<'a, I> EmphasisFixer<'a, I>
+where
+    I: Iterator<Item = (Event<'a>, Range<usize>)>,
+{
+    fn new(inner: I, source: &'a str) -> Self {
+        Self {
+            inner: inner.peekable(),
+            source,
+            buffer: Vec::new(),
+        }
+    }
+
+    /// Coalesce consecutive Text events into a single range.
+    /// Returns the merged range covering all adjacent Text events.
+    fn coalesce_text_range(&mut self, initial_range: Range<usize>) -> Range<usize> {
+        let mut merged_range = initial_range;
+
+        // Keep consuming Text events as long as they're adjacent
+        while let Some((next_event, next_range)) = self.inner.peek() {
+            if matches!(next_event, Event::Text(_)) && next_range.start == merged_range.end {
+                merged_range.end = next_range.end;
+                self.inner.next(); // Consume the peeked event
+            } else {
+                break;
+            }
+        }
+
+        merged_range
+    }
+
+    /// Process a text range, potentially splitting it into multiple events with Strong markers.
+    /// Uses the source slice directly based on range.
+    fn process_text_from_source(&mut self, range: Range<usize>) {
+        let source_slice = &self.source[range.clone()];
+
+        // Safety check: if source slice contains backslash, it may have escapes - skip processing
+        if source_slice.contains('\\') || source_slice.contains('&') {
+            self.buffer.push((Event::Text(source_slice.into()), range));
+            return;
+        }
+
+        // Look for __ patterns in the source text
+        let mut events: Vec<(Event<'a>, Range<usize>)> = Vec::new();
+        let mut in_underline = false;
+        let mut last_end = 0;
+        let mut i = 0;
+        let bytes = source_slice.as_bytes();
+
+        while i < bytes.len() {
+            if i + 1 < bytes.len() && bytes[i] == b'_' && bytes[i + 1] == b'_' {
+                // Found __
+                let before = &source_slice[last_end..i];
+                if !before.is_empty() {
+                    events.push((
+                        Event::Text(before.into()),
+                        range.start + last_end..range.start + i,
+                    ));
+                }
+
+                let marker_range = range.start + i..range.start + i + 2;
+                if in_underline {
+                    // Close underline
+                    events.push((Event::End(TagEnd::Strong), marker_range));
+                    in_underline = false;
+                } else {
+                    // Open underline
+                    events.push((Event::Start(Tag::Strong), marker_range));
+                    in_underline = true;
+                }
+
+                i += 2;
+                last_end = i;
+            } else {
+                i += 1;
+            }
+        }
+
+        // Emit remaining text
+        let remaining = &source_slice[last_end..];
+        if !remaining.is_empty() {
+            events.push((
+                Event::Text(remaining.into()),
+                range.start + last_end..range.end,
+            ));
+        }
+
+        // If we have an unclosed underline, we need to undo the transformation
+        // (just emit original text)
+        if in_underline {
+            self.buffer.push((Event::Text(source_slice.into()), range));
+        } else if events.is_empty() {
+            self.buffer.push((Event::Text(source_slice.into()), range));
+        } else {
+            // Events need to be reversed since we pop from buffer
+            events.reverse();
+            self.buffer.extend(events);
+        }
+    }
+}
+
+impl<'a, I> Iterator for EmphasisFixer<'a, I>
+where
+    I: Iterator<Item = (Event<'a>, Range<usize>)>,
+{
+    type Item = (Event<'a>, Range<usize>);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // First drain buffer
+        if let Some(event) = self.buffer.pop() {
+            return Some(event);
+        }
+
+        // Pull from inner iterator
+        let (event, range) = self.inner.next()?;
+
+        match event {
+            Event::Text(_) => {
+                // Coalesce adjacent Text events into a single range
+                let merged_range = self.coalesce_text_range(range);
+                let source_slice = &self.source[merged_range.clone()];
+
+                if source_slice.contains("__") {
+                    // Use source slice directly
+                    self.process_text_from_source(merged_range);
+                    self.buffer.pop()
+                } else {
+                    // Emit the merged text as a single event
+                    Some((Event::Text(source_slice.into()), merged_range))
+                }
+            }
+            _ => Some((event, range)),
+        }
+    }
+}
+
 /// Converts CommonMark Markdown to Typst markup.
 ///
 /// Returns an error if nesting depth exceeds the maximum allowed.
@@ -336,9 +482,10 @@ pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
 
     let parser = Parser::new_ext(markdown, options);
+    let fixer = EmphasisFixer::new(parser.into_offset_iter(), markdown);
     let mut typst_output = String::new();
 
-    push_typst(&mut typst_output, markdown, parser.into_offset_iter())?;
+    push_typst(&mut typst_output, markdown, fixer)?;
     Ok(typst_output)
 }
 
@@ -999,6 +1146,34 @@ mod tests {
             mark_to_typst("__underline ~~strike~~__").unwrap(),
             "#underline[underline #strike[strike]]\n\n"
         );
+    }
+
+    // Tests for intraword underscore emphasis (EmphasisFixer)
+    #[test]
+    fn test_intraword_underscore_emphasis() {
+        // This is the user's reported issue: underscores in middle of word
+        assert_eq!(
+            mark_to_typst("the cow __jumped over the mo__on").unwrap(),
+            "the cow #underline[jumped over the mo]on\n\n"
+        );
+    }
+
+    #[test]
+    fn test_intraword_underscore_start_of_word() {
+        // Underscore starts mid-word
+        assert_eq!(
+            mark_to_typst("foo__bar__baz").unwrap(),
+            "foo#underline[bar]baz\n\n"
+        );
+    }
+
+    #[test]
+    fn test_escaped_intraword_underscore() {
+        // Escaped underscores should remain literal
+        let result = mark_to_typst("foo\\__bar").unwrap();
+        // Contains literal underscore, not underline
+        assert!(result.contains("\\_"));
+        assert!(!result.contains("#underline"));
     }
 }
 
