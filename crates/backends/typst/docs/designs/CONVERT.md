@@ -239,14 +239,13 @@ This preserves markdown's distinction between soft line wrapping and explicit li
 
 ### Currently Unsupported Elements
 
-The following markdown features are not currently implemented in the initial version but have design considerations below:
+The following markdown features are not currently implemented but have design considerations below:
 
 - HTML tags (intentionally excluded)
 - Math expressions (intentionally excluded)
 - Footnotes (intentionally excluded)
 - Tables (intentionally excluded)
 - Images (to be handled separately by asset system)
-- Headings (see design below)
 - Block quotes (see design below)
 - Code blocks (see design below)
 - Horizontal rules (see design below)
@@ -465,13 +464,7 @@ This section provides a comprehensive analysis of all CommonMark features, their
 ###### Heading 6
 ```
 
-**Current Status:** Not implemented
-
-**Design Rationale:**
-
-Headings are intentionally left to the template system in Quillmark's architecture. The template controls document structure, and markdown content is treated as body content embedded via filters. This is a deliberate architectural decision.
-
-**However, if headings need to be supported in body content:**
+**Current Status:** ✅ Implemented
 
 **Typst Mapping:**
 ```typst
@@ -483,7 +476,9 @@ Headings are intentionally left to the template system in Quillmark's architectu
 ====== Heading 6
 ```
 
-**Implementation Design:**
+**Implementation:**
+
+See `/home/user/quillmark/crates/backends/typst/src/convert.rs:210-216` and `287-291`:
 
 ```rust
 Tag::Heading { level, .. } => {
@@ -503,13 +498,24 @@ TagEnd::Heading(_) => {
 }
 ```
 
-**Considerations:**
+**Features:**
+- Supports all 6 heading levels (CommonMark compliant)
 - Typst headings automatically handle numbering and spacing
-- Should heading levels be capped at 6 like CommonMark?
-- Conflict resolution: if template defines document structure, body headings may disrupt it
-- Alternative: Convert headings to bold text with larger font if structural headings aren't desired
+- Properly escapes special characters in heading text
+- Works with inline formatting (bold, italic, code) within headings
+- Comprehensive test coverage (12+ tests starting at line 912)
 
-**Recommendation:** Only implement if use case requires markdown content to define its own structure independent of templates. Otherwise, maintain current design where templates control structure.
+**Test Coverage:**
+- Basic heading levels 1-6
+- Headings with formatting (bold, italic, underline, code)
+- Headings with special characters
+- Multiple consecutive headings
+- Headings followed by paragraphs and lists
+
+**Notes:**
+- While templates typically control document structure, headings in body content allow for flexible document organization
+- Heading levels are capped at 6 per CommonMark specification
+- Headings can contain inline markdown (formatting, code, links)
 
 #### 1.2 Paragraphs
 
@@ -934,7 +940,7 @@ The double backslash in markdown becomes single backslash in parser output, whic
 
 | Feature | Status | Priority | Complexity | Notes |
 |---------|--------|----------|------------|-------|
-| Headings | Not impl. | Low | Simple | Conflicts with template-first design |
+| Headings | ✅ Done | - | - | All 6 levels supported with full test coverage |
 | Paragraphs | ✅ Done | - | - | Fully implemented |
 | Line breaks | ✅ Done | - | - | Hard & soft breaks work |
 | Italic | ✅ Done | - | - | Working |
@@ -959,11 +965,8 @@ The double backslash in markdown becomes single backslash in parser output, whic
 3. **Block quotes** - Useful for citations and callouts, requires depth tracking
 4. **Images** - Requires asset system coordination, high value for rich documents
 
-**Low Priority (Avoid or Defer):**
-5. **Headings** - Conflicts with template-first architecture; only if user requirements demand it
-
 **No Action Needed:**
-6. All emphasis, lists, links, escaping already work correctly
+5. All core features already work correctly: headings, emphasis, lists, links, escaping
 
 ---
 
