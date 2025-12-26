@@ -48,9 +48,16 @@ pub enum ConversionError {
 }
 
 /// Escapes text for safe use in Typst markup context.
+///
+/// This function escapes all Typst-special characters to prevent:
+/// - Markup injection (*, _, `, #, etc.)
+/// - Layout manipulation (~, which is non-breaking space in Typst)
+/// - Reference injection (@)
+/// - Code/comment injection (//, $, etc.)
 pub fn escape_markup(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace("//", "\\/\\/")
+        .replace('~', "\\~") // Non-breaking space in Typst
         .replace('*', "\\*")
         .replace('_', "\\_")
         .replace('`', "\\`")
@@ -528,6 +535,13 @@ mod tests {
             escape_markup("Use * for bold and # for functions"),
             "Use \\* for bold and \\# for functions"
         );
+    }
+
+    #[test]
+    fn test_escape_markup_tilde() {
+        // Tilde is non-breaking space in Typst - must be escaped to prevent layout manipulation
+        assert_eq!(escape_markup("Hello~World"), "Hello\\~World");
+        assert_eq!(escape_markup("a~b~c"), "a\\~b\\~c");
     }
 
     // Tests for escape_string function

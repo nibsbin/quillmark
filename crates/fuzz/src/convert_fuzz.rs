@@ -4,7 +4,7 @@ use quillmark_typst::convert::{escape_markup, escape_string, mark_to_typst};
 // Typst special characters that need escaping in markup context (excluding backslash and //)
 // Backslash is handled first to prevent double-escaping, and // is handled as a pattern
 // These correspond to the single-character escapes in the escape_markup function
-const TYPST_SPECIAL_CHARS: &[char] = &['*', '_', '`', '#', '[', ']', '$', '<', '>', '@'];
+const TYPST_SPECIAL_CHARS: &[char] = &['~', '*', '_', '`', '#', '[', ']', '$', '<', '>', '@'];
 
 // Security-focused tests for escape_string
 #[test]
@@ -61,6 +61,11 @@ fn test_escape_markup_security_attack_vectors() {
     let comment_attack = "// This could be a comment";
     let escaped = escape_markup(comment_attack);
     assert!(escaped.starts_with("\\/\\/"));
+
+    // Test tilde (non-breaking space in Typst) is escaped
+    let tilde_attack = "Hello~World";
+    let escaped = escape_markup(tilde_attack);
+    assert_eq!(escaped, "Hello\\~World");
 }
 
 proptest! {

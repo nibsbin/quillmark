@@ -213,6 +213,21 @@ fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
     fence_count % 2 == 1
 }
 
+/// Creates serde_saphyr Options with security budgets configured.
+///
+/// Uses MAX_YAML_DEPTH from error.rs to limit nesting depth at the parser level,
+/// which is more robust than heuristic-based pre-parse checks.
+fn yaml_parse_options() -> serde_saphyr::Options {
+    let budget = serde_saphyr::Budget {
+        max_depth: crate::error::MAX_YAML_DEPTH,
+        ..Default::default()
+    };
+    serde_saphyr::Options {
+        budget: Some(budget),
+        ..Default::default()
+    }
+}
+
 /// Find all metadata blocks in the document
 fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::error::ParseError> {
     let mut blocks = Vec::new();
@@ -328,10 +343,13 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                 }
 
                 // Parse YAML content to check for reserved keys (QUILL, CARD)
-                // First, try to parse as YAML
+                // Uses configured budget to limit nesting depth (prevents stack overflow)
                 let (tag, quill_name, yaml_value) = if !content.is_empty() {
-                    // Try to parse the YAML to check for reserved keys
-                    match serde_saphyr::from_str::<serde_json::Value>(content) {
+                    // Try to parse the YAML with security budgets
+                    match serde_saphyr::from_str_with_options::<serde_json::Value>(
+                        content,
+                        yaml_parse_options(),
+                    ) {
                         Ok(parsed_yaml) => {
                             if let Some(mapping) = parsed_yaml.as_object() {
                                 let quill_key = "QUILL";
@@ -1916,6 +1934,48 @@ mod demo_file_test {
     fn test_yaml_within_size_limit() {
         // Create YAML block well within the limit
         let markdown = "---\ntitle: Test\nauthor: John Doe\n---\n\nBody content";
+
+        let result = decompose(markdown);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_yaml_depth_limit() {
+        // Create deeply nested YAML that exceeds MAX_YAML_DEPTH (100 levels)
+        // This tests serde-saphyr's Budget.max_depth enforcement
+        let mut yaml_content = String::new();
+        for i in 0..110 {
+            yaml_content.push_str(&"  ".repeat(i));
+            yaml_content.push_str(&format!("level{}: value\n", i));
+        }
+
+        let markdown = format!("---\n{}---\n\nBody", yaml_content);
+        let result = decompose(&markdown);
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        // serde-saphyr returns "budget exceeded" or similar for depth violations
+        assert!(
+            err_msg.to_lowercase().contains("budget")
+                || err_msg.to_lowercase().contains("depth")
+                || err_msg.contains("YAML"),
+            "Expected depth/budget error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_yaml_depth_within_limit() {
+        // Create reasonably nested YAML (should succeed)
+        let markdown = r#"---
+level1:
+  level2:
+    level3:
+      level4:
+        value: test
+---
+
+Body content"#;
 
         let result = decompose(markdown);
         assert!(result.is_ok());

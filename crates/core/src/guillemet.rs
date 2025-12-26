@@ -48,6 +48,12 @@ fn count_leading_spaces(chars: &[char]) -> usize {
 /// - Indented code blocks (4+ spaces)
 /// - Inline code spans (backticks)
 fn preprocess_guillemets_impl(text: &str, skip_code_blocks: bool) -> String {
+    // Early exit: if no closing >> exists, no conversion is possible
+    // This prevents O(n²) complexity on pathological input with many unmatched <<
+    if !text.contains(">>") {
+        return text.to_string();
+    }
+
     let chars: Vec<char> = text.chars().collect();
     let mut result = String::with_capacity(text.len());
     let mut i = 0;
@@ -604,5 +610,22 @@ mod tests {
         assert_eq!(preprocess_guillemets(">>"), ">>");
         assert_eq!(preprocess_guillemets("<"), "<");
         assert_eq!(preprocess_guillemets(">"), ">");
+    }
+
+    #[test]
+    fn test_early_exit_no_closing_chevrons() {
+        // If there's no >> at all, the early exit optimization should kick in
+        // and return the input unchanged immediately (prevents O(n²) scanning)
+        let input_without_closing = "<<<<<<<<<<<<<<<<<<<<text<<<<<<<<<<";
+        assert_eq!(
+            preprocess_guillemets(input_without_closing),
+            input_without_closing
+        );
+
+        let input_with_only_opening = "Some <<text and <<more <<here";
+        assert_eq!(
+            preprocess_guillemets(input_with_only_opening),
+            input_with_only_opening
+        );
     }
 }

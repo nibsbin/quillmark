@@ -144,6 +144,10 @@ pub const MAX_NESTING_DEPTH: usize = 100;
 /// Maximum template output size (50 MB)
 pub const MAX_TEMPLATE_OUTPUT: usize = 50 * 1024 * 1024;
 
+/// Maximum YAML nesting depth (100 levels)
+/// Prevents stack overflow from deeply nested YAML structures
+pub const MAX_YAML_DEPTH: usize = 100;
+
 /// Error severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Severity {
