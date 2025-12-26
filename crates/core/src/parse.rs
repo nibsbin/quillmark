@@ -467,6 +467,14 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                     quill_name,
                 });
 
+                // Check card count limit to prevent memory exhaustion
+                if blocks.len() > crate::error::MAX_CARD_COUNT {
+                    return Err(crate::error::ParseError::InputTooLarge {
+                        size: blocks.len(),
+                        max: crate::error::MAX_CARD_COUNT,
+                    });
+                }
+
                 pos = abs_closing_pos + closing_len;
             } else if abs_pos == 0 {
                 // Frontmatter started but not closed
@@ -696,6 +704,14 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
         "CARDS".to_string(),
         QuillValue::from_json(serde_json::Value::Array(cards_array)),
     );
+
+    // Check field count limit to prevent memory exhaustion
+    if fields.len() > crate::error::MAX_FIELD_COUNT {
+        return Err(crate::error::ParseError::InputTooLarge {
+            size: fields.len(),
+            max: crate::error::MAX_FIELD_COUNT,
+        });
+    }
 
     let quill_tag = quill_name.unwrap_or_else(|| "__default__".to_string());
     let parsed = ParsedDocument::with_quill_tag(fields, quill_tag);

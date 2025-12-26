@@ -52,6 +52,7 @@ use crate::guillemet::{preprocess_markdown_guillemets, strip_chevrons};
 use crate::parse::BODY_FIELD;
 use crate::value::QuillValue;
 use std::collections::HashMap;
+use unicode_normalization::UnicodeNormalization;
 
 /// Errors that can occur during normalization
 #[derive(Debug, thiserror::Error)]
@@ -356,11 +357,37 @@ pub fn normalize_fields(fields: HashMap<String, QuillValue>) -> HashMap<String, 
     fields
         .into_iter()
         .map(|(key, value)| {
+            // Normalize field name to NFC form for consistent key comparison
+            // This ensures café (composed) and café (decomposed) are treated as the same key
+            let normalized_key = normalize_field_name(&key);
             let json = value.into_json();
-            let processed = normalize_json_value(json, key == BODY_FIELD);
-            (key, QuillValue::from_json(processed))
+            let processed = normalize_json_value(json, normalized_key == BODY_FIELD);
+            (normalized_key, QuillValue::from_json(processed))
         })
         .collect()
+}
+
+/// Normalize field name to Unicode NFC (Canonical Decomposition, followed by Canonical Composition)
+///
+/// This ensures that equivalent Unicode strings (e.g., "café" composed vs decomposed)
+/// are treated as identical field names, preventing subtle bugs where visually
+/// identical keys are treated as different.
+///
+/// # Examples
+///
+/// ```
+/// use quillmark_core::normalize::normalize_field_name;
+///
+/// // Composed form (single code point for é)
+/// let composed = "café";
+/// // Decomposed form (e + combining acute accent)
+/// let decomposed = "cafe\u{0301}";
+///
+/// // Both normalize to the same NFC form
+/// assert_eq!(normalize_field_name(composed), normalize_field_name(decomposed));
+/// ```
+pub fn normalize_field_name(name: &str) -> String {
+    name.nfc().collect()
 }
 
 #[cfg(test)]

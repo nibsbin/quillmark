@@ -376,13 +376,13 @@ where
     fn process_text_from_source(&mut self, range: Range<usize>) {
         let source_slice = &self.source[range.clone()];
 
-        // Safety check: if source slice contains backslash, it may have escapes - skip processing
-        if source_slice.contains('\\') || source_slice.contains('&') {
+        // Skip processing for HTML entities (complex to handle correctly)
+        if source_slice.contains('&') {
             self.buffer.push((Event::Text(source_slice.into()), range));
             return;
         }
 
-        // Look for __ patterns in the source text
+        // Look for __ patterns in the source text, handling escapes
         let mut events: Vec<(Event<'a>, Range<usize>)> = Vec::new();
         let mut in_underline = false;
         let mut last_end = 0;
@@ -390,6 +390,12 @@ where
         let bytes = source_slice.as_bytes();
 
         while i < bytes.len() {
+            // Skip over escaped characters (backslash followed by any char)
+            if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                i += 2; // Skip the backslash and the escaped character
+                continue;
+            }
+
             if i + 1 < bytes.len() && bytes[i] == b'_' && bytes[i + 1] == b'_' {
                 // Found __
                 let before = &source_slice[last_end..i];
@@ -430,6 +436,9 @@ where
         // If we have an unclosed underline, we need to undo the transformation
         // (just emit original text)
         if in_underline {
+            #[cfg(debug_assertions)]
+            eprintln!("Warning: Unclosed __ in text: {:?}", source_slice);
+
             self.buffer.push((Event::Text(source_slice.into()), range));
         } else if events.is_empty() {
             self.buffer.push((Event::Text(source_slice.into()), range));

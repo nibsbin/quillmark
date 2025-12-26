@@ -148,6 +148,14 @@ pub const MAX_TEMPLATE_OUTPUT: usize = 50 * 1024 * 1024;
 /// Prevents stack overflow from deeply nested YAML structures
 pub const MAX_YAML_DEPTH: usize = 100;
 
+/// Maximum number of CARD blocks allowed per document
+/// Prevents memory exhaustion from documents with excessive card blocks
+pub const MAX_CARD_COUNT: usize = 1000;
+
+/// Maximum number of fields allowed per document
+/// Prevents memory exhaustion from documents with excessive fields
+pub const MAX_FIELD_COUNT: usize = 1000;
+
 /// Error severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Severity {
