@@ -934,7 +934,9 @@ Err(e) => {
 
 ## 5. Design Weaknesses
 
-### 5.1 [MEDIUM] Multi-Phase Normalization Creates Inconsistency Risk
+### 5.1 [COMPLETE] Multi-Phase Normalization Creates Inconsistency Risk
+
+**Status:** ✅ IMPLEMENTED
 
 **Issue:** Normalization happens at multiple stages:
 1. `normalize_markdown()` - initial input
@@ -943,21 +945,25 @@ Err(e) => {
 
 If any phase is skipped (e.g., direct API usage), results are inconsistent.
 
-**Recommendation:**
+**Resolution:**
 
-Create a single normalization entry point:
+Added `normalize_document()` function in `crates/core/src/normalize.rs` as the single entry point for document normalization. The function:
+- Applies all field-level normalizations in the correct order
+- Preserves the quill tag
+- Is idempotent (can be called multiple times safely)
+- Has comprehensive documentation including usage examples
+
 ```rust
-pub fn normalize_document(doc: ParsedDocument) -> ParsedDocument {
-    // Apply all normalizations in correct order
-    let fields = normalize_fields(doc.fields);
-    ParsedDocument::with_quill_tag(fields, doc.quill_tag)
-}
-```
+use quillmark_core::{ParsedDocument, normalize::normalize_document};
 
-Document that this MUST be called before rendering.
+// After parsing, call normalize_document before rendering
+let doc = ParsedDocument::from_markdown(markdown).unwrap();
+let normalized = normalize_document(doc);
+```
 
 **Priority:** Medium
 **Effort:** Medium (2-3 hours)
+
 
 ---
 

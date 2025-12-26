@@ -390,6 +390,64 @@ pub fn normalize_field_name(name: &str) -> String {
     name.nfc().collect()
 }
 
+/// Normalizes a parsed document by applying all field-level normalizations.
+///
+/// This is the **primary entry point** for normalizing documents after parsing.
+/// It ensures consistent processing regardless of how the document was created.
+///
+/// # Normalization Steps
+///
+/// This function applies all normalizations in the correct order:
+/// 1. **Unicode NFC normalization** - Field names are normalized to NFC form
+/// 2. **Bidi stripping** - Invisible bidirectional control characters are removed
+/// 3. **HTML comment fence fixing** - Trailing text after `-->` is preserved
+/// 4. **Guillemet conversion** - `<<text>>` is converted to `«text»` in BODY fields
+/// 5. **Chevron stripping** - `<<text>>` is stripped to `text` in other fields
+///
+/// # When to Use
+///
+/// Call this function after parsing and before rendering:
+///
+/// ```no_run
+/// use quillmark_core::{ParsedDocument, normalize::normalize_document};
+///
+/// let markdown = "---\ntitle: Example\n---\n\nBody with <<placeholder>>";
+/// let doc = ParsedDocument::from_markdown(markdown).unwrap();
+/// let normalized = normalize_document(doc);
+/// // Use normalized document for rendering...
+/// ```
+///
+/// # Direct API Usage
+///
+/// If you're constructing a `ParsedDocument` directly via [`ParsedDocument::new`]
+/// rather than parsing from markdown, you **MUST** call this function to ensure
+/// consistent normalization:
+///
+/// ```
+/// use quillmark_core::{ParsedDocument, QuillValue, normalize::normalize_document};
+/// use std::collections::HashMap;
+///
+/// // Direct construction (e.g., from API or database)
+/// let mut fields = HashMap::new();
+/// fields.insert("title".to_string(), QuillValue::from_json(serde_json::json!("Test")));
+/// fields.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("<<content>>")));
+///
+/// let doc = ParsedDocument::new(fields);
+/// let normalized = normalize_document(doc);
+///
+/// // Body now has guillemets converted
+/// assert_eq!(normalized.body().unwrap(), "«content»");
+/// ```
+///
+/// # Idempotency
+///
+/// This function is idempotent - calling it multiple times produces the same result.
+/// However, for performance reasons, avoid unnecessary repeated calls.
+pub fn normalize_document(doc: crate::parse::ParsedDocument) -> crate::parse::ParsedDocument {
+    let normalized_fields = normalize_fields(doc.fields().clone());
+    crate::parse::ParsedDocument::with_quill_tag(normalized_fields, doc.quill_tag().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -728,5 +786,66 @@ mod tests {
         // This should succeed
         let result = super::normalize_json_value_inner(value, false, 0);
         assert!(result.is_ok());
+    }
+
+    // Tests for normalize_document
+
+    #[test]
+    fn test_normalize_document_basic() {
+        use crate::parse::ParsedDocument;
+
+        let mut fields = std::collections::HashMap::new();
+        fields.insert(
+            "title".to_string(),
+            crate::value::QuillValue::from_json(serde_json::json!("<<placeholder>>")),
+        );
+        fields.insert(
+            BODY_FIELD.to_string(),
+            crate::value::QuillValue::from_json(serde_json::json!("<<content>> \u{202D}**bold**")),
+        );
+
+        let doc = ParsedDocument::new(fields);
+        let normalized = super::normalize_document(doc);
+
+        // Title has chevrons stripped
+        assert_eq!(
+            normalized.get_field("title").unwrap().as_str().unwrap(),
+            "placeholder"
+        );
+
+        // Body has guillemets converted and bidi stripped
+        assert_eq!(normalized.body().unwrap(), "«content» **bold**");
+    }
+
+    #[test]
+    fn test_normalize_document_preserves_quill_tag() {
+        use crate::parse::ParsedDocument;
+
+        let fields = std::collections::HashMap::new();
+        let doc = ParsedDocument::with_quill_tag(fields, "custom_quill".to_string());
+        let normalized = super::normalize_document(doc);
+
+        assert_eq!(normalized.quill_tag(), "custom_quill");
+    }
+
+    #[test]
+    fn test_normalize_document_idempotent() {
+        use crate::parse::ParsedDocument;
+
+        let mut fields = std::collections::HashMap::new();
+        fields.insert(
+            BODY_FIELD.to_string(),
+            crate::value::QuillValue::from_json(serde_json::json!("<<content>>")),
+        );
+
+        let doc = ParsedDocument::new(fields);
+        let normalized_once = super::normalize_document(doc);
+        let normalized_twice = super::normalize_document(normalized_once.clone());
+
+        // Calling normalize_document twice should produce the same result
+        assert_eq!(
+            normalized_once.body().unwrap(),
+            normalized_twice.body().unwrap()
+        );
     }
 }
