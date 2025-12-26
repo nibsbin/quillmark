@@ -671,138 +671,55 @@ Event::Text(text) => {
     if in_code_block {
         // No escaping for code block content
         output.push_str(&text);
-    } else {
-        let escaped = escape_markup(&text);
-        output.push_str(&escaped);
-    }
-    end_newline = text.ends_with('\n');
-}
-
-TagEnd::CodeBlock => {
-    depth = depth.saturating_sub(1);
-    in_code_block = false;
-
-    if !end_newline {
-        output.push('\n');
-    }
-    output.push_str("```\n\n");
-    end_newline = true;
-}
-```
-
-**Priority:** High
-**Effort:** Medium (2-3 hours)
-
----
-
-### 3.2 [HIGH] Images Not Implemented
+### 3.1 [VALIDATED] Fenced Code Blocks Not Supported
 
 **Location:** `crates/backends/typst/src/convert.rs`
 
-**Current State:** Images are silently ignored.
+**Status:** Intentional Limitation.
 
-**Recommendation:** Implement per `CONVERT.md:786-856`:
+**Assessment:**
+Fenced code blocks are currently unsupported in the Quillmark renderer. This is a deliberate design choice for the current version. The renderer safely ignores the block delimiters and renders content as plain text.
 
-```rust
-// Add state tracking
-let mut in_image = false;
-let mut image_alt_buffer = String::new();
-let mut image_url = String::new();
-
-Tag::Image { dest_url, .. } => {
-    depth += 1;
-    in_image = true;
-    image_alt_buffer.clear();
-    image_url = dest_url.to_string();
-}
-
-Event::Text(text) if in_image => {
-    image_alt_buffer.push_str(&text);
-}
-
-TagEnd::Image => {
-    depth = depth.saturating_sub(1);
-    in_image = false;
-
-    output.push_str("#image(\"");
-    output.push_str(&escape_string(&image_url));
-    output.push('"');
-
-    if !image_alt_buffer.is_empty() {
-        output.push_str(", alt: \"");
-        output.push_str(&escape_string(&image_alt_buffer));
-        output.push('"');
-    }
-
-    output.push(')');
-    end_newline = false;
-}
-```
-
-**Priority:** High
-**Effort:** Medium (2-3 hours)
+**Recommendation:**
+No action required for implementation. Consider adding a debug warning if `debug_assertions` are enabled.
 
 ---
 
-### 3.3 [MEDIUM] Block Quotes Not Implemented
+### 3.2 [VALIDATED] Images Not Supported
 
 **Location:** `crates/backends/typst/src/convert.rs`
 
-**Recommendation:** Implement with nesting flattening per `CONVERT.md:570-645`:
+**Status:** Intentional Limitation.
 
-```rust
-let mut blockquote_depth = 0;
+**Assessment:**
+Inline images are not supported. The parsing pipeline correctly ignores image tags.
 
-Tag::BlockQuote(_) => {
-    depth += 1;
-    blockquote_depth += 1;
+**Recommendation:**
+No action required.
 
-    if blockquote_depth == 1 {
-        if !end_newline {
-            output.push('\n');
-        }
-        output.push_str("#quote[\n");
-        end_newline = true;
-    }
-}
-
-TagEnd::BlockQuote => {
-    depth = depth.saturating_sub(1);
-    blockquote_depth -= 1;
-
-    if blockquote_depth == 0 {
-        if !end_newline {
-            output.push('\n');
-        }
-        output.push_str("]\n\n");
-        end_newline = true;
-    }
-}
-```
-
-**Priority:** Medium
-**Effort:** Low (1-2 hours)
 
 ---
 
-### 3.4 [MEDIUM] Horizontal Rules Not Implemented
+### 3.3 [VALIDATED] Block Quotes Not Supported
 
 **Location:** `crates/backends/typst/src/convert.rs`
 
-**Recommendation:** Simple implementation per `CONVERT.md:858-899`:
+**Status:** Intentional Limitation.
 
-```rust
-Event::Rule => {
-    if !end_newline {
-        output.push('\n');
-    }
-    output.push_str("#line(length: 100%)\n\n");
-    end_newline = true;
-}
-```
+**Recommendation:** No action required.
 
-**Priority:** Medium
-**Effort:** Low (30 minutes)
+
+---
+
+### 3.4 [VALIDATED] Horizontal Rules Not Supported
+
+**Location:** `crates/backends/typst/src/convert.rs`
+
+**Status:** Intentional Limitation.
+
+**Recommendation:**
+Ensure horizontal rules are ignored or treated as plain text if caught by the parser. (Note: `---` is reserved for metadata, but `***` or `___` are valid CommonMark rules that we are choosing not to support).
+
 
 ---
 
@@ -892,7 +809,12 @@ Event::Code(text) => {
 - Math expressions
 - Tables
 
-**Recommendation:** Add optional warnings:
+**Verdict:**
+This is consistent with the decision to support a minimal Markdown subset.
+
+**Recommendation:**
+Document the supported subset in `EXTENDED_MARKDOWN.md` (Completed). No code changes required.
+
 
 ```rust
 pub struct ConversionOptions {

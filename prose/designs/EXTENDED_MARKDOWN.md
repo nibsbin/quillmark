@@ -133,3 +133,22 @@ Conclusion content.
 3. **Invalid card name**: Card name not matching `[a-z_][a-z0-9_]*` → error
 4. **Conflicting keys**: Both `CARD` and `QUILL` in same block → error
 5. **Unclosed block**: Opening `---` without closing `---` → error
+
+## Supported Syntax
+
+The following Markdown features are **supported**:
+- **Headings**: ATX-style (`# Heading`)
+- **Paragraphs**: Standard
+- **Emphasis**: `*italic*`, `**bold**`, `__underline__`, `~~strike~~`
+- **Lists**: Ordered and unordered (nested)
+- **Links**: `[text](url)`
+
+The following features are **NOT supported** (and will be rendered as plain text or ignored):
+- **Images**: Inline `![alt](src)`
+- **Block Quotes**: `> quote`
+- **Fenced Code Blocks**: ` ``` ` blocks (rendered as plain text)
+- **HTML Blocks**: `<div>...</div>`
+- **Tables**: GFM tables
+- **Math**: `$latex$`
+- **Footnotes**: `[^1]`
+- **Thematic Breaks**: `***`, `___`, `---` (all ignored or reserved)
