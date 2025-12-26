@@ -450,8 +450,13 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                             }
                         }
                         Err(e) => {
-                            // YAML parsing failed - return error with context
-                            return Err(crate::error::ParseError::YamlError(e));
+                            // Calculate line number for the start of this block
+                            let block_start_line = markdown[..abs_pos].lines().count() + 1;
+                            return Err(crate::error::ParseError::YamlErrorWithLocation {
+                                message: e.to_string(),
+                                line: block_start_line,
+                                block_index: blocks.len(),
+                            });
                         }
                     }
                 } else {
@@ -1032,10 +1037,8 @@ Content here."#;
 
         let result = decompose(markdown);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("YAML parsing error"));
+        // Error message now includes location context
+        assert!(result.unwrap_err().to_string().contains("YAML error"));
     }
 
     #[test]

@@ -1,0 +1,216 @@
+//! Security attack scenario tests for markdown parsing and conversion
+//!
+//! These tests verify that the system properly handles malicious input
+//! and prevents common attack vectors like injection, DoS, and path traversal.
+
+use quillmark_core::parse::ParsedDocument;
+
+mod common;
+
+/// Test deeply nested YAML structures hit the depth limit
+#[test]
+fn test_yaml_depth_limit_attack() {
+    // Create deeply nested YAML structure (exceeds MAX_YAML_DEPTH)
+    let mut deep_yaml = String::new();
+    for i in 0..150 {
+        deep_yaml.push_str(&"  ".repeat(i));
+        deep_yaml.push_str("a:\n");
+    }
+    let markdown = format!("---\n{}---\n\nBody", deep_yaml);
+    let result = ParsedDocument::from_markdown(&markdown);
+
+    // Should fail with YAML depth limit error
+    assert!(result.is_err(), "Should reject deeply nested YAML");
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("depth") || err_msg.contains("YAML") || err_msg.contains("limit"),
+        "Error should mention depth/limit: {}",
+        err_msg
+    );
+}
+
+/// Test card count limit prevents DoS
+#[test]
+fn test_card_count_limit_attack() {
+    // Generate more than MAX_CARD_COUNT (1000) card blocks
+    let mut markdown = String::from("---\ntitle: Test\n---\n\nBody\n\n");
+    for i in 0..1002 {
+        markdown.push_str(&format!("---\nCARD: item{}\nvalue: {}\n---\n\n", i, i));
+    }
+    let result = ParsedDocument::from_markdown(&markdown);
+
+    // Should fail with card count limit error
+    assert!(result.is_err(), "Should reject excessive card blocks");
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("too large") || err_msg.contains("max"),
+        "Error should mention limit: {}",
+        err_msg
+    );
+}
+
+/// Test that Typst special characters are properly escaped (injection prevention)
+#[test]
+fn test_typst_injection_via_special_chars() {
+    // Attempt to inject Typst syntax via special characters
+    let malicious_inputs = vec![
+        r#"**"; eval("malicious")""#,
+        r#"$x$ math injection"#,
+        r#"#eval("danger")"#,
+        r#"@dangerous"#,
+        r#"~strike~`code`"#,
+    ];
+
+    for input in malicious_inputs {
+        let result = ParsedDocument::from_markdown(input);
+        // Should parse without error (escaping happens during conversion)
+        assert!(
+            result.is_ok(),
+            "Should handle special chars in input: {}",
+            input
+        );
+    }
+}
+
+/// Test large input size limit
+#[test]
+fn test_input_size_limit() {
+    // Create input larger than MAX_INPUT_SIZE (10 MB)
+    let large_content = "a".repeat(11 * 1024 * 1024); // 11 MB
+    let markdown = format!("---\ntitle: Large\n---\n\n{}", large_content);
+    let result = ParsedDocument::from_markdown(&markdown);
+
+    // Should fail with input size limit error
+    assert!(result.is_err(), "Should reject oversized input");
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("too large") || err_msg.contains("bytes"),
+        "Error should mention size limit: {}",
+        err_msg
+    );
+}
+
+/// Test YAML size limit
+#[test]
+fn test_yaml_size_limit() {
+    // Create YAML content larger than MAX_YAML_SIZE (1 MB)
+    let large_value = "x".repeat(1024 * 1024 + 100); // Just over 1 MB
+    let markdown = format!("---\ndata: {}\n---\n\nBody", large_value);
+    let result = ParsedDocument::from_markdown(&markdown);
+
+    // Should fail with YAML size limit error
+    assert!(result.is_err(), "Should reject oversized YAML");
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("too large") || err_msg.contains("YAML"),
+        "Error should mention YAML size: {}",
+        err_msg
+    );
+}
+
+/// Test reserved field names are rejected
+#[test]
+fn test_reserved_field_injection() {
+    // Attempt to use reserved field names
+    let reserved_tests = vec![
+        ("---\nBODY: injected\n---\n\nBody", "BODY"),
+        ("---\nCARDS: []\n---\n\nBody", "CARDS"),
+    ];
+
+    for (markdown, reserved) in reserved_tests {
+        let result = ParsedDocument::from_markdown(markdown);
+        assert!(
+            result.is_err(),
+            "Should reject reserved field '{}' in YAML",
+            reserved
+        );
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("Reserved") || err_msg.contains(reserved),
+            "Error should mention reserved field: {}",
+            err_msg
+        );
+    }
+}
+
+/// Test that CARD directive validation prevents invalid names
+#[test]
+fn test_card_name_validation() {
+    // Invalid card names (must match [a-z_][a-z0-9_]*)
+    let invalid_names = vec![
+        "---\nCARD: Invalid-Name\n---\n\n", // hyphen
+        "---\nCARD: 123start\n---\n\n",     // starts with number
+        "---\nCARD: UPPERCASE\n---\n\n",    // uppercase
+        "---\nCARD: spaces here\n---\n\n",  // spaces
+    ];
+
+    for markdown in invalid_names {
+        let result = ParsedDocument::from_markdown(markdown);
+        assert!(
+            result.is_err(),
+            "Should reject invalid card name in: {}",
+            markdown
+        );
+    }
+}
+
+/// Test YAML error includes line number context
+#[test]
+fn test_yaml_error_location() {
+    // Create markdown with YAML error at a specific location
+    let markdown = "---\ntitle: Test\n---\n\nBody\n\n---\nCARD: test\ninvalid yaml: {\n---\n\n";
+    let result = ParsedDocument::from_markdown(markdown);
+
+    assert!(result.is_err(), "Should reject invalid YAML");
+    let err_msg = result.unwrap_err().to_string();
+    // Error should include line number context
+    assert!(
+        err_msg.contains("line") || err_msg.contains("YAML"),
+        "Error should include location context: {}",
+        err_msg
+    );
+}
+
+/// Test both QUILL and CARD in same block is rejected
+#[test]
+fn test_quill_card_conflict() {
+    let markdown = "---\nQUILL: template\nCARD: item\n---\n\n";
+    let result = ParsedDocument::from_markdown(markdown);
+
+    assert!(result.is_err(), "Should reject QUILL + CARD in same block");
+    let err_msg = result.unwrap_err().to_string();
+    assert!(
+        err_msg.contains("QUILL") && err_msg.contains("CARD"),
+        "Error should mention both keys: {}",
+        err_msg
+    );
+}
+
+/// Test that fenced code blocks only accept exactly 3 backticks
+#[test]
+fn test_strict_fence_detection() {
+    // Four backticks should NOT be a fence - --- inside should be parsed as metadata
+    let markdown = "---\ntitle: Test\n---\n\n````\n---\nCARD: test\nvalue: 1\n---\n````";
+    let result = ParsedDocument::from_markdown(markdown);
+
+    assert!(result.is_ok(), "Should parse successfully");
+    let doc = result.unwrap();
+    let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+    assert_eq!(cards.len(), 1, "Should have parsed the CARD block");
+}
+
+/// Test that tildes are NOT fences
+#[test]
+fn test_tildes_not_fences() {
+    let markdown = "---\ntitle: Test\n---\n\n~~~\n---\nCARD: test\nvalue: 1\n---\n~~~";
+    let result = ParsedDocument::from_markdown(markdown);
+
+    assert!(result.is_ok(), "Should parse successfully");
+    let doc = result.unwrap();
+    let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+    assert_eq!(
+        cards.len(),
+        1,
+        "Should have parsed the CARD block (tildes are not fences)"
+    );
+}

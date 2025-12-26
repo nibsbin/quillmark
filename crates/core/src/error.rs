@@ -374,6 +374,17 @@ pub enum ParseError {
         diag: Box<Diagnostic>,
     },
 
+    /// YAML parsing error with location context
+    #[error("YAML error at line {line}: {message}")]
+    YamlErrorWithLocation {
+        /// Error message
+        message: String,
+        /// Line number in the source document (1-indexed)
+        line: usize,
+        /// Index of the metadata block (0-indexed)
+        block_index: usize,
+    },
+
     /// Other parsing errors
     #[error("{0}")]
     Other(String),
@@ -423,6 +434,18 @@ impl ParseError {
             }
             ParseError::InvalidStructure(msg) => Diagnostic::new(Severity::Error, msg.clone())
                 .with_code("parse::invalid_structure".to_string()),
+            ParseError::YamlErrorWithLocation {
+                message,
+                line,
+                block_index,
+            } => Diagnostic::new(
+                Severity::Error,
+                format!(
+                    "YAML error at line {} (block {}): {}",
+                    line, block_index, message
+                ),
+            )
+            .with_code("parse::yaml_error_with_location".to_string()),
             ParseError::Other(msg) => Diagnostic::new(Severity::Error, msg.clone()),
         }
     }
