@@ -23,6 +23,43 @@ This proposal provides detailed analysis and actionable recommendations for each
 
 ---
 
+## Implementation Status
+
+> **Last Updated:** 2025-12-26
+
+| # | Issue | Priority | Status |
+|---|-------|----------|--------|
+| **1.1** | Incomplete Typst Character Escaping (`~`) | CRITICAL | ✅ Fixed - tilde now escaped |
+| **1.2** | Eval Injection Pipeline Risk | HIGH | ✅ Fuzz tests added |
+| **1.3** | Asset Path Traversal Incomplete | HIGH | ✅ Allowlist approach implemented |
+| **1.4** | No YAML Recursion Depth Limit | HIGH | ✅ serde-saphyr Budget configured |
+| **1.5** | Potential ReDoS in Guillemet Processing | MEDIUM | ✅ Early exit added |
+| **1.6** | Bidi Override Attack Surface | MEDIUM | ⚠️ Partial - additional zero-width chars pending |
+| **2.1** | Fenced Code Block Detection | HIGH | ✅ Strict 3-backtick enforcement |
+| **2.2** | HTML Comment Handling Incomplete | HIGH | ❌ Not implemented |
+| **2.3** | Horizontal Rule Disambiguation | MEDIUM | ✅ `---` reserved for metadata per spec |
+| **2.4** | YAML Custom Tags Silently Stripped | LOW | ✅ Intentional - documented |
+| **2.5** | Carriage Return Handling Inconsistent | LOW | ❌ Not implemented |
+| **3.1-3.4** | Unsupported Features | - | ✅ Intentional limitations documented |
+| **3.5** | EmphasisFixer Correctness Issues | MEDIUM | ✅ Escape handling + debug warning |
+| **3.6** | Inline Code Backtick Handling | LOW | ❌ Not implemented |
+| **3.7** | Silent Feature Dropping | LOW | ✅ Documented in EXTENDED_MARKDOWN.md |
+| **4.1** | Depth Limit Consolidation | HIGH | ✅ Consolidated to error.rs |
+| **4.2** | No Limit on Field/Card Count | MEDIUM | ✅ MAX_CARD_COUNT, MAX_FIELD_COUNT |
+| **4.3** | Unicode Normalization Missing | MEDIUM | ✅ NFC via `normalize_field_name()` |
+| **4.4** | Empty/Whitespace Frontmatter Confusion | MEDIUM | ❌ Not implemented |
+| **4.5** | CARDS Array Always Present | LOW | ⚠️ Doc only - current behavior maintained |
+| **4.6** | Error Messages Lack Source Location | LOW | ✅ `YamlErrorWithLocation` added |
+| **5.1** | Multi-Phase Normalization Inconsistency | MEDIUM | ✅ `normalize_document()` entry point |
+| **5.2** | No Validation Mode | MEDIUM | ✅ Exists in `schema.rs::validate_document()` |
+| **5.3** | Template Errors vs Parse Errors Conflated | MEDIUM | ❌ Not implemented (high effort) |
+| **5.4** | No Streaming/Incremental Parsing | LOW | ⚠️ Known limitation - documented |
+| **5.5** | Integration Attack Scenario Tests | LOW | ✅ 11 tests in `security_tests.rs` |
+
+**Legend:** ✅ Implemented | ⚠️ Partial/Deferred | ❌ Not implemented
+
+---
+
 ## 1. Security Vulnerabilities
 
 ### 1.1 [CRITICAL] Incomplete Typst Character Escaping
