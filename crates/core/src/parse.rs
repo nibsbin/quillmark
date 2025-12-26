@@ -359,6 +359,8 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
 
                 // Parse YAML content to check for reserved keys (QUILL, CARD)
                 // Uses configured budget to limit nesting depth (prevents stack overflow)
+                // Normalize: treat whitespace-only content as empty frontmatter
+                let content = content.trim();
                 let (tag, quill_name, yaml_value) = if !content.is_empty() {
                     // Try to parse the YAML with security budgets
                     match serde_saphyr::from_str_with_options::<serde_json::Value>(
@@ -764,6 +766,20 @@ This is the body."#;
         assert_eq!(doc.fields().len(), 4); // title, author, body, CARDS
                                            // Verify default quill tag is set when no QUILL directive
         assert_eq!(doc.quill_tag(), "__default__");
+    }
+
+    #[test]
+    fn test_whitespace_frontmatter() {
+        // Frontmatter with only whitespace should be treated as empty/valid
+        // and not error out or be treated as null YAML
+        let markdown = "---\n   \n---\n\n# Hello";
+        let doc = decompose(markdown).unwrap();
+
+        assert_eq!(doc.body(), Some("\n# Hello"));
+        // Should have default fields (BODY + CARDS) but no others
+        // (unless defaults are applied later, but decompose returns basics)
+        assert!(doc.get_field("title").is_none());
+        assert_eq!(doc.fields().len(), 2); // BODY, CARDS
     }
 
     #[test]

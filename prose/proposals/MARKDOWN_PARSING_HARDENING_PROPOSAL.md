@@ -897,25 +897,32 @@ pub fn normalize_field_name(name: &str) -> String {
 
 ---
 
-### 4.4 [MEDIUM] Empty/Whitespace Frontmatter Confusion
+### 4.4 [COMPLETE] Empty/Whitespace Frontmatter Confusion
+
+**Status:** ✅ IMPLEMENTED
 
 **Location:** `crates/core/src/parse.rs:2199`
 
 **Issue:** The difference between empty frontmatter (`---\n---`) and whitespace-only (`---\n \n---`) is subtle and confusing.
 
-**Recommendation:**
+**Resolution:**
 
-Document explicitly and consider normalizing:
+Implemented whitespace trimming normalization in `decompose()`. If frontmatter content is only whitespace, it is now treated exactly like empty frontmatter (no YAML parsing attempted).
+
 ```rust
-// Normalize whitespace-only YAML to empty
+// In crates/core/src/parse.rs
 let content = content.trim();
-if content.is_empty() {
-    return (None, None, None); // Treat as empty frontmatter
-}
+let (tag, quill_name, yaml_value) = if !content.is_empty() {
+    // ... parse as YAML
+} else {
+    // ... treat as empty
+    (None, None, None)
+};
 ```
 
 **Priority:** Medium
 **Effort:** Low (1 hour)
+
 
 ---
 
