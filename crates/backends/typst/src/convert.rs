@@ -29,10 +29,8 @@
 //! See [CONVERT.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-typst/docs/designs/CONVERT.md) for the complete specification.
 
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
+use quillmark_core::error::MAX_NESTING_DEPTH;
 use std::ops::Range;
-
-/// Maximum nesting depth for markdown structures
-const MAX_NESTING_DEPTH: usize = 100;
 
 /// Errors that can occur during markdown to Typst conversion
 #[derive(Debug, thiserror::Error)]

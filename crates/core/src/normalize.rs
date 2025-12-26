@@ -47,13 +47,11 @@
 //! assert_eq!(cleaned, "**asdf** or **(1234**");
 //! ```
 
+use crate::error::MAX_NESTING_DEPTH;
 use crate::guillemet::{preprocess_markdown_guillemets, strip_chevrons};
 use crate::parse::BODY_FIELD;
 use crate::value::QuillValue;
 use std::collections::HashMap;
-
-/// Maximum nesting depth for JSON value normalization to prevent stack overflow
-const MAX_NESTING_DEPTH: usize = 100;
 
 /// Errors that can occur during normalization
 #[derive(Debug, thiserror::Error)]
@@ -676,7 +674,7 @@ mod tests {
     fn test_normalize_json_value_inner_depth_exceeded() {
         // Create a deeply nested JSON structure that exceeds MAX_NESTING_DEPTH
         let mut value = serde_json::json!("leaf");
-        for _ in 0..=super::MAX_NESTING_DEPTH {
+        for _ in 0..=crate::error::MAX_NESTING_DEPTH {
             value = serde_json::json!([value]);
         }
 
@@ -686,7 +684,7 @@ mod tests {
 
         if let Err(NormalizationError::NestingTooDeep { depth, max }) = result {
             assert!(depth > max);
-            assert_eq!(max, super::MAX_NESTING_DEPTH);
+            assert_eq!(max, crate::error::MAX_NESTING_DEPTH);
         } else {
             panic!("Expected NestingTooDeep error");
         }

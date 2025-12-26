@@ -190,27 +190,42 @@ fn is_valid_tag_name(name: &str) -> bool {
 
 /// Check if a position is inside a fenced code block
 ///
-/// This uses a simple count-based approach: count opening fences before the position.
-/// An odd count means we're inside a fenced block.
+/// This uses strict fence detection per EXTENDED_MARKDOWN.md specification:
+/// - Only exactly 3 backticks (```) are valid fences
+/// - Tildes (~~~) are NOT treated as fences
+/// - 4+ backticks are NOT treated as fences
 fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
     let before = &markdown[..pos];
+    let mut in_fence = false;
 
-    // Count fences that appear at the start of lines
-    let mut fence_count = 0;
-
-    // Check if document starts with a fence
-    if before.starts_with("```") || before.starts_with("~~~") {
-        fence_count += 1;
+    // Check if document starts with exactly ```
+    if is_exact_fence_at(before, 0) {
+        in_fence = !in_fence;
     }
 
-    // Count fences after newlines
-    fence_count += before.matches("\n```").count();
-    fence_count += before.matches("\n~~~").count();
-    fence_count += before.matches("\r\n```").count();
-    fence_count += before.matches("\r\n~~~").count();
+    // Scan for fence toggles after newlines
+    for (i, _) in before.match_indices('\n') {
+        if is_exact_fence_at(before, i + 1) {
+            in_fence = !in_fence;
+        }
+    }
 
-    // Odd count means we're inside a fenced block
-    fence_count % 2 == 1
+    in_fence
+}
+
+/// Check if position starts exactly 3 backticks (not 2, not 4+)
+///
+/// Strict specification: only exactly ``` is a valid fence marker.
+fn is_exact_fence_at(text: &str, pos: usize) -> bool {
+    if pos >= text.len() {
+        return false;
+    }
+    let remaining = &text[pos..];
+    if !remaining.starts_with("```") {
+        return false;
+    }
+    // Ensure it's exactly 3 backticks (4th char is not a backtick)
+    remaining.len() == 3 || remaining.as_bytes().get(3) != Some(&b'`')
 }
 
 /// Creates serde_saphyr Options with security budgets configured.
@@ -1292,7 +1307,9 @@ More content.
     }
 
     #[test]
-    fn test_delimiter_inside_fenced_code_block_tildes() {
+    fn test_tildes_are_not_fences() {
+        // Per EXTENDED_MARKDOWN.md: tildes (~~~) are NOT treated as fences
+        // So --- inside ~~~ WILL be parsed as a metadata block
         let markdown = r#"---
 title: Test
 ---
@@ -1300,6 +1317,7 @@ Here is some code:
 
 ~~~yaml
 ---
+CARD: code_example
 fake: frontmatter
 ---
 ~~~
@@ -1308,9 +1326,42 @@ More content.
 "#;
 
         let doc = decompose(markdown).unwrap();
-        // The --- inside the code block should NOT be parsed as metadata
-        assert!(doc.body().unwrap().contains("fake: frontmatter"));
-        assert!(doc.get_field("fake").is_none());
+        // The --- should be parsed as a CARD block since tildes aren't fences
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(
+            cards[0].get("fake").unwrap().as_str().unwrap(),
+            "frontmatter"
+        );
+    }
+
+    #[test]
+    fn test_four_backticks_are_not_fences() {
+        // Per EXTENDED_MARKDOWN.md: only exactly 3 backticks are valid fences
+        // 4+ backticks are NOT treated as fences
+        let markdown = r#"---
+title: Test
+---
+Here is some code:
+
+````yaml
+---
+CARD: code_example
+fake: frontmatter
+---
+````
+
+More content.
+"#;
+
+        let doc = decompose(markdown).unwrap();
+        // The --- should be parsed as a CARD block since 4 backticks aren't a fence
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(
+            cards[0].get("fake").unwrap().as_str().unwrap(),
+            "frontmatter"
+        );
     }
 
     #[test]
