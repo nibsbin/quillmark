@@ -1,6 +1,6 @@
 # Typst Guillemet Conversion
 
-**Status**: Design Phase  
+**Status**: Implemented
 **Component**: Typst Backend Converter  
 **Related**: [CONVERT.md](../../crates/backends/typst/docs/designs/CONVERT.md)
 

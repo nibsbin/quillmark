@@ -1,6 +1,6 @@
 # Composable Cards Architecture
 
-> **Status**: Design Phase
+> **Status**: Implemented
 >
 > This document defines the composable cards system for structured, repeatable content blocks.
 
