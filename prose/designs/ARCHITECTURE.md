@@ -187,12 +187,12 @@ Quillmark supports advanced markdown parsing with the **Extended YAML Metadata S
 
 ### Extended YAML Metadata Standard
 
-Supports **inline metadata sections** using `SCOPE` and `QUILL` keys:
+Supports **inline metadata sections** using `CARD` and `QUILL` keys:
 
-- **SCOPE**: Creates named collections (aggregates blocks into arrays)
+- **CARD**: Creates typed card blocks aggregated into a unified `CARDS` array
 - **QUILL**: Specifies which template to use
 - **Horizontal rule disambiguation**: Smart detection distinguishes metadata from markdown
-- **Validation**: Scope names follow `[a-z_][a-z0-9_]*` pattern
+- **Validation**: Card names follow `[a-z_][a-z0-9_]*` pattern
 
 **Example:**
 ```markdown
@@ -202,13 +202,13 @@ title: Product Catalog
 Main description.
 
 ---
-SCOPE: products
+CARD: products
 name: Widget
 ---
 Widget description.
 ```
 
-Parses to: `{ title: "...", products: [{ name: "...", body: "..." }] }`
+Parses to: `{ title: "...", CARDS: [{ CARD: "products", name: "...", BODY: "..." }] }`
 
 **See `designs/PARSE.md` for complete specification.**
 

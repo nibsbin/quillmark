@@ -1,5 +1,7 @@
 # Quillmark Design Documentation Index
 
+**Last Consistency Sweep**: 2025-12-26
+
 This directory contains design documents that describe the architecture and components of Quillmark. These documents are the primary reference for agents implementing features and maintaining the codebase.
 
 ## Core Architecture

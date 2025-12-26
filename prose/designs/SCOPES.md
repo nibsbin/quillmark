@@ -1,8 +1,10 @@
 # Scope Schema Configuration
 
-> **Status**: Implemented
+> **Status**: Superseded by [CARDS.md](CARDS.md)
 >
-> This document defines how SCOPE blocks are configured as fields with `type = "scope"` in Quill.toml.
+> **Note**: This document describes the legacy SCOPE system. The implementation has been replaced with the CARDS architecture which uses a unified `CARDS` array with typed card blocks. See [CARDS.md](CARDS.md) for the current design.
+>
+> This document defines how SCOPE blocks were configured as fields with `type = "scope"` in Quill.toml.
 
 > **Related Documents**:
 > - [SCHEMAS.md](SCHEMAS.md) - Field validation and JSON Schema generation

@@ -164,9 +164,9 @@ Metadata fields: {{ __metadata__ | length }}
 - Templates can check: `{% if __metadata__ | length > 0 %}`
 
 ### Extended YAML Metadata Standard
-- SCOPE-based collections appear in `__metadata__` (not filtered out)
+- CARDS collections appear in `__metadata__` (not filtered out)
 - Only the `BODY` field is excluded
-- Example: `{ title: "...", products: [...] }` → `__metadata__` contains both `title` and `products`
+- Example: `{ title: "...", CARDS: [...] }` → `__metadata__` contains both `title` and `CARDS`
 
 ### Reserved Field Name Collision
 - User cannot define `__metadata__` in frontmatter (double underscore is reserved)
@@ -186,7 +186,7 @@ Future system-generated fields could include:
 
 Could introduce additional groupings:
 - `__frontmatter__`: Only top-level global fields
-- `__scoped__`: Only SCOPE-based collections
+- `__cards__`: Only CARDS collections
 - `__all__`: Everything including BODY (for completeness)
 
 ## Testing Strategy
@@ -197,7 +197,7 @@ Could introduce additional groupings:
 2. Test `__metadata__` excludes BODY field
 3. Test backward compatibility (top-level access still works)
 4. Test empty metadata scenario
-5. Test extended metadata with SCOPE collections
+5. Test extended metadata with CARDS collections
 6. Test iteration over `__metadata__` in templates
 
 ### Integration Tests
