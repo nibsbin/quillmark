@@ -202,131 +202,25 @@ pub fn content_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<V
 }
 
 pub fn asset_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Value, Error> {
-    // Get the filename from the value
     let filename = value.to_string();
 
-    // Security validation for asset filenames
-    // Prevents path traversal attacks via:
-    // - URL encoding (%2F, %5C, etc.)
-    // - Unicode confusables (fullwidth solidus, etc.)
-    // - Null byte injection
-    // - Path traversal patterns (..)
+    // Security: prevent path traversal and invalid characters.
+    // The allowlist blocks path separators (/, \), URL encoding (%), null bytes,
+    // and all non-ASCII. We only need to additionally check for ".." traversal.
+    let valid = !filename.trim().is_empty()
+        && !filename.contains("..")
+        && filename
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' || c == ' ');
 
-    // Check for null bytes (could truncate path in some systems)
-    if filename.contains('\0') {
+    if !valid {
         return Err(Error::new(
             ErrorKind::InvalidOperation,
-            "Asset filename cannot contain null bytes",
+            format!("Invalid asset filename: '{}'", filename),
         ));
     }
 
-    // Check for URL-encoded path separators (%2F = /, %5C = \)
-    let lower_filename = filename.to_lowercase();
-    if lower_filename.contains("%2f")
-        || lower_filename.contains("%5c")
-        || lower_filename.contains("%00")
-    {
-        return Err(Error::new(
-            ErrorKind::InvalidOperation,
-            format!(
-                "Asset filename cannot contain URL-encoded path separators: '{}'",
-                filename
-            ),
-        ));
-    }
-
-    // Check for double URL encoding (%252F, %255C)
-    if lower_filename.contains("%25") {
-        return Err(Error::new(
-            ErrorKind::InvalidOperation,
-            format!(
-                "Asset filename cannot contain double URL-encoded characters: '{}'",
-                filename
-            ),
-        ));
-    }
-
-    // Check for standard path separators
-    if filename.contains('/') || filename.contains('\\') {
-        return Err(Error::new(
-            ErrorKind::InvalidOperation,
-            format!(
-                "Asset filename cannot contain path separators: '{}'",
-                filename
-            ),
-        ));
-    }
-
-    // Check for Unicode path separator confusables
-    let has_unicode_path_sep = filename.chars().any(|c| {
-        matches!(
-            c,
-            '\u{FF0F}'  // Fullwidth solidus /
-            | '\u{FF3C}'  // Fullwidth reverse solidus \
-            | '\u{2215}'  // Division slash
-            | '\u{2216}'  // Set minus
-            | '\u{29F8}'  // Big solidus
-            | '\u{29F9}' // Big reverse solidus
-        )
-    });
-
-    if has_unicode_path_sep {
-        return Err(Error::new(
-            ErrorKind::InvalidOperation,
-            format!(
-                "Asset filename contains Unicode path separator variants: '{}'",
-                filename
-            ),
-        ));
-    }
-
-    // Check for path traversal patterns
-    if filename.contains("..") {
-        return Err(Error::new(
-            ErrorKind::InvalidOperation,
-            format!(
-                "Asset filename cannot contain path traversal patterns: '{}'",
-                filename
-            ),
-        ));
-    }
-
-    // Validate filename characters (allowlist approach)
-    // Allow: alphanumeric, dot, dash, underscore, space
-    let valid_chars = filename
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' || c == ' ');
-
-    if !valid_chars {
-        return Err(Error::new(
-            ErrorKind::InvalidOperation,
-            format!(
-                "Asset filename contains invalid characters (allowed: alphanumeric, .-_ and space): '{}'",
-                filename
-            ),
-        ));
-    }
-
-    // Validate that filename doesn't start with a dot (hidden files)
-    if filename.starts_with('.') {
-        return Err(Error::new(
-            ErrorKind::InvalidOperation,
-            format!("Asset filename cannot start with a dot: '{}'", filename),
-        ));
-    }
-
-    // Validate that filename is not empty
-    if filename.is_empty() || filename.trim().is_empty() {
-        return Err(Error::new(
-            ErrorKind::InvalidOperation,
-            "Asset filename cannot be empty",
-        ));
-    }
-
-    // Build the prefixed path
     let asset_path = format!("assets/DYNAMIC_ASSET__{}", filename);
-
-    // Return as a Typst string literal
     Ok(Value::from_safe_string(format!("\"{}\"", asset_path)))
 }
 
@@ -385,77 +279,45 @@ mod tests {
     }
 
     #[test]
-    fn test_asset_security_url_encoding() {
-        // URL-encoded path separators should be detected
-        let filename = "..%2F..%2Fetc%2Fpasswd";
-        let lower = filename.to_lowercase();
-        assert!(lower.contains("%2f"));
-    }
-
-    #[test]
-    fn test_asset_security_unicode_confusables() {
-        // Unicode path separator variants should be detected
-        let fullwidth_slash = '\u{FF0F}'; // Fullwidth solidus
-        let filename = format!("..{}etc{}passwd", fullwidth_slash, fullwidth_slash);
-        assert!(filename.contains('\u{FF0F}'));
-    }
-
-    #[test]
-    fn test_asset_security_null_byte() {
-        // Null bytes should be detected
-        let filename = "valid.png\x00../../etc/passwd";
-        assert!(filename.contains('\0'));
-    }
-
-    #[test]
-    fn test_asset_security_path_traversal() {
-        // Path traversal patterns should be detected
-        assert!("../parent/file.png".contains(".."));
-        assert!(!"normal-file.png".contains(".."));
-    }
-
-    #[test]
-    fn test_asset_security_double_encoding() {
-        // Double URL encoding should be detected
-        let filename = "..%252F..%252Fetc%252Fpasswd";
-        let lower = filename.to_lowercase();
-        assert!(lower.contains("%25"));
-    }
-
-    #[test]
-    fn test_asset_valid_characters() {
-        // Valid characters should pass
-        let valid_filenames = vec![
+    fn test_asset_valid_filenames() {
+        // Valid filenames: alphanumeric, dots, dashes, underscores, spaces
+        let valid = vec![
             "simple.png",
             "my-file.jpg",
             "my_file.pdf",
             "File Name With Spaces.doc",
             "archive2024.zip",
         ];
-        for filename in valid_filenames {
-            let valid = filename
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' || c == ' ');
-            assert!(valid, "Expected '{}' to have valid characters", filename);
+        for filename in valid {
+            let is_valid = !filename.trim().is_empty()
+                && !filename.contains("..")
+                && filename.chars().all(|c| {
+                    c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' || c == ' '
+                });
+            assert!(is_valid, "Expected '{}' to be valid", filename);
         }
     }
 
     #[test]
-    fn test_asset_invalid_characters() {
-        // Invalid characters should be detected
-        let invalid_filenames = vec![
-            "file<script>.png",
-            "file>test.png",
-            "file|pipe.png",
-            "file:colon.png",
-            "file*star.png",
-            "file?query.png",
+    fn test_asset_invalid_filenames() {
+        // Invalid: path traversal, special chars, non-ASCII
+        let invalid = vec![
+            "../etc/passwd",        // path traversal
+            "file/path.png",        // path separator
+            "file\\path.png",       // backslash
+            "file%2F.png",          // URL encoding
+            "file\x00.png",         // null byte
+            "file\u{FF0F}test.png", // Unicode path separator
+            "",                     // empty
+            "   ",                  // whitespace only
         ];
-        for filename in invalid_filenames {
-            let valid = filename
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' || c == ' ');
-            assert!(!valid, "Expected '{}' to have invalid characters", filename);
+        for filename in invalid {
+            let is_valid = !filename.trim().is_empty()
+                && !filename.contains("..")
+                && filename.chars().all(|c| {
+                    c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == '_' || c == ' '
+                });
+            assert!(!is_valid, "Expected '{}' to be invalid", filename);
         }
     }
 }
