@@ -146,7 +146,6 @@ The following Markdown features are **supported**:
 The following features are **NOT supported** (and will be rendered as plain text or ignored):
 - **Images**: Inline `![alt](src)`
 - **Block Quotes**: `> quote`
-- **Fenced Code Blocks**: ` ``` ` blocks (rendered as plain text)
 - **HTML Blocks**: `<div>...</div>`
 - **Tables**: GFM tables
 - **Math**: `$latex$`
