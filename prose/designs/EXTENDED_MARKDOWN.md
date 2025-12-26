@@ -23,7 +23,7 @@ key: value
 
 - **`---` is reserved for metadata blocks only** — never treated as a thematic break
 - **Exact match required** — `---` with any other characters on the same line is not a delimiter
-- **Fenced code blocks** — `---` inside fenced code blocks (`` ``` `` or `~~~`) is not processed as a delimiter
+- **Fenced code blocks** — `---` inside fenced code blocks (`` ``` ``) is not processed as a delimiter
 - **No `...` closer** — only `---` closes a metadata block (unlike Pandoc)
 
 ## CommonMark Compatibility
