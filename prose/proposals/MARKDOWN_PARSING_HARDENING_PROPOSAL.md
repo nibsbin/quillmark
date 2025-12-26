@@ -401,36 +401,32 @@ fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
 
 **Problems:**
 
-1. **Info strings ignored:** ` ```rust ` not matched by `"\n```"`
-2. **Different fence lengths:** ` ```` ` and ` ``` ` are different
-3. **Indented fences:** `    ```` in indented code block
-4. **Mixed fence types:** ` ``` ` opened, ` ~~~ ` doesn't close it
+1. **Loose Detection:** Current parser accepts variable lengths and tildes.
+2. **Ambiguity:** `~~~` vs ```` ` vs ` ``` ` creates confusion.
+3. **Spec Violation:** Current implementation does not enforce project-specific hardening rules.
 
-**Failure Case:**
-```markdown
-````
-```
-Not a close - different length
-````
----
-CARD: test  <- Incorrectly detected as inside fence
----
-```
+**Use Case Enforcement:**
+Per new specification, the parser must enforce:
+1. **No Tildes:** `~~~` and other squiggly lines are forbidden as code fences.
+2. **Strict Length:** Only **exactly three backticks** (```) are allowed.
+   - ` ``` ` (3 ticks) -> Valid Fence
+   - ` ```` ` (4 ticks) -> Invalid (Text)
+   - ` `` ` (2 ticks) -> Invalid (Inline code or text)
+
+**Recommendation:** Implement strict fence parsing regex/logic:
 
 **Recommendation:** Implement proper CommonMark fence parsing:
 
 ```rust
 #[derive(Debug, Clone)]
-struct FenceInfo {
-    char: char,       // '`' or '~'
-    length: usize,    // 3 or more
+struct ActiveFence {
     indent: usize,    // 0-3 spaces
     start_pos: usize,
 }
 
-fn find_active_fence(markdown: &str, pos: usize) -> Option<FenceInfo> {
+fn find_active_fence(markdown: &str, pos: usize) -> Option<ActiveFence> {
     let before = &markdown[..pos];
-    let mut active_fence: Option<FenceInfo> = None;
+    let mut active: Option<ActiveFence> = None;
 
     for (line_start, line) in before.lines().enumerate() {
         let trimmed = line.trim_start();
@@ -441,25 +437,23 @@ fn find_active_fence(markdown: &str, pos: usize) -> Option<FenceInfo> {
             continue;
         }
 
-        // Check for fence
-        let fence_char = trimmed.chars().next();
-        if matches!(fence_char, Some('`') | Some('~')) {
-            let fence_char = fence_char.unwrap();
-            let fence_len = trimmed.chars().take_while(|&c| c == fence_char).count();
+        // Check for fence start char
+        if trimmed.starts_with('`') {
+            let fence_len = trimmed.chars().take_while(|&c| c == '`').count();
 
-            if fence_len >= 3 {
-                if let Some(ref active) = active_fence {
+            // STRICT SPECIFICATION:
+            // 1. Only backticks allowed (no tildes)
+            // 2. Exactly three backticks required
+            if fence_len == 3 {
+                if active.is_some() {
                     // Check if this closes the active fence
-                    if fence_char == active.char &&
-                       fence_len >= active.length &&
-                       trimmed.trim_end().chars().all(|c| c == fence_char) {
-                        active_fence = None;
+                    // Closing fence must not have info string (just whitespace)
+                    if trimmed[3..].trim().is_empty() {
+                        active = None;
                     }
                 } else {
                     // Open new fence
-                    active_fence = Some(FenceInfo {
-                        char: fence_char,
-                        length: fence_len,
+                    active = Some(ActiveFence {
                         indent,
                         start_pos: line_start,
                     });
@@ -468,7 +462,7 @@ fn find_active_fence(markdown: &str, pos: usize) -> Option<FenceInfo> {
         }
     }
 
-    active_fence
+    active
 }
 
 fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
@@ -564,84 +558,48 @@ fn fix_html_blocks(s: &str) -> String {
 
 **Location:** `crates/core/src/parse.rs:253-284`
 
-**Edge Cases Not Handled:**
+**Issue:** The parser implementation currently attempts to support `---` as a horizontal rule if surrounded by blank lines. This is a direct violation of the `EXTENDED_MARKDOWN.md` specification.
 
-1. **Multiple consecutive blank lines:**
-   ```markdown
-   Text
+**Specification Violation:**
+> **`---` is reserved for metadata blocks only** — never treated as a thematic break
+> Uses `***` or `___` for horizontal rules. The `---` syntax is not available for thematic breaks.
 
-
-   ---
-
-
-   More text
-   ```
-   Should be horizontal rule, but `ends_with("\n\n")` only checks for exactly 2 newlines.
-
-2. **Blank lines with whitespace:**
-   ```markdown
-   Text
-
-   ---
-   ```
-   Line with spaces isn't detected as "blank."
+**Impact:**
+1.  **Ambiguity:** Creates confusion about whether a generic `---` is a separator or broken metadata block.
+2.  **Spec Drift:** Codebase behavior diverges from documentation.
 
 **Recommendation:**
+Strictly disable `---` detection as a horizontal rule.
+1. `---` at the start of a line is **always** a metadata block delimiter.
+2. If it is not a valid delimiter (e.g. not followed by valid YAML or closing fence), it should probably be treated as text or an error, but NEVER as a thematic break.
+
 ```rust
-fn is_preceded_by_blank_line(before: &str) -> bool {
-    // Find last non-empty line
-    let lines: Vec<&str> = before.lines().collect();
-    if lines.is_empty() {
-        return false;
-    }
-
-    // Check if last line(s) are blank (empty or whitespace-only)
-    let mut blank_count = 0;
-    for line in lines.iter().rev() {
-        if line.trim().is_empty() {
-            blank_count += 1;
-        } else {
-            break;
-        }
-    }
-
-    blank_count >= 1
-}
+// In crates/core/src/parse.rs
+// REMOVE the logic that skips '---' if preceded/followed by blank lines.
+// It should strictly be treated as a metadata delimiter.
 ```
-
-**Priority:** Medium
-**Effort:** Low (1 hour)
 
 ---
 
-### 2.4 [MEDIUM] YAML Custom Tags Lost
+### 2.4 [LOW] YAML Custom Tags Silently Stripped
 
 **Location:** `crates/core/src/parse.rs:334`
 
-**Issue:** Custom YAML tags like `!fill` are silently stripped by `serde-saphyr`.
+**Observation:** Custom YAML tags like `!fill` are silently stripped by `serde-saphyr` during parsing.
+`!fill 2d lt example` becomes `"2d lt example"`.
 
-**Example:**
-```yaml
-memo_from: !fill 2d lt example
-```
-
-Becomes `"2d lt example"` - the `!fill` semantic is lost.
+**Assessment:**
+This behavior is **INTENTIONAL**.
+- Tags like `!fill` are metadata for LLM assistance or GUI highlighting.
+- The Quillmark core renderer does not need to process these tags to generate the output document.
+- Stripping them simplifies the data model (pure JSON).
 
 **Recommendation:**
+1. **Document this behavior** in `PARSE.md`. Explicitly state that custom tags are consumed/stripped during parsing and are not available to the rendering engine.
+2. **Do NOT** implement complex tag preservation logic.
 
-1. **Document this limitation** prominently
-2. **Consider preserving tags** in a parallel structure:
-```rust
-struct TaggedValue {
-    tag: Option<String>,
-    value: serde_json::Value,
-}
-```
-
-3. **Or use a YAML parser that preserves tags** (e.g., `yaml-rust2` with custom handling)
-
-**Priority:** Medium
-**Effort:** High (significant refactor if preserving tags)
+**Priority:** Low (Documentation only)
+**Effort:** Low
 
 ---
 
@@ -1318,14 +1276,24 @@ fn test_asset_path_traversal_unicode() {
 fn test_fence_with_info_string() {
     let markdown = "```rust\n---\nCARD: test\n---\n```";
     let doc = ParsedDocument::from_markdown(markdown).unwrap();
+    // Should be inside fence
     assert!(doc.get_field("CARDS").unwrap().as_array().unwrap().is_empty());
 }
 
 #[test]
-fn test_fence_length_mismatch() {
-    let markdown = "````\n```\n````\n---\nCARD: test\n---";
+fn test_strict_length_enforcement() {
+    // 4 backticks = Text, not fence
+    let markdown = "````\n---\nCARD: test\n---\n````";
     let doc = ParsedDocument::from_markdown(markdown).unwrap();
-    // The --- should NOT be inside the fence
+    // The --- should be DETECTED as metadata because ```` is not a fence
+    assert!(!doc.get_field("CARDS").unwrap().as_array().unwrap().is_empty());
+}
+
+#[test]
+fn test_no_tildes() {
+    // Tildes = Text, not fence
+    let markdown = "~~~\n---\nCARD: test\n---\n~~~";
+    let doc = ParsedDocument::from_markdown(markdown).unwrap();
     assert!(!doc.get_field("CARDS").unwrap().as_array().unwrap().is_empty());
 }
 ```
