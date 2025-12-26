@@ -629,50 +629,7 @@ pub fn normalize_line_endings(s: &str) -> String {
 
 ## 3. Conversion Gaps
 
-### 3.1 [HIGH] Fenced Code Blocks Not Implemented
-
-**Location:** `crates/backends/typst/src/convert.rs`
-
-**Current State:** Fenced code blocks are silently ignored.
-
-**Impact:** Common markdown feature, especially for technical documentation.
-
-**Recommendation:** Implement per `CONVERT.md:666-764`:
-
-```rust
-Tag::CodeBlock(kind) => {
-    depth += 1;
-    if depth > MAX_NESTING_DEPTH {
-        return Err(ConversionError::NestingTooDeep { depth, max: MAX_NESTING_DEPTH });
-    }
-
-    in_code_block = true;
-
-    if !end_newline {
-        output.push('\n');
-    }
-
-    match kind {
-        pulldown_cmark::CodeBlockKind::Fenced(lang) => {
-            output.push_str("```");
-            if !lang.is_empty() {
-                output.push_str(&lang);
-            }
-            output.push('\n');
-        }
-        pulldown_cmark::CodeBlockKind::Indented => {
-            output.push_str("```\n");
-        }
-    }
-    end_newline = true;
-}
-
-Event::Text(text) => {
-    if in_code_block {
-        // No escaping for code block content
-        output.push_str(&text);
 ### 3.1 [VALIDATED] Fenced Code Blocks Not Supported
-
 **Location:** `crates/backends/typst/src/convert.rs`
 
 **Status:** Intentional Limitation.
@@ -816,22 +773,7 @@ This is consistent with the decision to support a minimal Markdown subset.
 Document the supported subset in `EXTENDED_MARKDOWN.md` (Completed). No code changes required.
 
 
-```rust
-pub struct ConversionOptions {
-    pub warn_on_unsupported: bool,
-}
 
-// In push_typst:
-Event::Html(_) => {
-    if options.warn_on_unsupported {
-        // Add to warnings collection
-        warnings.push("HTML block ignored");
-    }
-}
-```
-
-**Priority:** Low
-**Effort:** Low (1-2 hours)
 
 ---
 
@@ -1135,23 +1077,18 @@ fn test_injection_attack_scenarios() {
 4. Add early exit to guillemet processing
 
 ### Phase 2: High Priority Gaps (2-3 days)
-5. Fix fenced code block detection
-6. Implement code blocks in converter
-7. Implement images in converter
-8. Consolidate depth limits
+5. Fix fenced code block detection (Parser)
+6. Consolidate depth limits
 
 ### Phase 3: Medium Priority (3-5 days)
-9. Implement block quotes
-10. Implement horizontal rules
-11. Fix EmphasisFixer edge cases
-12. Add field/card count limits
-13. Add Unicode normalization
+7. Fix EmphasisFixer edge cases
+8. Add field/card count limits
+9. Add Unicode normalization
 
 ### Phase 4: Polish (2-3 days)
-14. Improve error messages with source locations
-15. Add unsupported feature warnings
-16. Add validation-only mode
-17. Integration attack scenario tests
+10. Improve error messages with source locations
+11. Add validation-only mode
+12. Integration attack scenario tests
 
 ---
 
@@ -1220,25 +1157,7 @@ fn test_no_tildes() {
 }
 ```
 
-### A.3 Conversion Test Cases
 
-```rust
-#[test]
-fn test_code_block_conversion() {
-    let markdown = "```rust\nfn main() {}\n```";
-    let typst = mark_to_typst(markdown).unwrap();
-    assert!(typst.contains("```rust"));
-    assert!(typst.contains("fn main()"));
-}
-
-#[test]
-fn test_image_conversion() {
-    let markdown = "![Alt text](image.png)";
-    let typst = mark_to_typst(markdown).unwrap();
-    assert!(typst.contains("#image("));
-    assert!(typst.contains("alt:"));
-}
-```
 
 ---
 
