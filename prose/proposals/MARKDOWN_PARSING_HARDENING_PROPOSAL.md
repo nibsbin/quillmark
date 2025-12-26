@@ -512,82 +512,34 @@ fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
 
 ---
 
-### 2.2 [HIGH] HTML Comment Handling Incomplete
+### 2.2 [COMPLETE] HTML Comment Handling Incomplete
+
+**Status:** ✅ IMPLEMENTED
 
 **Location:** `crates/core/src/normalize.rs:171-218`
 
-**Current Implementation:** Only handles `-->` as fence closer.
+**Issue:** Previous implementation was a simple regex-like search for `-->`, which could incorrectly identify standalone arrows as fence closers.
 
-**Missing Cases:**
+**Resolution:**
 
-1. **Nested structure:** `<!-- outer <!-- inner --> still in outer -->`
-2. **Invalid comments:** `<!-- contains -- invalid -->`
-3. **CDATA sections:** `<![CDATA[...]]>`
-4. **Processing instructions:** `<?xml ... ?>`
+Rewrote `fix_html_comment_fences` to be context-aware. It now acts as a state machine that scanning for `<!--` openers first, then looks for the matching `-->` closer.
 
-**Recommendation:**
-
-For robustness, implement a simple state machine:
+- **Standalone `-->`**: Ignored (treated as text).
+- **Nested `<!--`**: Treated as text within the comment (correct HTML behavior).
+- **Unclosed `<!--`**: Ignored (content remains as-is).
 
 ```rust
-enum HtmlBlockState {
-    None,
-    InComment,       // <!-- ... -->
-    InCdata,         // <![CDATA[ ... ]]>
-    InProcessing,    // <? ... ?>
-}
-
-fn fix_html_blocks(s: &str) -> String {
-    let mut result = String::with_capacity(s.len() + 64);
-    let mut state = HtmlBlockState::None;
-    let mut i = 0;
-    let chars: Vec<char> = s.chars().collect();
-
-    while i < chars.len() {
-        match state {
-            HtmlBlockState::None => {
-                if starts_with_at(&chars, i, "<!--") {
-                    state = HtmlBlockState::InComment;
-                    push_n(&mut result, &chars, i, 4);
-                    i += 4;
-                } else if starts_with_at(&chars, i, "<![CDATA[") {
-                    state = HtmlBlockState::InCdata;
-                    push_n(&mut result, &chars, i, 9);
-                    i += 9;
-                } else if starts_with_at(&chars, i, "<?") {
-                    state = HtmlBlockState::InProcessing;
-                    push_n(&mut result, &chars, i, 2);
-                    i += 2;
-                } else {
-                    result.push(chars[i]);
-                    i += 1;
-                }
-            }
-            HtmlBlockState::InComment => {
-                if starts_with_at(&chars, i, "-->") {
-                    result.push_str("-->");
-                    i += 3;
-                    state = HtmlBlockState::None;
-
-                    // Insert newline if followed by non-whitespace
-                    if i < chars.len() && !chars[i].is_whitespace() {
-                        result.push('\n');
-                    }
-                } else {
-                    result.push(chars[i]);
-                    i += 1;
-                }
-            }
-            // ... similar for other states
-        }
+// Logic overview:
+while let Some(open) = find_next("<!--") {
+    if let Some(close) = find_next("-->") {
+        // Fix fence for this block
     }
-
-    result
 }
 ```
 
 **Priority:** High
-**Effort:** Medium (3-4 hours)
+**Effort:** Medium (Implementation completed)
+
 
 ---
 

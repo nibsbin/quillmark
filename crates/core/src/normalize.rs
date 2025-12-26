@@ -173,45 +173,59 @@ pub fn fix_html_comment_fences(s: &str) -> String {
         return s.to_string();
     }
 
-    let mut result = String::with_capacity(s.len() + 16); // Extra capacity for potential newlines
-    let mut remaining = s;
+    // Context-aware processing: only fix `-->` if we are inside a comment started by `<!--`
+    let mut result = String::with_capacity(s.len() + 16);
+    let mut current_pos = 0;
 
-    while let Some(fence_pos) = remaining.find("-->") {
-        let after_fence = fence_pos + 3; // Position after "-->"
+    // Find first opener
+    while let Some(open_idx) = s[current_pos..].find("<!--") {
+        let abs_open = current_pos + open_idx;
 
-        // Copy everything up to and including "-->"
-        result.push_str(&remaining[..after_fence]);
+        // Find matching closer AFTER the opener
+        if let Some(close_idx) = s[abs_open..].find("-->") {
+            let abs_close = abs_open + close_idx;
+            let after_fence = abs_close + 3;
 
-        // Check what comes after the fence
-        let after_content = &remaining[after_fence..];
+            // Append everything up to and including the closing fence
+            result.push_str(&s[current_pos..after_fence]);
 
-        if after_content.is_empty() {
-            // End of string, nothing to do
-            remaining = "";
-        } else if after_content.starts_with('\n') || after_content.starts_with("\r\n") {
-            // Already has a newline, continue normally
-            remaining = after_content;
-        } else {
-            // Check if there's only whitespace until end of line or end of string
-            let next_newline = after_content.find('\n');
-            let until_newline = match next_newline {
-                Some(pos) => &after_content[..pos],
-                None => after_content,
+            // Check what comes after the fence
+            let after_content = &s[after_fence..];
+
+            // Determine if we need to insert a newline
+            let needs_newline = if after_content.is_empty() {
+                false
+            } else if after_content.starts_with('\n') || after_content.starts_with("\r\n") {
+                false
+            } else {
+                // Check if there's only whitespace until end of line
+                let next_newline = after_content.find('\n');
+                let until_newline = match next_newline {
+                    Some(pos) => &after_content[..pos],
+                    None => after_content,
+                };
+                !until_newline.trim().is_empty()
             };
 
-            if until_newline.trim().is_empty() {
-                // Only whitespace after -->, keep as-is
-                remaining = after_content;
-            } else {
-                // Non-whitespace content after -->, insert newline
+            if needs_newline {
                 result.push('\n');
-                remaining = after_content;
             }
+
+            // Move position to after the fence (we'll process the rest in next iteration)
+            current_pos = after_fence;
+        } else {
+            // Unclosed comment at end of string - just append the rest and break
+            // The opener was found but no closer exists.
+            result.push_str(&s[current_pos..]);
+            current_pos = s.len();
+            break;
         }
     }
 
-    // Append any remaining content after the last fence (or all content if no fence)
-    result.push_str(remaining);
+    // Append remaining content (text after last closed comment, or text if no comments found)
+    if current_pos < s.len() {
+        result.push_str(&s[current_pos..]);
+    }
 
     result
 }
@@ -618,8 +632,39 @@ mod tests {
     #[test]
     fn test_fix_html_comment_arrow_not_comment() {
         // --> that's not part of a comment (standalone)
-        // Still gets a newline if followed by non-whitespace (conservative approach)
-        assert_eq!(fix_html_comment_fences("-->some text"), "-->\nsome text");
+        // Should NOT be touched by the context-aware fixer
+        assert_eq!(fix_html_comment_fences("-->some text"), "-->some text");
+    }
+
+    #[test]
+    fn test_fix_html_comment_nested_opener() {
+        // Nested openers are just text inside the comment
+        // <!-- <!-- -->Trailing
+        // The first <!-- opens, the first --> closes.
+        assert_eq!(
+            fix_html_comment_fences("<!-- <!-- -->Trailing"),
+            "<!-- <!-- -->\nTrailing"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_unmatched_closer() {
+        // Closer without opener
+        assert_eq!(
+            fix_html_comment_fences("text --> more text"),
+            "text --> more text"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_multiple_valid_invalid() {
+        // Mixed valid and invalid comments
+        // <!-- valid -->FixMe
+        // text --> Ignore
+        // <!-- valid2 -->FixMe2
+        let input = "<!-- valid -->FixMe\ntext --> Ignore\n<!-- valid2 -->FixMe2";
+        let expected = "<!-- valid -->\nFixMe\ntext --> Ignore\n<!-- valid2 -->\nFixMe2";
+        assert_eq!(fix_html_comment_fences(input), expected);
     }
 
     #[test]
