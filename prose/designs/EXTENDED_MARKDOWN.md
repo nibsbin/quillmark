@@ -146,7 +146,7 @@ The following Markdown features are **supported**:
 The following features are **NOT supported** (and will be rendered as plain text or ignored):
 - **Images**: Inline `![alt](src)`
 - **Block Quotes**: `> quote`
-- **HTML Blocks**: `<div>...</div>`
+- **HTML Blocks**: Raw HTML tags (`<div>`), CDATA sections (`<![CDATA[...]]>`), and Processing Instructions (`<?xml ... ?>`) are not supported. Only standard HTML comments (`<!-- ... -->`) are supported efficiently.
 - **Tables**: GFM tables
 - **Math**: `$latex$`
 - **Footnotes**: `[^1]`
