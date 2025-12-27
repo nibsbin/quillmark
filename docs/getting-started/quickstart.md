@@ -42,7 +42,7 @@ Get started with Quillmark in your preferred language.
     parsed = ParsedDocument.from_markdown(markdown)
 
     # Create workflow and render
-    workflow = engine.workflow("quill_name")
+    workflow = engine.workflow("my-quill")
     result = workflow.render(parsed, OutputFormat.PDF)
 
     # Access the generated PDF
@@ -95,7 +95,7 @@ Get started with Quillmark in your preferred language.
         let parsed = ParsedDocument::from_markdown(markdown)?;
 
         // Create workflow and render
-        let workflow = engine.workflow("quill_name")?;
+        let workflow = engine.workflow("my-quill")?;
         let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
 
         // Access the generated PDF
@@ -125,7 +125,7 @@ Get started with Quillmark in your preferred language.
     ## Basic Usage
 
     ```javascript
-    import { Quillmark, ParsedDocument, OutputFormat } from '@quillmark-test/wasm';
+    import { Quillmark } from '@quillmark-test/wasm';
 
     // Create engine
     const engine = new Quillmark();
@@ -140,26 +140,27 @@ backend = "typst"
 description = "My template"
 `
             },
-            "plate.typ": { contents: "..." },
-            // ... other files
+            "plate.typ": { contents: "#{{ BODY | Content }}" }
         }
     };
-    engine.registerQuill(JSON.stringify(quillJson));
+    engine.registerQuill(quillJson);
 
     // Parse markdown
     const markdown = `---
-    title: Example Document
-    ---
+title: Example Document
+---
 
-    # Hello World
+# Hello World
 
-    This is a simple example.
-    `;
-    const parsed = ParsedDocument.from_markdown(markdown);
+This is a simple example.
+`;
+    const parsed = Quillmark.parseMarkdown(markdown);
 
-    // Create workflow and render
-    const workflow = engine.workflow("my-quill");
-    const result = workflow.render(parsed, OutputFormat.PDF);
+    // Render
+    const result = engine.render(parsed, {
+        format: 'pdf',
+        quillName: 'my-quill'
+    });
 
     // Access the generated PDF
     const pdfBytes = result.artifacts[0].bytes;
