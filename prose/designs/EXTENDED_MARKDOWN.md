@@ -1,153 +1,93 @@
-# Extended YAML Metadata Standard
+# Quillmark Extended Markdown
 
-This document defines the extended markdown syntax for embedding structured metadata in Quillmark documents. It is intended to be authoritative and implementable in any system.
+**Status:** Draft Standard
+**Editor:** Quillmark Team
 
-## Definitions
+This document describes the **Quillmark Extended Markdown** format. It is a strict superset of CommonMark designed to embed structured metadata blocks alongside standard content. This enables a "document as database" model where files serve as reliable data sources while remaining human-readable.
 
-- **Metadata block**: A YAML section delimited by `---` markers
-- **Global block**: The frontmatter at the document start (no CARD key)
-- **Card block**: A metadata block containing a `CARD` key
-- **Body**: Markdown content following a metadata block, up to the next block or end of document
+## Document Structure
 
-## Metadata Block Syntax
+A Extended Markdown file is composed of **Segments**. A segment is either a **Metadata Block** followed by **Body Content**, or (in the case of the first segment only) just Body Content.
 
-A metadata block begins and ends with a line containing **exactly** `---` (three hyphens, no leading/trailing whitespace, no other content on the line).
+### 1. Metadata Blocks
 
-```
+A metadata block is delimited by lines containing exactly three hyphens (`---`).
+
+```markdown
 ---
 key: value
 ---
 ```
 
-### Delimiter Rules
+**Key Rules:**
+*   **Delimiters:** The `---` marker must form its own line with no leading/trailing whitespace.
+*   **Exclusivity:** `---` is reserved for metadata and is never treated as a horizontal rule or setext header underline.
+*   **Context:** `---` markers inside fenced code blocks are ignored.
 
-- **`---` is reserved for metadata blocks only** — never treated as a thematic break
-- **Exact match required** — `---` with any other characters on the same line is not a delimiter
-- **Fenced code blocks** — `---` inside fenced code blocks (`` ``` ``) is not processed as a delimiter
-- **No `...` closer** — only `---` closes a metadata block (unlike Pandoc)
+**Content:**
+The content inside the block is standard YAML 1.2.
+*   **No Custom Tags:** Custom tags (like `!fill`) are stripped during parsing to ensure the data model remains simple JSON.
+*   **Recursion Limit:** Nesting is limited to 100 levels to prevent stack overflows.
+*   **Reserved Keys:** `BODY` and `CARDS` are reserved system keys and cannot be used in the YAML.
 
-## CommonMark Compatibility
+### 2. Body Content
 
-### Thematic Breaks (Horizontal Rules)
+The text following a metadata block is the "Body". It captures everything up to the next metadata block or the end of the file.
+*   Whitespace is preserved exactly as written.
+*   If two blocks are adjacent, the body between them is an empty string.
 
-Use `***` or `___` for horizontal rules. The `---` syntax is not available for thematic breaks.
+## Data Model
 
-- ✅ `***` (supported)
-- ✅ `___` (supported)
-- ❌ `---` (reserved for metadata blocks)
+The parsed document results in a flat JSON structure:
 
-### Setext Headers
+```typescript
+interface Document {
+  // Global fields from the first block (if it's not a card)
+  [key: string]: any;
 
-**Setext-style headers are not supported.** In standard CommonMark, a line of `---` under text creates an h2 header. This conflicts with metadata block syntax.
+  // Reserved fields filled by the parser
+  BODY: string;       // The content of the main/global body
+  CARDS: Card[];      // List of all named card blocks
+}
 
-- ✅ `# Heading` (ATX-style, supported)
-- ❌ `Heading\n---` (setext-style, not supported)
-
-## YAML Subset
-
-Metadata blocks follow **YAML 1.2** with one exception:
-
-- **Tags (`!`) are not supported** — custom and standard tags are ignored
-
-All other YAML 1.2 features are supported, including anchors, aliases, flow/block styles, and multi-line strings.
-
-## Special Keys
-
-| Key | Purpose | Constraints |
-|-----|---------|-------------|
-| `CARD` | Declares a card block with a named type | Value must match `[a-z_][a-z0-9_]*` |
-| `QUILL` | Specifies which quill template to use | Only valid in global block; defaults to `__default__` |
-| `BODY` | Reserved for body content | Cannot be used in YAML |
-
-## Document Structure
-
-### No Frontmatter
-
-If a document has no metadata blocks, the entire document content becomes the body with no fields and no cards.
-
-### Global Block (Optional)
-
-The first metadata block in a document, if it lacks a `CARD` key, is the global block. Only one global block is permitted. An empty global block (no YAML content) is valid.
-
-**If the first block contains a `CARD` key**, no global block exists. The document has no global fields, the global body is empty, and that first block becomes the first card.
-
-### Card Blocks
-
-Metadata blocks containing a `CARD` key are aggregated into a `CARDS` array in parse order. A non-global metadata block without a `CARD` key is invalid.
-
-### Body Extraction Rules
-
-Body content is extracted verbatim from the line after a block's closing `---` to the line before the next metadata block (or end of document).
-
-- **Whitespace preservation**: Leading and trailing blank lines are preserved exactly as written
-- **Empty body**: If no content exists between blocks, BODY is an empty string (`""`)
-- **No trimming**: Implementations must not trim or normalize whitespace
-
-### Flat Structure
-
-Cards are collected into a flat `CARDS` array. Nested or hierarchical card structures are not supported.
-
-## Example
-
-```markdown
----
-title: My Document
-QUILL: blog_post
----
-Main document body.
-
-***
-
-More content after horizontal rule.
-
----
-CARD: section
-heading: Introduction
----
-Introduction content.
-
----
-CARD: section
-heading: Conclusion
----
-Conclusion content.
-```
-
-**Parsed structure:**
-```json
-{
-  "title": "My Document",
-  "QUILL": "blog_post",
-  "BODY": "Main document body.\n\n***\n\nMore content after horizontal rule.",
-  "CARDS": [
-    {"CARD": "section", "heading": "Introduction", "BODY": "Introduction content."},
-    {"CARD": "section", "heading": "Conclusion", "BODY": "Conclusion content."}
-  ]
+interface Card {
+  CARD: string;       // The type of card (e.g. "section", "profile")
+  BODY: string;       // The content associated with this card
+  [key: string]: any; // Other fields defined in the block
 }
 ```
 
-## Validation Rules
+**Block Logic:**
+*   **Global Block:** The first block in the file is the "Global" block, unless it contains a `CARD` key.
+*   **Card Blocks:** Any block containing a `CARD` key is added to the `CARDS` array.
+*   **Validity:** Any block after the first one *must* have a `CARD` key.
 
-1. **Single global block**: Multiple blocks without `CARD` key → error
-2. **Reserved field names**: Using `BODY` or `CARDS` in YAML → error
-3. **Invalid card name**: Card name not matching `[a-z_][a-z0-9_]*` → error
-4. **Conflicting keys**: Both `CARD` and `QUILL` in same block → error
-5. **Unclosed block**: Opening `---` without closing `---` → error
+## Markdown Support
 
-## Supported Syntax
+Quillmark supports a specific subset of CommonMark to ensure security and consistency.
 
-The following Markdown features are **supported**:
-- **Headings**: ATX-style (`# Heading`)
-- **Paragraphs**: Standard
-- **Emphasis**: `*italic*`, `**bold**`, `__underline__`, `~~strike~~`
-- **Lists**: Ordered and unordered (nested)
-- **Links**: `[text](url)`
+### Supported Features
+*   **Headings:** ATX-style only (`# Heading`).
+*   **Text:** Paragraphs, Bold (`**`), Italic (`*`), Strike (`~~`), Underline (`__`).
+*   **Lists:** Ordered and unordered.
+*   **Links:** Standard `[text](url)`.
+*   **Code:** Inline code and Fenced Code Blocks (```).
 
-The following features are **NOT supported** (and will be rendered as plain text or ignored):
-- **Images**: Inline `![alt](src)`
-- **Block Quotes**: `> quote`
-- **HTML Blocks**: Raw HTML tags (`<div>`), CDATA sections (`<![CDATA[...]]>`), and Processing Instructions (`<?xml ... ?>`) are not supported. Only standard HTML comments (`<!-- ... -->`) are supported efficiently.
-- **Tables**: GFM tables
-- **Math**: `$latex$`
-- **Footnotes**: `[^1]`
-- **Thematic Breaks**: `***`, `___`, `---` (all ignored or reserved)
+### Unsupported Features
+These features are intentionally ignored or rendered as plain text:
+*   **Thematic Breaks:** `***`, `___`, `---` (ignored).
+*   **Images:** `![alt](src)` (ignored).
+*   **HTML:** Raw HTML tags are ignored, except for comments.
+*   **Complex formatting:** Tables, Math, Footnotes, Blockquotes.
+
+### HTML Comments
+Standard `<!-- comments -->` are supported as non-rendering content. Nested comments are handled safely.
+
+## System Limits
+
+To ensure performance and stability, the system enforces the following hard limits:
+
+*   **Max Input Size:** 10 MB
+*   **Max YAML Size:** 1 MB per block
+*   **Max YAML Depth:** 100 levels
+*   **Max Item Count:** 1000 fields or cards
