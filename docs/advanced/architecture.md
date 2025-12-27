@@ -203,8 +203,8 @@ The `filter_api` provides a stable ABI, preventing version conflicts and enablin
 
 Templates receive parsed document fields via MiniJinja context:
 
-- **Top-level fields**: All frontmatter fields and `body` accessible directly
-- **`__metadata__` field**: System-generated field containing all frontmatter fields except `body`
+- **Top-level fields**: All frontmatter fields and `BODY` accessible directly
+- **`__metadata__` field**: System-generated field containing all frontmatter fields except `BODY`
 
 This dual access pattern provides both convenience (top-level) and clarity (metadata object).
 
@@ -219,12 +219,12 @@ This dual access pattern provides both convenience (top-level) and clarity (meta
 
 ### Extended YAML Metadata Standard
 
-Supports **inline metadata sections** using `SCOPE` and `QUILL` keys:
+Supports **inline metadata sections** using `CARD` and `QUILL` keys:
 
-- **SCOPE**: Creates named collections (aggregates blocks into arrays)
-- **QUILL**: Specifies which template to use
-- **Horizontal rule disambiguation**: Smart detection distinguishes metadata from markdown
-- **Validation**: Scope names follow `[a-z_][a-z0-9_]*` pattern
+- **CARD**: Creates card blocks that are collected into a CARDS array
+- **QUILL**: Specifies which template to use (must be in first block only)
+- **Reserved delimiters**: `---` is reserved for metadata blocks, not horizontal rules
+- **Validation**: Card names follow `[a-z_][a-z0-9_]*` pattern
 
 **Example:**
 ```markdown
@@ -234,13 +234,13 @@ title: Product Catalog
 Main description.
 
 ---
-SCOPE: products
+CARD: products
 name: Widget
 ---
 Widget description.
 ```
 
-Parses to: `{ title: "...", body: "...", products: [{ name: "...", body: "..." }] }`
+Parses to: `{ title: "...", BODY: "...", CARDS: [{ CARD: "products", name: "...", BODY: "..." }] }`
 
 ## Backend Architecture
 

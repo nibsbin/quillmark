@@ -40,7 +40,7 @@ Typst plate templates use MiniJinja syntax to generate Typst code:
   date: {{ date | String }},
 )
 
-#{{ body | Content }}
+#{{ BODY | Content }}
 ```
 
 ## Template Filters
@@ -136,7 +136,7 @@ Output (Typst):
 Converts Markdown body to Typst markup:
 
 ```jinja
-#{{ body | Content }}
+#{{ BODY | Content }}
 ```
 
 Input (Markdown):
@@ -335,7 +335,7 @@ Errors include:
 
 Dear {{ recipient | String }},
 
-#{{ body | Content }}
+#{{ BODY | Content }}
 
 Sincerely,
 
@@ -355,7 +355,7 @@ Sincerely,
   #text(size: 12pt)[{{ author | String }}]
 ]
 
-#{{ body | Content }}
+#{{ BODY | Content }}
 ```
 
 ## Best Practices

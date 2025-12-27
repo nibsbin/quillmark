@@ -246,15 +246,15 @@ class ParsedDocument:
         """
     
     def body(self) -> str | None:
-        """Get document body."""
-    
+        """Get document body (stored in BODY field)."""
+
     def get_field(self, key: str) -> Any | None:
-        """Get frontmatter field."""
-    
+        """Get frontmatter field by key (e.g., 'title', 'BODY', 'CARDS')."""
+
     @property
     def fields(self) -> dict[str, Any]:
-        """All frontmatter fields."""
-    
+        """All frontmatter fields (includes BODY and CARDS)."""
+
     def quill_tag(self) -> str:
         """Get QUILL field value (defaults to '__default__' if not specified)."""
 ```
@@ -278,7 +278,8 @@ parsed = ParsedDocument.from_markdown(markdown)
 print(parsed.get_field("title"))  # "My Document"
 print(parsed.get_field("tags"))   # ["python", "tutorial"]
 print(parsed.body())               # "# Introduction\n\nContent here."
-print(parsed.fields)               # Complete field dict
+print(parsed.get_field("BODY"))   # Same as body()
+print(parsed.fields)               # Complete field dict (includes BODY)
 ```
 
 ### RenderResult

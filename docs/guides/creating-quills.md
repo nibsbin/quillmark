@@ -106,7 +106,7 @@ Plate templates use MiniJinja syntax to compose backend-specific code. They have
   subject: {{ subject | String }},
 )
 
-#{{ body | Content }}
+#{{ BODY | Content }}
 ```
 
 ### Available Filters
@@ -128,7 +128,7 @@ Example using multiple filters:
 
 = {{ title | String }}
 
-#{{ body | Content }}
+#{{ BODY | Content }}
 ```
 
 ### Accessing Frontmatter
@@ -151,7 +151,7 @@ Tags: {{ tags | Lines }}
 
 ### Using the Metadata Object
 
-Quillmark provides a special `__metadata__` field that contains all frontmatter fields except `body`. This is useful for iterating over metadata:
+Quillmark provides a special `__metadata__` field that contains all frontmatter fields except `BODY`. This is useful for iterating over metadata:
 
 ```jinja
 {% for key, value in __metadata__ %}
@@ -159,10 +159,10 @@ Quillmark provides a special `__metadata__` field that contains all frontmatter 
 {% endfor %}
 
 {# Body content separately #}
-#{{ body | Content }}
+#{{ BODY | Content }}
 ```
 
-The `__metadata__` field is automatically created and includes all fields from frontmatter (including SCOPE-based collections), but excludes the `body` field. You can still access individual fields at the top level (e.g., `{{ title }}`), but `__metadata__` provides convenient metadata-only access.
+The `__metadata__` field is automatically created and includes all fields from frontmatter (including the CARDS array), but excludes the `BODY` field. You can still access individual fields at the top level (e.g., `{{ title }}`), but `__metadata__` provides convenient metadata-only access.
 
 ## Backend-Specific Configuration
 
