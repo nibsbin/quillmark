@@ -73,10 +73,16 @@ def hello():
 ### Horizontal Rules
 
 ```markdown
----
+***
 ```
 
-Note: To use `---` as a horizontal rule (not a metadata delimiter), ensure there are blank lines both above and below it.
+or
+
+```markdown
+___
+```
+
+Note: The `---` syntax is **not available** for horizontal rules as it is reserved for metadata block delimiters. Use `***` or `___` instead.
 
 ## YAML Frontmatter
 
@@ -149,9 +155,9 @@ document:
 
 Quillmark supports an Extended YAML Metadata Standard that allows metadata blocks throughout the document, not just at the beginning.
 
-### Scoped Metadata Blocks
+### Card Blocks
 
-Use the special `SCOPE` key to create reusable metadata sections:
+Use the special `CARD` key to create reusable metadata sections:
 
 ```markdown
 ---
@@ -163,7 +169,7 @@ title: Main Document
 Some content here.
 
 ---
-SCOPE: products
+CARD: products
 name: Widget
 price: 19.99
 ---
@@ -171,7 +177,7 @@ price: 19.99
 Widget description.
 
 ---
-SCOPE: products
+CARD: products
 name: Gadget
 price: 29.99
 ---
@@ -179,13 +185,13 @@ price: 29.99
 Gadget description.
 ```
 
-The scoped blocks are collected into an array accessible as `products`:
+The card blocks are collected into a CARDS array:
 
 ```python
 # Access in template or code
-products = parsed.get_field("products")
-# Returns: [{"name": "Widget", "price": 19.99, "BODY": "Widget description."}, 
-#           {"name": "Gadget", "price": 29.99, "BODY": "Gadget description."}]
+cards = parsed.get_field("CARDS")
+# Returns: [{"CARD": "products", "name": "Widget", "price": 19.99, "BODY": "Widget description."},
+#           {"CARD": "products", "name": "Gadget", "price": 29.99, "BODY": "Gadget description."}]
 ```
 
 ### QUILL Key
@@ -206,26 +212,26 @@ If no `QUILL` key is specified, Quillmark uses the `__default__` template provid
 
 ### Rules for Extended Metadata
 
-- **SCOPE key**: Creates collections - blocks with same scope name are aggregated into arrays
+- **CARD key**: Creates card blocks - all blocks with CARD keys are collected into a CARDS array
 - **QUILL key**: Specifies which quill template to use (defaults to `__default__` if not specified)
-- **Scope names**: Must match `[a-z_][a-z0-9_]*` pattern
-- **Reserved names**: Cannot use `body` as scope name
-- **Single global**: Only one block without SCOPE/QUILL allowed
-- **No collisions**: Global field names cannot conflict with scope names
-- **Horizontal rule disambiguation**: `---` with blank lines above AND below is treated as markdown horizontal rule
-- **Each scoped block includes a `body` field**: Content between metadata blocks is stored in the `body` field
+- **Card names**: Must match `[a-z_][a-z0-9_]*` pattern
+- **Reserved names**: Cannot use `BODY` or `CARDS` in YAML frontmatter
+- **Single global**: Only one block without CARD/QUILL allowed
+- **QUILL placement**: QUILL key can only appear in the first (global) block, not in inline blocks
+- **Horizontal rule**: `---` is reserved for metadata delimiters only. Use `***` or `___` for horizontal rules
+- **Each card block includes a `BODY` field**: Content between metadata blocks is stored in the `BODY` field
 
 ## Body Content
 
-The document body (everything after frontmatter) is stored under the special field `body` and can be accessed in templates:
+The document body (everything after frontmatter) is stored under the special field `BODY` and can be accessed in templates:
 
 ```jinja
-#{{ body | Content }}
+#{{ BODY | Content }}
 ```
 
 ## Metadata Object
 
-Quillmark provides a special `__metadata__` field in templates that contains all frontmatter fields except `body`. This is useful for iterating over metadata or separating content from metadata:
+Quillmark provides a special `__metadata__` field in templates that contains all frontmatter fields except `BODY`. This is useful for iterating over metadata or separating content from metadata:
 
 ```jinja
 {% for key, value in __metadata__ %}
@@ -233,7 +239,7 @@ Quillmark provides a special `__metadata__` field in templates that contains all
 {% endfor %}
 ```
 
-The `__metadata__` field is automatically created and includes all fields from the frontmatter (including SCOPE-based collections), but excludes the `body` field. You can still access fields individually at the top level (e.g., `{{ title }}`), but `__metadata__` provides convenient metadata-only access.
+The `__metadata__` field is automatically created and includes all fields from the frontmatter (including the CARDS array), but excludes the `BODY` field. You can still access fields individually at the top level (e.g., `{{ title }}`), but `__metadata__` provides convenient metadata-only access.
 
 ## Validation
 

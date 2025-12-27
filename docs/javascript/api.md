@@ -34,7 +34,7 @@ description = "My template"
 `
     },
     "plate.typ": {
-      contents: "#set document(title: {{ title | String }})\n\n#{{ body | Content }}"
+      contents: "#set document(title: {{ title | String }})\n\n#{{ BODY | Content }}"
     }
   }
 };
@@ -136,7 +136,7 @@ backend = "typst"
 description = "Demo quill"
 `
     },
-    "plate.typ": { contents: "#{{ body | Content }}" }
+    "plate.typ": { contents: "#{{ BODY | Content }}" }
   }
 };
 
@@ -253,7 +253,7 @@ engine.unregisterQuill("my-quill");
 
 ```typescript
 interface ParsedDocument {
-  fields: object;      // YAML frontmatter fields (includes body)
+  fields: object;      // YAML frontmatter fields (includes BODY and CARDS)
   quillTag?: string;   // Value of QUILL field (if present)
 }
 ```
@@ -262,7 +262,8 @@ interface ParsedDocument {
 ```javascript
 const parsed = Quillmark.parseMarkdown(markdown);
 console.log(parsed.fields.title);   // Access frontmatter
-console.log(parsed.fields.body);    // Access body
+console.log(parsed.fields.BODY);    // Access body content
+console.log(parsed.fields.CARDS);   // Access card blocks array
 console.log(parsed.quillTag);       // Access QUILL field
 ```
 
@@ -437,7 +438,7 @@ plate_file = "plate.typ"
     
     // Required: Plate template
     "plate.typ": { 
-      contents: "#set document(title: {{ title | String }})\n\n#{{ body | Content }}" 
+      contents: "#set document(title: {{ title | String }})\n\n#{{ BODY | Content }}"
     },
     
     // Optional: Assets directory
@@ -502,12 +503,12 @@ author = { description = "Author name", type = "str" }
   #text(size: 12pt)[{{ author | String }}]
 ]
 
-#{{ body | Content }}
+#{{ BODY | Content }}
 `
       }
     }
   };
-  
+
   engine.registerQuill(quillJson);
   
   // Parse markdown
