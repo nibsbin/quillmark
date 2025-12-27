@@ -9,45 +9,45 @@ Get started with Quillmark in your preferred language.
     Install using `uv` (recommended):
 
     ```bash
-uv pip install quillmark
+    uv pip install quillmark
     ```
 
     Or using `pip`:
 
     ```bash
-pip install quillmark
+    pip install quillmark
     ```
 
     ## Basic Usage
 
     ```python
-from quillmark import Quillmark, ParsedDocument, OutputFormat, Quill
+    from quillmark import Quillmark, ParsedDocument, OutputFormat, Quill
 
-# Create engine
-engine = Quillmark()
+    # Create engine
+    engine = Quillmark()
 
-# Load a quill template
-quill = Quill.from_path("path/to/quill")
-engine.register_quill(quill)
+    # Load a quill template
+    quill = Quill.from_path("path/to/quill")
+    engine.register_quill(quill)
 
-# Parse markdown
-markdown = """---
-title: Example Document
----
+    # Parse markdown
+    markdown = """---
+    title: Example Document
+    ---
 
-# Hello World
+    # Hello World
 
-This is a simple example.
-"""
-parsed = ParsedDocument.from_markdown(markdown)
+    This is a simple example.
+    """
+    parsed = ParsedDocument.from_markdown(markdown)
 
-# Create workflow and render
-workflow = engine.workflow("my-quill")
-result = workflow.render(parsed, OutputFormat.PDF)
+    # Create workflow and render
+    workflow = engine.workflow("my-quill")
+    result = workflow.render(parsed, OutputFormat.PDF)
 
-# Access the generated PDF
-pdf_bytes = result.artifacts[0].bytes
-with open("output.pdf", "wb") as f:
+    # Access the generated PDF
+    pdf_bytes = result.artifacts[0].bytes
+    with open("output.pdf", "wb") as f:
     f.write(pdf_bytes)
     ```
 
@@ -58,24 +58,24 @@ with open("output.pdf", "wb") as f:
     Add Quillmark to your `Cargo.toml`:
 
     ```bash
-cargo add quillmark
+    cargo add quillmark
     ```
 
     Or add it manually:
 
     ```toml
-[dependencies]
-quillmark = "0.6"
-quillmark-core = "0.6"
+    [dependencies]
+    quillmark = "0.6"
+    quillmark-core = "0.6"
     ```
 
     ## Basic Usage
 
     ```rust
-use quillmark::{Quillmark, OutputFormat, ParsedDocument};
-use quillmark_core::Quill;
+    use quillmark::{Quillmark, OutputFormat, ParsedDocument};
+    use quillmark_core::Quill;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+    fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create engine
     let mut engine = Quillmark::new();
 
@@ -85,13 +85,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Parse markdown
     let markdown = r#"---
-title: Example Document
----
+    title: Example Document
+    ---
 
-# Hello World
+    # Hello World
 
-This is a simple example.
-"#;
+    This is a simple example.
+    "#;
     let parsed = ParsedDocument::from_markdown(markdown)?;
 
     // Create workflow and render
@@ -103,7 +103,7 @@ This is a simple example.
     std::fs::write("output.pdf", pdf_bytes)?;
 
     Ok(())
-}
+    }
     ```
 
 === "JavaScript"
@@ -113,57 +113,57 @@ This is a simple example.
     Install using `npm`:
 
     ```bash
-npm install @quillmark-test/wasm
+    npm install @quillmark-test/wasm
     ```
 
     Or using `yarn`:
 
     ```bash
-yarn add @quillmark-test/wasm
+    yarn add @quillmark-test/wasm
     ```
 
     ## Basic Usage
 
     ```javascript
-import { Quillmark } from '@quillmark-test/wasm';
+    import { Quillmark } from '@quillmark-test/wasm';
 
-// Create engine
-const engine = new Quillmark();
+    // Create engine
+    const engine = new Quillmark();
 
-// Load a quill template (as JSON)
-const quillJson = {
+    // Load a quill template (as JSON)
+    const quillJson = {
     files: {
         "Quill.toml": {
             contents: `[Quill]
-name = "my-quill"
-backend = "typst"
-description = "My template"
-`
+    name = "my-quill"
+    backend = "typst"
+    description = "My template"
+    `
         },
         "plate.typ": { contents: "#{{ BODY | Content }}" }
     }
-};
-engine.registerQuill(quillJson);
+    };
+    engine.registerQuill(quillJson);
 
-// Parse markdown
-const markdown = `---
-title: Example Document
----
+    // Parse markdown
+    const markdown = `---
+    title: Example Document
+    ---
 
-# Hello World
+    # Hello World
 
-This is a simple example.
-`;
-const parsed = Quillmark.parseMarkdown(markdown);
+    This is a simple example.
+    `;
+    const parsed = Quillmark.parseMarkdown(markdown);
 
-// Render
-const result = engine.render(parsed, {
+    // Render
+    const result = engine.render(parsed, {
     format: 'pdf',
     quillName: 'my-quill'
-});
+    });
 
-// Access the generated PDF
-const pdfBytes = result.artifacts[0].bytes;
+    // Access the generated PDF
+    const pdfBytes = result.artifacts[0].bytes;
     ```
 
 ## Next Steps
