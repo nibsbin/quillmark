@@ -26,7 +26,7 @@ JSON format with a root object containing a `files` key:
 {
   "files": {
     "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\n..." },
-    "plate.typ": { "contents": "= Template\n\n{{ body }}" },
+    "plate.typ": { "contents": "= Template\n\n{{ BODY }}" },
     "assets": {
       "logo.png": { "contents": [137, 80, 78, 71, ...] }
     }

@@ -98,7 +98,7 @@ The JSON format has a root object with a `files` key. The optional `metadata` ke
 {
   "files": {
     "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\n..." },
-    "plate.typ": { "contents": "= Template\n\n{{ body }}" },
+    "plate.typ": { "contents": "= Template\n\n{{ BODY }}" },
     "assets": {
       "logo.png": { "contents": [137, 80, 78, 71, ...] }
     }
@@ -185,7 +185,7 @@ let quill = Quill::from_path("path/to/my-quill")?;
 let json_data = r#"{
   "files": {
     "Quill.toml": { "contents": "[Quill]\nname = \"demo\"\nbackend = \"typst\"\ndescription = \"Demo quill\"" },
-    "plate.typ": { "contents": "#set document(title: \"{{ title }}\")\n\n{{ body | Content }}" }
+    "plate.typ": { "contents": "#set document(title: \"{{ title }}\")\n\n{{ BODY | Content }}" }
   }
 }"#;
 let quill = Quill::from_json(json_data)?;
