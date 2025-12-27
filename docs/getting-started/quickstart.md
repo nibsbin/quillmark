@@ -9,46 +9,46 @@ Get started with Quillmark in your preferred language.
     Install using `uv` (recommended):
 
     ```bash
-    uv pip install quillmark
+uv pip install quillmark
     ```
 
     Or using `pip`:
 
     ```bash
-    pip install quillmark
+pip install quillmark
     ```
 
     ## Basic Usage
 
     ```python
-    from quillmark import Quillmark, ParsedDocument, OutputFormat, Quill
+from quillmark import Quillmark, ParsedDocument, OutputFormat, Quill
 
-    # Create engine
-    engine = Quillmark()
+# Create engine
+engine = Quillmark()
 
-    # Load a quill template
-    quill = Quill.from_path("path/to/quill")
-    engine.register_quill(quill)
+# Load a quill template
+quill = Quill.from_path("path/to/quill")
+engine.register_quill(quill)
 
-    # Parse markdown
-    markdown = """---
-    title: Example Document
-    ---
+# Parse markdown
+markdown = """---
+title: Example Document
+---
 
-    # Hello World
+# Hello World
 
-    This is a simple example.
-    """
-    parsed = ParsedDocument.from_markdown(markdown)
+This is a simple example.
+"""
+parsed = ParsedDocument.from_markdown(markdown)
 
-    # Create workflow and render
-    workflow = engine.workflow("my-quill")
-    result = workflow.render(parsed, OutputFormat.PDF)
+# Create workflow and render
+workflow = engine.workflow("my-quill")
+result = workflow.render(parsed, OutputFormat.PDF)
 
-    # Access the generated PDF
-    pdf_bytes = result.artifacts[0].bytes
-    with open("output.pdf", "wb") as f:
-        f.write(pdf_bytes)
+# Access the generated PDF
+pdf_bytes = result.artifacts[0].bytes
+with open("output.pdf", "wb") as f:
+    f.write(pdf_bytes)
     ```
 
 === "Rust"
@@ -58,52 +58,52 @@ Get started with Quillmark in your preferred language.
     Add Quillmark to your `Cargo.toml`:
 
     ```bash
-    cargo add quillmark
+cargo add quillmark
     ```
 
     Or add it manually:
 
     ```toml
-    [dependencies]
-    quillmark = "0.6"
-    quillmark-core = "0.6"
+[dependencies]
+quillmark = "0.6"
+quillmark-core = "0.6"
     ```
 
     ## Basic Usage
 
     ```rust
-    use quillmark::{Quillmark, OutputFormat, ParsedDocument};
-    use quillmark_core::Quill;
+use quillmark::{Quillmark, OutputFormat, ParsedDocument};
+use quillmark_core::Quill;
 
-    fn main() -> Result<(), Box<dyn std::error::Error>> {
-        // Create engine
-        let mut engine = Quillmark::new();
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create engine
+    let mut engine = Quillmark::new();
 
-        // Load a quill template
-        let quill = Quill::from_path("path/to/quill")?;
-        engine.register_quill(quill);
+    // Load a quill template
+    let quill = Quill::from_path("path/to/quill")?;
+    engine.register_quill(quill);
 
-        // Parse markdown
-        let markdown = r#"---
-    title: Example Document
-    ---
+    // Parse markdown
+    let markdown = r#"---
+title: Example Document
+---
 
-    # Hello World
+# Hello World
 
-    This is a simple example.
-    "#;
-        let parsed = ParsedDocument::from_markdown(markdown)?;
+This is a simple example.
+"#;
+    let parsed = ParsedDocument::from_markdown(markdown)?;
 
-        // Create workflow and render
-        let workflow = engine.workflow("my-quill")?;
-        let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
+    // Create workflow and render
+    let workflow = engine.workflow("my-quill")?;
+    let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
 
-        // Access the generated PDF
-        let pdf_bytes = &result.artifacts[0].bytes;
-        std::fs::write("output.pdf", pdf_bytes)?;
+    // Access the generated PDF
+    let pdf_bytes = &result.artifacts[0].bytes;
+    std::fs::write("output.pdf", pdf_bytes)?;
 
-        Ok(())
-    }
+    Ok(())
+}
     ```
 
 === "JavaScript"
@@ -113,40 +113,40 @@ Get started with Quillmark in your preferred language.
     Install using `npm`:
 
     ```bash
-    npm install @quillmark-test/wasm
+npm install @quillmark-test/wasm
     ```
 
     Or using `yarn`:
 
     ```bash
-    yarn add @quillmark-test/wasm
+yarn add @quillmark-test/wasm
     ```
 
     ## Basic Usage
 
     ```javascript
-    import { Quillmark } from '@quillmark-test/wasm';
+import { Quillmark } from '@quillmark-test/wasm';
 
-    // Create engine
-    const engine = new Quillmark();
+// Create engine
+const engine = new Quillmark();
 
-    // Load a quill template (as JSON)
-    const quillJson = {
-        files: {
-            "Quill.toml": {
-                contents: `[Quill]
+// Load a quill template (as JSON)
+const quillJson = {
+    files: {
+        "Quill.toml": {
+            contents: `[Quill]
 name = "my-quill"
 backend = "typst"
 description = "My template"
 `
-            },
-            "plate.typ": { contents: "#{{ BODY | Content }}" }
-        }
-    };
-    engine.registerQuill(quillJson);
+        },
+        "plate.typ": { contents: "#{{ BODY | Content }}" }
+    }
+};
+engine.registerQuill(quillJson);
 
-    // Parse markdown
-    const markdown = `---
+// Parse markdown
+const markdown = `---
 title: Example Document
 ---
 
@@ -154,16 +154,16 @@ title: Example Document
 
 This is a simple example.
 `;
-    const parsed = Quillmark.parseMarkdown(markdown);
+const parsed = Quillmark.parseMarkdown(markdown);
 
-    // Render
-    const result = engine.render(parsed, {
-        format: 'pdf',
-        quillName: 'my-quill'
-    });
+// Render
+const result = engine.render(parsed, {
+    format: 'pdf',
+    quillName: 'my-quill'
+});
 
-    // Access the generated PDF
-    const pdfBytes = result.artifacts[0].bytes;
+// Access the generated PDF
+const pdfBytes = result.artifacts[0].bytes;
     ```
 
 ## Next Steps
