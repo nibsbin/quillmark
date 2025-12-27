@@ -48,7 +48,7 @@ Get started with Quillmark in your preferred language.
     # Access the generated PDF
     pdf_bytes = result.artifacts[0].bytes
     with open("output.pdf", "wb") as f:
-        f.write(pdf_bytes)
+    f.write(pdf_bytes)
     ```
 
 === "Rust"
@@ -76,15 +76,15 @@ Get started with Quillmark in your preferred language.
     use quillmark_core::Quill;
 
     fn main() -> Result<(), Box<dyn std::error::Error>> {
-        // Create engine
-        let mut engine = Quillmark::new();
+    // Create engine
+    let mut engine = Quillmark::new();
 
-        // Load a quill template
-        let quill = Quill::from_path("path/to/quill")?;
-        engine.register_quill(quill);
+    // Load a quill template
+    let quill = Quill::from_path("path/to/quill")?;
+    engine.register_quill(quill);
 
-        // Parse markdown
-        let markdown = r#"---
+    // Parse markdown
+    let markdown = r#"---
     title: Example Document
     ---
 
@@ -92,17 +92,17 @@ Get started with Quillmark in your preferred language.
 
     This is a simple example.
     "#;
-        let parsed = ParsedDocument::from_markdown(markdown)?;
+    let parsed = ParsedDocument::from_markdown(markdown)?;
 
-        // Create workflow and render
-        let workflow = engine.workflow("my-quill")?;
-        let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
+    // Create workflow and render
+    let workflow = engine.workflow("my-quill")?;
+    let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
 
-        // Access the generated PDF
-        let pdf_bytes = &result.artifacts[0].bytes;
-        std::fs::write("output.pdf", pdf_bytes)?;
+    // Access the generated PDF
+    let pdf_bytes = &result.artifacts[0].bytes;
+    std::fs::write("output.pdf", pdf_bytes)?;
 
-        Ok(())
+    Ok(())
     }
     ```
 
@@ -132,34 +132,34 @@ Get started with Quillmark in your preferred language.
 
     // Load a quill template (as JSON)
     const quillJson = {
-        files: {
-            "Quill.toml": {
-                contents: `[Quill]
-name = "my-quill"
-backend = "typst"
-description = "My template"
-`
-            },
-            "plate.typ": { contents: "#{{ BODY | Content }}" }
-        }
+    files: {
+        "Quill.toml": {
+            contents: `[Quill]
+    name = "my-quill"
+    backend = "typst"
+    description = "My template"
+    `
+        },
+        "plate.typ": { contents: "#{{ BODY | Content }}" }
+    }
     };
     engine.registerQuill(quillJson);
 
     // Parse markdown
     const markdown = `---
-title: Example Document
----
+    title: Example Document
+    ---
 
-# Hello World
+    # Hello World
 
-This is a simple example.
-`;
+    This is a simple example.
+    `;
     const parsed = Quillmark.parseMarkdown(markdown);
 
     // Render
     const result = engine.render(parsed, {
-        format: 'pdf',
-        quillName: 'my-quill'
+    format: 'pdf',
+    quillName: 'my-quill'
     });
 
     // Access the generated PDF
