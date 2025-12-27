@@ -29,10 +29,8 @@
 //! See [CONVERT.md](https://github.com/nibsbin/quillmark/blob/main/quillmark-typst/docs/designs/CONVERT.md) for the complete specification.
 
 use pulldown_cmark::{Event, Parser, Tag, TagEnd};
+use quillmark_core::error::MAX_NESTING_DEPTH;
 use std::ops::Range;
-
-/// Maximum nesting depth for markdown structures
-const MAX_NESTING_DEPTH: usize = 100;
 
 /// Errors that can occur during markdown to Typst conversion
 #[derive(Debug, thiserror::Error)]
@@ -48,9 +46,16 @@ pub enum ConversionError {
 }
 
 /// Escapes text for safe use in Typst markup context.
+///
+/// This function escapes all Typst-special characters to prevent:
+/// - Markup injection (*, _, `, #, etc.)
+/// - Layout manipulation (~, which is non-breaking space in Typst)
+/// - Reference injection (@)
+/// - Code/comment injection (//, $, etc.)
 pub fn escape_markup(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace("//", "\\/\\/")
+        .replace('~', "\\~") // Non-breaking space in Typst
         .replace('*', "\\*")
         .replace('_', "\\_")
         .replace('`', "\\`")
@@ -371,13 +376,13 @@ where
     fn process_text_from_source(&mut self, range: Range<usize>) {
         let source_slice = &self.source[range.clone()];
 
-        // Safety check: if source slice contains backslash, it may have escapes - skip processing
-        if source_slice.contains('\\') || source_slice.contains('&') {
+        // Skip processing for HTML entities (complex to handle correctly)
+        if source_slice.contains('&') {
             self.buffer.push((Event::Text(source_slice.into()), range));
             return;
         }
 
-        // Look for __ patterns in the source text
+        // Look for __ patterns in the source text, handling escapes
         let mut events: Vec<(Event<'a>, Range<usize>)> = Vec::new();
         let mut in_underline = false;
         let mut last_end = 0;
@@ -385,6 +390,12 @@ where
         let bytes = source_slice.as_bytes();
 
         while i < bytes.len() {
+            // Skip over escaped characters (backslash followed by any char)
+            if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                i += 2; // Skip the backslash and the escaped character
+                continue;
+            }
+
             if i + 1 < bytes.len() && bytes[i] == b'_' && bytes[i + 1] == b'_' {
                 // Found __
                 let before = &source_slice[last_end..i];
@@ -425,6 +436,9 @@ where
         // If we have an unclosed underline, we need to undo the transformation
         // (just emit original text)
         if in_underline {
+            #[cfg(debug_assertions)]
+            eprintln!("Warning: Unclosed __ in text: {:?}", source_slice);
+
             self.buffer.push((Event::Text(source_slice.into()), range));
         } else if events.is_empty() {
             self.buffer.push((Event::Text(source_slice.into()), range));
@@ -528,6 +542,13 @@ mod tests {
             escape_markup("Use * for bold and # for functions"),
             "Use \\* for bold and \\# for functions"
         );
+    }
+
+    #[test]
+    fn test_escape_markup_tilde() {
+        // Tilde is non-breaking space in Typst - must be escaped to prevent layout manipulation
+        assert_eq!(escape_markup("Hello~World"), "Hello\\~World");
+        assert_eq!(escape_markup("a~b~c"), "a\\~b\\~c");
     }
 
     // Tests for escape_string function

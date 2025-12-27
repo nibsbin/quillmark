@@ -1,6 +1,6 @@
 use quillmark_core::{
-    normalize_fields, Backend, Diagnostic, OutputFormat, ParsedDocument, Plate, Quill, RenderError,
-    RenderOptions, RenderResult, Severity,
+    normalize_document, Backend, Diagnostic, OutputFormat, ParsedDocument, Plate, Quill,
+    RenderError, RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -89,11 +89,11 @@ impl Workflow {
         // Validate document against schema
         self.validate_document(&parsed_coerced)?;
 
-        // Normalize fields: strip bidi characters and process guillemets
+        // Normalize document: strip bidi characters and process guillemets
         // - Strips Unicode bidirectional formatting characters that interfere with markdown parsing
         // - Converts <<text>> to «text» in body (guillemets)
         // - Strips chevrons in other fields (<<text>> → text)
-        let normalized_fields = normalize_fields(parsed_coerced.fields().clone());
+        let normalized = normalize_document(parsed_coerced);
 
         // Create appropriate plate based on whether template is provided
         let mut plate = match &self.quill.plate {
@@ -101,15 +101,14 @@ impl Workflow {
             _ => Plate::new_auto(),
         };
         self.backend.register_filters(&mut plate);
-        let plated_output =
-            plate
-                .compose(normalized_fields)
-                .map_err(|e| RenderError::TemplateFailed {
-                    diag: Box::new(
-                        Diagnostic::new(Severity::Error, e.to_string())
-                            .with_code("template::compose".to_string()),
-                    ),
-                })?;
+        let plated_output = plate.compose(normalized.fields().clone()).map_err(|e| {
+            RenderError::TemplateFailed {
+                diag: Box::new(
+                    Diagnostic::new(Severity::Error, e.to_string())
+                        .with_code("template::compose".to_string()),
+                ),
+            }
+        })?;
         Ok(plated_output)
     }
 

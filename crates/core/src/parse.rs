@@ -190,27 +190,57 @@ fn is_valid_tag_name(name: &str) -> bool {
 
 /// Check if a position is inside a fenced code block
 ///
-/// This uses a simple count-based approach: count opening fences before the position.
-/// An odd count means we're inside a fenced block.
+/// This uses strict fence detection per EXTENDED_MARKDOWN.md specification:
+/// - Only exactly 3 backticks (```) are valid fences
+/// - Tildes (~~~) are NOT treated as fences
+/// - 4+ backticks are NOT treated as fences
 fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
     let before = &markdown[..pos];
+    let mut in_fence = false;
 
-    // Count fences that appear at the start of lines
-    let mut fence_count = 0;
-
-    // Check if document starts with a fence
-    if before.starts_with("```") || before.starts_with("~~~") {
-        fence_count += 1;
+    // Check if document starts with exactly ```
+    if is_exact_fence_at(before, 0) {
+        in_fence = !in_fence;
     }
 
-    // Count fences after newlines
-    fence_count += before.matches("\n```").count();
-    fence_count += before.matches("\n~~~").count();
-    fence_count += before.matches("\r\n```").count();
-    fence_count += before.matches("\r\n~~~").count();
+    // Scan for fence toggles after newlines
+    for (i, _) in before.match_indices('\n') {
+        if is_exact_fence_at(before, i + 1) {
+            in_fence = !in_fence;
+        }
+    }
 
-    // Odd count means we're inside a fenced block
-    fence_count % 2 == 1
+    in_fence
+}
+
+/// Check if position starts exactly 3 backticks (not 2, not 4+)
+///
+/// Strict specification: only exactly ``` is a valid fence marker.
+fn is_exact_fence_at(text: &str, pos: usize) -> bool {
+    if pos >= text.len() {
+        return false;
+    }
+    let remaining = &text[pos..];
+    if !remaining.starts_with("```") {
+        return false;
+    }
+    // Ensure it's exactly 3 backticks (4th char is not a backtick)
+    remaining.len() == 3 || remaining.as_bytes().get(3) != Some(&b'`')
+}
+
+/// Creates serde_saphyr Options with security budgets configured.
+///
+/// Uses MAX_YAML_DEPTH from error.rs to limit nesting depth at the parser level,
+/// which is more robust than heuristic-based pre-parse checks.
+fn yaml_parse_options() -> serde_saphyr::Options {
+    let budget = serde_saphyr::Budget {
+        max_depth: crate::error::MAX_YAML_DEPTH,
+        ..Default::default()
+    };
+    serde_saphyr::Options {
+        budget: Some(budget),
+        ..Default::default()
+    }
 }
 
 /// Find all metadata blocks in the document
@@ -328,10 +358,15 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                 }
 
                 // Parse YAML content to check for reserved keys (QUILL, CARD)
-                // First, try to parse as YAML
+                // Uses configured budget to limit nesting depth (prevents stack overflow)
+                // Normalize: treat whitespace-only content as empty frontmatter
+                let content = content.trim();
                 let (tag, quill_name, yaml_value) = if !content.is_empty() {
-                    // Try to parse the YAML to check for reserved keys
-                    match serde_saphyr::from_str::<serde_json::Value>(content) {
+                    // Try to parse the YAML with security budgets
+                    match serde_saphyr::from_str_with_options::<serde_json::Value>(
+                        content,
+                        yaml_parse_options(),
+                    ) {
                         Ok(parsed_yaml) => {
                             if let Some(mapping) = parsed_yaml.as_object() {
                                 let quill_key = "QUILL";
@@ -417,8 +452,13 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                             }
                         }
                         Err(e) => {
-                            // YAML parsing failed - return error with context
-                            return Err(crate::error::ParseError::YamlError(e));
+                            // Calculate line number for the start of this block
+                            let block_start_line = markdown[..abs_pos].lines().count() + 1;
+                            return Err(crate::error::ParseError::YamlErrorWithLocation {
+                                message: e.to_string(),
+                                line: block_start_line,
+                                block_index: blocks.len(),
+                            });
                         }
                     }
                 } else {
@@ -433,6 +473,14 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                     tag,
                     quill_name,
                 });
+
+                // Check card count limit to prevent memory exhaustion
+                if blocks.len() > crate::error::MAX_CARD_COUNT {
+                    return Err(crate::error::ParseError::InputTooLarge {
+                        size: blocks.len(),
+                        max: crate::error::MAX_CARD_COUNT,
+                    });
+                }
 
                 pos = abs_closing_pos + closing_len;
             } else if abs_pos == 0 {
@@ -664,6 +712,14 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
         QuillValue::from_json(serde_json::Value::Array(cards_array)),
     );
 
+    // Check field count limit to prevent memory exhaustion
+    if fields.len() > crate::error::MAX_FIELD_COUNT {
+        return Err(crate::error::ParseError::InputTooLarge {
+            size: fields.len(),
+            max: crate::error::MAX_FIELD_COUNT,
+        });
+    }
+
     let quill_tag = quill_name.unwrap_or_else(|| "__default__".to_string());
     let parsed = ParsedDocument::with_quill_tag(fields, quill_tag);
 
@@ -710,6 +766,20 @@ This is the body."#;
         assert_eq!(doc.fields().len(), 4); // title, author, body, CARDS
                                            // Verify default quill tag is set when no QUILL directive
         assert_eq!(doc.quill_tag(), "__default__");
+    }
+
+    #[test]
+    fn test_whitespace_frontmatter() {
+        // Frontmatter with only whitespace should be treated as empty/valid
+        // and not error out or be treated as null YAML
+        let markdown = "---\n   \n---\n\n# Hello";
+        let doc = decompose(markdown).unwrap();
+
+        assert_eq!(doc.body(), Some("\n# Hello"));
+        // Should have default fields (BODY + CARDS) but no others
+        // (unless defaults are applied later, but decompose returns basics)
+        assert!(doc.get_field("title").is_none());
+        assert_eq!(doc.fields().len(), 2); // BODY, CARDS
     }
 
     #[test]
@@ -983,10 +1053,8 @@ Content here."#;
 
         let result = decompose(markdown);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("YAML parsing error"));
+        // Error message now includes location context
+        assert!(result.unwrap_err().to_string().contains("YAML error"));
     }
 
     #[test]
@@ -1274,7 +1342,9 @@ More content.
     }
 
     #[test]
-    fn test_delimiter_inside_fenced_code_block_tildes() {
+    fn test_tildes_are_not_fences() {
+        // Per EXTENDED_MARKDOWN.md: tildes (~~~) are NOT treated as fences
+        // So --- inside ~~~ WILL be parsed as a metadata block
         let markdown = r#"---
 title: Test
 ---
@@ -1282,6 +1352,7 @@ Here is some code:
 
 ~~~yaml
 ---
+CARD: code_example
 fake: frontmatter
 ---
 ~~~
@@ -1290,9 +1361,42 @@ More content.
 "#;
 
         let doc = decompose(markdown).unwrap();
-        // The --- inside the code block should NOT be parsed as metadata
-        assert!(doc.body().unwrap().contains("fake: frontmatter"));
-        assert!(doc.get_field("fake").is_none());
+        // The --- should be parsed as a CARD block since tildes aren't fences
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(
+            cards[0].get("fake").unwrap().as_str().unwrap(),
+            "frontmatter"
+        );
+    }
+
+    #[test]
+    fn test_four_backticks_are_not_fences() {
+        // Per EXTENDED_MARKDOWN.md: only exactly 3 backticks are valid fences
+        // 4+ backticks are NOT treated as fences
+        let markdown = r#"---
+title: Test
+---
+Here is some code:
+
+````yaml
+---
+CARD: code_example
+fake: frontmatter
+---
+````
+
+More content.
+"#;
+
+        let doc = decompose(markdown).unwrap();
+        // The --- should be parsed as a CARD block since 4 backticks aren't a fence
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 1);
+        assert_eq!(
+            cards[0].get("fake").unwrap().as_str().unwrap(),
+            "frontmatter"
+        );
     }
 
     #[test]
@@ -1916,6 +2020,48 @@ mod demo_file_test {
     fn test_yaml_within_size_limit() {
         // Create YAML block well within the limit
         let markdown = "---\ntitle: Test\nauthor: John Doe\n---\n\nBody content";
+
+        let result = decompose(markdown);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_yaml_depth_limit() {
+        // Create deeply nested YAML that exceeds MAX_YAML_DEPTH (100 levels)
+        // This tests serde-saphyr's Budget.max_depth enforcement
+        let mut yaml_content = String::new();
+        for i in 0..110 {
+            yaml_content.push_str(&"  ".repeat(i));
+            yaml_content.push_str(&format!("level{}: value\n", i));
+        }
+
+        let markdown = format!("---\n{}---\n\nBody", yaml_content);
+        let result = decompose(&markdown);
+
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        // serde-saphyr returns "budget exceeded" or similar for depth violations
+        assert!(
+            err_msg.to_lowercase().contains("budget")
+                || err_msg.to_lowercase().contains("depth")
+                || err_msg.contains("YAML"),
+            "Expected depth/budget error, got: {}",
+            err_msg
+        );
+    }
+
+    #[test]
+    fn test_yaml_depth_within_limit() {
+        // Create reasonably nested YAML (should succeed)
+        let markdown = r#"---
+level1:
+  level2:
+    level3:
+      level4:
+        value: test
+---
+
+Body content"#;
 
         let result = decompose(markdown);
         assert!(result.is_ok());

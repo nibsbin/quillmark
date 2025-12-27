@@ -46,6 +46,9 @@ minijinja = "2.13"
 # Validation
 jsonschema = { version = "0.37", default-features = false }
 
+# Unicode normalization
+unicode-normalization = "0.1"
+
 # Typst backend dependencies
 pulldown-cmark = "0.13.0"
 time = { version = "0.3.44", features = ["formatting", "parsing"] }

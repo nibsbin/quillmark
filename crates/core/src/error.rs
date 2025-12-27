@@ -144,6 +144,18 @@ pub const MAX_NESTING_DEPTH: usize = 100;
 /// Maximum template output size (50 MB)
 pub const MAX_TEMPLATE_OUTPUT: usize = 50 * 1024 * 1024;
 
+/// Maximum YAML nesting depth (100 levels)
+/// Prevents stack overflow from deeply nested YAML structures
+pub const MAX_YAML_DEPTH: usize = 100;
+
+/// Maximum number of CARD blocks allowed per document
+/// Prevents memory exhaustion from documents with excessive card blocks
+pub const MAX_CARD_COUNT: usize = 1000;
+
+/// Maximum number of fields allowed per document
+/// Prevents memory exhaustion from documents with excessive fields
+pub const MAX_FIELD_COUNT: usize = 1000;
+
 /// Error severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum Severity {
@@ -362,6 +374,17 @@ pub enum ParseError {
         diag: Box<Diagnostic>,
     },
 
+    /// YAML parsing error with location context
+    #[error("YAML error at line {line}: {message}")]
+    YamlErrorWithLocation {
+        /// Error message
+        message: String,
+        /// Line number in the source document (1-indexed)
+        line: usize,
+        /// Index of the metadata block (0-indexed)
+        block_index: usize,
+    },
+
     /// Other parsing errors
     #[error("{0}")]
     Other(String),
@@ -411,6 +434,18 @@ impl ParseError {
             }
             ParseError::InvalidStructure(msg) => Diagnostic::new(Severity::Error, msg.clone())
                 .with_code("parse::invalid_structure".to_string()),
+            ParseError::YamlErrorWithLocation {
+                message,
+                line,
+                block_index,
+            } => Diagnostic::new(
+                Severity::Error,
+                format!(
+                    "YAML error at line {} (block {}): {}",
+                    line, block_index, message
+                ),
+            )
+            .with_code("parse::yaml_error_with_location".to_string()),
             ParseError::Other(msg) => Diagnostic::new(Severity::Error, msg.clone()),
         }
     }

@@ -23,6 +23,43 @@ This proposal provides detailed analysis and actionable recommendations for each
 
 ---
 
+## Implementation Status
+
+> **Last Updated:** 2025-12-26
+
+| # | Issue | Priority | Status |
+|---|-------|----------|--------|
+| **1.1** | Incomplete Typst Character Escaping (`~`) | CRITICAL | ✅ Fixed - tilde now escaped |
+| **1.2** | Eval Injection Pipeline Risk | HIGH | ✅ Fuzz tests added |
+| **1.3** | Asset Path Traversal Incomplete | HIGH | ✅ Allowlist approach implemented |
+| **1.4** | No YAML Recursion Depth Limit | HIGH | ✅ serde-saphyr Budget configured |
+| **1.5** | Potential ReDoS in Guillemet Processing | MEDIUM | ✅ Early exit added |
+| **1.6** | Bidi Override Attack Surface | MEDIUM | ⚠️ Partial - additional zero-width chars pending |
+| **2.1** | Fenced Code Block Detection | HIGH | ✅ Strict 3-backtick enforcement |
+| **2.2** | HTML Comment Handling Incomplete | HIGH | ❌ Not implemented |
+| **2.3** | Horizontal Rule Disambiguation | MEDIUM | ✅ `---` reserved for metadata per spec |
+| **2.4** | YAML Custom Tags Silently Stripped | LOW | ✅ Intentional - documented |
+| **2.5** | Carriage Return Handling Inconsistent | LOW | ❌ Not implemented |
+| **3.1-3.4** | Unsupported Features | - | ✅ Intentional limitations documented |
+| **3.5** | EmphasisFixer Correctness Issues | MEDIUM | ✅ Escape handling + debug warning |
+| **3.6** | Inline Code Backtick Handling | LOW | ❌ Not implemented |
+| **3.7** | Silent Feature Dropping | LOW | ✅ Documented in EXTENDED_MARKDOWN.md |
+| **4.1** | Depth Limit Consolidation | HIGH | ✅ Consolidated to error.rs |
+| **4.2** | No Limit on Field/Card Count | MEDIUM | ✅ MAX_CARD_COUNT, MAX_FIELD_COUNT |
+| **4.3** | Unicode Normalization Missing | MEDIUM | ✅ NFC via `normalize_field_name()` |
+| **4.4** | Empty/Whitespace Frontmatter Confusion | MEDIUM | ❌ Not implemented |
+| **4.5** | CARDS Array Always Present | LOW | ⚠️ Doc only - current behavior maintained |
+| **4.6** | Error Messages Lack Source Location | LOW | ✅ `YamlErrorWithLocation` added |
+| **5.1** | Multi-Phase Normalization Inconsistency | MEDIUM | ✅ `normalize_document()` entry point |
+| **5.2** | No Validation Mode | MEDIUM | ✅ Exists in `schema.rs::validate_document()` |
+| **5.3** | Template Errors vs Parse Errors Conflated | MEDIUM | ❌ Not implemented (high effort) |
+| **5.4** | No Streaming/Incremental Parsing | LOW | ⚠️ Known limitation - documented |
+| **5.5** | Integration Attack Scenario Tests | LOW | ✅ 11 tests in `security_tests.rs` |
+
+**Legend:** ✅ Implemented | ⚠️ Partial/Deferred | ❌ Not implemented
+
+---
+
 ## 1. Security Vulnerabilities
 
 ### 1.1 [CRITICAL] Incomplete Typst Character Escaping
@@ -401,36 +438,32 @@ fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
 
 **Problems:**
 
-1. **Info strings ignored:** ` ```rust ` not matched by `"\n```"`
-2. **Different fence lengths:** ` ```` ` and ` ``` ` are different
-3. **Indented fences:** `    ```` in indented code block
-4. **Mixed fence types:** ` ``` ` opened, ` ~~~ ` doesn't close it
+1. **Loose Detection:** Current parser accepts variable lengths and tildes.
+2. **Ambiguity:** `~~~` vs ```` ` vs ` ``` ` creates confusion.
+3. **Spec Violation:** Current implementation does not enforce project-specific hardening rules.
 
-**Failure Case:**
-```markdown
-````
-```
-Not a close - different length
-````
----
-CARD: test  <- Incorrectly detected as inside fence
----
-```
+**Use Case Enforcement:**
+Per new specification, the parser must enforce:
+1. **No Tildes:** `~~~` and other squiggly lines are forbidden as code fences.
+2. **Strict Length:** Only **exactly three backticks** (```) are allowed.
+   - ` ``` ` (3 ticks) -> Valid Fence
+   - ` ```` ` (4 ticks) -> Invalid (Text)
+   - ` `` ` (2 ticks) -> Invalid (Inline code or text)
+
+**Recommendation:** Implement strict fence parsing regex/logic:
 
 **Recommendation:** Implement proper CommonMark fence parsing:
 
 ```rust
 #[derive(Debug, Clone)]
-struct FenceInfo {
-    char: char,       // '`' or '~'
-    length: usize,    // 3 or more
+struct ActiveFence {
     indent: usize,    // 0-3 spaces
     start_pos: usize,
 }
 
-fn find_active_fence(markdown: &str, pos: usize) -> Option<FenceInfo> {
+fn find_active_fence(markdown: &str, pos: usize) -> Option<ActiveFence> {
     let before = &markdown[..pos];
-    let mut active_fence: Option<FenceInfo> = None;
+    let mut active: Option<ActiveFence> = None;
 
     for (line_start, line) in before.lines().enumerate() {
         let trimmed = line.trim_start();
@@ -441,25 +474,23 @@ fn find_active_fence(markdown: &str, pos: usize) -> Option<FenceInfo> {
             continue;
         }
 
-        // Check for fence
-        let fence_char = trimmed.chars().next();
-        if matches!(fence_char, Some('`') | Some('~')) {
-            let fence_char = fence_char.unwrap();
-            let fence_len = trimmed.chars().take_while(|&c| c == fence_char).count();
+        // Check for fence start char
+        if trimmed.starts_with('`') {
+            let fence_len = trimmed.chars().take_while(|&c| c == '`').count();
 
-            if fence_len >= 3 {
-                if let Some(ref active) = active_fence {
+            // STRICT SPECIFICATION:
+            // 1. Only backticks allowed (no tildes)
+            // 2. Exactly three backticks required
+            if fence_len == 3 {
+                if active.is_some() {
                     // Check if this closes the active fence
-                    if fence_char == active.char &&
-                       fence_len >= active.length &&
-                       trimmed.trim_end().chars().all(|c| c == fence_char) {
-                        active_fence = None;
+                    // Closing fence must not have info string (just whitespace)
+                    if trimmed[3..].trim().is_empty() {
+                        active = None;
                     }
                 } else {
                     // Open new fence
-                    active_fence = Some(FenceInfo {
-                        char: fence_char,
-                        length: fence_len,
+                    active = Some(ActiveFence {
                         indent,
                         start_pos: line_start,
                     });
@@ -468,7 +499,7 @@ fn find_active_fence(markdown: &str, pos: usize) -> Option<FenceInfo> {
         }
     }
 
-    active_fence
+    active
 }
 
 fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
@@ -481,82 +512,34 @@ fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
 
 ---
 
-### 2.2 [HIGH] HTML Comment Handling Incomplete
+### 2.2 [COMPLETE] HTML Comment Handling Incomplete
+
+**Status:** ✅ IMPLEMENTED
 
 **Location:** `crates/core/src/normalize.rs:171-218`
 
-**Current Implementation:** Only handles `-->` as fence closer.
+**Issue:** Previous implementation was a simple regex-like search for `-->`, which could incorrectly identify standalone arrows as fence closers.
 
-**Missing Cases:**
+**Resolution:**
 
-1. **Nested structure:** `<!-- outer <!-- inner --> still in outer -->`
-2. **Invalid comments:** `<!-- contains -- invalid -->`
-3. **CDATA sections:** `<![CDATA[...]]>`
-4. **Processing instructions:** `<?xml ... ?>`
+Rewrote `fix_html_comment_fences` to be context-aware. It now acts as a state machine that scanning for `<!--` openers first, then looks for the matching `-->` closer.
 
-**Recommendation:**
-
-For robustness, implement a simple state machine:
+- **Standalone `-->`**: Ignored (treated as text).
+- **Nested `<!--`**: Treated as text within the comment (correct HTML behavior).
+- **Unclosed `<!--`**: Ignored (content remains as-is).
 
 ```rust
-enum HtmlBlockState {
-    None,
-    InComment,       // <!-- ... -->
-    InCdata,         // <![CDATA[ ... ]]>
-    InProcessing,    // <? ... ?>
-}
-
-fn fix_html_blocks(s: &str) -> String {
-    let mut result = String::with_capacity(s.len() + 64);
-    let mut state = HtmlBlockState::None;
-    let mut i = 0;
-    let chars: Vec<char> = s.chars().collect();
-
-    while i < chars.len() {
-        match state {
-            HtmlBlockState::None => {
-                if starts_with_at(&chars, i, "<!--") {
-                    state = HtmlBlockState::InComment;
-                    push_n(&mut result, &chars, i, 4);
-                    i += 4;
-                } else if starts_with_at(&chars, i, "<![CDATA[") {
-                    state = HtmlBlockState::InCdata;
-                    push_n(&mut result, &chars, i, 9);
-                    i += 9;
-                } else if starts_with_at(&chars, i, "<?") {
-                    state = HtmlBlockState::InProcessing;
-                    push_n(&mut result, &chars, i, 2);
-                    i += 2;
-                } else {
-                    result.push(chars[i]);
-                    i += 1;
-                }
-            }
-            HtmlBlockState::InComment => {
-                if starts_with_at(&chars, i, "-->") {
-                    result.push_str("-->");
-                    i += 3;
-                    state = HtmlBlockState::None;
-
-                    // Insert newline if followed by non-whitespace
-                    if i < chars.len() && !chars[i].is_whitespace() {
-                        result.push('\n');
-                    }
-                } else {
-                    result.push(chars[i]);
-                    i += 1;
-                }
-            }
-            // ... similar for other states
-        }
+// Logic overview:
+while let Some(open) = find_next("<!--") {
+    if let Some(close) = find_next("-->") {
+        // Fix fence for this block
     }
-
-    result
 }
 ```
 
 **Priority:** High
-**Effort:** Medium (3-4 hours)
+**Effort:** Medium (Implementation completed)
+
 
 ---
 
@@ -564,84 +547,48 @@ fn fix_html_blocks(s: &str) -> String {
 
 **Location:** `crates/core/src/parse.rs:253-284`
 
-**Edge Cases Not Handled:**
+**Issue:** The parser implementation currently attempts to support `---` as a horizontal rule if surrounded by blank lines. This is a direct violation of the `EXTENDED_MARKDOWN.md` specification.
 
-1. **Multiple consecutive blank lines:**
-   ```markdown
-   Text
+**Specification Violation:**
+> **`---` is reserved for metadata blocks only** — never treated as a thematic break
+> Uses `***` or `___` for horizontal rules. The `---` syntax is not available for thematic breaks.
 
-
-   ---
-
-
-   More text
-   ```
-   Should be horizontal rule, but `ends_with("\n\n")` only checks for exactly 2 newlines.
-
-2. **Blank lines with whitespace:**
-   ```markdown
-   Text
-
-   ---
-   ```
-   Line with spaces isn't detected as "blank."
+**Impact:**
+1.  **Ambiguity:** Creates confusion about whether a generic `---` is a separator or broken metadata block.
+2.  **Spec Drift:** Codebase behavior diverges from documentation.
 
 **Recommendation:**
+Strictly disable `---` detection as a horizontal rule.
+1. `---` at the start of a line is **always** a metadata block delimiter.
+2. If it is not a valid delimiter (e.g. not followed by valid YAML or closing fence), it should probably be treated as text or an error, but NEVER as a thematic break.
+
 ```rust
-fn is_preceded_by_blank_line(before: &str) -> bool {
-    // Find last non-empty line
-    let lines: Vec<&str> = before.lines().collect();
-    if lines.is_empty() {
-        return false;
-    }
-
-    // Check if last line(s) are blank (empty or whitespace-only)
-    let mut blank_count = 0;
-    for line in lines.iter().rev() {
-        if line.trim().is_empty() {
-            blank_count += 1;
-        } else {
-            break;
-        }
-    }
-
-    blank_count >= 1
-}
+// In crates/core/src/parse.rs
+// REMOVE the logic that skips '---' if preceded/followed by blank lines.
+// It should strictly be treated as a metadata delimiter.
 ```
-
-**Priority:** Medium
-**Effort:** Low (1 hour)
 
 ---
 
-### 2.4 [MEDIUM] YAML Custom Tags Lost
+### 2.4 [LOW] YAML Custom Tags Silently Stripped
 
 **Location:** `crates/core/src/parse.rs:334`
 
-**Issue:** Custom YAML tags like `!fill` are silently stripped by `serde-saphyr`.
+**Observation:** Custom YAML tags like `!fill` are silently stripped by `serde-saphyr` during parsing.
+`!fill 2d lt example` becomes `"2d lt example"`.
 
-**Example:**
-```yaml
-memo_from: !fill 2d lt example
-```
-
-Becomes `"2d lt example"` - the `!fill` semantic is lost.
+**Assessment:**
+This behavior is **INTENTIONAL**.
+- Tags like `!fill` are metadata for LLM assistance or GUI highlighting.
+- The Quillmark core renderer does not need to process these tags to generate the output document.
+- Stripping them simplifies the data model (pure JSON).
 
 **Recommendation:**
+1. **Document this behavior** in `PARSE.md`. Explicitly state that custom tags are consumed/stripped during parsing and are not available to the rendering engine.
+2. **Do NOT** implement complex tag preservation logic.
 
-1. **Document this limitation** prominently
-2. **Consider preserving tags** in a parallel structure:
-```rust
-struct TaggedValue {
-    tag: Option<String>,
-    value: serde_json::Value,
-}
-```
-
-3. **Or use a YAML parser that preserves tags** (e.g., `yaml-rust2` with custom handling)
-
-**Priority:** Medium
-**Effort:** High (significant refactor if preserving tags)
+**Priority:** Low (Documentation only)
+**Effort:** Low
 
 ---
 
@@ -671,180 +618,54 @@ pub fn normalize_line_endings(s: &str) -> String {
 
 ## 3. Conversion Gaps
 
-### 3.1 [HIGH] Fenced Code Blocks Not Implemented
-
+### 3.1 [VALIDATED] Fenced Code Blocks Not Supported
 **Location:** `crates/backends/typst/src/convert.rs`
 
-**Current State:** Fenced code blocks are silently ignored.
+**Status:** Intentional Limitation.
 
-**Impact:** Common markdown feature, especially for technical documentation.
+**Assessment:**
+Fenced code blocks are currently unsupported in the Quillmark renderer. This is a deliberate design choice for the current version. The renderer safely ignores the block delimiters and renders content as plain text.
 
-**Recommendation:** Implement per `CONVERT.md:666-764`:
-
-```rust
-Tag::CodeBlock(kind) => {
-    depth += 1;
-    if depth > MAX_NESTING_DEPTH {
-        return Err(ConversionError::NestingTooDeep { depth, max: MAX_NESTING_DEPTH });
-    }
-
-    in_code_block = true;
-
-    if !end_newline {
-        output.push('\n');
-    }
-
-    match kind {
-        pulldown_cmark::CodeBlockKind::Fenced(lang) => {
-            output.push_str("```");
-            if !lang.is_empty() {
-                output.push_str(&lang);
-            }
-            output.push('\n');
-        }
-        pulldown_cmark::CodeBlockKind::Indented => {
-            output.push_str("```\n");
-        }
-    }
-    end_newline = true;
-}
-
-Event::Text(text) => {
-    if in_code_block {
-        // No escaping for code block content
-        output.push_str(&text);
-    } else {
-        let escaped = escape_markup(&text);
-        output.push_str(&escaped);
-    }
-    end_newline = text.ends_with('\n');
-}
-
-TagEnd::CodeBlock => {
-    depth = depth.saturating_sub(1);
-    in_code_block = false;
-
-    if !end_newline {
-        output.push('\n');
-    }
-    output.push_str("```\n\n");
-    end_newline = true;
-}
-```
-
-**Priority:** High
-**Effort:** Medium (2-3 hours)
+**Recommendation:**
+No action required for implementation. Consider adding a debug warning if `debug_assertions` are enabled.
 
 ---
 
-### 3.2 [HIGH] Images Not Implemented
+### 3.2 [VALIDATED] Images Not Supported
 
 **Location:** `crates/backends/typst/src/convert.rs`
 
-**Current State:** Images are silently ignored.
+**Status:** Intentional Limitation.
 
-**Recommendation:** Implement per `CONVERT.md:786-856`:
+**Assessment:**
+Inline images are not supported. The parsing pipeline correctly ignores image tags.
 
-```rust
-// Add state tracking
-let mut in_image = false;
-let mut image_alt_buffer = String::new();
-let mut image_url = String::new();
+**Recommendation:**
+No action required.
 
-Tag::Image { dest_url, .. } => {
-    depth += 1;
-    in_image = true;
-    image_alt_buffer.clear();
-    image_url = dest_url.to_string();
-}
-
-Event::Text(text) if in_image => {
-    image_alt_buffer.push_str(&text);
-}
-
-TagEnd::Image => {
-    depth = depth.saturating_sub(1);
-    in_image = false;
-
-    output.push_str("#image(\"");
-    output.push_str(&escape_string(&image_url));
-    output.push('"');
-
-    if !image_alt_buffer.is_empty() {
-        output.push_str(", alt: \"");
-        output.push_str(&escape_string(&image_alt_buffer));
-        output.push('"');
-    }
-
-    output.push(')');
-    end_newline = false;
-}
-```
-
-**Priority:** High
-**Effort:** Medium (2-3 hours)
 
 ---
 
-### 3.3 [MEDIUM] Block Quotes Not Implemented
+### 3.3 [VALIDATED] Block Quotes Not Supported
 
 **Location:** `crates/backends/typst/src/convert.rs`
 
-**Recommendation:** Implement with nesting flattening per `CONVERT.md:570-645`:
+**Status:** Intentional Limitation.
 
-```rust
-let mut blockquote_depth = 0;
+**Recommendation:** No action required.
 
-Tag::BlockQuote(_) => {
-    depth += 1;
-    blockquote_depth += 1;
-
-    if blockquote_depth == 1 {
-        if !end_newline {
-            output.push('\n');
-        }
-        output.push_str("#quote[\n");
-        end_newline = true;
-    }
-}
-
-TagEnd::BlockQuote => {
-    depth = depth.saturating_sub(1);
-    blockquote_depth -= 1;
-
-    if blockquote_depth == 0 {
-        if !end_newline {
-            output.push('\n');
-        }
-        output.push_str("]\n\n");
-        end_newline = true;
-    }
-}
-```
-
-**Priority:** Medium
-**Effort:** Low (1-2 hours)
 
 ---
 
-### 3.4 [MEDIUM] Horizontal Rules Not Implemented
+### 3.4 [VALIDATED] Horizontal Rules Not Supported
 
 **Location:** `crates/backends/typst/src/convert.rs`
 
-**Recommendation:** Simple implementation per `CONVERT.md:858-899`:
+**Status:** Intentional Limitation.
 
-```rust
-Event::Rule => {
-    if !end_newline {
-        output.push('\n');
-    }
-    output.push_str("#line(length: 100%)\n\n");
-    end_newline = true;
-}
-```
+**Recommendation:**
+Ensure horizontal rules are ignored or treated as plain text if caught by the parser. (Note: `---` is reserved for metadata, but `***` or `___` are valid CommonMark rules that we are choosing not to support).
 
-**Priority:** Medium
-**Effort:** Low (30 minutes)
 
 ---
 
@@ -934,24 +755,14 @@ Event::Code(text) => {
 - Math expressions
 - Tables
 
-**Recommendation:** Add optional warnings:
+**Verdict:**
+This is consistent with the decision to support a minimal Markdown subset.
 
-```rust
-pub struct ConversionOptions {
-    pub warn_on_unsupported: bool,
-}
+**Recommendation:**
+Document the supported subset in `EXTENDED_MARKDOWN.md` (Completed). No code changes required.
 
-// In push_typst:
-Event::Html(_) => {
-    if options.warn_on_unsupported {
-        // Add to warnings collection
-        warnings.push("HTML block ignored");
-    }
-}
-```
 
-**Priority:** Low
-**Effort:** Low (1-2 hours)
+
 
 ---
 
@@ -1038,25 +849,32 @@ pub fn normalize_field_name(name: &str) -> String {
 
 ---
 
-### 4.4 [MEDIUM] Empty/Whitespace Frontmatter Confusion
+### 4.4 [COMPLETE] Empty/Whitespace Frontmatter Confusion
+
+**Status:** ✅ IMPLEMENTED
 
 **Location:** `crates/core/src/parse.rs:2199`
 
 **Issue:** The difference between empty frontmatter (`---\n---`) and whitespace-only (`---\n \n---`) is subtle and confusing.
 
-**Recommendation:**
+**Resolution:**
 
-Document explicitly and consider normalizing:
+Implemented whitespace trimming normalization in `decompose()`. If frontmatter content is only whitespace, it is now treated exactly like empty frontmatter (no YAML parsing attempted).
+
 ```rust
-// Normalize whitespace-only YAML to empty
+// In crates/core/src/parse.rs
 let content = content.trim();
-if content.is_empty() {
-    return (None, None, None); // Treat as empty frontmatter
-}
+let (tag, quill_name, yaml_value) = if !content.is_empty() {
+    // ... parse as YAML
+} else {
+    // ... treat as empty
+    (None, None, None)
+};
 ```
 
 **Priority:** Medium
 **Effort:** Low (1 hour)
+
 
 ---
 
@@ -1112,7 +930,9 @@ Err(e) => {
 
 ## 5. Design Weaknesses
 
-### 5.1 [MEDIUM] Multi-Phase Normalization Creates Inconsistency Risk
+### 5.1 [COMPLETE] Multi-Phase Normalization Creates Inconsistency Risk
+
+**Status:** ✅ IMPLEMENTED
 
 **Issue:** Normalization happens at multiple stages:
 1. `normalize_markdown()` - initial input
@@ -1121,21 +941,25 @@ Err(e) => {
 
 If any phase is skipped (e.g., direct API usage), results are inconsistent.
 
-**Recommendation:**
+**Resolution:**
 
-Create a single normalization entry point:
+Added `normalize_document()` function in `crates/core/src/normalize.rs` as the single entry point for document normalization. The function:
+- Applies all field-level normalizations in the correct order
+- Preserves the quill tag
+- Is idempotent (can be called multiple times safely)
+- Has comprehensive documentation including usage examples
+
 ```rust
-pub fn normalize_document(doc: ParsedDocument) -> ParsedDocument {
-    // Apply all normalizations in correct order
-    let fields = normalize_fields(doc.fields);
-    ParsedDocument::with_quill_tag(fields, doc.quill_tag)
-}
-```
+use quillmark_core::{ParsedDocument, normalize::normalize_document};
 
-Document that this MUST be called before rendering.
+// After parsing, call normalize_document before rendering
+let doc = ParsedDocument::from_markdown(markdown).unwrap();
+let normalized = normalize_document(doc);
+```
 
 **Priority:** Medium
 **Effort:** Medium (2-3 hours)
+
 
 ---
 
@@ -1255,23 +1079,18 @@ fn test_injection_attack_scenarios() {
 4. Add early exit to guillemet processing
 
 ### Phase 2: High Priority Gaps (2-3 days)
-5. Fix fenced code block detection
-6. Implement code blocks in converter
-7. Implement images in converter
-8. Consolidate depth limits
+5. Fix fenced code block detection (Parser)
+6. Consolidate depth limits
 
 ### Phase 3: Medium Priority (3-5 days)
-9. Implement block quotes
-10. Implement horizontal rules
-11. Fix EmphasisFixer edge cases
-12. Add field/card count limits
-13. Add Unicode normalization
+7. Fix EmphasisFixer edge cases
+8. Add field/card count limits
+9. Add Unicode normalization
 
 ### Phase 4: Polish (2-3 days)
-14. Improve error messages with source locations
-15. Add unsupported feature warnings
-16. Add validation-only mode
-17. Integration attack scenario tests
+10. Improve error messages with source locations
+11. Add validation-only mode
+12. Integration attack scenario tests
 
 ---
 
@@ -1318,37 +1137,29 @@ fn test_asset_path_traversal_unicode() {
 fn test_fence_with_info_string() {
     let markdown = "```rust\n---\nCARD: test\n---\n```";
     let doc = ParsedDocument::from_markdown(markdown).unwrap();
+    // Should be inside fence
     assert!(doc.get_field("CARDS").unwrap().as_array().unwrap().is_empty());
 }
 
 #[test]
-fn test_fence_length_mismatch() {
-    let markdown = "````\n```\n````\n---\nCARD: test\n---";
+fn test_strict_length_enforcement() {
+    // 4 backticks = Text, not fence
+    let markdown = "````\n---\nCARD: test\n---\n````";
     let doc = ParsedDocument::from_markdown(markdown).unwrap();
-    // The --- should NOT be inside the fence
+    // The --- should be DETECTED as metadata because ```` is not a fence
+    assert!(!doc.get_field("CARDS").unwrap().as_array().unwrap().is_empty());
+}
+
+#[test]
+fn test_no_tildes() {
+    // Tildes = Text, not fence
+    let markdown = "~~~\n---\nCARD: test\n---\n~~~";
+    let doc = ParsedDocument::from_markdown(markdown).unwrap();
     assert!(!doc.get_field("CARDS").unwrap().as_array().unwrap().is_empty());
 }
 ```
 
-### A.3 Conversion Test Cases
 
-```rust
-#[test]
-fn test_code_block_conversion() {
-    let markdown = "```rust\nfn main() {}\n```";
-    let typst = mark_to_typst(markdown).unwrap();
-    assert!(typst.contains("```rust"));
-    assert!(typst.contains("fn main()"));
-}
-
-#[test]
-fn test_image_conversion() {
-    let markdown = "![Alt text](image.png)";
-    let typst = mark_to_typst(markdown).unwrap();
-    assert!(typst.contains("#image("));
-    assert!(typst.contains("alt:"));
-}
-```
 
 ---
 

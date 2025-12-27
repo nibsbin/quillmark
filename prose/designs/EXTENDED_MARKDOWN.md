@@ -23,7 +23,7 @@ key: value
 
 - **`---` is reserved for metadata blocks only** — never treated as a thematic break
 - **Exact match required** — `---` with any other characters on the same line is not a delimiter
-- **Fenced code blocks** — `---` inside fenced code blocks (`` ``` `` or `~~~`) is not processed as a delimiter
+- **Fenced code blocks** — `---` inside fenced code blocks (`` ``` ``) is not processed as a delimiter
 - **No `...` closer** — only `---` closes a metadata block (unlike Pandoc)
 
 ## CommonMark Compatibility
@@ -133,3 +133,21 @@ Conclusion content.
 3. **Invalid card name**: Card name not matching `[a-z_][a-z0-9_]*` → error
 4. **Conflicting keys**: Both `CARD` and `QUILL` in same block → error
 5. **Unclosed block**: Opening `---` without closing `---` → error
+
+## Supported Syntax
+
+The following Markdown features are **supported**:
+- **Headings**: ATX-style (`# Heading`)
+- **Paragraphs**: Standard
+- **Emphasis**: `*italic*`, `**bold**`, `__underline__`, `~~strike~~`
+- **Lists**: Ordered and unordered (nested)
+- **Links**: `[text](url)`
+
+The following features are **NOT supported** (and will be rendered as plain text or ignored):
+- **Images**: Inline `![alt](src)`
+- **Block Quotes**: `> quote`
+- **HTML Blocks**: Raw HTML tags (`<div>`), CDATA sections (`<![CDATA[...]]>`), and Processing Instructions (`<?xml ... ?>`) are not supported. Only standard HTML comments (`<!-- ... -->`) are supported efficiently.
+- **Tables**: GFM tables
+- **Math**: `$latex$`
+- **Footnotes**: `[^1]`
+- **Thematic Breaks**: `***`, `___`, `---` (all ignored or reserved)

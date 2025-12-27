@@ -47,13 +47,12 @@
 //! assert_eq!(cleaned, "**asdf** or **(1234**");
 //! ```
 
+use crate::error::MAX_NESTING_DEPTH;
 use crate::guillemet::{preprocess_markdown_guillemets, strip_chevrons};
 use crate::parse::BODY_FIELD;
 use crate::value::QuillValue;
 use std::collections::HashMap;
-
-/// Maximum nesting depth for JSON value normalization to prevent stack overflow
-const MAX_NESTING_DEPTH: usize = 100;
+use unicode_normalization::UnicodeNormalization;
 
 /// Errors that can occur during normalization
 #[derive(Debug, thiserror::Error)]
@@ -174,45 +173,59 @@ pub fn fix_html_comment_fences(s: &str) -> String {
         return s.to_string();
     }
 
-    let mut result = String::with_capacity(s.len() + 16); // Extra capacity for potential newlines
-    let mut remaining = s;
+    // Context-aware processing: only fix `-->` if we are inside a comment started by `<!--`
+    let mut result = String::with_capacity(s.len() + 16);
+    let mut current_pos = 0;
 
-    while let Some(fence_pos) = remaining.find("-->") {
-        let after_fence = fence_pos + 3; // Position after "-->"
+    // Find first opener
+    while let Some(open_idx) = s[current_pos..].find("<!--") {
+        let abs_open = current_pos + open_idx;
 
-        // Copy everything up to and including "-->"
-        result.push_str(&remaining[..after_fence]);
+        // Find matching closer AFTER the opener
+        if let Some(close_idx) = s[abs_open..].find("-->") {
+            let abs_close = abs_open + close_idx;
+            let after_fence = abs_close + 3;
 
-        // Check what comes after the fence
-        let after_content = &remaining[after_fence..];
+            // Append everything up to and including the closing fence
+            result.push_str(&s[current_pos..after_fence]);
 
-        if after_content.is_empty() {
-            // End of string, nothing to do
-            remaining = "";
-        } else if after_content.starts_with('\n') || after_content.starts_with("\r\n") {
-            // Already has a newline, continue normally
-            remaining = after_content;
-        } else {
-            // Check if there's only whitespace until end of line or end of string
-            let next_newline = after_content.find('\n');
-            let until_newline = match next_newline {
-                Some(pos) => &after_content[..pos],
-                None => after_content,
+            // Check what comes after the fence
+            let after_content = &s[after_fence..];
+
+            // Determine if we need to insert a newline
+            let needs_newline = if after_content.is_empty() {
+                false
+            } else if after_content.starts_with('\n') || after_content.starts_with("\r\n") {
+                false
+            } else {
+                // Check if there's only whitespace until end of line
+                let next_newline = after_content.find('\n');
+                let until_newline = match next_newline {
+                    Some(pos) => &after_content[..pos],
+                    None => after_content,
+                };
+                !until_newline.trim().is_empty()
             };
 
-            if until_newline.trim().is_empty() {
-                // Only whitespace after -->, keep as-is
-                remaining = after_content;
-            } else {
-                // Non-whitespace content after -->, insert newline
+            if needs_newline {
                 result.push('\n');
-                remaining = after_content;
             }
+
+            // Move position to after the fence (we'll process the rest in next iteration)
+            current_pos = after_fence;
+        } else {
+            // Unclosed comment at end of string - just append the rest and break
+            // The opener was found but no closer exists.
+            result.push_str(&s[current_pos..]);
+            current_pos = s.len();
+            break;
         }
     }
 
-    // Append any remaining content after the last fence (or all content if no fence)
-    result.push_str(remaining);
+    // Append remaining content (text after last closed comment, or text if no comments found)
+    if current_pos < s.len() {
+        result.push_str(&s[current_pos..]);
+    }
 
     result
 }
@@ -358,11 +371,95 @@ pub fn normalize_fields(fields: HashMap<String, QuillValue>) -> HashMap<String, 
     fields
         .into_iter()
         .map(|(key, value)| {
+            // Normalize field name to NFC form for consistent key comparison
+            // This ensures café (composed) and café (decomposed) are treated as the same key
+            let normalized_key = normalize_field_name(&key);
             let json = value.into_json();
-            let processed = normalize_json_value(json, key == BODY_FIELD);
-            (key, QuillValue::from_json(processed))
+            let processed = normalize_json_value(json, normalized_key == BODY_FIELD);
+            (normalized_key, QuillValue::from_json(processed))
         })
         .collect()
+}
+
+/// Normalize field name to Unicode NFC (Canonical Decomposition, followed by Canonical Composition)
+///
+/// This ensures that equivalent Unicode strings (e.g., "café" composed vs decomposed)
+/// are treated as identical field names, preventing subtle bugs where visually
+/// identical keys are treated as different.
+///
+/// # Examples
+///
+/// ```
+/// use quillmark_core::normalize::normalize_field_name;
+///
+/// // Composed form (single code point for é)
+/// let composed = "café";
+/// // Decomposed form (e + combining acute accent)
+/// let decomposed = "cafe\u{0301}";
+///
+/// // Both normalize to the same NFC form
+/// assert_eq!(normalize_field_name(composed), normalize_field_name(decomposed));
+/// ```
+pub fn normalize_field_name(name: &str) -> String {
+    name.nfc().collect()
+}
+
+/// Normalizes a parsed document by applying all field-level normalizations.
+///
+/// This is the **primary entry point** for normalizing documents after parsing.
+/// It ensures consistent processing regardless of how the document was created.
+///
+/// # Normalization Steps
+///
+/// This function applies all normalizations in the correct order:
+/// 1. **Unicode NFC normalization** - Field names are normalized to NFC form
+/// 2. **Bidi stripping** - Invisible bidirectional control characters are removed
+/// 3. **HTML comment fence fixing** - Trailing text after `-->` is preserved
+/// 4. **Guillemet conversion** - `<<text>>` is converted to `«text»` in BODY fields
+/// 5. **Chevron stripping** - `<<text>>` is stripped to `text` in other fields
+///
+/// # When to Use
+///
+/// Call this function after parsing and before rendering:
+///
+/// ```no_run
+/// use quillmark_core::{ParsedDocument, normalize::normalize_document};
+///
+/// let markdown = "---\ntitle: Example\n---\n\nBody with <<placeholder>>";
+/// let doc = ParsedDocument::from_markdown(markdown).unwrap();
+/// let normalized = normalize_document(doc);
+/// // Use normalized document for rendering...
+/// ```
+///
+/// # Direct API Usage
+///
+/// If you're constructing a `ParsedDocument` directly via [`crate::parse::ParsedDocument::new`]
+/// rather than parsing from markdown, you **MUST** call this function to ensure
+/// consistent normalization:
+///
+/// ```
+/// use quillmark_core::{ParsedDocument, QuillValue, normalize::normalize_document};
+/// use std::collections::HashMap;
+///
+/// // Direct construction (e.g., from API or database)
+/// let mut fields = HashMap::new();
+/// fields.insert("title".to_string(), QuillValue::from_json(serde_json::json!("Test")));
+/// fields.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("<<content>>")));
+///
+/// let doc = ParsedDocument::new(fields);
+/// let normalized = normalize_document(doc);
+///
+/// // Body now has guillemets converted
+/// assert_eq!(normalized.body().unwrap(), "«content»");
+/// ```
+///
+/// # Idempotency
+///
+/// This function is idempotent - calling it multiple times produces the same result.
+/// However, for performance reasons, avoid unnecessary repeated calls.
+pub fn normalize_document(doc: crate::parse::ParsedDocument) -> crate::parse::ParsedDocument {
+    let normalized_fields = normalize_fields(doc.fields().clone());
+    crate::parse::ParsedDocument::with_quill_tag(normalized_fields, doc.quill_tag().to_string())
 }
 
 #[cfg(test)]
@@ -535,8 +632,39 @@ mod tests {
     #[test]
     fn test_fix_html_comment_arrow_not_comment() {
         // --> that's not part of a comment (standalone)
-        // Still gets a newline if followed by non-whitespace (conservative approach)
-        assert_eq!(fix_html_comment_fences("-->some text"), "-->\nsome text");
+        // Should NOT be touched by the context-aware fixer
+        assert_eq!(fix_html_comment_fences("-->some text"), "-->some text");
+    }
+
+    #[test]
+    fn test_fix_html_comment_nested_opener() {
+        // Nested openers are just text inside the comment
+        // <!-- <!-- -->Trailing
+        // The first <!-- opens, the first --> closes.
+        assert_eq!(
+            fix_html_comment_fences("<!-- <!-- -->Trailing"),
+            "<!-- <!-- -->\nTrailing"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_unmatched_closer() {
+        // Closer without opener
+        assert_eq!(
+            fix_html_comment_fences("text --> more text"),
+            "text --> more text"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_multiple_valid_invalid() {
+        // Mixed valid and invalid comments
+        // <!-- valid -->FixMe
+        // text --> Ignore
+        // <!-- valid2 -->FixMe2
+        let input = "<!-- valid -->FixMe\ntext --> Ignore\n<!-- valid2 -->FixMe2";
+        let expected = "<!-- valid -->\nFixMe\ntext --> Ignore\n<!-- valid2 -->\nFixMe2";
+        assert_eq!(fix_html_comment_fences(input), expected);
     }
 
     #[test]
@@ -676,7 +804,7 @@ mod tests {
     fn test_normalize_json_value_inner_depth_exceeded() {
         // Create a deeply nested JSON structure that exceeds MAX_NESTING_DEPTH
         let mut value = serde_json::json!("leaf");
-        for _ in 0..=super::MAX_NESTING_DEPTH {
+        for _ in 0..=crate::error::MAX_NESTING_DEPTH {
             value = serde_json::json!([value]);
         }
 
@@ -686,7 +814,7 @@ mod tests {
 
         if let Err(NormalizationError::NestingTooDeep { depth, max }) = result {
             assert!(depth > max);
-            assert_eq!(max, super::MAX_NESTING_DEPTH);
+            assert_eq!(max, crate::error::MAX_NESTING_DEPTH);
         } else {
             panic!("Expected NestingTooDeep error");
         }
@@ -703,5 +831,66 @@ mod tests {
         // This should succeed
         let result = super::normalize_json_value_inner(value, false, 0);
         assert!(result.is_ok());
+    }
+
+    // Tests for normalize_document
+
+    #[test]
+    fn test_normalize_document_basic() {
+        use crate::parse::ParsedDocument;
+
+        let mut fields = std::collections::HashMap::new();
+        fields.insert(
+            "title".to_string(),
+            crate::value::QuillValue::from_json(serde_json::json!("<<placeholder>>")),
+        );
+        fields.insert(
+            BODY_FIELD.to_string(),
+            crate::value::QuillValue::from_json(serde_json::json!("<<content>> \u{202D}**bold**")),
+        );
+
+        let doc = ParsedDocument::new(fields);
+        let normalized = super::normalize_document(doc);
+
+        // Title has chevrons stripped
+        assert_eq!(
+            normalized.get_field("title").unwrap().as_str().unwrap(),
+            "placeholder"
+        );
+
+        // Body has guillemets converted and bidi stripped
+        assert_eq!(normalized.body().unwrap(), "«content» **bold**");
+    }
+
+    #[test]
+    fn test_normalize_document_preserves_quill_tag() {
+        use crate::parse::ParsedDocument;
+
+        let fields = std::collections::HashMap::new();
+        let doc = ParsedDocument::with_quill_tag(fields, "custom_quill".to_string());
+        let normalized = super::normalize_document(doc);
+
+        assert_eq!(normalized.quill_tag(), "custom_quill");
+    }
+
+    #[test]
+    fn test_normalize_document_idempotent() {
+        use crate::parse::ParsedDocument;
+
+        let mut fields = std::collections::HashMap::new();
+        fields.insert(
+            BODY_FIELD.to_string(),
+            crate::value::QuillValue::from_json(serde_json::json!("<<content>>")),
+        );
+
+        let doc = ParsedDocument::new(fields);
+        let normalized_once = super::normalize_document(doc);
+        let normalized_twice = super::normalize_document(normalized_once.clone());
+
+        // Calling normalize_document twice should produce the same result
+        assert_eq!(
+            normalized_once.body().unwrap(),
+            normalized_twice.body().unwrap()
+        );
     }
 }
