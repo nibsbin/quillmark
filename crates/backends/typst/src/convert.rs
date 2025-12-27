@@ -546,7 +546,7 @@ where
                     }
                 }
             }
-            Event::End(TagEnd::Strong) => {
+            Event::End(TagEnd::Strong) | Event::End(TagEnd::Emphasis) => {
                 // Check if next event starts with *, which means we might need to fix closing tags
                 // This happens when we have something like __Underlined__***
                 // The __ produces End(Strong), and following *** should be interpreted as closing.
@@ -566,7 +566,11 @@ where
                     let (text_event, text_range) = if !self.buffer.is_empty() {
                         self.buffer.pop().unwrap()
                     } else {
-                        self.inner.next().unwrap()
+                        // Coalesce text from inner iterator
+                        let (_ev, rng) = self.inner.next().unwrap();
+                        let merged_range = self.coalesce_text_range(rng);
+                        let text = self.source[merged_range.clone()].into();
+                        (Event::Text(text), merged_range)
                     };
 
                     if let Event::Text(cow_str) = text_event {
