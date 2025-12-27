@@ -433,7 +433,7 @@ pub fn normalize_field_name(name: &str) -> String {
 ///
 /// # Direct API Usage
 ///
-/// If you're constructing a `ParsedDocument` directly via [`ParsedDocument::new`]
+/// If you're constructing a `ParsedDocument` directly via [`crate::parse::ParsedDocument::new`]
 /// rather than parsing from markdown, you **MUST** call this function to ensure
 /// consistent normalization:
 ///
