@@ -330,18 +330,17 @@ where
     Ok(())
 }
 
-/// Iterator that post-processes markdown events to enable intraword underscore emphasis.
-///
-/// CommonMark disables `__` emphasis when it starts or ends in the middle of a word.
-/// This iterator coalesces adjacent `Text` events and synthesizes `Strong` events for `__...__` patterns.
-struct EmphasisFixer<'a, I: Iterator<Item = (Event<'a>, Range<usize>)>> {
+/// Iterator that post-processes markdown events to handle specific edge cases:
+/// 1. Coalesces adjacent `Text` events to enable intraword underscore emphasis (fix for `__` sandwich).
+/// 2. Fixes `***` adjacency issues (fix for `***` sandwich).
+struct MarkdownFixer<'a, I: Iterator<Item = (Event<'a>, Range<usize>)>> {
     inner: std::iter::Peekable<I>,
     source: &'a str,
     /// Buffer of events to emit before pulling from inner
     buffer: Vec<(Event<'a>, Range<usize>)>,
 }
 
-impl<'a, I> EmphasisFixer<'a, I>
+impl<'a, I> MarkdownFixer<'a, I>
 where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
 {
@@ -351,6 +350,53 @@ where
             source,
             buffer: Vec::new(),
         }
+    }
+
+    /// Helper to generate events for a run of stars
+    fn events_for_stars(
+        star_count: usize,
+        is_start: bool,
+        start_idx: usize,
+    ) -> Vec<(Event<'a>, Range<usize>)> {
+        let mut events = Vec::new();
+        let mut offset = 0;
+        let mut remaining = star_count;
+
+        // 3 stars = Strong + Emph (***)
+        // 2 stars = Strong (**)
+        // 1 star = Emph (*)
+
+        if remaining >= 2 {
+            let len = 2;
+            let range = start_idx + offset..start_idx + offset + len;
+            let event = if is_start {
+                Event::Start(Tag::Strong)
+            } else {
+                Event::End(TagEnd::Strong)
+            };
+            events.push((event, range));
+            remaining -= 2;
+            offset += 2;
+        }
+
+        if remaining >= 1 {
+            let len = 1;
+            let range = start_idx + offset..start_idx + offset + len;
+            let event = if is_start {
+                Event::Start(Tag::Emphasis)
+            } else {
+                Event::End(TagEnd::Emphasis)
+            };
+            events.push((event, range));
+        }
+
+        // For closing tags, we need to reverse the order to close inner then outer
+        // Opened: Strong, Emph -> Closes: Emph, Strong
+        if !is_start {
+            events.reverse();
+        }
+
+        events
     }
 
     /// Coalesce consecutive Text events into a single range.
@@ -448,55 +494,184 @@ where
             self.buffer.extend(events);
         }
     }
+
+    fn handle_candidate(
+        &mut self,
+        candidate: (Event<'a>, Range<usize>),
+    ) -> Option<(Event<'a>, Range<usize>)> {
+        let (event, range) = candidate;
+
+        match &event {
+            Event::Text(cow_str) => {
+                let s = cow_str.as_ref();
+                if s.ends_with('*') {
+                    // Peek next event
+                    let is_strong_start = if let Some(next) = self.buffer.last() {
+                        matches!(next.0, Event::Start(Tag::Strong))
+                    } else {
+                        matches!(self.inner.peek(), Some((Event::Start(Tag::Strong), _)))
+                    };
+
+                    if is_strong_start {
+                        let star_count = s.chars().rev().take_while(|c| *c == '*').count();
+                        if star_count > 0 && star_count <= 3 {
+                            let text_len = s.len() - star_count;
+                            let text_content = &s[..text_len];
+                            // Generate star events
+                            let star_events =
+                                Self::events_for_stars(star_count, true, range.start + text_len);
+
+                            // Consume next event
+                            let next_event = if !self.buffer.is_empty() {
+                                self.buffer.pop().unwrap()
+                            } else {
+                                self.inner.next().unwrap()
+                            };
+
+                            // Push reverse
+                            self.buffer.push(next_event);
+                            for ev in star_events.into_iter().rev() {
+                                self.buffer.push(ev);
+                            }
+
+                            if !text_content.is_empty() {
+                                return Some((
+                                    Event::Text(text_content.to_string().into()),
+                                    range.start..range.start + text_len,
+                                ));
+                            } else {
+                                return None;
+                            }
+                        }
+                    }
+                }
+            }
+            Event::End(TagEnd::Strong) => {
+                // Check if next event starts with *, which means we might need to fix closing tags
+                // This happens when we have something like __Underlined__***
+                // The __ produces End(Strong), and following *** should be interpreted as closing.
+
+                // Peek next event (from buffer or inner)
+                let next_is_star_text = if let Some((Event::Text(cow_str), _)) = self.buffer.last()
+                {
+                    cow_str.starts_with('*')
+                } else if let Some((Event::Text(cow_str), _)) = self.inner.peek() {
+                    cow_str.starts_with('*')
+                } else {
+                    false
+                };
+
+                if next_is_star_text {
+                    // Retrieve the text event
+                    let (text_event, text_range) = if !self.buffer.is_empty() {
+                        self.buffer.pop().unwrap()
+                    } else {
+                        self.inner.next().unwrap()
+                    };
+
+                    if let Event::Text(cow_str) = text_event {
+                        let s = cow_str.as_ref();
+                        let star_count = s.chars().take_while(|c| *c == '*').count();
+
+                        if star_count > 0 && star_count <= 3 {
+                            // Perform fix: Close tags using stars
+                            let star_events =
+                                Self::events_for_stars(star_count, false, text_range.start);
+                            let text_after = &s[star_count..];
+
+                            // We emit the `End(Strong)` event (which caused this check).
+
+                            // We need to push remaining text first (so it comes out last)
+                            if !text_after.is_empty() {
+                                self.buffer.push((
+                                    Event::Text(text_after.to_string().into()),
+                                    text_range.start + star_count..text_range.end,
+                                ));
+                            }
+
+                            // Then push star events (reversed)
+                            // Self::events_for_stars returns [End(Emph), End(Strong)] (if 3 stars)
+                            // We want End(Strong), then End(Emph) to be popped.
+                            // So we push End(Strong) (bottom), then End(Emph) (top).
+                            // This is exactly reversed order.
+                            for ev in star_events.into_iter().rev() {
+                                self.buffer.push(ev);
+                            }
+
+                            return Some((event, range));
+                        } else {
+                            // Should not happen, put back
+                            self.buffer.push((Event::Text(cow_str), text_range));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        Some((event, range))
+    }
 }
 
-impl<'a, I> Iterator for EmphasisFixer<'a, I>
+impl<'a, I> Iterator for MarkdownFixer<'a, I>
 where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
 {
     type Item = (Event<'a>, Range<usize>);
 
     fn next(&mut self) -> Option<Self::Item> {
-        // First drain buffer
-        if let Some(event) = self.buffer.pop() {
-            return Some(event);
-        }
+        loop {
+            // 1. Process buffer
+            if let Some(event) = self.buffer.pop() {
+                if let Some(result) = self.handle_candidate(event) {
+                    return Some(result);
+                } else {
+                    // handle_candidate pushed to buffer and returned None
+                    continue;
+                }
+            }
 
-        // Pull from inner iterator
-        let (event, range) = self.inner.next()?;
+            // 2. Pull from inner
+            let (event, range) = self.inner.next()?;
 
-        match event {
-            Event::Text(_) => {
-                // Coalesce adjacent Text events into a single range
+            // 3. Process Event
+            if let Event::Text(_) = &event {
                 let merged_range = self.coalesce_text_range(range);
                 let source_slice = &self.source[merged_range.clone()];
 
                 if source_slice.contains("__") {
-                    // Use source slice directly
                     self.process_text_from_source(merged_range);
-                    self.buffer.pop()
+                    // Buffer is populated, loop continues to process buffer
+                    continue;
                 } else {
-                    // Emit the merged text as a single event
-                    Some((Event::Text(source_slice.into()), merged_range))
+                    // Fallthrough to handle_candidate for merged text
+                    // We need to pass the merged event
+                    if let Some(result) =
+                        self.handle_candidate((Event::Text(source_slice.into()), merged_range))
+                    {
+                        return Some(result);
+                    } else {
+                        continue;
+                    }
                 }
             }
-            _ => Some((event, range)),
+
+            // Handle other events via handle_candidate (checks for End(Strong))
+            if let Some(result) = self.handle_candidate((event, range)) {
+                return Some(result);
+            } else {
+                continue;
+            }
         }
     }
 }
 
-/// Converts CommonMark Markdown to Typst markup.
-///
-/// Returns an error if nesting depth exceeds the maximum allowed.
-///
-/// Note: Input normalization (bidi stripping, guillemet preprocessing) is expected
-/// to be done by the caller via `quillmark_core::normalize_fields` in the workflow.
 pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
 
     let parser = Parser::new_ext(markdown, options);
-    let fixer = EmphasisFixer::new(parser.into_offset_iter(), markdown);
+    let fixer = MarkdownFixer::new(parser.into_offset_iter(), markdown);
     let mut typst_output = String::new();
 
     push_typst(&mut typst_output, markdown, fixer)?;
@@ -798,6 +973,24 @@ mod tests {
 
     #[test]
     fn test_link_with_special_chars_in_url() {
+        let markdown = "[Link](https://example.com/foo_bar)";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "#link(\"https://example.com/foo_bar\")[Link]\n\n");
+    }
+
+    #[test]
+    fn test_emphasis_sandwich_bug() {
+        // Bug: ***__...__***asdf fails to parse outer ***
+        let markdown = "***__Underlined__***suffix";
+        let typst = mark_to_typst(markdown).unwrap();
+        // Expect: #strong[#emph[#underline[Underlined]]]suffix
+        // Or similar nesting.
+        // If it fails, it will likely be: \*\*\*#underline[Underlined]\*\*\*suffix
+        assert_eq!(typst, "#strong[#emph[#underline[Underlined]]]suffix\n\n");
+    }
+
+    #[test]
+    fn test_link_with_anchor() {
         // URLs don't need # escaped in Typst string literals
         let markdown = "[Link](#anchor)";
         let typst = mark_to_typst(markdown).unwrap();
