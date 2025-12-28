@@ -85,6 +85,42 @@ class Quillmark:
     
     def registered_quills(self) -> list[str]:
         """Get registered quill names."""
+
+    def unregister_quill(self, name: str) -> None:
+        """Unregister a quill by name.
+
+        Args:
+            name: Quill name to unregister
+
+        Raises:
+            QuillmarkError: If quill not registered
+        """
+
+    def get_quill(self, name: str) -> Quill:
+        """Get registered quill by name.
+
+        Args:
+            name: Registered quill name
+
+        Returns:
+            The registered quill
+
+        Raises:
+            QuillmarkError: If quill not registered
+        """
+
+    def get_quill_metadata(self, name: str) -> dict[str, Any]:
+        """Get quill metadata by name.
+
+        Args:
+            name: Registered quill name
+
+        Returns:
+            Quill metadata dictionary
+
+        Raises:
+            QuillmarkError: If quill not registered
+        """
 ```
 
 **Example:**
@@ -137,8 +173,71 @@ class Workflow:
         """Render pre-composed content."""
     
     def process_plate(self, parsed: ParsedDocument) -> str:
-        """Process plate template only."""
-    
+        """Process plate template without compilation.
+
+        Args:
+            parsed: Parsed markdown document
+
+        Returns:
+            Rendered template content
+        """
+
+    def dry_run(self, parsed: ParsedDocument) -> None:
+        """Validate document without compilation.
+
+        Args:
+            parsed: Parsed markdown document
+
+        Raises:
+            TemplateError: If template validation fails
+        """
+
+    def validate_schema(self, parsed: ParsedDocument) -> None:
+        """Validate document against quill schema.
+
+        Args:
+            parsed: Parsed markdown document
+
+        Raises:
+            QuillmarkError: If schema validation fails
+        """
+
+    def add_asset(self, name: str, data: bytes) -> None:
+        """Add runtime asset to workflow.
+
+        Args:
+            name: Asset identifier (e.g., 'logo.png')
+            data: Asset binary data
+        """
+
+    def add_assets(self, assets: dict[str, bytes]) -> None:
+        """Add multiple runtime assets.
+
+        Args:
+            assets: Dict mapping asset names to binary data
+        """
+
+    def add_font(self, name: str, data: bytes) -> None:
+        """Add runtime font to workflow.
+
+        Args:
+            name: Font identifier (e.g., 'custom.ttf')
+            data: Font binary data
+        """
+
+    def add_fonts(self, fonts: dict[str, bytes]) -> None:
+        """Add multiple runtime fonts.
+
+        Args:
+            fonts: Dict mapping font names to binary data
+        """
+
+    def dynamic_asset_names(self) -> list[str]:
+        """Get names of dynamically added assets."""
+
+    def dynamic_font_names(self) -> list[str]:
+        """Get names of dynamically added fonts."""
+
     @property
     def backend_id(self) -> str:
         """Backend identifier."""
@@ -173,17 +272,31 @@ class Quill:
     @staticmethod
     def from_path(path: str | Path) -> Quill:
         """Load quill from filesystem.
-        
+
         Args:
             path: Path to quill directory
-            
+
         Returns:
             Loaded quill
-            
+
         Raises:
             QuillmarkError: If invalid or missing
         """
-    
+
+    @staticmethod
+    def from_json(json_str: str) -> Quill:
+        """Load quill from JSON configuration.
+
+        Args:
+            json_str: JSON string containing quill config
+
+        Returns:
+            Loaded quill
+
+        Raises:
+            QuillmarkError: If JSON invalid or quill malformed
+        """
+
     @property
     def name(self) -> str:
         """Quill name from Quill.toml."""

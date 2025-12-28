@@ -38,6 +38,9 @@ nav:
   - Guides:
       - Creating Quills: guides/creating-quills.md
       - Quill Markdown: guides/quill-markdown.md
+      - Dynamic Assets: guides/dynamic-assets.md
+      - Validation: guides/validation.md
+      - CLI Reference: guides/cli.md
       - Typst Backend: guides/typst-backend.md
       - AcroForm Backend: guides/acroform-backend.md
   - Advanced:
