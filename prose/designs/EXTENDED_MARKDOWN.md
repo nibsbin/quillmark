@@ -21,12 +21,15 @@ key: value
 
 **Key Rules:**
 *   **Delimiters:** The `---` marker must form its own line with no leading/trailing whitespace.
-*   **Exclusivity:** `---` is reserved for metadata and is never treated as a horizontal rule or setext header underline.
+*   **Line Endings:** Both Unix (`\n`) and Windows (`\r\n`) line endings are supported.
+*   **Exclusivity:** `---` is reserved for metadata and is never treated as a setext header underline.
+*   **Horizontal Rule Exception:** A `---` line preceded by a blank line AND followed by a blank line is treated as a horizontal rule in the body content (not a metadata delimiter).
 *   **Context:** `---` markers inside fenced code blocks are ignored.
 
 **Content:**
 The content inside the block is standard YAML 1.2.
-*   **No Custom Tags:** Custom tags (like `!fill`) are stripped during parsing to ensure the data model remains simple JSON.
+*   **Whitespace Normalization:** Content that contains only whitespace (spaces, tabs, newlines) is treated as empty.
+*   **Custom Tags:** Custom YAML tags (like `!fill`) are silently stripped during parsing. For example, `key: !fill value` becomes `key: "value"`. This ensures the data model remains simple JSON.
 *   **Recursion Limit:** Nesting is limited to 100 levels to prevent stack overflows.
 *   **Reserved Keys:** `BODY` and `CARDS` are reserved system keys and cannot be used in the YAML.
 
@@ -61,6 +64,8 @@ interface Card {
 *   **Global Block:** The first block in the file is the "Global" block, unless it contains a `CARD` key.
 *   **Card Blocks:** Any block containing a `CARD` key is added to the `CARDS` array.
 *   **Validity:** Any block after the first one *must* have a `CARD` key.
+*   **CARDS Array:** The `CARDS` field is always present in the parsed document, even if empty (as an empty array `[]`).
+*   **Name Collisions:** Field names in the global block and `CARD` type names can overlap without error. For example, a global field `items` and a card type `CARD: items` can coexist.
 
 ## Markdown Support
 
@@ -71,7 +76,10 @@ Quillmark supports a specific subset of CommonMark to ensure security and consis
 *   **Text:** Paragraphs, Bold (`**`), Italic (`*`), Strike (`~~`), Underline (`__`).
 *   **Lists:** Ordered and unordered.
 *   **Links:** Standard `[text](url)`.
-*   **Code:** Inline code and Fenced Code Blocks (```).
+*   **Code:** Inline code and Fenced Code Blocks.
+    *   **Strict Fence Rules:** Only exactly three backticks (```) are recognized as code fence delimiters.
+    *   Tildes (`~~~`) are NOT treated as code fences.
+    *   Four or more backticks (````) are NOT treated as code fences.
 
 ### Unsupported Features
 These features are intentionally ignored or rendered as plain text:
