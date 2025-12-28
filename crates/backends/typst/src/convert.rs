@@ -994,6 +994,67 @@ mod tests {
     }
 
     #[test]
+    fn test_text_before_strong_emph_underline() {
+        // Bug report: pre***__content__*** doesn't parse correctly
+        // The "pre" before the *** causes pulldown-cmark to parse *** as literal text
+        // But MarkdownFixer should fix this
+        let markdown = "pre***__content__***";
+
+        // Without MarkdownFixer, the *** would render as literal \*\*\*
+        // because pulldown-cmark doesn't recognize them as emphasis markers
+        // after the "pre" text. The MarkdownFixer handles this case.
+
+        let typst = mark_to_typst(markdown).unwrap();
+        // Should render as: pre#strong[#emph[#underline[content]]]
+        assert_eq!(typst, "pre#strong[#emph[#underline[content]]]\n\n");
+    }
+
+    #[test]
+    fn test_text_before_strong_emph_underline_variations() {
+        // Additional test cases for combinations of text, stars, and underlines
+
+        // Variation 1: Just underline after text
+        assert_eq!(
+            mark_to_typst("pre__content__").unwrap(),
+            "pre#underline[content]\n\n"
+        );
+
+        // Variation 2: Stars before underline (no text before)
+        // Note: pulldown-cmark parses *** as emph wrapping strong (not strong wrapping emph)
+        // This is standard markdown behavior where *** = * (emph) + ** (strong)
+        assert_eq!(
+            mark_to_typst("***__content__***").unwrap(),
+            "#emph[#strong[#underline[content]]]\n\n"
+        );
+
+        // Variation 3: 2 stars (bold only) after text
+        assert_eq!(
+            mark_to_typst("pre**__content__**").unwrap(),
+            "pre#strong[#underline[content]]\n\n"
+        );
+
+        // Variation 4: 1 star (emph only) after text
+        assert_eq!(
+            mark_to_typst("pre*__content__*").unwrap(),
+            "pre#emph[#underline[content]]\n\n"
+        );
+
+        // Variation 5: Multiple words before the formatting (with space before ***)
+        // When there's a space before ***, pulldown-cmark recognizes the *** correctly
+        // as emphasis+strong, so it becomes #emph[#strong[...]]
+        assert_eq!(
+            mark_to_typst("some text ***__content__***").unwrap(),
+            "some text #emph[#strong[#underline[content]]]\n\n"
+        );
+
+        // Variation 6: Text after the formatting
+        assert_eq!(
+            mark_to_typst("pre***__content__*** suffix").unwrap(),
+            "pre#strong[#emph[#underline[content]]] suffix\n\n"
+        );
+    }
+
+    #[test]
     fn test_link_with_anchor() {
         // URLs don't need # escaped in Typst string literals
         let markdown = "[Link](#anchor)";
