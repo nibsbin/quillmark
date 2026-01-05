@@ -231,6 +231,39 @@ pub fn build_schema(
     Ok(QuillValue::from_json(schema))
 }
 
+/// Recursively strip specified fields from a JSON Schema
+///
+/// Traverses the JSON structure (objects and arrays) and removes any keys
+/// that match the provided list of field names. This is useful for removing
+/// internal metadata like "x-ui" before exposing the schema to consumers.
+///
+/// # Arguments
+///
+/// * `schema` - A mutable reference to the JSON Value to strip
+/// * `fields` - A slice of field names to remove
+pub fn strip_schema_fields(schema: &mut Value, fields: &[&str]) {
+    match schema {
+        Value::Object(map) => {
+            // Remove matching top-level keys
+            for field in fields {
+                map.remove(*field);
+            }
+
+            // Recurse into children
+            for value in map.values_mut() {
+                strip_schema_fields(value, fields);
+            }
+        }
+        Value::Array(arr) => {
+            // Recurse into array items
+            for item in arr {
+                strip_schema_fields(item, fields);
+            }
+        }
+        _ => {}
+    }
+}
+
 /// Backwards-compatible wrapper for build_schema (no cards)
 pub fn build_schema_from_fields(
     field_schemas: &HashMap<String, FieldSchema>,
