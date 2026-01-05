@@ -36,3 +36,31 @@ fn test_metadata_retrieval() {
     assert_eq!(x_ui["group"], "Personal Info");
     assert_eq!(x_ui["order"], 0);
 }
+
+#[wasm_bindgen_test]
+fn test_metadata_stripping() {
+    let mut engine = Quillmark::new();
+    engine
+        .register_quill(JsValue::from_str(UI_QUILL_JSON))
+        .map_err(|e| {
+            let error_obj: Value = serde_wasm_bindgen::from_value(e).unwrap();
+            panic!("register failed: {:#?}", error_obj);
+        })
+        .unwrap();
+
+    // Call with strip_ui = true (via slim)
+    let info = engine
+        .get_quill_info_slim("ui-test-quill")
+        .expect("getQuillInfoSlim failed");
+
+    // Verify x-ui is GONE
+    let x_ui = info.schema.pointer("/properties/my_field/x-ui");
+    assert!(x_ui.is_none(), "x-ui should be stripped");
+
+    // Verify other fields remain
+    let field_type = info
+        .schema
+        .pointer("/properties/my_field/type")
+        .expect("type should exist");
+    assert_eq!(field_type, "string");
+}
