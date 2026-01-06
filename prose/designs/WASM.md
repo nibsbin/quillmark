@@ -51,7 +51,7 @@ class Quillmark {
   constructor();
   static parseMarkdown(markdown: string): ParsedDocument;
   registerQuill(quillJson: string | object): void;
-  getQuillInfo(name: string): QuillInfo;
+  getQuillInfo(name: string, stripFields?: string[]): QuillInfo;
   processPlate(quillName: string, markdown: string): string;
   render(parsedDoc: ParsedDocument, options?: RenderOptions): RenderResult;
   listQuills(): string[];
@@ -111,6 +111,21 @@ interface Location {
   column: number;
 }
 ```
+
+**API Design Notes:**
+
+The `getQuillInfo` method accepts an optional `stripFields` parameter to remove specified fields from the schema before returning it. This is useful for removing internal metadata like `"x-ui"` that's only needed for specific UI frameworks.
+
+**Example usage:**
+```typescript
+// Get full schema with all metadata
+const fullInfo = engine.getQuillInfo("my-quill");
+
+// Get schema without UI metadata
+const slimInfo = engine.getQuillInfo("my-quill", ["x-ui"]);
+```
+
+This design unifies what was previously two separate methods (`getQuillInfo` and `getQuillInfoSlim`), providing better ergonomics and flexibility while maintaining backward compatibility.
 
 ---
 
