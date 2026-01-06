@@ -64,38 +64,3 @@ fn test_metadata_stripping() {
         .expect("type should exist");
     assert_eq!(field_type, "string");
 }
-
-#[wasm_bindgen_test]
-fn test_metadata_stripping_via_method() {
-    let mut engine = Quillmark::new();
-    engine
-        .register_quill(JsValue::from_str(UI_QUILL_JSON))
-        .map_err(|e| {
-            let error_obj: Value = serde_wasm_bindgen::from_value(e).unwrap();
-            panic!("register failed: {:#?}", error_obj);
-        })
-        .unwrap();
-
-    // Get full info, then strip using the method
-    let mut info = engine
-        .get_quill_info("ui-test-quill", None)
-        .expect("getQuillInfo failed");
-
-    // Verify x-ui exists first
-    let x_ui_before = info.schema.pointer("/properties/my_field/x-ui");
-    assert!(x_ui_before.is_some(), "x-ui should exist before stripping");
-
-    // Now strip it
-    info.strip_schema_fields(vec!["x-ui".to_string()]);
-
-    // Verify x-ui is GONE
-    let x_ui_after = info.schema.pointer("/properties/my_field/x-ui");
-    assert!(x_ui_after.is_none(), "x-ui should be stripped");
-
-    // Verify other fields remain
-    let field_type = info
-        .schema
-        .pointer("/properties/my_field/type")
-        .expect("type should exist");
-    assert_eq!(field_type, "string");
-}
