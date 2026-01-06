@@ -12,12 +12,6 @@ use std::collections::HashMap;
 fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
     let mut property = Map::new();
 
-    // Add name
-    property.insert(
-        field_key::NAME.to_string(),
-        Value::String(field_schema.name.clone()),
-    );
-
     // Map field type to JSON Schema type
     if let Some(ref field_type) = field_schema.r#type {
         let (json_type, format) = match field_type {
@@ -868,17 +862,14 @@ mod tests {
     #[test]
     fn test_build_schema_simple() {
         let mut fields = HashMap::new();
-        let mut schema = FieldSchema::new(
-            "Author name".to_string(),
-            "The name of the author".to_string(),
-        );
+        let mut schema =
+            FieldSchema::new("author".to_string(), "The name of the author".to_string());
         schema.r#type = Some(FieldType::Str);
         fields.insert("author".to_string(), schema);
 
         let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
         assert_eq!(json_schema["type"], "object");
         assert_eq!(json_schema["properties"]["author"]["type"], "string");
-        assert_eq!(json_schema["properties"]["author"]["name"], "Author name");
         assert_eq!(
             json_schema["properties"]["author"]["description"],
             "The name of the author"

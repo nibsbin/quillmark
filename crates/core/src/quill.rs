@@ -12,8 +12,6 @@ use crate::value::QuillValue;
 /// Using constants provides IDE support (find references, autocomplete) and ensures
 /// consistency between parsing and output.
 pub mod field_key {
-    /// Field name identifier
-    pub const NAME: &str = "name";
     /// Short label for the field
     pub const TITLE: &str = "title";
     /// Field type (string, number, boolean, array, etc.)
