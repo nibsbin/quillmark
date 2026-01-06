@@ -86,7 +86,7 @@ describe('quillmark-wasm smoke tests', () => {
     expect(info.schema instanceof Object).toBe(true)
   })
 
-  it('should get quill info with slim schema option', () => {
+  it('should get quill info with stripUi option', () => {
     const engine = new Quillmark()
     
     // Register a quill with UI metadata in TOML
@@ -120,10 +120,10 @@ group = "Personal Info"
     expect(fullInfo.schema.properties.my_field['x-ui']).toBeDefined()
     expect(fullInfo.schema.properties.my_field['x-ui'].group).toBe('Personal Info')
 
-    // Get info with slim schema enabled
-    const slimInfo = engine.getQuillInfo('ui_test_quill', true)
-    expect(slimInfo.schema.properties.my_field['x-ui']).toBeUndefined()
-    expect(slimInfo.schema.properties.my_field.type).toBe('string')
+    // Get info with UI stripping enabled
+    const strippedInfo = engine.getQuillInfo('ui_test_quill', true)
+    expect(strippedInfo.schema.properties.my_field['x-ui']).toBeUndefined()
+    expect(strippedInfo.schema.properties.my_field.type).toBe('string')
   })
 
   it('should render plate template', () => {

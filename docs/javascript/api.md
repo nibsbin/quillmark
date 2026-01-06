@@ -148,14 +148,14 @@ engine.registerQuill(JSON.stringify(quill));
 ##### getQuillInfo
 
 ```typescript
-getQuillInfo(name: string, slimSchema?: boolean): QuillInfo
+getQuillInfo(name: string, stripUi?: boolean): QuillInfo
 ```
 
 Get information about a registered Quill.
 
 **Parameters:**
 - `name` - Registered Quill name
-- `slimSchema` - Optional boolean to strip UI metadata fields (e.g., "x-ui") from the schema. Defaults to `false`.
+- `stripUi` - Optional boolean to strip UI metadata fields (e.g., "x-ui") from the schema. Defaults to `false`.
 
 **Returns:** QuillInfo object with Quill details
 
@@ -168,9 +168,9 @@ const info = engine.getQuillInfo("my-quill");
 console.log(info.backend);           // "typst"
 console.log(info.supportedFormats);  // ["pdf", "svg"]
 
-// Get quill info with slim schema (UI metadata stripped)
-const slimInfo = engine.getQuillInfo("my-quill", true);
-// slimInfo.schema will not contain any "x-ui" fields
+// Get quill info with UI metadata stripped
+const strippedInfo = engine.getQuillInfo("my-quill", true);
+// strippedInfo.schema will not contain any "x-ui" fields
 ```
 
 ##### processPlate

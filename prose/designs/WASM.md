@@ -51,7 +51,7 @@ class Quillmark {
   constructor();
   static parseMarkdown(markdown: string): ParsedDocument;
   registerQuill(quillJson: string | object): void;
-  getQuillInfo(name: string, slimSchema?: boolean): QuillInfo;
+  getQuillInfo(name: string, stripUi?: boolean): QuillInfo;
   processPlate(quillName: string, markdown: string): string;
   render(parsedDoc: ParsedDocument, options?: RenderOptions): RenderResult;
   listQuills(): string[];
@@ -114,15 +114,15 @@ interface Location {
 
 **API Design Notes:**
 
-The `getQuillInfo` method accepts an optional `slimSchema` boolean parameter. When set to `true`, it strips UI metadata fields (specifically "x-ui") from the schema before returning it. This provides an opinionated, all-or-nothing approach to schema simplification.
+The `getQuillInfo` method accepts an optional `stripUi` boolean parameter. When set to `true`, it strips UI metadata fields (specifically "x-ui") from the schema before returning it. This provides an opinionated, all-or-nothing approach to schema stripping.
 
 **Example usage:**
 ```typescript
 // Get full schema with all metadata (default)
 const fullInfo = engine.getQuillInfo("my-quill");
 
-// Get slim schema without UI metadata
-const slimInfo = engine.getQuillInfo("my-quill", true);
+// Get schema with UI metadata stripped
+const strippedInfo = engine.getQuillInfo("my-quill", true);
 ```
 
 This design unifies what was previously two separate methods (`getQuillInfo` and `getQuillInfoSlim`), providing better ergonomics with a simple boolean flag while maintaining backward compatibility.

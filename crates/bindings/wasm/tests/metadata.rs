@@ -48,7 +48,7 @@ fn test_metadata_stripping() {
         })
         .unwrap();
 
-    // Call with slim_schema parameter
+    // Call with strip_ui parameter
     let info = engine
         .get_quill_info("ui-test-quill", Some(true))
         .expect("getQuillInfo failed");
