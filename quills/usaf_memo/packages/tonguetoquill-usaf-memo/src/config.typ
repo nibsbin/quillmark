@@ -9,10 +9,10 @@
 // AFH 33-337 specifies precise spacing requirements throughout Chapter 14
 
 #let spacing = (
-  line: .5em,         // Internal line spacing for readability
-  line-height: .7em,  // Base line height for spacing calculations
-  tab: 0.5in,         // Tab stop for multi-column recipient alignment
-  margin: 1in         // AFH 33-337 §4: "Use 1-inch margins on the left, right and bottom"
+  line: .5em, // Internal line spacing for readability
+  line-height: .7em, // Base line height for spacing calculations
+  tab: 0.5in, // Tab stop for multi-column recipient alignment
+  margin: 1in, // AFH 33-337 §4: "Use 1-inch margins on the left, right and bottom"
 )
 
 // =============================================================================
@@ -36,7 +36,6 @@
   // AFH 33-337 §2: Hierarchical paragraph numbering format
   // Level 0: 1., 2., 3. | Level 1: a., b., c. | Level 2: (1), (2), (3) | Level 3: (a), (b), (c)
   numbering-formats: ("1.", "a.", "(1)", "(a)", n => underline(str(n)), n => underline(str(n))),
-  block-indent-state: state("BLOCK_INDENT", true),
 )
 
 // =============================================================================
@@ -57,8 +56,8 @@
 // Source: https://security.stackexchange.com/questions/161829
 
 #let CLASSIFICATION_COLORS = (
-  "UNCLASSIFIED": rgb(0, 122, 51),    // Forest green (#007A33)
-  "CONFIDENTIAL": rgb(0, 51, 160),    // Deep blue (#0033A0)
-  "SECRET": rgb(200, 16, 46),         // Crimson red (#C8102E)
-  "TOP SECRET": rgb(255, 103, 31),    // Burnt orange (#FF671F)
+  "UNCLASSIFIED": rgb(0, 122, 51), // Forest green (#007A33)
+  "CONFIDENTIAL": rgb(0, 51, 160), // Deep blue (#0033A0)
+  "SECRET": rgb(200, 16, 46), // Crimson red (#C8102E)
+  "TOP SECRET": rgb(255, 103, 31), // Burnt orange (#FF671F)
 )

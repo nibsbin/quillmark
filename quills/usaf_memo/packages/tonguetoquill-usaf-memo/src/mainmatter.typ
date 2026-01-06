@@ -4,6 +4,7 @@
 // AFH 33-337 Chapter 14 "The Text of the Official Memorandum" (§1-12).
 
 #import "primitives.typ": *
+#import "body.typ": *
 
 /// Mainmatter show rule for USAF memorandum body content.
 ///
@@ -21,5 +22,5 @@
 /// - content (content): The body content to render
 /// -> content
 #let mainmatter(it) = {
-  render-paragraph-body(it)
+  render-body(it)
 }
