@@ -47,7 +47,7 @@ fn test_register_and_get_quill_info() {
 
     // Get quill info
     let info = engine
-        .get_quill_info("test-quill")
+        .get_quill_info("test-quill", None)
         .expect("getQuillInfo failed");
 
     // Verify it returns a QuillInfo
@@ -79,7 +79,7 @@ This is a test.
 
     // Step 3: Get quill info
     let info = engine
-        .get_quill_info("test-quill")
+        .get_quill_info("test-quill", None)
         .expect("getQuillInfo failed");
     assert_eq!(info.name, "test-quill");
 

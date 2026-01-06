@@ -99,27 +99,29 @@ impl Quillmark {
             .register_quill(quill)
             .map_err(|e| WasmError::from(e).to_js_value())?;
 
-        self.get_quill_info(&name)
+        self.get_quill_info(&name, None)
     }
 
     /// Get shallow information about a registered Quill
     ///
     /// This returns metadata, backend info, field schemas, and supported formats
     /// that consumers need to configure render options for the next step.
-    #[wasm_bindgen(js_name = getQuillInfo)]
-    pub fn get_quill_info(&self, name: &str) -> Result<QuillInfo, JsValue> {
-        self.fetch_quill_info(name, false)
-    }
-
-    /// Get shallow information about a registered Quill with UI metadata stripped
     ///
-    /// Same as `getQuillInfo`, but removes "x-ui" fields from the schema.
-    #[wasm_bindgen(js_name = getQuillInfoSlim)]
-    pub fn get_quill_info_slim(&self, name: &str) -> Result<QuillInfo, JsValue> {
-        self.fetch_quill_info(name, true)
+    /// Optionally strips specified fields from the schema (e.g., "x-ui" for UI metadata).
+    #[wasm_bindgen(js_name = getQuillInfo)]
+    pub fn get_quill_info(
+        &self,
+        name: &str,
+        strip_fields: Option<Vec<String>>,
+    ) -> Result<QuillInfo, JsValue> {
+        self.fetch_quill_info(name, strip_fields)
     }
 
-    fn fetch_quill_info(&self, name: &str, strip_ui: bool) -> Result<QuillInfo, JsValue> {
+    fn fetch_quill_info(
+        &self,
+        name: &str,
+        strip_fields: Option<Vec<String>>,
+    ) -> Result<QuillInfo, JsValue> {
         let quill = self.inner.get_quill(name).ok_or_else(|| {
             WasmError::from(format!("Quill '{}' not registered", name)).to_js_value()
         })?;
@@ -167,8 +169,9 @@ impl Quillmark {
 
         // Prepare schema
         let mut schema_json = quill.schema.clone().as_json().clone();
-        if strip_ui {
-            quillmark_core::schema::strip_schema_fields(&mut schema_json, &["x-ui"]);
+        if let Some(fields) = strip_fields {
+            let field_refs: Vec<&str> = fields.iter().map(|s| s.as_str()).collect();
+            quillmark_core::schema::strip_schema_fields(&mut schema_json, &field_refs);
         }
 
         Ok(QuillInfo {

@@ -180,6 +180,24 @@ pub struct QuillInfo {
     pub supported_formats: Vec<OutputFormat>,
 }
 
+impl QuillInfo {
+    /// Strip specified fields from the schema
+    ///
+    /// This is useful for removing internal metadata like "x-ui" before exposing
+    /// the schema to consumers. Modifies the schema in-place.
+    ///
+    /// # Example
+    /// ```javascript
+    /// const info = engine.getQuillInfo("my-quill");
+    /// info.stripSchemaFields(["x-ui"]);
+    /// // Now info.schema no longer contains "x-ui" fields
+    /// ```
+    pub fn strip_schema_fields(&mut self, fields: Vec<String>) {
+        let field_refs: Vec<&str> = fields.iter().map(|s| s.as_str()).collect();
+        quillmark_core::schema::strip_schema_fields(&mut self.schema, &field_refs);
+    }
+}
+
 impl IntoWasmAbi for QuillInfo {
     type Abi = <JsValue as IntoWasmAbi>::Abi;
 
