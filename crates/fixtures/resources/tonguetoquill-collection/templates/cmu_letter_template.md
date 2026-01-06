@@ -8,12 +8,12 @@ url: cmu.edu
 
 date: 2025-11-30
 recipient:
-  - <<Dr. Heinz Doofenshmirtz>>
-  - <<9297 Polly Parkway>>
-  - <<City, Virginia 46231>>
+  - Dr. Heinz Doofenshmirtz
+  - 9297 Polly Parkway
+  - City, Virginia 46231
 signature_block:
-  - <<Phineas Flynn>>
-  - <<Masters Student>>
+  - Phineas Flynn
+  - Masters Student
 ---
 <!--
 In the data above, edit:

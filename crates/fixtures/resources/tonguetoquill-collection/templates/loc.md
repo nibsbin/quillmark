@@ -5,13 +5,13 @@ letterhead_caption:
   - 20th Fighter Wing (ACC)
   - Shaw Air Force Base South Carolina
 memo_for:
-  - <<subject_rank>> <<subject_first_name>> <<subject_middle_initial>>. <<subject_last_name>>
+  - SUBJECT RANK FIRST M. LAST
 memo_from:
-  - <<issuer_org_symbol>>
+  - ISSUER ORG/SYMBOL
 subject: Letter of Counseling
 signature_block:
-  - <<issuer_first_name>> <<issuer_middle_initial>>. <<issuer_last_name>>, <<issuer_rank>>, USAF
-  - <<issuer_duty_title>>
+  - ISSUER FIRST M. LAST, RANK, USAF
+  - ISSUER DUTY TITLE
 tag_line: Get Rekt # Optional tagline
 
 # Tune to fit all indorsements on second page
@@ -37,10 +37,9 @@ You will acknowledge receipt of this letter immediately by signing the first ind
 
 ---
 CARD: indorsement
-for: <<issuer_org_symbol>>
-from: <<subject_rank>> <<subject_first_name>> <<subject_middle_initial>>. <<subject_last_name>>
-signature_block: <<subject_first_name>> <<subject_middle_initial>>. <<subject_last_name>>, <<subject_rank>>, USAF
-format: separate_page # Omit to keep on same page
+for: ISSUER ORG/SYMBOL
+from: SUBJECT RANK FIRST M. LAST
+signature_block: SUBJECT FIRST M. LAST, RANK, USAF
 ---
 
 <!-- EDIT: First Indorsement: Subject acknowledges receipt of the LOC -->
@@ -48,9 +47,9 @@ I acknowledge receipt and understanding of this letter on ________________ at __
 
 ---
 CARD: indorsement
-from: <<subject_rank>> <<subject_first_name>> <<subject_middle_initial>>. <<subject_last_name>>
-for: <<issuer_org_symbol>>
-signature_block: <<subject_first_name>> <<subject_middle_initial>>. <<subject_last_name>>, <<subject_rank>>, USAF
+from: SUBJECT RANK FIRST M. LAST
+for: ISSUER ORG/SYMBOL
+signature_block: SUBJECT FIRST M. LAST, RANK, USAF
 date: "Date: _____________"
 ---
 
@@ -59,9 +58,9 @@ I have reviewed the allegations contained in this Letter of Counseling. _I am su
 
 ---
 CARD: indorsement
-from: <<issuer_rank>> <<issuer_first_name>> <<issuer_middle_initial>>. <<issuer_last_name>>
-for: <<subject_rank>> <<subject_first_name>> <<subject_middle_initial>>. <<subject_last_name>>
-signature_block: <<issuer_first_name>> <<issuer_middle_initial>>. <<issuer_last_name>>, <<issuer_rank>>, USAF
+from: ISSUER RANK FIRST M. LAST
+for: SUBJECT RANK FIRST M. LAST
+signature_block: ISSUER FIRST M. LAST, RANK, USAF
 date: "Date: _____________"
 ---
 
@@ -70,9 +69,9 @@ _I have considered the response you submitted_ / _You waived your right to submi
 
 ---
 CARD: indorsement
-from: <<subject_rank>> <<subject_first_name>> <<subject_middle_initial>>. <<subject_last_name>>
-for: <<issuer_org_symbol>>
-signature_block: <<subject_first_name>> <<subject_middle_initial>>. <<subject_last_name>>, <<subject_rank>>, USAF
+from: SUBJECT RANK FIRST M. LAST
+for: ISSUER ORG/SYMBOL
+signature_block: SUBJECT FIRST M. LAST, RANK, USAF
 date: "Date: _____________"
 ---
 

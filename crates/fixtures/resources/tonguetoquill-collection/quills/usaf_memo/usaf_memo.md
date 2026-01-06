@@ -41,3 +41,15 @@ The `usaf_memo` Quill package takes care of all 33-337 formatting details. Focus
   - Up to five levels of paragraphs are supported
 
 Do not include a complimentary close (e.g. "Respectfully,") in official memorandums.
+
+---
+CARD: indorsement
+for: ORG/SYMBOL
+format: standard
+from: ORG/SYMBOL
+signature_block:
+  - FIRST M. LAST, Rank, USAF
+  - Duty Title
+---
+
+This body and the metdata above are an indorsement card. Multiple or no indorsements cards can be used.
