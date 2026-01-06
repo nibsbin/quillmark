@@ -99,6 +99,7 @@ impl Quillmark {
             .register_quill(quill)
             .map_err(|e| WasmError::from(e).to_js_value())?;
 
+        // Return full quill info (no field stripping needed during registration)
         self.get_quill_info(&name, None)
     }
 

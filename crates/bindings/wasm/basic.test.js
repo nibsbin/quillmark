@@ -89,7 +89,8 @@ describe('quillmark-wasm smoke tests', () => {
   it('should get quill info with stripped fields', () => {
     const engine = new Quillmark()
     
-    // Register a quill with UI metadata
+    // Register a quill with UI metadata in TOML
+    // Note: [fields.my_field.ui] in TOML gets converted to "x-ui" in the JSON schema
     const quillWithUI = {
       files: {
         'Quill.toml': {
