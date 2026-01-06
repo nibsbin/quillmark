@@ -108,20 +108,20 @@ impl Quillmark {
     /// This returns metadata, backend info, field schemas, and supported formats
     /// that consumers need to configure render options for the next step.
     ///
-    /// Optionally strips specified fields from the schema (e.g., "x-ui" for UI metadata).
+    /// When `slim_schema` is true, removes UI metadata fields (e.g., "x-ui") from the schema.
     #[wasm_bindgen(js_name = getQuillInfo)]
     pub fn get_quill_info(
         &self,
         name: &str,
-        strip_fields: Option<Vec<String>>,
+        slim_schema: Option<bool>,
     ) -> Result<QuillInfo, JsValue> {
-        self.fetch_quill_info(name, strip_fields)
+        self.fetch_quill_info(name, slim_schema)
     }
 
     fn fetch_quill_info(
         &self,
         name: &str,
-        strip_fields: Option<Vec<String>>,
+        slim_schema: Option<bool>,
     ) -> Result<QuillInfo, JsValue> {
         let quill = self.inner.get_quill(name).ok_or_else(|| {
             WasmError::from(format!("Quill '{}' not registered", name)).to_js_value()
@@ -170,9 +170,8 @@ impl Quillmark {
 
         // Prepare schema
         let mut schema_json = quill.schema.clone().as_json().clone();
-        if let Some(fields) = strip_fields {
-            let field_refs: Vec<&str> = fields.iter().map(|s| s.as_str()).collect();
-            quillmark_core::schema::strip_schema_fields(&mut schema_json, &field_refs);
+        if slim_schema.unwrap_or(false) {
+            quillmark_core::schema::strip_schema_fields(&mut schema_json, &["x-ui"]);
         }
 
         Ok(QuillInfo {

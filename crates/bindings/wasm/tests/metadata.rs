@@ -48,9 +48,9 @@ fn test_metadata_stripping() {
         })
         .unwrap();
 
-    // Call with strip_fields parameter
+    // Call with slim_schema parameter
     let info = engine
-        .get_quill_info("ui-test-quill", Some(vec!["x-ui".to_string()]))
+        .get_quill_info("ui-test-quill", Some(true))
         .expect("getQuillInfo failed");
 
     // Verify x-ui is GONE
