@@ -53,7 +53,7 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
         let mut ui_obj = Map::new();
 
         if let Some(ref group) = ui.group {
-            ui_obj.insert(ui_key::GROUP.to_string(), Value::String(group.clone()));
+            ui_obj.insert(ui_key::GROUP.to_string(), json!(group));
         }
 
         if let Some(order) = ui.order {
@@ -113,6 +113,20 @@ fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
         );
     }
 
+    // Add UI metadata if present
+    if let Some(ref ui) = card.ui {
+        let mut ui_obj = Map::new();
+        if let Some(metadata_only) = ui.metadata_only {
+            ui_obj.insert(
+                ui_key::METADATA_ONLY.to_string(),
+                Value::Bool(metadata_only),
+            );
+        }
+        if !ui_obj.is_empty() {
+            def.insert("x-ui".to_string(), Value::Object(ui_obj));
+        }
+    }
+
     // Build properties
     let mut properties = Map::new();
     let mut required = vec![Value::String("CARD".to_string())];
@@ -146,15 +160,15 @@ fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
 /// - Card schemas in `$defs`
 /// - `CARDS` array with `oneOf` refs and `x-discriminator`
 pub fn build_schema(
-    field_schemas: &HashMap<String, FieldSchema>,
-    card_schemas: &HashMap<String, CardSchema>,
+    document: &CardSchema,
+    definitions: &HashMap<String, CardSchema>,
 ) -> Result<QuillValue, RenderError> {
     let mut properties = Map::new();
     let mut required_fields = Vec::new();
     let mut defs = Map::new();
 
     // Build field properties
-    for (field_name, field_schema) in field_schemas {
+    for (field_name, field_schema) in &document.fields {
         let property = build_field_property(field_schema);
         properties.insert(field_name.clone(), Value::Object(property));
 
@@ -164,11 +178,11 @@ pub fn build_schema(
     }
 
     // Build card definitions and CARDS array
-    if !card_schemas.is_empty() {
+    if !definitions.is_empty() {
         let mut one_of = Vec::new();
         let mut discriminator_mapping = Map::new();
 
-        for (card_name, card_schema) in card_schemas {
+        for (card_name, card_schema) in definitions {
             let def_name = format!("{}_card", card_name);
             let ref_path = format!("#/$defs/{}", def_name);
 
@@ -213,12 +227,37 @@ pub fn build_schema(
         schema_map.insert("$defs".to_string(), Value::Object(defs));
     }
 
+    // Add description
+    if !document.description.is_empty() {
+        schema_map.insert(
+            "description".to_string(),
+            Value::String(document.description.clone()),
+        );
+    }
+
+    // Add UI metadata if present
+    if let Some(ref ui) = document.ui {
+        let mut ui_obj = Map::new();
+        if let Some(metadata_only) = ui.metadata_only {
+            ui_obj.insert(
+                ui_key::METADATA_ONLY.to_string(),
+                Value::Bool(metadata_only),
+            );
+        }
+        if !ui_obj.is_empty() {
+            schema_map.insert("x-ui".to_string(), Value::Object(ui_obj));
+        }
+    }
+
     schema_map.insert("properties".to_string(), Value::Object(properties));
     schema_map.insert(
         "required".to_string(),
         Value::Array(required_fields.into_iter().map(Value::String).collect()),
     );
     schema_map.insert("additionalProperties".to_string(), Value::Bool(true));
+
+    // Add UI metadata if present
+    // Removed legacy UI handling, now handled via document.ui logic above.
 
     let schema = Value::Object(schema_map);
 
@@ -262,7 +301,14 @@ pub fn strip_schema_fields(schema: &mut Value, fields: &[&str]) {
 pub fn build_schema_from_fields(
     field_schemas: &HashMap<String, FieldSchema>,
 ) -> Result<QuillValue, RenderError> {
-    build_schema(field_schemas, &HashMap::new())
+    let document = CardSchema {
+        name: "root".to_string(),
+        title: None,
+        description: "".to_string(),
+        fields: field_schemas.clone(),
+        ui: None,
+    };
+    build_schema(&document, &HashMap::new())
 }
 
 /// Extract default values from a JSON Schema
@@ -1554,10 +1600,18 @@ mod tests {
             title: Some("Endorsements".to_string()),
             description: "Chain of endorsements".to_string(),
             fields: card_fields,
+            ui: None,
         };
         cards.insert("endorsements".to_string(), card);
 
-        let json_schema = build_schema(&fields, &cards).unwrap().as_json().clone();
+        let document = CardSchema {
+            name: "root".to_string(),
+            title: None,
+            description: "".to_string(),
+            fields,
+            ui: None,
+        };
+        let json_schema = build_schema(&document, &cards).unwrap().as_json().clone();
 
         // Verify $defs exists
         assert!(json_schema["$defs"].is_object());
@@ -1606,10 +1660,18 @@ mod tests {
             title: Some("Endorsements".to_string()),
             description: "Chain of endorsements".to_string(),
             fields: card_fields,
+            ui: None,
         };
         cards.insert("endorsements".to_string(), card);
 
-        let json_schema = build_schema(&fields, &cards).unwrap().as_json().clone();
+        let document = CardSchema {
+            name: "root".to_string(),
+            title: None,
+            description: "".to_string(),
+            fields,
+            ui: None,
+        };
+        let json_schema = build_schema(&document, &cards).unwrap().as_json().clone();
 
         // Verify CARDS array property exists
         let cards_prop = &json_schema["properties"]["CARDS"];
@@ -1862,10 +1924,18 @@ mod tests {
                 title: None,
                 description: "".to_string(),
                 fields: card_fields,
+                ui: None,
             },
         );
 
-        let schema = build_schema(&HashMap::new(), &card_schemas).unwrap();
+        let document = CardSchema {
+            name: "root".to_string(),
+            title: None,
+            description: "".to_string(),
+            fields: HashMap::new(),
+            ui: None,
+        };
+        let schema = build_schema(&document, &card_schemas).unwrap();
 
         let mut fields = HashMap::new();
         // invalid card
@@ -1906,10 +1976,18 @@ mod tests {
                 title: None,
                 description: "Test card".to_string(),
                 fields: card_fields,
+                ui: None,
             },
         );
 
-        let schema = build_schema(&HashMap::new(), &card_schemas).unwrap();
+        let document = CardSchema {
+            name: "root".to_string(),
+            title: None,
+            description: "".to_string(),
+            fields: HashMap::new(),
+            ui: None,
+        };
+        let schema = build_schema(&document, &card_schemas).unwrap();
 
         let mut fields = HashMap::new();
         let card_value = json!({
@@ -1946,10 +2024,18 @@ mod tests {
                 title: None,
                 description: "Test card".to_string(),
                 fields: card_fields,
+                ui: None,
             },
         );
 
-        let schema = build_schema(&HashMap::new(), &card_schemas).unwrap();
+        let document = CardSchema {
+            name: "root".to_string(),
+            title: None,
+            description: "".to_string(),
+            fields: HashMap::new(),
+            ui: None,
+        };
+        let schema = build_schema(&document, &card_schemas).unwrap();
 
         let mut fields = HashMap::new();
         let card_value = json!({
@@ -1980,11 +2066,11 @@ mod tests {
     #[test]
     fn test_card_field_ui_metadata() {
         // Verify that card fields with ui.group produce x-ui in JSON schema
-        use crate::quill::{CardSchema, UiSchema};
+        use crate::quill::{CardSchema, UiFieldSchema};
 
         let mut field_schema = FieldSchema::new("from".to_string(), "Sender".to_string());
         field_schema.r#type = Some(FieldType::String);
-        field_schema.ui = Some(UiSchema {
+        field_schema.ui = Some(UiFieldSchema {
             group: Some("Header".to_string()),
             order: Some(0),
         });
@@ -1997,16 +2083,76 @@ mod tests {
             title: Some("Indorsement".to_string()),
             description: "An indorsement".to_string(),
             fields: card_fields,
+            ui: None,
         };
 
         let mut cards = HashMap::new();
         cards.insert("indorsement".to_string(), card);
 
-        let schema = build_schema(&HashMap::new(), &cards).unwrap();
+        // Create empty root doc
+        let document = CardSchema {
+            name: "root".to_string(),
+            title: None,
+            description: "".to_string(),
+            fields: HashMap::new(),
+            ui: None,
+        };
+
+        let schema = build_schema(&document, &cards).unwrap();
         let card_def = &schema.as_json()["$defs"]["indorsement_card"];
         let from_field = &card_def["properties"]["from"];
 
         assert_eq!(from_field["x-ui"]["group"], "Header");
         assert_eq!(from_field["x-ui"]["order"], 0);
+    }
+
+    #[test]
+    fn test_metadata_only_schema() {
+        use crate::quill::{CardSchema, UiContainerSchema};
+
+        // Test document level metadata_only
+        let ui_schema = UiContainerSchema {
+            metadata_only: Some(true),
+        };
+
+        // Test card level metadata_only
+        let mut field_schema = FieldSchema::new("name".to_string(), "Name".to_string());
+        field_schema.r#type = Some(FieldType::String);
+
+        let mut card_fields = HashMap::new();
+        card_fields.insert("name".to_string(), field_schema);
+
+        let card = CardSchema {
+            name: "meta_card".to_string(),
+            title: None,
+            description: "Meta only card".to_string(),
+            fields: card_fields,
+            ui: Some(UiContainerSchema {
+                metadata_only: Some(true),
+            }),
+        };
+
+        let mut cards = HashMap::new();
+        cards.insert("meta_card".to_string(), card);
+
+        let document = CardSchema {
+            name: "root".to_string(),
+            title: None,
+            description: "".to_string(),
+            fields: HashMap::new(),
+            ui: Some(ui_schema),
+        };
+
+        let schema = build_schema(&document, &cards).unwrap();
+        let json_schema = schema.as_json();
+
+        // Verify document root x-ui
+        assert!(json_schema.get("x-ui").is_some());
+        assert_eq!(json_schema["x-ui"]["metadata_only"], true);
+
+        // Verify card x-ui
+        let card_def = &json_schema["$defs"]["meta_card_card"];
+        assert!(card_def.get("x-ui").is_some(), "Card should have x-ui");
+        assert_eq!(card_def["x-ui"]["metadata_only"], true);
     }
 }

@@ -38,20 +38,29 @@ pub mod ui_key {
     pub const GROUP: &str = "group";
     /// Display order within the UI
     pub const ORDER: &str = "order";
+    /// Whether the field or specific component is metadata-only (no body editor)
+    pub const METADATA_ONLY: &str = "metadata_only";
 }
 
 /// UI-specific metadata for field rendering
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct UiSchema {
+pub struct UiFieldSchema {
     /// Group name for organizing fields (e.g., "Personal Info", "Preferences")
     pub group: Option<String>,
     /// Order of the field in the UI (automatically generated based on field position in Quill.toml)
     pub order: Option<i32>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct UiContainerSchema {
+    /// Whether to hide the body editor for this element (metadata only)
+    pub metadata_only: Option<bool>,
+}
+
 /// Schema definition for a card type (composable content blocks)
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CardSchema {
     /// Card type name (e.g., "indorsements")
     pub name: String,
@@ -59,8 +68,10 @@ pub struct CardSchema {
     pub title: Option<String>,
     /// Detailed description of this card type
     pub description: String,
-    /// Field definitions for this card type
+    /// List of fields in the card
     pub fields: HashMap<String, FieldSchema>,
+    /// UI layout hints
+    pub ui: Option<UiContainerSchema>,
 }
 
 /// Field type hint enum for type-safe field type definitions
@@ -118,7 +129,7 @@ impl FieldType {
 }
 
 /// Schema definition for a template field
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FieldSchema {
     pub name: String,
     /// Short label for the field (used in JSON Schema title)
@@ -131,8 +142,8 @@ pub struct FieldSchema {
     pub default: Option<QuillValue>,
     /// Example values for the field
     pub examples: Option<QuillValue>,
-    /// UI-specific metadata for rendering
-    pub ui: Option<UiSchema>,
+    /// UI layout hints
+    pub ui: Option<UiFieldSchema>,
     /// Whether this field is required (fields are optional by default)
     pub required: bool,
     /// Enum values for string fields (restricts valid values)
@@ -148,7 +159,7 @@ struct FieldSchemaDef {
     pub description: String,
     pub default: Option<QuillValue>,
     pub examples: Option<QuillValue>,
-    pub ui: Option<UiSchema>,
+    pub ui: Option<UiFieldSchema>,
     #[serde(default)]
     pub required: bool,
     #[serde(rename = "enum")]
@@ -507,30 +518,28 @@ pub struct Quill {
     pub files: FileTreeNode,
 }
 
-/// Quill configuration extracted from Quill.toml
-#[derive(Debug, Clone)]
+/// Top-level configuration for a Quillmark project
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QuillConfig {
-    /// Human-readable name
-    pub name: String,
-    /// Description of the quill
-    pub description: String,
-    /// Backend identifier (e.g., "typst")
+    /// The root document schema
+    pub document: CardSchema,
+    /// Backend to use for rendering (e.g., "typst", "html")
     pub backend: String,
-    /// Semantic version of the quill
-    pub version: Option<String>,
-    /// Author of the quill
-    pub author: Option<String>,
-    /// Example markdown file
+    /// Version of the Quillmark spec
+    pub version: String,
+    /// Author of the project
+    pub author: String,
+    /// Example data file for preview
     pub example_file: Option<String>,
-    /// Plate file
+    /// Plate file (template)
     pub plate_file: Option<String>,
-    /// Field schemas
-    pub fields: HashMap<String, FieldSchema>,
-    /// Card schemas (composable content blocks)
+    /// Card definitions (reusable sub-schemas)
     pub cards: HashMap<String, CardSchema>,
-    /// Additional metadata from [Quill] section (excluding standard fields)
+    /// Additional unstructured metadata
+    #[serde(flatten)]
     pub metadata: HashMap<String, QuillValue>,
-    /// Typst-specific configuration from `[typst]` section
+    /// Typst specific configuration
+    #[serde(default)]
     pub typst_config: HashMap<String, QuillValue>,
 }
 
@@ -541,6 +550,7 @@ struct CardSchemaDef {
     #[serde(default)]
     pub description: String,
     pub fields: Option<toml::value::Table>,
+    pub ui: Option<UiContainerSchema>,
 }
 
 impl QuillConfig {
@@ -577,7 +587,7 @@ impl QuillConfig {
                         Ok(mut schema) => {
                             // Always set ui.order based on position
                             if schema.ui.is_none() {
-                                schema.ui = Some(UiSchema {
+                                schema.ui = Some(UiFieldSchema {
                                     group: None,
                                     order: Some(order),
                                 });
@@ -661,12 +671,14 @@ impl QuillConfig {
         let version = quill_section
             .get("version")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "0.1.0".to_string()); // Default version
 
         let author = quill_section
             .get("author")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "Unknown".to_string()); // Default author
 
         let example_file = quill_section
             .get("example_file")
@@ -677,6 +689,12 @@ impl QuillConfig {
             .get("plate_file")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
+
+        let ui_section: Option<UiContainerSchema> = quill_section
+            .get("ui")
+            .cloned()
+            .and_then(|v| QuillValue::from_toml(&v).ok())
+            .and_then(|v| serde_json::from_value(v.into_json()).ok());
 
         // Extract additional metadata from [Quill] section (excluding standard fields)
         let mut metadata = HashMap::new();
@@ -690,8 +708,9 @@ impl QuillConfig {
                     && key != "author"
                     && key != "example_file"
                     && key != "plate_file"
+                    && key != "ui"
                 {
-                    match QuillValue::from_toml(value) {
+                    match QuillValue::from_toml(&value) {
                         Ok(quill_value) => {
                             metadata.insert(key.clone(), quill_value);
                         }
@@ -726,7 +745,6 @@ impl QuillConfig {
             HashMap::new()
         };
 
-        // Extract [cards] section (optional)
         // Extract [cards] section (optional)
         let mut cards: HashMap<String, CardSchema> = HashMap::new();
         if let Some(cards_value) = quill_toml.get("cards") {
@@ -765,21 +783,29 @@ impl QuillConfig {
                     title: card_def.title,
                     description: card_def.description,
                     fields: card_fields,
+                    ui: card_def.ui,
                 };
 
                 cards.insert(card_name.clone(), card_schema);
             }
         }
 
-        Ok(QuillConfig {
-            name,
+        // Create document schema from root fields
+        let document = CardSchema {
+            name: name.clone(),
+            title: Some(name),
             description,
+            fields,
+            ui: ui_section,
+        };
+
+        Ok(QuillConfig {
+            document,
             backend,
             version,
             author,
             example_file,
             plate_file,
-            fields,
             cards,
             metadata,
             typst_config,
@@ -889,19 +915,18 @@ impl Quill {
             QuillValue::from_json(serde_json::Value::String(config.backend.clone())),
         );
 
-        // Add description to metadata
         metadata.insert(
             "description".to_string(),
-            QuillValue::from_json(serde_json::Value::String(config.description.clone())),
+            QuillValue::from_json(serde_json::Value::String(
+                config.document.description.clone(),
+            )),
         );
 
-        // Add author if present
-        if let Some(ref author) = config.author {
-            metadata.insert(
-                "author".to_string(),
-                QuillValue::from_json(serde_json::Value::String(author.clone())),
-            );
-        }
+        // Add author
+        metadata.insert(
+            "author".to_string(),
+            QuillValue::from_json(serde_json::Value::String(config.author.clone())),
+        );
 
         // Add typst config to metadata with typst_ prefix
         for (key, value) in &config.typst_config {
@@ -909,7 +934,8 @@ impl Quill {
         }
 
         // Build JSON schema from field and card schemas
-        let schema = crate::schema::build_schema(&config.fields, &config.cards)
+        // Build JSON schema from field and card schemas
+        let schema = crate::schema::build_schema(&config.document, &config.cards)
             .map_err(|e| format!("Failed to build JSON schema from field schemas: {}", e))?;
 
         // Read the plate content from plate file (if specified)
@@ -950,7 +976,7 @@ impl Quill {
 
         let quill = Quill {
             metadata,
-            name: config.name,
+            name: config.document.name,
             backend: config.backend,
             plate: plate_content,
             example: example_content,
@@ -2030,13 +2056,13 @@ author = {description = "Document author"}
         let config = QuillConfig::from_toml(toml_content).unwrap();
 
         // Verify required fields
-        assert_eq!(config.name, "test-config");
+        assert_eq!(config.document.name, "test-config");
         assert_eq!(config.backend, "typst");
-        assert_eq!(config.description, "Test configuration parsing");
+        assert_eq!(config.document.description, "Test configuration parsing");
 
         // Verify optional fields
-        assert_eq!(config.version, Some("1.0.0".to_string()));
-        assert_eq!(config.author, Some("Test Author".to_string()));
+        assert_eq!(config.version, "1.0.0");
+        assert_eq!(config.author, "Test Author");
         assert_eq!(config.plate_file, Some("plate.typ".to_string()));
         assert_eq!(config.example_file, Some("example.md".to_string()));
 
@@ -2044,11 +2070,11 @@ author = {description = "Document author"}
         assert!(config.typst_config.contains_key("packages"));
 
         // Verify field schemas
-        assert_eq!(config.fields.len(), 2);
-        assert!(config.fields.contains_key("title"));
-        assert!(config.fields.contains_key("author"));
+        assert_eq!(config.document.fields.len(), 2);
+        assert!(config.document.fields.contains_key("title"));
+        assert!(config.document.fields.contains_key("author"));
 
-        let title_field = &config.fields["title"];
+        let title_field = &config.document.fields["title"];
         assert_eq!(title_field.description, "Document title");
         assert_eq!(title_field.r#type, Some(FieldType::String));
     }
@@ -2220,20 +2246,20 @@ fourth = {description = "Fourth field"}
         // Check that fields have correct order based on TOML position
         // Order is automatically generated based on field position
 
-        let first = config.fields.get("first").unwrap();
+        let first = config.document.fields.get("first").unwrap();
         assert_eq!(first.ui.as_ref().unwrap().order, Some(0));
 
-        let second = config.fields.get("second").unwrap();
+        let second = config.document.fields.get("second").unwrap();
         assert_eq!(second.ui.as_ref().unwrap().order, Some(1));
 
-        let third = config.fields.get("third").unwrap();
+        let third = config.document.fields.get("third").unwrap();
         assert_eq!(third.ui.as_ref().unwrap().order, Some(2));
         assert_eq!(
             third.ui.as_ref().unwrap().group,
             Some("Test Group".to_string())
         );
 
-        let fourth = config.fields.get("fourth").unwrap();
+        let fourth = config.document.fields.get("fourth").unwrap();
         assert_eq!(fourth.ui.as_ref().unwrap().order, Some(3));
     }
 
@@ -2254,7 +2280,7 @@ group = "Author Info"
 
         let config = QuillConfig::from_toml(toml_content).unwrap();
 
-        let author_field = &config.fields["author"];
+        let author_field = &config.document.fields["author"];
         let ui = author_field.ui.as_ref().unwrap();
         assert_eq!(ui.group, Some("Author Info".to_string()));
         assert_eq!(ui.order, Some(0)); // First field should have order 0
@@ -2406,11 +2432,11 @@ description = "Name field"
         let config = QuillConfig::from_toml(toml_content).unwrap();
 
         // Check regular field
-        assert!(config.fields.contains_key("regular"));
-        let regular = config.fields.get("regular").unwrap();
+        assert!(config.document.fields.contains_key("regular"));
+        let regular = config.document.fields.get("regular").unwrap();
         assert_eq!(regular.r#type, Some(FieldType::String));
 
-        // Check card is in config.cards (not config.fields)
+        // Check card is in config.cards (not config.document.fields)
         assert!(config.cards.contains_key("indorsements"));
         let card = config.cards.get("indorsements").unwrap();
         assert_eq!(card.title, Some("Routing Indorsements".to_string()));
@@ -2463,7 +2489,7 @@ description = "Card"
         assert!(result.is_ok());
 
         let config = result.unwrap();
-        assert!(config.fields.contains_key("conflict"));
+        assert!(config.document.fields.contains_key("conflict"));
         assert!(config.cards.contains_key("conflict"));
     }
 
@@ -2490,8 +2516,8 @@ description = "Zero"
 
         let config = QuillConfig::from_toml(toml_content).unwrap();
 
-        let first = config.fields.get("first").unwrap();
-        let zero = config.fields.get("zero").unwrap();
+        let first = config.document.fields.get("first").unwrap();
+        let zero = config.document.fields.get("zero").unwrap();
         let second = config.cards.get("second").unwrap();
 
         // Check field ordering
