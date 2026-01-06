@@ -124,9 +124,9 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
     };
 
     if args.verbose {
-        println!("  Quill name: {}", config.name);
+        println!("  Quill name: {}", config.document.name);
         println!("  Backend: {}", config.backend);
-        println!("  Fields: {}", config.fields.len());
+        println!("  Fields: {}", config.document.fields.len());
         println!("  Cards: {}", config.cards.len());
     }
 
@@ -134,7 +134,7 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
     validate_file_references(&args.quill_path, &config, &mut result);
 
     // Step 3: Validate field schemas including defaults
-    validate_field_schemas(&config.fields, &mut result, "field");
+    validate_field_schemas(&config.document.fields, &mut result, "field");
 
     // Step 4: Validate card schemas
     for (card_name, card_schema) in &config.cards {
@@ -353,7 +353,7 @@ fn validate_defaults_against_schema(
 
     for (field_name, default_value) in defaults {
         // Look up field type in config
-        if let Some(field_schema) = config.fields.get(field_name) {
+        if let Some(field_schema) = config.document.fields.get(field_name) {
             if let Some(ref field_type) = field_schema.r#type {
                 if let Some(type_mismatch) = check_type_mismatch(field_type, default_value) {
                     result.add_error(format!(

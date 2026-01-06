@@ -11,6 +11,7 @@
 // #indorsement(...)[Body text...]
 
 #import "primitives.typ": *
+#import "body.typ": *
 
 #let indorsement(
   from: none,
@@ -86,13 +87,8 @@
     blank-line()
   }
 
-  // Enable paragraph numbering for indorsement body (same as mainmatter)
-  IN_BACKMATTER_STATE.update(false)
-  render-paragraph-body(content)
+  render-body(content)
 
-
-  // Disable paragraph numbering for indorsement backmatter sections
-  IN_BACKMATTER_STATE.update(true)
   render-signature-block(signature_block, signature-blank-lines: signature_blank_lines)
 
   if not falsey(attachments) {

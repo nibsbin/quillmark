@@ -173,6 +173,7 @@ type = "string"
 enum = ["standard", "informal", "separate_page"]
 ui.group = "Additional"
 description = "Format style: 'standard' (formal on same page), 'informal' (less formal routing), or 'separate_page' (starts on new page)."
+default = "standard"
 
 [cards.indorsement.fields.attachments]
 title = "Attachments for this endorsement"
