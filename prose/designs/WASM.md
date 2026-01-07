@@ -51,7 +51,7 @@ class Quillmark {
   constructor();
   static parseMarkdown(markdown: string): ParsedDocument;
   registerQuill(quillJson: string | object): void;
-  getQuillInfo(name: string, stripUi?: boolean): QuillInfo;
+  getQuillInfo(name: string): QuillInfo;
   processPlate(quillName: string, markdown: string): string;
   render(parsedDoc: ParsedDocument, options?: RenderOptions): RenderResult;
   listQuills(): string[];
@@ -72,10 +72,11 @@ interface QuillInfo {
   backend: string;  // e.g., "typst"
   metadata: object;  // Quill metadata from Quill.toml
   example?: string;  // Example markdown (if available)
-  schema: object;  // JSON schema for fields
+  schema: object;  // JSON schema for fields (always includes full schema with UI metadata)
   defaults: object;  // Default values extracted from schema
   examples: object;  // Example values extracted from schema
   supportedFormats: Array<'pdf' | 'svg' | 'txt'>;  // Formats this backend supports
+  getStrippedSchema(): object;  // Returns schema without UI metadata ("x-ui" fields)
 }
 
 interface RenderOptions {
@@ -114,15 +115,15 @@ interface Location {
 
 **API Design Notes:**
 
-The `getQuillInfo` method accepts an optional `stripUi` boolean parameter. When set to `true`, it strips UI metadata fields (specifically "x-ui") from the schema before returning it. This provides an opinionated, all-or-nothing approach to schema stripping.
+The `getQuillInfo` method always returns the full schema including UI metadata. For cases where you need the schema without UI-specific fields, use the `getStrippedSchema()` method on the returned `QuillInfo` object.
 
 **Example usage:**
 ```typescript
-// Get full schema with all metadata (default)
-const fullInfo = engine.getQuillInfo("my-quill");
+// Get full quill info (always includes complete schema)
+const info = engine.getQuillInfo("my-quill");
 
-// Get schema with UI metadata stripped
-const strippedInfo = engine.getQuillInfo("my-quill", true);
+// Get schema without UI metadata using helper method
+const strippedSchema = info.getStrippedSchema();
 ```
 
 ---
