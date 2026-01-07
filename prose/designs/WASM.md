@@ -125,8 +125,6 @@ const fullInfo = engine.getQuillInfo("my-quill");
 const strippedInfo = engine.getQuillInfo("my-quill", true);
 ```
 
-This design unifies what was previously two separate methods (`getQuillInfo` and `getQuillInfoSlim`), providing better ergonomics with a simple boolean flag while maintaining backward compatibility.
-
 ---
 
 ## Registry Architecture
