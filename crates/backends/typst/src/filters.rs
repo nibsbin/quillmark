@@ -244,6 +244,37 @@ pub fn json_filter(_state: &State, value: Value, _kwargs: Kwargs) -> Result<Valu
     Ok(Value::from_safe_string(inject_json(&json_str)))
 }
 
+pub fn number_filter(_state: &State, mut value: Value, kwargs: Kwargs) -> Result<Value, Error> {
+    value = apply_default(value, &kwargs)?;
+
+    let jv = json::to_value(&value).map_err(|e| {
+        err(
+            ErrorKind::InvalidOperation,
+            format!(
+                "Value cannot be converted to JSON: {e} (source: {:?})",
+                value
+            ),
+        )
+    })?;
+
+    // Accept integers or floats
+    let num_str = if let Some(i) = jv.as_i64() {
+        i.to_string()
+    } else if let Some(u) = jv.as_u64() {
+        u.to_string()
+    } else if let Some(f) = jv.as_f64() {
+        // Format float; Typst accepts standard decimal notation
+        f.to_string()
+    } else {
+        return Err(err(
+            ErrorKind::InvalidOperation,
+            format!("Value is not a number: got {}", jv),
+        ));
+    };
+
+    Ok(Value::from_safe_string(num_str))
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -319,5 +350,39 @@ mod tests {
                 });
             assert!(!is_valid, "Expected '{}' to be invalid", filename);
         }
+    }
+
+    #[test]
+    fn test_number_filter_logic() {
+        use serde_json::json;
+
+        // Test integer parsing
+        let jv = json!(42);
+        let num_str = if let Some(i) = jv.as_i64() {
+            i.to_string()
+        } else if let Some(u) = jv.as_u64() {
+            u.to_string()
+        } else if let Some(f) = jv.as_f64() {
+            f.to_string()
+        } else {
+            panic!("Expected number");
+        };
+        assert_eq!(num_str, "42");
+
+        // Test negative integer
+        let jv = json!(-100);
+        let num_str = jv.as_i64().map(|i| i.to_string()).unwrap();
+        assert_eq!(num_str, "-100");
+
+        // Test float
+        let jv = json!(3.14);
+        let num_str = jv.as_f64().map(|f| f.to_string()).unwrap();
+        assert_eq!(num_str, "3.14");
+
+        // Test that string is not a number
+        let jv = json!("not a number");
+        assert!(jv.as_i64().is_none());
+        assert!(jv.as_u64().is_none());
+        assert!(jv.as_f64().is_none());
     }
 }
