@@ -58,7 +58,8 @@ pub mod fuzz_utils {
 }
 
 use filters::{
-    asset_filter, content_filter, date_filter, dict_filter, lines_filter, string_filter,
+    asset_filter, content_filter, date_filter, dict_filter, lines_filter, number_filter,
+    string_filter,
 };
 use quillmark_core::{
     Artifact, Backend, Diagnostic, OutputFormat, Plate, Quill, RenderError, RenderOptions,
@@ -95,6 +96,7 @@ impl Backend for TypstBackend {
         plate.register_filter("Content", content_filter);
         plate.register_filter("Asset", asset_filter);
         plate.register_filter("Json", filters::json_filter);
+        plate.register_filter("Number", number_filter);
     }
 
     fn compile(
