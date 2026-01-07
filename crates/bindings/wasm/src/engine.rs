@@ -110,19 +110,11 @@ impl Quillmark {
     ///
     /// When `strip_ui` is true, removes UI metadata fields (e.g., "x-ui") from the schema.
     #[wasm_bindgen(js_name = getQuillInfo)]
-    pub fn get_quill_info(
-        &self,
-        name: &str,
-        strip_ui: Option<bool>,
-    ) -> Result<QuillInfo, JsValue> {
+    pub fn get_quill_info(&self, name: &str, strip_ui: Option<bool>) -> Result<QuillInfo, JsValue> {
         self.fetch_quill_info(name, strip_ui)
     }
 
-    fn fetch_quill_info(
-        &self,
-        name: &str,
-        strip_ui: Option<bool>,
-    ) -> Result<QuillInfo, JsValue> {
+    fn fetch_quill_info(&self, name: &str, strip_ui: Option<bool>) -> Result<QuillInfo, JsValue> {
         let quill = self.inner.get_quill(name).ok_or_else(|| {
             WasmError::from(format!("Quill '{}' not registered", name)).to_js_value()
         })?;
