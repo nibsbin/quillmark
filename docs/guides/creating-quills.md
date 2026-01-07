@@ -193,16 +193,7 @@ See the [Typst Backend Guide](typst-backend.md) for more details.
 
 ### AcroForm Backend
 
-The AcroForm backend fills PDF forms. Place a `form.pdf` file in your Quill directory:
-
-```
-my-form-quill/
-├── Quill.toml
-├── plate.jinja       # Template for field values
-└── form.pdf         # PDF form to fill
-```
-
-See the [AcroForm Backend Guide](acroform-backend.md) for more details.
+> The AcroForm backend is experimental and currently not recommended for use.
 
 ## Assets and Resources
 
@@ -303,4 +294,3 @@ engine.register_quill(quill)
 
 - [Learn about Quill Markdown syntax](quill-markdown.md)
 - [Explore the Typst backend](typst-backend.md)
-- [Understand the AcroForm backend](acroform-backend.md)
