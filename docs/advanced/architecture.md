@@ -115,8 +115,7 @@ AcroForm backend for PDF form filling:
 - Implements `Backend` trait
 - Templates field values using MiniJinja
 - Supports tooltip-based and value-based templating
-- Returns filled PDF as single artifact
-- TXT format support for debugging
+- Returns filled PDF as single artifact (PDF output only)
 
 ### Language Bindings
 

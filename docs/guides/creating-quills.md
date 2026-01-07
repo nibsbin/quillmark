@@ -62,16 +62,27 @@ Define expected frontmatter fields in the `[fields]` section:
 ```toml
 [fields]
 title = { description = "Document title", type = "str" }
-count = { description = "Number of items", type = "int", default = 10 }
-enabled = { description = "Enable feature", type = "bool", default = false }
+count = { description = "Number of items", type = "number", default = 10 }
+enabled = { description = "Enable feature", type = "boolean", default = false }
 ```
 
 Each field can specify:
 - `title` - Short label for the field
 - `description` - Detailed description of the field
-- `type` - Data type (`"str"`, `"int"`, `"bool"`, etc.)
+- `type` - Data type
 - `default` - Default value if not provided
 - `examples` - Array of example values
+- `required` - Whether the field must be present
+- `enum` - Restrict string fields to specific values
+
+Supported `type` values:
+- `string` or `str`
+- `number`
+- `boolean`
+- `array`
+- `dict`
+- `date`
+- `datetime`
 
 ### UI Configuration
 
