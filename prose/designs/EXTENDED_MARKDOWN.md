@@ -83,6 +83,7 @@ Quillmark supports a specific subset of CommonMark to ensure security and consis
 
 ### Unsupported Features
 These features are intentionally ignored or rendered as plain text:
+*   **Setext Headings:** Underline-style headings using `===` or `---` are NOT supported. Only ATX-style headings (`# Heading`) are recognized. This prevents ambiguity with list items and horizontal rules.
 *   **Thematic Breaks:** `***`, `___`, `---` (ignored).
 *   **Images:** `![alt](src)` (ignored).
 *   **HTML:** Raw HTML tags are ignored, except for comments.
