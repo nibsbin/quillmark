@@ -333,11 +333,14 @@ where
 /// Iterator that post-processes markdown events to handle specific edge cases:
 /// 1. Coalesces adjacent `Text` events to enable intraword underscore emphasis (fix for `__` sandwich).
 /// 2. Fixes `***` adjacency issues (fix for `***` sandwich).
+/// 3. Suppresses setext-style headings (only ATX-style `# Heading` is supported).
 struct MarkdownFixer<'a, I: Iterator<Item = (Event<'a>, Range<usize>)>> {
     inner: std::iter::Peekable<I>,
     source: &'a str,
     /// Buffer of events to emit before pulling from inner
     buffer: Vec<(Event<'a>, Range<usize>)>,
+    /// Track when we're inside a setext heading that should be suppressed
+    in_setext_heading: bool,
 }
 
 impl<'a, I> MarkdownFixer<'a, I>
@@ -349,6 +352,27 @@ where
             inner: inner.peekable(),
             source,
             buffer: Vec::new(),
+            in_setext_heading: false,
+        }
+    }
+
+    /// Check if a heading at the given source range is a setext-style heading.
+    /// Setext headings have the text on one line and `=` or `-` underline on the next.
+    /// ATX headings start with `#` characters.
+    fn is_setext_heading(&self, range: &Range<usize>) -> bool {
+        let source_slice = &self.source[range.clone()];
+        // Setext headings contain a newline followed by = or - characters
+        // ATX headings start with # and don't have this pattern
+        if let Some(newline_pos) = source_slice.find('\n') {
+            let after_newline = &source_slice[newline_pos + 1..];
+            let trimmed = after_newline.trim_start();
+            // Check if the line after newline consists of = or - (setext underline)
+            !trimmed.is_empty()
+                && trimmed
+                    .chars()
+                    .all(|c| c == '=' || c == '-' || c.is_whitespace())
+        } else {
+            false
         }
     }
 
@@ -638,7 +662,26 @@ where
             // 2. Pull from inner
             let (event, range) = self.inner.next()?;
 
-            // 3. Process Event
+            // 3. Handle setext heading suppression (ATX-only policy)
+            match &event {
+                Event::Start(Tag::Heading { .. }) => {
+                    if self.is_setext_heading(&range) {
+                        // Skip setext heading start - the text content will still be emitted
+                        self.in_setext_heading = true;
+                        continue;
+                    }
+                }
+                Event::End(TagEnd::Heading(_)) => {
+                    if self.in_setext_heading {
+                        // Skip setext heading end
+                        self.in_setext_heading = false;
+                        continue;
+                    }
+                }
+                _ => {}
+            }
+
+            // 4. Process Event
             if let Event::Text(_) = &event {
                 let merged_range = self.coalesce_text_range(range);
                 let source_slice = &self.source[merged_range.clone()];
@@ -1658,6 +1701,50 @@ mod robustness_tests {
         assert!(result.contains("= One"));
         assert!(result.contains("== Two"));
         assert!(result.contains("=== Three"));
+    }
+
+    // Setext heading suppression (ATX-only policy)
+
+    #[test]
+    fn test_setext_h1_suppressed() {
+        // Setext H1 (with ===) should be treated as plain text
+        let result = mark_to_typst("My Heading\n==========").unwrap();
+        assert!(!result.contains("= My Heading")); // Should NOT be a heading
+        assert!(result.contains("My Heading")); // Text should still appear
+    }
+
+    #[test]
+    fn test_setext_h2_suppressed() {
+        // Setext H2 (with ---) should be treated as plain text
+        let result = mark_to_typst("My Heading\n----------").unwrap();
+        assert!(!result.contains("== My Heading")); // Should NOT be a heading
+        assert!(result.contains("My Heading")); // Text should still appear
+    }
+
+    #[test]
+    fn test_unclosed_nested_bullet_not_setext() {
+        // This was being incorrectly parsed as a setext heading
+        let result = mark_to_typst("- parent\n  - ").unwrap();
+        assert!(!result.contains("== parent")); // Should NOT be a heading
+        assert!(result.contains("- parent")); // Should be a list item
+    }
+
+    #[test]
+    fn test_atx_headings_still_work() {
+        // ATX headings should still be converted properly
+        let result = mark_to_typst("# H1\n## H2\n### H3").unwrap();
+        assert!(result.contains("= H1"));
+        assert!(result.contains("== H2"));
+        assert!(result.contains("=== H3"));
+    }
+
+    #[test]
+    fn test_nested_list_empty_item_deep() {
+        // Deeper nesting with empty item should not create setext heading
+        let result = mark_to_typst("- parent\n  - child\n    - ").unwrap();
+        assert!(!result.contains("== child")); // Should NOT be a heading
+        assert!(result.contains("- parent"));
+        assert!(result.contains("- child"));
     }
 
     // Code block handling (currently ignored but should not crash)
