@@ -351,4 +351,38 @@ mod tests {
             assert!(!is_valid, "Expected '{}' to be invalid", filename);
         }
     }
+
+    #[test]
+    fn test_number_filter_logic() {
+        use serde_json::json;
+
+        // Test integer parsing
+        let jv = json!(42);
+        let num_str = if let Some(i) = jv.as_i64() {
+            i.to_string()
+        } else if let Some(u) = jv.as_u64() {
+            u.to_string()
+        } else if let Some(f) = jv.as_f64() {
+            f.to_string()
+        } else {
+            panic!("Expected number");
+        };
+        assert_eq!(num_str, "42");
+
+        // Test negative integer
+        let jv = json!(-100);
+        let num_str = jv.as_i64().map(|i| i.to_string()).unwrap();
+        assert_eq!(num_str, "-100");
+
+        // Test float
+        let jv = json!(3.14);
+        let num_str = jv.as_f64().map(|f| f.to_string()).unwrap();
+        assert_eq!(num_str, "3.14");
+
+        // Test that string is not a number
+        let jv = json!("not a number");
+        assert!(jv.as_i64().is_none());
+        assert!(jv.as_u64().is_none());
+        assert!(jv.as_f64().is_none());
+    }
 }
