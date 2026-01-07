@@ -110,13 +110,7 @@ Typst backend for PDF/SVG output:
 
 #### `crates/backends/acroform`
 
-AcroForm backend for PDF form filling:
-
-- Implements `Backend` trait
-- Templates field values using MiniJinja
-- Supports tooltip-based and value-based templating
-- Returns filled PDF as single artifact
-- TXT format support for debugging
+> Experimental; not recommended for production use and not documented.
 
 ### Language Bindings
 
@@ -268,21 +262,7 @@ Compilation environment (`QuillWorld`):
 
 ### AcroForm Backend
 
-Key features:
-
-- Reads PDF forms from `form.pdf` in quill bundle
-- Templates field values using MiniJinja
-- Supports tooltip-based (`description__{{template}}`) and value-based templating
-- Returns filled PDF as single artifact
-- TXT format support for debugging (returns field values as JSON)
-
-Compilation process:
-
-1. Load PDF form from quill's `form.pdf` file
-2. Extract field names and current values
-3. Render templated values using MiniJinja with JSON context
-4. Write rendered values back to PDF form
-5. Return filled PDF as byte vector
+The AcroForm backend is experimental and currently not recommended for use. No further documentation is provided until it stabilizes.
 
 ## Package and Asset Management
 

@@ -16,7 +16,6 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
 - **YAML frontmatter support**: Extended YAML metadata with inline sections
 - **Multiple backends**: 
   - PDF and SVG output via Typst backend
-  - PDF form filling via AcroForm backend
 - **Structured error handling**: Clear diagnostics with source locations
 - **Dynamic asset loading**: Fonts, images, and packages resolved at runtime
 
@@ -34,7 +33,6 @@ Quillmark is organized as a workspace with multiple crates:
 - **crates/core** - Core parsing, templating, and backend traits
 - **crates/quillmark** - High-level orchestration API
 - **crates/backends/typst** - Typst backend for PDF/SVG output
-- **crates/backends/acroform** - AcroForm backend for PDF form filling
 - **crates/bindings/python** - Python bindings (PyO3)
 - **crates/bindings/wasm** - WebAssembly bindings for JavaScript
 - **crates/bindings/cli** - Command-line interface

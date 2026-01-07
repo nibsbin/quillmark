@@ -78,10 +78,6 @@ Reference assets by name:
 #set text(font: "CustomFont")
 ```
 
-### AcroForm Templates
-
-Use base64-encoded assets in form fields or annotations.
-
 ## Checking Dynamic Assets
 
 ```python

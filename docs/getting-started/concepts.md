@@ -48,7 +48,6 @@ This metadata is accessible in templates and can be validated against JSON schem
 Backends transform composed templates into final artifacts:
 
 - **Typst Backend** - Generates PDF and SVG files using the Typst typesetting system
-- **AcroForm Backend** - Fills PDF form fields using templates
 
 Each backend has its own templating capabilities and filters.
 
