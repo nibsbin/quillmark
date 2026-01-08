@@ -68,5 +68,8 @@ fn test_metadata_stripping() {
 
     // Verify original info still has x-ui
     let x_ui_original = info.schema.pointer("/properties/my_field/x-ui");
-    assert!(x_ui_original.is_some(), "original schema should still have x-ui");
+    assert!(
+        x_ui_original.is_some(),
+        "original schema should still have x-ui"
+    );
 }
