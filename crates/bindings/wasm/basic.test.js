@@ -86,6 +86,46 @@ describe('quillmark-wasm smoke tests', () => {
     expect(info.schema instanceof Object).toBe(true)
   })
 
+  it('should get stripped schema from QuillInfo', () => {
+    const engine = new Quillmark()
+    
+    // Register a quill with UI metadata in TOML
+    // Note: [fields.my_field.ui] in TOML gets converted to "x-ui" in the JSON schema
+    const quillWithUI = {
+      files: {
+        'Quill.toml': {
+          contents: `[Quill]
+name = "ui_test_quill"
+backend = "typst"
+plate_file = "plate.typ"
+description = "Test quill with UI metadata"
+
+[fields.my_field]
+type = "string"
+
+[fields.my_field.ui]
+group = "Personal Info"
+`
+        },
+        'plate.typ': {
+          contents: `= Title`
+        }
+      }
+    }
+    
+    engine.registerQuill(quillWithUI)
+
+    // Get full quill info (always returns full schema)
+    const info = engine.getQuillInfo('ui_test_quill')
+    expect(info.schema.properties.my_field['x-ui']).toBeDefined()
+    expect(info.schema.properties.my_field['x-ui'].group).toBe('Personal Info')
+
+    // Get stripped schema using the helper method
+    const strippedSchema = info.getStrippedSchema()
+    expect(strippedSchema.properties.my_field['x-ui']).toBeUndefined()
+    expect(strippedSchema.properties.my_field.type).toBe('string')
+  })
+
   it('should render plate template', () => {
     const engine = new Quillmark()
     engine.registerQuill(TEST_QUILL)

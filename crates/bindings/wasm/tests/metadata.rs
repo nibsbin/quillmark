@@ -48,19 +48,28 @@ fn test_metadata_stripping() {
         })
         .unwrap();
 
-    // Call with strip_ui = true (via slim)
+    // Get full info
     let info = engine
-        .get_quill_info_slim("ui-test-quill")
-        .expect("getQuillInfoSlim failed");
+        .get_quill_info("ui-test-quill")
+        .expect("getQuillInfo failed");
 
-    // Verify x-ui is GONE
-    let x_ui = info.schema.pointer("/properties/my_field/x-ui");
+    // Get stripped schema using the helper method
+    let stripped_schema = info.get_stripped_schema();
+
+    // Verify x-ui is GONE in stripped schema
+    let x_ui = stripped_schema.pointer("/properties/my_field/x-ui");
     assert!(x_ui.is_none(), "x-ui should be stripped");
 
-    // Verify other fields remain
-    let field_type = info
-        .schema
+    // Verify other fields remain in stripped schema
+    let field_type = stripped_schema
         .pointer("/properties/my_field/type")
         .expect("type should exist");
     assert_eq!(field_type, "string");
+
+    // Verify original info still has x-ui
+    let x_ui_original = info.schema.pointer("/properties/my_field/x-ui");
+    assert!(
+        x_ui_original.is_some(),
+        "original schema should still have x-ui"
+    );
 }

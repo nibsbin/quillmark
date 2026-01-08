@@ -180,6 +180,18 @@ pub struct QuillInfo {
     pub supported_formats: Vec<OutputFormat>,
 }
 
+impl QuillInfo {
+    /// Get a stripped version of the schema without UI metadata
+    ///
+    /// Returns a new QuillInfo with the schema field stripped of "x-ui" metadata.
+    /// This is useful when you need to expose the schema without UI-specific information.
+    pub fn get_stripped_schema(&self) -> serde_json::Value {
+        let mut stripped_schema = self.schema.clone();
+        quillmark_core::schema::strip_schema_fields(&mut stripped_schema, &["x-ui"]);
+        stripped_schema
+    }
+}
+
 impl IntoWasmAbi for QuillInfo {
     type Abi = <JsValue as IntoWasmAbi>::Abi;
 

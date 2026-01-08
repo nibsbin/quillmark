@@ -156,7 +156,7 @@ Get information about a registered Quill.
 **Parameters:**
 - `name` - Registered Quill name
 
-**Returns:** QuillInfo object with Quill details
+**Returns:** QuillInfo object with Quill details (always includes full schema with UI metadata)
 
 **Throws:** Error if Quill not found
 
@@ -165,6 +165,10 @@ Get information about a registered Quill.
 const info = engine.getQuillInfo("my-quill");
 console.log(info.backend);           // "typst"
 console.log(info.supportedFormats);  // ["pdf", "svg"]
+
+// To get a stripped schema without UI metadata:
+const strippedSchema = info.getStrippedSchema();
+// strippedSchema will not contain any "x-ui" fields
 ```
 
 ##### processPlate
@@ -277,14 +281,21 @@ interface QuillInfo {
   example?: string;
   fieldSchemas: object;
   supportedFormats: Array<'pdf' | 'svg' | 'txt'>;
+  getStrippedSchema(): object;  // Returns schema without UI metadata ("x-ui" fields)
 }
 ```
+
+**Methods:**
+- `getStrippedSchema()` - Returns a copy of the schema with UI metadata fields (e.g., "x-ui") removed
 
 **Example:**
 ```javascript
 const info = engine.getQuillInfo("my-quill");
 console.log(`Backend: ${info.backend}`);
 console.log(`Formats: ${info.supportedFormats.join(', ')}`);
+
+// Get schema without UI metadata
+const strippedSchema = info.getStrippedSchema();
 ```
 
 ### RenderOptions
