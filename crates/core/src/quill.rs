@@ -78,11 +78,9 @@ pub struct CardSchema {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum FieldType {
-    /// String type (alias: "string")
-    String,
-    /// String type (alias: "str")
+    /// String type
     #[serde(alias = "str")]
-    Str,
+    String,
     /// Numeric type
     Number,
     /// Boolean type
@@ -101,8 +99,7 @@ impl FieldType {
     /// Parse a FieldType from a string
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
-            "string" => Some(FieldType::String),
-            "str" => Some(FieldType::Str),
+            "string" | "str" => Some(FieldType::String),
             "number" => Some(FieldType::Number),
             "boolean" => Some(FieldType::Boolean),
             "array" => Some(FieldType::Array),
@@ -117,7 +114,6 @@ impl FieldType {
     pub fn as_str(&self) -> &'static str {
         match self {
             FieldType::String => "string",
-            FieldType::Str => "str",
             FieldType::Number => "number",
             FieldType::Boolean => "boolean",
             FieldType::Array => "array",
@@ -134,8 +130,8 @@ pub struct FieldSchema {
     pub name: String,
     /// Short label for the field (used in JSON Schema title)
     pub title: Option<String>,
-    /// Field type hint (e.g., String, Number, Boolean, Dict, Array)
-    pub r#type: Option<FieldType>,
+    /// Field type (required)
+    pub r#type: FieldType,
     /// Detailed description of the field (used in JSON Schema description)
     pub description: String,
     /// Default value for the field
@@ -148,13 +144,17 @@ pub struct FieldSchema {
     pub required: bool,
     /// Enum values for string fields (restricts valid values)
     pub enum_values: Option<Vec<String>>,
+    /// Properties for dict/object types (nested field schemas)
+    pub properties: Option<HashMap<String, Box<FieldSchema>>>,
+    /// Item schema for array types
+    pub items: Option<Box<FieldSchema>>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FieldSchemaDef {
     pub title: Option<String>,
-    pub r#type: Option<FieldType>,
+    pub r#type: FieldType,
     #[serde(default)]
     pub description: String,
     pub default: Option<QuillValue>,
@@ -164,21 +164,26 @@ struct FieldSchemaDef {
     pub required: bool,
     #[serde(rename = "enum")]
     pub enum_values: Option<Vec<String>>,
+    // Nested schema support
+    pub properties: Option<toml::value::Table>,
+    pub items: Option<toml::Value>,
 }
 
 impl FieldSchema {
     /// Create a new FieldSchema with default values
-    pub fn new(name: String, description: String) -> Self {
+    pub fn new(name: String, r#type: FieldType, description: String) -> Self {
         Self {
             name,
             title: None,
-            r#type: None,
+            r#type,
             description,
             default: None,
             examples: None,
             ui: None,
             required: false,
             enum_values: None,
+            properties: None,
+            items: None,
         }
     }
 
@@ -197,6 +202,8 @@ impl FieldSchema {
             ui: def.ui,
             required: def.required,
             enum_values: def.enum_values,
+            properties: None, // TODO: Parse nested properties
+            items: None,      // TODO: Parse items schema
         })
     }
 }
