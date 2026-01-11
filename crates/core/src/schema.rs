@@ -1090,7 +1090,10 @@ mod tests {
             FieldType::Array,
             "List of recipient organization symbols".to_string(),
         );
-        schema.examples = Some(QuillValue::from_json(json!(["ORG1/SYMBOL", "ORG2/SYMBOL"])));
+        schema.examples = Some(QuillValue::from_json(json!([[
+            "ORG1/SYMBOL",
+            "ORG2/SYMBOL"
+        ]])));
         fields.insert("memo_for".to_string(), schema);
 
         let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
@@ -1617,8 +1620,11 @@ mod tests {
         let fields = HashMap::new();
         let mut cards = HashMap::new();
 
-        let mut name_schema = FieldSchema::new("name".to_string(), "Name field".to_string());
-        name_schema.r#type = Some(FieldType::String);
+        let name_schema = FieldSchema::new(
+            "name".to_string(),
+            FieldType::String,
+            "Name field".to_string(),
+        );
 
         let mut card_fields = HashMap::new();
         card_fields.insert("name".to_string(), name_schema);
@@ -1671,12 +1677,18 @@ mod tests {
         let fields = HashMap::new();
         let mut cards = HashMap::new();
 
-        let mut name_schema = FieldSchema::new("name".to_string(), "Endorser name".to_string());
-        name_schema.r#type = Some(FieldType::String);
+        let mut name_schema = FieldSchema::new(
+            "name".to_string(),
+            FieldType::String,
+            "Endorser name".to_string(),
+        );
         name_schema.required = true;
 
-        let mut org_schema = FieldSchema::new("org".to_string(), "Organization".to_string());
-        org_schema.r#type = Some(FieldType::String);
+        let mut org_schema = FieldSchema::new(
+            "org".to_string(),
+            FieldType::String,
+            "Organization".to_string(),
+        );
         org_schema.default = Some(QuillValue::from_json(json!("Unknown")));
 
         let mut card_fields = HashMap::new();
@@ -1725,7 +1737,6 @@ mod tests {
         assert!(required.contains(&json!("CARD")));
         assert!(required.contains(&json!("name")));
         assert!(!required.contains(&json!("org")));
-
     }
 
     #[test]
@@ -1940,7 +1951,7 @@ mod tests {
         let mut card_fields = HashMap::new();
         card_fields.insert(
             "field1".to_string(),
-            FieldSchema::new("f1".to_string(), "desc".to_string()),
+            FieldSchema::new("f1".to_string(), FieldType::String, "desc".to_string()),
         );
         let mut card_schemas = HashMap::new();
         card_schemas.insert(
@@ -2103,7 +2114,7 @@ mod tests {
         // Verify that card fields with ui.group produce x-ui in JSON schema
         use crate::quill::{CardSchema, UiFieldSchema};
 
-        let field_schema =
+        let mut field_schema =
             FieldSchema::new("from".to_string(), FieldType::String, "Sender".to_string());
         field_schema.ui = Some(UiFieldSchema {
             group: Some("Header".to_string()),

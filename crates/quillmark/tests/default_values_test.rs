@@ -49,9 +49,9 @@ plate_file = "plate.typ"
 description = "Test quill with defaults"
 
 [fields]
-title = { description = "Document title" }
-status = { description = "Document status", default = "draft" }
-version = { description = "Version number", default = 1 }
+title = { type = "string", description = "Document title" }
+status = { type = "string", description = "Document status", default = "draft" }
+version = { type = "number", description = "Version number", default = 1 }
 "#,
     )
     .expect("Failed to write Quill.toml");
@@ -114,8 +114,8 @@ plate_file = "plate.typ"
 description = "Test quill with defaults"
 
 [fields]
-title = { description = "Document title" }
-status = { description = "Document status", default = "draft" }
+title = { type = "string", description = "Document title" }
+status = { type = "string", description = "Document status", default = "draft" }
 "#,
     )
     .expect("Failed to write Quill.toml");
@@ -177,8 +177,8 @@ plate_file = "plate.typ"
 description = "Test quill with optional fields"
 
 [fields]
-title = { description = "Document title", default = "Untitled" }
-status = { description = "Document status", default = "draft" }
+title = { type = "string", description = "Document title", default = "Untitled" }
+status = { type = "string", description = "Document status", default = "draft" }
 "#,
     )
     .expect("Failed to write Quill.toml");
@@ -232,8 +232,8 @@ plate_file = "plate.typ"
 description = "Test quill with required field"
 
 [fields]
-title = { description = "Document title", required = true }
-status = { description = "Document status", default = "draft" }
+title = { type = "string", description = "Document title", required = true }
+status = { type = "string", description = "Document status", default = "draft" }
 "#,
     )
     .expect("Failed to write Quill.toml");

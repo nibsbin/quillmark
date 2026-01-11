@@ -1914,9 +1914,9 @@ example_file = "taro.md"
 description = "Test template for field schemas"
 
 [fields]
-author = {description = "Author of document" }
-ice_cream = {description = "favorite ice cream flavor"}
-title = {description = "title of document" }
+author = {type = "string", description = "Author of document" }
+ice_cream = {type = "string", description = "favorite ice cream flavor"}
+title = {type = "string", description = "title of document" }
 "#;
         root_files.insert(
             "Quill.toml".to_string(),
@@ -1978,9 +1978,13 @@ title = {description = "title of document" }
     #[test]
     fn test_field_schema_struct() {
         // Test creating FieldSchema with minimal fields
-        let schema1 = FieldSchema::new("test_name".to_string(), "Test description".to_string());
+        let schema1 = FieldSchema::new(
+            "test_name".to_string(),
+            FieldType::String,
+            "Test description".to_string(),
+        );
         assert_eq!(schema1.description, "Test description");
-        assert_eq!(schema1.r#type, None);
+        assert_eq!(schema1.r#type, FieldType::String);
         assert_eq!(schema1.examples, None);
         assert_eq!(schema1.default, None);
 
@@ -1996,7 +2000,7 @@ default: "Default value"
         let schema2 = FieldSchema::from_quill_value("test_name".to_string(), &quill_value).unwrap();
         assert_eq!(schema2.name, "test_name");
         assert_eq!(schema2.description, "Full field schema");
-        assert_eq!(schema2.r#type, Some(FieldType::String));
+        assert_eq!(schema2.r#type, FieldType::String);
         assert_eq!(
             schema2
                 .examples
@@ -2057,7 +2061,7 @@ packages = ["@preview/bubble:0.2.2"]
 
 [fields]
 title = {description = "Document title", type = "string"}
-author = {description = "Document author"}
+author = {type = "string", description = "Document author"}
 "#;
 
         let config = QuillConfig::from_toml(toml_content).unwrap();
@@ -2083,7 +2087,7 @@ author = {description = "Document author"}
 
         let title_field = &config.document.fields["title"];
         assert_eq!(title_field.description, "Document title");
-        assert_eq!(title_field.r#type, Some(FieldType::String));
+        assert_eq!(title_field.r#type, FieldType::String);
     }
 
     #[test]
@@ -2205,9 +2209,9 @@ backend = "typst"
 description = "Test defaults extraction"
 
 [fields]
-title = {description = "Title"}
-author = {description = "Author", default = "Anonymous"}
-status = {description = "Status", default = "draft"}
+title = {type = "string", description = "Title"}
+author = {type = "string", description = "Author", default = "Anonymous"}
+status = {type = "string", description = "Status", default = "draft"}
 "#;
 
         root_files.insert(
@@ -2242,10 +2246,10 @@ backend = "typst"
 description = "Test field order"
 
 [fields]
-first = {description = "First field"}
-second = {description = "Second field"}
-third = {description = "Third field", ui = {group = "Test Group"}}
-fourth = {description = "Fourth field"}
+first = {type = "string", description = "First field"}
+second = {type = "string", description = "Second field"}
+third = {type = "string", description = "Third field", ui = {group = "Test Group"}}
+fourth = {type = "string", description = "Fourth field"}
 "#;
 
         let config = QuillConfig::from_toml(toml_content).unwrap();
@@ -2337,7 +2341,7 @@ description: "A simple string field"
             FieldSchema::from_quill_value("simple_field".to_string(), &quill_value).unwrap();
 
         assert_eq!(schema.name, "simple_field");
-        assert_eq!(schema.r#type, Some(FieldType::String));
+        assert_eq!(schema.r#type, FieldType::String);
         assert_eq!(schema.title, Some("Simple Field".to_string()));
         assert_eq!(schema.description, "A simple string field");
     }
@@ -2381,12 +2385,12 @@ default = "Unknown"
         assert_eq!(card.fields.len(), 2);
 
         let name_field = card.fields.get("name").unwrap();
-        assert_eq!(name_field.r#type, Some(FieldType::String));
+        assert_eq!(name_field.r#type, FieldType::String);
         assert_eq!(name_field.title, Some("Endorser Name".to_string()));
         assert!(name_field.required);
 
         let org_field = card.fields.get("org").unwrap();
-        assert_eq!(org_field.r#type, Some(FieldType::String));
+        assert_eq!(org_field.r#type, FieldType::String);
         assert!(org_field.default.is_some());
         assert_eq!(
             org_field.default.as_ref().unwrap().as_str(),
@@ -2396,11 +2400,11 @@ default = "Unknown"
 
     #[test]
     fn test_field_schema_rejects_unknown_keys() {
-        // Test that unknown keys like "items" are rejected (strict mode)
+        // Test that unknown keys like "invalid_key" are rejected (strict mode)
         let yaml = r#"
 type: "string"
 description: "A string field"
-items:
+invalid_key:
   sub_field:
     type: "string"
     description: "Nested field"
@@ -2412,7 +2416,11 @@ items:
         // The parsing should fail due to deny_unknown_fields
         assert!(result.is_err());
         let err = result.unwrap_err();
-        assert!(err.contains("unknown field `items`"), "Error was: {}", err);
+        assert!(
+            err.contains("unknown field `invalid_key`"),
+            "Error was: {}",
+            err
+        );
     }
 
     #[test]
@@ -2441,7 +2449,7 @@ description = "Name field"
         // Check regular field
         assert!(config.document.fields.contains_key("regular"));
         let regular = config.document.fields.get("regular").unwrap();
-        assert_eq!(regular.r#type, Some(FieldType::String));
+        assert_eq!(regular.r#type, FieldType::String);
 
         // Check card is in config.cards (not config.document.fields)
         assert!(config.cards.contains_key("indorsements"));
@@ -2509,15 +2517,18 @@ backend = "typst"
 description = "Test ordering"
 
 [fields.first]
+type = "string"
 description = "First"
 
 [cards.second]
 description = "Second"
 
 [cards.second.fields.card_field]
+type = "string"
 description = "A card field"
 
 [fields.zero]
+type = "string"
 description = "Zero"
 "#;
 
