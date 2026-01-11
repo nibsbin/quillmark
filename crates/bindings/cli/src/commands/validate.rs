@@ -307,7 +307,7 @@ fn check_type_mismatch(field_type: &FieldType, value: &QuillValue) -> Option<Str
                 None
             }
         }
-        FieldType::Dict => {
+        FieldType::Object => {
             if !json_value.is_object() {
                 Some(format!(
                     "is {} (not an object)",

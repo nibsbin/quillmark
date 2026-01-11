@@ -88,7 +88,7 @@ pub enum FieldType {
     /// Array type
     Array,
     /// Dictionary/object type
-    Dict,
+    Object,
     /// Date type (formatted as string with date format)
     Date,
     /// DateTime type (formatted as string with date-time format)
@@ -103,7 +103,7 @@ impl FieldType {
             "number" => Some(FieldType::Number),
             "boolean" => Some(FieldType::Boolean),
             "array" => Some(FieldType::Array),
-            "dict" => Some(FieldType::Dict),
+            "dict" => Some(FieldType::Object),
             "date" => Some(FieldType::Date),
             "datetime" => Some(FieldType::DateTime),
             _ => None,
@@ -117,7 +117,7 @@ impl FieldType {
             FieldType::Number => "number",
             FieldType::Boolean => "boolean",
             FieldType::Array => "array",
-            FieldType::Dict => "dict",
+            FieldType::Object => "dict",
             FieldType::Date => "date",
             FieldType::DateTime => "datetime",
         }
