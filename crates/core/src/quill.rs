@@ -2621,7 +2621,7 @@ description = "Test nested elements"
 [fields.my_list]
 type = "array"
 description = "List of objects"
-items.type = "dictionary"
+items.type = "object"
 items.properties.sub_a.type = "string"
 items.properties.sub_a.description = "Subfield A"
 items.properties.sub_b.type = "number"
@@ -2642,7 +2642,7 @@ properties.child.description = "Child field"
         assert!(list_field.items.is_some());
 
         let items_schema = list_field.items.as_ref().unwrap();
-        assert_eq!(items_schema.r#type, FieldType::Object); // "dictionary" -> Object
+        assert_eq!(items_schema.r#type, FieldType::Object);
         assert!(items_schema.properties.is_some());
 
         let props = items_schema.properties.as_ref().unwrap();
