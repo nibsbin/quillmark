@@ -88,6 +88,7 @@ pub enum FieldType {
     /// Array type
     Array,
     /// Dictionary/object type
+    #[serde(alias = "dict", alias = "dictionary")]
     Object,
     /// Date type (formatted as string with date format)
     Date,
@@ -103,7 +104,7 @@ impl FieldType {
             "number" => Some(FieldType::Number),
             "boolean" => Some(FieldType::Boolean),
             "array" => Some(FieldType::Array),
-            "dict" => Some(FieldType::Object),
+            "dict" | "dictionary" | "object" => Some(FieldType::Object),
             "date" => Some(FieldType::Date),
             "datetime" => Some(FieldType::DateTime),
             _ => None,
@@ -165,8 +166,9 @@ struct FieldSchemaDef {
     #[serde(rename = "enum")]
     pub enum_values: Option<Vec<String>>,
     // Nested schema support
-    pub properties: Option<toml::value::Table>,
-    pub items: Option<toml::Value>,
+    // Nested schema support
+    pub properties: Option<serde_json::Map<String, serde_json::Value>>,
+    pub items: Option<serde_json::Value>,
 }
 
 impl FieldSchema {
@@ -202,8 +204,29 @@ impl FieldSchema {
             ui: def.ui,
             required: def.required,
             enum_values: def.enum_values,
-            properties: None, // TODO: Parse nested properties
-            items: None,      // TODO: Parse items schema
+            properties: if let Some(props) = def.properties {
+                let mut p = HashMap::new();
+                for (key, value) in props {
+                    p.insert(
+                        key.clone(),
+                        Box::new(FieldSchema::from_quill_value(
+                            key,
+                            &QuillValue::from_json(value),
+                        )?),
+                    );
+                }
+                Some(p)
+            } else {
+                None
+            },
+            items: if let Some(item_def) = def.items {
+                Some(Box::new(FieldSchema::from_quill_value(
+                    "items".to_string(),
+                    &QuillValue::from_json(item_def),
+                )?))
+            } else {
+                None
+            },
         })
     }
 }
@@ -2588,5 +2611,54 @@ description = "Defined second"
         // z_first should be 0, a_second should be 1
         assert_eq!(z_order, 0, "z_first should be 0 (defined first)");
         assert_eq!(a_order, 1, "a_second should be 1 (defined second)");
+    }
+    #[test]
+    fn test_nested_schema_parsing() {
+        let toml_content = r#"[Quill]
+name = "nested-test"
+backend = "typst"
+description = "Test nested elements"
+
+[fields.my_list]
+type = "array"
+description = "List of objects"
+items.type = "dictionary"
+items.properties.sub_a.type = "string"
+items.properties.sub_a.description = "Subfield A"
+items.properties.sub_b.type = "number"
+items.properties.sub_b.description = "Subfield B"
+
+[fields.my_obj]
+type = "object"
+description = "Single object"
+properties.child.type = "boolean"
+properties.child.description = "Child field"
+"#;
+
+        let config = QuillConfig::from_toml(toml_content).unwrap();
+
+        // Check array with items
+        let list_field = config.document.fields.get("my_list").unwrap();
+        assert_eq!(list_field.r#type, FieldType::Array);
+        assert!(list_field.items.is_some());
+
+        let items_schema = list_field.items.as_ref().unwrap();
+        assert_eq!(items_schema.r#type, FieldType::Object); // "dictionary" -> Object
+        assert!(items_schema.properties.is_some());
+
+        let props = items_schema.properties.as_ref().unwrap();
+        assert!(props.contains_key("sub_a"));
+        assert!(props.contains_key("sub_b"));
+        assert_eq!(props["sub_a"].r#type, FieldType::String);
+        assert_eq!(props["sub_b"].r#type, FieldType::Number);
+
+        // Check object with properties
+        let obj_field = config.document.fields.get("my_obj").unwrap();
+        assert_eq!(obj_field.r#type, FieldType::Object);
+        assert!(obj_field.properties.is_some());
+
+        let obj_props = obj_field.properties.as_ref().unwrap();
+        assert!(obj_props.contains_key("child"));
+        assert_eq!(obj_props["child"].r#type, FieldType::Boolean);
     }
 }
