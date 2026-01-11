@@ -88,7 +88,6 @@ pub enum FieldType {
     /// Array type
     Array,
     /// Dictionary/object type
-    #[serde(alias = "dict", alias = "dictionary")]
     Object,
     /// Date type (formatted as string with date format)
     Date,
