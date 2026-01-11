@@ -18,7 +18,7 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
         FieldType::Number => ("number", None),
         FieldType::Boolean => ("boolean", None),
         FieldType::Array => ("array", None),
-        FieldType::Dict => ("object", None),
+        FieldType::Object => ("object", None),
         FieldType::Date => ("string", Some("date")),
         FieldType::DateTime => ("string", Some("date-time")),
     };
