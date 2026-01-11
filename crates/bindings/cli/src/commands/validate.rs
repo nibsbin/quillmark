@@ -205,16 +205,14 @@ fn validate_field_schemas(
 ) {
     for (field_name, field_schema) in fields {
         // Validate default value type matches declared type
-        if let (Some(ref field_type), Some(ref default)) =
-            (&field_schema.r#type, &field_schema.default)
-        {
-            if let Some(type_mismatch) = check_type_mismatch(field_type, default) {
+        if let Some(ref default) = field_schema.default {
+            if let Some(type_mismatch) = check_type_mismatch(&field_schema.r#type, default) {
                 result.add_error(format!(
                     "{} '{}': default value {} but field type is '{}'",
                     context,
                     field_name,
                     type_mismatch,
-                    field_type.as_str()
+                    field_schema.r#type.as_str()
                 ));
             }
         }
@@ -269,7 +267,7 @@ fn check_type_mismatch(field_type: &FieldType, value: &QuillValue) -> Option<Str
     let json_value = value.as_json();
 
     match field_type {
-        FieldType::Str | FieldType::String => {
+        FieldType::String => {
             if !json_value.is_string() {
                 Some(format!(
                     "is {} (not a string)",
@@ -354,15 +352,13 @@ fn validate_defaults_against_schema(
     for (field_name, default_value) in defaults {
         // Look up field type in config
         if let Some(field_schema) = config.document.fields.get(field_name) {
-            if let Some(ref field_type) = field_schema.r#type {
-                if let Some(type_mismatch) = check_type_mismatch(field_type, default_value) {
-                    result.add_error(format!(
-                        "extracted default for '{}' {}, expected '{}'",
-                        field_name,
-                        type_mismatch,
-                        field_type.as_str()
-                    ));
-                }
+            if let Some(type_mismatch) = check_type_mismatch(&field_schema.r#type, default_value) {
+                result.add_error(format!(
+                    "extracted default for '{}' {}, expected '{}'",
+                    field_name,
+                    type_mismatch,
+                    field_schema.r#type.as_str()
+                ));
             }
         }
     }

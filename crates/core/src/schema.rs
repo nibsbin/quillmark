@@ -13,28 +13,26 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
     let mut property = Map::new();
 
     // Map field type to JSON Schema type
-    if let Some(ref field_type) = field_schema.r#type {
-        let (json_type, format) = match field_type {
-            FieldType::Str | FieldType::String => ("string", None),
-            FieldType::Number => ("number", None),
-            FieldType::Boolean => ("boolean", None),
-            FieldType::Array => ("array", None),
-            FieldType::Dict => ("object", None),
-            FieldType::Date => ("string", Some("date")),
-            FieldType::DateTime => ("string", Some("date-time")),
-        };
-        property.insert(
-            field_key::TYPE.to_string(),
-            Value::String(json_type.to_string()),
-        );
+    let (json_type, format) = match field_schema.r#type {
+        FieldType::String => ("string", None),
+        FieldType::Number => ("number", None),
+        FieldType::Boolean => ("boolean", None),
+        FieldType::Array => ("array", None),
+        FieldType::Dict => ("object", None),
+        FieldType::Date => ("string", Some("date")),
+        FieldType::DateTime => ("string", Some("date-time")),
+    };
+    property.insert(
+        field_key::TYPE.to_string(),
+        Value::String(json_type.to_string()),
+    );
 
-        // Add format for date types
-        if let Some(fmt) = format {
-            property.insert(
-                field_key::FORMAT.to_string(),
-                Value::String(fmt.to_string()),
-            );
-        }
+    // Add format for date types
+    if let Some(fmt) = format {
+        property.insert(
+            field_key::FORMAT.to_string(),
+            Value::String(fmt.to_string()),
+        );
     }
 
     // Add title if specified
@@ -89,6 +87,37 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
             .map(|s| Value::String(s.clone()))
             .collect();
         property.insert(field_key::ENUM.to_string(), Value::Array(enum_array));
+    }
+
+    // Add nested properties for dict types
+    if let Some(ref properties) = field_schema.properties {
+        let mut props_map = Map::new();
+        let mut required_fields = Vec::new();
+
+        for (prop_name, prop_schema) in properties {
+            props_map.insert(
+                prop_name.clone(),
+                Value::Object(build_field_property(prop_schema)),
+            );
+
+            if prop_schema.required {
+                required_fields.push(Value::String(prop_name.clone()));
+            }
+        }
+
+        property.insert("properties".to_string(), Value::Object(props_map));
+
+        if !required_fields.is_empty() {
+            property.insert("required".to_string(), Value::Array(required_fields));
+        }
+    }
+
+    // Add items schema for array types
+    if let Some(ref items) = field_schema.items {
+        property.insert(
+            "items".to_string(),
+            Value::Object(build_field_property(items)),
+        );
     }
 
     property
@@ -148,7 +177,6 @@ fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
 
     def.insert("properties".to_string(), Value::Object(properties));
     def.insert("required".to_string(), Value::Array(required));
-    def.insert("additionalProperties".to_string(), Value::Bool(true));
 
     def
 }
@@ -254,7 +282,6 @@ pub fn build_schema(
         "required".to_string(),
         Value::Array(required_fields.into_iter().map(Value::String).collect()),
     );
-    schema_map.insert("additionalProperties".to_string(), Value::Bool(true));
 
     // Add UI metadata if present
     // Removed legacy UI handling, now handled via document.ui logic above.
@@ -908,9 +935,11 @@ mod tests {
     #[test]
     fn test_build_schema_simple() {
         let mut fields = HashMap::new();
-        let mut schema =
-            FieldSchema::new("author".to_string(), "The name of the author".to_string());
-        schema.r#type = Some(FieldType::Str);
+        let schema = FieldSchema::new(
+            "author".to_string(),
+            FieldType::String,
+            "The name of the author".to_string(),
+        );
         fields.insert("author".to_string(), schema);
 
         let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
@@ -927,9 +956,9 @@ mod tests {
         let mut fields = HashMap::new();
         let mut schema = FieldSchema::new(
             "Field with default".to_string(),
+            FieldType::String,
             "A field with a default value".to_string(),
         );
-        schema.r#type = Some(FieldType::Str);
         schema.default = Some(QuillValue::from_json(json!("default value")));
         // When default is present, field should be optional regardless of required flag
         fields.insert("with_default".to_string(), schema);
@@ -941,16 +970,18 @@ mod tests {
     fn test_build_schema_date_types() {
         let mut fields = HashMap::new();
 
-        let mut date_schema =
-            FieldSchema::new("Date field".to_string(), "A field for dates".to_string());
-        date_schema.r#type = Some(FieldType::Date);
+        let date_schema = FieldSchema::new(
+            "Date field".to_string(),
+            FieldType::Date,
+            "A field for dates".to_string(),
+        );
         fields.insert("date_field".to_string(), date_schema);
 
-        let mut datetime_schema = FieldSchema::new(
+        let datetime_schema = FieldSchema::new(
             "DateTime field".to_string(),
+            FieldType::DateTime,
             "A field for date and time".to_string(),
         );
-        datetime_schema.r#type = Some(FieldType::DateTime);
         fields.insert("datetime_field".to_string(), datetime_schema);
 
         let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
@@ -1056,9 +1087,9 @@ mod tests {
         let mut fields = HashMap::new();
         let mut schema = FieldSchema::new(
             "memo_for".to_string(),
+            FieldType::Array,
             "List of recipient organization symbols".to_string(),
         );
-        schema.r#type = Some(FieldType::Array);
         schema.examples = Some(QuillValue::from_json(json!([[
             "ORG1/SYMBOL",
             "ORG2/SYMBOL"
@@ -1082,9 +1113,9 @@ mod tests {
         let mut fields = HashMap::new();
         let mut schema = FieldSchema::new(
             "ice_cream".to_string(),
+            FieldType::String,
             "favorite ice cream flavor".to_string(),
         );
-        schema.r#type = Some(FieldType::String);
         schema.default = Some(QuillValue::from_json(json!("taro")));
         fields.insert("ice_cream".to_string(), schema);
 
@@ -1096,8 +1127,8 @@ mod tests {
             .unwrap()
             .contains_key("default"));
 
-        let default_value = &json_schema["properties"]["ice_cream"]["default"];
-        assert_eq!(default_value, &json!("taro"));
+        // Verify the default value
+        assert_eq!(json_schema["properties"]["ice_cream"]["default"], "taro");
 
         // Verify that field with default is not required
         let required_fields = json_schema["required"].as_array().unwrap();
@@ -1589,8 +1620,11 @@ mod tests {
         let fields = HashMap::new();
         let mut cards = HashMap::new();
 
-        let mut name_schema = FieldSchema::new("name".to_string(), "Name field".to_string());
-        name_schema.r#type = Some(FieldType::String);
+        let name_schema = FieldSchema::new(
+            "name".to_string(),
+            FieldType::String,
+            "Name field".to_string(),
+        );
 
         let mut card_fields = HashMap::new();
         card_fields.insert("name".to_string(), name_schema);
@@ -1643,12 +1677,18 @@ mod tests {
         let fields = HashMap::new();
         let mut cards = HashMap::new();
 
-        let mut name_schema = FieldSchema::new("name".to_string(), "Endorser name".to_string());
-        name_schema.r#type = Some(FieldType::String);
+        let mut name_schema = FieldSchema::new(
+            "name".to_string(),
+            FieldType::String,
+            "Endorser name".to_string(),
+        );
         name_schema.required = true;
 
-        let mut org_schema = FieldSchema::new("org".to_string(), "Organization".to_string());
-        org_schema.r#type = Some(FieldType::String);
+        let mut org_schema = FieldSchema::new(
+            "org".to_string(),
+            FieldType::String,
+            "Organization".to_string(),
+        );
         org_schema.default = Some(QuillValue::from_json(json!("Unknown")));
 
         let mut card_fields = HashMap::new();
@@ -1697,9 +1737,6 @@ mod tests {
         assert!(required.contains(&json!("CARD")));
         assert!(required.contains(&json!("name")));
         assert!(!required.contains(&json!("org")));
-
-        // Verify additionalProperties is set
-        assert_eq!(card_def["additionalProperties"], true);
     }
 
     #[test]
@@ -1914,7 +1951,7 @@ mod tests {
         let mut card_fields = HashMap::new();
         card_fields.insert(
             "field1".to_string(),
-            FieldSchema::new("f1".to_string(), "desc".to_string()),
+            FieldSchema::new("f1".to_string(), FieldType::String, "desc".to_string()),
         );
         let mut card_schemas = HashMap::new();
         card_schemas.insert(
@@ -1960,12 +1997,18 @@ mod tests {
     #[test]
     fn test_coerce_document_cards() {
         let mut card_fields = HashMap::new();
-        let mut count_schema = FieldSchema::new("Count".to_string(), "A number".to_string());
-        count_schema.r#type = Some(FieldType::Number);
+        let count_schema = FieldSchema::new(
+            "Count".to_string(),
+            FieldType::Number,
+            "A number".to_string(),
+        );
         card_fields.insert("count".to_string(), count_schema);
 
-        let mut active_schema = FieldSchema::new("Active".to_string(), "A boolean".to_string());
-        active_schema.r#type = Some(FieldType::Boolean);
+        let active_schema = FieldSchema::new(
+            "Active".to_string(),
+            FieldType::Boolean,
+            "A boolean".to_string(),
+        );
         card_fields.insert("active".to_string(), active_schema);
 
         let mut card_schemas = HashMap::new();
@@ -2012,8 +2055,11 @@ mod tests {
     #[test]
     fn test_validate_document_card_fields() {
         let mut card_fields = HashMap::new();
-        let mut count_schema = FieldSchema::new("Count".to_string(), "A number".to_string());
-        count_schema.r#type = Some(FieldType::Number);
+        let count_schema = FieldSchema::new(
+            "Count".to_string(),
+            FieldType::Number,
+            "A number".to_string(),
+        );
         card_fields.insert("count".to_string(), count_schema);
 
         let mut card_schemas = HashMap::new();
@@ -2068,8 +2114,8 @@ mod tests {
         // Verify that card fields with ui.group produce x-ui in JSON schema
         use crate::quill::{CardSchema, UiFieldSchema};
 
-        let mut field_schema = FieldSchema::new("from".to_string(), "Sender".to_string());
-        field_schema.r#type = Some(FieldType::String);
+        let mut field_schema =
+            FieldSchema::new("from".to_string(), FieldType::String, "Sender".to_string());
         field_schema.ui = Some(UiFieldSchema {
             group: Some("Header".to_string()),
             order: Some(0),
@@ -2116,8 +2162,8 @@ mod tests {
         };
 
         // Test card level metadata_only
-        let mut field_schema = FieldSchema::new("name".to_string(), "Name".to_string());
-        field_schema.r#type = Some(FieldType::String);
+        let field_schema =
+            FieldSchema::new("name".to_string(), FieldType::String, "Name".to_string());
 
         let mut card_fields = HashMap::new();
         card_fields.insert("name".to_string(), field_schema);
