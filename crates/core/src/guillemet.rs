@@ -1,17 +1,20 @@
 //! # Guillemet Preprocessing
 //!
-//! This module provides preprocessing for converting double chevrons (`<<text>>`)
+//! This module provides functions for converting double chevrons (`<<text>>`)
 //! into French guillemets (`«text»`).
 //!
 //! ## Overview
 //!
-//! Guillemets are used in Quillmark as a lightweight syntax for marking raw/verbatim
-//! content that should be passed through to the backend without markdown processing.
+//! **Note:** These functions are available for explicit use but are NOT applied
+//! automatically during document normalization. Double chevrons pass through
+//! unchanged by default. Use these functions explicitly if you need guillemet
+//! conversion.
 //!
 //! ## Functions
 //!
 //! - [`preprocess_guillemets`] - Converts `<<text>>` to `«text»` in simple text
 //! - [`preprocess_markdown_guillemets`] - Same conversion but skips code blocks/spans
+//! - [`strip_chevrons`] - Strips chevrons, extracting inner content: `<<text>>` → `text`
 //!
 //! ## Examples
 //!

@@ -89,10 +89,10 @@ impl Workflow {
         // Validate document against schema
         self.validate_document(&parsed_coerced)?;
 
-        // Normalize document: strip bidi characters and process guillemets
+        // Normalize document: strip bidi characters and fix HTML comment fences
         // - Strips Unicode bidirectional formatting characters that interfere with markdown parsing
-        // - Converts <<text>> to «text» in body (guillemets)
-        // - Strips chevrons in other fields (<<text>> → text)
+        // - Fixes HTML comment fences (ensures text after --> is preserved)
+        // - Double chevrons (<<, >>) pass through unchanged
         let normalized = normalize_document(parsed_coerced);
 
         // Create appropriate plate based on whether template is provided

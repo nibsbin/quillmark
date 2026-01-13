@@ -10,14 +10,16 @@
 //! that interfere with markdown parsing. This module provides functions to:
 //!
 //! - Strip Unicode bidirectional formatting characters that break delimiter recognition
-//! - Orchestrate guillemet preprocessing (`<<text>>` → `«text»`)
+//! - Fix HTML comment fences to preserve trailing text
 //! - Apply all normalizations in the correct order
+//!
+//! Double chevrons (`<<` and `>>`) are passed through unchanged without conversion.
 //!
 //! ## Functions
 //!
 //! - [`strip_bidi_formatting`] - Remove Unicode bidi control characters
 //! - [`normalize_markdown`] - Apply all markdown-specific normalizations
-//! - [`normalize_fields`] - Normalize document fields (bidi + guillemets)
+//! - [`normalize_fields`] - Normalize document fields (bidi stripping)
 //!
 //! ## Why Normalize?
 //!
@@ -48,7 +50,6 @@
 //! ```
 
 use crate::error::MAX_NESTING_DEPTH;
-use crate::guillemet::{preprocess_markdown_guillemets, strip_chevrons};
 use crate::parse::BODY_FIELD;
 use crate::value::QuillValue;
 use std::collections::HashMap;
@@ -260,22 +261,24 @@ pub fn normalize_markdown(markdown: &str) -> String {
     fix_html_comment_fences(&cleaned)
 }
 
-/// Normalizes a string value by stripping bidi characters and optionally processing guillemets.
+/// Normalizes a string value by stripping bidi characters and fixing HTML comment fences.
 ///
-/// - For body content: applies `preprocess_markdown_guillemets` (converts `<<text>>` to `«text»`)
-///   and `fix_html_comment_fences` to preserve text after `-->`
-/// - For other fields: applies `strip_chevrons` (removes chevrons entirely)
+/// - For body content: applies `fix_html_comment_fences` to preserve text after `-->`
+/// - For other fields: strips bidi characters only
+///
+/// Double chevrons (`<<` and `>>`) are passed through untouched without conversion to
+/// guillemets. This preserves the original delimiter syntax in the output.
 fn normalize_string(s: &str, is_body: bool) -> String {
     // First strip bidi formatting characters
     let cleaned = strip_bidi_formatting(s);
 
     // Then apply content-specific normalization
     if is_body {
-        // Fix HTML comment fences first, then convert guillemets
-        let fixed = fix_html_comment_fences(&cleaned);
-        preprocess_markdown_guillemets(&fixed)
+        // Fix HTML comment fences (chevrons pass through unchanged)
+        fix_html_comment_fences(&cleaned)
     } else {
-        strip_chevrons(&cleaned)
+        // Non-body fields: just return cleaned string (chevrons pass through unchanged)
+        cleaned
     }
 }
 
@@ -339,14 +342,15 @@ fn normalize_json_value(value: serde_json::Value, is_body: bool) -> serde_json::
 ///
 /// This function orchestrates input normalization for document fields:
 /// 1. Strips Unicode bidirectional formatting characters from all string values
-/// 2. For the body field: converts `<<text>>` to `«text»` (guillemets)
-/// 3. For other fields: strips chevrons entirely (`<<text>>` → `text`)
+/// 2. For the body field: fixes HTML comment fences to preserve trailing text
+///
+/// Double chevrons (`<<` and `>>`) are passed through unchanged in all fields.
 ///
 /// # Processing Order
 ///
 /// The normalization order is important:
 /// 1. **Bidi stripping** - Must happen first so markdown delimiters are recognized
-/// 2. **Guillemet preprocessing** - Converts user syntax to internal markers
+/// 2. **HTML comment fence fixing** - Ensures text after `-->` is preserved
 ///
 /// # Examples
 ///
@@ -361,10 +365,10 @@ fn normalize_json_value(value: serde_json::Value, is_body: bool) -> serde_json::
 ///
 /// let result = normalize_fields(fields);
 ///
-/// // Title has chevrons stripped
-/// assert_eq!(result.get("title").unwrap().as_str().unwrap(), "hello");
+/// // Title has chevrons preserved (only bidi stripped)
+/// assert_eq!(result.get("title").unwrap().as_str().unwrap(), "<<hello>>");
 ///
-/// // Body has bidi chars stripped (guillemet would apply if there were any <<>>)
+/// // Body has bidi chars stripped, chevrons preserved
 /// assert_eq!(result.get("BODY").unwrap().as_str().unwrap(), "**bold** **more**");
 /// ```
 pub fn normalize_fields(fields: HashMap<String, QuillValue>) -> HashMap<String, QuillValue> {
@@ -414,9 +418,9 @@ pub fn normalize_field_name(name: &str) -> String {
 /// This function applies all normalizations in the correct order:
 /// 1. **Unicode NFC normalization** - Field names are normalized to NFC form
 /// 2. **Bidi stripping** - Invisible bidirectional control characters are removed
-/// 3. **HTML comment fence fixing** - Trailing text after `-->` is preserved
-/// 4. **Guillemet conversion** - `<<text>>` is converted to `«text»` in BODY fields
-/// 5. **Chevron stripping** - `<<text>>` is stripped to `text` in other fields
+/// 3. **HTML comment fence fixing** - Trailing text after `-->` is preserved (body only)
+///
+/// Double chevrons (`<<` and `>>`) are passed through unchanged without conversion.
 ///
 /// # When to Use
 ///
@@ -449,8 +453,8 @@ pub fn normalize_field_name(name: &str) -> String {
 /// let doc = ParsedDocument::new(fields);
 /// let normalized = normalize_document(doc);
 ///
-/// // Body now has guillemets converted
-/// assert_eq!(normalized.body().unwrap(), "«content»");
+/// // Body has chevrons preserved
+/// assert_eq!(normalized.body().unwrap(), "<<content>>");
 /// ```
 ///
 /// # Idempotency
@@ -694,7 +698,7 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_fields_body_guillemets() {
+    fn test_normalize_fields_body_chevrons_preserved() {
         let mut fields = HashMap::new();
         fields.insert(
             BODY_FIELD.to_string(),
@@ -702,11 +706,15 @@ mod tests {
         );
 
         let result = normalize_fields(fields);
-        assert_eq!(result.get(BODY_FIELD).unwrap().as_str().unwrap(), "«raw»");
+        // Chevrons are passed through unchanged
+        assert_eq!(
+            result.get(BODY_FIELD).unwrap().as_str().unwrap(),
+            "<<raw>>"
+        );
     }
 
     #[test]
-    fn test_normalize_fields_body_both() {
+    fn test_normalize_fields_body_chevrons_and_bidi() {
         let mut fields = HashMap::new();
         fields.insert(
             BODY_FIELD.to_string(),
@@ -714,15 +722,15 @@ mod tests {
         );
 
         let result = normalize_fields(fields);
-        // Bidi stripped first, then guillemets converted
+        // Bidi stripped, chevrons preserved
         assert_eq!(
             result.get(BODY_FIELD).unwrap().as_str().unwrap(),
-            "«raw» **bold**"
+            "<<raw>> **bold**"
         );
     }
 
     #[test]
-    fn test_normalize_fields_other_field_chevrons_stripped() {
+    fn test_normalize_fields_other_field_chevrons_preserved() {
         let mut fields = HashMap::new();
         fields.insert(
             "title".to_string(),
@@ -730,7 +738,8 @@ mod tests {
         );
 
         let result = normalize_fields(fields);
-        assert_eq!(result.get("title").unwrap().as_str().unwrap(), "hello");
+        // Chevrons are passed through unchanged
+        assert_eq!(result.get("title").unwrap().as_str().unwrap(), "<<hello>>");
     }
 
     #[test]
@@ -755,7 +764,8 @@ mod tests {
 
         let result = normalize_fields(fields);
         let items = result.get("items").unwrap().as_array().unwrap();
-        assert_eq!(items[0].as_str().unwrap(), "a");
+        // Chevrons are preserved, bidi stripped
+        assert_eq!(items[0].as_str().unwrap(), "<<a>>");
         assert_eq!(items[1].as_str().unwrap(), "b");
     }
 
@@ -773,11 +783,14 @@ mod tests {
         let result = normalize_fields(fields);
         let meta = result.get("meta").unwrap();
         let meta_obj = meta.as_object().unwrap();
-        // Nested "BODY" key should be recognized
-        assert_eq!(meta_obj.get("title").unwrap().as_str().unwrap(), "hello");
+        // Chevrons are preserved in all fields
+        assert_eq!(
+            meta_obj.get("title").unwrap().as_str().unwrap(),
+            "<<hello>>"
+        );
         assert_eq!(
             meta_obj.get(BODY_FIELD).unwrap().as_str().unwrap(),
-            "«content»"
+            "<<content>>"
         );
     }
 
@@ -852,14 +865,14 @@ mod tests {
         let doc = ParsedDocument::new(fields);
         let normalized = super::normalize_document(doc);
 
-        // Title has chevrons stripped
+        // Title has chevrons preserved (only bidi stripped)
         assert_eq!(
             normalized.get_field("title").unwrap().as_str().unwrap(),
-            "placeholder"
+            "<<placeholder>>"
         );
 
-        // Body has guillemets converted and bidi stripped
-        assert_eq!(normalized.body().unwrap(), "«content» **bold**");
+        // Body has bidi stripped, chevrons preserved
+        assert_eq!(normalized.body().unwrap(), "<<content>> **bold**");
     }
 
     #[test]
