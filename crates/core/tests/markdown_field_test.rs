@@ -1,5 +1,5 @@
 use quillmark_core::{
-    normalize::normalize_document_with_schema,
+    normalize::normalize_document,
     quill::{CardSchema, FieldSchema, FieldType},
     schema::build_schema,
     ParsedDocument, QuillValue,
@@ -117,8 +117,9 @@ fn test_markdown_field_normalization() {
 
     let doc = ParsedDocument::new(doc_fields);
 
-    // 3. Normalize with schema
-    let normalized = normalize_document_with_schema(doc, Some(&schema));
+    // 3. Normalize (schema no longer affects normalization)
+    let _ = schema; // Schema is built for the first test but not needed here
+    let normalized = normalize_document(doc);
     let norm_fields = normalized.fields();
 
     // 4. Verify results
