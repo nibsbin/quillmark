@@ -67,9 +67,6 @@ pub use value::QuillValue;
 
 pub mod schema;
 
-pub mod guillemet;
-pub use guillemet::{preprocess_guillemets, preprocess_markdown_guillemets};
-
 pub mod normalize;
 pub use normalize::{
     normalize_document, normalize_fields, normalize_markdown, strip_bidi_formatting,
