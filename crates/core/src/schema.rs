@@ -13,14 +13,15 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
     let mut property = Map::new();
 
     // Map field type to JSON Schema type
-    let (json_type, format) = match field_schema.r#type {
-        FieldType::String => ("string", None),
-        FieldType::Number => ("number", None),
-        FieldType::Boolean => ("boolean", None),
-        FieldType::Array => ("array", None),
-        FieldType::Object => ("object", None),
-        FieldType::Date => ("string", Some("date")),
-        FieldType::DateTime => ("string", Some("date-time")),
+    let (json_type, format, content_media_type) = match field_schema.r#type {
+        FieldType::String => ("string", None, None),
+        FieldType::Number => ("number", None, None),
+        FieldType::Boolean => ("boolean", None, None),
+        FieldType::Array => ("array", None, None),
+        FieldType::Object => ("object", None, None),
+        FieldType::Date => ("string", Some("date"), None),
+        FieldType::DateTime => ("string", Some("date-time"), None),
+        FieldType::Markdown => ("string", None, Some("text/markdown")),
     };
     property.insert(
         field_key::TYPE.to_string(),
@@ -32,6 +33,14 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
         property.insert(
             field_key::FORMAT.to_string(),
             Value::String(fmt.to_string()),
+        );
+    }
+
+    // Add contentMediaType for markdown types (signals LLMs and tools)
+    if let Some(media_type) = content_media_type {
+        property.insert(
+            "contentMediaType".to_string(),
+            Value::String(media_type.to_string()),
         );
     }
 

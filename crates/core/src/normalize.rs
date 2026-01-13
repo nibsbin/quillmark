@@ -368,6 +368,33 @@ fn normalize_json_value(value: serde_json::Value, is_body: bool) -> serde_json::
 /// assert_eq!(result.get("BODY").unwrap().as_str().unwrap(), "**bold** **more**");
 /// ```
 pub fn normalize_fields(fields: HashMap<String, QuillValue>) -> HashMap<String, QuillValue> {
+    normalize_fields_with_schema(fields, None)
+}
+
+/// Check if a field type in the schema indicates markdown content.
+///
+/// Returns true if the schema contains `contentMediaType: "text/markdown"` for this field.
+fn is_markdown_field(schema: Option<&crate::QuillValue>, field_name: &str) -> bool {
+    schema
+        .and_then(|s| s.as_json().get("properties"))
+        .and_then(|props| props.get(field_name))
+        .and_then(|field| field.get("contentMediaType"))
+        .and_then(|v| v.as_str())
+        .map(|s| s == "text/markdown")
+        .unwrap_or(false)
+}
+
+/// Normalizes document fields with optional schema for type-aware processing.
+///
+/// When a schema is provided:
+/// - Fields with `contentMediaType: "text/markdown"` are treated like body content
+///   (chevrons are converted to guillemets instead of stripped)
+///
+/// Without a schema, behaves identically to `normalize_fields`.
+pub fn normalize_fields_with_schema(
+    fields: HashMap<String, QuillValue>,
+    schema: Option<&crate::QuillValue>,
+) -> HashMap<String, QuillValue> {
     fields
         .into_iter()
         .map(|(key, value)| {
@@ -375,7 +402,10 @@ pub fn normalize_fields(fields: HashMap<String, QuillValue>) -> HashMap<String, 
             // This ensures café (composed) and café (decomposed) are treated as the same key
             let normalized_key = normalize_field_name(&key);
             let json = value.into_json();
-            let processed = normalize_json_value(json, normalized_key == BODY_FIELD);
+            // Treat as body if it's the BODY field OR if schema marks it as markdown
+            let treat_as_body =
+                normalized_key == BODY_FIELD || is_markdown_field(schema, &normalized_key);
+            let processed = normalize_json_value(json, treat_as_body);
             (normalized_key, QuillValue::from_json(processed))
         })
         .collect()
@@ -458,7 +488,20 @@ pub fn normalize_field_name(name: &str) -> String {
 /// This function is idempotent - calling it multiple times produces the same result.
 /// However, for performance reasons, avoid unnecessary repeated calls.
 pub fn normalize_document(doc: crate::parse::ParsedDocument) -> crate::parse::ParsedDocument {
-    let normalized_fields = normalize_fields(doc.fields().clone());
+    normalize_document_with_schema(doc, None)
+}
+
+/// Normalizes a parsed document with optional schema for type-aware processing.
+///
+/// When a schema is provided, fields with `contentMediaType: "text/markdown"` are treated
+/// like BODY content (chevrons are converted to guillemets instead of stripped).
+///
+/// This is useful when you have typed fields that contain markdown content.
+pub fn normalize_document_with_schema(
+    doc: crate::parse::ParsedDocument,
+    schema: Option<&crate::QuillValue>,
+) -> crate::parse::ParsedDocument {
+    let normalized_fields = normalize_fields_with_schema(doc.fields().clone(), schema);
     crate::parse::ParsedDocument::with_quill_tag(normalized_fields, doc.quill_tag().to_string())
 }
 

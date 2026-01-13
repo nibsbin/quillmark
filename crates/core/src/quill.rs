@@ -93,6 +93,8 @@ pub enum FieldType {
     Date,
     /// DateTime type (formatted as string with date-time format)
     DateTime,
+    /// Markdown type (string with markdown content, contentMediaType: text/markdown)
+    Markdown,
 }
 
 impl FieldType {
@@ -106,6 +108,7 @@ impl FieldType {
             "object" => Some(FieldType::Object),
             "date" => Some(FieldType::Date),
             "datetime" => Some(FieldType::DateTime),
+            "markdown" => Some(FieldType::Markdown),
             _ => None,
         }
     }
@@ -120,6 +123,7 @@ impl FieldType {
             FieldType::Object => "dict",
             FieldType::Date => "date",
             FieldType::DateTime => "datetime",
+            FieldType::Markdown => "markdown",
         }
     }
 }
