@@ -6,8 +6,8 @@
 
 use acroform::{AcroFormDocument, FieldValue};
 use quillmark_core::{
-    Artifact, Backend, Diagnostic, OutputFormat, Quill, RenderError, RenderOptions,
-    RenderResult, Severity,
+    Artifact, Backend, Diagnostic, OutputFormat, Quill, RenderError, RenderOptions, RenderResult,
+    Severity,
 };
 use std::collections::HashMap;
 

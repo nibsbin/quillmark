@@ -60,8 +60,8 @@ pub mod fuzz_utils {
 
 use convert::mark_to_typst;
 use quillmark_core::{
-    Artifact, Backend, Diagnostic, OutputFormat, Quill, QuillValue, RenderError,
-    RenderOptions, RenderResult, Severity,
+    Artifact, Backend, Diagnostic, OutputFormat, Quill, QuillValue, RenderError, RenderOptions,
+    RenderResult, Severity,
 };
 use std::collections::HashMap;
 
