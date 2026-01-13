@@ -240,7 +240,13 @@ fn validate_field_schemas(
         }
 
         // Warn about missing description
-        if field_schema.description.trim().is_empty() {
+        if field_schema
+            .description
+            .as_deref()
+            .unwrap_or("")
+            .trim()
+            .is_empty()
+        {
             result.add_warning(format!(
                 "{} '{}': missing or empty description",
                 context, field_name
@@ -251,7 +257,13 @@ fn validate_field_schemas(
 
 fn validate_card_schema(card_name: &str, card_schema: &CardSchema, result: &mut ValidationResult) {
     // Warn about missing description
-    if card_schema.description.trim().is_empty() {
+    if card_schema
+        .description
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .is_empty()
+    {
         result.add_warning(format!(
             "card '{}': missing or empty description",
             card_name
@@ -317,8 +329,8 @@ fn check_type_mismatch(field_type: &FieldType, value: &QuillValue) -> Option<Str
                 None
             }
         }
-        FieldType::Date | FieldType::DateTime => {
-            // Date/DateTime are stored as strings
+        FieldType::Date | FieldType::DateTime | FieldType::Markdown => {
+            // Date/DateTime/Markdown are stored as strings
             if !json_value.is_string() {
                 Some(format!(
                     "is {} (not a string)",
