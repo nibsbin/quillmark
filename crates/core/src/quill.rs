@@ -67,7 +67,7 @@ pub struct CardSchema {
     /// Short label for the card type
     pub title: Option<String>,
     /// Detailed description of this card type
-    pub description: String,
+    pub description: Option<String>,
     /// List of fields in the card
     pub fields: HashMap<String, FieldSchema>,
     /// UI layout hints
@@ -133,7 +133,7 @@ pub struct FieldSchema {
     /// Field type (required)
     pub r#type: FieldType,
     /// Detailed description of the field (used in JSON Schema description)
-    pub description: String,
+    pub description: Option<String>,
     /// Default value for the field
     pub default: Option<QuillValue>,
     /// Example values for the field
@@ -155,8 +155,7 @@ pub struct FieldSchema {
 struct FieldSchemaDef {
     pub title: Option<String>,
     pub r#type: FieldType,
-    #[serde(default)]
-    pub description: String,
+    pub description: Option<String>,
     pub default: Option<QuillValue>,
     pub examples: Option<QuillValue>,
     pub ui: Option<UiFieldSchema>,
@@ -172,7 +171,7 @@ struct FieldSchemaDef {
 
 impl FieldSchema {
     /// Create a new FieldSchema with default values
-    pub fn new(name: String, r#type: FieldType, description: String) -> Self {
+    pub fn new(name: String, r#type: FieldType, description: Option<String>) -> Self {
         Self {
             name,
             title: None,
@@ -576,8 +575,7 @@ pub struct QuillConfig {
 #[serde(deny_unknown_fields)]
 struct CardSchemaDef {
     pub title: Option<String>,
-    #[serde(default)]
-    pub description: String,
+    pub description: Option<String>,
     pub fields: Option<toml::value::Table>,
     pub ui: Option<UiContainerSchema>,
 }
@@ -823,7 +821,7 @@ impl QuillConfig {
         let document = CardSchema {
             name: name.clone(),
             title: Some(name),
-            description,
+            description: Some(description),
             fields,
             ui: ui_section,
         };
@@ -947,7 +945,7 @@ impl Quill {
         metadata.insert(
             "description".to_string(),
             QuillValue::from_json(serde_json::Value::String(
-                config.document.description.clone(),
+                config.document.description.clone().unwrap_or_default(),
             )),
         );
 
@@ -2003,9 +2001,9 @@ title = {type = "string", description = "title of document" }
         let schema1 = FieldSchema::new(
             "test_name".to_string(),
             FieldType::String,
-            "Test description".to_string(),
+            Some("Test description".to_string()),
         );
-        assert_eq!(schema1.description, "Test description");
+        assert_eq!(schema1.description, Some("Test description".to_string()));
         assert_eq!(schema1.r#type, FieldType::String);
         assert_eq!(schema1.examples, None);
         assert_eq!(schema1.default, None);
@@ -2021,7 +2019,7 @@ default: "Default value"
         let quill_value = QuillValue::from_yaml_str(yaml_str).unwrap();
         let schema2 = FieldSchema::from_quill_value("test_name".to_string(), &quill_value).unwrap();
         assert_eq!(schema2.name, "test_name");
-        assert_eq!(schema2.description, "Full field schema");
+        assert_eq!(schema2.description, Some("Full field schema".to_string()));
         assert_eq!(schema2.r#type, FieldType::String);
         assert_eq!(
             schema2
@@ -2091,7 +2089,10 @@ author = {type = "string", description = "Document author"}
         // Verify required fields
         assert_eq!(config.document.name, "test-config");
         assert_eq!(config.backend, "typst");
-        assert_eq!(config.document.description, "Test configuration parsing");
+        assert_eq!(
+            config.document.description,
+            Some("Test configuration parsing".to_string())
+        );
 
         // Verify optional fields
         assert_eq!(config.version, "1.0.0");
@@ -2108,7 +2109,7 @@ author = {type = "string", description = "Document author"}
         assert!(config.document.fields.contains_key("author"));
 
         let title_field = &config.document.fields["title"];
-        assert_eq!(title_field.description, "Document title");
+        assert_eq!(title_field.description, Some("Document title".to_string()));
         assert_eq!(title_field.r#type, FieldType::String);
     }
 
@@ -2334,7 +2335,10 @@ ui:
         let schema = FieldSchema::from_quill_value("test_field".to_string(), &quill_value).unwrap();
 
         assert_eq!(schema.title, Some("Field Title".to_string()));
-        assert_eq!(schema.description, "Detailed field description");
+        assert_eq!(
+            schema.description,
+            Some("Detailed field description".to_string())
+        );
 
         assert_eq!(
             schema
@@ -2365,7 +2369,10 @@ description: "A simple string field"
         assert_eq!(schema.name, "simple_field");
         assert_eq!(schema.r#type, FieldType::String);
         assert_eq!(schema.title, Some("Simple Field".to_string()));
-        assert_eq!(schema.description, "A simple string field");
+        assert_eq!(
+            schema.description,
+            Some("A simple string field".to_string())
+        );
     }
 
     #[test]
@@ -2401,7 +2408,7 @@ default = "Unknown"
 
         assert_eq!(card.name, "endorsements");
         assert_eq!(card.title, Some("Endorsements".to_string()));
-        assert_eq!(card.description, "Chain of endorsements");
+        assert_eq!(card.description, Some("Chain of endorsements".to_string()));
 
         // Verify card fields
         assert_eq!(card.fields.len(), 2);
@@ -2477,7 +2484,7 @@ description = "Name field"
         assert!(config.cards.contains_key("indorsements"));
         let card = config.cards.get("indorsements").unwrap();
         assert_eq!(card.title, Some("Routing Indorsements".to_string()));
-        assert_eq!(card.description, "Chain of endorsements");
+        assert_eq!(card.description, Some("Chain of endorsements".to_string()));
         assert!(card.fields.contains_key("name"));
     }
 
@@ -2496,7 +2503,7 @@ description = "My scope"
         let config = QuillConfig::from_toml(toml_content).unwrap();
         let card = config.cards.get("myscope").unwrap();
         assert_eq!(card.name, "myscope");
-        assert_eq!(card.description, "My scope");
+        assert_eq!(card.description, Some("My scope".to_string()));
         assert!(card.fields.is_empty());
     }
 
