@@ -158,11 +158,8 @@ fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
     // Add UI metadata if present
     if let Some(ref ui) = card.ui {
         let mut ui_obj = Map::new();
-        if let Some(metadata_only) = ui.metadata_only {
-            ui_obj.insert(
-                ui_key::METADATA_ONLY.to_string(),
-                Value::Bool(metadata_only),
-            );
+        if let Some(hide_body) = ui.hide_body {
+            ui_obj.insert(ui_key::HIDE_BODY.to_string(), Value::Bool(hide_body));
         }
         if !ui_obj.is_empty() {
             def.insert("x-ui".to_string(), Value::Object(ui_obj));
@@ -281,11 +278,8 @@ pub fn build_schema(
     // Add UI metadata if present
     if let Some(ref ui) = document.ui {
         let mut ui_obj = Map::new();
-        if let Some(metadata_only) = ui.metadata_only {
-            ui_obj.insert(
-                ui_key::METADATA_ONLY.to_string(),
-                Value::Bool(metadata_only),
-            );
+        if let Some(hide_body) = ui.hide_body {
+            ui_obj.insert(ui_key::HIDE_BODY.to_string(), Value::Bool(hide_body));
         }
         if !ui_obj.is_empty() {
             schema_map.insert("x-ui".to_string(), Value::Object(ui_obj));
@@ -2175,12 +2169,12 @@ mod tests {
     }
 
     #[test]
-    fn test_metadata_only_schema() {
+    fn test_hide_body_schema() {
         use crate::quill::{CardSchema, UiContainerSchema};
 
-        // Test document level metadata_only
+        // Test document level hide_body
         let ui_schema = UiContainerSchema {
-            metadata_only: Some(true),
+            hide_body: Some(true),
         };
 
         // Test card level metadata_only
@@ -2199,7 +2193,7 @@ mod tests {
             description: Some("Meta only card".to_string()),
             fields: card_fields,
             ui: Some(UiContainerSchema {
-                metadata_only: Some(true),
+                hide_body: Some(true),
             }),
         };
 
@@ -2219,11 +2213,11 @@ mod tests {
 
         // Verify document root x-ui
         assert!(json_schema.get("x-ui").is_some());
-        assert_eq!(json_schema["x-ui"]["metadata_only"], true);
+        assert_eq!(json_schema["x-ui"]["hide_body"], true);
 
         // Verify card x-ui
         let card_def = &json_schema["$defs"]["meta_card_card"];
         assert!(card_def.get("x-ui").is_some(), "Card should have x-ui");
-        assert_eq!(card_def["x-ui"]["metadata_only"], true);
+        assert_eq!(card_def["x-ui"]["hide_body"], true);
     }
 }
