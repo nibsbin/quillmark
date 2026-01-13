@@ -108,7 +108,7 @@ impl FieldType {
             "object" => Some(FieldType::Object),
             "date" => Some(FieldType::Date),
             "datetime" => Some(FieldType::DateTime),
-            "markdown" | "md" => Some(FieldType::Markdown),
+            "markdown" => Some(FieldType::Markdown),
             _ => None,
         }
     }
