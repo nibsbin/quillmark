@@ -6,7 +6,7 @@
 
 use acroform::{AcroFormDocument, FieldValue};
 use quillmark_core::{
-    Artifact, Backend, Diagnostic, OutputFormat, Plate, Quill, RenderError, RenderOptions,
+    Artifact, Backend, Diagnostic, OutputFormat, Quill, RenderError, RenderOptions,
     RenderResult, Severity,
 };
 use std::collections::HashMap;
@@ -31,10 +31,6 @@ impl Backend for AcroformBackend {
 
     fn allow_auto_plate(&self) -> bool {
         true
-    }
-
-    fn register_filters(&self, _plate: &mut Plate) {
-        // No filters registered - we use default auto plate
     }
 
     fn compile(

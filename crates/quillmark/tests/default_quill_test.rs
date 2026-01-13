@@ -200,8 +200,6 @@ fn test_second_backend_with_default_quill_does_not_override() {
             true
         }
 
-        fn register_filters(&self, _: &mut quillmark_core::Plate) {}
-
         fn compile(
             &self,
             _: &str,

@@ -9,8 +9,8 @@
 //! three main stages:
 //!
 //! 1. **Parsing** - YAML frontmatter and body extraction from Markdown
-//! 2. **Templating** - MiniJinja-based composition with backend-registered filters
-//! 3. **Backend Processing** - Compilation of composed content to final artifacts
+//! 2. **Field Transformation** - Backend-specific data transformations (e.g., markdown to Typst)
+//! 3. **Backend Processing** - Compilation of plate content with injected data to final artifacts
 //!
 //! ## Core Components
 //!
@@ -73,14 +73,13 @@
 //!
 //! ```no_run
 //! use quillmark::{Quillmark, Backend};
-//! # use quillmark_core::{OutputFormat, Plate, Quill, RenderOptions, Artifact, RenderError, RenderResult};
+//! # use quillmark_core::{OutputFormat, Quill, RenderOptions, Artifact, RenderError, RenderResult};
 //! # struct MyCustomBackend;
 //! # impl Backend for MyCustomBackend {
 //! #     fn id(&self) -> &'static str { "custom" }
 //! #     fn supported_formats(&self) -> &'static [OutputFormat] { &[OutputFormat::Txt] }
 //! #     fn plate_extension_types(&self) -> &'static [&'static str] { &[".txt"] }
 //! #     fn allow_auto_plate(&self) -> bool { true }
-//! #     fn register_filters(&self, _plate: &mut Plate) {}
 //! #     fn compile(&self, content: &str, _quill: &Quill, _opts: &RenderOptions) -> Result<RenderResult, RenderError> {
 //! #         let artifacts = vec![Artifact { bytes: content.as_bytes().to_vec(), output_format: OutputFormat::Txt }];
 //! #         Ok(RenderResult::new(artifacts, OutputFormat::Txt))
@@ -100,8 +99,8 @@
 
 // Re-export all core types for convenience
 pub use quillmark_core::{
-    Artifact, Backend, Diagnostic, Location, OutputFormat, ParseError, ParsedDocument, Plate,
-    Quill, RenderError, RenderResult, SerializableDiagnostic, Severity, TemplateError, BODY_FIELD,
+    Artifact, Backend, Diagnostic, Location, OutputFormat, ParseError, ParsedDocument,
+    Quill, RenderError, RenderResult, SerializableDiagnostic, Severity, BODY_FIELD,
 };
 
 // Declare orchestration module

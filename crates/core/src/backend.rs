@@ -15,7 +15,6 @@
 //!     fn supported_formats(&self) -> &'static [OutputFormat];
 //!     fn plate_extension_types(&self) -> &'static [&'static str];
 //!     fn allow_auto_plate(&self) -> bool;
-//!     fn register_filters(&self, plate: &mut Plate);
 //!     fn compile(
 //!         &self,
 //!         plated: &str,
@@ -41,24 +40,6 @@
 //!
 //! #### `allow_auto_plate()`
 //! Return whether automatic JSON plate generation is allowed.
-//!
-//! #### `register_filters()`
-//! Register backend-specific filters with the plate environment.
-//!
-//! ```no_run
-//! # use quillmark_core::{Plate, templating::filter_api::{State, Value, Kwargs, Error}};
-//! # fn string_filter(_: &State, v: Value, _: Kwargs) -> Result<Value, Error> { Ok(v) }
-//! # fn content_filter(_: &State, v: Value, _: Kwargs) -> Result<Value, Error> { Ok(v) }
-//! # fn lines_filter(_: &State, v: Value, _: Kwargs) -> Result<Value, Error> { Ok(v) }
-//! # struct MyBackend;
-//! # impl MyBackend {
-//! fn register_filters(&self, plate: &mut Plate) {
-//!     plate.register_filter("String", string_filter);
-//!     plate.register_filter("Content", content_filter);
-//!     plate.register_filter("Lines", lines_filter);
-//! }
-//! # }
-//! ```
 //!
 //! #### `compile()`
 //! Compile plated content into final artifacts.
@@ -101,7 +82,6 @@
 //! All backend implementations must be thread-safe.
 
 use crate::error::RenderError;
-use crate::templating::Plate;
 use crate::value::QuillValue;
 use crate::{OutputFormat, Quill, RenderOptions};
 use std::collections::HashMap;
@@ -120,9 +100,6 @@ pub trait Backend: Send + Sync {
 
     /// Whether this backend allows automatic JSON plate generation
     fn allow_auto_plate(&self) -> bool;
-
-    /// Register backend-specific filters with the plate environment
-    fn register_filters(&self, plate: &mut Plate);
 
     /// Compile the plated content into final artifacts
     fn compile(
