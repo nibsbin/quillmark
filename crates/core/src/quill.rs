@@ -38,8 +38,8 @@ pub mod ui_key {
     pub const GROUP: &str = "group";
     /// Display order within the UI
     pub const ORDER: &str = "order";
-    /// Whether the field or specific component is metadata-only (no body editor)
-    pub const METADATA_ONLY: &str = "metadata_only";
+    /// Whether the field or specific component is hide-body (no body editor)
+    pub const HIDE_BODY: &str = "hide_body";
 }
 
 /// UI-specific metadata for field rendering
@@ -56,7 +56,7 @@ pub struct UiFieldSchema {
 #[serde(deny_unknown_fields)]
 pub struct UiContainerSchema {
     /// Whether to hide the body editor for this element (metadata only)
-    pub metadata_only: Option<bool>,
+    pub hide_body: Option<bool>,
 }
 
 /// Schema definition for a card type (composable content blocks)
