@@ -320,9 +320,15 @@ where
                 output.push(' ');
                 end_newline = false;
             }
+            Event::Html(html) | Event::InlineHtml(html) => {
+                // Escape HTML as literal text instead of dropping it
+                let escaped = escape_markup(&html);
+                output.push_str(&escaped);
+                end_newline = escaped.ends_with('\n');
+            }
             _ => {
                 // Ignore other events not specified in requirements
-                // (html, math, footnotes, tables, etc.)
+                // (math, footnotes, tables, etc.)
             }
         }
     }
