@@ -707,10 +707,7 @@ mod tests {
 
         let result = normalize_fields(fields);
         // Chevrons are passed through unchanged
-        assert_eq!(
-            result.get(BODY_FIELD).unwrap().as_str().unwrap(),
-            "<<raw>>"
-        );
+        assert_eq!(result.get(BODY_FIELD).unwrap().as_str().unwrap(), "<<raw>>");
     }
 
     #[test]
