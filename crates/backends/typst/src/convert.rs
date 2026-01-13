@@ -322,7 +322,8 @@ where
             }
             _ => {
                 // Ignore other events not specified in requirements
-                // (html, math, footnotes, tables, etc.)
+                // (math, footnotes, tables, etc.)
+                // Note: HTML events are converted to Text in MarkdownFixer
             }
         }
     }
@@ -662,7 +663,13 @@ where
             // 2. Pull from inner
             let (event, range) = self.inner.next()?;
 
-            // 3. Handle setext heading suppression (ATX-only policy)
+            // 3. Convert HTML to Text (we don't support HTML, pass through as literal)
+            let (event, range) = match event {
+                Event::Html(html) | Event::InlineHtml(html) => (Event::Text(html), range),
+                other => (other, range),
+            };
+
+            // 4. Handle setext heading suppression (ATX-only policy)
             match &event {
                 Event::Start(Tag::Heading { .. }) => {
                     if self.is_setext_heading(&range) {

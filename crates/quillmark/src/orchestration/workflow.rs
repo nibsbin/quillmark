@@ -1,6 +1,6 @@
 use quillmark_core::{
-    normalize::normalize_document_with_schema, Backend, Diagnostic, OutputFormat, ParsedDocument,
-    Plate, Quill, RenderError, RenderOptions, RenderResult, Severity,
+    normalize::normalize_document, Backend, Diagnostic, OutputFormat, ParsedDocument, Plate, Quill,
+    RenderError, RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -89,16 +89,9 @@ impl Workflow {
         // Validate document against schema
         self.validate_document(&parsed_coerced)?;
 
-        // Normalize document: strip bidi characters and process guillemets
+        // Normalize document: strip bidi characters and fix HTML comment fences
         // - Strips Unicode bidirectional formatting characters that interfere with markdown parsing
-        // - Converts <<text>> to «text» in body and markdown-typed fields (guillemets)
-        // - Strips chevrons in other fields (<<text>> → text)
-        let schema_ref = if self.quill.schema.is_null() {
-            None
-        } else {
-            Some(&self.quill.schema)
-        };
-        let normalized = normalize_document_with_schema(parsed_coerced, schema_ref);
+        let normalized = normalize_document(parsed_coerced);
 
         // Create appropriate plate based on whether template is provided
         let mut plate = match &self.quill.plate {
