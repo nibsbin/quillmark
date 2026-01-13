@@ -41,10 +41,12 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
     }
 
     // Add description
-    property.insert(
-        field_key::DESCRIPTION.to_string(),
-        Value::String(field_schema.description.clone()),
-    );
+    if let Some(ref description) = field_schema.description {
+        property.insert(
+            field_key::DESCRIPTION.to_string(),
+            Value::String(description.clone()),
+        );
+    }
 
     // Add UI metadata as x-ui property if present
     if let Some(ref ui) = field_schema.ui {
@@ -135,11 +137,13 @@ fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
     }
 
     // Add description
-    if !card.description.is_empty() {
-        def.insert(
-            "description".to_string(),
-            Value::String(card.description.clone()),
-        );
+    if let Some(ref description) = card.description {
+        if !description.is_empty() {
+            def.insert(
+                "description".to_string(),
+                Value::String(description.clone()),
+            );
+        }
     }
 
     // Add UI metadata if present
@@ -256,11 +260,13 @@ pub fn build_schema(
     }
 
     // Add description
-    if !document.description.is_empty() {
-        schema_map.insert(
-            "description".to_string(),
-            Value::String(document.description.clone()),
-        );
+    if let Some(ref description) = document.description {
+        if !description.is_empty() {
+            schema_map.insert(
+                "description".to_string(),
+                Value::String(description.clone()),
+            );
+        }
     }
 
     // Add UI metadata if present
@@ -331,7 +337,7 @@ pub fn build_schema_from_fields(
     let document = CardSchema {
         name: "root".to_string(),
         title: None,
-        description: "".to_string(),
+        description: None,
         fields: field_schemas.clone(),
         ui: None,
     };
@@ -938,7 +944,7 @@ mod tests {
         let schema = FieldSchema::new(
             "author".to_string(),
             FieldType::String,
-            "The name of the author".to_string(),
+            Some("The name of the author".to_string()),
         );
         fields.insert("author".to_string(), schema);
 
@@ -957,7 +963,7 @@ mod tests {
         let mut schema = FieldSchema::new(
             "Field with default".to_string(),
             FieldType::String,
-            "A field with a default value".to_string(),
+            Some("A field with a default value".to_string()),
         );
         schema.default = Some(QuillValue::from_json(json!("default value")));
         // When default is present, field should be optional regardless of required flag
@@ -973,14 +979,14 @@ mod tests {
         let date_schema = FieldSchema::new(
             "Date field".to_string(),
             FieldType::Date,
-            "A field for dates".to_string(),
+            Some("A field for dates".to_string()),
         );
         fields.insert("date_field".to_string(), date_schema);
 
         let datetime_schema = FieldSchema::new(
             "DateTime field".to_string(),
             FieldType::DateTime,
-            "A field for date and time".to_string(),
+            Some("A field for date and time".to_string()),
         );
         fields.insert("datetime_field".to_string(), datetime_schema);
 
@@ -1088,7 +1094,7 @@ mod tests {
         let mut schema = FieldSchema::new(
             "memo_for".to_string(),
             FieldType::Array,
-            "List of recipient organization symbols".to_string(),
+            Some("List of recipient organization symbols".to_string()),
         );
         schema.examples = Some(QuillValue::from_json(json!([[
             "ORG1/SYMBOL",
@@ -1114,7 +1120,7 @@ mod tests {
         let mut schema = FieldSchema::new(
             "ice_cream".to_string(),
             FieldType::String,
-            "favorite ice cream flavor".to_string(),
+            Some("favorite ice cream flavor".to_string()),
         );
         schema.default = Some(QuillValue::from_json(json!("taro")));
         fields.insert("ice_cream".to_string(), schema);
@@ -1623,7 +1629,7 @@ mod tests {
         let name_schema = FieldSchema::new(
             "name".to_string(),
             FieldType::String,
-            "Name field".to_string(),
+            Some("Name field".to_string()),
         );
 
         let mut card_fields = HashMap::new();
@@ -1632,7 +1638,7 @@ mod tests {
         let card = CardSchema {
             name: "endorsements".to_string(),
             title: Some("Endorsements".to_string()),
-            description: "Chain of endorsements".to_string(),
+            description: Some("Chain of endorsements".to_string()),
             fields: card_fields,
             ui: None,
         };
@@ -1641,7 +1647,7 @@ mod tests {
         let document = CardSchema {
             name: "root".to_string(),
             title: None,
-            description: "".to_string(),
+            description: None,
             fields,
             ui: None,
         };
@@ -1680,14 +1686,14 @@ mod tests {
         let mut name_schema = FieldSchema::new(
             "name".to_string(),
             FieldType::String,
-            "Endorser name".to_string(),
+            Some("Endorser name".to_string()),
         );
         name_schema.required = true;
 
         let mut org_schema = FieldSchema::new(
             "org".to_string(),
             FieldType::String,
-            "Organization".to_string(),
+            Some("Organization".to_string()),
         );
         org_schema.default = Some(QuillValue::from_json(json!("Unknown")));
 
@@ -1698,7 +1704,7 @@ mod tests {
         let card = CardSchema {
             name: "endorsements".to_string(),
             title: Some("Endorsements".to_string()),
-            description: "Chain of endorsements".to_string(),
+            description: Some("Chain of endorsements".to_string()),
             fields: card_fields,
             ui: None,
         };
@@ -1707,7 +1713,7 @@ mod tests {
         let document = CardSchema {
             name: "root".to_string(),
             title: None,
-            description: "".to_string(),
+            description: None,
             fields,
             ui: None,
         };
@@ -1951,7 +1957,11 @@ mod tests {
         let mut card_fields = HashMap::new();
         card_fields.insert(
             "field1".to_string(),
-            FieldSchema::new("f1".to_string(), FieldType::String, "desc".to_string()),
+            FieldSchema::new(
+                "f1".to_string(),
+                FieldType::String,
+                Some("desc".to_string()),
+            ),
         );
         let mut card_schemas = HashMap::new();
         card_schemas.insert(
@@ -1959,7 +1969,7 @@ mod tests {
             CardSchema {
                 name: "valid_card".to_string(),
                 title: None,
-                description: "".to_string(),
+                description: None,
                 fields: card_fields,
                 ui: None,
             },
@@ -1968,7 +1978,7 @@ mod tests {
         let document = CardSchema {
             name: "root".to_string(),
             title: None,
-            description: "".to_string(),
+            description: None,
             fields: HashMap::new(),
             ui: None,
         };
@@ -2000,14 +2010,14 @@ mod tests {
         let count_schema = FieldSchema::new(
             "Count".to_string(),
             FieldType::Number,
-            "A number".to_string(),
+            Some("A number".to_string()),
         );
         card_fields.insert("count".to_string(), count_schema);
 
         let active_schema = FieldSchema::new(
             "Active".to_string(),
             FieldType::Boolean,
-            "A boolean".to_string(),
+            Some("A boolean".to_string()),
         );
         card_fields.insert("active".to_string(), active_schema);
 
@@ -2017,7 +2027,7 @@ mod tests {
             CardSchema {
                 name: "test_card".to_string(),
                 title: None,
-                description: "Test card".to_string(),
+                description: Some("Test card".to_string()),
                 fields: card_fields,
                 ui: None,
             },
@@ -2026,7 +2036,7 @@ mod tests {
         let document = CardSchema {
             name: "root".to_string(),
             title: None,
-            description: "".to_string(),
+            description: None,
             fields: HashMap::new(),
             ui: None,
         };
@@ -2058,7 +2068,7 @@ mod tests {
         let count_schema = FieldSchema::new(
             "Count".to_string(),
             FieldType::Number,
-            "A number".to_string(),
+            Some("A number".to_string()),
         );
         card_fields.insert("count".to_string(), count_schema);
 
@@ -2068,7 +2078,7 @@ mod tests {
             CardSchema {
                 name: "test_card".to_string(),
                 title: None,
-                description: "Test card".to_string(),
+                description: Some("Test card".to_string()),
                 fields: card_fields,
                 ui: None,
             },
@@ -2077,7 +2087,7 @@ mod tests {
         let document = CardSchema {
             name: "root".to_string(),
             title: None,
-            description: "".to_string(),
+            description: None,
             fields: HashMap::new(),
             ui: None,
         };
@@ -2114,8 +2124,11 @@ mod tests {
         // Verify that card fields with ui.group produce x-ui in JSON schema
         use crate::quill::{CardSchema, UiFieldSchema};
 
-        let mut field_schema =
-            FieldSchema::new("from".to_string(), FieldType::String, "Sender".to_string());
+        let mut field_schema = FieldSchema::new(
+            "from".to_string(),
+            FieldType::String,
+            Some("Sender".to_string()),
+        );
         field_schema.ui = Some(UiFieldSchema {
             group: Some("Header".to_string()),
             order: Some(0),
@@ -2127,7 +2140,7 @@ mod tests {
         let card = CardSchema {
             name: "indorsement".to_string(),
             title: Some("Indorsement".to_string()),
-            description: "An indorsement".to_string(),
+            description: Some("An indorsement".to_string()),
             fields: card_fields,
             ui: None,
         };
@@ -2139,7 +2152,7 @@ mod tests {
         let document = CardSchema {
             name: "root".to_string(),
             title: None,
-            description: "".to_string(),
+            description: None,
             fields: HashMap::new(),
             ui: None,
         };
@@ -2162,8 +2175,11 @@ mod tests {
         };
 
         // Test card level metadata_only
-        let field_schema =
-            FieldSchema::new("name".to_string(), FieldType::String, "Name".to_string());
+        let field_schema = FieldSchema::new(
+            "name".to_string(),
+            FieldType::String,
+            Some("Name".to_string()),
+        );
 
         let mut card_fields = HashMap::new();
         card_fields.insert("name".to_string(), field_schema);
@@ -2171,7 +2187,7 @@ mod tests {
         let card = CardSchema {
             name: "meta_card".to_string(),
             title: None,
-            description: "Meta only card".to_string(),
+            description: Some("Meta only card".to_string()),
             fields: card_fields,
             ui: Some(UiContainerSchema {
                 metadata_only: Some(true),
@@ -2184,7 +2200,7 @@ mod tests {
         let document = CardSchema {
             name: "root".to_string(),
             title: None,
-            description: "".to_string(),
+            description: None,
             fields: HashMap::new(),
             ui: Some(ui_schema),
         };
