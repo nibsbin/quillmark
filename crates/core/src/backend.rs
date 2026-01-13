@@ -102,7 +102,9 @@
 
 use crate::error::RenderError;
 use crate::templating::Plate;
+use crate::value::QuillValue;
 use crate::{OutputFormat, Quill, RenderOptions};
+use std::collections::HashMap;
 
 /// Backend trait for rendering different output formats
 pub trait Backend: Send + Sync {
@@ -129,6 +131,31 @@ pub trait Backend: Send + Sync {
         quill: &Quill,
         opts: &RenderOptions,
     ) -> Result<crate::RenderResult, RenderError>;
+
+    /// Compile with JSON data injection.
+    ///
+    /// This method allows backends to inject document data as a virtual package.
+    /// The Typst backend uses this to create a `@local/quillmark-helper:0.1.0`
+    /// package that plates can import.
+    ///
+    /// The default implementation ignores the json_data and calls `compile()`.
+    ///
+    /// # Arguments
+    ///
+    /// * `plated` - The plated content (plate file after template composition)
+    /// * `quill` - The quill template
+    /// * `opts` - Render options
+    /// * `json_data` - JSON string containing transformed document data
+    fn compile_with_data(
+        &self,
+        plated: &str,
+        quill: &Quill,
+        opts: &RenderOptions,
+        _json_data: &str,
+    ) -> Result<crate::RenderResult, RenderError> {
+        // Default: ignore json_data and use standard compile
+        self.compile(plated, quill, opts)
+    }
 
     /// Provide an embedded default Quill for this backend.
     ///
@@ -162,5 +189,48 @@ pub trait Backend: Send + Sync {
     /// ```
     fn default_quill(&self) -> Option<Quill> {
         None
+    }
+
+    /// Transform field values according to backend-specific rules.
+    ///
+    /// This method is called before JSON serialization to allow backends
+    /// to transform field values. For example, the Typst backend converts
+    /// markdown fields to Typst markup based on schema type annotations.
+    ///
+    /// The default implementation returns fields unchanged.
+    ///
+    /// # Arguments
+    ///
+    /// * `fields` - The normalized document fields
+    /// * `schema` - The Quill schema (JSON Schema) for field type information
+    ///
+    /// # Returns
+    ///
+    /// Transformed fields ready for JSON serialization
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use quillmark_core::{QuillValue, Backend};
+    /// # use std::collections::HashMap;
+    /// # struct MyBackend;
+    /// # impl MyBackend {
+    /// fn transform_fields(
+    ///     &self,
+    ///     fields: &HashMap<String, QuillValue>,
+    ///     schema: &QuillValue,
+    /// ) -> HashMap<String, QuillValue> {
+    ///     // Transform markdown fields to backend-specific format
+    ///     fields.clone()
+    /// }
+    /// # }
+    /// ```
+    fn transform_fields(
+        &self,
+        fields: &HashMap<String, QuillValue>,
+        _schema: &QuillValue,
+    ) -> HashMap<String, QuillValue> {
+        // Default: return fields unchanged
+        fields.clone()
     }
 }

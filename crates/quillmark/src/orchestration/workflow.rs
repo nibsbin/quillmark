@@ -33,11 +33,20 @@ impl Workflow {
     ) -> Result<RenderResult, RenderError> {
         let plated_output = self.process_plate(parsed)?;
 
+        // Transform fields for JSON injection (backend-specific transformations)
+        let normalized = normalize_document(parsed.with_coercion(&self.quill.schema));
+        let transformed_fields =
+            self.backend
+                .transform_fields(normalized.fields(), &self.quill.schema);
+
+        // Serialize transformed fields to JSON for injection
+        let json_data = Self::fields_to_json(&transformed_fields)?;
+
         // Prepare quill with dynamic assets
         let prepared_quill = self.prepare_quill_with_assets();
 
-        // Pass prepared quill to backend
-        self.render_plate_with_quill(&plated_output, format, &prepared_quill)
+        // Pass prepared quill and JSON data to backend
+        self.render_plate_with_quill_and_data(&plated_output, format, &prepared_quill, &json_data)
     }
 
     /// Render pre-processed plate content, skipping parsing and template composition.
@@ -75,6 +84,52 @@ impl Workflow {
         };
 
         self.backend.compile(content, quill, &render_opts)
+    }
+
+    /// Internal method to render content with a specific quill and JSON data
+    fn render_plate_with_quill_and_data(
+        &self,
+        content: &str,
+        format: Option<OutputFormat>,
+        quill: &Quill,
+        json_data: &str,
+    ) -> Result<RenderResult, RenderError> {
+        let format = if format.is_some() {
+            format
+        } else {
+            // Default to first supported format if none specified
+            let supported = self.backend.supported_formats();
+            if !supported.is_empty() {
+                Some(supported[0])
+            } else {
+                None
+            }
+        };
+
+        let render_opts = RenderOptions {
+            output_format: format,
+        };
+
+        self.backend
+            .compile_with_data(content, quill, &render_opts, json_data)
+    }
+
+    /// Convert fields to JSON string for injection
+    fn fields_to_json(
+        fields: &HashMap<String, quillmark_core::QuillValue>,
+    ) -> Result<String, RenderError> {
+        let mut json_map = serde_json::Map::new();
+        for (key, value) in fields {
+            json_map.insert(key.clone(), value.as_json().clone());
+        }
+        serde_json::to_string(&serde_json::Value::Object(json_map)).map_err(|e| {
+            RenderError::TemplateFailed {
+                diag: Box::new(
+                    Diagnostic::new(Severity::Error, format!("Failed to serialize fields: {}", e))
+                        .with_code("workflow::json_serialize".to_string()),
+                ),
+            }
+        })
     }
 
     /// Process a parsed document through the plate template without compilation

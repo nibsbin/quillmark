@@ -108,3 +108,73 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
         }
     }
 }
+
+/// Compiles a Typst document to PDF format with JSON data injection.
+///
+/// This function creates a `@local/quillmark-helper:0.1.0` package containing
+/// the JSON data, which can be imported by the plate file.
+pub fn compile_to_pdf_with_data(
+    quill: &Quill,
+    plated_content: &str,
+    json_data: &str,
+) -> Result<Vec<u8>, RenderError> {
+    let world = QuillWorld::new_with_data(quill, plated_content, json_data).map_err(|e| {
+        RenderError::EngineCreation {
+            diag: Box::new(
+                Diagnostic::new(
+                    Severity::Error,
+                    format!("Failed to create Typst compilation environment: {}", e),
+                )
+                .with_code("typst::world_creation".to_string())
+                .with_source(e),
+            ),
+        }
+    })?;
+
+    let document = compile_document(&world)?;
+
+    let pdf = typst_pdf::pdf(&document, &PdfOptions::default()).map_err(|e| {
+        RenderError::CompilationFailed {
+            diags: vec![Diagnostic::new(
+                Severity::Error,
+                format!("PDF generation failed: {:?}", e),
+            )
+            .with_code("typst::pdf_generation".to_string())],
+        }
+    })?;
+
+    Ok(pdf)
+}
+
+/// Compiles a Typst document to SVG format with JSON data injection.
+///
+/// This function creates a `@local/quillmark-helper:0.1.0` package containing
+/// the JSON data, which can be imported by the plate file.
+pub fn compile_to_svg_with_data(
+    quill: &Quill,
+    plated_content: &str,
+    json_data: &str,
+) -> Result<Vec<Vec<u8>>, RenderError> {
+    let world = QuillWorld::new_with_data(quill, plated_content, json_data).map_err(|e| {
+        RenderError::EngineCreation {
+            diag: Box::new(
+                Diagnostic::new(
+                    Severity::Error,
+                    format!("Failed to create Typst compilation environment: {}", e),
+                )
+                .with_code("typst::world_creation".to_string())
+                .with_source(e),
+            ),
+        }
+    })?;
+
+    let document = compile_document(&world)?;
+
+    let mut pages = Vec::new();
+    for page in &document.pages {
+        let svg = typst_svg::svg(page);
+        pages.push(svg.into_bytes());
+    }
+
+    Ok(pages)
+}
