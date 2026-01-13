@@ -35,9 +35,9 @@ impl Workflow {
 
         // Transform fields for JSON injection (backend-specific transformations)
         let normalized = normalize_document(parsed.with_coercion(&self.quill.schema));
-        let transformed_fields =
-            self.backend
-                .transform_fields(normalized.fields(), &self.quill.schema);
+        let transformed_fields = self
+            .backend
+            .transform_fields(normalized.fields(), &self.quill.schema);
 
         // Serialize transformed fields to JSON for injection
         let json_data = Self::fields_to_json(&transformed_fields)?;
@@ -125,8 +125,11 @@ impl Workflow {
         serde_json::to_string(&serde_json::Value::Object(json_map)).map_err(|e| {
             RenderError::TemplateFailed {
                 diag: Box::new(
-                    Diagnostic::new(Severity::Error, format!("Failed to serialize fields: {}", e))
-                        .with_code("workflow::json_serialize".to_string()),
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!("Failed to serialize fields: {}", e),
+                    )
+                    .with_code("workflow::json_serialize".to_string()),
                 ),
             }
         })
