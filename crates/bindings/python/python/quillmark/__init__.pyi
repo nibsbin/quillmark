@@ -103,8 +103,7 @@ class Workflow:
     
 
     
-    def process_plate(self, parsed: ParsedDocument) -> str:
-        """Process parsed document through plate template."""
+
     
     @property
     def backend_id(self) -> str:

@@ -50,7 +50,7 @@ impl Workflow {
         let json_data = Self::fields_to_json(&fields_with_defaults);
 
         // Get plate content directly (no MiniJinja composition)
-        let plate_content = self.get_plate_content()?;
+        let plate_content = self.get_plate_content()?.unwrap_or_default();
 
         // Prepare quill with dynamic assets
         let prepared_quill = self.prepare_quill_with_assets();
@@ -128,19 +128,11 @@ impl Workflow {
     /// Get the plate content directly from the quill
     ///
     /// Returns the plate file content as-is, without any MiniJinja processing.
-    fn get_plate_content(&self) -> Result<String, RenderError> {
+    /// Returns None if no plate file exists (valid for pure-binary backends).
+    fn get_plate_content(&self) -> Result<Option<String>, RenderError> {
         match &self.quill.plate {
-            Some(s) if !s.is_empty() => Ok(s.clone()),
-            _ => Err(RenderError::TemplateFailed {
-                diag: Box::new(
-                    Diagnostic::new(
-                        Severity::Error,
-                        "No plate file found in quill. Plate files are required for direct JSON data delivery.".to_string(),
-                    )
-                    .with_code("workflow::no_plate".to_string())
-                    .with_hint("Add a plate.typ file to your quill directory".to_string()),
-                ),
-            }),
+            Some(s) if !s.is_empty() => Ok(Some(s.clone())),
+            _ => Ok(None),
         }
     }
 

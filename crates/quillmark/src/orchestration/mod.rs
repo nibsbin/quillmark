@@ -92,7 +92,6 @@
 //! The workflow supports rendering at three levels:
 //!
 //! 1. **Full render** ([`Workflow::render()`]) - Compose with template → Compile to artifacts (parsing done separately)
-//! 2. **Plate only** ([`Workflow::process_plate()`]) - Compose from parsed document, return template output
 //!
 //! ## Examples
 //!
