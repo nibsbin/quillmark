@@ -6,4 +6,4 @@
 #line(length: 100%)
 
 // Render body content
-#eval-markup(data.at("body", default: ""))
+#eval-markup(data.at("BODY", default: ""))

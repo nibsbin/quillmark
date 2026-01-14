@@ -215,6 +215,17 @@ pub fn build_schema(
         }
     }
 
+    // Implicitly add BODY field if not present
+    if !properties.contains_key("BODY") {
+        let mut body_property = Map::new();
+        body_property.insert("type".to_string(), Value::String("string".to_string()));
+        body_property.insert(
+            "contentMediaType".to_string(),
+            Value::String("text/markdown".to_string()),
+        );
+        properties.insert("BODY".to_string(), Value::Object(body_property));
+    }
+
     // Build card definitions and CARDS array
     if !definitions.is_empty() {
         let mut one_of = Vec::new();

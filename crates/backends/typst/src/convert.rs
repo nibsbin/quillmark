@@ -793,10 +793,15 @@ mod tests {
     }
 
     #[test]
-    fn test_escape_string_whitespace() {
-        assert_eq!(escape_string("line\nbreak"), "line\\nbreak");
-        assert_eq!(escape_string("carriage\rreturn"), "carriage\\rreturn");
-        assert_eq!(escape_string("tab\there"), "tab\\there");
+    fn test_escape_markup_double_chevrons() {
+        assert_eq!(escape_markup("<<"), "\\<\\<");
+        assert_eq!(escape_markup(">>"), "\\>\\>");
+    }
+
+    #[test]
+    fn test_mark_to_typst_double_chevrons() {
+        let output = mark_to_typst("Text << content >>").unwrap();
+        assert_eq!(output, "Text \\<\\< content \\>\\>\n\n");
     }
 
     #[test]

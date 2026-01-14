@@ -412,4 +412,25 @@ mod tests {
         let body = result.get("BODY").unwrap().as_str().unwrap();
         assert!(body.contains("#emph[italic]"));
     }
+
+    #[test]
+    fn test_default_quill_schema_has_body() {
+        let backend = TypstBackend;
+        let quill = backend
+            .default_quill()
+            .expect("Failed to load default quill");
+
+        // Inspect the schema derived from Quill.toml
+        let schema_json = quill.schema.as_json();
+        let properties = schema_json
+            .get("properties")
+            .expect("Schema missing properties");
+        let body_schema = properties.get("BODY").expect("Schema missing BODY field");
+
+        assert_eq!(
+            body_schema.get("contentMediaType").and_then(|v| v.as_str()),
+            Some("text/markdown"),
+            "BODY field should be marked as text/markdown"
+        );
+    }
 }
