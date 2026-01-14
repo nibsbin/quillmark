@@ -34,7 +34,7 @@ impl Backend for AcroformBackend {
         _plate_content: &str,
         quill: &Quill,
         opts: &RenderOptions,
-        json_data: &str,
+        json_data: &serde_json::Value,
     ) -> Result<RenderResult, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
 
@@ -50,14 +50,7 @@ impl Backend for AcroformBackend {
                 ),
             });
         }
-        let mut context: serde_json::Value =
-            serde_json::from_str(json_data).map_err(|e| RenderError::InvalidFrontmatter {
-                diag: Box::new(
-                    Diagnostic::new(Severity::Error, format!("Failed to parse JSON data: {}", e))
-                        .with_code("acroform::json_parse".to_string())
-                        .with_source(Box::new(e)),
-                ),
-            })?;
+        let mut context: serde_json::Value = json_data.clone();
 
         // Replace all null values with empty strings
         fn replace_nulls_with_empty(value: &mut serde_json::Value) {

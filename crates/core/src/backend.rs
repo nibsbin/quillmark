@@ -105,13 +105,13 @@ pub trait Backend: Send + Sync {
     /// * `plate_content` - The plate file content (e.g., Typst source)
     /// * `quill` - The quill template containing assets and configuration
     /// * `opts` - Render options including output format
-    /// * `json_data` - JSON string containing the document data
+    /// * `json_data` - JSON value containing the document data
     fn compile(
         &self,
         plate_content: &str,
         quill: &Quill,
         opts: &RenderOptions,
-        json_data: &str,
+        json_data: &serde_json::Value,
     ) -> Result<crate::RenderResult, RenderError>;
 
     /// Provide an embedded default Quill for this backend.

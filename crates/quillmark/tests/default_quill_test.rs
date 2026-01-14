@@ -201,7 +201,7 @@ fn test_second_backend_with_default_quill_does_not_override() {
             _: &str,
             _: &quillmark_core::Quill,
             _: &quillmark_core::RenderOptions,
-            _: &str,
+            _: &serde_json::Value,
         ) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
             Ok(quillmark_core::RenderResult::new(vec![], OutputFormat::Txt))
         }

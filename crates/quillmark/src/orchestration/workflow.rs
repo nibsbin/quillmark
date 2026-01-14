@@ -47,7 +47,7 @@ impl Workflow {
         let fields_with_defaults = self.apply_schema_defaults(&transformed_fields);
 
         // Serialize transformed fields to JSON for injection
-        let json_data = Self::fields_to_json(&fields_with_defaults)?;
+        let json_data = Self::fields_to_json(&fields_with_defaults);
 
         // Get plate content directly (no MiniJinja composition)
         let plate_content = self.get_plate_content()?;
@@ -93,7 +93,8 @@ impl Workflow {
             output_format: format,
         };
 
-        self.backend.compile(content, quill, &render_opts, "{}")
+        self.backend
+            .compile(content, quill, &render_opts, &serde_json::json!({}))
     }
 
     /// Internal method to render content with a specific quill and JSON data
@@ -102,7 +103,7 @@ impl Workflow {
         content: &str,
         format: Option<OutputFormat>,
         quill: &Quill,
-        json_data: &str,
+        json_data: &serde_json::Value,
     ) -> Result<RenderResult, RenderError> {
         let format = if format.is_some() {
             format
@@ -153,25 +154,13 @@ impl Workflow {
         result
     }
 
-    /// Convert fields to JSON string for injection
-    fn fields_to_json(
-        fields: &HashMap<String, quillmark_core::QuillValue>,
-    ) -> Result<String, RenderError> {
+    /// Convert fields to JSON Value for injection
+    fn fields_to_json(fields: &HashMap<String, quillmark_core::QuillValue>) -> serde_json::Value {
         let mut json_map = serde_json::Map::new();
         for (key, value) in fields {
             json_map.insert(key.clone(), value.as_json().clone());
         }
-        serde_json::to_string(&serde_json::Value::Object(json_map)).map_err(|e| {
-            RenderError::TemplateFailed {
-                diag: Box::new(
-                    Diagnostic::new(
-                        Severity::Error,
-                        format!("Failed to serialize fields: {}", e),
-                    )
-                    .with_code("workflow::json_serialize".to_string()),
-                ),
-            }
-        })
+        serde_json::Value::Object(json_map)
     }
 
     /// Get the plate content directly from the quill

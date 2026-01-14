@@ -52,7 +52,7 @@ impl Backend for MockBackend {
         plated: &str,
         _quill: &Quill,
         _opts: &RenderOptions,
-        _json_data: &str,
+        _json_data: &serde_json::Value,
     ) -> Result<RenderResult, RenderError> {
         // Simple mock: just return the plated content as a text artifact
         let artifacts = vec![Artifact {

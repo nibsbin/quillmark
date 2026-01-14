@@ -86,7 +86,7 @@ impl Backend for TypstBackend {
         plate_content: &str,
         quill: &Quill,
         opts: &RenderOptions,
-        json_data: &str,
+        json_data: &serde_json::Value,
     ) -> Result<RenderResult, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
 
@@ -104,9 +104,12 @@ impl Backend for TypstBackend {
             });
         }
 
+        // Serialize JSON value to string for injection into Typst
+        let json_str = serde_json::to_string(json_data).unwrap_or_else(|_| "{}".to_string());
+
         match format {
             OutputFormat::Pdf => {
-                let bytes = compile::compile_to_pdf(quill, plate_content, json_data)?;
+                let bytes = compile::compile_to_pdf(quill, plate_content, &json_str)?;
                 let artifacts = vec![Artifact {
                     bytes,
                     output_format: OutputFormat::Pdf,
@@ -114,7 +117,7 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
             }
             OutputFormat::Svg => {
-                let svg_pages = compile::compile_to_svg(quill, plate_content, json_data)?;
+                let svg_pages = compile::compile_to_svg(quill, plate_content, &json_str)?;
                 let artifacts = svg_pages
                     .into_iter()
                     .map(|bytes| Artifact {
