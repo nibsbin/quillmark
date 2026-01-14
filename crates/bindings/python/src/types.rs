@@ -122,12 +122,6 @@ impl PyWorkflow {
         Ok(PyRenderResult { inner: result })
     }
 
-    fn process_plate(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<String> {
-        self.inner
-            .process_plate(&parsed.inner)
-            .map_err(convert_render_error)
-    }
-
     /// Perform a dry run validation without backend compilation.
     ///
     /// Raises QuillmarkError with diagnostic payload on validation failure.

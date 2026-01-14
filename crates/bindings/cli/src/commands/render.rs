@@ -1,5 +1,5 @@
 use crate::errors::{CliError, Result};
-use crate::output::{derive_output_path, derive_plated_output_path, OutputWriter};
+use crate::output::{derive_output_path, OutputWriter};
 use clap::Parser;
 use quillmark::{ParsedDocument, Quill, Quillmark};
 use quillmark_core::OutputFormat;
@@ -29,7 +29,7 @@ pub struct RenderArgs {
     stdout: bool,
 
     /// Only process plate template, don't render final output
-    #[arg(long)]
+    #[arg(long, hide = true)]
     plate_only: bool,
 
     /// Show detailed processing information
@@ -170,29 +170,11 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         println!("Workflow created for backend: {}", workflow.backend_id());
     }
 
-    // Handle plate-only mode
+    // plate_only is deprecated and no longer supported
     if args.plate_only {
-        if args.verbose {
-            println!("Processing plate template...");
-        }
-
-        let plated = workflow.process_plate(&parsed)?;
-
-        let plated_bytes = plated.into_bytes();
-
-        // Determine output path
-        let output_path = args.output.unwrap_or_else(|| {
-            if let Some(ref path) = markdown_path_for_output {
-                derive_plated_output_path(path)
-            } else {
-                PathBuf::from("example_plated.typ")
-            }
-        });
-
-        let writer = OutputWriter::new(args.stdout, Some(output_path), args.quiet);
-        writer.write(&plated_bytes)?;
-
-        return Ok(());
+        return Err(CliError::InvalidArgument(
+            "--plate-only is no longer supported. Use workflow.render() with the new JSON data architecture.".to_string(),
+        ));
     }
 
     // Parse output format

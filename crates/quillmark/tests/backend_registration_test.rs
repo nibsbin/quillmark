@@ -47,15 +47,12 @@ impl Backend for MockBackend {
         &[".txt"]
     }
 
-    fn allow_auto_plate(&self) -> bool {
-        true
-    }
-
     fn compile(
         &self,
         plated: &str,
         _quill: &Quill,
         _opts: &RenderOptions,
+        _json_data: &str,
     ) -> Result<RenderResult, RenderError> {
         // Simple mock: just return the plated content as a text artifact
         let artifacts = vec![Artifact {

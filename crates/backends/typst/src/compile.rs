@@ -16,7 +16,7 @@
 //! let quill = Quill::from_path("path/to/quill")?;
 //! let typst_content = "#set document(title: \"Test\")\n= Hello";
 //!
-//! let pdf_bytes = compile_to_pdf(&quill, typst_content)?;
+//! let pdf_bytes = compile_to_pdf(&quill, typst_content, "{}")?;
 //! std::fs::write("output.pdf", pdf_bytes)?;
 //! # Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
 //! ```
@@ -37,60 +37,6 @@ use typst_pdf::PdfOptions;
 use crate::error_mapping::map_typst_errors;
 use crate::world::QuillWorld;
 use quillmark_core::{Diagnostic, Quill, RenderError, Severity};
-
-/// Compiles a Typst document to PDF format.
-pub fn compile_to_pdf(quill: &Quill, plated_content: &str) -> Result<Vec<u8>, RenderError> {
-    let world =
-        QuillWorld::new(quill, plated_content).map_err(|e| RenderError::EngineCreation {
-            diag: Box::new(
-                Diagnostic::new(
-                    Severity::Error,
-                    format!("Failed to create Typst compilation environment: {}", e),
-                )
-                .with_code("typst::world_creation".to_string())
-                .with_source(e),
-            ),
-        })?;
-
-    let document = compile_document(&world)?;
-
-    let pdf = typst_pdf::pdf(&document, &PdfOptions::default()).map_err(|e| {
-        RenderError::CompilationFailed {
-            diags: vec![Diagnostic::new(
-                Severity::Error,
-                format!("PDF generation failed: {:?}", e),
-            )
-            .with_code("typst::pdf_generation".to_string())],
-        }
-    })?;
-
-    Ok(pdf)
-}
-
-/// Compiles a Typst document to SVG format (one file per page).
-pub fn compile_to_svg(quill: &Quill, plated_content: &str) -> Result<Vec<Vec<u8>>, RenderError> {
-    let world =
-        QuillWorld::new(quill, plated_content).map_err(|e| RenderError::EngineCreation {
-            diag: Box::new(
-                Diagnostic::new(
-                    Severity::Error,
-                    format!("Failed to create Typst compilation environment: {}", e),
-                )
-                .with_code("typst::world_creation".to_string())
-                .with_source(e),
-            ),
-        })?;
-
-    let document = compile_document(&world)?;
-
-    let mut pages = Vec::new();
-    for page in &document.pages {
-        let svg = typst_svg::svg(page);
-        pages.push(svg.into_bytes());
-    }
-
-    Ok(pages)
-}
 
 /// Internal compilation function
 fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
@@ -113,7 +59,7 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
 ///
 /// This function creates a `@local/quillmark-helper:0.1.0` package containing
 /// the JSON data, which can be imported by the plate file.
-pub fn compile_to_pdf_with_data(
+pub fn compile_to_pdf(
     quill: &Quill,
     plated_content: &str,
     json_data: &str,
@@ -150,7 +96,7 @@ pub fn compile_to_pdf_with_data(
 ///
 /// This function creates a `@local/quillmark-helper:0.1.0` package containing
 /// the JSON data, which can be imported by the plate file.
-pub fn compile_to_svg_with_data(
+pub fn compile_to_svg(
     quill: &Quill,
     plated_content: &str,
     json_data: &str,

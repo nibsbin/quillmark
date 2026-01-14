@@ -196,15 +196,12 @@ fn test_second_backend_with_default_quill_does_not_override() {
             &[".txt"]
         }
 
-        fn allow_auto_plate(&self) -> bool {
-            true
-        }
-
         fn compile(
             &self,
             _: &str,
             _: &quillmark_core::Quill,
             _: &quillmark_core::RenderOptions,
+            _: &str,
         ) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
             Ok(quillmark_core::RenderResult::new(vec![], OutputFormat::Txt))
         }

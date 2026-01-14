@@ -79,8 +79,7 @@
 //! #     fn id(&self) -> &'static str { "custom" }
 //! #     fn supported_formats(&self) -> &'static [OutputFormat] { &[OutputFormat::Txt] }
 //! #     fn plate_extension_types(&self) -> &'static [&'static str] { &[".txt"] }
-//! #     fn allow_auto_plate(&self) -> bool { true }
-//! #     fn compile(&self, content: &str, _quill: &Quill, _opts: &RenderOptions) -> Result<RenderResult, RenderError> {
+//! #     fn compile(&self, content: &str, _quill: &Quill, _opts: &RenderOptions, _json_data: &str) -> Result<RenderResult, RenderError> {
 //! #         let artifacts = vec![Artifact { bytes: content.as_bytes().to_vec(), output_format: OutputFormat::Txt }];
 //! #         Ok(RenderResult::new(artifacts, OutputFormat::Txt))
 //! #     }

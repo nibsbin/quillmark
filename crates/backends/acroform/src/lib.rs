@@ -25,19 +25,16 @@ impl Backend for AcroformBackend {
     }
 
     fn plate_extension_types(&self) -> &'static [&'static str] {
-        // Only accept auto plate
+        // Acroform uses form.pdf instead of plate files
         &[]
-    }
-
-    fn allow_auto_plate(&self) -> bool {
-        true
     }
 
     fn compile(
         &self,
-        plated: &str,
+        _plate_content: &str,
         quill: &Quill,
         opts: &RenderOptions,
+        json_data: &str,
     ) -> Result<RenderResult, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
 
@@ -54,14 +51,11 @@ impl Backend for AcroformBackend {
             });
         }
         let mut context: serde_json::Value =
-            serde_json::from_str(plated).map_err(|e| RenderError::InvalidFrontmatter {
+            serde_json::from_str(json_data).map_err(|e| RenderError::InvalidFrontmatter {
                 diag: Box::new(
-                    Diagnostic::new(
-                        Severity::Error,
-                        format!("Failed to parse JSON context: {}", e),
-                    )
-                    .with_code("acroform::json_parse".to_string())
-                    .with_source(Box::new(e)),
+                    Diagnostic::new(Severity::Error, format!("Failed to parse JSON data: {}", e))
+                        .with_code("acroform::json_parse".to_string())
+                        .with_source(Box::new(e)),
                 ),
             })?;
 
@@ -238,7 +232,6 @@ mod tests {
         assert_eq!(backend.id(), "acroform");
         let empty_string_arr: [&str; 0] = [];
         assert_eq!(backend.plate_extension_types(), &empty_string_arr);
-        assert!(backend.allow_auto_plate());
         assert!(backend.supported_formats().contains(&OutputFormat::Pdf));
     }
 

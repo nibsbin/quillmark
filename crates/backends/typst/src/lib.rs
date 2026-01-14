@@ -78,18 +78,15 @@ impl Backend for TypstBackend {
     }
 
     fn plate_extension_types(&self) -> &'static [&'static str] {
-        &["typ"]
-    }
-
-    fn allow_auto_plate(&self) -> bool {
-        true
+        &[".typ"]
     }
 
     fn compile(
         &self,
-        plated: &str,
+        plate_content: &str,
         quill: &Quill,
         opts: &RenderOptions,
+        json_data: &str,
     ) -> Result<RenderResult, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
 
@@ -109,7 +106,7 @@ impl Backend for TypstBackend {
 
         match format {
             OutputFormat::Pdf => {
-                let bytes = compile::compile_to_pdf(quill, plated)?;
+                let bytes = compile::compile_to_pdf(quill, plate_content, json_data)?;
                 let artifacts = vec![Artifact {
                     bytes,
                     output_format: OutputFormat::Pdf,
@@ -117,7 +114,7 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
             }
             OutputFormat::Svg => {
-                let svg_pages = compile::compile_to_svg(quill, plated)?;
+                let svg_pages = compile::compile_to_svg(quill, plate_content, json_data)?;
                 let artifacts = svg_pages
                     .into_iter()
                     .map(|bytes| Artifact {
@@ -146,62 +143,6 @@ impl Backend for TypstBackend {
         schema: &QuillValue,
     ) -> HashMap<String, QuillValue> {
         transform_markdown_fields(fields, schema)
-    }
-
-    fn compile_with_data(
-        &self,
-        plated: &str,
-        quill: &Quill,
-        opts: &RenderOptions,
-        json_data: &str,
-    ) -> Result<RenderResult, RenderError> {
-        let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
-
-        // Check if format is supported
-        if !self.supported_formats().contains(&format) {
-            return Err(RenderError::FormatNotSupported {
-                diag: Box::new(
-                    Diagnostic::new(
-                        Severity::Error,
-                        format!("{:?} not supported by {} backend", format, self.id()),
-                    )
-                    .with_code("backend::format_not_supported".to_string())
-                    .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
-                ),
-            });
-        }
-
-        match format {
-            OutputFormat::Pdf => {
-                let bytes = compile::compile_to_pdf_with_data(quill, plated, json_data)?;
-                let artifacts = vec![Artifact {
-                    bytes,
-                    output_format: OutputFormat::Pdf,
-                }];
-                Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
-            }
-            OutputFormat::Svg => {
-                let svg_pages = compile::compile_to_svg_with_data(quill, plated, json_data)?;
-                let artifacts = svg_pages
-                    .into_iter()
-                    .map(|bytes| Artifact {
-                        bytes,
-                        output_format: OutputFormat::Svg,
-                    })
-                    .collect();
-                Ok(RenderResult::new(artifacts, OutputFormat::Svg))
-            }
-            OutputFormat::Txt => Err(RenderError::FormatNotSupported {
-                diag: Box::new(
-                    Diagnostic::new(
-                        Severity::Error,
-                        format!("Text output not supported by {} backend", self.id()),
-                    )
-                    .with_code("backend::format_not_supported".to_string())
-                    .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
-                ),
-            }),
-        }
     }
 
     fn default_quill(&self) -> Option<Quill> {
@@ -369,7 +310,6 @@ mod tests {
     fn test_backend_info() {
         let backend = TypstBackend;
         assert_eq!(backend.id(), "typst");
-        assert!(backend.allow_auto_plate());
         assert!(backend.supported_formats().contains(&OutputFormat::Pdf));
         assert!(backend.supported_formats().contains(&OutputFormat::Svg));
     }

@@ -98,41 +98,21 @@ pub trait Backend: Send + Sync {
     /// Returns an empty array to disable custom plate files.
     fn plate_extension_types(&self) -> &'static [&'static str];
 
-    /// Whether this backend allows automatic JSON plate generation
-    fn allow_auto_plate(&self) -> bool;
-
-    /// Compile the plated content into final artifacts
-    fn compile(
-        &self,
-        plated: &str,
-        quill: &Quill,
-        opts: &RenderOptions,
-    ) -> Result<crate::RenderResult, RenderError>;
-
-    /// Compile with JSON data injection.
-    ///
-    /// This method allows backends to inject document data as a virtual package.
-    /// The Typst backend uses this to create a `@local/quillmark-helper:0.1.0`
-    /// package that plates can import.
-    ///
-    /// The default implementation ignores the json_data and calls `compile()`.
+    /// Compile the plate content with JSON data into final artifacts.
     ///
     /// # Arguments
     ///
-    /// * `plated` - The plated content (plate file after template composition)
-    /// * `quill` - The quill template
-    /// * `opts` - Render options
-    /// * `json_data` - JSON string containing transformed document data
-    fn compile_with_data(
+    /// * `plate_content` - The plate file content (e.g., Typst source)
+    /// * `quill` - The quill template containing assets and configuration
+    /// * `opts` - Render options including output format
+    /// * `json_data` - JSON string containing the document data
+    fn compile(
         &self,
-        plated: &str,
+        plate_content: &str,
         quill: &Quill,
         opts: &RenderOptions,
-        _json_data: &str,
-    ) -> Result<crate::RenderResult, RenderError> {
-        // Default: ignore json_data and use standard compile
-        self.compile(plated, quill, opts)
-    }
+        json_data: &str,
+    ) -> Result<crate::RenderResult, RenderError>;
 
     /// Provide an embedded default Quill for this backend.
     ///
@@ -150,8 +130,7 @@ pub trait Backend: Send + Sync {
     /// #     fn id(&self) -> &'static str { "my" }
     /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
     /// #     fn plate_extension_types(&self) -> &'static [&'static str] { &[] }
-    /// #     fn allow_auto_plate(&self) -> bool { true }
-    /// #     fn compile(&self, _: &str, _: &Quill, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> { todo!() }
+    /// #     fn compile(&self, _: &str, _: &Quill, _: &quillmark_core::RenderOptions, _: &str) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> { todo!() }
     /// fn default_quill(&self) -> Option<Quill> {
     ///     // Build embedded default Quill from files
     ///     let mut files = HashMap::new();

@@ -93,7 +93,7 @@ impl Workflow {
             output_format: format,
         };
 
-        self.backend.compile(content, quill, &render_opts)
+        self.backend.compile(content, quill, &render_opts, "{}")
     }
 
     /// Internal method to render content with a specific quill and JSON data
@@ -121,7 +121,7 @@ impl Workflow {
         };
 
         self.backend
-            .compile_with_data(content, quill, &render_opts, json_data)
+            .compile(content, quill, &render_opts, json_data)
     }
 
     /// Apply schema defaults to fields before JSON serialization
@@ -191,31 +191,6 @@ impl Workflow {
                 ),
             }),
         }
-    }
-
-    /// Process a parsed document (compatibility method).
-    ///
-    /// NOTE: This method is deprecated. In the new architecture without MiniJinja,
-    /// plates are pure Typst files that receive data via JSON injection.
-    /// This method now only performs validation and returns serialized JSON data
-    /// for backwards compatibility with existing tests and examples.
-    ///
-    /// For new code, use `render()` which properly handles JSON data injection.
-    pub fn process_plate(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
-        // Validate and transform
-        let parsed_coerced = parsed.with_coercion(&self.quill.schema);
-        self.validate_document(&parsed_coerced)?;
-
-        let normalized = normalize_document(parsed_coerced);
-        let transformed_fields = self
-            .backend
-            .transform_fields(normalized.fields(), &self.quill.schema);
-
-        // Apply schema defaults to fill in missing fields
-        let fields_with_defaults = self.apply_schema_defaults(&transformed_fields);
-
-        // Return JSON representation for compatibility
-        Self::fields_to_json(&fields_with_defaults)
     }
 
     /// Perform a dry run validation without backend compilation.

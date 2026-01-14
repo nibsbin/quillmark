@@ -51,8 +51,7 @@ impl Quillmark {
     /// #     fn id(&self) -> &'static str { "custom" }
     /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
     /// #     fn plate_extension_types(&self) -> &'static [&'static str] { &[".custom"] }
-    /// #     fn allow_auto_plate(&self) -> bool { true }
-    /// #     fn compile(&self, _: &str, _: &quillmark_core::Quill, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
+    /// #     fn compile(&self, _: &str, _: &quillmark_core::Quill, _: &quillmark_core::RenderOptions, _: &str) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
     /// #         Ok(quillmark_core::RenderResult::new(vec![], quillmark_core::OutputFormat::Txt))
     /// #     }
     /// # }
@@ -157,21 +156,6 @@ impl Quillmark {
                     ))),
                 });
             }
-        } else if !backend.allow_auto_plate() {
-            return Err(RenderError::QuillConfig {
-                diag: Box::new(Diagnostic::new(
-                    Severity::Error,
-                    format!(
-                        "Backend '{}' does not support automatic plate generation, but quill '{}' does not specify a plate file",
-                        backend_id, name
-                    ),
-                )
-                .with_code("quill::auto_plate_not_allowed".to_string())
-                .with_hint(format!(
-                    "Add a plate file with one of these extensions: {}",
-                    backend.plate_extension_types().join(", ")
-                ))),
-            });
         }
 
         self.quills.insert(name, quill);
