@@ -85,9 +85,6 @@ quillmark render memo.md
 # Output to stdout (useful for piping)
 quillmark render memo.md --quill ./quills/usaf_memo --stdout > output.pdf
 
-# Only process plate template (for debugging)
-quillmark render memo.md --quill ./quills/usaf_memo --plate-only -o plate_output.typ
-
 # Verbose output
 quillmark render memo.md --quill ./quills/usaf_memo --verbose
 
@@ -114,7 +111,6 @@ quillmark render [OPTIONS] <MARKDOWN_FILE>
 - `-o, --output <FILE>` - Output file path (default: derived from input filename)
 - `-f, --format <FORMAT>` - Output format: pdf, svg, txt (default: pdf)
 - `--stdout` - Write output to stdout instead of file
-- `--plate-only` - Only process plate template, don't render final output
 - `-v, --verbose` - Show detailed processing information
 - `--quiet` - Suppress all non-error output
 
@@ -146,16 +142,6 @@ quillmark render memo.md --quill ./quills/usaf_memo --stdout | evince -
 
 # Render to stdout and pipe to another tool
 quillmark render memo.md --quill ./quills/usaf_memo --stdout > final.pdf
-```
-
-### Example: Debug Template Processing
-
-```bash
-# Generate only the plate template to inspect intermediate Typst code
-quillmark render memo.md \
-  --quill ./quills/usaf_memo \
-  --plate-only \
-  -o debug_plate.typ
 ```
 
 ## Error Handling

@@ -34,7 +34,10 @@ description = "My template"
 `
     },
     "plate.typ": {
-      contents: "#set document(title: {{ title | String }})\n\n#{{ BODY | Content }}"
+      contents: `#import "@local/quillmark-helper:0.1.0": data, eval-markup
+#set document(title: data.at("title", default: "Untitled"))
+
+#eval-markup(data.at("body", default: ""))`
     }
   }
 };
@@ -136,7 +139,10 @@ backend = "typst"
 description = "Demo quill"
 `
     },
-    "plate.typ": { contents: "#{{ BODY | Content }}" }
+    "plate.typ": {
+      contents: `#import "@local/quillmark-helper:0.1.0": data, eval-markup
+#eval-markup(data.at("body", default: ""))`
+    }
   }
 };
 
@@ -169,26 +175,6 @@ console.log(info.supportedFormats);  // ["pdf", "svg"]
 // To get a stripped schema without UI metadata:
 const strippedSchema = info.getStrippedSchema();
 // strippedSchema will not contain any "x-ui" fields
-```
-
-##### processPlate
-
-```typescript
-processPlate(quillName: string, markdown: string): string
-```
-
-Process markdown through plate template only (no compilation).
-
-**Parameters:**
-- `quillName` - Name of registered Quill
-- `markdown` - Markdown content
-
-**Returns:** Processed plate output (backend-specific code)
-
-**Example:**
-```javascript
-const plate = engine.processPlate("my-quill", markdown);
-console.log(plate);  // Typst code
 ```
 
 ##### render
@@ -438,18 +424,21 @@ Quills are represented as JSON with a `files` structure:
 const quillJson = {
   files: {
     // Required: Quill.toml configuration
-    "Quill.toml": { 
+    "Quill.toml": {
       contents: `[Quill]
 name = "my-quill"
 backend = "typst"
 description = "My template"
 plate_file = "plate.typ"
-` 
+`
     },
-    
+
     // Required: Plate template
-    "plate.typ": { 
-      contents: "#set document(title: {{ title | String }})\n\n#{{ BODY | Content }}"
+    "plate.typ": {
+      contents: `#import "@local/quillmark-helper:0.1.0": data, eval-markup
+#set document(title: data.at("title", default: "Untitled"))
+
+#eval-markup(data.at("body", default: ""))`
     },
     
     // Optional: Assets directory
@@ -504,17 +493,18 @@ author = { description = "Author name", type = "str" }
 `
       },
       "plate.typ": {
-        contents: `#set document(title: {{ title | String }}, author: {{ author | String }})
+        contents: `#import "@local/quillmark-helper:0.1.0": data, eval-markup
+#set document(title: data.at("title", default: ""), author: data.at("author", default: ""))
 #set page(margin: 1in)
 #set text(font: "Arial", size: 11pt)
 
 #align(center)[
-  #text(size: 18pt, weight: "bold")[{{ title | String }}]
-  
-  #text(size: 12pt)[{{ author | String }}]
+  #text(size: 18pt, weight: "bold")[#data.at("title", default: "")]
+
+  #text(size: 12pt)[#data.at("author", default: "")]
 ]
 
-#{{ BODY | Content }}
+#eval-markup(data.at("body", default: ""))
 `
       }
     }

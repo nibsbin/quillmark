@@ -34,7 +34,6 @@ quillmark render [OPTIONS] <INPUT>
 - `--quill-name <NAME>`: Use registered quill by name
 - `--output <PATH>` / `-o <PATH>`: Output file path (default: stdout)
 - `--format <FORMAT>` / `-f <FORMAT>`: Output format: `pdf`, `svg`, `txt`
-- `--plate-only`: Output processed template without compilation
 - `--verbose` / `-v`: Enable verbose logging
 - `--quiet` / `-q`: Suppress non-error output
 - `--stdout`: Force output to stdout
@@ -53,9 +52,6 @@ cat input.md | quillmark render --quill ./my-quill -o output.pdf
 
 # Output to stdout
 quillmark render --quill ./my-quill input.md --stdout > output.pdf
-
-# Debug template (plate only)
-quillmark render --quill ./my-quill input.md --plate-only
 ```
 
 ### schema
@@ -161,16 +157,6 @@ echo "✓ All quills valid"
 quillmark render --quill ./my-quill input.md -f pdf -o output.pdf
 quillmark render --quill ./my-quill input.md -f svg -o output.svg
 quillmark render --quill ./my-quill input.md -f txt -o output.txt
-```
-
-### Template Debugging
-
-```bash
-# See processed template
-quillmark render --quill ./my-quill input.md --plate-only > debug.typ
-
-# Check what backend receives
-cat debug.typ
 ```
 
 ## Environment Variables

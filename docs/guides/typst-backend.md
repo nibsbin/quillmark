@@ -10,7 +10,7 @@ Typst is a modern typesetting system designed as a better alternative to LaTeX. 
 - Compiles Typst code to PDF or SVG
 - Supports dynamic package loading
 - Handles fonts and assets automatically
-- Provides rich template filters
+- Provides JSON data injection via helper package
 
 ## Basic Usage
 
@@ -29,54 +29,86 @@ packages = ["@preview/appreciated-letter:0.1.0"]
 
 ## Plate Templates
 
-Typst plate templates use MiniJinja syntax to generate Typst code:
+Typst plate templates are pure Typst code that access document data via a helper package:
 
-```jinja
-#import "@preview/appreciated-letter:0.1.0": letter
-
-#show: letter.with(
-  sender: {{ sender | String }},
-  recipient: {{ recipient | String }},
-  date: {{ date | String }},
-)
-
-#{{ BODY | Content }}
-```
-
-## Template Filters
-
-The Typst backend provides specialized filters to convert data into Typst format:
-
-### String Filter
-
-Converts values to Typst string literals:
-
-```jinja
-#let title = {{ title | String }}
-#let author = {{ author | String }}
-```
-
-Input:
-```yaml
-title: My Document
-author: John Doe
-```
-
-Output (Typst):
 ```typst
-#let title = "My Document"
-#let author = "John Doe"
+#import "@local/quillmark-helper:0.1.0": data, eval-markup
+
+#set document(title: data.at("title", default: "Untitled"))
+
+#eval-markup(data.at("body", default: ""))
 ```
 
-### Lines Filter
+## Data Access
 
-Converts arrays to Typst arrays:
+Quillmark injects your document's frontmatter as JSON data via the `@local/quillmark-helper` virtual package.
 
-```jinja
-#let authors = {{ authors | Lines }}
+### Importing the Helper
+
+```typst
+#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
 ```
 
-Input:
+The helper provides:
+- `data` - Dictionary containing all frontmatter fields
+- `eval-markup(content)` - Render Markdown content as Typst markup
+- `parse-date(str)` - Parse date strings into Typst datetime objects
+
+### Accessing Fields
+
+Access frontmatter fields directly from the `data` dictionary:
+
+```typst
+// Direct access (may error if field missing)
+#data.title
+#data.author
+
+// Safe access with defaults (recommended)
+#data.at("title", default: "Untitled")
+#data.at("author", default: "Anonymous")
+```
+
+### Checking for Optional Fields
+
+Use Typst's `in` operator to check for optional fields:
+
+```typst
+#if "subtitle" in data {
+  [Subtitle: #data.subtitle]
+}
+
+// Or use spread syntax for function arguments
+#show: template.with(
+  title: data.title,
+  ..if "subtitle" in data {
+    (subtitle: data.subtitle,)
+  } else {
+    (:)
+  },
+)
+```
+
+### Rendering Body Content
+
+The document body (Markdown content after frontmatter) is stored in `data.body` or `data.BODY`. Use `eval-markup()` to render it as Typst:
+
+```typst
+#eval-markup(data.at("body", default: ""))
+```
+
+### Parsing Dates
+
+Use `parse-date()` to convert date strings to Typst datetime objects:
+
+```typst
+// Input: date: "2025-01-15" in frontmatter
+#parse-date(data.date)  // Returns datetime(year: 2025, month: 1, day: 15)
+```
+
+### Working with Arrays
+
+Arrays from YAML frontmatter are accessible as Typst arrays:
+
 ```yaml
 authors:
   - Alice
@@ -84,92 +116,22 @@ authors:
   - Charlie
 ```
 
-Output (Typst):
 ```typst
-#let authors = ("Alice", "Bob", "Charlie")
+#for author in data.authors {
+  [- #author]
+}
 ```
 
-### Date Filter
+### Working with CARDS
 
-Converts date strings to Typst datetime objects:
+If your document uses the CARDS feature, access them via `data.CARDS`:
 
-```jinja
-#let doc_date = {{ date | Date }}
-```
-
-Input:
-```yaml
-date: 2025-01-15
-```
-
-Output (Typst):
 ```typst
-#let doc_date = datetime(year: 2025, month: 1, day: 15)
-```
-
-### Dict Filter
-
-Converts objects to Typst dictionaries:
-
-```jinja
-#let metadata = {{ frontmatter | Dict }}
-```
-
-Input:
-```yaml
-title: My Doc
-author: Alice
-version: 1.0
-```
-
-Output (Typst):
-```typst
-#let metadata = (
-  title: "My Doc",
-  author: "Alice",
-  version: 1.0
-)
-```
-
-### Content Filter
-
-Converts Markdown body to Typst markup:
-
-```jinja
-#{{ BODY | Content }}
-```
-
-Input (Markdown):
-```markdown
-# Introduction
-
-This is **bold** and this is *italic*.
-
-- List item 1
-- List item 2
-```
-
-Output (Typst):
-```typst
-= Introduction
-
-This is *bold* and this is _italic_.
-
-- List item 1
-- List item 2
-```
-
-### Asset Filter
-
-References asset files from the Quill bundle:
-
-```jinja
-#image({{ "assets/logo.png" | Asset }})
-```
-
-Output (Typst):
-```typst
-#image("/path/to/quill/assets/logo.png")
+#for card in data.at("CARDS", default: ()) {
+  if card.CARD == "product" {
+    [Product: #card.name - #eval-markup(card.BODY)]
+  }
+}
 ```
 
 ## Typst Packages
@@ -187,11 +149,15 @@ packages = [
 
 Then import and use them in your plate template:
 
-```jinja
+```typst
+#import "@local/quillmark-helper:0.1.0": data, eval-markup
 #import "@preview/appreciated-letter:0.1.0": letter
 #import "@preview/fontawesome:0.5.0": fa-icon
 
-#show: letter.with(...)
+#show: letter.with(
+  sender: data.sender,
+  recipient: data.recipient,
+)
 
 #fa-icon("envelope") Contact: info@example.com
 ```
@@ -230,7 +196,7 @@ my-quill/
 
 Reference them in your plate:
 
-```jinja
+```typst
 #set text(font: "CustomFont")
 ```
 
@@ -298,7 +264,7 @@ Configure paragraph spacing and alignment:
 
 Define reusable Typst functions:
 
-```jinja
+```typst
 #let highlight(content) = {
   rect(fill: yellow, inset: 8pt)[#content]
 }
@@ -325,37 +291,41 @@ Errors include:
 
 ### Simple Letter
 
-```jinja
+```typst
+#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
+
 #set page(margin: 1in)
 #set text(font: "Arial", size: 11pt)
 
-{{ date | String }}
+#parse-date(data.date).display("[month repr:long] [day], [year]")
 
-{{ recipient | String }}
+#data.recipient
 
-Dear {{ recipient | String }},
+Dear #data.recipient,
 
-#{{ BODY | Content }}
+#eval-markup(data.at("body", default: ""))
 
 Sincerely,
 
-{{ sender | String }}
+#data.sender
 ```
 
 ### Academic Paper
 
-```jinja
+```typst
+#import "@local/quillmark-helper:0.1.0": data, eval-markup
+
 #set page(paper: "a4", margin: 1in)
 #set text(font: "Linux Libertine", size: 12pt)
 #set par(justify: true)
 
 #align(center)[
-  #text(size: 18pt, weight: "bold")[{{ title | String }}]
-  
-  #text(size: 12pt)[{{ author | String }}]
+  #text(size: 18pt, weight: "bold")[#data.title]
+
+  #text(size: 12pt)[#data.author]
 ]
 
-#{{ BODY | Content }}
+#eval-markup(data.at("body", default: ""))
 ```
 
 ## Best Practices

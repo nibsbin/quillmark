@@ -9,7 +9,7 @@ A Quill is a directory containing:
 ```
 my-quill/
 ├── Quill.toml          # Configuration and metadata
-├── plate.typ            # MiniJinja template (backend-specific)
+├── plate.typ           # Plate template (backend-specific)
 ├── example.md          # Optional example document
 └── assets/             # Optional assets (fonts, images, etc.)
     ├── logo.png
@@ -103,48 +103,40 @@ Supported UI properties:
 
 ## Plate Templates
 
-Plate templates use MiniJinja syntax to compose backend-specific code. They have access to frontmatter data and special filters.
+Plate templates are pure backend-specific code (e.g., Typst) that access document data via a helper package.
 
 ### Basic Example (Typst)
 
-```jinja
+```typst
+#import "@local/quillmark-helper:0.1.0": data, eval-markup
 #import "@preview/appreciated-letter:0.1.0": letter
 
 #show: letter.with(
-  sender: {{ sender | String }},
-  recipient: {{ recipient | String }},
-  date: {{ date | String }},
-  subject: {{ subject | String }},
+  sender: data.sender,
+  recipient: data.recipient,
+  date: data.date,
+  subject: data.subject,
 )
 
-#{{ BODY | Content }}
+#eval-markup(data.at("body", default: ""))
 ```
 
-### Available Filters
+### Data Access
 
-Filters convert data to backend-specific formats. For the Typst backend:
+Quillmark injects your document's frontmatter as JSON data via the `@local/quillmark-helper` virtual package:
 
-- `String` - Convert to Typst string
-- `Lines` - Convert to Typst line array
-- `Date` - Convert to Typst datetime
-- `Dict` - Convert to Typst dictionary
-- `Content` - Convert Markdown body to Typst content
-- `Asset` - Reference asset files
-
-Example using multiple filters:
-
-```jinja
-#let metadata = {{ frontmatter | Dict }}
-#let authors = {{ authors | Lines }}
-
-= {{ title | String }}
-
-#{{ BODY | Content }}
+```typst
+#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
 ```
+
+The helper provides:
+- `data` - Dictionary containing all frontmatter fields
+- `eval-markup(content)` - Render Markdown content as Typst markup
+- `parse-date(str)` - Parse date strings into Typst datetime objects
 
 ### Accessing Frontmatter
 
-Access YAML frontmatter fields directly in your template:
+Access YAML frontmatter fields from the `data` dictionary:
 
 ```yaml
 ---
@@ -154,26 +146,36 @@ tags: ["important", "draft"]
 ---
 ```
 
-```jinja
-Title: {{ title | String }}
-Author: {{ author | String }}
-Tags: {{ tags | Lines }}
+```typst
+Title: #data.title
+Author: #data.author
+Tags: #data.tags.join(", ")
 ```
 
-### Using the Metadata Object
+Use `data.at()` for safe access with defaults:
 
-Quillmark provides a special `__metadata__` field that contains all frontmatter fields except `BODY`. This is useful for iterating over metadata:
-
-```jinja
-{% for key, value in __metadata__ %}
-  #set document({{ key }}: {{ value | String }})
-{% endfor %}
-
-{# Body content separately #}
-#{{ BODY | Content }}
+```typst
+#data.at("title", default: "Untitled")
+#data.at("author", default: "Anonymous")
 ```
 
-The `__metadata__` field is automatically created and includes all fields from frontmatter (including the CARDS array), but excludes the `BODY` field. You can still access individual fields at the top level (e.g., `{{ title }}`), but `__metadata__` provides convenient metadata-only access.
+### Rendering Body Content
+
+The document body is stored in `data.body`. Use `eval-markup()` to render it:
+
+```typst
+#eval-markup(data.at("body", default: ""))
+```
+
+### Working with Optional Fields
+
+Check for optional fields using Typst's `in` operator:
+
+```typst
+#if "subtitle" in data {
+  [Subtitle: #data.subtitle]
+}
+```
 
 ## Backend-Specific Configuration
 
@@ -211,7 +213,7 @@ my-quill/
 
 Reference them in your Typst plate:
 
-```jinja
+```typst
 #set text(font: "MyFont")
 ```
 
@@ -225,8 +227,8 @@ my-quill/
     └── logo.png
 ```
 
-```jinja
-#image({{ "assets/logo.png" | Asset }})
+```typst
+#image("assets/logo.png")
 ```
 
 ## Example Markdown
