@@ -31,7 +31,6 @@
 //! - [`RenderError::InputTooLarge`]: Input size limits exceeded
 //! - [`RenderError::YamlTooLarge`]: YAML size exceeded maximum
 //! - [`RenderError::NestingTooDeep`]: Nesting depth exceeded maximum
-//! - [`RenderError::OutputTooLarge`]: Template output exceeded maximum size
 //!
 //! ## Examples
 //!
