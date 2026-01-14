@@ -43,8 +43,11 @@ impl Workflow {
             .backend
             .transform_fields(normalized.fields(), &self.quill.schema);
 
+        // Apply schema defaults to fill in missing fields
+        let fields_with_defaults = self.apply_schema_defaults(&transformed_fields);
+
         // Serialize transformed fields to JSON for injection
-        let json_data = Self::fields_to_json(&transformed_fields)?;
+        let json_data = Self::fields_to_json(&fields_with_defaults)?;
 
         // Get plate content directly (no MiniJinja composition)
         let plate_content = self.get_plate_content()?;
@@ -121,6 +124,35 @@ impl Workflow {
             .compile_with_data(content, quill, &render_opts, json_data)
     }
 
+    /// Apply schema defaults to fields before JSON serialization
+    fn apply_schema_defaults(
+        &self,
+        fields: &HashMap<String, quillmark_core::QuillValue>,
+    ) -> HashMap<String, quillmark_core::QuillValue> {
+        use quillmark_core::QuillValue;
+
+        let mut result = fields.clone();
+
+        // Extract properties from schema if it exists
+        if let Some(properties_value) = self.quill.schema.get("properties") {
+            if let Some(properties) = properties_value.as_object() {
+                for (field_name, field_schema) in properties {
+                    // If field is missing and schema has a default, apply it
+                    if !result.contains_key(field_name) {
+                        if let Some(default_value) = field_schema.get("default") {
+                            result.insert(
+                                field_name.clone(),
+                                QuillValue::from_json(default_value.clone()),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        result
+    }
+
     /// Convert fields to JSON string for injection
     fn fields_to_json(
         fields: &HashMap<String, quillmark_core::QuillValue>,
@@ -179,8 +211,11 @@ impl Workflow {
             .backend
             .transform_fields(normalized.fields(), &self.quill.schema);
 
+        // Apply schema defaults to fill in missing fields
+        let fields_with_defaults = self.apply_schema_defaults(&transformed_fields);
+
         // Return JSON representation for compatibility
-        Self::fields_to_json(&transformed_fields)
+        Self::fields_to_json(&fields_with_defaults)
     }
 
     /// Perform a dry run validation without backend compilation.

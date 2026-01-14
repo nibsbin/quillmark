@@ -120,6 +120,7 @@ author: Test Author
 }
 
 #[test]
+#[ignore = "Test obsolete after MiniJinja removal - filters and template composition no longer exist"]
 fn test_dry_run_invalid_template_filter() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let quill_path = temp_dir.path().join("test-quill");
