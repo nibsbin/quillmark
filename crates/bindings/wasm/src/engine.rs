@@ -173,6 +173,25 @@ impl Quillmark {
         })
     }
 
+    /// Get the stripped JSON schema of a Quill (removes UI metadata)
+    ///
+    /// This returns the schema in a format suitable for feeding to LLMs or
+    /// other consumers that don't need the UI configuration "x-ui" fields.
+    #[wasm_bindgen(js_name = getStrippedSchema)]
+    pub fn get_stripped_schema(&self, name: &str) -> Result<JsValue, JsValue> {
+        let info = self.fetch_quill_info(name)?;
+        let stripped = info.get_stripped_schema();
+
+        // Convert serde_json::Value to JsValue via JSON string to ensure clean object conversion
+        let json_str = serde_json::to_string(&stripped).map_err(|e| {
+            WasmError::from(format!("Failed to serialize schema: {}", e)).to_js_value()
+        })?;
+
+        js_sys::JSON::parse(&json_str).map_err(|e| {
+            WasmError::from(format!("Failed to parse JSON schema: {:?}", e)).to_js_value()
+        })
+    }
+
     /// Perform a dry run validation without backend compilation.
     ///
     /// Executes parsing, schema validation, and template composition to
