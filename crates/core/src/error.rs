@@ -10,7 +10,7 @@
 //! ## Key Types
 //!
 //! - [`RenderError`]: Main error enum for rendering operations
-//! - [`crate::TemplateError`]: Template-specific errors
+
 //! - [`Diagnostic`]: Structured diagnostic information
 //! - [`Location`]: Source file location (file, line, column)
 //! - [`Severity`]: Error severity levels (Error, Warning, Note)
