@@ -1,24 +1,21 @@
 # Document Validation
 
-Validate documents without full compilation for faster feedback and multi-stage processing.
+Validate documents without full compilation for faster feedback.
 
 ## Overview
 
-Quillmark provides validation methods for different stages:
+Quillmark provides validation via the `dry_run()` method, which validates inputs without expensive backend compilation.
 
-- **`validate_schema()`**: Check document fields against quill schema
-- **`dry_run()`**: Validate template composition without compilation
-- **`process_plate()`**: Process template and return composed content
+## Dry Run Validation
 
-## Schema Validation
-
-Check if document fields match the quill's schema requirements.
+Validate parsing and schema without backend compilation:
 
 ```python
-from quillmark import Quillmark, ParsedDocument, QuillmarkError
+from quillmark import Quillmark, Quill, ParsedDocument, QuillmarkError
 
 engine = Quillmark()
-workflow = engine.workflow("my-quill")
+quill = Quill.from_path("./my-quill")
+workflow = engine.workflow(quill)
 
 markdown = """---
 title: My Document
@@ -29,83 +26,39 @@ author: Alice
 
 parsed = ParsedDocument.from_markdown(markdown)
 
-# Validate schema only
-try:
-    workflow.validate_schema(parsed)
-    print("✓ Schema valid")
-except QuillmarkError as e:
-    print(f"✗ Schema error: {e}")
-```
-
-**Use cases:**
-- Form validation before rendering
-- Quick feedback in editors
-- Batch document validation
-
-## Dry Run Validation
-
-Validate template composition without backend compilation.
-
-```python
-# Validate template processing
+# Validate without compilation
 try:
     workflow.dry_run(parsed)
-    print("✓ Template valid")
-except TemplateError as e:
-    print(f"✗ Template error: {e}")
+    print("✓ Document valid")
+except QuillmarkError as e:
+    print(f"✗ Validation error: {e}")
 ```
 
 **Use cases:**
-- Faster validation than full rendering
-- Check template syntax before expensive compilation
+- Fast feedback in editors
+- Batch document validation
 - LLM-driven document generation pipelines
-
-## Template Processing
-
-Process the plate template and return composed content without compilation.
-
-```python
-# Get processed template content
-content = workflow.process_plate(parsed)
-print(content)  # Backend-specific template (Typst, etc.)
-```
-
-**Use cases:**
-- Debugging template composition
-- Two-stage rendering pipelines
-- Custom post-processing
 
 ## Validation Workflow
 
-Combine validation methods for efficient pipelines:
+Use dry_run for efficient pipelines:
 
 ```python
-from quillmark import (
-    Quillmark,
-    ParsedDocument,
-    OutputFormat,
-    QuillmarkError,
-    TemplateError
-)
+from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat, QuillmarkError
 
-def validate_and_render(markdown: str, quill_name: str):
+def validate_and_render(markdown: str, quill_path: str):
     engine = Quillmark()
-    workflow = engine.workflow(quill_name)
+    quill = Quill.from_path(quill_path)
+    workflow = engine.workflow(quill)
     parsed = ParsedDocument.from_markdown(markdown)
 
-    # Stage 1: Schema validation (fastest)
-    try:
-        workflow.validate_schema(parsed)
-    except QuillmarkError as e:
-        return {"error": f"Invalid schema: {e}", "stage": "schema"}
-
-    # Stage 2: Template validation (fast)
+    # Stage 1: Dry run validation (fast)
     try:
         workflow.dry_run(parsed)
-    except TemplateError as e:
-        return {"error": f"Invalid template: {e}", "stage": "template"}
+    except QuillmarkError as e:
+        return {"error": f"Validation failed: {e}", "stage": "validation"}
 
-    # Stage 3: Full render (slowest)
+    # Stage 2: Full render (slower)
     try:
         result = workflow.render(parsed, OutputFormat.PDF)
         return {"success": True, "result": result}
@@ -113,7 +66,7 @@ def validate_and_render(markdown: str, quill_name: str):
         return {"error": str(e), "stage": "compilation"}
 
 # Usage
-outcome = validate_and_render(markdown, "invoice")
+outcome = validate_and_render(markdown, "./invoice")
 if "error" in outcome:
     print(f"Failed at {outcome['stage']}: {outcome['error']}")
 else:
@@ -124,20 +77,19 @@ else:
 
 | Method | Speed | Checks |
 |--------|-------|--------|
-| `validate_schema()` | Fastest | Field types and requirements |
-| `dry_run()` | Fast | Template syntax and composition |
-| `process_plate()` | Fast | Template processing only |
-| `render()` | Slowest | Full compilation and rendering |
+| `dry_run()` | Fast | Parsing, schema validation |
+| `render()` | Slower | Full compilation and rendering |
 
 ## LLM Document Generation
 
 Use validation for fast iteration with language models:
 
 ```python
-def generate_document_with_llm(prompt: str, quill_name: str):
+def generate_document_with_llm(prompt: str, quill_path: str):
     """Generate document using LLM with validation loop."""
     engine = Quillmark()
-    workflow = engine.workflow(quill_name)
+    quill = Quill.from_path(quill_path)
+    workflow = engine.workflow(quill)
 
     for attempt in range(3):
         # Get markdown from LLM
@@ -146,7 +98,6 @@ def generate_document_with_llm(prompt: str, quill_name: str):
 
         # Fast validation
         try:
-            workflow.validate_schema(parsed)
             workflow.dry_run(parsed)
             # Valid - proceed to render
             return workflow.render(parsed, OutputFormat.PDF)
@@ -160,24 +111,22 @@ def generate_document_with_llm(prompt: str, quill_name: str):
 ## Error Handling
 
 ```python
-from quillmark import QuillmarkError, TemplateError, ParseError
+from quillmark import QuillmarkError, ParseError
 
 try:
-    workflow.validate_schema(parsed)
-except QuillmarkError as e:
-    print(f"Schema validation failed: {e}")
+    parsed = ParsedDocument.from_markdown(markdown)
+except ParseError as e:
+    print(f"Parse error: {e}")
 
 try:
     workflow.dry_run(parsed)
-except TemplateError as e:
-    print(f"Template validation failed: {e}")
-    # e may contain diagnostic info
+except QuillmarkError as e:
+    print(f"Validation failed: {e}")
 ```
 
 ## Best Practices
 
-1. **Validate early**: Use `validate_schema()` first for quick feedback
+1. **Validate early**: Use `dry_run()` for quick feedback before rendering
 2. **Stage validation**: Run cheap checks before expensive operations
-3. **Debug with process_plate()**: Inspect composed templates when debugging
-4. **Cache workflows**: Reuse workflow instances for batch validation
-5. **Handle errors gracefully**: Provide clear feedback on validation failures
+3. **Cache workflows**: Reuse workflow instances for batch validation
+4. **Handle errors gracefully**: Provide clear feedback on validation failures

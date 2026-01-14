@@ -20,20 +20,6 @@ def test_end_to_end_render(taro_quill_dir, taro_md):
     assert len(result.artifacts[0].bytes) > 0
 
 
-def test_process_plate(taro_quill_dir, taro_md):
-    """Test processing plate template."""
-    engine = Quillmark()
-    quill = Quill.from_path(str(taro_quill_dir))
-    engine.register_quill(quill)
-    
-    workflow = engine.workflow("taro")
-    parsed = ParsedDocument.from_markdown(taro_md)
-    plated = workflow.process_plate(parsed)
-    
-    assert "nutty" in plated
-    assert "earthy" in plated
-
-
 def test_save_artifact(taro_quill_dir, taro_md, tmp_path):
     """Test saving an artifact to file."""
     engine = Quillmark()
