@@ -17,7 +17,7 @@ Markdown + YAML → Parse → Template → Compile → Artifacts
 The workflow follows three main stages:
 
 1. **Parse** - Extract YAML frontmatter and body from markdown
-2. **Template** - Compose backend-specific plate via MiniJinja with registered filters
+2. **Inject** - Serialize frontmatter as JSON and inject into plate template via virtual helper package
 3. **Compile** - Backend processes plate to generate output artifacts
 
 ## Core Design Principles
@@ -103,8 +103,8 @@ Orchestration layer providing:
 Typst backend for PDF/SVG output:
 
 - Implements `Backend` trait
-- Markdown→Typst conversion
-- Template filters: String, Lines, Date, Dict, Content, Asset
+- Markdown→Typst conversion via `eval-markup()` helper
+- JSON data injection via `@local/quillmark-helper` virtual package
 - Compilation environment with font & asset resolution
 - Structured diagnostics with source locations
 
@@ -176,31 +176,33 @@ Fuzz testing suite for:
 
 **RenderResult** - Output artifacts + warnings
 
-### Template System
+### Data Injection System
 
-The template system uses **MiniJinja** with a **stable filter API** to keep backends decoupled:
+The template system uses **JSON data injection** via a virtual helper package:
 
-#### Filter Architecture
+#### Helper Package
 
-Backends register custom filters via the stable `filter_api` module:
+Templates import the `@local/quillmark-helper` virtual package:
 
-- **String** - Escape/quote values for backend syntax
-- **Lines** - Array to multi-line string conversion
-- **Date** - Date parsing for backend datetime types
-- **Dict** - Objects to backend-native structures
-- **Content** - Markdown body to backend markup conversion
-- **Asset** - Dynamic asset filename transformation
+```typst
+#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
+```
 
-The `filter_api` provides a stable ABI, preventing version conflicts and enabling independent backend development.
+The helper provides:
+- **data** - Dictionary containing all frontmatter fields as JSON
+- **eval-markup(content)** - Render Markdown content as Typst markup
+- **parse-date(str)** - Parse date strings into Typst datetime objects
 
-#### Template Context
+#### Data Access
 
-Templates receive parsed document fields via MiniJinja context:
+Templates access document data directly via the `data` dictionary:
 
-- **Top-level fields**: All frontmatter fields and `BODY` accessible directly
-- **`__metadata__` field**: System-generated field containing all frontmatter fields except `BODY`
+- **Direct access**: `data.title`, `data.author`
+- **Safe access with defaults**: `data.at("title", default: "Untitled")`
+- **Body content**: `data.body` or `data.BODY`
+- **CARDS array**: `data.at("CARDS", default: ())`
 
-This dual access pattern provides both convenience (top-level) and clarity (metadata object).
+This approach provides full IDE support (autocomplete, type checking) since templates are pure Typst code.
 
 ## Parsing Architecture
 
@@ -242,17 +244,13 @@ Parses to: `{ title: "...", BODY: "...", CARDS: [{ CARD: "products", name: "..."
 
 Key features:
 
-- Markdown→Typst conversion with proper escaping
+- JSON data injection via `@local/quillmark-helper` virtual package
+- `eval-markup()` for Markdown→Typst conversion
+- `parse-date()` for date string parsing
 - Dynamic package loading from `packages/` directory
 - Font and asset resolution from `assets/` directory
 - Runtime asset injection with `DYNAMIC_ASSET__` prefix
 - Structured error mapping with source locations
-
-Filter support:
-
-- String, Lines, Date, Dict filters for data transformation
-- Content filter for Markdown→Typst conversion
-- Asset filter for dynamic asset path mapping
 
 Compilation environment (`QuillWorld`):
 
@@ -326,7 +324,6 @@ Implement the `Backend` trait with required methods:
 - `supported_formats()` - Output formats
 - `plate_extension_types()` - Template file extensions
 - `allow_auto_plate()` - Whether auto-plate is supported
-- `register_filters()` - Register template filters
 - `compile()` - Compile plate to artifacts
 
 Optionally provide:
@@ -339,17 +336,13 @@ Requirements:
 - Structured error reporting
 - Format validation
 
-### Custom Filters
-
-Register via `plate.register_filter(name, func)` using stable `filter_api` types. Return `Result<Value, Error>` for error handling.
-
 ## Key Design Decisions
 
 1. **Sealed Engine w/ Explicit Backend** - Simplifies usage; deterministic backend selection
 2. **Template-First, YAML-Only Frontmatter** - Reduces parsing complexity
 3. **Default Quill System** - Backends provide embedded default templates for zero-config usage
 4. **Dynamic Package Loading** - Runtime discovery of packages and versions
-5. **Filter-Based Data Transformation** - Stable templating ABI across backends
+5. **JSON Data Injection** - Direct data access in pure backend templates
 6. **Unified Error Hierarchy** - Consistent diagnostics with source chains
 7. **Thread-Safe Design** - `Send + Sync` traits enable concurrent rendering
 8. **Backend Auto-Registration** - Feature-based backend registration for simplified setup

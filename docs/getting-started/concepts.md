@@ -23,7 +23,7 @@ This approach differs from traditional Markdown renderers where styling is an af
 A **Quill** is a template bundle that defines how Markdown content should be rendered. It contains:
 
 - **Metadata** (`Quill.toml`) - Configuration including name, backend, and field schemas
-- **Plate template** - MiniJinja template that composes content with backend-specific code
+- **Plate template** - Backend-specific template that receives document data as JSON
 - **Assets** - Fonts, images, and other resources needed for rendering
 - **Packages** - Backend-specific packages (e.g., Typst packages)
 
@@ -78,12 +78,12 @@ This document will render using the default Typst quill without requiring you to
 Quillmark follows a multi-stage pipeline:
 
 1. **Parse** - Extract YAML frontmatter and Markdown body
-2. **Template** - Compose plate template using MiniJinja with backend-specific filters
-3. **Compile** - Backend processes composed plate into final artifacts (PDF, SVG, etc.)
+2. **Inject** - Frontmatter data is serialized as JSON and injected into the plate template
+3. **Compile** - Backend processes plate with injected data into final artifacts (PDF, SVG, etc.)
 4. **Output** - Return artifacts with metadata
 
 ```
-Markdown + YAML → Parse → Template (MiniJinja) → Compile (Backend) → Artifacts
+Markdown + YAML → Parse → Data Injection → Compile (Backend) → Artifacts
 ```
 
 ## Mental Model
