@@ -141,9 +141,6 @@ pub const MAX_YAML_SIZE: usize = 1024 * 1024;
 /// Maximum nesting depth for markdown structures (100 levels)
 pub const MAX_NESTING_DEPTH: usize = 100;
 
-/// Maximum template output size (50 MB)
-pub const MAX_TEMPLATE_OUTPUT: usize = 50 * 1024 * 1024;
-
 /// Maximum YAML nesting depth (100 levels)
 /// Prevents stack overflow from deeply nested YAML structures
 pub const MAX_YAML_DEPTH: usize = 100;
@@ -549,13 +546,6 @@ pub enum RenderError {
         diag: Box<Diagnostic>,
     },
 
-    /// Template output exceeded maximum size
-    #[error("{diag}")]
-    OutputTooLarge {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
     /// Validation failed for parsed document
     #[error("{diag}")]
     ValidationFailed {
@@ -593,7 +583,6 @@ impl RenderError {
             | RenderError::InputTooLarge { diag }
             | RenderError::YamlTooLarge { diag }
             | RenderError::NestingTooDeep { diag }
-            | RenderError::OutputTooLarge { diag }
             | RenderError::ValidationFailed { diag }
             | RenderError::InvalidSchema { diag }
             | RenderError::QuillConfig { diag } => vec![diag.as_ref()],
@@ -647,7 +636,6 @@ pub fn print_errors(err: &RenderError) {
         RenderError::InputTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::YamlTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::NestingTooDeep { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::OutputTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::ValidationFailed { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::InvalidSchema { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::QuillConfig { diag } => eprintln!("{}", diag.fmt_pretty()),
