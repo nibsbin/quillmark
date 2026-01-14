@@ -6,9 +6,9 @@ example_file = "taro.md"
 description = "A simple document template for testing"
 
 [fields]
-author = {title = "Author of document"}
-ice_cream = {title = "favorite ice cream flavor", default = "taro"}
-title = {title = "title of document"}
+author = {type = "string", title = "Author of document"}
+ice_cream = {type = "string", title = "favorite ice cream flavor", default = "taro"}
+title = {type = "string", title = "title of document"}
 
 [cards.quotes]
 title = "Inspirational Quotes"

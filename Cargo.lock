@@ -2548,7 +2548,6 @@ dependencies = [
  "anyhow",
  "glob",
  "jsonschema",
- "minijinja",
  "serde",
  "serde-saphyr",
  "serde_json",

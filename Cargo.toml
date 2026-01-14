@@ -40,9 +40,6 @@ anyhow = "~1.0"
 # File globbing
 glob = "0.3.3"
 
-# Templating
-minijinja = "2.13"
-
 # Validation
 jsonschema = { version = "0.37", default-features = false }
 

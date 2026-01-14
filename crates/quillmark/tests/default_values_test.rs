@@ -210,9 +210,12 @@ Status: #doc.at("status", default: "draft")"#,
         .process_plate(&parsed)
         .expect("Validation should pass - fields are optional");
 
-    // Verify plate output contains expected field references
-    assert!(plated.contains("Title:"));
-    assert!(plated.contains("Status:"));
+    // process_plate() now returns JSON data with schema defaults applied
+    // Verify defaults were injected into the JSON
+    assert!(plated.contains("\"title\""));
+    assert!(plated.contains("\"Untitled\""));
+    assert!(plated.contains("\"status\""));
+    assert!(plated.contains("\"draft\""));
 }
 
 #[test]

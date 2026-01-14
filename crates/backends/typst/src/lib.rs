@@ -59,13 +59,9 @@ pub mod fuzz_utils {
 }
 
 use convert::mark_to_typst;
-use filters::{
-    asset_filter, content_filter, date_filter, dict_filter, lines_filter, number_filter,
-    string_filter,
-};
 use quillmark_core::{
-    Artifact, Backend, Diagnostic, OutputFormat, Plate, Quill, QuillValue, RenderError,
-    RenderOptions, RenderResult, Severity,
+    Artifact, Backend, Diagnostic, OutputFormat, Quill, QuillValue, RenderError, RenderOptions,
+    RenderResult, Severity,
 };
 use std::collections::HashMap;
 
@@ -87,18 +83,6 @@ impl Backend for TypstBackend {
 
     fn allow_auto_plate(&self) -> bool {
         true
-    }
-
-    fn register_filters(&self, plate: &mut Plate) {
-        // Register basic filters (simplified for now)
-        plate.register_filter("String", string_filter);
-        plate.register_filter("Lines", lines_filter);
-        plate.register_filter("Date", date_filter);
-        plate.register_filter("Dict", dict_filter);
-        plate.register_filter("Content", content_filter);
-        plate.register_filter("Asset", asset_filter);
-        plate.register_filter("Json", filters::json_filter);
-        plate.register_filter("Number", number_filter);
     }
 
     fn compile(

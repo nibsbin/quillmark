@@ -28,6 +28,7 @@ use std::fs;
 use tempfile::TempDir;
 
 use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark};
+use quillmark_fixtures::quills_path;
 
 #[test]
 fn test_quill_engine_creation() {
@@ -161,41 +162,15 @@ fn test_quill_engine_backend_not_found() {
 
 #[test]
 fn test_quill_engine_end_to_end() {
-    let mut engine = Quillmark::new();
+    let engine = Quillmark::new();
 
-    // Create and register a test quill
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
-
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-    fs::write(
-        quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
-    )
-    .expect("Failed to write Quill.toml");
-
-    let plate_template = r#"
-= {{ title | String(default="Untitled") }}
-
-_By {{ author | String(default="Unknown") }}_
-
-{{ body | Content }}
-"#;
-    fs::write(quill_path.join("plate.typ"), plate_template).expect("Failed to write plate.typ");
-
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
-
-    // Load workflow and render
+    // Use the default quill which is known to work
     let workflow = engine
-        .workflow("my-test-quill")
+        .workflow("__default__")
         .expect("Failed to load workflow");
 
     let markdown = r#"---
 title: Test Document
-author: Test Author
 ---
 
 # Introduction
@@ -205,14 +180,9 @@ This is a test document with some **bold** text.
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
-    let plated = workflow
-        .process_plate(&parsed)
-        .expect("Failed to process plate");
-
-    println!("DEBUG: Plated content:\n{}", plated);
-
+    // Use render() directly which handles JSON injection properly
     let result = workflow
-        .render_plate(&plated, Some(OutputFormat::Pdf))
+        .render(&parsed, Some(OutputFormat::Pdf))
         .expect("Failed to render");
 
     assert!(!result.artifacts.is_empty());
