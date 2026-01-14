@@ -663,9 +663,9 @@ where
             // 2. Pull from inner
             let (event, range) = self.inner.next()?;
 
-            // 3. Convert HTML to Text (we don't support HTML, pass through as literal)
+            // 3. Strip HTML entirely (we don't support HTML in Typst output)
             let (event, range) = match event {
-                Event::Html(html) | Event::InlineHtml(html) => (Event::Text(html), range),
+                Event::Html(_) | Event::InlineHtml(_) => continue,
                 other => (other, range),
             };
 
