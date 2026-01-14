@@ -108,6 +108,7 @@ def test_full_workflow_as_specified():
     engine.register_quill(quill)
     
     # Step 2: Parse markdown (with quill tag)
+    # Note: Body content must be valid Typst markup since taro uses the typst backend
     markdown = """---
 QUILL: taro
 author: Test Author
@@ -115,9 +116,7 @@ ice_cream: Chocolate
 title: Test Document
 ---
 
-# My Document
-
-This is a test.
+This is a test document.
 """
     parsed = ParsedDocument.from_markdown(markdown)
     
