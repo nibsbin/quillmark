@@ -4,11 +4,5 @@ use common::demo;
 
 fn main() {
     // Use the fixtures demo helper which centralizes file IO and printing.
-    demo(
-        "usaf_memo",
-        "usaf_memo_plated.typ",
-        "usaf_memo_output.pdf",
-        false,
-    )
-    .expect("Demo failed");
+    demo("usaf_memo", "usaf_memo_output.pdf", false).expect("Demo failed");
 }

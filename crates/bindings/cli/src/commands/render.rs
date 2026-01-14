@@ -1,5 +1,5 @@
 use crate::errors::{CliError, Result};
-use crate::output::{derive_output_path, derive_plated_output_path, OutputWriter};
+use crate::output::{derive_output_path, OutputWriter};
 use clap::Parser;
 use quillmark::{ParsedDocument, Quill, Quillmark};
 use quillmark_core::OutputFormat;
@@ -28,10 +28,6 @@ pub struct RenderArgs {
     #[arg(long)]
     stdout: bool,
 
-    /// Only process plate template, don't render final output
-    #[arg(long)]
-    plate_only: bool,
-
     /// Show detailed processing information
     #[arg(short, long)]
     verbose: bool,
@@ -39,6 +35,10 @@ pub struct RenderArgs {
     /// Suppress all non-error output
     #[arg(long)]
     quiet: bool,
+
+    /// Output intermediate JSON data to file
+    #[arg(long, value_name = "DATA_FILE")]
+    output_data: Option<PathBuf>,
 }
 
 pub fn execute(args: RenderArgs) -> Result<()> {
@@ -170,31 +170,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         println!("Workflow created for backend: {}", workflow.backend_id());
     }
 
-    // Handle plate-only mode
-    if args.plate_only {
-        if args.verbose {
-            println!("Processing plate template...");
-        }
-
-        let plated = workflow.process_plate(&parsed)?;
-
-        let plated_bytes = plated.into_bytes();
-
-        // Determine output path
-        let output_path = args.output.unwrap_or_else(|| {
-            if let Some(ref path) = markdown_path_for_output {
-                derive_plated_output_path(path)
-            } else {
-                PathBuf::from("example_plated.typ")
-            }
-        });
-
-        let writer = OutputWriter::new(args.stdout, Some(output_path), args.quiet);
-        writer.write(&plated_bytes)?;
-
-        return Ok(());
-    }
-
     // Parse output format
     let output_format = match args.format.to_lowercase().as_str() {
         "pdf" => OutputFormat::Pdf,
@@ -210,6 +185,32 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 
     if args.verbose {
         println!("Rendering to format: {:?}", output_format);
+    }
+
+    // Handle output-data
+    if let Some(data_path) = args.output_data {
+        let json_data = workflow
+            .compile_data(&parsed)
+            .map_err(|e| CliError::Render(e))?;
+        let f = std::fs::File::create(&data_path).map_err(|e| {
+            CliError::Io(std::io::Error::new(
+                e.kind(),
+                format!(
+                    "Failed to create data output file '{}': {}",
+                    data_path.display(),
+                    e
+                ),
+            ))
+        })?;
+        serde_json::to_writer_pretty(f, &json_data).map_err(|e| {
+            CliError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to write JSON data: {}", e),
+            ))
+        })?;
+        if args.verbose && !args.quiet {
+            println!("JSON data written to: {}", data_path.display());
+        }
     }
 
     // Render

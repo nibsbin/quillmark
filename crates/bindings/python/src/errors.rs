@@ -128,16 +128,6 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
             }
             py_err
         }
-        RenderError::OutputTooLarge { diag } => {
-            let py_err = QuillmarkError::new_err(format!("Output too large: {}", diag.message));
-            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                let py_diag = crate::types::PyDiagnostic {
-                    inner: (*diag).into(),
-                };
-                let _ = exc.setattr("diagnostic", py_diag);
-            }
-            py_err
-        }
         RenderError::ValidationFailed { diag } => {
             let py_err = QuillmarkError::new_err(format!("Validation failed: {}", diag.message));
             if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {

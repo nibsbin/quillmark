@@ -173,25 +173,6 @@ impl Quillmark {
         })
     }
 
-    /// Process markdown through template engine (debugging)
-    ///
-    /// Returns template source code (Typst, LaTeX, etc.)
-    #[wasm_bindgen(js_name = processPlate)]
-    pub fn process_plate(&mut self, quill_name: &str, markdown: &str) -> Result<String, JsValue> {
-        // Parse markdown first
-        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
-            .map_err(WasmError::from)
-            .map_err(|e| e.to_js_value())?;
-
-        let workflow = self.inner.workflow(quill_name).map_err(|e| {
-            WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
-        })?;
-
-        workflow
-            .process_plate(&parsed)
-            .map_err(|e| WasmError::from(e).to_js_value())
-    }
-
     /// Perform a dry run validation without backend compilation.
     ///
     /// Executes parsing, schema validation, and template composition to
@@ -218,6 +199,40 @@ impl Quillmark {
         workflow
             .dry_run(&parsed)
             .map_err(|e| WasmError::from(e).to_js_value())
+    }
+
+    /// Compile markdown to JSON data without rendering artifacts.
+    ///
+    /// This exposes the intermediate data structure that would be passed to the backend.
+    /// Useful for debugging and validation.
+    #[wasm_bindgen(js_name = compileData)]
+    pub fn compile_data(&mut self, markdown: &str) -> Result<JsValue, JsValue> {
+        // Parse markdown first
+        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
+            .map_err(WasmError::from)
+            .map_err(|e| e.to_js_value())?;
+
+        // Infer quill name form parsed document's quill_tag
+        let quill_name = parsed.quill_tag();
+
+        let workflow = self.inner.workflow(quill_name).map_err(|e| {
+            WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
+        })?;
+
+        let json_data = workflow
+            .compile_data(&parsed)
+            .map_err(|e| WasmError::from(e).to_js_value())?;
+
+        // Convert serde_json::Value to JsValue
+        // We can stringify and parse, or use serde-wasm-bindgen (if available).
+        // For simplicity/compatibility, let's use the JSON string approach via js_sys
+        let json_str = serde_json::to_string(&json_data).map_err(|e| {
+            WasmError::from(format!("Failed to serialize data: {}", e)).to_js_value()
+        })?;
+
+        js_sys::JSON::parse(&json_str).map_err(|e| {
+            WasmError::from(format!("Failed to parse JSON data: {:?}", e)).to_js_value()
+        })
     }
 
     /// Render a ParsedDocument to final artifacts (PDF, SVG, TXT)

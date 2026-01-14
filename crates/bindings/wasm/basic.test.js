@@ -26,9 +26,13 @@ description = "Test quill for smoke tests"
 `
     },
     'plate.typ': {
-      contents: `= #{{ title | String }}
+      contents: `#import "@local/quillmark-helper:0.1.0": data
+#let title = data.title
+#let body = data.BODY
 
-#{{ body | Content }}`
+= #title
+
+#body`
     }
   }
 }
@@ -86,110 +90,22 @@ describe('quillmark-wasm smoke tests', () => {
     expect(info.schema instanceof Object).toBe(true)
   })
 
-  it('should get stripped schema from QuillInfo', () => {
-    const engine = new Quillmark()
-    
-    // Register a quill with UI metadata in TOML
-    // Note: [fields.my_field.ui] in TOML gets converted to "x-ui" in the JSON schema
-    const quillWithUI = {
-      files: {
-        'Quill.toml': {
-          contents: `[Quill]
-name = "ui_test_quill"
-backend = "typst"
-plate_file = "plate.typ"
-description = "Test quill with UI metadata"
 
-[fields.my_field]
-type = "string"
 
-[fields.my_field.ui]
-group = "Personal Info"
-`
-        },
-        'plate.typ': {
-          contents: `= Title`
-        }
-      }
-    }
-    
-    engine.registerQuill(quillWithUI)
 
-    // Get full quill info (always returns full schema)
-    const info = engine.getQuillInfo('ui_test_quill')
-    expect(info.schema.properties.my_field['x-ui']).toBeDefined()
-    expect(info.schema.properties.my_field['x-ui'].group).toBe('Personal Info')
 
-    // Get stripped schema using the helper method
-    const strippedSchema = info.getStrippedSchema()
-    expect(strippedSchema.properties.my_field['x-ui']).toBeUndefined()
-    expect(strippedSchema.properties.my_field.type).toBe('string')
-  })
 
-  it('should render plate template', () => {
+
+  it('should compile data to JSON', () => {
+    // Verify that we can extract the intermediate JSON data
     const engine = new Quillmark()
     engine.registerQuill(TEST_QUILL)
 
-    const plated = engine.processPlate('test_quill', TEST_MARKDOWN)
+    const jsonData = engine.compileData(TEST_MARKDOWN)
 
-    expect(plated).toBeDefined()
-    expect(typeof plated).toBe('string')
-    expect(plated).toContain('Test Document')
-  })
-
-  it('should use TemplatePlate (not AutoPlate) when plate_file is specified', () => {
-    // This test verifies that when a Quill has a plate_file, the template
-    // is actually processed through MiniJinja, producing Typst syntax
-    const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
-
-    const plated = engine.processPlate('test_quill', TEST_MARKDOWN)
-
-    // The plated output should contain Typst template syntax from plate.typ
-    // (e.g., "= #{title}" becomes "= Test Document" after template processing)
-    // It should NOT be JSON (which AutoPlate would produce)
-    expect(plated).toContain('=') // Typst heading from template
-    expect(plated).not.toMatch(/^\s*\{/) // Should not start with JSON object
-    expect(plated).not.toContain('"title":') // Should not contain JSON keys
-    expect(plated).not.toContain('"BODY":') // Should not contain JSON keys
-  })
-
-  it('should use AutoPlate (JSON output) when plate_file is not specified', () => {
-    // A Quill without plate_file should fall back to AutoPlate, which outputs JSON
-    const quillWithoutPlate = {
-      files: {
-        'Quill.toml': {
-          contents: `[Quill]
-name = "no_plate_quill"
-backend = "typst"
-description = "Test quill without plate file"
-`
-        }
-      }
-    }
-
-    const markdownForNoPlate = `---
-title: AutoPlate Test
-author: Test Author
-QUILL: no_plate_quill
----
-
-This is the body content.`
-
-    const engine = new Quillmark()
-    engine.registerQuill(quillWithoutPlate)
-
-    const plated = engine.processPlate('no_plate_quill', markdownForNoPlate)
-
-    // AutoPlate should produce valid JSON
-    expect(plated).toBeDefined()
-    expect(() => JSON.parse(plated)).not.toThrow()
-
-    const parsed = JSON.parse(plated)
-    expect(parsed.title).toBe('AutoPlate Test')
-    expect(parsed.author).toBe('Test Author')
-    expect(parsed.__metadata__).toBeDefined()
-    expect(parsed.__metadata__.title).toBe('AutoPlate Test')
+    expect(jsonData).toBeDefined()
+    expect(jsonData.title).toBe('Test Document')
+    expect(jsonData.author).toBe('Test Author')
   })
 
   it('should complete full workflow: parse → register → render', () => {
@@ -211,7 +127,6 @@ This is the body content.`
     }
     catch (e) {
       console.error("Render error:", e);
-      console.error("Plate content:", engine.processPlate('test_quill', TEST_MARKDOWN));
       throw e;
     }
 

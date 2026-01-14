@@ -7,7 +7,6 @@
 //! This crate provides the foundational types and traits for Quillmark:
 //!
 //! - **Parsing**: YAML frontmatter extraction with Extended YAML Metadata Standard support
-//! - **Templating**: MiniJinja-based template composition with stable filter API
 //! - **Template model**: [`Quill`] type for managing template bundles with in-memory file system
 //! - **Backend trait**: Extensible interface for implementing output format backends
 //! - **Error handling**: Structured diagnostics with source location tracking
@@ -31,7 +30,6 @@
 //! The crate is organized into modules:
 //!
 //! - [`parse`]: Markdown parsing with YAML frontmatter support
-//! - [`templating`]: Template composition using MiniJinja
 //! - [`backend`]: Backend trait for output format implementations
 //! - [`error`]: Structured error handling and diagnostics
 //! - [`types`]: Core rendering types (OutputFormat, Artifact, RenderOptions)
@@ -44,9 +42,6 @@
 
 pub mod parse;
 pub use parse::{ParsedDocument, BODY_FIELD};
-
-pub mod templating;
-pub use templating::{Plate, TemplateError};
 
 pub mod backend;
 pub use backend::Backend;

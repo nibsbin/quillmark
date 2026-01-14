@@ -25,7 +25,7 @@
 //! third-party backends can integrate cleanly with the engine.
 
 use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark, RenderError};
-use quillmark_core::{Artifact, Backend, Plate, RenderOptions, RenderResult};
+use quillmark_core::{Artifact, Backend, RenderOptions, RenderResult};
 use std::fs;
 use tempfile::TempDir;
 
@@ -47,19 +47,12 @@ impl Backend for MockBackend {
         &[".txt"]
     }
 
-    fn allow_auto_plate(&self) -> bool {
-        true
-    }
-
-    fn register_filters(&self, _plate: &mut Plate) {
-        // No filters for this mock backend
-    }
-
     fn compile(
         &self,
         plated: &str,
         _quill: &Quill,
         _opts: &RenderOptions,
+        _json_data: &serde_json::Value,
     ) -> Result<RenderResult, RenderError> {
         // Simple mock: just return the plated content as a text artifact
         let artifacts = vec![Artifact {

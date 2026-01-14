@@ -10,7 +10,7 @@
 //! ## Key Types
 //!
 //! - [`RenderError`]: Main error enum for rendering operations
-//! - [`crate::TemplateError`]: Template-specific errors
+
 //! - [`Diagnostic`]: Structured diagnostic information
 //! - [`Location`]: Source file location (file, line, column)
 //! - [`Severity`]: Error severity levels (Error, Warning, Note)
@@ -31,7 +31,6 @@
 //! - [`RenderError::InputTooLarge`]: Input size limits exceeded
 //! - [`RenderError::YamlTooLarge`]: YAML size exceeded maximum
 //! - [`RenderError::NestingTooDeep`]: Nesting depth exceeded maximum
-//! - [`RenderError::OutputTooLarge`]: Template output exceeded maximum size
 //!
 //! ## Examples
 //!
@@ -140,9 +139,6 @@ pub const MAX_YAML_SIZE: usize = 1024 * 1024;
 
 /// Maximum nesting depth for markdown structures (100 levels)
 pub const MAX_NESTING_DEPTH: usize = 100;
-
-/// Maximum template output size (50 MB)
-pub const MAX_TEMPLATE_OUTPUT: usize = 50 * 1024 * 1024;
 
 /// Maximum YAML nesting depth (100 levels)
 /// Prevents stack overflow from deeply nested YAML structures
@@ -549,13 +545,6 @@ pub enum RenderError {
         diag: Box<Diagnostic>,
     },
 
-    /// Template output exceeded maximum size
-    #[error("{diag}")]
-    OutputTooLarge {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
     /// Validation failed for parsed document
     #[error("{diag}")]
     ValidationFailed {
@@ -593,7 +582,6 @@ impl RenderError {
             | RenderError::InputTooLarge { diag }
             | RenderError::YamlTooLarge { diag }
             | RenderError::NestingTooDeep { diag }
-            | RenderError::OutputTooLarge { diag }
             | RenderError::ValidationFailed { diag }
             | RenderError::InvalidSchema { diag }
             | RenderError::QuillConfig { diag } => vec![diag.as_ref()],
@@ -629,59 +617,6 @@ impl RenderResult {
     }
 }
 
-/// Convert minijinja errors to RenderError
-impl From<minijinja::Error> for RenderError {
-    fn from(e: minijinja::Error) -> Self {
-        // Extract location with proper range information
-        let loc = e.line().map(|line| Location {
-            file: e.name().unwrap_or("template").to_string(),
-            line: line as u32,
-            // MiniJinja provides range, extract approximate column
-            col: e.range().map(|r| r.start as u32).unwrap_or(0),
-        });
-
-        // Generate helpful hints based on error kind
-        let hint = generate_minijinja_hint(&e);
-
-        // Create diagnostic with source preservation
-        let mut diag = Diagnostic::new(Severity::Error, e.to_string())
-            .with_code(format!("minijinja::{:?}", e.kind()));
-
-        if let Some(loc) = loc {
-            diag = diag.with_location(loc);
-        }
-
-        if let Some(hint) = hint {
-            diag = diag.with_hint(hint);
-        }
-
-        // Preserve the original error as source
-        diag = diag.with_source(Box::new(e));
-
-        RenderError::TemplateFailed {
-            diag: Box::new(diag),
-        }
-    }
-}
-
-/// Generate helpful hints for common MiniJinja errors
-fn generate_minijinja_hint(e: &minijinja::Error) -> Option<String> {
-    use minijinja::ErrorKind;
-
-    match e.kind() {
-        ErrorKind::UndefinedError => {
-            Some("Check variable spelling and ensure it's defined in frontmatter".to_string())
-        }
-        ErrorKind::InvalidOperation => {
-            Some("Check that you're using the correct filter or operator for this type".to_string())
-        }
-        ErrorKind::SyntaxError => Some(
-            "Check template syntax - look for unclosed tags or invalid expressions".to_string(),
-        ),
-        _ => e.detail().map(|d| d.to_string()),
-    }
-}
-
 /// Helper to print structured errors
 pub fn print_errors(err: &RenderError) {
     match err {
@@ -700,7 +635,6 @@ pub fn print_errors(err: &RenderError) {
         RenderError::InputTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::YamlTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::NestingTooDeep { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::OutputTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::ValidationFailed { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::InvalidSchema { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::QuillConfig { diag } => eprintln!("{}", diag.fmt_pretty()),
@@ -793,32 +727,5 @@ mod tests {
 
         assert_eq!(result.warnings.len(), 1);
         assert_eq!(result.warnings[0].message, "Test warning");
-    }
-
-    #[test]
-    fn test_minijinja_error_conversion() {
-        // Use undefined variable with strict mode to trigger an error
-        let template_str = "{{ undefined_var }}";
-        let mut env = minijinja::Environment::new();
-        env.set_undefined_behavior(minijinja::UndefinedBehavior::Strict);
-
-        let result = env.render_str(template_str, minijinja::context! {});
-        assert!(
-            result.is_err(),
-            "Expected rendering to fail with undefined variable"
-        );
-
-        let minijinja_err = result.unwrap_err();
-        let render_err: RenderError = minijinja_err.into();
-
-        match render_err {
-            RenderError::TemplateFailed { diag } => {
-                assert_eq!(diag.severity, Severity::Error);
-                assert!(diag.code.is_some());
-                assert!(diag.hint.is_some());
-                assert!(diag.source.is_some());
-            }
-            _ => panic!("Expected TemplateFailed error"),
-        }
     }
 }

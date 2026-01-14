@@ -1,0 +1,28 @@
+// Auto-generated quillmark-helper package
+// Version: {version}
+
+/// Document data as a dictionary
+#let data = json(bytes("{escaped_json}"))
+
+/// Evaluate a pre-converted Typst markup string as content
+#let eval-markup(s) = eval(s, mode: "markup")
+
+/// Parse an ISO 8601 date string (YYYY-MM-DD) to a Typst datetime
+/// Handles both pure dates (2024-01-15) and datetime strings (2024-01-15T10:30:00)
+#let parse-date(s) = {
+  if s == none { return none }
+  let date-str = str(s)
+  // Handle datetime strings by extracting just the date part
+  if date-str.contains("T") {
+    date-str = date-str.split("T").at(0)
+  }
+  let parts = date-str.split("-")
+  if parts.len() < 3 { return none }
+  let year = int(parts.at(0))
+  let month = int(parts.at(1))
+  // Take only the first 2 characters in case there's extra content
+  let day-str = parts.at(2)
+  if day-str.len() > 2 { day-str = day-str.slice(0, 2) }
+  let day = int(day-str)
+  datetime(year: year, month: month, day: day)
+}

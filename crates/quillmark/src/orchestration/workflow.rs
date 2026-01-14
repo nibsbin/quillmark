@@ -1,5 +1,5 @@
 use quillmark_core::{
-    normalize::normalize_document, Backend, Diagnostic, OutputFormat, ParsedDocument, Plate, Quill,
+    normalize::normalize_document, Backend, Diagnostic, OutputFormat, ParsedDocument, Quill,
     RenderError, RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;
@@ -26,37 +26,52 @@ impl Workflow {
     }
 
     /// Render Markdown with YAML frontmatter to output artifacts. See [module docs](super) for examples.
+    /// Compile the document to JSON data suitable for the backend
+    pub fn compile_data(&self, parsed: &ParsedDocument) -> Result<serde_json::Value, RenderError> {
+        // Apply coercion and validate
+        let parsed_coerced = parsed.with_coercion(&self.quill.schema);
+        self.validate_document(&parsed_coerced)?;
+
+        // Normalize document: strip bidi characters and fix HTML comment fences
+        let normalized = normalize_document(parsed_coerced);
+
+        // Transform fields for JSON injection (backend-specific transformations)
+        let transformed_fields = self
+            .backend
+            .transform_fields(normalized.fields(), &self.quill.schema);
+
+        // Apply schema defaults to fill in missing fields
+        let fields_with_defaults = self.apply_schema_defaults(&transformed_fields);
+
+        // Serialize transformed fields to JSON for injection
+        Ok(Self::fields_to_json(&fields_with_defaults))
+    }
+
     pub fn render(
         &self,
         parsed: &ParsedDocument,
         format: Option<OutputFormat>,
     ) -> Result<RenderResult, RenderError> {
-        let plated_output = self.process_plate(parsed)?;
+        // Compile the data first
+        let json_data = self.compile_data(parsed)?;
+
+        // Get plate content directly (no MiniJinja composition)
+        let plate_content = self.get_plate_content()?.unwrap_or_default();
 
         // Prepare quill with dynamic assets
         let prepared_quill = self.prepare_quill_with_assets();
 
-        // Pass prepared quill to backend
-        self.render_plate_with_quill(&plated_output, format, &prepared_quill)
+        // Pass plate content and JSON data to backend
+        self.render_plate_with_quill_and_data(&plate_content, format, &prepared_quill, &json_data)
     }
 
-    /// Render pre-processed plate content, skipping parsing and template composition.
-    pub fn render_plate(
-        &self,
-        content: &str,
-        format: Option<OutputFormat>,
-    ) -> Result<RenderResult, RenderError> {
-        // Prepare quill with dynamic assets
-        let prepared_quill = self.prepare_quill_with_assets();
-        self.render_plate_with_quill(content, format, &prepared_quill)
-    }
-
-    /// Internal method to render content with a specific quill
-    fn render_plate_with_quill(
+    /// Internal method to render content with a specific quill and JSON data
+    fn render_plate_with_quill_and_data(
         &self,
         content: &str,
         format: Option<OutputFormat>,
         quill: &Quill,
+        json_data: &serde_json::Value,
     ) -> Result<RenderResult, RenderError> {
         let format = if format.is_some() {
             format
@@ -74,52 +89,70 @@ impl Workflow {
             output_format: format,
         };
 
-        self.backend.compile(content, quill, &render_opts)
+        self.backend
+            .compile(content, quill, &render_opts, json_data)
     }
 
-    /// Process a parsed document through the plate template without compilation
-    ///
-    /// Note: Default values from the schema are NOT automatically injected.
-    /// This follows JSON Schema semantics where `default` is purely informational.
-    /// Typst plates should handle missing optional fields via `.at("field", default: ...)`.
-    pub fn process_plate(&self, parsed: &ParsedDocument) -> Result<String, RenderError> {
-        // Apply coercion based on schema (no default imputation - aligns with JSON Schema semantics)
-        let parsed_coerced = parsed.with_coercion(&self.quill.schema);
+    /// Apply schema defaults to fields before JSON serialization
+    fn apply_schema_defaults(
+        &self,
+        fields: &HashMap<String, quillmark_core::QuillValue>,
+    ) -> HashMap<String, quillmark_core::QuillValue> {
+        use quillmark_core::QuillValue;
 
-        // Validate document against schema
-        self.validate_document(&parsed_coerced)?;
+        let mut result = fields.clone();
 
-        // Normalize document: strip bidi characters and fix HTML comment fences
-        // - Strips Unicode bidirectional formatting characters that interfere with markdown parsing
-        let normalized = normalize_document(parsed_coerced);
-
-        // Create appropriate plate based on whether template is provided
-        let mut plate = match &self.quill.plate {
-            Some(s) if !s.is_empty() => Plate::new(s.to_string()),
-            _ => Plate::new_auto(),
-        };
-        self.backend.register_filters(&mut plate);
-        let plated_output = plate.compose(normalized.fields().clone()).map_err(|e| {
-            RenderError::TemplateFailed {
-                diag: Box::new(
-                    Diagnostic::new(Severity::Error, e.to_string())
-                        .with_code("template::compose".to_string()),
-                ),
+        // Extract properties from schema if it exists
+        if let Some(properties_value) = self.quill.schema.get("properties") {
+            if let Some(properties) = properties_value.as_object() {
+                for (field_name, field_schema) in properties {
+                    // If field is missing and schema has a default, apply it
+                    if !result.contains_key(field_name) {
+                        if let Some(default_value) = field_schema.get("default") {
+                            result.insert(
+                                field_name.clone(),
+                                QuillValue::from_json(default_value.clone()),
+                            );
+                        }
+                    }
+                }
             }
-        })?;
-        Ok(plated_output)
+        }
+
+        result
+    }
+
+    /// Convert fields to JSON Value for injection
+    fn fields_to_json(fields: &HashMap<String, quillmark_core::QuillValue>) -> serde_json::Value {
+        let mut json_map = serde_json::Map::new();
+        for (key, value) in fields {
+            json_map.insert(key.clone(), value.as_json().clone());
+        }
+        serde_json::Value::Object(json_map)
+    }
+
+    /// Get the plate content directly from the quill
+    ///
+    /// Returns the plate file content as-is, without any MiniJinja processing.
+    /// Returns None if no plate file exists (valid for pure-binary backends).
+    fn get_plate_content(&self) -> Result<Option<String>, RenderError> {
+        match &self.quill.plate {
+            Some(s) if !s.is_empty() => Ok(Some(s.clone())),
+            _ => Ok(None),
+        }
     }
 
     /// Perform a dry run validation without backend compilation.
     ///
-    /// Executes parsing, schema validation, and template composition to
-    /// surface input errors quickly. Returns `Ok(())` on success, or
-    /// `Err(RenderError)` with structured diagnostics on failure.
+    /// Executes parsing and schema validation to surface input errors quickly.
+    /// Returns `Ok(())` on success, or `Err(RenderError)` with structured
+    /// diagnostics on failure.
     ///
     /// This is useful for fast feedback loops in LLM-driven document generation,
     /// where you want to validate inputs before incurring compilation costs.
     pub fn dry_run(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
-        self.process_plate(parsed)?;
+        let parsed_coerced = parsed.with_coercion(&self.quill.schema);
+        self.validate_document(&parsed_coerced)?;
         Ok(())
     }
 

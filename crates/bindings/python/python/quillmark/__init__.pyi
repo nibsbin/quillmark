@@ -100,17 +100,17 @@ class Workflow:
             TemplateError: If template composition fails
             CompilationError: If backend compilation fails
         """
-    
-    def render_plated(
-        self,
-        content: str,
-        format: OutputFormat | None = None
-    ) -> RenderResult:
-        """Render pre-composed plate content (skip template processing)."""
-    
-    def process_plate(self, parsed: ParsedDocument) -> str:
-        """Process parsed document through plate template."""
-    
+
+    def dry_run(self, parsed: ParsedDocument) -> None:
+        """Validate document without compilation.
+
+        Args:
+            parsed: Parsed markdown document
+
+        Raises:
+            QuillmarkError: If validation fails
+        """
+
     @property
     def backend_id(self) -> str:
         """Get backend identifier."""
@@ -158,7 +158,7 @@ class Quill:
     def schema(self) -> Any:
         """Field schema definitions declared by the quill (from Quill.toml)."""
 
-    @function
+    @property
     def print_tree(self) -> str:
         """Get a string representation of the quill file tree."""
 

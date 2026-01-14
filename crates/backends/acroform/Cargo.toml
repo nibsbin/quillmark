@@ -14,7 +14,7 @@ publish = true
 [dependencies]
 quillmark-core = { workspace = true }
 serde_json = { workspace = true }
-minijinja = { workspace = true }
+minijinja = "2.13"
 thiserror = { workspace = true }
 acroform = {workspace = true}
 

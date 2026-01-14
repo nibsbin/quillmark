@@ -1,43 +1,52 @@
+#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
 #import "@preview/tonguetoquill-usaf-memo:1.0.0": frontmatter, mainmatter, backmatter, indorsement
 
 // Frontmatter configuration
 #show: frontmatter.with(
   // Letterhead configuration
-  letterhead_title: {{ letterhead_title | String(default="letterhead-title") }},
-  letterhead_caption: {{ letterhead_caption | Lines(default=["letterhead-caption"]) }},
+  letterhead_title: data.at("letterhead_title", default: "letterhead-title"),
+  letterhead_caption: data.at("letterhead_caption", default: ("letterhead-caption",)),
   letterhead_seal: image("assets/dow_seal.jpg"),
 
   // Date
-  date: {{ date | Date }},
+  date: parse-date(data.date),
 
   // Receiver information
-  memo_for: {{ memo_for | Lines(default=["memo_for"]) }},
+  memo_for: data.at("memo_for", default: ("memo_for",)),
 
   // Sender information
-  memo_from: {{ memo_from | Lines(default=["memo_from"]) }},
+  memo_from: data.at("memo_from", default: ("memo_from",)),
 
   // Subject line
-  subject: {{ subject | String(default="subject") }},
+  subject: data.at("subject", default: "subject"),
 
   // Optional references
-  {% if references is defined %}
-  references: {{ references | Lines }},
-  {% endif %}
+  ..if "references" in data {
+    (references: data.references,)
+  } else {
+    (:)
+  },
 
   // Optional footer tag line
-  {% if tag_line is defined %}
-  footer_tag_line: {{ tag_line | String }},
-  {% endif %}
+  ..if "tag_line" in data {
+    (footer_tag_line: data.tag_line,)
+  } else {
+    (:)
+  },
 
   // Optional classification level
-  {% if classification is defined %}
-  classification_level: {{ classification | String }},
-  {% endif %}
+  ..if "classification" in data {
+    (classification_level: data.classification,)
+  } else {
+    (:)
+  },
 
   // Font size
-  {% if font_size is defined %}
-  font_size: {{ font_size }}pt,
-  {% endif %}
+  ..if "font_size" in data {
+    (font_size: data.font_size * 1pt,)
+  } else {
+    (:)
+  },
 
   // List recipients in vertical list
   memo_for_cols: 1,
@@ -45,49 +54,61 @@
 
 // Mainmatter configuration
 #mainmatter[
-#{{ BODY | Content }}
+  #eval-markup(data.BODY)
 ]
 
 // Backmatter
 #backmatter(
   // Signature block
-  signature_block: {{ signature_block | Lines(default=["signature_block"]) }},
+  signature_block: data.at("signature_block", default: ("signature_block",)),
 
   // Optional cc
-  {% if cc is defined %}
-  cc: {{ cc | Lines }},
-  {% endif %}
+  ..if "cc" in data {
+    (cc: data.cc,)
+  } else {
+    (:)
+  },
 
   // Optional distribution
-  {% if distribution is defined %}
-  distribution: {{ distribution | Lines }},
-  {% endif %}
+  ..if "distribution" in data {
+    (distribution: data.distribution,)
+  } else {
+    (:)
+  },
 
   // Optional attachments
-  {% if attachments is defined %}
-  attachments: {{ attachments | Lines }},
-  {% endif %}
+  ..if "attachments" in data {
+    (attachments: data.attachments,)
+  } else {
+    (:)
+  },
 )
 
 // Indorsements - iterate through CARDS array and filter by CARD type
-{% for card in CARDS %}
-{% if card.CARD == "indorsement" %}
-#indorsement(
-  from: {{ card.from | String }},
-  to: {{ card.for | String }},
-  signature_block: {{ card.signature_block | Lines }},
-  {% if card.attachments is defined %}
-  attachments: {{ card.attachments | Lines }},
-  {% endif %}
-  {% if card.cc is defined %}
-  cc: {{ card.cc | Lines }},
-  {% endif %}
-  format: {{ card.format | String(default="standard") }},
-  {% if card.date is defined %}
-  date: {{ card.date | String }},
-  {% endif %}
-)[
-  #{{ card.BODY | Content }}
-]
-{% endif %}
-{% endfor %}
+#for card in data.at("CARDS", default: ()) {
+  if card.CARD == "indorsement" {
+    indorsement(
+      from: card.from,
+      to: card.for,
+      signature_block: card.signature_block,
+      ..if "attachments" in card {
+        (attachments: card.attachments,)
+      } else {
+        (:)
+      },
+      ..if "cc" in card {
+        (cc: card.cc,)
+      } else {
+        (:)
+      },
+      format: card.at("format", default: "standard"),
+      ..if "date" in card {
+        (date: card.date,)
+      } else {
+        (:)
+      },
+    )[
+      #eval-markup(card.BODY)
+    ]
+  }
+}

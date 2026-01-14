@@ -16,7 +16,7 @@
 //! let quill = Quill::from_path("path/to/quill")?;
 //! let typst_content = "#set document(title: \"Test\")\n= Hello";
 //!
-//! let pdf_bytes = compile_to_pdf(&quill, typst_content)?;
+//! let pdf_bytes = compile_to_pdf(&quill, typst_content, "{}")?;
 //! std::fs::write("output.pdf", pdf_bytes)?;
 //! # Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
 //! ```
@@ -38,10 +38,34 @@ use crate::error_mapping::map_typst_errors;
 use crate::world::QuillWorld;
 use quillmark_core::{Diagnostic, Quill, RenderError, Severity};
 
-/// Compiles a Typst document to PDF format.
-pub fn compile_to_pdf(quill: &Quill, plated_content: &str) -> Result<Vec<u8>, RenderError> {
-    let world =
-        QuillWorld::new(quill, plated_content).map_err(|e| RenderError::EngineCreation {
+/// Internal compilation function
+fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
+    let Warned { output, warnings } = typst::compile::<PagedDocument>(world);
+
+    for warning in warnings {
+        eprintln!("Warning: {}", warning.message);
+    }
+
+    match output {
+        Ok(doc) => Ok(doc),
+        Err(errors) => {
+            let diagnostics = map_typst_errors(&errors, world);
+            Err(RenderError::CompilationFailed { diags: diagnostics })
+        }
+    }
+}
+
+/// Compiles a Typst document to PDF format with JSON data injection.
+///
+/// This function creates a `@local/quillmark-helper:0.1.0` package containing
+/// the JSON data, which can be imported by the plate file.
+pub fn compile_to_pdf(
+    quill: &Quill,
+    plated_content: &str,
+    json_data: &str,
+) -> Result<Vec<u8>, RenderError> {
+    let world = QuillWorld::new_with_data(quill, plated_content, json_data).map_err(|e| {
+        RenderError::EngineCreation {
             diag: Box::new(
                 Diagnostic::new(
                     Severity::Error,
@@ -50,7 +74,8 @@ pub fn compile_to_pdf(quill: &Quill, plated_content: &str) -> Result<Vec<u8>, Re
                 .with_code("typst::world_creation".to_string())
                 .with_source(e),
             ),
-        })?;
+        }
+    })?;
 
     let document = compile_document(&world)?;
 
@@ -67,10 +92,17 @@ pub fn compile_to_pdf(quill: &Quill, plated_content: &str) -> Result<Vec<u8>, Re
     Ok(pdf)
 }
 
-/// Compiles a Typst document to SVG format (one file per page).
-pub fn compile_to_svg(quill: &Quill, plated_content: &str) -> Result<Vec<Vec<u8>>, RenderError> {
-    let world =
-        QuillWorld::new(quill, plated_content).map_err(|e| RenderError::EngineCreation {
+/// Compiles a Typst document to SVG format with JSON data injection.
+///
+/// This function creates a `@local/quillmark-helper:0.1.0` package containing
+/// the JSON data, which can be imported by the plate file.
+pub fn compile_to_svg(
+    quill: &Quill,
+    plated_content: &str,
+    json_data: &str,
+) -> Result<Vec<Vec<u8>>, RenderError> {
+    let world = QuillWorld::new_with_data(quill, plated_content, json_data).map_err(|e| {
+        RenderError::EngineCreation {
             diag: Box::new(
                 Diagnostic::new(
                     Severity::Error,
@@ -79,7 +111,8 @@ pub fn compile_to_svg(quill: &Quill, plated_content: &str) -> Result<Vec<Vec<u8>
                 .with_code("typst::world_creation".to_string())
                 .with_source(e),
             ),
-        })?;
+        }
+    })?;
 
     let document = compile_document(&world)?;
 
@@ -90,21 +123,4 @@ pub fn compile_to_svg(quill: &Quill, plated_content: &str) -> Result<Vec<Vec<u8>
     }
 
     Ok(pages)
-}
-
-/// Internal compilation function
-fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
-    let Warned { output, warnings } = typst::compile::<PagedDocument>(world);
-
-    for warning in warnings {
-        eprintln!("Warning: {}", warning.message);
-    }
-
-    match output {
-        Ok(doc) => Ok(doc),
-        Err(errors) => {
-            let diagnostics = map_typst_errors(&errors, world);
-            Err(RenderError::CompilationFailed { diags: diagnostics })
-        }
-    }
 }

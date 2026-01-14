@@ -7,6 +7,7 @@ use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, World};
 
+use crate::helper;
 use quillmark_core::Quill;
 
 /// Typst World implementation for quill-based compilation.
@@ -99,6 +100,56 @@ impl QuillWorld {
             sources,
             binaries,
         })
+    }
+
+    /// Create a new QuillWorld with JSON data injected as a helper package.
+    ///
+    /// This method creates a virtual `@local/quillmark-helper:0.1.0` package
+    /// containing the JSON data and helper functions. Plates can import this
+    /// package to access document data.
+    ///
+    /// # Arguments
+    ///
+    /// * `quill` - The quill template
+    /// * `main` - The main Typst content to compile
+    /// * `json_data` - JSON string containing document data
+    pub fn new_with_data(
+        quill: &Quill,
+        main: &str,
+        json_data: &str,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        let mut world = Self::new(quill, main)?;
+
+        // Inject the quillmark-helper package
+        world.inject_helper_package(json_data);
+
+        Ok(world)
+    }
+
+    /// Inject the quillmark-helper package with JSON data.
+    fn inject_helper_package(&mut self, json_data: &str) {
+        // Create the package spec
+        let spec = PackageSpec {
+            namespace: helper::HELPER_NAMESPACE.into(),
+            name: helper::HELPER_NAME.into(),
+            version: helper::HELPER_VERSION
+                .parse()
+                .expect("Invalid helper version"),
+        };
+
+        // Generate and inject lib.typ
+        let lib_content = helper::generate_lib_typ(json_data);
+        let lib_path = VirtualPath::new("lib.typ");
+        let lib_id = FileId::new(Some(spec.clone()), lib_path);
+        self.sources
+            .insert(lib_id, Source::new(lib_id, lib_content));
+
+        // Generate and inject typst.toml (as binary)
+        let toml_content = helper::generate_typst_toml();
+        let toml_path = VirtualPath::new("typst.toml");
+        let toml_id = FileId::new(Some(spec), toml_path);
+        self.binaries
+            .insert(toml_id, Bytes::new(toml_content.into_bytes()));
     }
 
     /// Loads fonts from quill's in-memory file system.

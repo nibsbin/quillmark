@@ -1,5 +1,9 @@
-#{{__metadata__ | Json}}
+#import "@local/quillmark-helper:0.1.0": data, eval-markup
+
+// Display document metadata
+#data
 
 #line(length: 100%)
 
-#{{ body | Content }}
+// Render body content
+#eval-markup(data.at("BODY", default: ""))
