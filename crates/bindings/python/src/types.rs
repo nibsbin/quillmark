@@ -108,20 +108,6 @@ impl PyWorkflow {
         Ok(PyRenderResult { inner: result })
     }
 
-    #[pyo3(signature = (content, format=None))]
-    fn render_plated(
-        &self,
-        content: &str,
-        format: Option<PyOutputFormat>,
-    ) -> PyResult<PyRenderResult> {
-        let rust_format = format.map(|f| f.into());
-        let result = self
-            .inner
-            .render_plate(content, rust_format)
-            .map_err(convert_render_error)?;
-        Ok(PyRenderResult { inner: result })
-    }
-
     /// Perform a dry run validation without backend compilation.
     ///
     /// Raises QuillmarkError with diagnostic payload on validation failure.

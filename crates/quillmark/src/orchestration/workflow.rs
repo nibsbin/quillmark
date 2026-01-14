@@ -59,44 +59,6 @@ impl Workflow {
         self.render_plate_with_quill_and_data(&plate_content, format, &prepared_quill, &json_data)
     }
 
-    /// Render pre-processed plate content, skipping parsing and template composition.
-    pub fn render_plate(
-        &self,
-        content: &str,
-        format: Option<OutputFormat>,
-    ) -> Result<RenderResult, RenderError> {
-        // Prepare quill with dynamic assets
-        let prepared_quill = self.prepare_quill_with_assets();
-        self.render_plate_with_quill(content, format, &prepared_quill)
-    }
-
-    /// Internal method to render content with a specific quill
-    fn render_plate_with_quill(
-        &self,
-        content: &str,
-        format: Option<OutputFormat>,
-        quill: &Quill,
-    ) -> Result<RenderResult, RenderError> {
-        let format = if format.is_some() {
-            format
-        } else {
-            // Default to first supported format if none specified
-            let supported = self.backend.supported_formats();
-            if !supported.is_empty() {
-                Some(supported[0])
-            } else {
-                None
-            }
-        };
-
-        let render_opts = RenderOptions {
-            output_format: format,
-        };
-
-        self.backend
-            .compile(content, quill, &render_opts, &serde_json::json!({}))
-    }
-
     /// Internal method to render content with a specific quill and JSON data
     fn render_plate_with_quill_and_data(
         &self,

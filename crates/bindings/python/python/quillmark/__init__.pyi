@@ -101,12 +101,7 @@ class Workflow:
             CompilationError: If backend compilation fails
         """
     
-    def render_plated(
-        self,
-        content: str,
-        format: OutputFormat | None = None
-    ) -> RenderResult:
-        """Render pre-composed plate content (skip template processing)."""
+
     
     def process_plate(self, parsed: ParsedDocument) -> str:
         """Process parsed document through plate template."""
