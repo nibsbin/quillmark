@@ -39,6 +39,10 @@ pub struct RenderArgs {
     /// Suppress all non-error output
     #[arg(long)]
     quiet: bool,
+
+    /// Output intermediate JSON data to file
+    #[arg(long, value_name = "DATA_FILE")]
+    output_data: Option<PathBuf>,
 }
 
 pub fn execute(args: RenderArgs) -> Result<()> {
@@ -192,6 +196,32 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 
     if args.verbose {
         println!("Rendering to format: {:?}", output_format);
+    }
+
+    // Handle output-data
+    if let Some(data_path) = args.output_data {
+        let json_data = workflow
+            .compile_data(&parsed)
+            .map_err(|e| CliError::Render(e))?;
+        let f = std::fs::File::create(&data_path).map_err(|e| {
+            CliError::Io(std::io::Error::new(
+                e.kind(),
+                format!(
+                    "Failed to create data output file '{}': {}",
+                    data_path.display(),
+                    e
+                ),
+            ))
+        })?;
+        serde_json::to_writer_pretty(f, &json_data).map_err(|e| {
+            CliError::Io(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Failed to write JSON data: {}", e),
+            ))
+        })?;
+        if args.verbose && !args.quiet {
+            println!("JSON data written to: {}", data_path.display());
+        }
     }
 
     // Render

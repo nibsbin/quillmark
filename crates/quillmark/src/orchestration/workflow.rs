@@ -26,11 +26,8 @@ impl Workflow {
     }
 
     /// Render Markdown with YAML frontmatter to output artifacts. See [module docs](super) for examples.
-    pub fn render(
-        &self,
-        parsed: &ParsedDocument,
-        format: Option<OutputFormat>,
-    ) -> Result<RenderResult, RenderError> {
+    /// Compile the document to JSON data suitable for the backend
+    pub fn compile_data(&self, parsed: &ParsedDocument) -> Result<serde_json::Value, RenderError> {
         // Apply coercion and validate
         let parsed_coerced = parsed.with_coercion(&self.quill.schema);
         self.validate_document(&parsed_coerced)?;
@@ -47,7 +44,16 @@ impl Workflow {
         let fields_with_defaults = self.apply_schema_defaults(&transformed_fields);
 
         // Serialize transformed fields to JSON for injection
-        let json_data = Self::fields_to_json(&fields_with_defaults);
+        Ok(Self::fields_to_json(&fields_with_defaults))
+    }
+
+    pub fn render(
+        &self,
+        parsed: &ParsedDocument,
+        format: Option<OutputFormat>,
+    ) -> Result<RenderResult, RenderError> {
+        // Compile the data first
+        let json_data = self.compile_data(parsed)?;
 
         // Get plate content directly (no MiniJinja composition)
         let plate_content = self.get_plate_content()?.unwrap_or_default();
