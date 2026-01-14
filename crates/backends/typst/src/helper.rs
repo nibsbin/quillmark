@@ -7,16 +7,16 @@
 //!
 //! The generated package exports:
 //! - `data` - A dictionary containing all document fields as JSON
-//! - `content(string)` - Evaluates pre-converted Typst markup strings
+//! - `eval-markup(string)` - Evaluates pre-converted Typst markup strings
 //! - `parse-date(string)` - Parses ISO 8601 date strings to Typst datetime
 //!
 //! ## Usage in Plates
 //!
 //! ```typst
-//! #import "@local/quillmark-helper:0.1.0": data, content, parse-date
+//! #import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
 //!
 //! #data.title
-//! #content(data.BODY)
+//! #eval-markup(data.BODY)
 //! #parse-date(data.date)
 //! ```
 
@@ -31,48 +31,21 @@ pub const HELPER_NAMESPACE: &str = "local";
 /// Helper package name
 pub const HELPER_NAME: &str = "quillmark-helper";
 
+/// Template for the `lib.typ` file, loaded at compile time
+const LIB_TYP_TEMPLATE: &str = include_str!("lib.typ.template");
+
 /// Generate the `lib.typ` content for the quillmark-helper package.
 ///
 /// The generated file contains:
 /// - Embedded JSON data as `#let data = json(bytes("..."))`
-/// - `#let content(s) = eval(s, mode: "markup")` helper
+/// - `#let eval-markup(s) = eval(s, mode: "markup")` helper
 /// - `#let parse-date(s) = { ... }` helper for ISO 8601 dates
 pub fn generate_lib_typ(json_data: &str) -> String {
     let escaped_json = escape_string(json_data);
 
-    format!(
-        r#"// Auto-generated quillmark-helper package
-// Version: {version}
-
-/// Document data as a dictionary
-#let data = json(bytes("{escaped_json}"))
-
-/// Evaluate a pre-converted Typst markup string as content
-#let content(s) = eval(s, mode: "markup")
-
-/// Parse an ISO 8601 date string (YYYY-MM-DD) to a Typst datetime
-/// Handles both pure dates (2024-01-15) and datetime strings (2024-01-15T10:30:00)
-#let parse-date(s) = {{
-  if s == none {{ return none }}
-  let date-str = str(s)
-  // Handle datetime strings by extracting just the date part
-  if date-str.contains("T") {{
-    date-str = date-str.split("T").at(0)
-  }}
-  let parts = date-str.split("-")
-  if parts.len() < 3 {{ return none }}
-  let year = int(parts.at(0))
-  let month = int(parts.at(1))
-  // Take only the first 2 characters in case there's extra content
-  let day-str = parts.at(2)
-  if day-str.len() > 2 {{ day-str = day-str.slice(0, 2) }}
-  let day = int(day-str)
-  datetime(year: year, month: month, day: day)
-}}
-"#,
-        version = HELPER_VERSION,
-        escaped_json = escaped_json
-    )
+    LIB_TYP_TEMPLATE
+        .replace("{version}", HELPER_VERSION)
+        .replace("{escaped_json}", &escaped_json)
 }
 
 /// Generate the `typst.toml` content for the quillmark-helper package.
@@ -105,8 +78,8 @@ mod tests {
         // Should contain the data binding
         assert!(lib.contains("#let data = json(bytes("));
 
-        // Should contain the content helper
-        assert!(lib.contains("#let content(s) = eval(s, mode: \"markup\")"));
+        // Should contain the eval-markup helper
+        assert!(lib.contains("#let eval-markup(s) = eval(s, mode: \"markup\")"));
 
         // Should contain the parse-date helper
         assert!(lib.contains("#let parse-date(s)"));
