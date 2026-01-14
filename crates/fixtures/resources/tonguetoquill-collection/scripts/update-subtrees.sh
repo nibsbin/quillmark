@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# Updates the tonguetoquill-usaf-memo subtree from upstream
+# Updates all subtrees from upstream
 #
-# Usage: ./scripts/update-usaf-memo-subtree.sh
+# Usage: ./scripts/update-subtrees.sh
 #
 
 set -euo pipefail
@@ -10,22 +10,47 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-SUBTREE_PREFIX="quills/usaf_memo/packages/tonguetoquill-usaf-memo"
-UPSTREAM_REPO="https://github.com/nibsbin/tonguetoquill-usaf-memo"
-UPSTREAM_BRANCH="release/core"
+# Define subtrees as arrays
+SUBTREE_NAMES=("usaf_memo" "classic_resume")
+SUBTREE_PREFIXES=(
+    "quills/usaf_memo/packages/tonguetoquill-usaf-memo"
+    "quills/classic_resume/packages/ttq-classic-resume"
+)
+UPSTREAM_REPOS=(
+    "https://github.com/nibsbin/tonguetoquill-usaf-memo"
+    "https://github.com/nibsbin/ttq-classic-resume"
+)
+UPSTREAM_BRANCHES=(
+    "release/core"
+    "release/core"
+)
 
 cd "$REPO_ROOT"
 
-echo "Updating subtree: $SUBTREE_PREFIX"
-echo "From: $UPSTREAM_REPO ($UPSTREAM_BRANCH)"
-echo ""
+# Update each subtree
+for i in "${!SUBTREE_NAMES[@]}"; do
+    NAME="${SUBTREE_NAMES[$i]}"
+    PREFIX="${SUBTREE_PREFIXES[$i]}"
+    REPO="${UPSTREAM_REPOS[$i]}"
+    BRANCH="${UPSTREAM_BRANCHES[$i]}"
+    
+    echo "========================================="
+    echo "Updating subtree: $NAME"
+    echo "Prefix: $PREFIX"
+    echo "From: $REPO ($BRANCH)"
+    echo ""
+    
+    git subtree pull \
+        --prefix="$PREFIX" \
+        "$REPO" \
+        "$BRANCH" \
+        --squash \
+        -m "chore: update $NAME subtree from upstream"
+    
+    echo ""
+    echo "✓ $NAME subtree updated successfully"
+    echo ""
+done
 
-git subtree pull \
-    --prefix="$SUBTREE_PREFIX" \
-    "$UPSTREAM_REPO" \
-    "$UPSTREAM_BRANCH" \
-    --squash \
-    -m "chore: update tonguetoquill-usaf-memo subtree from upstream"
-
-echo ""
-echo "✓ Subtree updated successfully"
+echo "========================================="
+echo "✓ All subtrees updated successfully"
