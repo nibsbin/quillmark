@@ -83,7 +83,7 @@ A virtual Typst package injected into the compilation world. It exports:
 
 - **`data`** — A dictionary containing all document fields, serialized from the parsed document according to the Quill.toml schema.
 
-- **`content(string)`** — A helper function that evaluates a pre-converted Typst markup string. Used for fields that were originally markdown (e.g., BODY).
+- **`eval-markup(string)`** — A helper function that evaluates a pre-converted Typst markup string. Used for fields that were originally markdown (e.g., BODY).
 
 - **`parse-date(string)`** — A helper function that parses an ISO 8601 date string into a Typst `datetime` value.
 
@@ -128,7 +128,7 @@ The package is generated dynamically with the JSON data embedded inline. No phys
 )
 
 #mainmatter[
-  #content(data.BODY)
+  #eval-markup(data.BODY)
 ]
 
 #for item in data.at("CARDS", default: ()) {
@@ -152,7 +152,7 @@ Fields with `type = "markdown"` in Quill.toml require special handling. These fi
 
 3. **The converted string is stored in the JSON.** It contains valid Typst markup, ready to be evaluated.
 
-4. **In the plate, the author calls `content(data.BODY)`**, which wraps the string in `eval(..., mode: "markup")` to produce Typst content.
+4. **In the plate, the author calls `eval-markup(data.BODY)`**, which wraps the string in `eval(..., mode: "markup")` to produce Typst content.
 
 ### Nested Content Fields
 

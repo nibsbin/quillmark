@@ -7,16 +7,16 @@
 //!
 //! The generated package exports:
 //! - `data` - A dictionary containing all document fields as JSON
-//! - `content(string)` - Evaluates pre-converted Typst markup strings
+//! - `eval-markup(string)` - Evaluates pre-converted Typst markup strings
 //! - `parse-date(string)` - Parses ISO 8601 date strings to Typst datetime
 //!
 //! ## Usage in Plates
 //!
 //! ```typst
-//! #import "@local/quillmark-helper:0.1.0": data, content, parse-date
+//! #import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
 //!
 //! #data.title
-//! #content(data.BODY)
+//! #eval-markup(data.BODY)
 //! #parse-date(data.date)
 //! ```
 
@@ -38,7 +38,7 @@ const LIB_TYP_TEMPLATE: &str = include_str!("lib.typ.template");
 ///
 /// The generated file contains:
 /// - Embedded JSON data as `#let data = json(bytes("..."))`
-/// - `#let content(s) = eval(s, mode: "markup")` helper
+/// - `#let eval-markup(s) = eval(s, mode: "markup")` helper
 /// - `#let parse-date(s) = { ... }` helper for ISO 8601 dates
 pub fn generate_lib_typ(json_data: &str) -> String {
     let escaped_json = escape_string(json_data);
@@ -78,8 +78,8 @@ mod tests {
         // Should contain the data binding
         assert!(lib.contains("#let data = json(bytes("));
 
-        // Should contain the content helper
-        assert!(lib.contains("#let content(s) = eval(s, mode: \"markup\")"));
+        // Should contain the eval-markup helper
+        assert!(lib.contains("#let eval-markup(s) = eval(s, mode: \"markup\")"));
 
         // Should contain the parse-date helper
         assert!(lib.contains("#let parse-date(s)"));

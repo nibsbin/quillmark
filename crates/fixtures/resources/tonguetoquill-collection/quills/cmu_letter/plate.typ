@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data, content, parse-date
+#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
 #import "@preview/tonguetoquill-cmu-letter:0.1.0": frontmatter, mainmatter, backmatter
 
 #show: frontmatter.with(
@@ -12,7 +12,7 @@
 
 #show: mainmatter
 
-#content(data.BODY)
+#eval-markup(data.BODY)
 
 #backmatter(
   signature_block: data.at("signature_block", default: ("First M. Last", "Title"))

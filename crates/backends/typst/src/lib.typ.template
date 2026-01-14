@@ -5,7 +5,7 @@
 #let data = json(bytes("{escaped_json}"))
 
 /// Evaluate a pre-converted Typst markup string as content
-#let content(s) = eval(s, mode: "markup")
+#let eval-markup(s) = eval(s, mode: "markup")
 
 /// Parse an ISO 8601 date string (YYYY-MM-DD) to a Typst datetime
 /// Handles both pure dates (2024-01-15) and datetime strings (2024-01-15T10:30:00)
