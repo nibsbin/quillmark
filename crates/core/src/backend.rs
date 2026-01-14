@@ -151,7 +151,6 @@ pub trait Backend: Send + Sync {
     /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
     /// #     fn plate_extension_types(&self) -> &'static [&'static str] { &[] }
     /// #     fn allow_auto_plate(&self) -> bool { true }
-    /// #     fn register_filters(&self, _: &mut quillmark_core::Plate) {}
     /// #     fn compile(&self, _: &str, _: &Quill, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> { todo!() }
     /// fn default_quill(&self) -> Option<Quill> {
     ///     // Build embedded default Quill from files
