@@ -1,0 +1,84 @@
+[Quill]
+name = "classic_resume"
+backend = "typst"
+plate_file = "plate.typ"
+example_file = "example.md"
+description = "A clean and modern classic resume template."
+
+# ==========================================
+# Group 1: Personal Information
+# ==========================================
+
+[fields.name]
+title = "Full Name"
+type = "string"
+required = true
+examples = ["John Doe"]
+ui.group = "Personal Info"
+
+[fields.contacts]
+title = "Contact Information"
+type = "array"
+required = true
+examples = [["john.doe@example.com", "123-456-7890", "linkedin.com/in/johndoe"]]
+ui.group = "Personal Info"
+description = "List of contact details (email, phone, links, etc.)"
+
+# ==========================================
+# Cards
+# ==========================================
+
+# (No changes needed here)
+
+[cards.experience_section]
+title = "Experience/Education Entry"
+description = "An entry with a heading, subheading, and bullet points."
+
+[cards.experience_section.fields]
+title = { title = "Section Title", type = "string", default = "Experience" }
+headingLeft = { title = "Heading Left (e.g., Company/School)", type = "string", required = true }
+headingRight = { title = "Heading Right (e.g., Location)", type = "string" }
+subheadingLeft = { title = "Subheading Left (e.g., Title/Degree)", type = "string" }
+subheadingRight = { title = "Subheading Right (e.g., Date)", type = "string" }
+
+[cards.skills_section]
+title = "Skills Grid"
+description = "A grid of skill categories with key-value pairs."
+ui.metadata_only = true
+
+[cards.skills_section.fields]
+title = { title = "Section Title", type = "string", default = "Skills" }
+
+cells.title = "Skill Categories"
+cells.type = "array"
+cells.required = true
+cells.examples = [
+    [
+        { category = "Languages", skills = "Python, Rust, C++" },
+        { category = "DevOps", skills = "Docker, Kubernetes" },
+    ],
+]
+cells.items.type = "object"
+cells.items.properties.category = { type = "string", title = "Category", required = true }
+cells.items.properties.skills = { type = "string", title = "Skills", required = true }
+
+[cards.projects_section]
+title = "Project Entry"
+description = "A project entry with a name and optional URL."
+
+[cards.projects_section.fields]
+title = { title = "Section Title", type = "string", default = "Projects" }
+name = { title = "Project Name", type = "string", required = true }
+url = { title = "Project URL", type = "string" }
+
+[cards.certifications_section]
+title = "Certifications Grid"
+description = "A grid of certifications."
+ui.metadata_only = true
+
+[cards.certifications_section.fields]
+title = { title = "Section Title", type = "string", default = "Certifications" }
+cells.title = "Certification Names"
+cells.type = "array"
+cells.required = true
+cells.examples = [["AWS Certified Solutions Architect", "CKA", "OSCP"]]
