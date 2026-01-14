@@ -35,8 +35,7 @@ workflow = engine.workflow("my-quill")
 result = workflow.render(parsed, OutputFormat.PDF)
 
 # Save output
-with open("output.pdf", "wb") as f:
-    f.write(result.artifacts[0].bytes)
+result.artifacts[0].save("output.pdf")
 ```
 
 ## Core Classes
@@ -49,78 +48,33 @@ High-level engine for managing backends and quills.
 class Quillmark:
     def __init__(self) -> None:
         """Create engine with auto-registered backends."""
-    
+
     def register_quill(self, quill: Quill) -> None:
         """Register a quill template.
-        
+
         Raises:
             QuillmarkError: If validation fails
         """
-    
-    def workflow(self, name: str) -> Workflow:
-        """Get workflow by quill name.
-        
+
+    def workflow(self, quill_ref: str | Quill | ParsedDocument) -> Workflow:
+        """Get workflow for rendering.
+
         Args:
-            name: Registered quill name
-            
+            quill_ref: Quill name (str), Quill object, or ParsedDocument
+
         Returns:
-            Workflow for the quill
-            
+            Workflow for rendering
+
         Raises:
-            QuillmarkError: If quill not registered
+            QuillmarkError: If quill not found
+            TypeError: If invalid argument type
         """
-    
-    def workflow_from_quill(self, quill: Quill) -> Workflow:
-        """Get workflow from quill object."""
-    
-    def workflow(self, parsed: ParsedDocument) -> Workflow:
-        """Get workflow from document's QUILL field.
-        
-        Raises:
-            QuillmarkError: If QUILL field missing
-        """
-    
+
     def registered_backends(self) -> list[str]:
         """Get registered backend IDs."""
-    
+
     def registered_quills(self) -> list[str]:
         """Get registered quill names."""
-
-    def unregister_quill(self, name: str) -> None:
-        """Unregister a quill by name.
-
-        Args:
-            name: Quill name to unregister
-
-        Raises:
-            QuillmarkError: If quill not registered
-        """
-
-    def get_quill(self, name: str) -> Quill:
-        """Get registered quill by name.
-
-        Args:
-            name: Registered quill name
-
-        Returns:
-            The registered quill
-
-        Raises:
-            QuillmarkError: If quill not registered
-        """
-
-    def get_quill_metadata(self, name: str) -> dict[str, Any]:
-        """Get quill metadata by name.
-
-        Args:
-            name: Registered quill name
-
-        Returns:
-            Quill metadata dictionary
-
-        Raises:
-            QuillmarkError: If quill not registered
-        """
 ```
 
 **Example:**
@@ -132,12 +86,16 @@ engine = Quillmark()
 print(engine.registered_backends())  # ['typst', 'acroform']
 
 # Load and register quill
-from quillmark import Quill
 quill = Quill.from_path("my-quill/")
 engine.register_quill(quill)
 
 # Check registered quills
-print(engine.registered_quills())  # ['my-quill', '__default__']
+print(engine.registered_quills())  # ['my-quill']
+
+# Create workflow (multiple ways)
+workflow = engine.workflow("my-quill")       # by name
+workflow = engine.workflow(quill)            # by Quill object
+workflow = engine.workflow(parsed_document)  # by ParsedDocument (uses QUILL field)
 ```
 
 ### Workflow
@@ -152,34 +110,16 @@ class Workflow:
         format: OutputFormat | None = None
     ) -> RenderResult:
         """Render document to artifacts.
-        
+
         Args:
             parsed: Parsed markdown document
             format: Output format (default: first supported)
-            
+
         Returns:
             RenderResult with artifacts
-            
+
         Raises:
-            TemplateError: Template composition failed
-            CompilationError: Backend compilation failed
-        """
-    
-    def render_processed(
-        self,
-        content: str,
-        format: OutputFormat | None = None
-    ) -> RenderResult:
-        """Render pre-composed content."""
-    
-    def process_plate(self, parsed: ParsedDocument) -> str:
-        """Process plate template without compilation.
-
-        Args:
-            parsed: Parsed markdown document
-
-        Returns:
-            Rendered template content
+            QuillmarkError: If rendering fails
         """
 
     def dry_run(self, parsed: ParsedDocument) -> None:
@@ -189,63 +129,17 @@ class Workflow:
             parsed: Parsed markdown document
 
         Raises:
-            TemplateError: If template validation fails
+            QuillmarkError: If validation fails
         """
-
-    def validate_schema(self, parsed: ParsedDocument) -> None:
-        """Validate document against quill schema.
-
-        Args:
-            parsed: Parsed markdown document
-
-        Raises:
-            QuillmarkError: If schema validation fails
-        """
-
-    def add_asset(self, name: str, data: bytes) -> None:
-        """Add runtime asset to workflow.
-
-        Args:
-            name: Asset identifier (e.g., 'logo.png')
-            data: Asset binary data
-        """
-
-    def add_assets(self, assets: dict[str, bytes]) -> None:
-        """Add multiple runtime assets.
-
-        Args:
-            assets: Dict mapping asset names to binary data
-        """
-
-    def add_font(self, name: str, data: bytes) -> None:
-        """Add runtime font to workflow.
-
-        Args:
-            name: Font identifier (e.g., 'custom.ttf')
-            data: Font binary data
-        """
-
-    def add_fonts(self, fonts: dict[str, bytes]) -> None:
-        """Add multiple runtime fonts.
-
-        Args:
-            fonts: Dict mapping font names to binary data
-        """
-
-    def dynamic_asset_names(self) -> list[str]:
-        """Get names of dynamically added assets."""
-
-    def dynamic_font_names(self) -> list[str]:
-        """Get names of dynamically added fonts."""
 
     @property
     def backend_id(self) -> str:
         """Backend identifier."""
-    
+
     @property
     def supported_formats(self) -> list[OutputFormat]:
         """Supported output formats."""
-    
+
     @property
     def quill_name(self) -> str:
         """Quill name."""
@@ -258,6 +152,9 @@ workflow = engine.workflow("my-quill")
 
 print(f"Backend: {workflow.backend_id}")  # 'typst'
 print(f"Formats: {workflow.supported_formats}")  # [PDF, SVG]
+
+# Validate before rendering
+workflow.dry_run(parsed)
 
 # Render to specific format
 result = workflow.render(parsed, OutputFormat.PDF)
@@ -283,46 +180,43 @@ class Quill:
             QuillmarkError: If invalid or missing
         """
 
-    @staticmethod
-    def from_json(json_str: str) -> Quill:
-        """Load quill from JSON configuration.
-
-        Args:
-            json_str: JSON string containing quill config
-
-        Returns:
-            Loaded quill
-
-        Raises:
-            QuillmarkError: If JSON invalid or quill malformed
-        """
-
     @property
     def name(self) -> str:
         """Quill name from Quill.toml."""
-    
+
     @property
     def backend(self) -> str | None:
         """Backend identifier."""
-    
+
     @property
-    def plate(self) -> str:
+    def plate(self) -> str | None:
         """Plate template content."""
-    
+
     @property
     def example(self) -> str | None:
         """Example markdown content."""
-    
+
     @property
     def metadata(self) -> dict[str, Any]:
         """Quill metadata."""
-    
+
     @property
     def schema(self) -> Any:
         """Field schema definitions."""
-    
+
+    @property
+    def defaults(self) -> dict[str, Any]:
+        """Default field values from schema."""
+
+    @property
+    def examples(self) -> dict[str, list[Any]]:
+        """Example field values from schema."""
+
     def print_tree(self) -> str:
         """Get file tree representation."""
+
+    def supported_formats(self) -> list[OutputFormat]:
+        """Get supported output formats for this quill's backend."""
 ```
 
 **Example:**
@@ -347,17 +241,17 @@ class ParsedDocument:
     @staticmethod
     def from_markdown(markdown: str) -> ParsedDocument:
         """Parse markdown with frontmatter.
-        
+
         Args:
             markdown: Markdown content
-            
+
         Returns:
             Parsed document
-            
+
         Raises:
             ParseError: If YAML invalid
         """
-    
+
     def body(self) -> str | None:
         """Get document body (stored in BODY field)."""
 
@@ -404,7 +298,7 @@ class RenderResult:
     @property
     def artifacts(self) -> list[Artifact]:
         """Output artifacts."""
-    
+
     @property
     def warnings(self) -> list[Diagnostic]:
         """Warning diagnostics."""
@@ -434,11 +328,11 @@ class Artifact:
     @property
     def bytes(self) -> bytes:
         """Artifact binary data."""
-    
+
     @property
     def output_format(self) -> OutputFormat:
         """Output format."""
-    
+
     def save(self, path: str | Path) -> None:
         """Save to file."""
 ```
@@ -502,11 +396,11 @@ class Location:
     @property
     def file(self) -> str | None:
         """Source file path."""
-    
+
     @property
     def line(self) -> int:
         """Line number."""
-    
+
     @property
     def col(self) -> int:
         """Column number."""
@@ -521,19 +415,19 @@ class Diagnostic:
     @property
     def severity(self) -> Severity:
         """Diagnostic severity."""
-    
+
     @property
     def message(self) -> str:
         """Diagnostic message."""
-    
+
     @property
     def code(self) -> str | None:
         """Error code."""
-    
+
     @property
     def primary(self) -> Location | None:
         """Primary location."""
-    
+
     @property
     def hint(self) -> str | None:
         """Helpful hint."""
@@ -580,17 +474,15 @@ class CompilationError(QuillmarkError):
 **Example Error Handling:**
 
 ```python
-from quillmark import ParseError, TemplateError, CompilationError
+from quillmark import ParseError, QuillmarkError
 
 try:
     parsed = ParsedDocument.from_markdown(markdown)
     result = workflow.render(parsed, OutputFormat.PDF)
 except ParseError as e:
     print(f"Parse error: {e}")
-except TemplateError as e:
-    print(f"Template error: {e}")
-except CompilationError as e:
-    print(f"Compilation error: {e}")
+except QuillmarkError as e:
+    print(f"Quillmark error: {e}")
 ```
 
 ## Complete Example
@@ -610,38 +502,41 @@ def render_document(quill_path: str, markdown: str, output_path: str):
     try:
         # Setup engine
         engine = Quillmark()
-        
+
         # Load quill
         quill = Quill.from_path(quill_path)
         engine.register_quill(quill)
-        
+
         # Parse markdown
         parsed = ParsedDocument.from_markdown(markdown)
-        
+
         # Create workflow
         workflow = engine.workflow(quill.name)
-        
+
+        # Validate first (fast)
+        workflow.dry_run(parsed)
+
         # Check supported formats
         formats = workflow.supported_formats
         print(f"Supported formats: {formats}")
-        
+
         # Render
         if OutputFormat.PDF in formats:
             result = workflow.render(parsed, OutputFormat.PDF)
         else:
             result = workflow.render(parsed, formats[0])
-        
+
         # Save first artifact
         result.artifacts[0].save(output_path)
         print(f"Saved to: {output_path}")
-        
+
         # Report warnings
         if result.warnings:
             for warning in result.warnings:
                 print(f"Warning: {warning.message}")
-        
+
         return True
-        
+
     except QuillmarkError as e:
         print(f"Error: {e}")
         return False

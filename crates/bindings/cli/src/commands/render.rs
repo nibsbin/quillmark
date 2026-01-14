@@ -28,10 +28,6 @@ pub struct RenderArgs {
     #[arg(long)]
     stdout: bool,
 
-    /// Only process plate template, don't render final output
-    #[arg(long, hide = true)]
-    plate_only: bool,
-
     /// Show detailed processing information
     #[arg(short, long)]
     verbose: bool,
@@ -172,13 +168,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 
     if args.verbose {
         println!("Workflow created for backend: {}", workflow.backend_id());
-    }
-
-    // plate_only is deprecated and no longer supported
-    if args.plate_only {
-        return Err(CliError::InvalidArgument(
-            "--plate-only is no longer supported. Use workflow.render() with the new JSON data architecture.".to_string(),
-        ));
     }
 
     // Parse output format
