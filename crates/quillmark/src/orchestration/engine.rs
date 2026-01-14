@@ -51,7 +51,7 @@ impl Quillmark {
     /// #     fn id(&self) -> &'static str { "custom" }
     /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
     /// #     fn plate_extension_types(&self) -> &'static [&'static str] { &[".custom"] }
-    /// #     fn compile(&self, _: &str, _: &quillmark_core::Quill, _: &quillmark_core::RenderOptions, _: &str) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
+    /// #     fn compile(&self, _: &str, _: &quillmark_core::Quill, _: &quillmark_core::RenderOptions, _: &serde_json::Value) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
     /// #         Ok(quillmark_core::RenderResult::new(vec![], quillmark_core::OutputFormat::Txt))
     /// #     }
     /// # }

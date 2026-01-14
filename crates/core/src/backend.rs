@@ -130,7 +130,7 @@ pub trait Backend: Send + Sync {
     /// #     fn id(&self) -> &'static str { "my" }
     /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
     /// #     fn plate_extension_types(&self) -> &'static [&'static str] { &[] }
-    /// #     fn compile(&self, _: &str, _: &Quill, _: &quillmark_core::RenderOptions, _: &str) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> { todo!() }
+    /// #     fn compile(&self, _: &str, _: &Quill, _: &quillmark_core::RenderOptions, _: &serde_json::Value) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> { todo!() }
     /// fn default_quill(&self) -> Option<Quill> {
     ///     // Build embedded default Quill from files
     ///     let mut files = HashMap::new();
