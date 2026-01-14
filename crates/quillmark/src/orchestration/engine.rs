@@ -52,7 +52,6 @@ impl Quillmark {
     /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
     /// #     fn plate_extension_types(&self) -> &'static [&'static str] { &[".custom"] }
     /// #     fn allow_auto_plate(&self) -> bool { true }
-    /// #     fn register_filters(&self, _: &mut quillmark_core::Plate) {}
     /// #     fn compile(&self, _: &str, _: &quillmark_core::Quill, _: &quillmark_core::RenderOptions) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> {
     /// #         Ok(quillmark_core::RenderResult::new(vec![], quillmark_core::OutputFormat::Txt))
     /// #     }
