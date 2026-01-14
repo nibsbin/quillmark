@@ -51,7 +51,7 @@ pub enum ConversionError {
 /// - Markup injection (*, _, `, #, etc.)
 /// - Layout manipulation (~, which is non-breaking space in Typst)
 /// - Reference injection (@)
-/// - Code/comment injection (//, $, etc.)
+/// - Code/comment injection (//, $, {, }, etc.)
 pub fn escape_markup(s: &str) -> String {
     s.replace('\\', "\\\\")
         .replace("//", "\\/\\/")
@@ -62,6 +62,8 @@ pub fn escape_markup(s: &str) -> String {
         .replace('#', "\\#")
         .replace('[', "\\[")
         .replace(']', "\\]")
+        .replace('{', "\\{")
+        .replace('}', "\\}")
         .replace('$', "\\$")
         .replace('<', "\\<")
         .replace('>', "\\>")
@@ -793,15 +795,15 @@ mod tests {
     }
 
     #[test]
-    fn test_escape_markup_double_chevrons() {
-        assert_eq!(escape_markup("<<"), "\\<\\<");
-        assert_eq!(escape_markup(">>"), "\\>\\>");
+    fn test_escape_markup_double_curly_brackets() {
+        assert_eq!(escape_markup("{{"), "\\{\\{");
+        assert_eq!(escape_markup("}}"), "\\}\\}");
     }
 
     #[test]
-    fn test_mark_to_typst_double_chevrons() {
-        let output = mark_to_typst("Text << content >>").unwrap();
-        assert_eq!(output, "Text \\<\\< content \\>\\>\n\n");
+    fn test_mark_to_typst_double_curly_brackets() {
+        let output = mark_to_typst("Text {{ content }}").unwrap();
+        assert_eq!(output, "Text \\{\\{ content \\}\\}\n\n");
     }
 
     #[test]

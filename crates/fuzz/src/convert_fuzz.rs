@@ -4,7 +4,9 @@ use quillmark_typst::convert::{escape_markup, escape_string, mark_to_typst};
 // Typst special characters that need escaping in markup context (excluding backslash and //)
 // Backslash is handled first to prevent double-escaping, and // is handled as a pattern
 // These correspond to the single-character escapes in the escape_markup function
-const TYPST_SPECIAL_CHARS: &[char] = &['~', '*', '_', '`', '#', '[', ']', '$', '<', '>', '@'];
+const TYPST_SPECIAL_CHARS: &[char] = &[
+    '~', '*', '_', '`', '#', '[', ']', '{', '}', '$', '<', '>', '@',
+];
 
 // Security-focused tests for escape_string
 #[test]
@@ -48,9 +50,9 @@ fn test_escape_string_control_characters() {
 #[test]
 fn test_escape_markup_security_attack_vectors() {
     // Test that all special characters are escaped
-    let attack = "*_`#[]$<>@\\";
+    let attack = "*_`#[]{}$<>@\\";
     let escaped = escape_markup(attack);
-    assert_eq!(escaped, "\\*\\_\\`\\#\\[\\]\\$\\<\\>\\@\\\\");
+    assert_eq!(escaped, "\\*\\_\\`\\#\\[\\]\\{\\}\\$\\<\\>\\@\\\\");
 
     // Verify backslash is escaped first
     let backslash_attack = "\\*";
