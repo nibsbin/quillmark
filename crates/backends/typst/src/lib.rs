@@ -40,7 +40,7 @@
 pub mod compile;
 pub mod convert;
 mod error_mapping;
-mod filters;
+
 pub mod helper;
 mod world;
 
@@ -55,7 +55,7 @@ mod embedded {
 /// Not intended for general use.
 #[doc(hidden)]
 pub mod fuzz_utils {
-    pub use super::filters::inject_json;
+    pub use super::helper::inject_json;
 }
 
 use convert::mark_to_typst;
