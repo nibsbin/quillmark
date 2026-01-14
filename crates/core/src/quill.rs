@@ -1971,8 +1971,8 @@ title = {type = "string", description = "title of document" }
         // Create Quill from tree
         let quill = Quill::from_tree(root, Some("taro".to_string())).unwrap();
 
-        // Validate field schemas were parsed
-        assert_eq!(quill.schema["properties"].as_object().unwrap().len(), 3);
+        // Validate field schemas were parsed (author, ice_cream, title, BODY)
+        assert_eq!(quill.schema["properties"].as_object().unwrap().len(), 4);
         assert!(quill.schema["properties"]
             .as_object()
             .unwrap()
@@ -1985,6 +1985,10 @@ title = {type = "string", description = "title of document" }
             .as_object()
             .unwrap()
             .contains_key("title"));
+        assert!(quill.schema["properties"]
+            .as_object()
+            .unwrap()
+            .contains_key("BODY"));
 
         // Verify author field schema
         let author_schema = quill.schema["properties"]["author"].as_object().unwrap();
