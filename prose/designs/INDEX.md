@@ -24,7 +24,6 @@ This directory contains design documents that describe the architecture and comp
 ## Backends
 
 - **[ACROFORM.md](ACROFORM.md)** - AcroForm backend for PDF form filling
-- **[TYPST_GUILLEMET_CONVERSION.md](TYPST_GUILLEMET_CONVERSION.md)** - Guillemet conversion for Typst backend
 - Typst backend documentation is in the rustdoc (see `crates/backends/typst/`)
 
 ## Language Bindings
