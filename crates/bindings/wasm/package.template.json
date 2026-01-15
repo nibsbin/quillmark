@@ -8,6 +8,9 @@
     "type": "git",
     "url": "git+https://github.com/nibsbin/quillmark.git"
   },
+  "engines": {
+    "node": ">=18 <23"
+  },
   "files": [
     "bundler/wasm_bg.wasm",
     "bundler/wasm_bg.js",

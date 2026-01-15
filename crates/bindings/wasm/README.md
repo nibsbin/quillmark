@@ -16,6 +16,8 @@ wasm-pack build --target bundler --scope quillmark
 
 ### For Node.js
 
+Node.js builds target the current LTS range (`>=18 <23`).
+
 ```bash
 wasm-pack build --target nodejs --scope quillmark
 ```
