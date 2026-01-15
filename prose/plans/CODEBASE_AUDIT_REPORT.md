@@ -220,6 +220,26 @@
 
 ---
 
+## Procedural Remediation Plan (Divide & Conquer)
+
+1. **Dependency Hygiene (Owner: Core Maintainer, Sprint: Current)**
+   - Run `cargo machete --fix` per crate; commit lockfile changes.
+   - Add CI check to fail on newly introduced unused dependencies.
+2. **Fixture Repair (Owner: Docs/Fixtures, Sprint: Current)**
+   - Update `appreciated_letter/Quill.toml` to point to an existing `.typ` file or rename `glue.typ` to `plate.typ`.
+   - Validate fixtures via existing fixture update script; document outcome in changelog.
+3. **Documentation Refresh (Owner: Docs, Sprint: Current)**
+   - Replace MiniJinja syntax with Typst helpers in the four listed user-facing docs; verify examples render or lint where applicable.
+   - Remove broken link in `prose/designs/INDEX.md`; add deprecation note in `ARCHITECTURE.md` filter section and rewrite `GLUE_METADATA.md` to current flow.
+4. **Test & Design Cleanup (Owner: Core Maintainer, Sprint: Next)**
+   - Remove or rewrite ignored `dry_run_test.rs` to exercise current architecture.
+   - Decide on `frontmatter_demo.md`/`sample.md`: either add coverage or delete fixtures.
+5. **API Surface Hardening (Owner: Core Maintainer, Sprint: Next)**
+   - Narrow listed `pub` items in `quillmark-core` to `pub(crate)` where safe; ensure downstream crates still compile.
+   - Introduce `WorldError` type and migrate `Box<dyn Error>` returns; migrate `CliError` to `thiserror` with minimal breakage.
+
+---
+
 ## Appendix: Files Analyzed
 
 ### Crates Audited
