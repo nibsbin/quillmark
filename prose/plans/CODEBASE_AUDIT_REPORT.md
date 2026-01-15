@@ -225,6 +225,7 @@
 1. **Dependency Hygiene (Owner: Core Maintainer, Sprint: Current)**
    - Run `cargo machete --fix` per crate; commit lockfile changes.
    - Add CI check to fail on newly introduced unused dependencies.
+   - Relax Node.js support to current LTS range (e.g., `>=18 <23`) for WASM npm publishing and test against that range.
 2. **Fixture Repair (Owner: Docs/Fixtures, Sprint: Current)**
    - Update `appreciated_letter/Quill.toml` to point to an existing `.typ` file or rename `glue.typ` to `plate.typ`.
    - Validate fixtures via existing fixture update script; document outcome in changelog.
@@ -237,6 +238,9 @@
 5. **API Surface Hardening (Owner: Core Maintainer, Sprint: Next)**
    - Narrow listed `pub` items in `quillmark-core` to `pub(crate)` where safe; ensure downstream crates still compile.
    - Introduce `WorldError` type and migrate `Box<dyn Error>` returns; migrate `CliError` to `thiserror` with minimal breakage.
+6. **Test Coverage Guardrails (Owner: Core Maintainer, Sprint: Current)**
+   - Keep cargo workspace tests green (`cargo test --workspace --locked`) plus WASM npm tests and uv-based Python tests in CI.
+   - Gate merges on the three suites; surface failures with actionable diagnostics.
 
 ---
 
