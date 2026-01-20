@@ -15,14 +15,15 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
 - **Template-first design**: Quill templates control structure and styling, Markdown provides content
 - **YAML frontmatter support**: Extended YAML metadata with inline sections
 - **Multiple backends**: 
-  - PDF and SVG output via Typst backend
+  - PDF and SVG output via Typst backend (JSON injection + helper package)
+  - PDF form filling via AcroForm backend (MiniJinja templating in fields/tooltips)
 - **Structured error handling**: Clear diagnostics with source locations
 - **Dynamic asset loading**: Fonts, images, and packages resolved at runtime
 
 ## Quick Links
 
-- [Quickstart Guide](getting-started/quickstart.md) - Get up and running in minutes
-- [Concepts](getting-started/concepts.md) - Understand Quillmark's design
+- [Quickstart Guide](getting-started/quickstart.md) - Get up and running in minutes (Python, Rust, JavaScript)
+- [Concepts](getting-started/concepts.md) - Understand Quillmark's design and pipeline
 - [Rust API Documentation](https://docs.rs/quillmark/latest/quillmark/) - Complete Rust API reference
 - [GitHub Repository](https://github.com/nibsbin/quillmark)
 

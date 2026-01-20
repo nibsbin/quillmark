@@ -47,11 +47,10 @@ Ordered lists:
 3. Third item
 ```
 
-### Links and Images
+### Links
 
 ```markdown
 [Link text](https://example.com)
-![Alt text](image.png)
 ```
 
 ### Code Blocks
@@ -185,14 +184,7 @@ price: 29.99
 Gadget description.
 ```
 
-The card blocks are collected into a CARDS array:
-
-```python
-# Access in template or code
-cards = parsed.get_field("CARDS")
-# Returns: [{"CARD": "products", "name": "Widget", "price": 19.99, "BODY": "Widget description."},
-#           {"CARD": "products", "name": "Gadget", "price": 29.99, "BODY": "Gadget description."}]
-```
+The card blocks are collected into a CARDS array.
 
 ### QUILL Key
 
@@ -223,23 +215,7 @@ If no `QUILL` key is specified, Quillmark uses the `__default__` template provid
 
 ## Body Content
 
-The document body (everything after frontmatter) is stored under the special field `BODY` and can be accessed in templates:
-
-```jinja
-#{{ BODY | Content }}
-```
-
-## Metadata Object
-
-Quillmark provides a special `__metadata__` field in templates that contains all frontmatter fields except `BODY`. This is useful for iterating over metadata or separating content from metadata:
-
-```jinja
-{% for key, value in __metadata__ %}
-  {{ key }}: {{ value }}
-{% endfor %}
-```
-
-The `__metadata__` field is automatically created and includes all fields from the frontmatter (including the CARDS array), but excludes the `BODY` field. You can still access fields individually at the top level (e.g., `{{ title }}`), but `__metadata__` provides convenient metadata-only access.
+The document body (everything after frontmatter) is stored under the special field `BODY` and is injected into JSON for backends. For Typst, `transform_fields` converts markdown fields (including `BODY`) to Typst markup strings that you render with `eval-markup(data.BODY)`.
 
 ## Validation
 

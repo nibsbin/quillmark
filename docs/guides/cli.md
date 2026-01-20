@@ -18,7 +18,7 @@ pip install quillmark
 
 ### render
 
-Render markdown documents to PDF, SVG, or text.
+Render markdown documents to PDF, SVG, or text. Optionally emit compiled JSON data.
 
 ```bash
 quillmark render [OPTIONS] <INPUT>
@@ -34,6 +34,7 @@ quillmark render [OPTIONS] <INPUT>
 - `--quill-name <NAME>`: Use registered quill by name
 - `--output <PATH>` / `-o <PATH>`: Output file path (default: stdout)
 - `--format <FORMAT>` / `-f <FORMAT>`: Output format: `pdf`, `svg`, `txt`
+- `--output-data <PATH>`: Write compiled JSON data (after coercion/defaults/transform_fields) to a file
 - `--verbose` / `-v`: Enable verbose logging
 - `--quiet` / `-q`: Suppress non-error output
 - `--stdout`: Force output to stdout
@@ -46,6 +47,9 @@ quillmark render --quill ./invoice-quill input.md -o output.pdf
 
 # Render to SVG
 quillmark render --quill ./my-quill input.md -f svg -o output.svg
+
+# Emit compiled data for inspection
+quillmark render --quill ./my-quill input.md --output-data data.json
 
 # Render from stdin
 cat input.md | quillmark render --quill ./my-quill -o output.pdf

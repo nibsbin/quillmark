@@ -29,10 +29,10 @@ workflow = engine.workflow("my-quill")
 with open("logo.png", "rb") as f:
     logo_data = f.read()
 
-# Add to workflow
+# Add to workflow (stored as assets/DYNAMIC_ASSET__logo.png in the quill tree)
 workflow.add_asset("logo.png", logo_data)
 
-# Render (template can now reference logo.png)
+# Render (template can now reference assets/DYNAMIC_ASSET__logo.png)
 parsed = ParsedDocument.from_markdown(markdown)
 result = workflow.render(parsed)
 ```
@@ -98,20 +98,18 @@ def render_invoice(customer_name: str, logo_path: str):
     engine = Quillmark()
     workflow = engine.workflow("invoice")
 
-    # Add customer logo dynamically
+    # Add customer logo dynamically (accessible as assets/DYNAMIC_ASSET__customer-logo.png)
     with open(logo_path, "rb") as f:
         workflow.add_asset("customer-logo.png", f.read())
 
     # Prepare markdown
     markdown = f"""---
-title: Invoice
-customer: {customer_name}
----
+    title: Invoice
+    customer: {customer_name}
+    ---
 
-# Invoice
-
-Customer logo: {{{{ customer-logo.png }}}}
-"""
+    # Invoice
+    """
 
     # Render
     parsed = ParsedDocument.from_markdown(markdown)

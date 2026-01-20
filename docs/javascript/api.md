@@ -118,7 +118,7 @@ console.log(parsed.fields.body);   // "# Content"
 ##### registerQuill
 
 ```typescript
-registerQuill(quillJson: string | object): void
+registerQuill(quillJson: string | object): QuillInfo
 ```
 
 Register a Quill template from JSON.
@@ -157,25 +157,15 @@ engine.registerQuill(JSON.stringify(quill));
 getQuillInfo(name: string): QuillInfo
 ```
 
-Get information about a registered Quill.
+Get information about a registered Quill (always includes full schema with UI metadata).
 
-**Parameters:**
-- `name` - Registered Quill name
+##### getStrippedSchema
 
-**Returns:** QuillInfo object with Quill details (always includes full schema with UI metadata)
-
-**Throws:** Error if Quill not found
-
-**Example:**
-```javascript
-const info = engine.getQuillInfo("my-quill");
-console.log(info.backend);           // "typst"
-console.log(info.supportedFormats);  // ["pdf", "svg"]
-
-// To get a stripped schema without UI metadata:
-const strippedSchema = info.getStrippedSchema();
-// strippedSchema will not contain any "x-ui" fields
+```typescript
+getStrippedSchema(name: string): object
 ```
+
+Return the schema without UI metadata (`x-ui` fields).
 
 ##### render
 
@@ -244,7 +234,7 @@ engine.unregisterQuill("my-quill");
 ```typescript
 interface ParsedDocument {
   fields: object;      // YAML frontmatter fields (includes BODY and CARDS)
-  quillTag?: string;   // Value of QUILL field (if present)
+  quillTag: string;    // Value of QUILL field or "__default__"
 }
 ```
 
@@ -265,7 +255,9 @@ interface QuillInfo {
   backend: string;
   metadata: object;
   example?: string;
-  fieldSchemas: object;
+  schema: object;
+  defaults: object;
+  examples: object;
   supportedFormats: Array<'pdf' | 'svg' | 'txt'>;
   getStrippedSchema(): object;  // Returns schema without UI metadata ("x-ui" fields)
 }
@@ -291,6 +283,7 @@ interface RenderOptions {
   format?: 'pdf' | 'svg' | 'txt';
   assets?: Record<string, Uint8Array>;
   quillName?: string;
+  outputData?: boolean; // reserved for future use
 }
 ```
 
@@ -317,6 +310,7 @@ interface RenderResult {
   artifacts: Artifact[];
   warnings: Diagnostic[];
   renderTimeMs: number;
+  outputFormat: 'pdf' | 'svg' | 'txt';
 }
 ```
 
