@@ -1,5 +1,7 @@
 # backends/quillmark-acroform
 
+> **Status**: Implemented
+
 This is an optional backend for `quillmark` that maps markdown/YAML context to PDF AcroForms.
 
 ## Quill
@@ -38,9 +40,8 @@ The backend uses the workspace's minijinja dependency to render templates with t
 
 ## Considerations
 
-- For the backend compile implementation, expect a JSON string for plate_content input.
+- Plate content is ignored (`plate_extension_types` is empty); all data comes from injected JSON.
 - If you need any dependencies like `serde_json`, pin them in the workspace `Cargo.toml`.
-- Do not register any filters because we are using the default auto plate
 
 ## Resources
 
