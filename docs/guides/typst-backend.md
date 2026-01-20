@@ -6,10 +6,10 @@ The Typst backend generates professional PDF and SVG documents using the [Typst]
 
 Typst is a modern typesetting system designed as a better alternative to LaTeX. The Quillmark Typst backend:
 
-- Converts Markdown to Typst markup
+- Converts Markdown to Typst markup via backend `transform_fields`
 - Compiles Typst code to PDF or SVG
 - Supports dynamic package loading
-- Handles fonts and assets automatically
+- Handles fonts and assets automatically (including dynamic assets/fonts)
 - Provides JSON data injection via helper package
 
 ## Basic Usage
@@ -90,7 +90,7 @@ Use Typst's `in` operator to check for optional fields:
 
 ### Rendering Body Content
 
-The document body (Markdown content after frontmatter) is stored in `data.body` or `data.BODY`. Use `eval-markup()` to render it as Typst:
+The document body (Markdown content after frontmatter) is stored in `data.BODY` (and accessible via `data.body`). Use `eval-markup()` to render Typst markup produced by `transform_fields`:
 
 ```typst
 #eval-markup(data.at("body", default: ""))

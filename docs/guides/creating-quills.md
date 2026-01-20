@@ -161,10 +161,10 @@ Use `data.at()` for safe access with defaults:
 
 ### Rendering Body Content
 
-The document body is stored in `data.body`. Use `eval-markup()` to render it:
+The document body is stored in `data.BODY` (also exposed as `body` in some bindings). For Typst, `transform_fields` converts markdown to Typst markup, so render with `eval-markup(data.BODY)`:
 
 ```typst
-#eval-markup(data.at("body", default: ""))
+#eval-markup(data.at("BODY", default: ""))
 ```
 
 ### Working with Optional Fields

@@ -9,16 +9,20 @@ Quillmark is a flexible, **template-first** Markdown rendering system that conve
 ### High-Level Data Flow
 
 ```
-Markdown + YAML → Parse → Template → Compile → Artifacts
-                    ↓        ↓          ↓
-              ParsedDocument  Plate   PDF/SVG/TXT
+Markdown + YAML
+    ↓ parse + normalize (coercion, defaults, bidi/HTML fixes)
+ParsedDocument + Schema
+    ↓ backend transform_fields (e.g., markdown→Typst markup)
+JSON data
+    ↓ compile raw plate + injected JSON
+Artifacts (PDF/SVG/TXT)
 ```
 
 The workflow follows three main stages:
 
-1. **Parse** - Extract YAML frontmatter and body from markdown
-2. **Inject** - Serialize frontmatter as JSON and inject into plate template via virtual helper package
-3. **Compile** - Backend processes plate to generate output artifacts
+1. **Parse & Normalize** - Extract YAML frontmatter/body, apply schema coercion/defaults, normalize bidi/HTML fences
+2. **Transform Fields** - Backend-specific shaping (e.g., Typst markdown conversion) before JSON serialization
+3. **Compile** - Backend compiles raw plate content with injected JSON data to artifacts
 
 ## Core Design Principles
 
@@ -36,7 +40,7 @@ New output formats implement the `Backend` trait (thread-safe, zero global state
 
 ### 3. Template-First Philosophy
 
-Quill templates fully control structure and styling; Markdown provides content via filters. This separation means:
+Quill templates fully control structure and styling; Markdown provides content through JSON injection. This separation means:
 
 - Content authors focus on writing
 - Template designers control layout
@@ -78,9 +82,9 @@ Foundation layer providing:
 
 - **Types**: `Backend`, `Artifact`, `OutputFormat`
 - **Parsing**: `ParsedDocument` with `from_markdown()` constructor
-- **Templating**: `Plate` + stable `filter_api`
+- **Normalization**: Coercion, defaults, bidi/HTML fixes
 - **Template model**: `Quill` (+ `Quill.toml`)
-- **Errors & Diagnostics**: `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
+- **Errors & Diagnostics**: `RenderError`, `Diagnostic`, `Severity`, `Location`
 - **Utilities**: TOML⇄YAML conversion helpers
 
 **Design Note:** No external backend deps; backends depend on core → no cycles.
@@ -103,9 +107,9 @@ Orchestration layer providing:
 Typst backend for PDF/SVG output:
 
 - Implements `Backend` trait
-- Markdown→Typst conversion via `eval-markup()` helper
+- Markdown→Typst conversion via backend `transform_fields` using Typst markup generator
 - JSON data injection via `@local/quillmark-helper` virtual package
-- Compilation environment with font & asset resolution
+- Compilation environment with font & asset resolution (including dynamic assets/fonts)
 - Structured diagnostics with source locations
 
 #### `crates/backends/acroform`
@@ -120,7 +124,7 @@ PyO3-based Python bindings:
 
 - Mirrors Rust API with Pythonic conventions
 - Published to PyPI as `quillmark` package
-- Full feature parity with Rust API
+- Exposes `Workflow.dry_run` and `compile_data`
 - Error delegation to core types
 
 #### `crates/bindings/wasm`
@@ -129,7 +133,7 @@ wasm-bindgen based WebAssembly bindings:
 
 - JSON data exchange for JavaScript interop
 - Published to npm as `@quillmark-test/wasm`
-- Supports bundler, Node.js, and web targets
+- Exposes `registerQuill`, `getQuillInfo`, `getStrippedSchema`, `compileData`, `dryRun`, `render`
 - Error delegation to core types
 
 #### `crates/bindings/cli`
@@ -164,7 +168,7 @@ Fuzz testing suite for:
 
 **Quillmark Engine** - High-level orchestration managing backends and quills
 
-**Workflow** - Rendering pipeline orchestration (parse → template → compile)
+**Workflow** - Rendering pipeline orchestration (parse → normalize → transform_fields → compile)
 
 **Backend Trait** - Interface for implementing output formats (PDF, SVG, etc.)
 
@@ -178,9 +182,9 @@ Fuzz testing suite for:
 
 ### Data Injection System
 
-The template system uses **JSON data injection** via a virtual helper package:
+Backends receive **raw plate content** plus **JSON data** produced by `Workflow::compile_data()` (after coercion, defaults, normalization, and backend `transform_fields`). No MiniJinja templating runs for Typst.
 
-#### Helper Package
+#### Helper Package (Typst)
 
 Templates import the `@local/quillmark-helper` virtual package:
 
@@ -189,15 +193,9 @@ Templates import the `@local/quillmark-helper` virtual package:
 ```
 
 The helper provides:
-- **data** - Dictionary containing all frontmatter fields as JSON
-- **eval-markup(content)** - Render Markdown content as Typst markup
-- **parse-date(str)** - Parse date strings into Typst datetime objects
-
-#### Data Access
-
-Templates access document data directly via the `data` dictionary:
-
-- **Direct access**: `data.title`, `data.author`
+- **data** - Dictionary containing all frontmatter fields as JSON (including `BODY`/`CARDS`)
+- **eval-markup(content)** - Evaluate Typst markup strings (e.g., converted markdown)
+- **parse-date(str)** - Parse ISO date strings into Typst datetime objects
 - **Safe access with defaults**: `data.at("title", default: "Untitled")`
 - **Body content**: `data.body` or `data.BODY`
 - **CARDS array**: `data.at("CARDS", default: ())`
