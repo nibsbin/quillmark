@@ -1,6 +1,6 @@
 # Quillmark Design Documentation Index
 
-**Last Consistency Sweep**: 2025-12-26
+**Last Consistency Sweep**: 2026-01-20
 
 This directory contains design documents that describe the architecture and components of Quillmark. These documents are the primary reference for agents implementing features and maintaining the codebase.
 
@@ -18,13 +18,12 @@ This directory contains design documents that describe the architecture and comp
 - **[CARDS.md](CARDS.md)** - Composable cards architecture with unified CARDS array
 - ~~**[SCOPES.md](SCOPES.md)**~~ - *Superseded by CARDS.md*
 - **[TEMPLATE_DRY_RUN.md](TEMPLATE_DRY_RUN.md)** - Template dry run for lightweight validation
-- **[GLUE_METADATA.md](GLUE_METADATA.md)** - Template metadata access via `__metadata__` field
+- **[GLUE_METADATA.md](GLUE_METADATA.md)** - Plate data injection (Typst helper package, backend JSON contract)
 - **[DEFAULT_QUILL.md](DEFAULT_QUILL.md)** - Default quill system for zero-config rendering
 
 ## Backends
 
 - **[ACROFORM.md](ACROFORM.md)** - AcroForm backend for PDF form filling
-- **[TYPST_GUILLEMET_CONVERSION.md](TYPST_GUILLEMET_CONVERSION.md)** - Guillemet conversion for Typst backend
 - Typst backend documentation is in the rustdoc (see `crates/backends/typst/`)
 
 ## Language Bindings
@@ -60,7 +59,7 @@ When creating new designs or updating existing ones:
 Design documents frequently reference each other. Key relationships:
 
 - ARCHITECTURE → all component designs
-- PARSE → GLUE_METADATA (metadata structure)
+- PARSE → GLUE_METADATA (data injection and helper package)
 - QUILL → SCHEMAS (field definitions)
 - ERROR → all bindings (error handling patterns)
 - DEFAULT_QUILL → QUILL, PARSE (template selection)

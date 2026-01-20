@@ -189,25 +189,11 @@ Each card schema includes:
 
 ---
 
-## Template Consumption
+## Consumption in Backends
 
-### MiniJinja Plates
-
-```jinja
-{% for card in CARDS %}
-    {% if card.CARD == "indorsements" %}
-        {# Render indorsement #}
-        {{ card.from }} → {{ card.for }}
-    {% elif card.CARD == "alert" %}
-        {# Render alert #}
-        {{ card.message }}
-    {% endif %}
-{% endfor %}
-```
-
-### ParsedDocument
-
-`ParsedDocument` provides the `CARDS` array directly to templates. The `CARD` field in each item comes from the markdown YAML block, not injected by the parser.
+- **Typst**: Cards appear under `data.CARDS` via the helper package. Markdown fields marked with `contentMediaType = "text/markdown"` are pre-converted to Typst markup.
+- **AcroForm**: Cards are available in the JSON context for MiniJinja templates as `CARDS`.
+- **Bindings**: `Workflow::compile_data()` exposes the exact JSON used for rendering.
 
 ---
 

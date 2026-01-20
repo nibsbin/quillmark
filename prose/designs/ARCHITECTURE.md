@@ -9,7 +9,7 @@ This document outlines the architecture and design principles of Quillmark, a fl
 3. [Crate Structure and Responsibilities](#crate-structure-and-responsibilities)
 4. [Core Interfaces and Structures](#core-interfaces-and-structures)
 5. [End-to-End Orchestration Workflow](#end-to-end-orchestration-workflow)
-6. [Template System Design](#template-system-design)
+6. [Data Injection and Plate Consumption](#data-injection-and-plate-consumption)
 7. [Parsing and Document Decomposition](#parsing-and-document-decomposition)
 8. [Backend Architecture](#backend-architecture)
 9. [Package Management and Asset Handling](#package-management-and-asset-handling)
@@ -21,14 +21,15 @@ This document outlines the architecture and design principles of Quillmark, a fl
 
 ## System Overview
 
-Quillmark is a flexible, **template-first** Markdown rendering system that converts Markdown with YAML frontmatter into output artifacts (PDF, SVG, TXT, etc.). The architecture is built around a an orchestration API for high-level use, backed by trait-based extensibility for backends.
+Quillmark is a flexible, **template-first** Markdown rendering system that converts Markdown with YAML frontmatter into output artifacts (PDF, SVG, TXT, etc.). The architecture is built around an orchestration API for high-level use, backed by trait-based extensibility for backends.
 
 High-level data flow:
 
-* **Parsing** → YAML frontmatter + body extraction
-* **Templating** → MiniJinja-based composition with backend-registered filters
-* **Backend Processing** → Compile to final artifacts
-* **Assets/Packages** → Fonts, images, and packages resolved dynamically
+* **Parsing & Normalization** → YAML/frontmatter extraction, CARD aggregation, bidi stripping, HTML fence normalization
+* **Schema Coercion & Defaults** → Apply type coercion and defaults from Quill schema
+* **Backend Field Transforms** → Backend-specific field shaping (e.g., markdown→Typst markup)
+* **Backend Processing** → Compile plate content with injected JSON data
+* **Assets/Packages** → Fonts, images, and packages resolved dynamically (including dynamic assets/fonts)
 
 ---
 
@@ -39,7 +40,7 @@ High-level data flow:
 2. **Trait-Based Extensibility**
    New output formats implement the `Backend` trait (thread-safe, zero global state).
 3. **Template-First**
-   Quill templates fully control structure and styling; Markdown provides content via filters.
+   Quill templates fully control structure and styling; Markdown provides content through JSON injection.
 4. **YAML-First Frontmatter**
    YAML is the single supported frontmatter format presented to templates. Backends may inject/convert to their native preferences (e.g., TOML for Typst) via filters.
 5. **Zero-Copy Where Practical**
@@ -59,7 +60,6 @@ High-level data flow:
 
 * Types: `Backend`, `Artifact`, `OutputFormat`
 * Parsing: `ParsedDocument` with `from_markdown()` constructor
-* Templating: `Plate` + stable `filter_api`
 * Template model: `Quill` (+ `Quill.toml`)
 * Errors & Diagnostics: `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
 * Utilities: TOML⇄YAML conversion helpers
@@ -80,8 +80,8 @@ High-level data flow:
 ### `backends/quillmark-typst` (Typst backend)
 
 * Implements `Backend` for PDF/SVG
-* Markdown→Typst conversion
-* Template filters: String, Lines, Date, Dict, Content, Asset
+* Markdown→Typst conversion via backend `transform_fields`
+* `@local/quillmark-helper` package exposes injected JSON data inside Typst
 * Compilation environment with font & asset resolution
 * Structured diagnostics with source locations
 
@@ -134,43 +134,36 @@ High-level data flow:
 The workflow follows a three-stage pipeline:
 
 1. **Parse** - Extract YAML frontmatter + body from markdown
-2. **Template** - Compose backend-specific plate via MiniJinja with registered filters
-3. **Compile** - Backend processes plate to generate output artifacts
+2. **Normalize & Shape** - Coerce types, apply defaults, normalize bidi/HTML fences, and run backend `transform_fields`
+3. **Compile** - Backend processes plate with injected JSON data to generate output artifacts
 
 ### Key Concepts
 
 - **Backend Auto-Registration**: Backends registered based on enabled features
 - **Default Quill System**: Backends provide fallback templates for documents without `QUILL:` tags
-- **Dynamic Assets**: Runtime assets accessible via `Asset` filter
+- **Dynamic Assets**: Runtime assets and fonts injected into the quill file tree with `DYNAMIC_ASSET__`/`DYNAMIC_FONT__` prefixes
 - **Error Handling**: Structured diagnostics with source chain preservation
 
 ---
 
-## Template System Design
+## Data Injection and Plate Consumption
 
-The template system uses **MiniJinja** with a **stable filter API** to keep backends decoupled from the template engine.
+Plate content is passed to backends **without** MiniJinja composition. Backends receive:
 
-### Filter Architecture
+- `plate_content`: the raw plate from `Quill.plate` (or empty for plate-less backends)
+- `json_data`: JSON produced by `Workflow::compile_data()` after coercion, defaults, normalization, and backend `transform_fields`
+- `quill`: the template bundle with assets, packages, and optional dynamic assets/fonts injected
 
-### Filter Architecture
+### Typst Backend
 
-Backends register custom filters via the stable `filter_api` module:
-- **String** - Escape/quote values for backend syntax
-- **Lines** - Array to multi-line string conversion
-- **Date** - Date parsing for backend datetime types  
-- **Dict** - Objects to backend-native structures
-- **Content** - Markdown body to backend markup conversion
-- **Asset** - Dynamic asset filename transformation
+- Loads plate content directly into Typst
+- Injects `json_data` as a virtual package `@local/quillmark-helper:<version>` (see [GLUE_METADATA.md](GLUE_METADATA.md))
+- Uses backend `transform_fields` to convert markdown schema fields to Typst markup before serialization
 
-The `filter_api` provides a stable ABI, preventing version conflicts and enabling independent backend development.
+### AcroForm Backend
 
-### Template Context
-
-Templates receive parsed document fields via the MiniJinja context:
-- **Top-level fields**: All frontmatter fields and `body` accessible directly
-- **`__metadata__` field**: System-generated field containing all frontmatter fields except `body`
-
-See [GLUE_METADATA.md](GLUE_METADATA.md) for metadata access patterns.
+- Ignores plate content and reads `form.pdf` from the quill
+- Uses MiniJinja to render field values from `json_data`
 
 ---
 
@@ -221,20 +214,16 @@ Parses to: `{ title: "...", CARDS: [{ CARD: "products", name: "...", BODY: "..."
 The Typst backend implements PDF and SVG output:
 
 **Key Features:**
-- Markdown→Typst conversion with proper escaping
+- Markdown→Typst conversion via backend `transform_fields` for fields annotated with `contentMediaType = "text/markdown"`
+- JSON data injection exposed to Typst through the virtual `@local/quillmark-helper` package
 - Dynamic package loading from `packages/` directory
-- Font and asset resolution from `assets/` directory
-- Runtime asset injection with `DYNAMIC_ASSET__` prefix
+- Font and asset resolution from `assets/` directory (including dynamic assets/fonts)
 - Structured error mapping with source locations
-
-**Filter Support:**
-- String, Lines, Date, Dict filters for data transformation
-- Content filter for Markdown→Typst conversion
-- Asset filter for dynamic asset path mapping
 
 **Compilation Environment (`QuillWorld`):**
 - Implements Typst `World` trait
 - Virtual file system for packages and assets
+- Helper package generates `lib.typ`/`typst.toml` from injected JSON data
 - Line/column mapping for error diagnostics
 
 ### AcroForm Backend
@@ -246,7 +235,6 @@ The AcroForm backend implements PDF form filling:
 - Templates field values using MiniJinja
 - Supports tooltip-based (`description__{{template}}`) and value-based templating
 - Returns filled PDF as single artifact
-- TXT format support for debugging (returns field values as JSON)
 
 **Compilation Process:**
 1. Load PDF form from quill's `form.pdf` file
@@ -303,7 +291,7 @@ External errors are converted to structured diagnostics preserving location and 
 
 ### New Backends
 
-Implement the `Backend` trait with required methods: `id()`, `supported_formats()`, `plate_extension_types()`, `allow_auto_plate()`, `register_filters()`, and `compile()`. Optionally provide `default_quill()` for zero-config support.
+Implement the `Backend` trait with required methods: `id()`, `supported_formats()`, `plate_extension_types()`, `transform_fields()`, and `compile()`. Optionally provide `default_quill()` for zero-config support.
 
 **Requirements:** Thread-safe (`Send + Sync`), structured error reporting, format validation.
 

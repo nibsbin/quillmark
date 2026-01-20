@@ -26,7 +26,7 @@ JSON format with a root object containing a `files` key:
 {
   "files": {
     "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\n..." },
-    "plate.typ": { "contents": "= Template\n\n{{ body }}" },
+    "plate.typ": { "contents": "#import \"@local/quillmark-helper:0.1.0\": data, eval-markup\n= Template\n\n#eval-markup(data.BODY)" },
     "assets": {
       "logo.png": { "contents": [137, 80, 78, 71, ...] }
     }
@@ -50,10 +50,12 @@ JSON format with a root object containing a `files` key:
 class Quillmark {
   constructor();
   static parseMarkdown(markdown: string): ParsedDocument;
-  registerQuill(quillJson: string | object): void;
+  registerQuill(quillJson: string | object): QuillInfo;
   getQuillInfo(name: string): QuillInfo;
-  processPlate(quillName: string, markdown: string): string;
-  render(parsedDoc: ParsedDocument, options?: RenderOptions): RenderResult;
+  getStrippedSchema(name: string): object;
+  compileData(markdown: string): object;
+  dryRun(markdown: string): void; // throws on validation errors
+  render(parsed: ParsedDocument, options?: RenderOptions): RenderResult;
   listQuills(): string[];
   unregisterQuill(name: string): void;
 }
@@ -95,6 +97,7 @@ interface RenderResult {
 interface Artifact {
   outputFormat: 'pdf' | 'svg' | 'txt';
   bytes: number[];  // Byte array
+  mime_type: string;
 }
 
 interface Diagnostic {
@@ -103,7 +106,7 @@ interface Diagnostic {
   message: string;
   location?: Location;
   hint?: string;
-  source?: string;  // Source chain flattened
+  source_chain?: string[];  // Source chain flattened
 }
 
 interface Location {
