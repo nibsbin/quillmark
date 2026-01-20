@@ -285,42 +285,42 @@ fn is_valid_tag_name(name: &str) -> bool {
 
 ## 2. Architectural Pain Points: Markdown Block/Card System
 
-### 2.1 Asymmetric First-Block Semantics ⚠️ **High Impact**
+### 2.1 First-Block QUILL Detection (Essential Architecture)
 
-**Issue:** The first metadata block has different parsing rules than subsequent blocks, creating complexity and confusion.
+**Status:** This is NOT a bug - it's required for template selection.
+
+**Why first block is special:**
+1. **Must detect QUILL directive** to know which template schema to use
+2. Without `QUILL:`, defaults to `__default__` template
+3. All global frontmatter must be in first block (by design)
 
 **Rules:**
 1. **First block** (index 0):
-   - CAN have `QUILL:` directive
-   - CAN be global frontmatter (no `QUILL:`, no `CARD:`)
-   - CAN be a card (has `CARD:`)
+   - CAN have `QUILL:` directive (selects template)
+   - CAN be global frontmatter (no `QUILL:`, no `CARD:`) → uses `__default__`
+   - CAN be a card (has `CARD:`) → uses `__default__` with card
 
 2. **Subsequent blocks** (index > 0):
-   - MUST have `CARD:` directive
-   - CANNOT have `QUILL:` directive (error)
-   - CANNOT be global frontmatter (error)
+   - MUST have `CARD:` directive (template already selected)
+   - CANNOT have `QUILL:` directive (too late - template chosen)
+   - CANNOT be global frontmatter (already defined)
 
-**Source:** `crates/core/src/parse.rs:532-553`
-```rust
-for (idx, block) in blocks.iter().enumerate() {
-    if idx == 0 {
-        // Top-level frontmatter: can have QUILL or neither
-        if block.tag.is_none() && block.quill_name.is_none() {
-            global_frontmatter_index = Some(idx);
-        }
-    } else {
-        // Inline blocks: MUST have CARD
-        if block.quill_name.is_some() {
-            return Err("QUILL directive can only appear in top-level frontmatter");
-        }
-        if block.tag.is_none() {
-            return Err(missing_card_directive());
-        }
-    }
-}
+**Parsing flow:**
+```
+1. Parse all metadata blocks
+2. Check first block for QUILL: directive
+   - Found → Use that template's schema
+   - Not found → Use __default__ template
+3. Validate all subsequent blocks against selected schema
 ```
 
-**Example confusion:**
+**Why this design is correct:**
+- Template selection MUST happen before parsing
+- Can't validate card blocks without knowing card schemas
+- Can't determine card schemas without knowing which Quill
+- Therefore: QUILL must be in first block
+
+**User confusion point:**
 ```markdown
 ---
 title: My Document
@@ -333,55 +333,33 @@ author: John Doe    # ❌ ERROR: Missing CARD directive
 ---
 ```
 
-User expectation: "Second block is also global frontmatter, just like the first."
-Reality: "Second block MUST be a card or error."
+User thinks: "I'm adding more global metadata"
+System thinks: "Template selected, this must be a card"
 
-**Why this is architectural:**
-- Design decision: global frontmatter lives in a single top block
-- Parsing logic enforces this rule
-- Cannot be changed without redefining the document model
+**Why second block can't be global frontmatter:**
+- Template already selected (from first block)
+- Parser already initialized schema
+- All global metadata must be declared upfront
+- Subsequent blocks are card content
 
 **Impact:**
-- **Newcomers:** Frequently make this mistake
-- **Migrations:** Documents from Jekyll/Hugo have multiple frontmatter blocks
-- **Authoring flow:** Adds cognitive load - "Is this the first block?"
+- **Newcomers:** Expect to add metadata anywhere (like Jekyll)
+- **Reality:** All global metadata in first block only
+- **Mitigation:** Clear error message explaining this constraint
 
-**Recommendation:**
+**This is CORRECT design, not a bug.** Alternative designs would break template selection logic.
 
-**Option A:** Allow multiple global frontmatter blocks (merge them):
-```rust
-// Parse ALL blocks without CARD: as global frontmatter
-// Merge into single fields map
-// Error on field name collisions
+**Recommendation:** Accept design, improve error message:
 ```
+Error: Metadata block at line 7 is missing CARD directive
 
-**Option B:** Require explicit `FRONTMATTER:` directive:
-```markdown
----
-FRONTMATTER:
-title: My Document
----
+All global frontmatter must be in the first metadata block.
+This block is being parsed as a card, which requires:
+  CARD: card_type_name
 
----
-CARD: section
----
+Did you mean to add 'author' to the first block?
+Or did you forget the CARD directive?
 ```
-Makes the special first-block behavior explicit.
-
-**Option C:** Document-level vs inline distinction:
-```markdown
-===
-DOCUMENT:
-title: Global metadata
-===
-
----
-CARD: section
----
-```
-Use different delimiters (`===` vs `---`) for document vs. cards.
-
-**Preferred:** Option A - least breaking, most intuitive.
 
 ---
 
@@ -828,7 +806,7 @@ ui.hidden = true  # Don't show in UI, template use only
 | Issue | Frequency | Severity | Workaround | Total Impact |
 |-------|-----------|----------|------------|--------------|
 | TOML nested verbosity | High | Medium | Inline JSON | **High** |
-| Asymmetric first-block | Very High | High | None | **Critical** |
+| First-block QUILL detection | Very High | Low | Better errors | **Medium** |
 | Reserved keywords | Low | High | Rename fields | **Medium** |
 | Tag naming restrictions | Medium | Low | Accept convention | **Low** |
 | No field reusability | Medium | Medium | Copy-paste | **Medium** |
@@ -837,10 +815,12 @@ ui.hidden = true  # Don't show in UI, template use only
 | Fence detection strictness | Low | Low | Use ``` only | **Low** |
 | Card vs. field distinction | Very High | High | Learn model | **High** |
 
+**Note:** First-block QUILL detection is CORRECT design - essential for template selection. Confusion is communication issue, not architectural flaw.
+
 **Critical issues to address:**
-1. Asymmetric first-block semantics
-2. TOML nested structure verbosity
-3. Card vs. field conceptual model (communication)
+1. TOML nested structure verbosity
+2. Card vs. field conceptual model (communication)
+3. Reserved keyword namespace pollution
 
 ---
 
@@ -848,18 +828,7 @@ ui.hidden = true  # Don't show in UI, template use only
 
 ### High Priority (Architectural Changes)
 
-1. **Allow multiple global frontmatter blocks** (fixes asymmetry):
-   - Merge all blocks without `CARD:` into global fields
-   - Error on name collisions
-   - Simplifies mental model significantly
-
-2. **Schema-level card defaults** (reduces repetition):
-   ```toml
-   [cards.experience_section.fields.title]
-   default = "Work Experience"
-   ```
-
-3. **Field schema reusability** (reduces duplication):
+1. **Field schema reusability** (reduces duplication):
    ```toml
    [Quill.schema_defs.address]
    type = "object"
@@ -867,6 +836,18 @@ ui.hidden = true  # Don't show in UI, template use only
 
    [fields.shipping_address]
    type = "$ref:address"
+   ```
+
+2. **Schema-level card defaults** (reduces repetition):
+   ```toml
+   [cards.experience_section.fields.title]
+   default = "Work Experience"
+   ```
+
+3. **Inline JSON for complex nested structures** (TOML escape hatch):
+   ```toml
+   [fields.complex]
+   schema = '''{"type": "array", "items": {...}}'''
    ```
 
 ### Medium Priority (Incremental Improvements)
