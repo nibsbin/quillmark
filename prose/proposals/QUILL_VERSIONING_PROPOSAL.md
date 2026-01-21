@@ -2,6 +2,7 @@
 ## Enabling Reproducible Rendering with Version Pinning
 
 **Date:** 2026-01-21
+**Status:** Pre-1.0 breaking change - no backward compatibility required
 **Context:** Enable documents to specify which version of a Quill template they require, ensuring reproducible rendering across time as templates evolve.
 **Design Focus:** Simplicity for users, two-segment versioning for compatibility, extensibility for future distribution systems.
 
@@ -29,7 +30,7 @@ Extend the QUILL tag syntax to support version specification using two-segment v
 
 ### Core Design Principles
 
-1. **Backward compatible.** Documents without version specifications continue to work, defaulting to the latest available version.
+1. **Explicit versioning required.** All documents must specify a version. No implicit defaults, no guessing. Reproducibility is mandatory.
 
 2. **Simple for non-technical users.** Basic version syntax is easy to understand: `@2` means "latest version 2", `@2.1` means exactly "version 2.1".
 
@@ -49,19 +50,19 @@ Documents specify versions in the QUILL tag using `@` separator:
 ---
 QUILL: "resume-template@2.1"      # Exact version
 QUILL: "resume-template@2"        # Latest 2.x
-QUILL: "resume-template@latest"   # Latest overall (explicit)
-QUILL: "resume-template"          # Unspecified (uses default, typically latest)
+QUILL: "resume-template@latest"   # Latest overall
 ---
 ```
 
 ### Parsing Rules
 
-The parser splits on `@` to extract the template name and version constraint. The version constraint is parsed as:
+The parser splits on `@` to extract the template name and version constraint. Version specification is mandatory—documents without `@version` are rejected with a clear error.
+
+The version constraint is parsed as:
 
 - **Two components (2.1)** — Exact version match required.
 - **One component (2)** — Match latest minor version in the 2.x series.
 - **Keyword "latest"** — Match the highest version available.
-- **No version** — Apply default policy (recommended: latest with optional warning).
 
 Version numbers follow two-segment format: `MAJOR.MINOR`. Template authors increment major for breaking changes, minor for all backward-compatible changes (bug fixes, features, improvements).
 
@@ -111,7 +112,6 @@ pub struct Quillmark {
 pub struct VersionedQuillSet {
     name: String,
     versions: BTreeMap<Version, Quill>,
-    default_selector: VersionSelector,
 }
 
 pub struct Version {
@@ -123,7 +123,6 @@ pub enum VersionSelector {
     Exact(u64, u64),     // 2.1 (major, minor)
     Major(u64),          // 2 (any minor)
     Latest,
-    Unspecified,
 }
 
 pub struct QuillReference {
@@ -137,18 +136,21 @@ pub struct QuillReference {
 ```rust
 impl QuillReference {
     pub fn parse(quill_tag: &str) -> Result<Self> {
-        let (name, version_str) = match quill_tag.split_once('@') {
-            Some((n, v)) => (n.to_string(), Some(v)),
-            None => (quill_tag.to_string(), None),
-        };
+        let (name, version_str) = quill_tag.split_once('@')
+            .ok_or_else(|| Error::MissingVersion {
+                quill_tag: quill_tag.to_string(),
+                hint: "Specify a version like 'template@2.1' or 'template@latest'",
+            })?;
 
         let version = match version_str {
-            None => VersionSelector::Unspecified,
-            Some("latest") => VersionSelector::Latest,
-            Some(v) => Self::parse_version_selector(v)?,
+            "latest" => VersionSelector::Latest,
+            v => Self::parse_version_selector(v)?,
         };
 
-        Ok(QuillReference { name, version })
+        Ok(QuillReference {
+            name: name.to_string(),
+            version
+        })
     }
 
     fn parse_version_selector(s: &str) -> Result<VersionSelector> {
@@ -205,11 +207,6 @@ impl VersionedQuillSet {
                         constraint: format!("{}.x", major),
                         available: self.list_versions(),
                     })
-            }
-
-            VersionSelector::Unspecified => {
-                // Use default policy
-                self.resolve(&self.default_selector)
             }
         }
     }
@@ -360,6 +357,19 @@ The upgrade command helps users transition documents to newer template versions 
 
 ## Error Messages and Diagnostics
 
+When version specification is missing, the system fails immediately with a clear error:
+
+```
+Error: Missing version specification
+  Document: document.md
+  QUILL tag: "resume-template"
+
+  All documents must specify a version. Update to:
+    QUILL: "resume-template@2.1"  (exact version)
+    QUILL: "resume-template@2"    (latest 2.x)
+    QUILL: "resume-template@latest" (latest overall)
+```
+
 When version resolution fails, the system provides actionable error messages with context:
 
 ```
@@ -369,17 +379,6 @@ Error: Version not found
   Available: 3.0, 2.2, 2.1, 2.0, 1.3, 1.2, 1.1, 1.0
 
   Suggestion: Use @2 for latest 2.x (currently 2.2), or specify @2.2
-```
-
-When a document uses an unversioned QUILL tag, the system can optionally warn (configurable):
-
-```
-Warning: Unversioned template reference
-  Document: document.md
-  Template: resume-template
-  Rendering with: resume-template@2.1 (latest)
-
-  To lock this version: quillmark pin document.md
 ```
 
 When a major version upgrade is attempted:
@@ -397,17 +396,27 @@ Warning: Major version change detected
 
 ## Migration Strategy
 
-### Phase 1: Additive Changes
+This is a breaking change. Pre-1.0 software, pre-1.0 rules.
 
-Implement version parsing, resolution, and registry without breaking existing behavior. Documents without version constraints continue to use the latest available version. This phase is backward compatible.
+### All Quills Must Declare Versions
 
-### Phase 2: Template Migration
+Add `version = "1.0"` to every Quill.toml. Start at 1.0 for all existing templates.
 
-Update all existing Quills to include proper two-segment versions in their Quill.toml files. Create tooling to scan template directories and assign initial versions (start with 1.0). Establish guidelines for version bumping.
+### All Documents Must Specify Versions
 
-### Phase 3: Default Policy Adjustment
+Add version to every QUILL tag. Provide migration tool:
 
-Consider making version specification recommended or required for new documents. Add CLI warnings for unversioned documents to encourage explicit pinning. Provide migration tooling to bulk-update document collections.
+```bash
+# Scan and fix all documents to use @latest
+$ quillmark migrate fix --version latest ./docs
+
+# Or interactively choose version for each template
+$ quillmark migrate fix --interactive ./docs
+```
+
+### Timeline
+
+Ship it. Update all templates and examples in the same release. Documents without versions fail with clear error messages pointing to the migration tool.
 
 ---
 
@@ -477,49 +486,37 @@ This would enable more sophisticated compatibility specifications but is not nec
 
 ## Implementation Checklist
 
-The feature can be implemented in discrete, testable phases:
+1. **Version parsing.** Implement `QuillReference::parse` and `VersionSelector` enum. Require `@version` in all QUILL tags.
 
-1. **Version parsing.** Implement `QuillReference::parse` and `VersionSelector` enum with comprehensive unit tests for all syntax variants (major-only, exact, latest, unspecified).
+2. **Resolution algorithm.** Implement `VersionedQuillSet::resolve` with tests for all resolution cases.
 
-2. **Resolution algorithm.** Implement `VersionedQuillSet::resolve` with unit tests covering all resolution cases, edge cases, and error conditions.
+3. **Engine integration.** Update `Quillmark` to use `VersionedQuillSet`. Enforce version requirement in Quill.toml.
 
-3. **Engine integration.** Update `Quillmark` to use `VersionedQuillSet` internally. Add tests for multi-version registration and resolution.
+4. **Workflow creation.** Update `workflow_for_document` to parse and resolve versions. Fail hard on missing versions.
 
-4. **Workflow creation.** Update `workflow_for_document` to parse QUILL tags and resolve versions. Test with versioned and unversioned documents.
+5. **CLI commands.** Add `versions`, `resolve`, `pin`, `upgrade`, and `migrate fix` commands.
 
-5. **CLI commands.** Add `versions`, `resolve`, `pin`, and `upgrade` commands. Test with various version constraints and edge cases.
+6. **Error handling.** Clear error messages for missing versions and failed resolution.
 
-6. **Error handling.** Implement clear, actionable error messages with available version listings and suggestions.
+7. **Migration tool.** Build `quillmark migrate fix` to bulk-update documents.
 
-7. **Documentation.** Update user docs, template author guides, and migration documentation.
-
-8. **Template migration.** Audit existing Quills and assign appropriate two-segment versions. Update all plates and examples.
+8. **Template migration.** Add `version = "1.0"` to all existing Quills. Update all example documents.
 
 ---
 
-## Open Considerations
-
-### Default Version Policy
-
-When a document does not specify a version, the system must choose a default. Options include:
-
-- **Always latest.** Simple and encourages staying current, but sacrifices reproducibility.
-- **Latest with warning.** Alerts users to unversioned documents while maintaining convenience.
-- **Require explicit version.** Maximizes reproducibility but increases friction for casual users.
-
-The recommended approach is "latest with warning" initially, allowing future tightening based on user feedback.
+## Open Questions
 
 ### Version Validation
 
-Should the system validate that template authors follow versioning guidelines correctly? This is challenging—determining whether a change is "breaking" requires semantic understanding of template changes. The system cannot enforce this automatically. Instead, rely on documentation, conventions, and community norms. Consider adding a changelog validation tool that helps authors document their changes.
+Should the system validate that template authors follow versioning guidelines correctly? This is challenging—determining whether a change is "breaking" requires semantic understanding of template changes. The system cannot enforce this automatically. Rely on documentation, conventions, and community norms.
 
 ### Backend Compatibility
 
-Different versions of a template might target different backend versions or require different backend capabilities. The system should consider whether version resolution needs to account for backend compatibility constraints. This could be handled through metadata fields like `min_backend_version` or ignored initially.
+Different versions of a template might target different backend versions. Could add `min_backend_version` or `min_quillmark` fields to Quill.toml for validation.
 
 ### Multi-Repository Coordination
 
-If templates are distributed across multiple repositories with overlapping names, namespacing becomes necessary. Consider prefixing syntax like `@org/template@version` or repository-qualified names. This can be deferred until remote distribution is implemented.
+When templates are distributed across multiple repositories with overlapping names, use namespacing like `@org/template@version`. Defer until remote distribution is implemented.
 
 ---
 
@@ -545,14 +542,16 @@ The system can always be extended to support three segments in the future if nee
 
 ## Benefits
 
-1. **Reproducible rendering.** Documents render identically over time, even as templates evolve.
+1. **Mandatory reproducibility.** Every document specifies its version. No surprises, no silent breakage. Documents render identically forever.
 
-2. **Safe template evolution.** Authors can improve templates without fear of breaking existing documents.
+2. **Safe template evolution.** Authors can iterate aggressively knowing existing documents are protected by explicit versioning.
 
 3. **Clear compatibility signaling.** Two-segment versioning communicates breaking vs. compatible changes.
 
-4. **User control.** Document authors choose their stability level: bleeding edge (`latest`), stable (major version like `@2`), frozen (exact version like `@2.1`).
+4. **User control.** Document authors choose their stability level: bleeding edge (`@latest`), stable (major version like `@2`), frozen (exact version like `@2.1`).
 
-5. **Foundation for distribution.** The versioning system enables future features like template repositories, dependency management, and publishing workflows.
+5. **Foundation for distribution.** The versioning system enables template repositories, dependency management, and publishing workflows.
 
 6. **Simple and understandable.** Two-segment versions are easy to explain to non-technical users while still being semantically meaningful.
+
+7. **No legacy baggage.** Pre-1.0 means we can design it right the first time without compromise.
