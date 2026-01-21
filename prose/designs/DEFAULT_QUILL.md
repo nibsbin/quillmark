@@ -112,8 +112,8 @@ The default Quill is embedded at compile time to avoid filesystem dependencies.
 
 The name `__default__` is reserved for default Quills:
 
-1. **Validation:** `Quillmark::register_quill()` should emit a warning or error if users attempt to register a Quill named `__default__` manually
-2. **Exception:** Only backend-provided default Quills can use this name
+1. **Validation:** `Quillmark::register_quill()` enforces global uniqueness (any duplicate name is an error); default quills are only auto-registered when no `__default__` is present.
+2. **Exception:** Manual registration of `__default__` is allowed but still must pass backend/plate validation.
 3. **Pattern:** Double underscore prefix/suffix follows Rust/Python conventions for reserved names
 
 ---

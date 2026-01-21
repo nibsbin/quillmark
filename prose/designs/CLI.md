@@ -63,7 +63,7 @@ quillmark render <MARKDOWN_FILE> [OPTIONS]
 - `-o, --output <FILE>` - Output file path (default: derived from input filename)
 - `-f, --format <FORMAT>` - Output format: pdf, svg, txt (default: pdf)
 - `--stdout` - Write output to stdout instead of file
-- `--plate-only` - Only process plate template, don't render final output
+- `--output-data <FILE>` - Write compiled JSON data (post-coercion/defaults/transform_fields) to file
 - `--verbose` - Show detailed processing information
 - `--quiet` - Suppress all non-error output
 
@@ -73,6 +73,7 @@ quillmark render <MARKDOWN_FILE> [OPTIONS]
 3. Load quill from filesystem
 4. Create workflow and render to specified format
 5. Write output to file or stdout
+6. Optionally emit compiled JSON data when `--output-data` is provided
 
 **Error Handling:**
 - Invalid markdown: display parse errors with line numbers
@@ -94,11 +95,11 @@ quillmark render memo.md --format svg
 # Output to specific file
 quillmark render memo.md -o output/final.pdf
 
-# Only process plate template
-quillmark render memo.md --plate-only -o plate_output.typ
-
 # Pipe output for further processing
 quillmark render memo.md --stdout > output.pdf
+
+# Emit compiled data for inspection
+quillmark render memo.md --output-data data.json
 ```
 
 ---

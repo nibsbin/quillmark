@@ -98,7 +98,7 @@ The JSON format has a root object with a `files` key. The optional `metadata` ke
 {
   "files": {
     "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\n..." },
-    "plate.typ": { "contents": "= Template\n\n{{ body }}" },
+    "plate.typ": { "contents": "#import \"@local/quillmark-helper:0.1.0\": data, eval-markup\n= Template\n\n#eval-markup(data.BODY)" },
     "assets": {
       "logo.png": { "contents": [137, 80, 78, 71, ...] }
     }

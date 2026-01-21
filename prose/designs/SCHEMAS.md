@@ -6,12 +6,14 @@ This document describes the configuration and data schemas used in Quillmark.
 
 ### Backend Trait Schema
 
-The Backend trait defines the interface for implementing backends in the quillmark system. Implementations must define the following configurations:
+The Backend trait defines the interface for implementing backends in the quillmark system. Implementations must define the following:
 
-- id -> str: Returns the backend identifier (e.g., "typst", "latex").
-- supported_formats -> str[]: Returns the supported output formats.
-- plate_extension_types -> str[]: Returns the plate file extensions (e.g., ".typ", ".tex"). Returns an empty array to disable custom plate files.
-- allow_auto_plate -> bool: Whether to allow automatic plate generation.
+- `id() -> &str`: Backend identifier (e.g., "typst", "acroform").
+- `supported_formats() -> &[OutputFormat]`: Output formats supported by the backend.
+- `plate_extension_types() -> &[&str]`: Accepted plate extensions (e.g., `[".typ"]`). Use empty slice to indicate "no plate required".
+- `compile(plate, quill, opts, json_data)`: Compile raw plate content plus JSON document data into artifacts.
+- `transform_fields(fields, schema)`: Optional backend-specific field shaping before JSON serialization (e.g., markdown→Typst markup).
+- `default_quill() -> Option<Quill>`: Optional embedded default quill for zero-config use.
 
 ## Quill
 
@@ -24,9 +26,7 @@ Quills encapsulate the metadata, configuration, and behavior for generating a sp
     - Upon registering the Quill to a Quillmark instance, ensure the backend is already registered
 - author -> Option[str]: The author of the Quill.
 - version -> Option[str]: The version of the Quill.
-- plate_file -> Option[str]: Path to a custom plate file. If not provided, automatic plate generation is used. Validation:
-    - Ensure extension is in the backend's `plate_extension_types`
-    - If not provided, ensure `backend.allow_auto_plate` is true
+- plate_file -> Option[str]: Path to a custom plate file. If provided, its extension must be in the backend's `plate_extension_types`. If omitted, the backend is expected to work without a plate (e.g., AcroForm) or use its own default plate.
 - example_file -> Option[str]: Path to an example markdown file demonstrating the Quill's capabilities. Developers should include usage instructions in the content for human and LLM consumers.
 
 ### Quill Field
@@ -62,6 +62,7 @@ Field properties:
 - "date" → "string" with format "date"
 - "datetime" → "string" with format "date-time"
 - "scope" → See [CARDS.md](CARDS.md) for card type handling
+- `contentMediaType = "text/markdown"` → Marks fields that the Typst backend will convert to Typst markup via `transform_fields`
 
 **Required Field Logic:**
 - Fields are **optional by default** (aligns with JSON Schema standard)

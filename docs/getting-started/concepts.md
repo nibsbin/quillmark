@@ -45,11 +45,12 @@ This metadata is accessible in templates and can be validated against JSON schem
 
 ### Backends
 
-Backends transform composed templates into final artifacts:
+Backends compile raw plate content with injected JSON data into final artifacts:
 
-- **Typst Backend** - Generates PDF and SVG files using the Typst typesetting system
+- **Typst Backend** - Generates PDF and SVG files using the Typst typesetting system. It transforms markdown fields (annotated with `contentMediaType = "text/markdown"`) into Typst markup before serialization.
+- **AcroForm Backend** - Fills PDF forms using MiniJinja templates embedded in form fields/tooltips (plate-less).
 
-Each backend has its own templating capabilities and filters.
+Each backend has its own compilation process and error mapping.
 
 ### Default Quill System
 
@@ -77,13 +78,13 @@ This document will render using the default Typst quill without requiring you to
 
 Quillmark follows a multi-stage pipeline:
 
-1. **Parse** - Extract YAML frontmatter and Markdown body
-2. **Inject** - Frontmatter data is serialized as JSON and injected into the plate template
-3. **Compile** - Backend processes plate with injected data into final artifacts (PDF, SVG, etc.)
+1. **Parse & Normalize** - Extract YAML frontmatter/body, apply schema coercion/defaults, normalize bidi/HTML fences
+2. **Transform Fields** - Backend-specific shaping (e.g., markdown→Typst markup) before JSON serialization
+3. **Compile** - Backend processes plate with injected JSON data into final artifacts (PDF, SVG, etc.)
 4. **Output** - Return artifacts with metadata
 
 ```
-Markdown + YAML → Parse → Data Injection → Compile (Backend) → Artifacts
+Markdown + YAML → Parse/Normalize → Transform Fields → Compile (Backend) → Artifacts
 ```
 
 ## Mental Model

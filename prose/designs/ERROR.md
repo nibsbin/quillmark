@@ -66,13 +66,13 @@ Bindings should convert `RenderError` to language-specific exceptions/errors whi
 
 Backends convert their native error types to Quillmark's structured diagnostics.
 
-### Template Engine (MiniJinja)
+### Template Engine (AcroForm MiniJinja)
 
-MiniJinja errors are automatically converted to `RenderError::TemplateFailed` with:
-- Accurate line/column extraction from error location
+MiniJinja is only used by the AcroForm backend. Template failures are converted to `RenderError::TemplateFailed` with:
+- Line/column extraction when available
 - Context-aware hints based on error kind (undefined variables, syntax errors, etc.)
 - Preserved error chain via `source` field
-- Structured error codes (e.g., "minijinja::UndefinedError")
+- Structured error codes (e.g., "acroform::template")
 
 ### Typst Backend
 

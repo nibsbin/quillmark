@@ -19,7 +19,7 @@
 pub struct QuillValue(serde_json::Value);
 ```
 
-**Conversion methods:** `from_toml()`, `from_yaml()`, `from_json()`, `to_minijinja()`, `as_json()`, `into_json()`
+**Conversion methods:** `from_toml()`, `from_yaml_str()`, `from_json()`, `as_json()`, `into_json()`
 
 **Delegating methods:** `is_null()`, `as_str()`, `as_bool()`, `as_i64()`, `as_array()`, `as_object()`, `get(key)`
 - `get(key)` - Field access with `QuillValue` wrapping

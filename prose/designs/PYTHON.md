@@ -60,12 +60,11 @@ result = workflow.render(parsed, OutputFormat.PDF)
 ```
 
 **Methods:**
-- `render(parsed, format)` - Render parsed document to artifacts
-- `render_processed(content, format)` - Render pre-composed content
-- `process_plate(parsed)` - Process through plate template
-- `backend_id()` - Get backend identifier (property)
-- `supported_formats()` - Get supported output formats (property)
-- `quill_name()` - Get quill name (property)
+- `render(parsed, format=None)` - Render parsed document to artifacts
+- `dry_run(parsed)` - Schema validation without backend compilation
+- `backend_id` - Backend identifier (property)
+- `supported_formats` - Supported output formats (property)
+- `quill_name` - Quill name (property)
 
 **Note**: Dynamic asset and font injection methods are not currently supported in Python bindings.
 
