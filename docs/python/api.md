@@ -32,6 +32,7 @@ parsed = ParsedDocument.from_markdown(markdown)
 
 # Render
 workflow = engine.workflow("my-quill")
+workflow.dry_run(parsed)  # fast validation
 result = workflow.render(parsed, OutputFormat.PDF)
 
 # Save output
