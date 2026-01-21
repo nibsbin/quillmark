@@ -337,6 +337,7 @@ where
 /// 1. Coalesces adjacent `Text` events to enable intraword underscore emphasis (fix for `__` sandwich).
 /// 2. Fixes `***` adjacency issues (fix for `***` sandwich).
 /// 3. Suppresses setext-style headings (only ATX-style `# Heading` is supported).
+/// 4. Tracks `__` and `~~` markers across events for intraword nested formatting.
 struct MarkdownFixer<'a, I: Iterator<Item = (Event<'a>, Range<usize>)>> {
     inner: std::iter::Peekable<I>,
     source: &'a str,
@@ -344,6 +345,9 @@ struct MarkdownFixer<'a, I: Iterator<Item = (Event<'a>, Range<usize>)>> {
     buffer: Vec<(Event<'a>, Range<usize>)>,
     /// Track when we're inside a setext heading that should be suppressed
     in_setext_heading: bool,
+    /// Stack of pending intraword markers (marker type, text before marker, range)
+    /// Marker type: "__" for underline, "~~" for strikethrough
+    pending_markers: Vec<(&'static str, String, Range<usize>)>,
 }
 
 impl<'a, I> MarkdownFixer<'a, I>
@@ -356,6 +360,7 @@ where
             source,
             buffer: Vec::new(),
             in_setext_heading: false,
+            pending_markers: Vec::new(),
         }
     }
 
@@ -446,6 +451,7 @@ where
 
     /// Process a text range, potentially splitting it into multiple events with Strong markers.
     /// Uses the source slice directly based on range.
+    /// Handles cross-event marker tracking for intraword nested formatting.
     fn process_text_from_source(&mut self, range: Range<usize>) {
         let source_slice = &self.source[range.clone()];
 
@@ -455,17 +461,51 @@ where
             return;
         }
 
-        // Look for __ patterns in the source text, handling escapes
+        // Check if the slice is preceded by an escape backslash in the full source
+        // If so, the __ at the start is escaped and should not be processed
+        let preceded_by_escape =
+            range.start > 0 && self.source.as_bytes().get(range.start - 1) == Some(&b'\\');
+        if preceded_by_escape && source_slice.starts_with("__") {
+            // Don't process - the __ is escaped
+            self.buffer.push((Event::Text(source_slice.into()), range));
+            return;
+        }
+
         let mut events: Vec<(Event<'a>, Range<usize>)> = Vec::new();
         let mut in_underline = false;
         let mut last_end = 0;
         let mut i = 0;
         let bytes = source_slice.as_bytes();
 
+        // Check if this text starts with __ and we have a pending underline opener
+        if bytes.len() >= 2
+            && bytes[0] == b'_'
+            && bytes[1] == b'_'
+            && self
+                .pending_markers
+                .last()
+                .map(|(m, _, _)| *m == "__")
+                .unwrap_or(false)
+        {
+            // Close the pending underline
+            let (_, pending_text, pending_range) = self.pending_markers.pop().unwrap();
+            if !pending_text.is_empty() {
+                events.push((Event::Text(pending_text.into()), pending_range.clone()));
+            }
+            events.push((Event::Start(Tag::Strong), pending_range));
+
+            // Now process the rest after the closing __
+            let marker_range = range.start..range.start + 2;
+            events.push((Event::End(TagEnd::Strong), marker_range));
+            i = 2;
+            last_end = 2;
+        }
+
+        // Process the rest of the text for __ patterns
         while i < bytes.len() {
             // Skip over escaped characters (backslash followed by any char)
             if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                i += 2; // Skip the backslash and the escaped character
+                i += 2;
                 continue;
             }
 
@@ -499,23 +539,68 @@ where
 
         // Emit remaining text
         let remaining = &source_slice[last_end..];
-        if !remaining.is_empty() {
-            events.push((
-                Event::Text(remaining.into()),
-                range.start + last_end..range.end,
-            ));
-        }
 
-        // If we have an unclosed underline, we need to undo the transformation
-        // (just emit original text)
+        // If we have an unclosed underline at the end, save it as pending
         if in_underline {
-            #[cfg(debug_assertions)]
-            eprintln!("Warning: Unclosed __ in text: {:?}", source_slice);
+            // Find the position of the last __ (which opened the underline)
+            // Events should have Start(Strong) as the last non-text event
+            // We need to extract the text before it and save as pending
 
-            self.buffer.push((Event::Text(source_slice.into()), range));
-        } else if events.is_empty() {
+            // Find where the opening __ was
+            let mut text_before_opener = String::new();
+            let mut opener_range = range.clone();
+
+            // Collect all events before the unclosed Start(Strong)
+            let mut final_events: Vec<(Event<'a>, Range<usize>)> = Vec::new();
+            for ev in events.into_iter() {
+                match &ev.0 {
+                    Event::Start(Tag::Strong) => {
+                        // This is the unclosed opener - save text before it as pending
+                        opener_range = ev.1.clone();
+                    }
+                    Event::Text(t) => {
+                        // Check if this comes before or after the opener
+                        if ev.1.end <= opener_range.start {
+                            // Before opener - emit it
+                            final_events.push(ev);
+                        } else {
+                            // After opener - accumulate for pending
+                            text_before_opener.push_str(t);
+                        }
+                    }
+                    Event::End(TagEnd::Strong) => {
+                        // Completed underlines - emit
+                        final_events.push(ev);
+                    }
+                    _ => {
+                        final_events.push(ev);
+                    }
+                }
+            }
+
+            // Add remaining text to what goes with the pending marker
+            if !remaining.is_empty() {
+                text_before_opener.push_str(remaining);
+            }
+
+            // Save the pending marker
+            self.pending_markers
+                .push(("__", text_before_opener, opener_range));
+
+            // Emit the events we collected (reversed for buffer)
+            final_events.reverse();
+            self.buffer.extend(final_events);
+        } else if events.is_empty() && remaining == source_slice {
+            // No markers found, emit original text
             self.buffer.push((Event::Text(source_slice.into()), range));
         } else {
+            // Add remaining text if any
+            if !remaining.is_empty() {
+                events.push((
+                    Event::Text(remaining.into()),
+                    range.start + last_end..range.end,
+                ));
+            }
             // Events need to be reversed since we pop from buffer
             events.reverse();
             self.buffer.extend(events);
@@ -722,16 +807,170 @@ where
     }
 }
 
+/// Placeholder markers for intraword formatting.
+/// These are Unicode characters unlikely to appear in normal text.
+const UNDERLINE_OPEN: &str = "\u{FFF9}"; // Interlinear Annotation Anchor
+const UNDERLINE_CLOSE: &str = "\u{FFFA}"; // Interlinear Annotation Separator
+const STRIKE_OPEN: &str = "\u{FFFB}"; // Interlinear Annotation Terminator
+const STRIKE_CLOSE: &str = "\u{2060}"; // Word Joiner (used as strike close)
+
+/// Check if a character is a word character (alphanumeric).
+fn is_word_char(c: char) -> bool {
+    c.is_ascii_alphanumeric()
+}
+
+/// Pre-process markdown to handle INTRAWORD `__` and `~~` markers only.
+///
+/// CommonMark doesn't allow intraword underscore emphasis. This function finds
+/// paired markers that are in intraword positions (adjacent to alphanumeric
+/// without whitespace) and replaces them with placeholders.
+///
+/// Properly bounded markers (with whitespace/punctuation boundaries) are left
+/// for pulldown-cmark to handle natively.
+fn preprocess_intraword_formatting(source: &str) -> String {
+    let mut result = source.to_string();
+
+    // Only transform markers that are truly intraword
+    result = replace_intraword_marker_pairs(&result, "__", UNDERLINE_OPEN, UNDERLINE_CLOSE);
+    result = replace_intraword_marker_pairs(&result, "~~", STRIKE_OPEN, STRIKE_CLOSE);
+
+    result
+}
+
+/// Find and replace INTRAWORD marker pairs only.
+/// An intraword marker pair is one where BOTH markers are adjacent to word characters
+/// on the "inner" side (i.e., opener followed by word char, closer preceded by word char)
+/// AND at least one marker is in a truly intraword position (word char on outer side too).
+fn replace_intraword_marker_pairs(source: &str, marker: &str, open: &str, close: &str) -> String {
+    let chars: Vec<char> = source.chars().collect();
+    let marker_chars: Vec<char> = marker.chars().collect();
+    let marker_len = marker_chars.len();
+
+    // First pass: find all marker positions and their context
+    struct MarkerInfo {
+        pos: usize,         // position in chars array
+        prev_is_word: bool, // char before marker is word char
+        next_is_word: bool, // char after marker is word char
+    }
+
+    let mut markers: Vec<MarkerInfo> = Vec::new();
+    let mut i = 0;
+
+    while i < chars.len() {
+        // Skip escaped markers
+        if i > 0 && chars[i - 1] == '\\' {
+            i += 1;
+            continue;
+        }
+
+        // Check for marker
+        if i + marker_len <= chars.len()
+            && chars[i..i + marker_len]
+                .iter()
+                .zip(marker_chars.iter())
+                .all(|(a, b)| a == b)
+        {
+            let prev_char = if i > 0 { Some(chars[i - 1]) } else { None };
+            let next_char = if i + marker_len < chars.len() {
+                Some(chars[i + marker_len])
+            } else {
+                None
+            };
+
+            markers.push(MarkerInfo {
+                pos: i,
+                prev_is_word: prev_char.map(is_word_char).unwrap_or(false),
+                next_is_word: next_char.map(is_word_char).unwrap_or(false),
+            });
+            i += marker_len;
+        } else {
+            i += 1;
+        }
+    }
+
+    // Only transform simple intraword pairs (exactly 2 markers)
+    // Complex nested cases should be handled by MarkdownFixer
+    let mut transform_positions: std::collections::HashSet<usize> =
+        std::collections::HashSet::new();
+
+    if markers.len() == 2 {
+        let opener = &markers[0];
+        let closer = &markers[1];
+
+        // Transform if this is a truly intraword pair:
+        // - Opener preceded by word char (intraword on left)
+        // - OR closer followed by word char (intraword on right)
+        let is_truly_intraword = opener.prev_is_word || closer.next_is_word;
+
+        if is_truly_intraword {
+            transform_positions.insert(opener.pos);
+            transform_positions.insert(closer.pos);
+        }
+    }
+    // For 4+ markers (potential nesting), don't transform - let MarkdownFixer handle it
+
+    // Second pass: build result with transformations
+    let mut result = String::with_capacity(source.len());
+    let mut char_idx = 0;
+    let mut marker_iter = markers.iter().peekable();
+
+    while char_idx < chars.len() {
+        // Check if we're at a marker position
+        if let Some(marker_info) = marker_iter.peek() {
+            if marker_info.pos == char_idx {
+                marker_iter.next();
+                if transform_positions.contains(&char_idx) {
+                    // Determine if this is an opener or closer
+                    // Count how many transformed markers we've seen before this one
+                    let transformed_before = markers
+                        .iter()
+                        .filter(|m| m.pos < char_idx && transform_positions.contains(&m.pos))
+                        .count();
+                    if transformed_before % 2 == 0 {
+                        result.push_str(open);
+                    } else {
+                        result.push_str(close);
+                    }
+                } else {
+                    // Keep original marker
+                    for c in marker_chars.iter() {
+                        result.push(*c);
+                    }
+                }
+                char_idx += marker_len;
+                continue;
+            }
+        }
+        result.push(chars[char_idx]);
+        char_idx += 1;
+    }
+
+    result
+}
+
+/// Convert placeholder markers back to Typst formatting in the output.
+fn convert_placeholders(text: &str) -> String {
+    text.replace(UNDERLINE_OPEN, "#underline[")
+        .replace(UNDERLINE_CLOSE, "]")
+        .replace(STRIKE_OPEN, "#strike[")
+        .replace(STRIKE_CLOSE, "]")
+}
+
 pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
+    // Pre-process for intraword formatting support (replaces __ and ~~ with placeholders)
+    let preprocessed = preprocess_intraword_formatting(markdown);
+
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
 
-    let parser = Parser::new_ext(markdown, options);
-    let fixer = MarkdownFixer::new(parser.into_offset_iter(), markdown);
+    let parser = Parser::new_ext(&preprocessed, options);
+    let fixer = MarkdownFixer::new(parser.into_offset_iter(), &preprocessed);
     let mut typst_output = String::new();
 
-    push_typst(&mut typst_output, markdown, fixer)?;
-    Ok(typst_output)
+    push_typst(&mut typst_output, &preprocessed, fixer)?;
+
+    // Convert placeholder markers to Typst formatting
+    Ok(convert_placeholders(&typst_output))
 }
 
 #[cfg(test)]
@@ -1510,6 +1749,34 @@ mod tests {
         // Contains literal underscore, not underline
         assert!(result.contains("\\_"));
         assert!(!result.contains("#underline"));
+    }
+
+    // Tests for nested intraword formatting (the originally problematic cases)
+    #[test]
+    fn test_intraword_underline_wrapping_strikethrough() {
+        // Underline wrapping strikethrough, all intraword
+        assert_eq!(
+            mark_to_typst("outer__~~inner~~__asdf").unwrap(),
+            "outer#underline[#strike[inner]]asdf\n\n"
+        );
+    }
+
+    #[test]
+    fn test_intraword_strikethrough_wrapping_underline() {
+        // Strikethrough wrapping underline, all intraword
+        assert_eq!(
+            mark_to_typst("outer~~__inner__~~asdf").unwrap(),
+            "outer#strike[#underline[inner]]asdf\n\n"
+        );
+    }
+
+    #[test]
+    fn test_intraword_strikethrough_only() {
+        // Simple intraword strikethrough
+        assert_eq!(
+            mark_to_typst("outer~~inner~~asdf").unwrap(),
+            "outer#strike[inner]asdf\n\n"
+        );
     }
 }
 
