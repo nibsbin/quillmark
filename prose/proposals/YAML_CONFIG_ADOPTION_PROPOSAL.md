@@ -18,8 +18,7 @@
 **Primary Benefits:**
 1. Solves TOML's nested structure verbosity (current architectural pain point #1)
 2. Enables rich IDE tooling (autocomplete, validation, hover docs)
-3. Provides native $ref support for schema reusability
-4. Aligns with web developer ecosystem (Docker, Kubernetes, GitHub Actions, OpenAPI)
+3. Aligns with web developer ecosystem (Docker, Kubernetes, GitHub Actions, OpenAPI)
 
 **File Name:** `Quill.yaml` (replacing `Quill.toml`)
 
@@ -52,14 +51,7 @@ cells.items.properties.skills.required = true
 - Scales poorly as schemas grow
 - No IDE autocomplete or validation
 
-### Secondary Pain: Limited Reusability
-
-TOML provides no native mechanism for reusable schema definitions. Common structures (addresses, date ranges, contact info) must be copy-pasted across fields, leading to:
-- Duplication in large templates
-- Maintenance burden (update in multiple places)
-- Inconsistency risk
-
-### Tertiary Pain: Poor Developer Tooling
+### Secondary Pain: Poor Developer Tooling
 
 TOML IDE support is limited to syntax highlighting. No schema validation, autocomplete, or inline documentation exists for custom TOML structures. This means:
 - No real-time error detection (must run Quillmark to validate)
@@ -96,36 +88,13 @@ fields:
 
 **Readability improvement:** Structure is immediately visible. No repetitive prefixes.
 
-**2. Native $ref Support for Reusability**
-
-```yaml
-# Define reusable schemas
-definitions:
-  address:
-    type: object
-    properties:
-      street: { type: string }
-      city: { type: string }
-      zip: { type: string, pattern: '^[0-9]{5}$' }
-
-# Reference them
-fields:
-  shippingAddress:
-    $ref: '#/definitions/address'
-  billingAddress:
-    $ref: '#/definitions/address'
-```
-
-**Benefit:** Define once, reference everywhere. Eliminates duplication.
-
-**3. Rich IDE Tooling via JSON Schema**
+**2. Rich IDE Tooling via JSON Schema**
 
 YAML + JSON Schema = powerful IDE experience:
 
 - ✅ **Real-time validation** - errors highlighted as you type
 - ✅ **Autocomplete** - field names, types, enum values
 - ✅ **Hover documentation** - inline help for every property
-- ✅ **$ref resolution** - autocomplete definition paths
 - ✅ **Refactoring support** - rename symbols safely
 
 **Setup (one-time per IDE):**
@@ -264,24 +233,6 @@ backend:
     packages:
       - "@preview/bubble:0.2.2"
 
-# Reusable definitions (eliminates duplication)
-definitions:
-  address:
-    type: object
-    properties:
-      street: { type: string, title: Street Address }
-      city: { type: string, title: City }
-      state: { type: string, title: State }
-      zip: { type: string, pattern: '^[0-9]{5}$', title: ZIP Code }
-    required: [street, city]
-
-  date_range:
-    type: string
-    pattern: '^[A-Z][a-z]+ [0-9]{4}( – ([A-Z][a-z]+ [0-9]{4}|Present))?$'
-    examples:
-      - January 2020 – Present
-      - June 2018 – December 2019
-
 fields:
   name:
     type: string
@@ -306,9 +257,15 @@ fields:
       group: Personal Information
       order: 2
 
-  # Reference reusable definition
   address:
-    $ref: '#/definitions/address'
+    type: object
+    title: Address
+    properties:
+      street: { type: string, title: Street Address }
+      city: { type: string, title: City }
+      state: { type: string, title: State }
+      zip: { type: string, pattern: '^[0-9]{5}$', title: ZIP Code }
+    required: [street, city]
     ui:
       group: Personal Information
       order: 3
@@ -341,7 +298,12 @@ cards:
         examples: [Senior Software Engineer, BS Computer Science]
 
       dates:
-        $ref: '#/definitions/date_range'
+        type: string
+        title: Date Range
+        pattern: '^[A-Z][a-z]+ [0-9]{4}( – ([A-Z][a-z]+ [0-9]{4}|Present))?$'
+        examples:
+          - January 2020 – Present
+          - June 2018 – December 2019
 
   skills_section:
     title: Skills Grid
@@ -413,13 +375,6 @@ cells:
 
 **Impact:** 70% faster authoring with YAML (measured in real-world testing).
 
-**3. Reusability**
-
-YAML: Built-in `$ref` support
-TOML: Must copy-paste (no native mechanism)
-
-**Impact:** YAML eliminates duplication in large templates.
-
 ### Where TOML is Better
 
 **1. Type Explicitness**
@@ -456,246 +411,113 @@ TOML is marginally cleaner for very simple schemas (< 10 flat fields).
 **For 80% of real-world templates, YAML is more ergonomic** due to:
 1. Better nested structure handling
 2. Dramatically superior IDE support
-3. Native reusability via $ref
-4. Real-time validation
+3. Real-time validation
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: YAML Parser Implementation (Week 1-2)
+**Note:** Quillmark is pre-1.0, so we can make breaking changes without extensive migration paths.
 
-**Tasks:**
-1. Add `serde_yaml` dependency
-2. Implement `QuillConfig::from_yaml()` parser
-3. Add YAML-to-QuillConfig conversion (mirror TOML logic)
-4. Support `$ref` resolution for `definitions` section
-5. Auto-detect `Quill.yaml` in `Quill::from_tree()`
+### Core Changes
 
-**Compatibility:**
-- Keep existing TOML parser for migration period
-- Prioritize YAML if both files exist
-- Emit warning if using deprecated TOML
+**1. Remove TOML Support**
+- Remove `toml` and `toml_edit` dependencies from `Cargo.toml`
+- Replace `QuillConfig::from_toml()` with `QuillConfig::from_yaml()`
+- Update `Quill::from_tree()` to look for `Quill.yaml` instead of `Quill.toml`
+- Remove `QuillValue::from_toml()` method
 
-**Estimated effort:** ~2 weeks
+**2. Update Tests**
+- Convert all test fixtures from TOML to YAML format
+- Update hardcoded test strings in integration tests
+- Update WASM/Python binding tests
 
-### Phase 2: JSON Schema Generation (Week 3)
+**3. Create JSON Schema**
+- Create `schema/quill-v1.schema.json` for IDE validation
+- Host schema at `https://quillmark.dev/schema/quill-v1.json`
+- Document IDE setup in README
 
-**Tasks:**
-1. Create JSON Schema for `Quill.yaml` format itself
-2. Host schema at `https://quillmark.dev/schema/quill-v1.json`
-3. Document IDE setup instructions
-4. Add schema validation to CI/CD
-
-**Deliverables:**
-- `schema/quill-v1.schema.json` file
-- VSCode/IntelliJ setup docs
-- Schema validation in pre-commit hooks
-
-**Estimated effort:** ~1 week
-
-### Phase 3: Migration Tooling (Week 4)
-
-**Tasks:**
-1. Implement `quillmark convert` command
-   ```bash
-   quillmark convert Quill.toml --to-yaml > Quill.yaml
-   ```
-2. Create migration guide documentation
-3. Update all fixture templates to YAML
-4. Update example templates to YAML
-
-**Estimated effort:** ~1 week
-
-### Phase 4: TOML Deprecation (6 months later)
-
-**Timeline:**
-- Month 1-3: Both formats supported, YAML recommended
-- Month 4-6: Deprecation warnings for TOML
-- Month 7+: TOML support removed
-
-**Communication:**
-- Release notes highlighting YAML adoption
-- Migration guide with examples
-- Deprecation warnings in CLI output
+**4. Update Documentation**
+- Update all examples to use YAML
+- Update error messages referencing `Quill.toml` → `Quill.yaml`
+- Add migration note in release notes
 
 ---
 
-## Migration Path for Users
+## Migration Note
 
-### For Template Authors
+**Breaking Change:** Quillmark is pre-1.0, so TOML support will be removed immediately.
 
-**Step 1: Convert configuration**
-```bash
-quillmark convert Quill.toml --to-yaml > Quill.yaml
-rm Quill.toml  # Optional: keep both during testing
+### For Existing Template Authors
+
+Convert your `Quill.toml` to `Quill.yaml`:
+
+**TOML:**
+```toml
+[Quill]
+name = "my_template"
+backend = "typst"
+
+[fields.title]
+type = "string"
+required = true
 ```
 
-**Step 2: Verify**
-```bash
-quillmark validate
-quillmark build example.md  # Test rendering
-```
+**YAML:**
+```yaml
+Quill:
+  name: my_template
+  backend: typst
 
-**Step 3: Commit**
-```bash
-git add Quill.yaml
-git rm Quill.toml
-git commit -m "Migrate to YAML configuration"
+fields:
+  title:
+    type: string
+    required: true
 ```
 
 ### For Template Users
 
-**No action required.** Template rendering is unchanged - this only affects template authors configuring schemas.
-
-### For Simple Templates
-
-Templates with < 10 flat fields can stay on TOML during deprecation period. However, YAML is still recommended for:
-- Future-proofing (TOML will be removed)
-- IDE support benefits apply to simple schemas too
-- Consistency across ecosystem
+**No action required.** Template rendering is unchanged - this only affects template configuration files.
 
 ---
 
-## Risks and Mitigations
+## Risks
 
-### Risk 1: YAML Indentation Errors
+### YAML Indentation Errors
 
-**Risk:** YAML is indentation-sensitive. Users might create invalid YAML.
+YAML is indentation-sensitive. Mitigation: IDE validation catches errors immediately with red squiggles and clear error messages.
 
-**Mitigation:**
-- IDE validation catches errors immediately (red squiggles)
-- Pre-commit hooks validate YAML syntax
-- Clear error messages with line numbers
-- Auto-formatting in IDE fixes indentation
+### Type Coercion
 
-**Severity:** Low (tooling solves this)
+YAML's implicit typing (`version: 1.0` = number) can surprise users. Mitigation: JSON Schema validation enforces correct types, documentation includes quoting guidelines.
 
-### Risk 2: Type Coercion Surprises
+### Breaking Change
 
-**Risk:** YAML's implicit typing (`version: 1.0` = number, not string)
-
-**Mitigation:**
-- JSON Schema validation enforces correct types
-- Documentation includes quoting guidelines
-- Common gotchas documented with examples
-
-**Severity:** Low (IDE validation catches this)
-
-### Risk 3: User Resistance to Change
-
-**Risk:** Some users prefer TOML and resist migration.
-
-**Mitigation:**
-- Provide conversion tool (automated migration)
-- Explain benefits clearly (better tooling, IDE support)
-- Gradual deprecation (6+ month timeline)
-- Show concrete examples of improved ergonomics
-
-**Severity:** Medium (communication and tooling address this)
-
-### Risk 4: Breaking Existing Workflows
-
-**Risk:** CI/CD pipelines, documentation, tutorials reference `Quill.toml`.
-
-**Mitigation:**
-- Support both formats during transition (6 months)
-- Update official documentation immediately
-- Provide migration guide for common workflows
-- Deprecation warnings guide users to update
-
-**Severity:** Low (transition period mitigates)
-
----
-
-## Alternatives Considered
-
-### Alternative 1: Support Both TOML and YAML Indefinitely
-
-**Rejected because:**
-- Doubles maintenance burden (two parsers, two test suites)
-- Creates ecosystem fragmentation (some templates use TOML, others YAML)
-- No clear "blessed" format leads to decision paralysis
-- Documentation becomes confusing (show both? which first?)
-
-**Decision:** Pick one format. Make it the best choice.
-
-### Alternative 2: Stay with TOML, Add Inline JSON Escape Hatch
-
-**Considered:**
-```toml
-[fields.complex]
-schema = '''{"type": "array", "items": {...}}'''
-```
-
-**Rejected because:**
-- Doesn't solve reusability ($ref)
-- Awkward mixed syntax (TOML + JSON)
-- No IDE support for inline JSON strings
-- Doesn't improve tooling for rest of config
-
-**Decision:** Full YAML is cleaner than TOML+JSON hybrid.
-
-### Alternative 3: Pure JSON Schema
-
-**Rejected because:**
-- Too verbose for hand-editing (lots of brackets/quotes)
-- Less readable than YAML
-- Comments require `$comment` workaround
-- YAML is JSON superset (can embed JSON when needed)
-
-**Decision:** YAML offers better ergonomics than raw JSON.
+This is a breaking change for existing templates. Mitigation: Clear migration guide, simple conversion process (TOML → YAML is straightforward), and since we're pre-1.0, breaking changes are expected.
 
 ---
 
 ## Success Criteria
 
-**Phase 1 Success:**
 - ✅ YAML parser fully functional
-- ✅ All existing TOML test cases pass with YAML equivalents
-- ✅ Conversion tool works correctly
-- ✅ Documentation updated
-
-**Phase 2 Success:**
-- ✅ JSON Schema hosted and accessible
-- ✅ VSCode autocomplete/validation working
-- ✅ IntelliJ autocomplete/validation working
-- ✅ Migration guide published
-
-**Phase 3 Success:**
-- ✅ All fixture templates migrated to YAML
-- ✅ Community templates migrating (> 50% adoption)
-- ✅ Positive user feedback on IDE experience
-- ✅ No critical migration bugs
-
-**Phase 4 Success:**
-- ✅ TOML support removed cleanly
-- ✅ 100% of active templates using YAML
-- ✅ Documentation contains no TOML references
-- ✅ Simplified codebase (one parser)
+- ✅ All tests pass with YAML configs
+- ✅ JSON Schema published and working in IDEs
+- ✅ Documentation updated (no TOML references)
+- ✅ TOML dependencies removed
+- ✅ Migration guide available
 
 ---
 
 ## Conclusion
 
-**Recommendation: Adopt YAML as the sole Quill configuration format.**
+**Adopt YAML as the sole Quill configuration format.**
 
-**Rationale:**
+**Why:**
+1. Solves TOML nested verbosity (the #1 architectural pain point)
+2. Enables rich IDE tooling (autocomplete, validation, hover docs)
+3. Aligns with web ecosystem (Docker, K8s, OpenAPI, CI/CD)
+4. Backend-agnostic (not tied to Typst's format choice)
 
-1. **Solves architectural pain point #1** (TOML nested verbosity)
-2. **Enables 70% faster authoring** (IDE autocomplete + validation)
-3. **Provides native reusability** ($ref eliminates duplication)
-4. **Aligns with web ecosystem** (Docker, K8s, OpenAPI, CI/CD)
-5. **Backend-agnostic choice** (not tied to Typst)
-6. **Clear separation of concerns** (Quill schema ≠ Typst compiler config)
+**Typst Compatibility:** `typst.toml` and `Quill.yaml` serve different purposes (compiler config vs. schema config). Mixed formats are standard - no awkwardness.
 
-**The presence of `typst.toml` is not awkward** - they serve different purposes. Mixed formats are standard practice (like `package.json` + `docker-compose.yaml`).
-
-**Next steps:**
-1. Approve proposal
-2. Implement YAML parser (~2 weeks)
-3. Create JSON Schema + IDE setup docs (~1 week)
-4. Build migration tooling (~1 week)
-5. Begin community migration (6 month timeline)
-
-**Total effort:** ~4 weeks development + 6 months gradual migration
+**Pre-1.0 Context:** As a pre-1.0 library, we can make breaking changes. Remove TOML support cleanly rather than maintaining dual formats.
