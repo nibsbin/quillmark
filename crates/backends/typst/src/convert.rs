@@ -463,8 +463,8 @@ where
 
         // Check if the slice is preceded by an escape backslash in the full source
         // If so, the __ at the start is escaped and should not be processed
-        let preceded_by_escape = range.start > 0
-            && self.source.as_bytes().get(range.start - 1) == Some(&b'\\');
+        let preceded_by_escape =
+            range.start > 0 && self.source.as_bytes().get(range.start - 1) == Some(&b'\\');
         if preceded_by_escape && source_slice.starts_with("__") {
             // Don't process - the __ is escaped
             self.buffer.push((Event::Text(source_slice.into()), range));
@@ -848,9 +848,9 @@ fn replace_intraword_marker_pairs(source: &str, marker: &str, open: &str, close:
 
     // First pass: find all marker positions and their context
     struct MarkerInfo {
-        pos: usize,            // position in chars array
-        prev_is_word: bool,    // char before marker is word char
-        next_is_word: bool,    // char after marker is word char
+        pos: usize,         // position in chars array
+        prev_is_word: bool, // char before marker is word char
+        next_is_word: bool, // char after marker is word char
     }
 
     let mut markers: Vec<MarkerInfo> = Vec::new();
@@ -890,7 +890,8 @@ fn replace_intraword_marker_pairs(source: &str, marker: &str, open: &str, close:
 
     // Only transform simple intraword pairs (exactly 2 markers)
     // Complex nested cases should be handled by MarkdownFixer
-    let mut transform_positions: std::collections::HashSet<usize> = std::collections::HashSet::new();
+    let mut transform_positions: std::collections::HashSet<usize> =
+        std::collections::HashSet::new();
 
     if markers.len() == 2 {
         let opener = &markers[0];
