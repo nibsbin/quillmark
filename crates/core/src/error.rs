@@ -573,6 +573,13 @@ pub enum RenderError {
         diag: Box<Diagnostic>,
     },
 
+    /// Quill not found (name doesn't exist)
+    #[error("{diag}")]
+    QuillNotFound {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
+
     /// Invalid version format
     #[error("{diag}")]
     InvalidVersion {
@@ -600,7 +607,20 @@ impl RenderError {
             | RenderError::InvalidSchema { diag }
             | RenderError::QuillConfig { diag }
             | RenderError::VersionNotFound { diag }
+            | RenderError::QuillNotFound { diag }
             | RenderError::InvalidVersion { diag } => vec![diag.as_ref()],
+        }
+    }
+}
+
+/// Convert ParseError to RenderError
+impl From<ParseError> for RenderError {
+    fn from(err: ParseError) -> Self {
+        RenderError::InvalidFrontmatter {
+            diag: Box::new(
+                Diagnostic::new(Severity::Error, err.to_string())
+                    .with_code("parse::error".to_string()),
+            ),
         }
     }
 }
@@ -655,6 +675,7 @@ pub fn print_errors(err: &RenderError) {
         RenderError::InvalidSchema { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::QuillConfig { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::VersionNotFound { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::QuillNotFound { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::InvalidVersion { diag } => eprintln!("{}", diag.fmt_pretty()),
     }
 }
