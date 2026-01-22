@@ -1,7 +1,9 @@
-use quillmark_core::{Backend, Diagnostic, Quill, RenderError, Severity, Version, VersionSelector, QuillReference};
-use std::collections::{HashMap, BTreeMap};
-use std::sync::Arc;
+use quillmark_core::{
+    Backend, Diagnostic, Quill, QuillReference, RenderError, Severity, Version, VersionSelector,
+};
+use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
+use std::sync::Arc;
 
 use super::workflow::Workflow;
 use super::QuillRef;
@@ -151,7 +153,9 @@ impl Quillmark {
                         format!("Quill '{}' is missing required 'version' field", name),
                     )
                     .with_code("quill::missing_version".to_string())
-                    .with_hint("Add 'version = \"1.0\"' to the [Quill] section of Quill.toml".to_string()),
+                    .with_hint(
+                        "Add 'version = \"1.0\"' to the [Quill] section of Quill.toml".to_string(),
+                    ),
                 ),
             })?;
 
@@ -159,7 +163,10 @@ impl Quillmark {
             diag: Box::new(
                 Diagnostic::new(
                     Severity::Error,
-                    format!("Quill '{}' has invalid version '{}': {}", name, version_str, e),
+                    format!(
+                        "Quill '{}' has invalid version '{}': {}",
+                        name, version_str, e
+                    ),
                 )
                 .with_code("quill::invalid_version".to_string())
                 .with_hint("Version must be in MAJOR.MINOR format (e.g., '2.1')".to_string()),
@@ -239,27 +246,28 @@ impl Quillmark {
             .entry(name.clone())
             .or_insert_with(VersionedQuillSet::new)
             .insert(version, quill);
-        
+
         Ok(())
     }
 
     /// Resolve a QuillReference to a specific Quill
     fn resolve_quill_reference(&self, quill_ref: &QuillReference) -> Result<&Quill, RenderError> {
-        let version_set = self.quills.get(&quill_ref.name).ok_or_else(|| {
-            RenderError::VersionNotFound {
-                diag: Box::new(
-                    Diagnostic::new(
-                        Severity::Error,
-                        format!("Quill '{}' not registered", quill_ref.name),
-                    )
-                    .with_code("engine::quill_not_found".to_string())
-                    .with_hint(format!(
-                        "Available quills: {}",
-                        self.quills.keys().cloned().collect::<Vec<_>>().join(", ")
-                    )),
-                ),
-            }
-        })?;
+        let version_set =
+            self.quills
+                .get(&quill_ref.name)
+                .ok_or_else(|| RenderError::VersionNotFound {
+                    diag: Box::new(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!("Quill '{}' not registered", quill_ref.name),
+                        )
+                        .with_code("engine::quill_not_found".to_string())
+                        .with_hint(format!(
+                            "Available quills: {}",
+                            self.quills.keys().cloned().collect::<Vec<_>>().join(", ")
+                        )),
+                    ),
+                })?;
 
         version_set.resolve(&quill_ref.selector).ok_or_else(|| {
             let available = version_set.available_versions();
@@ -307,7 +315,6 @@ impl Quillmark {
             }
         })
     }
-
 
     /// Load a workflow by quill reference (name, object, or parsed document)
     ///

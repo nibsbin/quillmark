@@ -249,13 +249,20 @@ impl FromStr for QuillReference {
         }
 
         // Validate name format: [a-z_][a-z0-9_]*
-        if !name.chars().next().is_some_and(|c| c.is_ascii_lowercase() || c == '_') {
+        if !name
+            .chars()
+            .next()
+            .is_some_and(|c| c.is_ascii_lowercase() || c == '_')
+        {
             return Err(format!(
                 "Invalid Quill name '{}': must start with lowercase letter or underscore",
                 name
             ));
         }
-        if !name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_') {
+        if !name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        {
             return Err(format!(
                 "Invalid Quill name '{}': must contain only lowercase letters, digits, and underscores",
                 name
@@ -378,7 +385,10 @@ mod tests {
 
     #[test]
     fn test_quill_reference_display() {
-        let ref1 = QuillReference::new("resume".to_string(), VersionSelector::Exact(Version::new(2, 1)));
+        let ref1 = QuillReference::new(
+            "resume".to_string(),
+            VersionSelector::Exact(Version::new(2, 1)),
+        );
         assert_eq!(ref1.to_string(), "resume@2.1");
 
         let ref2 = QuillReference::new("resume".to_string(), VersionSelector::Major(2));

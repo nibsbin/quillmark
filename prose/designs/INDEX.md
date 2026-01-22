@@ -1,6 +1,6 @@
 # Quillmark Design Documentation Index
 
-**Last Consistency Sweep**: 2026-01-20
+**Last Consistency Sweep**: 2026-01-22
 
 This directory contains design documents that describe the architecture and components of Quillmark. These documents are the primary reference for agents implementing features and maintaining the codebase.
 
@@ -14,6 +14,7 @@ This directory contains design documents that describe the architecture and comp
 - **[PARSE.md](PARSE.md)** - Markdown parsing and Extended YAML Metadata Standard
 - **[QUILL.md](QUILL.md)** - Quill template bundle structure, file tree API, and JSON contract
 - **[QUILL_VALUE.md](QUILL_VALUE.md)** - Unified value type for TOML/YAML/JSON conversions
+- **[VERSIONING.md](VERSIONING.md)** - Two-segment version system for reproducible rendering
 - **[SCHEMAS.md](SCHEMAS.md)** - Configuration schemas and field validation
 - **[CARDS.md](CARDS.md)** - Composable cards architecture with unified CARDS array
 - ~~**[SCOPES.md](SCOPES.md)**~~ - *Superseded by CARDS.md*
@@ -60,7 +61,8 @@ Design documents frequently reference each other. Key relationships:
 
 - ARCHITECTURE → all component designs
 - PARSE → GLUE_METADATA (data injection and helper package)
-- QUILL → SCHEMAS (field definitions)
+- QUILL → SCHEMAS (field definitions), VERSIONING (version requirements)
+- VERSIONING → QUILL, PARSE, ERROR (version resolution and errors)
 - ERROR → all bindings (error handling patterns)
 - DEFAULT_QUILL → QUILL, PARSE (template selection)
 

@@ -91,7 +91,7 @@ impl ParsedDocument {
     }
 
     /// Get the quill tag (from QUILL key, or "__default__" if not specified)
-    /// 
+    ///
     /// This returns just the name for backward compatibility.
     /// Use `quill_reference()` to get the full reference with version.
     pub fn quill_tag(&self) -> &str {
@@ -422,10 +422,13 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                                         .ok_or("QUILL value must be a string")?;
 
                                     // Parse as QuillReference to validate name and version
-                                    let _quill_ref = quill_ref_str.parse::<QuillReference>()
-                                        .map_err(|e| crate::error::ParseError::InvalidStructure(
-                                            format!("Invalid QUILL reference '{}': {}", quill_ref_str, e)
-                                        ))?;
+                                    let _quill_ref =
+                                        quill_ref_str.parse::<QuillReference>().map_err(|e| {
+                                            crate::error::ParseError::InvalidStructure(format!(
+                                                "Invalid QUILL reference '{}': {}",
+                                                quill_ref_str, e
+                                            ))
+                                        })?;
 
                                     // Remove QUILL from the YAML value for processing
                                     let mut new_mapping = mapping.clone();
