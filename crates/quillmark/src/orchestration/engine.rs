@@ -355,8 +355,8 @@ impl Quillmark {
         let quill = match quill_ref {
             QuillRef::Name(name) => {
                 // Parse the name as a QuillReference (supports @version syntax)
-                let quill_reference = QuillReference::from_str(name).map_err(|e| {
-                    RenderError::InvalidVersion {
+                let quill_reference =
+                    QuillReference::from_str(name).map_err(|e| RenderError::InvalidVersion {
                         diag: Box::new(
                             Diagnostic::new(
                                 Severity::Error,
@@ -364,8 +364,7 @@ impl Quillmark {
                             )
                             .with_code("engine::invalid_reference".to_string()),
                         ),
-                    }
-                })?;
+                    })?;
                 self.resolve_quill_reference(&quill_reference)?
             }
             QuillRef::Object(quill) => {

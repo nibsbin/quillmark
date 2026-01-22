@@ -96,10 +96,18 @@ fn test_resolve_major_version_selector() {
     let quill_2_2 = create_test_quill(&temp_dir, "resume_template", "2.2");
     let quill_3_0 = create_test_quill(&temp_dir, "resume_template", "3.0");
 
-    engine.register_quill(quill_2_0).expect("Failed to register");
-    engine.register_quill(quill_2_1).expect("Failed to register");
-    engine.register_quill(quill_2_2).expect("Failed to register");
-    engine.register_quill(quill_3_0).expect("Failed to register");
+    engine
+        .register_quill(quill_2_0)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_2_1)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_2_2)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_3_0)
+        .expect("Failed to register");
 
     // Resolve @2 -> should get 2.2 (latest 2.x)
     let workflow_2 = engine
@@ -128,9 +136,15 @@ fn test_resolve_exact_version_selector() {
     let quill_2_1 = create_test_quill(&temp_dir, "resume_template", "2.1");
     let quill_2_2 = create_test_quill(&temp_dir, "resume_template", "2.2");
 
-    engine.register_quill(quill_2_0).expect("Failed to register");
-    engine.register_quill(quill_2_1).expect("Failed to register");
-    engine.register_quill(quill_2_2).expect("Failed to register");
+    engine
+        .register_quill(quill_2_0)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_2_1)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_2_2)
+        .expect("Failed to register");
 
     // Resolve @2.1 -> should get exactly 2.1
     let workflow = engine
@@ -257,9 +271,15 @@ fn test_workflow_from_versioned_document() {
     let quill_2_0 = create_test_quill(&temp_dir, "resume_template", "2.0");
     let quill_2_1 = create_test_quill(&temp_dir, "resume_template", "2.1");
 
-    engine.register_quill(quill_1_0).expect("Failed to register");
-    engine.register_quill(quill_2_0).expect("Failed to register");
-    engine.register_quill(quill_2_1).expect("Failed to register");
+    engine
+        .register_quill(quill_1_0)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_2_0)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_2_1)
+        .expect("Failed to register");
 
     // Create document with version tag
     let markdown = r#"---
@@ -320,9 +340,15 @@ fn test_version_not_found_error_message() {
     let quill_2_0 = create_test_quill(&temp_dir, "resume_template", "2.0");
     let quill_3_0 = create_test_quill(&temp_dir, "resume_template", "3.0");
 
-    engine.register_quill(quill_1_0).expect("Failed to register");
-    engine.register_quill(quill_2_0).expect("Failed to register");
-    engine.register_quill(quill_3_0).expect("Failed to register");
+    engine
+        .register_quill(quill_1_0)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_2_0)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_3_0)
+        .expect("Failed to register");
 
     // Request nonexistent version
     let result = engine.workflow("resume_template@2.5");
@@ -374,9 +400,15 @@ fn test_latest_selector_with_multiple_versions() {
     let quill_2_0 = create_test_quill(&temp_dir, "resume_template", "2.0");
     let quill_3_0 = create_test_quill(&temp_dir, "resume_template", "3.0");
 
-    engine.register_quill(quill_1_0).expect("Failed to register");
-    engine.register_quill(quill_2_0).expect("Failed to register");
-    engine.register_quill(quill_3_0).expect("Failed to register");
+    engine
+        .register_quill(quill_1_0)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_2_0)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_3_0)
+        .expect("Failed to register");
 
     // Resolve with no selector (implicit latest)
     let workflow_implicit = engine
@@ -404,8 +436,12 @@ fn test_version_selector_with_unversioned_document() {
     let quill_1_0 = create_test_quill(&temp_dir, "resume_template", "1.0");
     let quill_2_0 = create_test_quill(&temp_dir, "resume_template", "2.0");
 
-    engine.register_quill(quill_1_0).expect("Failed to register");
-    engine.register_quill(quill_2_0).expect("Failed to register");
+    engine
+        .register_quill(quill_1_0)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_2_0)
+        .expect("Failed to register");
 
     // Document without version in QUILL tag
     let markdown = r#"---
@@ -417,9 +453,7 @@ title: Test Document
 "#;
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse");
-    let workflow = engine
-        .workflow(&parsed)
-        .expect("Failed to create workflow");
+    let workflow = engine.workflow(&parsed).expect("Failed to create workflow");
 
     // Should use latest version (2.0)
     assert_eq!(workflow.quill_name(), "resume_template");

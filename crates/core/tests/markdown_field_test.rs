@@ -119,7 +119,7 @@ fn test_markdown_field_normalization() {
 
     // 3. Normalize (schema no longer affects normalization)
     let _ = schema; // Schema is built for the first test but not needed here
-    let normalized = normalize_document(doc);
+    let normalized = normalize_document(doc).expect("Failed to normalize document");
     let norm_fields = normalized.fields();
 
     // 4. Verify results

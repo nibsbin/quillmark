@@ -453,7 +453,7 @@ pub fn normalize_field_name(name: &str) -> String {
 /// fields.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("<<content>>")));
 ///
 /// let doc = ParsedDocument::new(fields);
-/// let normalized = normalize_document(doc);
+/// let normalized = normalize_document(doc).expect("Failed to normalize document");
 ///
 /// // Body has chevrons preserved
 /// assert_eq!(normalized.body().unwrap(), "<<content>>");
