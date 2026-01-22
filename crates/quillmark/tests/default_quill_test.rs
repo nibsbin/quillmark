@@ -77,7 +77,12 @@ fn test_explicit_quill_tag_takes_precedence_over_default() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"custom_quill\"\nbackend = \"typst\"\ndescription = \"Custom test quill\"\n",
+        r#"[Quill]
+name = "custom_quill"
+version = "1.0"
+backend = "typst"
+description = "Custom test quill"
+"#,
     )
     .expect("Failed to write Quill.toml");
 

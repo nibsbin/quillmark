@@ -124,7 +124,13 @@ fn test_workflow_with_custom_backend() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"custom-backend-quill\"\nbackend = \"mock-txt\"\nplate_file = \"plate.txt\"\ndescription = \"Test quill with custom backend\"\n",
+        r#"[Quill]
+name = "custom-backend-quill"
+version = "1.0"
+backend = "mock-txt"
+plate_file = "plate.txt"
+description = "Test quill with custom backend"
+"#,
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("plate.txt"), "Test template: {{ title }}")

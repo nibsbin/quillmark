@@ -32,6 +32,7 @@ description = "Document author"
         format!(
             r#"[Quill]
 name = "test-quill"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 description = "Test quill"
@@ -130,6 +131,7 @@ fn test_dry_run_invalid_template_filter() {
         quill_path.join("Quill.toml"),
         r#"[Quill]
 name = "test-quill"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 description = "Test quill"

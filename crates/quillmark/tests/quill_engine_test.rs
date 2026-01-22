@@ -28,7 +28,6 @@ use std::fs;
 use tempfile::TempDir;
 
 use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark};
-use quillmark_fixtures::quills_path;
 
 #[test]
 fn test_quill_engine_creation() {
@@ -58,7 +57,7 @@ fn test_quill_engine_register_quill() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my_test_quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my_test_quill\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("plate.typ"), "Test template").expect("Failed to write plate.typ");
@@ -88,7 +87,7 @@ fn test_quill_engine_get_workflow() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my_test_quill\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
@@ -104,11 +103,11 @@ fn test_quill_engine_get_workflow() {
 
     // Load workflow by quill name using new load() method
     let workflow = engine
-        .workflow("my-test-quill")
+        .workflow("my_test_quill")
         .expect("Failed to load workflow");
 
     // Verify workflow properties
-    assert_eq!(workflow.quill_name(), "my-test-quill");
+    assert_eq!(workflow.quill_name(), "my_test_quill");
     assert_eq!(workflow.backend_id(), "typst");
     assert!(workflow.supported_formats().contains(&OutputFormat::Pdf));
 }
@@ -118,14 +117,14 @@ fn test_quill_engine_workflow_not_found() {
     let engine = Quillmark::new();
 
     // Try to load workflow for non-existent quill
-    let result = engine.workflow("non-existent");
+    let result = engine.workflow("non_existent");
 
     assert!(result.is_err());
     match result {
-        Err(quillmark::RenderError::UnsupportedBackend { diag }) => {
+        Err(quillmark::RenderError::VersionNotFound { diag }) => {
             assert!(diag.message.contains("not registered"));
         }
-        _ => panic!("Expected UnsupportedBackend error with 'not registered' message"),
+        _ => panic!("Expected VersionNotFound error"),
     }
 }
 
@@ -140,7 +139,7 @@ fn test_quill_engine_backend_not_found() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"bad-backend-quill\"\nbackend = \"non-existent\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"bad_backend_quill\"\nversion = \"1.0\"\nbackend = \"non_existent\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("plate.typ"), "Test template").expect("Failed to write plate.typ");
@@ -201,7 +200,7 @@ fn test_quill_engine_load_with_quill_object() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my_test_quill\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
@@ -219,7 +218,7 @@ fn test_quill_engine_load_with_quill_object() {
     let workflow = engine.workflow(&quill).expect("Failed to load workflow");
 
     // Verify workflow properties
-    assert_eq!(workflow.quill_name(), "my-test-quill");
+    assert_eq!(workflow.quill_name(), "my_test_quill");
     assert_eq!(workflow.backend_id(), "typst");
     assert!(workflow.supported_formats().contains(&OutputFormat::Pdf));
 }
@@ -235,7 +234,7 @@ fn test_quill_engine_load_with_different_string_types() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my-test-quill\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
+        "[Quill]\nname = \"my_test_quill\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
     )
     .expect("Failed to write Quill.toml");
     fs::write(
@@ -251,14 +250,14 @@ fn test_quill_engine_load_with_different_string_types() {
 
     // Test with &str
     let workflow1 = engine
-        .workflow("my-test-quill")
+        .workflow("my_test_quill")
         .expect("Failed to load with &str");
-    assert_eq!(workflow1.quill_name(), "my-test-quill");
+    assert_eq!(workflow1.quill_name(), "my_test_quill");
 
     // Test with &String
-    let quill_name = String::from("my-test-quill");
+    let quill_name = String::from("my_test_quill");
     let workflow2 = engine
         .workflow(&quill_name)
         .expect("Failed to load with &String");
-    assert_eq!(workflow2.quill_name(), "my-test-quill");
+    assert_eq!(workflow2.quill_name(), "my_test_quill");
 }

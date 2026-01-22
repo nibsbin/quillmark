@@ -58,6 +58,7 @@ fn test_default_values_applied_via_dry_run() {
         &temp_dir,
         r#"[Quill]
 name = "test-quill"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 description = "Test quill with defaults"
@@ -106,6 +107,7 @@ fn test_default_values_not_overriding_existing_fields() {
         &temp_dir,
         r#"[Quill]
 name = "test-quill"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 description = "Test quill with defaults"
@@ -153,6 +155,7 @@ fn test_validation_with_defaults() {
         &temp_dir,
         r#"[Quill]
 name = "test-quill"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 description = "Test quill with optional fields"
@@ -195,6 +198,7 @@ fn test_validation_fails_without_defaults() {
         &temp_dir,
         r#"[Quill]
 name = "test-quill"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 description = "Test quill with required field"
@@ -249,6 +253,7 @@ fn test_extract_defaults_from_quill() {
         quill_path.join("Quill.toml"),
         r#"[Quill]
 name = "test-quill"
+version = "1.0"
 backend = "typst"
 description = "Test"
 

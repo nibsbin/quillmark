@@ -698,12 +698,18 @@ impl QuillConfig {
         }
         let description = description.to_string();
 
-        // Extract optional fields
+        // Extract optional fields (now version is required)
         let version = quill_section
             .get("version")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| "0.1.0".to_string()); // Default version
+            .ok_or("Missing required 'version' field in [Quill] section")?;
+
+        // Validate version format (must be MAJOR.MINOR)
+        use std::str::FromStr;
+        crate::version::Version::from_str(version)
+            .map_err(|e| format!("Invalid version '{}': {}", version, e))?;
+
+        let version = version.to_string();
 
         let author = quill_section
             .get("author")
@@ -957,6 +963,12 @@ impl Quill {
         metadata.insert(
             "author".to_string(),
             QuillValue::from_json(serde_json::Value::String(config.author.clone())),
+        );
+
+        // Add version
+        metadata.insert(
+            "version".to_string(),
+            QuillValue::from_json(serde_json::Value::String(config.version.clone())),
         );
 
         // Add typst config to metadata with typst_ prefix
@@ -1303,7 +1315,7 @@ node_modules/
         // Create test files
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
+            "[Quill]\nname = \"test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("plate.typ"), "test plate").unwrap();
@@ -1346,7 +1358,7 @@ node_modules/
         // Create test files
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
+            "[Quill]\nname = \"test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("plate.typ"), "test template").unwrap();
@@ -1373,7 +1385,7 @@ node_modules/
         // Create test directory structure
         fs::write(
             quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
+            "[Quill]\nname = \"test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("plate.typ"), "template").unwrap();
@@ -1407,6 +1419,7 @@ node_modules/
         // Create test files using new standardized format
         let toml_content = r#"[Quill]
 name = "my-custom-quill"
+version = "1.0"
 backend = "typst"
 plate_file = "custom_plate.typ"
 description = "Test quill with new format"
@@ -1435,10 +1448,15 @@ author = "Test Author"
             }
         }
 
-        // Test that other fields are in metadata (but not version)
+        // Test that other fields are in metadata including version
         assert!(quill.metadata.contains_key("description"));
         assert!(quill.metadata.contains_key("author"));
-        assert!(!quill.metadata.contains_key("version")); // version should be excluded
+        assert!(quill.metadata.contains_key("version")); // version should now be included
+        if let Some(version_val) = quill.metadata.get("version") {
+            if let Some(version_str) = version_val.as_str() {
+                assert_eq!(version_str, "1.0");
+            }
+        }
 
         // Test that plate template content is loaded correctly
         assert!(quill.plate.unwrap().contains("Custom Template"));
@@ -1452,6 +1470,7 @@ author = "Test Author"
         let toml_content = r#"
 [Quill]
 name = "test-quill"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 description = "Test quill for packages"
@@ -1479,6 +1498,7 @@ packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
         // Create test files with example specified
         let toml_content = r#"[Quill]
 name = "test-with-template"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 example_file = "example.md"
@@ -1513,6 +1533,7 @@ description = "Test quill with template"
         // Create test files without example specified
         let toml_content = r#"[Quill]
 name = "test-without-template"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 description = "Test quill without template"
@@ -1538,6 +1559,7 @@ description = "Test quill without template"
         // Add Quill.toml
         let quill_toml = r#"[Quill]
 name = "test-from-tree"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 description = "A test quill from tree"
@@ -1577,6 +1599,7 @@ description = "A test quill from tree"
         // Add Quill.toml with example specified
         let quill_toml = r#"[Quill]
 name = "test-tree-template"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 example_file = "template.md"
@@ -1620,11 +1643,11 @@ description = "Test tree with template"
         // Create JSON representation of a Quill using new format
         let json_str = r#"{
             "metadata": {
-                "name": "test-from-json"
+                "name": "test_from_json"
             },
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test-from-json\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill from JSON\"\n"
+                    "contents": "[Quill]\nname = \"test_from_json\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill from JSON\"\n"
                 },
                 "plate.typ": {
                     "contents": "= Test Plate\n\nThis is test content."
@@ -1636,7 +1659,7 @@ description = "Test tree with template"
         let quill = Quill::from_json(json_str).unwrap();
 
         // Validate the quill
-        assert_eq!(quill.name, "test-from-json");
+        assert_eq!(quill.name, "test_from_json");
         assert!(quill.plate.unwrap().contains("Test Plate"));
         assert!(quill.metadata.contains_key("backend"));
     }
@@ -1647,7 +1670,7 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n"
+                    "contents": "[Quill]\nname = \"test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n"
                 },
                 "plate.typ": {
                     "contents": "test plate"
@@ -1684,7 +1707,7 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test-tree-json\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test tree JSON\"\n"
+                    "contents": "[Quill]\nname = \"test_tree_json\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test tree JSON\"\n"
                 },
                 "plate.typ": {
                     "contents": "= Test Plate\n\nTree structure content."
@@ -1694,7 +1717,7 @@ description = "Test tree with template"
 
         let quill = Quill::from_json(json_str).unwrap();
 
-        assert_eq!(quill.name, "test-tree-json");
+        assert_eq!(quill.name, "test_tree_json");
         assert!(quill.plate.unwrap().contains("Tree structure content"));
         assert!(quill.metadata.contains_key("backend"));
     }
@@ -1705,7 +1728,7 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"nested-test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Nested test\"\n"
+                    "contents": "[Quill]\nname = \"nested_test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Nested test\"\n"
                 },
                 "plate.typ": {
                     "contents": "plate"
@@ -1723,7 +1746,7 @@ description = "Test tree with template"
 
         let quill = Quill::from_json(json_str).unwrap();
 
-        assert_eq!(quill.name, "nested-test");
+        assert_eq!(quill.name, "nested_test");
         // Verify nested files are accessible
         assert!(quill.file_exists("src/main.rs"));
         assert!(quill.file_exists("src/lib.rs"));
@@ -1741,7 +1764,7 @@ description = "Test tree with template"
             "Quill.toml".to_string(),
             FileTreeNode::File {
                 contents:
-                    b"[Quill]\nname = \"direct-tree\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Direct tree test\"\n"
+                    b"[Quill]\nname = \"direct_tree\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Direct tree test\"\n"
                         .to_vec(),
             },
         );
@@ -1771,7 +1794,7 @@ description = "Test tree with template"
 
         let quill = Quill::from_tree(root, None).unwrap();
 
-        assert_eq!(quill.name, "direct-tree");
+        assert_eq!(quill.name, "direct_tree");
         assert!(quill.file_exists("src/main.rs"));
         assert!(quill.file_exists("plate.typ"));
     }
@@ -1781,11 +1804,11 @@ description = "Test tree with template"
         // Test that metadata key overrides name from Quill.toml
         let json_str = r#"{
             "metadata": {
-                "name": "override-name"
+                "name": "override_name"
             },
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"toml-name\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"TOML name test\"\n"
+                    "contents": "[Quill]\nname = \"toml_name\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"TOML name test\"\n"
                 },
                 "plate.typ": {
                     "contents": "= plate"
@@ -1796,7 +1819,7 @@ description = "Test tree with template"
         let quill = Quill::from_json(json_str).unwrap();
         // Metadata name should be used as default, but Quill.toml takes precedence
         // when from_tree is called
-        assert_eq!(quill.name, "toml-name");
+        assert_eq!(quill.name, "toml_name");
     }
 
     #[test]
@@ -1805,7 +1828,7 @@ description = "Test tree with template"
         let json_str = r#"{
             "files": {
                 "Quill.toml": {
-                    "contents": "[Quill]\nname = \"empty-dir-test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Empty directory test\"\n"
+                    "contents": "[Quill]\nname = \"empty_dir_test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Empty directory test\"\n"
                 },
                 "plate.typ": {
                     "contents": "plate"
@@ -1815,7 +1838,7 @@ description = "Test tree with template"
         }"#;
 
         let quill = Quill::from_json(json_str).unwrap();
-        assert_eq!(quill.name, "empty-dir-test");
+        assert_eq!(quill.name, "empty_dir_test");
         assert!(quill.dir_exists("empty_dir"));
         assert!(!quill.file_exists("empty_dir"));
     }
@@ -1828,7 +1851,7 @@ description = "Test tree with template"
         root_files.insert(
             "Quill.toml".to_string(),
             FileTreeNode::File {
-                contents: b"[Quill]\nname = \"test\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n"
+                contents: b"[Quill]\nname = \"test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n"
                     .to_vec(),
             },
         );
@@ -1932,6 +1955,7 @@ description = "Test tree with template"
         // Add Quill.toml with field schemas
         let quill_toml = r#"[Quill]
 name = "taro"
+version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
 example_file = "taro.md"
@@ -2052,6 +2076,7 @@ default: "Default value"
         // Add Quill.toml without plate field
         let quill_toml = r#"[Quill]
 name = "test-no-plate"
+version = "1.0"
 backend = "typst"
 description = "Test quill without plate file"
 "#;
@@ -2076,10 +2101,10 @@ description = "Test quill without plate file"
     fn test_quill_config_from_toml() {
         // Test parsing QuillConfig from TOML content
         let toml_content = r#"[Quill]
-name = "test-config"
+name = "test_config"
+version = "1.0"
 backend = "typst"
 description = "Test configuration parsing"
-version = "1.0.0"
 author = "Test Author"
 plate_file = "plate.typ"
 example_file = "example.md"
@@ -2095,7 +2120,7 @@ author = {type = "string", description = "Document author"}
         let config = QuillConfig::from_toml(toml_content).unwrap();
 
         // Verify required fields
-        assert_eq!(config.document.name, "test-config");
+        assert_eq!(config.document.name, "test_config");
         assert_eq!(config.backend, "typst");
         assert_eq!(
             config.document.description,
@@ -2103,7 +2128,7 @@ author = {type = "string", description = "Document author"}
         );
 
         // Verify optional fields
-        assert_eq!(config.version, "1.0.0");
+        assert_eq!(config.version, "1.0");
         assert_eq!(config.author, "Test Author");
         assert_eq!(config.plate_file, Some("plate.typ".to_string()));
         assert_eq!(config.example_file, Some("example.md".to_string()));
@@ -2148,6 +2173,7 @@ description = "Missing backend"
 
         let toml_missing_description = r#"[Quill]
 name = "test"
+version = "1.0"
 backend = "typst"
 "#;
         let result = QuillConfig::from_toml(toml_missing_description);
@@ -2163,6 +2189,7 @@ backend = "typst"
         // Test that empty description results in error
         let toml_empty_description = r#"[Quill]
 name = "test"
+version = "1.0"
 backend = "typst"
 description = "   "
 "#;
@@ -2195,6 +2222,7 @@ title = {description = "Title"}
 
         let quill_toml = r#"[Quill]
 name = "metadata-test"
+version = "1.0"
 backend = "typst"
 description = "Test metadata flow"
 author = "Test Author"
@@ -2236,6 +2264,7 @@ packages = ["@preview/bubble:0.2.2"]
 
         let quill_toml = r#"[Quill]
 name = "defaults-test"
+version = "1.0"
 backend = "typst"
 description = "Test defaults extraction"
 
@@ -2273,6 +2302,7 @@ status = {type = "string", description = "Status", default = "draft"}
     fn test_field_order_preservation() {
         let toml_content = r#"[Quill]
 name = "order-test"
+version = "1.0"
 backend = "typst"
 description = "Test field order"
 
@@ -2309,6 +2339,7 @@ fourth = {type = "string", description = "Fourth field"}
     fn test_quill_with_all_ui_properties() {
         let toml_content = r#"[Quill]
 name = "full-ui-test"
+version = "1.0"
 backend = "typst"
 description = "Test all UI properties"
 
@@ -2388,6 +2419,7 @@ description: "A simple string field"
         // Test parsing [cards] section with [cards.X.fields.Y] syntax
         let toml_content = r#"[Quill]
 name = "cards-fields-test"
+version = "1.0"
 backend = "typst"
 description = "Test [cards.X.fields.Y] syntax"
 
@@ -2464,6 +2496,7 @@ invalid_key:
     fn test_quill_config_with_cards_section() {
         let toml_content = r#"[Quill]
 name = "cards-test"
+version = "1.0"
 backend = "typst"
 description = "Test [cards] section"
 
@@ -2501,6 +2534,7 @@ description = "Name field"
         // Test that cards with no fields section are valid
         let toml_content = r#"[Quill]
 name = "cards-empty-fields-test"
+version = "1.0"
 backend = "typst"
 description = "Test cards without fields"
 
@@ -2520,6 +2554,7 @@ description = "My scope"
         // Test that scope name colliding with field name is ALLOWED
         let toml_content = r#"[Quill]
 name = "collision-test"
+version = "1.0"
 backend = "typst"
 description = "Test collision"
 
@@ -2550,6 +2585,7 @@ description = "Card"
         // Test that fields have proper UI ordering (cards no longer have card-level ordering)
         let toml_content = r#"[Quill]
 name = "ordering-test"
+version = "1.0"
 backend = "typst"
 description = "Test ordering"
 
@@ -2596,6 +2632,7 @@ description = "Zero"
         // alphabetical: a_second, then z_first
         let toml_content = r#"[Quill]
 name = "card-order-test"
+version = "1.0"
 backend = "typst"
 description = "Test card field order"
 
@@ -2630,6 +2667,7 @@ description = "Defined second"
     fn test_nested_schema_parsing() {
         let toml_content = r#"[Quill]
 name = "nested-test"
+version = "1.0"
 backend = "typst"
 description = "Test nested elements"
 

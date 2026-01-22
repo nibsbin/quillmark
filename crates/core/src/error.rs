@@ -565,6 +565,20 @@ pub enum RenderError {
         /// Diagnostic information
         diag: Box<Diagnostic>,
     },
+
+    /// Version not found
+    #[error("{diag}")]
+    VersionNotFound {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
+
+    /// Invalid version format
+    #[error("{diag}")]
+    InvalidVersion {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
 }
 
 impl RenderError {
@@ -584,7 +598,9 @@ impl RenderError {
             | RenderError::NestingTooDeep { diag }
             | RenderError::ValidationFailed { diag }
             | RenderError::InvalidSchema { diag }
-            | RenderError::QuillConfig { diag } => vec![diag.as_ref()],
+            | RenderError::QuillConfig { diag }
+            | RenderError::VersionNotFound { diag }
+            | RenderError::InvalidVersion { diag } => vec![diag.as_ref()],
         }
     }
 }
@@ -638,6 +654,8 @@ pub fn print_errors(err: &RenderError) {
         RenderError::ValidationFailed { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::InvalidSchema { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::QuillConfig { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::VersionNotFound { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::InvalidVersion { diag } => eprintln!("{}", diag.fmt_pretty()),
     }
 }
 

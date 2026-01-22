@@ -49,6 +49,7 @@
 use std::collections::HashMap;
 
 use crate::value::QuillValue;
+use crate::version::QuillReference;
 
 /// The field name used to store the document body
 pub const BODY_FIELD: &str = "BODY";
@@ -57,7 +58,7 @@ pub const BODY_FIELD: &str = "BODY";
 #[derive(Debug, Clone)]
 pub struct ParsedDocument {
     fields: HashMap<String, QuillValue>,
-    quill_tag: String,
+    quill_ref: QuillReference,
 }
 
 impl ParsedDocument {
@@ -65,13 +66,23 @@ impl ParsedDocument {
     pub fn new(fields: HashMap<String, QuillValue>) -> Self {
         Self {
             fields,
-            quill_tag: "__default__".to_string(),
+            quill_ref: QuillReference::latest("__default__".to_string()),
         }
     }
 
     /// Create a ParsedDocument from fields and quill tag
     pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: String) -> Self {
-        Self { fields, quill_tag }
+        // Parse the quill tag as a QuillReference
+        let quill_ref = quill_tag.parse().unwrap_or_else(|_| {
+            // If parsing fails, treat it as a name with Latest selector
+            QuillReference::latest(quill_tag)
+        });
+        Self { fields, quill_ref }
+    }
+
+    /// Create a ParsedDocument from fields and quill reference
+    pub fn with_quill_ref(fields: HashMap<String, QuillValue>, quill_ref: QuillReference) -> Self {
+        Self { fields, quill_ref }
     }
 
     /// Create a ParsedDocument from markdown string
@@ -80,8 +91,16 @@ impl ParsedDocument {
     }
 
     /// Get the quill tag (from QUILL key, or "__default__" if not specified)
+    /// 
+    /// This returns just the name for backward compatibility.
+    /// Use `quill_reference()` to get the full reference with version.
     pub fn quill_tag(&self) -> &str {
-        &self.quill_tag
+        &self.quill_ref.name
+    }
+
+    /// Get the quill reference (name + version selector)
+    pub fn quill_reference(&self) -> &QuillReference {
+        &self.quill_ref
     }
 
     /// Get the document body
@@ -124,7 +143,7 @@ impl ParsedDocument {
 
         Self {
             fields,
-            quill_tag: self.quill_tag.clone(),
+            quill_ref: self.quill_ref.clone(),
         }
     }
 
@@ -152,7 +171,7 @@ impl ParsedDocument {
 
         Self {
             fields: coerced_fields,
-            quill_tag: self.quill_tag.clone(),
+            quill_ref: self.quill_ref.clone(),
         }
     }
 }
@@ -396,18 +415,17 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                                 }
 
                                 if has_quill {
-                                    // Extract quill name
+                                    // Extract and parse quill reference
                                     let quill_value = mapping.get(quill_key).unwrap();
-                                    let quill_name_str = quill_value
+                                    let quill_ref_str = quill_value
                                         .as_str()
                                         .ok_or("QUILL value must be a string")?;
 
-                                    if !is_valid_tag_name(quill_name_str) {
-                                        return Err(crate::error::ParseError::InvalidStructure(format!(
-                                            "Invalid quill name '{}': must match pattern [a-z_][a-z0-9_]*",
-                                            quill_name_str
-                                        )));
-                                    }
+                                    // Parse as QuillReference to validate name and version
+                                    let _quill_ref = quill_ref_str.parse::<QuillReference>()
+                                        .map_err(|e| crate::error::ParseError::InvalidStructure(
+                                            format!("Invalid QUILL reference '{}': {}", quill_ref_str, e)
+                                        ))?;
 
                                     // Remove QUILL from the YAML value for processing
                                     let mut new_mapping = mapping.clone();
@@ -418,7 +436,7 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                                         Some(serde_json::Value::Object(new_mapping))
                                     };
 
-                                    (None, Some(quill_name_str.to_string()), new_value)
+                                    (None, Some(quill_ref_str.to_string()), new_value)
                                 } else if has_card {
                                     // Extract card field name
                                     let card_value = mapping.get(card_key).unwrap();
@@ -1707,7 +1725,7 @@ QUILL: Invalid-Name
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Invalid quill name"));
+            .contains("Invalid QUILL reference"));
     }
 
     #[test]
