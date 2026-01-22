@@ -22,6 +22,17 @@ Two-segment versioning: `MAJOR.MINOR`
 | **MAJOR** | Breaking changes: layout changes, removed fields, incompatible types |
 | **MINOR** | Compatible changes: bug fixes, new optional fields, improvements |
 
+### Pre-1.0 Versioning
+
+Versions below `1.0` (e.g., `0.1`, `0.2`) indicate **pre-release** Quills that are still in development. Pre-1.0 guidelines:
+
+- **Start at `0.1`** for new Quills under development
+- **Increment minor only** (e.g., `0.1` → `0.2` → `0.3`) during pre-release
+- **Do not increment major** until the Quill is production-ready
+- **Graduate to `1.0`** when the Quill is stable and ready for production use
+
+Pre-1.0 Quills may have breaking changes between any minor version. Document authors should pin to exact versions (e.g., `@0.2`) for stability during this phase.
+
 ## Document Syntax
 
 ```yaml

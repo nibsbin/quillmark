@@ -1,6 +1,6 @@
 [Quill]
 name = "usaf_memo"
-version = "1.0"
+version = "0.1"
 backend = "typst"
 plate_file = "plate.typ"
 example_file = "example.md"
