@@ -8,7 +8,7 @@ use std::fs;
 use tempfile::TempDir;
 
 fn create_test_quill(temp_dir: &TempDir, with_required_field: bool) -> Quill {
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test_quill");
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
 
     let fields_section = if with_required_field {
@@ -31,7 +31,7 @@ description = "Document author"
         quill_path.join("Quill.toml"),
         format!(
             r#"[Quill]
-name = "test-quill"
+name = "test_quill"
 version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
@@ -60,7 +60,7 @@ fn test_dry_run_success() {
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test_quill")
         .expect("Failed to load workflow");
 
     let markdown = r#"---
@@ -91,7 +91,7 @@ fn test_dry_run_missing_required_field() {
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test_quill")
         .expect("Failed to load workflow");
 
     // Missing required 'title' field
@@ -124,13 +124,13 @@ author: Test Author
 #[ignore = "Test obsolete after MiniJinja removal - filters and template composition no longer exist"]
 fn test_dry_run_invalid_template_filter() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test_quill");
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
 
     fs::write(
         quill_path.join("Quill.toml"),
         r#"[Quill]
-name = "test-quill"
+name = "test_quill"
 version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
@@ -154,7 +154,7 @@ description = "Test quill"
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test_quill")
         .expect("Failed to load workflow");
 
     let markdown = r#"---
@@ -190,7 +190,7 @@ fn test_dry_run_no_schema() {
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test_quill")
         .expect("Failed to load workflow");
 
     // Any fields should work when there's no schema

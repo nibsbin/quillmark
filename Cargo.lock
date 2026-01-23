@@ -2545,7 +2545,6 @@ dependencies = [
 name = "quillmark-core"
 version = "0.30.0"
 dependencies = [
- "anyhow",
  "glob",
  "jsonschema",
  "serde",
