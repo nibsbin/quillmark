@@ -138,7 +138,7 @@ pub trait Backend: Send + Sync {
     ///         contents: b"[Quill]\nname = \"__default__\"\nbackend = \"my\"\n".to_vec(),
     ///     });
     ///     let root = FileTreeNode::Directory { files };
-    ///     Quill::from_tree(root, None).ok()
+    ///     Quill::from_tree(root).ok()
     /// }
     /// # }
     /// ```

@@ -52,7 +52,7 @@ This is a test document without a QUILL tag.
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
     // Verify default quill tag is set
-    assert_eq!(parsed.quill_tag(), "__default__");
+    assert_eq!(parsed.quill_reference().name, "__default__");
 
     let engine = Quillmark::new();
 
@@ -77,7 +77,12 @@ fn test_explicit_quill_tag_takes_precedence_over_default() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"custom_quill\"\nbackend = \"typst\"\ndescription = \"Custom test quill\"\n",
+        r#"[Quill]
+name = "custom_quill"
+version = "1.0"
+backend = "typst"
+description = "Custom test quill"
+"#,
     )
     .expect("Failed to write Quill.toml");
 
@@ -92,7 +97,7 @@ Content here.
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
     // Verify QUILL tag is present
-    assert_eq!(parsed.quill_tag(), "custom_quill");
+    assert_eq!(parsed.quill_reference().name, "custom_quill");
 
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
@@ -118,7 +123,7 @@ Content
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
     // Verify default quill tag is set (always "__default__" when no QUILL directive)
-    assert_eq!(parsed.quill_tag(), "__default__");
+    assert_eq!(parsed.quill_reference().name, "__default__");
 
     // Note: In the current implementation with Typst backend auto-registered,
     // __default__ is always available. This test documents the expected behavior
@@ -217,7 +222,7 @@ fn test_second_backend_with_default_quill_does_not_override() {
             );
 
             let root = FileTreeNode::Directory { files };
-            Quill::from_tree(root, None).ok()
+            Quill::from_tree(root).ok()
         }
     }
 

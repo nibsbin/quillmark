@@ -1,5 +1,6 @@
 [Quill]
-name = "appreeciated_letter"
+name = "appreciated_letter"
+version = "0.1"
 backend = "typst"
 plate_file = "plate.typ"
 example_file = "appreciated_letter.md"

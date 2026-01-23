@@ -183,7 +183,7 @@ class ParsedDocument:
     def fields(self) -> dict[str, Any]:
         """Get all frontmatter fields."""
     
-    def quill_tag(self) -> str | None:
+    def quill_name(self) -> str | None:
         """Get QUILL field value if present."""
 
 class RenderResult:

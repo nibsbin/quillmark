@@ -99,7 +99,7 @@ title = parsed.get_field("title")
 - `body()` - Get document body content
 - `get_field(key)` - Get frontmatter field value
 - `fields()` - Get all frontmatter fields
-- `quill_tag()` - Get QUILL field value if present
+- `quill_name()` - Get QUILL field value if present
 
 #### 5. `RenderResult`, `Artifact`
 

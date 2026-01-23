@@ -12,8 +12,8 @@ from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat
 from conftest import QUILLS_PATH
 
 
-def test_parsed_document_quill_tag():
-    """Test that ParsedDocument exposes quill_tag property."""
+def test_parsed_document_quill_name():
+    """Test that ParsedDocument exposes quill_name property."""
     markdown_with_quill = """---
 QUILL: my_quill
 title: Test
@@ -22,7 +22,7 @@ title: Test
 # Content
 """
     parsed = ParsedDocument.from_markdown(markdown_with_quill)
-    assert parsed.quill_tag() == "my_quill"
+    assert parsed.quill_name() == "my_quill"
     
     markdown_without_quill = """---
 title: Test
@@ -31,7 +31,7 @@ title: Test
 # Content
 """
     parsed2 = ParsedDocument.from_markdown(markdown_without_quill)
-    assert parsed2.quill_tag() == "__default__"
+    assert parsed2.quill_name() == "__default__"
 
 
 def test_quill_properties(taro_quill_dir):
@@ -79,7 +79,7 @@ def test_workflow_from_parsed_with_quill_tag(taro_quill_dir, taro_md):
 """
     
     parsed = ParsedDocument.from_markdown(markdown_with_tag)
-    assert parsed.quill_tag() == quill.name
+    assert parsed.quill_name() == quill.name
     
     # Create workflow from parsed document
     workflow = engine.workflow(parsed)
@@ -120,8 +120,8 @@ This is a test document.
 """
     parsed = ParsedDocument.from_markdown(markdown)
     
-    # Verify ParsedDocument.quill_tag
-    assert parsed.quill_tag() == "taro"
+    # Verify ParsedDocument.quill_name
+    assert parsed.quill_name() == "taro"
     
     # Step 3: Retrieve Quill object and inspect properties
     # Consumer can use this information to configure render options

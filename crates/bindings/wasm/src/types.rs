@@ -206,7 +206,7 @@ impl IntoWasmAbi for QuillInfo {
 /// Parsed markdown document
 ///
 /// Returned by `Quillmark.parseMarkdown()`. Contains the parsed YAML frontmatter
-/// fields and the quill tag (from QUILL field or "__default__" if not specified).
+/// fields and the quill name (from QUILL field or "__default__" if not specified).
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
@@ -214,8 +214,8 @@ pub struct ParsedDocument {
     /// YAML frontmatter fields
     #[tsify(type = "Record<string, any>")]
     pub fields: serde_json::Value,
-    /// The quill tag (from QUILL field or "__default__")
-    pub quill_tag: String,
+    /// The quill name (from QUILL field or "__default__")
+    pub quill_name: String,
 }
 
 impl IntoWasmAbi for ParsedDocument {
@@ -624,7 +624,7 @@ mod tests {
 
         let parsed_doc = ParsedDocument {
             fields: serde_json::Value::Object(fields_obj),
-            quill_tag: "test-quill".to_string(),
+            quill_name: "test-quill".to_string(),
         };
 
         // Serialize and verify structure
@@ -632,7 +632,10 @@ mod tests {
         assert!(json.is_object());
 
         let obj = json.as_object().unwrap();
-        assert_eq!(obj.get("quillTag").unwrap().as_str().unwrap(), "test-quill");
+        assert_eq!(
+            obj.get("quillName").unwrap().as_str().unwrap(),
+            "test-quill"
+        );
 
         // Verify fields is an object (not a Map)
         let fields = obj.get("fields").unwrap();

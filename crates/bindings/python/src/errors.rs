@@ -159,5 +159,35 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
             }
             py_err
         }
+        RenderError::VersionNotFound { diag } => {
+            let py_err = QuillmarkError::new_err(format!("Version not found: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
+        }
+        RenderError::QuillNotFound { diag } => {
+            let py_err = QuillmarkError::new_err(format!("Quill not found: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
+        }
+        RenderError::InvalidVersion { diag } => {
+            let py_err = QuillmarkError::new_err(format!("Invalid version: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
+        }
     })
 }

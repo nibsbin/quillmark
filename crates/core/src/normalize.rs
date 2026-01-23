@@ -453,7 +453,7 @@ pub fn normalize_field_name(name: &str) -> String {
 /// fields.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("<<content>>")));
 ///
 /// let doc = ParsedDocument::new(fields);
-/// let normalized = normalize_document(doc);
+/// let normalized = normalize_document(doc).expect("Failed to normalize document");
 ///
 /// // Body has chevrons preserved
 /// assert_eq!(normalized.body().unwrap(), "<<content>>");
@@ -463,9 +463,14 @@ pub fn normalize_field_name(name: &str) -> String {
 ///
 /// This function is idempotent - calling it multiple times produces the same result.
 /// However, for performance reasons, avoid unnecessary repeated calls.
-pub fn normalize_document(doc: crate::parse::ParsedDocument) -> crate::parse::ParsedDocument {
+pub fn normalize_document(
+    doc: crate::parse::ParsedDocument,
+) -> Result<crate::parse::ParsedDocument, crate::error::ParseError> {
     let normalized_fields = normalize_fields(doc.fields().clone());
-    crate::parse::ParsedDocument::with_quill_tag(normalized_fields, doc.quill_tag().to_string())
+    Ok(crate::parse::ParsedDocument::with_quill_ref(
+        normalized_fields,
+        doc.quill_reference().clone(),
+    ))
 }
 
 #[cfg(test)]
@@ -862,7 +867,7 @@ mod tests {
         );
 
         let doc = ParsedDocument::new(fields);
-        let normalized = super::normalize_document(doc);
+        let normalized = super::normalize_document(doc).unwrap();
 
         // Title has chevrons preserved (only bidi stripped)
         assert_eq!(
@@ -877,12 +882,15 @@ mod tests {
     #[test]
     fn test_normalize_document_preserves_quill_tag() {
         use crate::parse::ParsedDocument;
+        use crate::version::QuillReference;
+        use std::str::FromStr;
 
         let fields = std::collections::HashMap::new();
-        let doc = ParsedDocument::with_quill_tag(fields, "custom_quill".to_string());
-        let normalized = super::normalize_document(doc);
+        let quill_ref = QuillReference::from_str("custom_quill").unwrap();
+        let doc = ParsedDocument::with_quill_ref(fields, quill_ref);
+        let normalized = super::normalize_document(doc).unwrap();
 
-        assert_eq!(normalized.quill_tag(), "custom_quill");
+        assert_eq!(normalized.quill_reference().name, "custom_quill");
     }
 
     #[test]
@@ -896,8 +904,8 @@ mod tests {
         );
 
         let doc = ParsedDocument::new(fields);
-        let normalized_once = super::normalize_document(doc);
-        let normalized_twice = super::normalize_document(normalized_once.clone());
+        let normalized_once = super::normalize_document(doc).unwrap();
+        let normalized_twice = super::normalize_document(normalized_once.clone()).unwrap();
 
         // Calling normalize_document twice should produce the same result
         assert_eq!(

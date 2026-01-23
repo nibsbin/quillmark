@@ -1,5 +1,6 @@
 [Quill]
 name = "__default__"
+version = "0.1"
 backend = "typst"
 plate_file = "plate.typ"
 example_file = "example.md"

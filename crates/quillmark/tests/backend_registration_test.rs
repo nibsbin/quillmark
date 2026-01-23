@@ -119,12 +119,18 @@ fn test_workflow_with_custom_backend() {
 
     // Create a test quill that uses our custom backend
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test_quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"custom-backend-quill\"\nbackend = \"mock-txt\"\nplate_file = \"plate.txt\"\ndescription = \"Test quill with custom backend\"\n",
+        r#"[Quill]
+name = "custom_backend_quill"
+version = "1.0"
+backend = "mock-txt"
+plate_file = "plate.txt"
+description = "Test quill with custom backend"
+"#,
     )
     .expect("Failed to write Quill.toml");
     fs::write(quill_path.join("plate.txt"), "Test template: {{ title }}")
@@ -137,12 +143,12 @@ fn test_workflow_with_custom_backend() {
 
     // Load workflow using the custom backend
     let workflow = engine
-        .workflow("custom-backend-quill")
+        .workflow("custom_backend_quill")
         .expect("Failed to load workflow");
 
     // Verify workflow properties
     assert_eq!(workflow.backend_id(), "mock-txt");
-    assert_eq!(workflow.quill_name(), "custom-backend-quill");
+    assert_eq!(workflow.quill_name(), "custom_backend_quill");
     assert!(workflow.supported_formats().contains(&OutputFormat::Txt));
 
     // Test rendering with the custom backend

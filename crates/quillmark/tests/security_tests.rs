@@ -5,8 +5,6 @@
 
 use quillmark_core::parse::ParsedDocument;
 
-mod common;
-
 /// Test deeply nested YAML structures hit the depth limit
 #[test]
 fn test_yaml_depth_limit_attack() {

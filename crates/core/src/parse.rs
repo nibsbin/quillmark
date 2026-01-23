@@ -47,8 +47,11 @@
 //! See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) for comprehensive documentation of the Extended YAML Metadata Standard.
 
 use std::collections::HashMap;
+use std::str::FromStr;
 
+use crate::error::ParseError;
 use crate::value::QuillValue;
+use crate::version::QuillReference;
 
 /// The field name used to store the document body
 pub const BODY_FIELD: &str = "BODY";
@@ -57,7 +60,7 @@ pub const BODY_FIELD: &str = "BODY";
 #[derive(Debug, Clone)]
 pub struct ParsedDocument {
     fields: HashMap<String, QuillValue>,
-    quill_tag: String,
+    quill_ref: QuillReference,
 }
 
 impl ParsedDocument {
@@ -65,13 +68,13 @@ impl ParsedDocument {
     pub fn new(fields: HashMap<String, QuillValue>) -> Self {
         Self {
             fields,
-            quill_tag: "__default__".to_string(),
+            quill_ref: QuillReference::latest("__default__".to_string()),
         }
     }
 
-    /// Create a ParsedDocument from fields and quill tag
-    pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: String) -> Self {
-        Self { fields, quill_tag }
+    /// Create a ParsedDocument from fields and quill reference
+    pub fn with_quill_ref(fields: HashMap<String, QuillValue>, quill_ref: QuillReference) -> Self {
+        Self { fields, quill_ref }
     }
 
     /// Create a ParsedDocument from markdown string
@@ -79,9 +82,9 @@ impl ParsedDocument {
         decompose(markdown)
     }
 
-    /// Get the quill tag (from QUILL key, or "__default__" if not specified)
-    pub fn quill_tag(&self) -> &str {
-        &self.quill_tag
+    /// Get the quill reference (name + version selector)
+    pub fn quill_reference(&self) -> &QuillReference {
+        &self.quill_ref
     }
 
     /// Get the document body
@@ -124,7 +127,7 @@ impl ParsedDocument {
 
         Self {
             fields,
-            quill_tag: self.quill_tag.clone(),
+            quill_ref: self.quill_ref.clone(),
         }
     }
 
@@ -152,7 +155,7 @@ impl ParsedDocument {
 
         Self {
             fields: coerced_fields,
-            quill_tag: self.quill_tag.clone(),
+            quill_ref: self.quill_ref.clone(),
         }
     }
 }
@@ -396,18 +399,20 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                                 }
 
                                 if has_quill {
-                                    // Extract quill name
+                                    // Extract and parse quill reference
                                     let quill_value = mapping.get(quill_key).unwrap();
-                                    let quill_name_str = quill_value
+                                    let quill_ref_str = quill_value
                                         .as_str()
                                         .ok_or("QUILL value must be a string")?;
 
-                                    if !is_valid_tag_name(quill_name_str) {
-                                        return Err(crate::error::ParseError::InvalidStructure(format!(
-                                            "Invalid quill name '{}': must match pattern [a-z_][a-z0-9_]*",
-                                            quill_name_str
-                                        )));
-                                    }
+                                    // Parse as QuillReference to validate name and version
+                                    let _quill_ref =
+                                        quill_ref_str.parse::<QuillReference>().map_err(|e| {
+                                            crate::error::ParseError::InvalidStructure(format!(
+                                                "Invalid QUILL reference '{}': {}",
+                                                quill_ref_str, e
+                                            ))
+                                        })?;
 
                                     // Remove QUILL from the YAML value for processing
                                     let mut new_mapping = mapping.clone();
@@ -418,7 +423,7 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                                         Some(serde_json::Value::Object(new_mapping))
                                     };
 
-                                    (None, Some(quill_name_str.to_string()), new_value)
+                                    (None, Some(quill_ref_str.to_string()), new_value)
                                 } else if has_card {
                                     // Extract card field name
                                     let card_value = mapping.get(card_key).unwrap();
@@ -721,7 +726,10 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
     }
 
     let quill_tag = quill_name.unwrap_or_else(|| "__default__".to_string());
-    let parsed = ParsedDocument::with_quill_tag(fields, quill_tag);
+    let quill_ref = QuillReference::from_str(&quill_tag).map_err(|e| {
+        ParseError::InvalidStructure(format!("Invalid QUILL tag '{}': {}", quill_tag, e))
+    })?;
+    let parsed = ParsedDocument::with_quill_ref(fields, quill_ref);
 
     Ok(parsed)
 }
@@ -738,7 +746,7 @@ mod tests {
         assert_eq!(doc.body(), Some(markdown));
         assert_eq!(doc.fields().len(), 1);
         // Verify default quill tag is set
-        assert_eq!(doc.quill_tag(), "__default__");
+        assert_eq!(doc.quill_reference().name, "__default__");
     }
 
     #[test]
@@ -765,7 +773,7 @@ This is the body."#;
         );
         assert_eq!(doc.fields().len(), 4); // title, author, body, CARDS
                                            // Verify default quill tag is set when no QUILL directive
-        assert_eq!(doc.quill_tag(), "__default__");
+        assert_eq!(doc.quill_reference().name, "__default__");
     }
 
     #[test]
@@ -1618,7 +1626,7 @@ This is the memo body."#;
         let doc = decompose(markdown).unwrap();
 
         // Verify quill tag is set
-        assert_eq!(doc.quill_tag(), "usaf_memo");
+        assert_eq!(doc.quill_reference().name, "usaf_memo");
 
         // Verify fields from quill block become frontmatter
         assert_eq!(
@@ -1651,7 +1659,7 @@ Section 1 body."#;
         let doc = decompose(markdown).unwrap();
 
         // Verify quill tag
-        assert_eq!(doc.quill_tag(), "document");
+        assert_eq!(doc.quill_reference().name, "document");
 
         // Verify global field from quill block
         assert_eq!(
@@ -1707,7 +1715,7 @@ QUILL: Invalid-Name
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Invalid quill name"));
+            .contains("Invalid QUILL reference"));
     }
 
     #[test]
@@ -2274,7 +2282,7 @@ mod robustness_tests {
     fn test_empty_document() {
         let doc = decompose("").unwrap();
         assert_eq!(doc.body(), Some(""));
-        assert_eq!(doc.quill_tag(), "__default__");
+        assert_eq!(doc.quill_reference().name, "__default__");
     }
 
     #[test]
@@ -2538,14 +2546,14 @@ Some text with --- dashes in it."#;
     fn test_quill_with_underscore_prefix() {
         let markdown = "---\nQUILL: _internal\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
-        assert_eq!(doc.quill_tag(), "_internal");
+        assert_eq!(doc.quill_reference().name, "_internal");
     }
 
     #[test]
     fn test_quill_with_numbers() {
         let markdown = "---\nQUILL: form_8_v2\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
-        assert_eq!(doc.quill_tag(), "form_8_v2");
+        assert_eq!(doc.quill_reference().name, "form_8_v2");
     }
 
     #[test]
@@ -2558,7 +2566,7 @@ author: John Doe
 
 Body content."#;
         let doc = decompose(markdown).unwrap();
-        assert_eq!(doc.quill_tag(), "my_quill");
+        assert_eq!(doc.quill_reference().name, "my_quill");
         assert_eq!(
             doc.get_field("title").unwrap().as_str().unwrap(),
             "Document Title"
@@ -2806,7 +2814,7 @@ Conclusion content.
             doc.get_field("title").unwrap().as_str().unwrap(),
             "My Document"
         );
-        assert_eq!(doc.quill_tag(), "blog_post");
+        assert_eq!(doc.quill_reference().name, "blog_post");
 
         // Verify body contains horizontal rule (*** preserved)
         let body = doc.body().unwrap();

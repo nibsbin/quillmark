@@ -64,7 +64,7 @@ The secret of getting ahead is getting started... with taro ice cream.
     
     parsed = ParsedDocument.from_markdown(markdown)
     print(f"  ✓ Parsed document")
-    print(f"  ✓ Quill tag from document: {parsed.quill_tag()}")
+    print(f"  ✓ Quill name from document: {parsed.quill_name()}")
     print(f"  ✓ Document fields: {list(parsed.fields.keys())}")
     print()
     
