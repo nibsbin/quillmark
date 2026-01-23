@@ -624,7 +624,7 @@ mod tests {
 
         let parsed_doc = ParsedDocument {
             fields: serde_json::Value::Object(fields_obj),
-            quill_tag: "test-quill".to_string(),
+            quill_name: "test-quill".to_string(),
         };
 
         // Serialize and verify structure
@@ -632,7 +632,7 @@ mod tests {
         assert!(json.is_object());
 
         let obj = json.as_object().unwrap();
-        assert_eq!(obj.get("quillTag").unwrap().as_str().unwrap(), "test-quill");
+        assert_eq!(obj.get("quillName").unwrap().as_str().unwrap(), "test-quill");
 
         // Verify fields is an object (not a Map)
         let fields = obj.get("fields").unwrap();
