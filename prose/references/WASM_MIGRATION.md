@@ -1,5 +1,5 @@
 
-> **Version**: 0.30.0 (Versioning Rework)
+> **Version**: 0.31.0 (Versioning Rework)
 
 This guide covers breaking changes for JavaScript/TypeScript consumers of the Quillmark WASM bindings.
 
