@@ -32,7 +32,7 @@ def taro_quill_dir():
 @pytest.fixture
 def taro_md():
     """Return the example taro markdown."""
-    sample_path = QUILLS_PATH / "taro" / "taro.md"
+    sample_path = QUILLS_PATH / "taro" / "example.md"
 
     if sample_path.exists():
         return sample_path.read_text()
