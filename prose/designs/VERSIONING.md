@@ -1,7 +1,7 @@
 # Quill Versioning System
 
 > **Status**: Implemented
-> **Implementation**: `quillmark-core/src/version.rs`, `quillmark/src/orchestration/engine.rs`
+> **Implementation**: `crates/core/src/version.rs`, `crates/quillmark/src/orchestration/engine.rs`
 
 ## TL;DR
 

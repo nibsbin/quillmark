@@ -121,10 +121,10 @@ fn test_quill_engine_workflow_not_found() {
 
     assert!(result.is_err());
     match result {
-        Err(quillmark::RenderError::VersionNotFound { diag }) => {
+        Err(quillmark::RenderError::QuillNotFound { diag }) => {
             assert!(diag.message.contains("not registered"));
         }
-        _ => panic!("Expected VersionNotFound error"),
+        _ => panic!("Expected QuillNotFound error"),
     }
 }
 

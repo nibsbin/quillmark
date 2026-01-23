@@ -125,7 +125,7 @@ fn test_workflow_with_custom_backend() {
     fs::write(
         quill_path.join("Quill.toml"),
         r#"[Quill]
-name = "custom-backend-quill"
+name = "custom_backend_quill"
 version = "1.0"
 backend = "mock-txt"
 plate_file = "plate.txt"
@@ -143,12 +143,12 @@ description = "Test quill with custom backend"
 
     // Load workflow using the custom backend
     let workflow = engine
-        .workflow("custom-backend-quill")
+        .workflow("custom_backend_quill")
         .expect("Failed to load workflow");
 
     // Verify workflow properties
     assert_eq!(workflow.backend_id(), "mock-txt");
-    assert_eq!(workflow.quill_name(), "custom-backend-quill");
+    assert_eq!(workflow.quill_name(), "custom_backend_quill");
     assert!(workflow.supported_formats().contains(&OutputFormat::Txt));
 
     // Test rendering with the custom backend

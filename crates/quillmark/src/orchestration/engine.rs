@@ -41,7 +41,12 @@ impl VersionedQuillSet {
             }
             VersionSelector::Latest => {
                 // Return the highest version overall
-                self.versions.iter().next_back().map(|(_, quill)| quill)
+                let result = self.versions.iter().next_back().map(|(_, quill)| quill);
+                debug_assert!(
+                    result.is_some(),
+                    "VersionedQuillSet should never be empty - quills must have at least one version"
+                );
+                result
             }
         }
     }
@@ -255,7 +260,7 @@ impl Quillmark {
         let version_set =
             self.quills
                 .get(&quill_ref.name)
-                .ok_or_else(|| RenderError::VersionNotFound {
+                .ok_or_else(|| RenderError::QuillNotFound {
                     diag: Box::new(
                         Diagnostic::new(
                             Severity::Error,
@@ -349,8 +354,17 @@ impl Quillmark {
         // Get the quill reference based on the parameter type
         let quill = match quill_ref {
             QuillRef::Name(name) => {
-                // Look up the quill by name (use latest version)
-                let quill_reference = QuillReference::latest(name.to_string());
+                // Parse the name as a QuillReference (supports @version syntax)
+                let quill_reference =
+                    QuillReference::from_str(name).map_err(|e| RenderError::InvalidVersion {
+                        diag: Box::new(
+                            Diagnostic::new(
+                                Severity::Error,
+                                format!("Invalid quill reference '{}': {}", name, e),
+                            )
+                            .with_code("engine::invalid_reference".to_string()),
+                        ),
+                    })?;
                 self.resolve_quill_reference(&quill_reference)?
             }
             QuillRef::Object(quill) => {

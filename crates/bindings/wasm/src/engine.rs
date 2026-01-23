@@ -287,7 +287,8 @@ impl Quillmark {
             }
         }
 
-        let parsed = quillmark_core::ParsedDocument::with_quill_tag(fields, quill_tag);
+        let parsed = quillmark_core::ParsedDocument::with_quill_tag(fields, quill_tag)
+            .map_err(|e| JsValue::from_str(&format!("Failed to parse QUILL tag: {}", e)))?;
 
         // Load the workflow
         let mut workflow = self.inner.workflow(&quill_name_to_use).map_err(|e| {

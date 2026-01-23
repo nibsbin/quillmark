@@ -47,7 +47,9 @@
 //! See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) for comprehensive documentation of the Extended YAML Metadata Standard.
 
 use std::collections::HashMap;
+use std::str::FromStr;
 
+use crate::error::ParseError;
 use crate::value::QuillValue;
 use crate::version::QuillReference;
 
@@ -71,13 +73,15 @@ impl ParsedDocument {
     }
 
     /// Create a ParsedDocument from fields and quill tag
-    pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: String) -> Self {
+    pub fn with_quill_tag(
+        fields: HashMap<String, QuillValue>,
+        quill_tag: String,
+    ) -> Result<Self, ParseError> {
         // Parse the quill tag as a QuillReference
-        let quill_ref = quill_tag.parse().unwrap_or_else(|_| {
-            // If parsing fails, treat it as a name with Latest selector
-            QuillReference::latest(quill_tag)
-        });
-        Self { fields, quill_ref }
+        let quill_ref = QuillReference::from_str(&quill_tag).map_err(|e| {
+            ParseError::InvalidStructure(format!("Invalid QUILL tag '{}': {}", quill_tag, e))
+        })?;
+        Ok(Self { fields, quill_ref })
     }
 
     /// Create a ParsedDocument from fields and quill reference
@@ -742,7 +746,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
     }
 
     let quill_tag = quill_name.unwrap_or_else(|| "__default__".to_string());
-    let parsed = ParsedDocument::with_quill_tag(fields, quill_tag);
+    let parsed = ParsedDocument::with_quill_tag(fields, quill_tag)?;
 
     Ok(parsed)
 }

@@ -33,7 +33,7 @@ impl Workflow {
         self.validate_document(&parsed_coerced)?;
 
         // Normalize document: strip bidi characters and fix HTML comment fences
-        let normalized = normalize_document(parsed_coerced);
+        let normalized = normalize_document(parsed_coerced)?;
 
         // Transform fields for JSON injection (backend-specific transformations)
         let transformed_fields = self
