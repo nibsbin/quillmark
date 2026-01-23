@@ -49,7 +49,7 @@ impl Quillmark {
     /// Parse markdown into a ParsedDocument
     ///
     /// This is the first step in the workflow. The returned ParsedDocument contains
-    /// the parsed YAML frontmatter fields and the quill_tag (from QUILL field or "__default__").
+    /// the parsed YAML frontmatter fields and the quill_name (from QUILL field or "__default__").
     #[wasm_bindgen(js_name = parseMarkdown)]
     pub fn parse_markdown(markdown: &str) -> Result<ParsedDocument, JsValue> {
         let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
