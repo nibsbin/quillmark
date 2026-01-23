@@ -31,7 +31,7 @@ This is a test document.
     let parsed = Quillmark::parse_markdown(markdown).expect("parse_markdown failed");
 
     // Verify it returns a ParsedDocument
-    assert_eq!(parsed.quill_tag, "test-quill");
+    assert_eq!(parsed.quill_name, "test-quill");
     assert!(parsed.fields.is_object());
 }
 

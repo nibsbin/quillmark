@@ -862,11 +862,6 @@ impl Quill {
         use std::fs;
 
         let path = path.as_ref();
-        let name = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unnamed")
-            .to_string();
 
         // Load .quillignore if it exists
         let quillignore_path = path.join(".quillignore");
@@ -889,7 +884,7 @@ impl Quill {
         let root = Self::load_directory_as_tree(path, path, &ignore)?;
 
         // Create Quill from the file tree
-        Self::from_tree(root, Some(name))
+        Self::from_tree(root)
     }
 
     /// Create a Quill from a tree structure
@@ -899,7 +894,6 @@ impl Quill {
     /// # Arguments
     ///
     /// * `root` - The root node of the file tree
-    /// * `_default_name` - Unused parameter kept for API compatibility (name always from Quill.toml)
     ///
     /// # Errors
     ///
@@ -908,10 +902,7 @@ impl Quill {
     /// - Quill.toml is not valid UTF-8 or TOML
     /// - The plate file specified in Quill.toml is not found or not valid UTF-8
     /// - Validation fails
-    pub fn from_tree(
-        root: FileTreeNode,
-        _default_name: Option<String>,
-    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+    pub fn from_tree(root: FileTreeNode) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         // Read Quill.toml
         let quill_toml_bytes = root
             .get_file("Quill.toml")
@@ -1050,13 +1041,6 @@ impl Quill {
 
         let obj = json.as_object().ok_or("Root must be an object")?;
 
-        // Extract metadata (optional)
-        let default_name = obj
-            .get("metadata")
-            .and_then(|m| m.get("name"))
-            .and_then(|v| v.as_str())
-            .map(String::from);
-
         // Extract files (required)
         let files_obj = obj
             .get("files")
@@ -1072,7 +1056,7 @@ impl Quill {
         let root = FileTreeNode::Directory { files: root_files };
 
         // Create Quill from tree
-        Self::from_tree(root, default_name)
+        Self::from_tree(root)
     }
 
     /// Recursively load all files from a directory into a tree structure
@@ -1587,7 +1571,7 @@ description = "A test quill from tree"
         let root = FileTreeNode::Directory { files: root_files };
 
         // Create Quill from tree
-        let quill = Quill::from_tree(root, Some("test-from-tree".to_string())).unwrap();
+        let quill = Quill::from_tree(root).unwrap();
 
         // Validate the quill
         assert_eq!(quill.name, "test-from-tree");
@@ -1636,7 +1620,7 @@ description = "Test tree with template"
         let root = FileTreeNode::Directory { files: root_files };
 
         // Create Quill from tree
-        let quill = Quill::from_tree(root, None).unwrap();
+        let quill = Quill::from_tree(root).unwrap();
 
         // Validate template is loaded
         assert_eq!(quill.example, Some(template_content.to_string()));
@@ -1796,7 +1780,7 @@ description = "Test tree with template"
 
         let root = FileTreeNode::Directory { files: root_files };
 
-        let quill = Quill::from_tree(root, None).unwrap();
+        let quill = Quill::from_tree(root).unwrap();
 
         assert_eq!(quill.name, "direct_tree");
         assert!(quill.file_exists("src/main.rs"));
@@ -1912,7 +1896,7 @@ description = "Test tree with template"
         );
 
         let root = FileTreeNode::Directory { files: root_files };
-        let quill = Quill::from_tree(root, None).unwrap();
+        let quill = Quill::from_tree(root).unwrap();
 
         // Test dir_exists
         assert!(quill.dir_exists("assets"));
@@ -1997,7 +1981,7 @@ title = {type = "string", description = "title of document" }
         let root = FileTreeNode::Directory { files: root_files };
 
         // Create Quill from tree
-        let quill = Quill::from_tree(root, Some("taro".to_string())).unwrap();
+        let quill = Quill::from_tree(root).unwrap();
 
         // Validate field schemas were parsed (author, ice_cream, title, BODY)
         assert_eq!(quill.schema["properties"].as_object().unwrap().len(), 4);
@@ -2094,7 +2078,7 @@ description = "Test quill without plate file"
         let root = FileTreeNode::Directory { files: root_files };
 
         // Create Quill from tree
-        let quill = Quill::from_tree(root, None).unwrap();
+        let quill = Quill::from_tree(root).unwrap();
 
         // Validate that plate is null (will use auto plate)
         assert!(quill.plate.clone().is_none());
@@ -2243,7 +2227,7 @@ packages = ["@preview/bubble:0.2.2"]
         );
 
         let root = FileTreeNode::Directory { files: root_files };
-        let quill = Quill::from_tree(root, None).unwrap();
+        let quill = Quill::from_tree(root).unwrap();
 
         // Verify metadata includes backend and description
         assert!(quill.metadata.contains_key("backend"));
@@ -2286,7 +2270,7 @@ status = {type = "string", description = "Status", default = "draft"}
         );
 
         let root = FileTreeNode::Directory { files: root_files };
-        let quill = Quill::from_tree(root, None).unwrap();
+        let quill = Quill::from_tree(root).unwrap();
 
         // Extract defaults
         let defaults = quill.extract_defaults();

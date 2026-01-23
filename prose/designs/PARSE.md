@@ -11,8 +11,8 @@ Implementation notes for `quillmark-core/src/parse.rs`.
 Stores fields and body in a single `HashMap<String, QuillValue>`.
 
 - Body stored under `BODY_FIELD = "BODY"`
-- Quill tag defaults to `__default__` when not specified
-- Access via `body()`, `get_field()`, `fields()`, `quill_tag()`
+- Quill reference defaults to `__default__@latest` when not specified
+- Access via `body()`, `get_field()`, `fields()`, `quill_reference()`
 
 ### Parsing Flow
 

@@ -172,7 +172,7 @@ title = { description = "Document title", type = "str" }
 ### Core Construction APIs
 
 - `Quill::from_path(path)` - Load from filesystem directory
-- `Quill::from_tree(root, default_name)` - Load from in-memory file tree (canonical constructor)
+- `Quill::from_tree(root)` - Load from in-memory file tree (canonical constructor)
 - `Quill::from_json(json_str)` - Load from JSON string
 
 **Usage Examples:**

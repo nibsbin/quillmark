@@ -61,16 +61,16 @@ The `Quillmark::register_backend()` method is enhanced to:
 
 The `Quillmark::workflow()` method loads workflows from a ParsedDocument:
 
-1. The parsed document always has a quill_tag (either from QUILL: directive or `__default__`)
-2. The workflow is loaded using the quill_tag directly
+1. The parsed document always has a quill reference (either from QUILL: directive or `__default__@latest`)
+2. The workflow is loaded using the quill name from the reference directly
 3. If the quill is not registered, emit a clear error message
 
 **Parse-Time Default Assignment:**
 
-When `ParsedDocument::from_markdown()` parses markdown without a QUILL: directive, it sets `quill_tag = "__default__"` at parse time. This ensures:
-- ParsedDocument.quill_tag is never None (non-optional String field)
+When `ParsedDocument::from_markdown()` parses markdown without a QUILL: directive, it sets `quill_reference = QuillReference::latest("__default__")` at parse time. This ensures:
+- ParsedDocument.quill_reference is never None (always has a value)
 - Consumers (WASM, Python bindings) don't need to implement default quill logic
-- The contract is cleaner: every parsed document has a quill tag
+- The contract is cleaner: every parsed document has a quill reference
 
 **Error Message Pattern:**
 ```

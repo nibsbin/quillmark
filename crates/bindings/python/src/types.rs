@@ -290,8 +290,8 @@ impl PyParsedDocument {
         Ok(dict)
     }
 
-    fn quill_tag(&self) -> &str {
-        self.inner.quill_tag()
+    fn quill_name(&self) -> &str {
+        &self.inner.quill_reference().name
     }
 }
 

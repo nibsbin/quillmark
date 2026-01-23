@@ -467,7 +467,10 @@ pub fn normalize_document(
     doc: crate::parse::ParsedDocument,
 ) -> Result<crate::parse::ParsedDocument, crate::error::ParseError> {
     let normalized_fields = normalize_fields(doc.fields().clone());
-    crate::parse::ParsedDocument::with_quill_tag(normalized_fields, doc.quill_tag().to_string())
+    Ok(crate::parse::ParsedDocument::with_quill_ref(
+        normalized_fields,
+        doc.quill_reference().clone(),
+    ))
 }
 
 #[cfg(test)]
@@ -879,12 +882,15 @@ mod tests {
     #[test]
     fn test_normalize_document_preserves_quill_tag() {
         use crate::parse::ParsedDocument;
+        use crate::version::QuillReference;
+        use std::str::FromStr;
 
         let fields = std::collections::HashMap::new();
-        let doc = ParsedDocument::with_quill_tag(fields, "custom_quill".to_string()).unwrap();
+        let quill_ref = QuillReference::from_str("custom_quill").unwrap();
+        let doc = ParsedDocument::with_quill_ref(fields, quill_ref);
         let normalized = super::normalize_document(doc).unwrap();
 
-        assert_eq!(normalized.quill_tag(), "custom_quill");
+        assert_eq!(normalized.quill_reference().name, "custom_quill");
     }
 
     #[test]
