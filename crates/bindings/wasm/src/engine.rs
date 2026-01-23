@@ -2,6 +2,7 @@
 
 use crate::error::WasmError;
 use crate::types::{OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult};
+use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
 // Cross-platform helper to get current time in milliseconds as f64.
@@ -56,7 +57,7 @@ impl Quillmark {
             .map_err(|e| e.to_js_value())?;
 
         // Convert to WASM type
-        let quill_tag = parsed.quill_tag().to_string();
+        let quill_name = parsed.quill_reference().name.clone();
 
         // Convert fields HashMap to JSON
         let mut fields_obj = serde_json::Map::new();
@@ -65,7 +66,7 @@ impl Quillmark {
         }
         let fields = serde_json::Value::Object(fields_obj);
 
-        Ok(ParsedDocument { fields, quill_tag })
+        Ok(ParsedDocument { fields, quill_name })
     }
 
     /// Register a Quill template bundle
@@ -215,8 +216,8 @@ impl Quillmark {
             .map_err(WasmError::from)
             .map_err(|e| e.to_js_value())?;
 
-        // Infer quill name from parsed document's quill_tag
-        let quill_name = parsed.quill_tag();
+        // Infer quill name from parsed document's quill reference
+        let quill_name = &parsed.quill_reference().name;
 
         let workflow = self.inner.workflow(quill_name).map_err(|e| {
             WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
@@ -238,8 +239,8 @@ impl Quillmark {
             .map_err(WasmError::from)
             .map_err(|e| e.to_js_value())?;
 
-        // Infer quill name form parsed document's quill_tag
-        let quill_name = parsed.quill_tag();
+        // Infer quill name from parsed document's quill reference
+        let quill_name = &parsed.quill_reference().name;
 
         let workflow = self.inner.workflow(quill_name).map_err(|e| {
             WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
@@ -264,7 +265,7 @@ impl Quillmark {
     /// Render a ParsedDocument to final artifacts (PDF, SVG, TXT)
     ///
     /// Uses the Quill specified in options.quill_name if provided,
-    /// otherwise infers it from the ParsedDocument's quill_tag field.
+    /// otherwise infers it from the ParsedDocument's quill_name field.
     #[wasm_bindgen]
     pub fn render(
         &mut self,
@@ -272,12 +273,12 @@ impl Quillmark {
         opts: RenderOptions,
     ) -> Result<RenderResult, JsValue> {
         // Determine which quill name to use (before consuming parsed)
-        let quill_name_to_use = opts.quill_name.unwrap_or_else(|| parsed.quill_tag.clone());
+        let quill_name_to_use = opts.quill_name.unwrap_or_else(|| parsed.quill_name.clone());
 
         // Reconstruct a core ParsedDocument from the WASM type
         // Convert JSON value to HashMap<String, QuillValue>
         let fields_json = parsed.fields;
-        let quill_tag = parsed.quill_tag; // Move quill_tag out
+        let quill_name = parsed.quill_name; // Move quill_name out
 
         let mut fields = std::collections::HashMap::new();
 
@@ -287,8 +288,10 @@ impl Quillmark {
             }
         }
 
-        let parsed = quillmark_core::ParsedDocument::with_quill_tag(fields, quill_tag)
-            .map_err(|e| JsValue::from_str(&format!("Failed to parse QUILL tag: {}", e)))?;
+        let quill_ref = quillmark_core::version::QuillReference::from_str(&quill_name)
+            .map_err(|e| JsValue::from_str(&format!("Invalid QUILL name '{}': {}", quill_name, e)))?;
+        
+        let parsed = quillmark_core::ParsedDocument::with_quill_ref(fields, quill_ref);
 
         // Load the workflow
         let mut workflow = self.inner.workflow(&quill_name_to_use).map_err(|e| {

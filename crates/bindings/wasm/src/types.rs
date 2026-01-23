@@ -206,7 +206,7 @@ impl IntoWasmAbi for QuillInfo {
 /// Parsed markdown document
 ///
 /// Returned by `Quillmark.parseMarkdown()`. Contains the parsed YAML frontmatter
-/// fields and the quill tag (from QUILL field or "__default__" if not specified).
+/// fields and the quill name (from QUILL field or "__default__" if not specified).
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
@@ -214,8 +214,8 @@ pub struct ParsedDocument {
     /// YAML frontmatter fields
     #[tsify(type = "Record<string, any>")]
     pub fields: serde_json::Value,
-    /// The quill tag (from QUILL field or "__default__")
-    pub quill_tag: String,
+    /// The quill name (from QUILL field or "__default__")
+    pub quill_name: String,
 }
 
 impl IntoWasmAbi for ParsedDocument {

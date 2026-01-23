@@ -72,18 +72,6 @@ impl ParsedDocument {
         }
     }
 
-    /// Create a ParsedDocument from fields and quill tag
-    pub fn with_quill_tag(
-        fields: HashMap<String, QuillValue>,
-        quill_tag: String,
-    ) -> Result<Self, ParseError> {
-        // Parse the quill tag as a QuillReference
-        let quill_ref = QuillReference::from_str(&quill_tag).map_err(|e| {
-            ParseError::InvalidStructure(format!("Invalid QUILL tag '{}': {}", quill_tag, e))
-        })?;
-        Ok(Self { fields, quill_ref })
-    }
-
     /// Create a ParsedDocument from fields and quill reference
     pub fn with_quill_ref(fields: HashMap<String, QuillValue>, quill_ref: QuillReference) -> Self {
         Self { fields, quill_ref }
@@ -92,14 +80,6 @@ impl ParsedDocument {
     /// Create a ParsedDocument from markdown string
     pub fn from_markdown(markdown: &str) -> Result<Self, crate::error::ParseError> {
         decompose(markdown)
-    }
-
-    /// Get the quill tag (from QUILL key, or "__default__" if not specified)
-    ///
-    /// This returns just the name for backward compatibility.
-    /// Use `quill_reference()` to get the full reference with version.
-    pub fn quill_tag(&self) -> &str {
-        &self.quill_ref.name
     }
 
     /// Get the quill reference (name + version selector)
@@ -746,7 +726,10 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
     }
 
     let quill_tag = quill_name.unwrap_or_else(|| "__default__".to_string());
-    let parsed = ParsedDocument::with_quill_tag(fields, quill_tag)?;
+    let quill_ref = QuillReference::from_str(&quill_tag).map_err(|e| {
+        ParseError::InvalidStructure(format!("Invalid QUILL tag '{}': {}", quill_tag, e))
+    })?;
+    let parsed = ParsedDocument::with_quill_ref(fields, quill_ref);
 
     Ok(parsed)
 }
@@ -763,7 +746,7 @@ mod tests {
         assert_eq!(doc.body(), Some(markdown));
         assert_eq!(doc.fields().len(), 1);
         // Verify default quill tag is set
-        assert_eq!(doc.quill_tag(), "__default__");
+        assert_eq!(doc.quill_reference().name, "__default__");
     }
 
     #[test]
@@ -790,7 +773,7 @@ This is the body."#;
         );
         assert_eq!(doc.fields().len(), 4); // title, author, body, CARDS
                                            // Verify default quill tag is set when no QUILL directive
-        assert_eq!(doc.quill_tag(), "__default__");
+        assert_eq!(doc.quill_reference().name, "__default__");
     }
 
     #[test]
@@ -1643,7 +1626,7 @@ This is the memo body."#;
         let doc = decompose(markdown).unwrap();
 
         // Verify quill tag is set
-        assert_eq!(doc.quill_tag(), "usaf_memo");
+        assert_eq!(doc.quill_reference().name, "usaf_memo");
 
         // Verify fields from quill block become frontmatter
         assert_eq!(
@@ -1676,7 +1659,7 @@ Section 1 body."#;
         let doc = decompose(markdown).unwrap();
 
         // Verify quill tag
-        assert_eq!(doc.quill_tag(), "document");
+        assert_eq!(doc.quill_reference().name, "document");
 
         // Verify global field from quill block
         assert_eq!(
@@ -2299,7 +2282,7 @@ mod robustness_tests {
     fn test_empty_document() {
         let doc = decompose("").unwrap();
         assert_eq!(doc.body(), Some(""));
-        assert_eq!(doc.quill_tag(), "__default__");
+        assert_eq!(doc.quill_reference().name, "__default__");
     }
 
     #[test]
@@ -2563,14 +2546,14 @@ Some text with --- dashes in it."#;
     fn test_quill_with_underscore_prefix() {
         let markdown = "---\nQUILL: _internal\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
-        assert_eq!(doc.quill_tag(), "_internal");
+        assert_eq!(doc.quill_reference().name, "_internal");
     }
 
     #[test]
     fn test_quill_with_numbers() {
         let markdown = "---\nQUILL: form_8_v2\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
-        assert_eq!(doc.quill_tag(), "form_8_v2");
+        assert_eq!(doc.quill_reference().name, "form_8_v2");
     }
 
     #[test]
@@ -2583,7 +2566,7 @@ author: John Doe
 
 Body content."#;
         let doc = decompose(markdown).unwrap();
-        assert_eq!(doc.quill_tag(), "my_quill");
+        assert_eq!(doc.quill_reference().name, "my_quill");
         assert_eq!(
             doc.get_field("title").unwrap().as_str().unwrap(),
             "Document Title"
@@ -2831,7 +2814,7 @@ Conclusion content.
             doc.get_field("title").unwrap().as_str().unwrap(),
             "My Document"
         );
-        assert_eq!(doc.quill_tag(), "blog_post");
+        assert_eq!(doc.quill_reference().name, "blog_post");
 
         // Verify body contains horizontal rule (*** preserved)
         let body = doc.body().unwrap();
