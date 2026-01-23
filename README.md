@@ -15,8 +15,9 @@ Maintained by [tonguetoquill.com](https://www.tonguetoquill.com).
 ## Features
 
 - **Template-first design**: Quill templates control structure and styling, Markdown provides content
+- **Version management**: Two-segment versioning (`MAJOR.MINOR`) for reproducible rendering with flexible version selectors
 - **YAML metadata**: Extended YAML support for inline metadata blocks
-- **Multiple backends**: 
+- **Multiple backends**:
   - PDF and SVG output via Typst backend
   - PDF form filling via AcroForm backend
 - **Structured error handling**: Clear diagnostics with source locations
@@ -48,17 +49,41 @@ let mut engine = Quillmark::new();
 let quill = Quill::from_path("path/to/quill")?;
 engine.register_quill(quill);
 
-// Parse markdown once
-let markdown = "---\ntitle: Example\n---\n\n# Hello World";
+// Parse markdown with version specification
+let markdown = "---\nQUILL: resume_template@2.1\ntitle: Example\n---\n\n# Hello World";
 let parsed = ParsedDocument::from_markdown(markdown)?;
 
-// Load workflow and render to PDF
-let workflow = engine.workflow("quill_name")?;
+// Load workflow (resolves version from document)
+let workflow = engine.workflow(&parsed)?;
+// Or specify version directly: engine.workflow("resume_template@2")?;
 let result = workflow.render(&parsed, Some(OutputFormat::Pdf))?;
 
 // Access the generated PDF
 let pdf_bytes = &result.artifacts[0].bytes;
 ```
+
+## Version Management
+
+Quillmark supports two-segment versioning for templates, enabling reproducible rendering:
+
+```yaml
+---
+QUILL: "template@2.1"      # Pin to exact version
+QUILL: "template@2"        # Latest 2.x version
+QUILL: "template@latest"   # Latest overall
+QUILL: "template"          # Latest overall (default)
+---
+```
+
+Templates specify versions in `Quill.toml`:
+```toml
+[Quill]
+name = "resume_template"
+version = "2.1"
+backend = "typst"
+```
+
+Multiple versions of the same template can coexist in the engine. See [VERSIONING.md](prose/designs/VERSIONING.md) for details.
 
 ## Examples
 
@@ -77,6 +102,7 @@ cargo run --example test_defaults
 
 - [API Documentation](https://docs.rs/quillmark)
 - [Architecture Design](prose/designs/ARCHITECTURE.md)
+- [Version Management](prose/designs/VERSIONING.md)
 - [Contributing Guide](CONTRIBUTING.md)
 
 ## Project Structure
