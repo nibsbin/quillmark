@@ -97,11 +97,6 @@ impl QuillValue {
         self.0.as_object()
     }
 
-    /// Get the value as an object reference (alias for as_object, for YAML compatibility)
-    pub fn as_mapping(&self) -> Option<&serde_json::Map<String, serde_json::Value>> {
-        self.0.as_object()
-    }
-
     /// Get a field from an object by key
     pub fn get(&self, key: &str) -> Option<QuillValue> {
         self.0.get(key).map(|v| QuillValue(v.clone()))

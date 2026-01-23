@@ -33,7 +33,7 @@ use tempfile::TempDir;
 
 /// Helper to create a test quill
 fn create_test_quill(temp_dir: &TempDir, quill_toml: &str) -> std::path::PathBuf {
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test_quill");
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
 
     fs::write(quill_path.join("Quill.toml"), quill_toml).expect("Failed to write Quill.toml");
@@ -57,7 +57,7 @@ fn test_default_values_applied_via_dry_run() {
     let quill_path = create_test_quill(
         &temp_dir,
         r#"[Quill]
-name = "test-quill"
+name = "test_quill"
 version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
@@ -77,7 +77,7 @@ version = { type = "number", description = "Version number", default = 1 }
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test_quill")
         .expect("Failed to load workflow");
 
     // Create document with only title (missing status and version)
@@ -106,7 +106,7 @@ fn test_default_values_not_overriding_existing_fields() {
     let quill_path = create_test_quill(
         &temp_dir,
         r#"[Quill]
-name = "test-quill"
+name = "test_quill"
 version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
@@ -125,7 +125,7 @@ status = { type = "string", description = "Document status", default = "draft" }
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test_quill")
         .expect("Failed to load workflow");
 
     // Create document with explicit status value
@@ -154,7 +154,7 @@ fn test_validation_with_defaults() {
     let quill_path = create_test_quill(
         &temp_dir,
         r#"[Quill]
-name = "test-quill"
+name = "test_quill"
 version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
@@ -173,7 +173,7 @@ status = { type = "string", description = "Document status", default = "draft" }
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test_quill")
         .expect("Failed to load workflow");
 
     // Create document with no fields - should validate because none are required
@@ -197,7 +197,7 @@ fn test_validation_fails_without_defaults() {
     let quill_path = create_test_quill(
         &temp_dir,
         r#"[Quill]
-name = "test-quill"
+name = "test_quill"
 version = "1.0"
 backend = "typst"
 plate_file = "plate.typ"
@@ -216,7 +216,7 @@ status = { type = "string", description = "Document status", default = "draft" }
         .expect("Failed to register quill");
 
     let workflow = engine
-        .workflow("test-quill")
+        .workflow("test_quill")
         .expect("Failed to load workflow");
 
     // Create document missing required title field
@@ -246,13 +246,13 @@ status: published
 #[test]
 fn test_extract_defaults_from_quill() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test_quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
         quill_path.join("Quill.toml"),
         r#"[Quill]
-name = "test-quill"
+name = "test_quill"
 version = "1.0"
 backend = "typst"
 description = "Test"

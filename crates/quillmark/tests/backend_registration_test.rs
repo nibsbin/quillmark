@@ -119,7 +119,7 @@ fn test_workflow_with_custom_backend() {
 
     // Create a test quill that uses our custom backend
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test_quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(

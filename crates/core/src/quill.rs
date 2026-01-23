@@ -423,10 +423,10 @@ impl FileTreeNode {
     }
 
     pub fn print_tree(&self) -> String {
-        self.__print_tree("", "", true)
+        self.print_tree_recursive("", "", true)
     }
 
-    pub fn __print_tree(&self, name: &str, prefix: &str, is_last: bool) -> String {
+    fn print_tree_recursive(&self, name: &str, prefix: &str, is_last: bool) -> String {
         let mut result = String::new();
 
         // Choose the appropriate tree characters
@@ -446,7 +446,11 @@ impl FileTreeNode {
 
                 for (i, (child_name, node)) in files.iter().enumerate() {
                     let is_last_child = i == count - 1;
-                    result.push_str(&node.__print_tree(child_name, &child_prefix, is_last_child));
+                    result.push_str(&node.print_tree_recursive(
+                        child_name,
+                        &child_prefix,
+                        is_last_child,
+                    ));
                 }
             }
         }

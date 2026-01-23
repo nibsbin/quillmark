@@ -52,7 +52,7 @@ fn test_quill_engine_register_quill() {
 
     // Create a test quill
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test_quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
@@ -82,7 +82,7 @@ fn test_quill_engine_get_workflow() {
 
     // Create and register a test quill
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test_quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
@@ -134,7 +134,7 @@ fn test_quill_engine_backend_not_found() {
 
     // Create a quill with non-existent backend
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test_quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
@@ -195,7 +195,7 @@ fn test_quill_engine_load_with_quill_object() {
 
     // Create a test quill
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test_quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
@@ -229,7 +229,7 @@ fn test_quill_engine_load_with_different_string_types() {
 
     // Create and register a test quill
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test-quill");
+    let quill_path = temp_dir.path().join("test_quill");
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
