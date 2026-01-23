@@ -446,7 +446,11 @@ impl FileTreeNode {
 
                 for (i, (child_name, node)) in files.iter().enumerate() {
                     let is_last_child = i == count - 1;
-                    result.push_str(&node.print_tree_recursive(child_name, &child_prefix, is_last_child));
+                    result.push_str(&node.print_tree_recursive(
+                        child_name,
+                        &child_prefix,
+                        is_last_child,
+                    ));
                 }
             }
         }
