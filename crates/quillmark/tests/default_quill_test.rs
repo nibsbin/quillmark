@@ -222,7 +222,7 @@ fn test_second_backend_with_default_quill_does_not_override() {
             );
 
             let root = FileTreeNode::Directory { files };
-            Quill::from_tree(root, None).ok()
+            Quill::from_tree(root).ok()
         }
     }
 

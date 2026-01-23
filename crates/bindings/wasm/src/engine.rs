@@ -288,9 +288,11 @@ impl Quillmark {
             }
         }
 
-        let quill_ref = quillmark_core::version::QuillReference::from_str(&quill_name)
-            .map_err(|e| JsValue::from_str(&format!("Invalid QUILL name '{}': {}", quill_name, e)))?;
-        
+        let quill_ref =
+            quillmark_core::version::QuillReference::from_str(&quill_name).map_err(|e| {
+                JsValue::from_str(&format!("Invalid QUILL name '{}': {}", quill_name, e))
+            })?;
+
         let parsed = quillmark_core::ParsedDocument::with_quill_ref(fields, quill_ref);
 
         // Load the workflow

@@ -175,7 +175,7 @@ impl Backend for TypstBackend {
         let root = FileTreeNode::Directory { files };
 
         // Try to create Quill from tree, return None if it fails
-        Quill::from_tree(root, None).ok()
+        Quill::from_tree(root).ok()
     }
 }
 
