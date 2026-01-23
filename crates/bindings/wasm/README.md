@@ -54,7 +54,7 @@ import { Quillmark } from '@quillmark-test/wasm';
 const markdown = `---
 title: My Document
 author: Alice
-QUILL: my-quill
+QUILL: my_quill
 ---
 
 # Hello World
@@ -70,7 +70,7 @@ const engine = new Quillmark();
 const quillJson = {
   files: {
     'Quill.toml': { 
-      contents: '[Quill]\nname = "my-quill"\nbackend = "typst"\nplate_file = "plate.typ"\ndescription = "My template"\n' 
+      contents: '[Quill]\nname = "my_quill"\nversion = "1.0"\nbackend = "typst"\nplate_file = "plate.typ"\ndescription = "My template"\n' 
     },
     'plate.typ': { 
       contents: '= {{ title }}\n\n{{ body | Content }}' 
@@ -123,7 +123,7 @@ Additional methods for managing the engine and debugging:
 {
   format?: 'pdf' | 'svg' | 'txt',  // Output format (default: 'pdf')
   assets?: Record<string, Uint8Array>,  // Additional assets to inject as plain object (not Map)
-  quillName?: string  // Override quill_tag from ParsedDocument
+  quillName?: string  // Override quillName from ParsedDocument
 }
 ```
 
@@ -134,7 +134,7 @@ Returned by `parseMarkdown()`:
 ```typescript
 {
   fields: object,  // YAML frontmatter fields
-  quillTag?: string  // Value of QUILL field (if present)
+  quillName: string  // Template name from QUILL field (or "__default__")
 }
 ```
 
