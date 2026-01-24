@@ -22,7 +22,7 @@ This approach differs from traditional Markdown renderers where styling is an af
 
 A **Quill** is a template bundle that defines how Markdown content should be rendered. It contains:
 
-- **Metadata** (`Quill.toml`) - Configuration including name, backend, and field schemas
+- **Metadata** (`Quill.yaml`) - Configuration including name, backend, and field schemas
 - **Plate template** - Backend-specific template that receives document data as JSON
 - **Assets** - Fonts, images, and other resources needed for rendering
 - **Packages** - Backend-specific packages (e.g., Typst packages)

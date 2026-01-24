@@ -14,17 +14,18 @@ Typst is a modern typesetting system designed as a better alternative to LaTeX. 
 
 ## Basic Usage
 
-Specify `backend = "typst"` in your `Quill.toml`:
+Specify `backend: typst` in your `Quill.yaml`:
 
-```toml
-[Quill]
-name = "my-typst-quill"
-backend = "typst"
-description = "Document template using Typst"
-plate_file = "plate.typ"
+```yaml
+Quill:
+  name: my-typst-quill
+  backend: typst
+  description: Document template using Typst
+  plate_file: plate.typ
 
-[typst]
-packages = ["@preview/appreciated-letter:0.1.0"]
+typst:
+  packages:
+    - "@preview/appreciated-letter:0.1.0"
 ```
 
 ## Plate Templates
@@ -136,15 +137,14 @@ If your document uses the CARDS feature, access them via `data.CARDS`:
 
 ## Typst Packages
 
-Typst packages extend functionality with pre-built templates and utilities. Specify packages in `Quill.toml`:
+Typst packages extend functionality with pre-built templates and utilities. Specify packages in `Quill.yaml`:
 
-```toml
-[typst]
-packages = [
-    "@preview/appreciated-letter:0.1.0",
-    "@preview/bubble:0.2.2",
-    "@preview/fontawesome:0.5.0"
-]
+```yaml
+typst:
+  packages:
+    - "@preview/appreciated-letter:0.1.0"
+    - "@preview/bubble:0.2.2"
+    - "@preview/fontawesome:0.5.0"
 ```
 
 Then import and use them in your plate template:
@@ -333,7 +333,7 @@ Sincerely,
 1. **Test incrementally** - Build your template step-by-step
 2. **Use packages** - Leverage existing Typst packages when possible
 3. **Separate concerns** - Keep complex logic in Typst, data in frontmatter
-4. **Validate inputs** - Define field schemas in `Quill.toml`
+4. **Validate inputs** - Define field schemas in `Quill.yaml`
 5. **Handle missing fields** - Use defaults for optional fields
 
 ## Resources

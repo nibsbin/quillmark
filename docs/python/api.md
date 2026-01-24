@@ -183,7 +183,7 @@ class Quill:
 
     @property
     def name(self) -> str:
-        """Quill name from Quill.toml."""
+        """Quill name from Quill.yaml."""
 
     @property
     def backend(self) -> str | None:
