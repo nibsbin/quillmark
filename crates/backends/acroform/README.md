@@ -11,16 +11,16 @@ using MiniJinja templates, and returns filled PDFs.
 
 ```
 my_form_quill/
-├── Quill.toml
+├── Quill.yaml
 └── form.pdf
 ```
 
-The `Quill.toml` must specify `backend = "acroform"`:
+The `Quill.yaml` must specify `backend: acroform`:
 
-```toml
-[Quill]
-name = "my_form"
-backend = "acroform"
+```yaml
+Quill:
+  name: my_form
+  backend: acroform
 ```
 
 ## Template Sources

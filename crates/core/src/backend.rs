@@ -134,8 +134,8 @@ pub trait Backend: Send + Sync {
     /// fn default_quill(&self) -> Option<Quill> {
     ///     // Build embedded default Quill from files
     ///     let mut files = HashMap::new();
-    ///     files.insert("Quill.toml".to_string(), FileTreeNode::File {
-    ///         contents: b"[Quill]\nname = \"__default__\"\nbackend = \"my\"\n".to_vec(),
+    ///     files.insert("Quill.yaml".to_string(), FileTreeNode::File {
+    ///         contents: b"Quill:\n  name: __default__\n  backend: my\n".to_vec(),
     ///     });
     ///     let root = FileTreeNode::Directory { files };
     ///     Quill::from_tree(root).ok()

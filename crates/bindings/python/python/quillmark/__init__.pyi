@@ -136,7 +136,7 @@ class Quill:
     
     @property
     def name(self) -> str:
-        """Quill name from Quill.toml"""
+        """Quill name from Quill.yaml"""
     
     @property
     def backend(self) -> str | None:
@@ -152,11 +152,11 @@ class Quill:
     
     @property
     def metadata(self) -> dict[str, Any]:
-        """Quill metadata from Quill.toml"""
+        """Quill metadata from Quill.yaml"""
 
     @property
     def schema(self) -> Any:
-        """Field schema definitions declared by the quill (from Quill.toml)."""
+        """Field schema definitions declared by the quill (from Quill.yaml)."""
 
     @property
     def print_tree(self) -> str:

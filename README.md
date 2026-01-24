@@ -75,12 +75,12 @@ QUILL: "template"          # Latest overall (default)
 ---
 ```
 
-Templates specify versions in `Quill.toml`:
-```toml
-[Quill]
-name = "resume_template"
-version = "2.1"
-backend = "typst"
+Templates specify versions in `Quill.yaml`:
+```yaml
+Quill:
+  name: resume_template
+  version: "2.1"
+  backend: typst
 ```
 
 Multiple versions of the same template can coexist in the engine. See [VERSIONING.md](prose/designs/VERSIONING.md) for details.

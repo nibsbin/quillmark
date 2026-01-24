@@ -26,11 +26,11 @@ const engine = new Quillmark();
 // Register a quill from JSON
 const quillJson = {
   files: {
-    "Quill.toml": {
-      contents: `[Quill]
-name = "my-quill"
-backend = "typst"
-description = "My template"
+    "Quill.yaml": {
+      contents: `Quill:
+  name: my-quill
+  backend: typst
+  description: My template
 `
     },
     "plate.typ": {
@@ -132,11 +132,11 @@ Register a Quill template from JSON.
 ```javascript
 const quill = {
   files: {
-    "Quill.toml": {
-      contents: `[Quill]
-name = "demo"
-backend = "typst"
-description = "Demo quill"
+    "Quill.yaml": {
+      contents: `Quill:
+  name: demo
+  backend: typst
+  description: Demo quill
 `
     },
     "plate.typ": {
@@ -417,13 +417,13 @@ Quills are represented as JSON with a `files` structure:
 ```javascript
 const quillJson = {
   files: {
-    // Required: Quill.toml configuration
-    "Quill.toml": {
-      contents: `[Quill]
-name = "my-quill"
-backend = "typst"
-description = "My template"
-plate_file = "plate.typ"
+    // Required: Quill.yaml configuration
+    "Quill.yaml": {
+      contents: `Quill:
+  name: my-quill
+  backend: typst
+  description: My template
+  plate_file: plate.typ
 `
     },
 
@@ -474,16 +474,20 @@ async function renderDocument() {
   // Load quill
   const quillJson = {
     files: {
-      "Quill.toml": {
-        contents: `[Quill]
-name = "simple-doc"
-backend = "typst"
-description = "Simple document template"
-plate_file = "plate.typ"
+      "Quill.yaml": {
+        contents: `Quill:
+  name: simple-doc
+  backend: typst
+  description: Simple document template
+  plate_file: plate.typ
 
-[fields]
-title = { description = "Document title", type = "str" }
-author = { description = "Author name", type = "str" }
+fields:
+  title:
+    description: Document title
+    type: string
+  author:
+    description: Author name
+    type: string
 `
       },
       "plate.typ": {

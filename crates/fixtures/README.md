@@ -34,12 +34,12 @@ const sampleMd = await response.text();
 
 The package includes:
 
-- **Quill Templates**: Sample Quill templates with plate.typ, Quill.toml, and assets
+- **Quill Templates**: Sample Quill templates with plate.typ, Quill.yaml, and assets
   - `appreciated_letter/` - A formal letter template
   - `usaf_memo/` - US Air Force memo template
   - `taro/` - Custom template example
 
-  Each Quill template now includes a `template` field in `Quill.toml` that points to a sample markdown file demonstrating the template's usage. This allows users to see example content for each template.
+  Each Quill template now includes a `template` field in `Quill.yaml` that points to a sample markdown file demonstrating the template's usage. This allows users to see example content for each template.
 
 - **Sample Markdown Files**: Example markdown files for testing
   - `sample.md` - Basic markdown example

@@ -8,7 +8,7 @@ A Quill is a directory containing:
 
 ```
 my-quill/
-├── Quill.toml          # Configuration and metadata
+├── Quill.yaml          # Configuration and metadata
 ├── plate.typ           # Plate template (backend-specific)
 ├── example.md          # Optional example document
 └── assets/             # Optional assets (fonts, images, etc.)
@@ -17,29 +17,37 @@ my-quill/
         └── custom.ttf
 ```
 
-## Quill.toml Configuration
+## Quill.yaml Configuration
 
-The `Quill.toml` file defines your Quill's metadata and configuration:
+The `Quill.yaml` file defines your Quill's metadata and configuration:
 
-```toml
-[Quill]
-name = "my-quill"
-backend = "typst"
-description = "A professional document template"
-plate_file = "plate.typ"
-example_file = "example.md"
-version = "1.0.0"
-author = "Your Name"
+```yaml
+Quill:
+  name: my-quill
+  backend: typst
+  description: A professional document template
+  plate_file: plate.typ
+  example_file: example.md
+  version: "1.0.0"
+  author: Your Name
 
 # Backend-specific configuration
-[typst]
-packages = ["@preview/appreciated-letter:0.1.0"]
+typst:
+  packages:
+    - "@preview/appreciated-letter:0.1.0"
 
 # Field schemas for validation
-[fields]
-title = { description = "Document title", type = "str" }
-author = { description = "Author name", type = "str", default = "Anonymous" }
-date = { description = "Document date", type = "str" }
+fields:
+  title:
+    description: Document title
+    type: string
+  author:
+    description: Author name
+    type: string
+    default: Anonymous
+  date:
+    description: Document date
+    type: string
 ```
 
 ### Required Fields
@@ -57,13 +65,21 @@ date = { description = "Document date", type = "str" }
 
 ### Field Schemas
 
-Define expected frontmatter fields in the `[fields]` section:
+Define expected frontmatter fields in the `fields` section:
 
-```toml
-[fields]
-title = { description = "Document title", type = "str" }
-count = { description = "Number of items", type = "number", default = 10 }
-enabled = { description = "Enable feature", type = "boolean", default = false }
+```yaml
+fields:
+  title:
+    description: Document title
+    type: string
+  count:
+    description: Number of items
+    type: number
+    default: 10
+  enabled:
+    description: Enable feature
+    type: boolean
+    default: false
 ```
 
 Each field can specify:
@@ -86,16 +102,16 @@ Supported `type` values:
 
 ### UI Configuration
 
-You can provide additional metadata for UI generators (like wizards or form builders) using the `ui` table within a field definition.
+You can provide additional metadata for UI generators (like wizards or form builders) using the `ui` property within a field definition.
 
-```toml
-[fields.sender]
-title = "Sender Name"
-description = "The full name of the person sending the letter, including any titles or suffixes."
-type = "string"
-
-[fields.sender.ui]
-group = "Sender Information"
+```yaml
+fields:
+  sender:
+    title: Sender Name
+    description: The full name of the person sending the letter, including any titles or suffixes.
+    type: string
+    ui:
+      group: Sender Information
 ```
 
 Supported UI properties:
@@ -181,14 +197,13 @@ Check for optional fields using Typst's `in` operator:
 
 ### Typst Backend
 
-Configure Typst packages and settings in the `[typst]` section:
+Configure Typst packages and settings in the `typst` section:
 
-```toml
-[typst]
-packages = [
-    "@preview/appreciated-letter:0.1.0",
-    "@preview/bubble:0.2.2"
-]
+```yaml
+typst:
+  packages:
+    - "@preview/appreciated-letter:0.1.0"
+    - "@preview/bubble:0.2.2"
 ```
 
 See the [Typst Backend Guide](typst-backend.md) for more details.
@@ -274,7 +289,7 @@ from quillmark import Quillmark, Quill
 
 quill_data = {
     "files": {
-        "Quill.toml": {"contents": "..."},
+        "Quill.yaml": {"contents": "..."},
         "plate.typ": {"contents": "..."}
     }
 }
@@ -288,7 +303,7 @@ engine.register_quill(quill)
 
 1. **Keep it simple** - Start with basic templates and add complexity only when needed
 2. **Use examples** - Provide clear example markdown files
-3. **Document fields** - Write good descriptions for all fields in `[fields]`
+3. **Document fields** - Write good descriptions for all fields in `fields`
 4. **Test thoroughly** - Try various input combinations
 5. **Version carefully** - Use semantic versioning for your Quills
 

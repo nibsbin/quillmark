@@ -420,7 +420,7 @@ mod tests {
             .default_quill()
             .expect("Failed to load default quill");
 
-        // Inspect the schema derived from Quill.toml
+        // Inspect the schema derived from Quill.yaml
         let schema_json = quill.schema.as_json();
         let properties = schema_json
             .get("properties")
