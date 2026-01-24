@@ -965,6 +965,7 @@ impl Quill {
         };
 
         // Read the markdown example content if specified
+        // Read the markdown example content if specified, or check for default "example.md"
         let example_content = if let Some(ref example_file_name) = config.example_file {
             root.get_file(example_file_name).and_then(|bytes| {
                 String::from_utf8(bytes.to_vec())
@@ -972,6 +973,19 @@ impl Quill {
                         eprintln!(
                             "Warning: Example file '{}' is not valid UTF-8: {}",
                             example_file_name, e
+                        );
+                        e
+                    })
+                    .ok()
+            })
+        } else if root.file_exists("example.md") {
+            // Smart default: use example.md if it exists
+            root.get_file("example.md").and_then(|bytes| {
+                String::from_utf8(bytes.to_vec())
+                    .map_err(|e| {
+                        eprintln!(
+                            "Warning: Default example file 'example.md' is not valid UTF-8: {}",
+                            e
                         );
                         e
                     })
@@ -1487,6 +1501,38 @@ typst:
 
         // Test that plate template is still loaded
         assert_eq!(quill.plate.unwrap(), "plate content");
+    }
+
+    #[test]
+    fn test_template_smart_default() {
+        let temp_dir = TempDir::new().unwrap();
+        let quill_dir = temp_dir.path();
+
+        // Create test files without example specified
+        let yaml_content = r#"Quill:
+  name: "test-smart-default"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  description: "Test quill with smart default"
+"#;
+        fs::write(quill_dir.join("Quill.yaml"), yaml_content).unwrap();
+        fs::write(quill_dir.join("plate.typ"), "plate content").unwrap();
+        // Create example.md which should be picked up automatically
+        fs::write(
+            quill_dir.join("example.md"),
+            "---\ntitle: Smart Default\n---\n\nPicked up automatically.",
+        )
+        .unwrap();
+
+        // Load quill
+        let quill = Quill::from_path(quill_dir).unwrap();
+
+        // Test that example content is loaded
+        assert!(quill.example.is_some());
+        let example = quill.example.unwrap();
+        assert!(example.contains("title: Smart Default"));
+        assert!(example.contains("Picked up automatically"));
     }
 
     #[test]
