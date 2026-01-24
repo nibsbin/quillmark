@@ -24,7 +24,6 @@ wasm-bindgen = "0.2"
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde-saphyr = { workspace = true }
-toml = { workspace = true }
 serde-wasm-bindgen = "0.6"
 tsify = { version = "0.4.5", features = ["js"] }
 console_error_panic_hook = "0.1"

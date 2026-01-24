@@ -5,19 +5,20 @@
 //! ## Test Coverage
 //!
 //! This test suite validates:
-//! - **Schema-defined defaults** - Default values from Quill.toml [fields] section
+//! - **Schema-defined defaults** - Default values from Quill.yaml [fields] section
 //! - **Missing field handling** - Defaults applied when fields are absent from markdown
 //! - **Explicit value precedence** - User-provided values override defaults
 //! - **Validation with defaults** - Required field validation behavior
 //!
 //! ## Schema System
 //!
-//! Quill templates can define default values for fields in Quill.toml:
-//! ```toml
-//! [fields.author]
-//! type = "str"
-//! description = "Document author"
-//! default = "Anonymous"
+//! Quill templates can define default values for fields in Quill.yaml:
+//! ```yaml
+//! fields:
+//!   author:
+//!     type: "string"
+//!     description: "Document author"
+//!     default: "Anonymous"
 //! ```
 //!
 //! When rendering, missing fields are populated with defaults before
@@ -32,11 +33,11 @@ use std::fs;
 use tempfile::TempDir;
 
 /// Helper to create a test quill
-fn create_test_quill(temp_dir: &TempDir, quill_toml: &str) -> std::path::PathBuf {
+fn create_test_quill(temp_dir: &TempDir, quill_yaml: &str) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join("test_quill");
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
 
-    fs::write(quill_path.join("Quill.toml"), quill_toml).expect("Failed to write Quill.toml");
+    fs::write(quill_path.join("Quill.yaml"), quill_yaml).expect("Failed to write Quill.yaml");
 
     // Create a minimal plate template
     fs::write(
@@ -56,17 +57,25 @@ fn test_default_values_applied_via_dry_run() {
 
     let quill_path = create_test_quill(
         &temp_dir,
-        r#"[Quill]
-name = "test_quill"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-description = "Test quill with defaults"
+        r#"Quill:
+  name: "test_quill"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  description: "Test quill with defaults"
 
-[fields]
-title = { type = "string", description = "Document title" }
-status = { type = "string", description = "Document status", default = "draft" }
-version = { type = "number", description = "Version number", default = 1 }
+fields:
+  title:
+    type: "string"
+    description: "Document title"
+  status:
+    type: "string"
+    description: "Document status"
+    default: "draft"
+  version:
+    type: "number"
+    description: "Version number"
+    default: 1
 "#,
     );
 
@@ -105,16 +114,21 @@ fn test_default_values_not_overriding_existing_fields() {
 
     let quill_path = create_test_quill(
         &temp_dir,
-        r#"[Quill]
-name = "test_quill"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-description = "Test quill with defaults"
+        r#"Quill:
+  name: "test_quill"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  description: "Test quill with defaults"
 
-[fields]
-title = { type = "string", description = "Document title" }
-status = { type = "string", description = "Document status", default = "draft" }
+fields:
+  title:
+    type: "string"
+    description: "Document title"
+  status:
+    type: "string"
+    description: "Document status"
+    default: "draft"
 "#,
     );
 
@@ -153,16 +167,22 @@ fn test_validation_with_defaults() {
 
     let quill_path = create_test_quill(
         &temp_dir,
-        r#"[Quill]
-name = "test_quill"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-description = "Test quill with optional fields"
+        r#"Quill:
+  name: "test_quill"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  description: "Test quill with optional fields"
 
-[fields]
-title = { type = "string", description = "Document title", default = "Untitled" }
-status = { type = "string", description = "Document status", default = "draft" }
+fields:
+  title:
+    type: "string"
+    description: "Document title"
+    default: "Untitled"
+  status:
+    type: "string"
+    description: "Document status"
+    default: "draft"
 "#,
     );
 
@@ -196,16 +216,22 @@ fn test_validation_fails_without_defaults() {
 
     let quill_path = create_test_quill(
         &temp_dir,
-        r#"[Quill]
-name = "test_quill"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-description = "Test quill with required field"
+        r#"Quill:
+  name: "test_quill"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  description: "Test quill with required field"
 
-[fields]
-title = { type = "string", description = "Document title", required = true }
-status = { type = "string", description = "Document status", default = "draft" }
+fields:
+  title:
+    type: "string"
+    description: "Document title"
+    required: true
+  status:
+    type: "string"
+    description: "Document status"
+    default: "draft"
 "#,
     );
 
@@ -250,20 +276,26 @@ fn test_extract_defaults_from_quill() {
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
-        quill_path.join("Quill.toml"),
-        r#"[Quill]
-name = "test_quill"
-version = "1.0"
-backend = "typst"
-description = "Test"
+        quill_path.join("Quill.yaml"),
+        r#"Quill:
+  name: "test_quill"
+  version: "1.0"
+  backend: "typst"
+  description: "Test"
 
-[fields]
-author = { type = "string", default = "Anonymous" }
-priority = { type = "number", default = 5 }
-draft = { type = "boolean", default = true }
+fields:
+  author:
+    type: "string"
+    default: "Anonymous"
+  priority:
+    type: "number"
+    default: 5
+  draft:
+    type: "boolean"
+    default: true
 "#,
     )
-    .expect("Failed to write Quill.toml");
+    .expect("Failed to write Quill.yaml");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 

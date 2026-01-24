@@ -69,8 +69,8 @@ const engine = new Quillmark();
 
 const quillJson = {
   files: {
-    'Quill.toml': { 
-      contents: '[Quill]\nname = "my_quill"\nversion = "1.0"\nbackend = "typst"\nplate_file = "plate.typ"\ndescription = "My template"\n' 
+    'Quill.yaml': {
+      contents: 'Quill:\n  name: my_quill\n  version: "1.0"\n  backend: typst\n  plate_file: plate.typ\n  description: My template\n'
     },
     'plate.typ': { 
       contents: '= {{ title }}\n\n{{ body | Content }}' 
@@ -146,7 +146,7 @@ Returned by `getQuillInfo()`:
 {
   name: string,
   backend: string,  // e.g., "typst"
-  metadata: object,  // Quill metadata from Quill.toml
+  metadata: object,  // Quill metadata from Quill.yaml
   example?: string,  // Example markdown (if available)
   fieldSchemas: object,  // Field schema definitions
   supportedFormats: Array<'pdf' | 'svg' | 'txt'>  // Formats this backend supports

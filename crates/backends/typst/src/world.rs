@@ -84,7 +84,7 @@ impl QuillWorld {
         // Load packages from quill's in-memory file system
         Self::load_packages_from_quill(quill, &mut sources, &mut binaries)?;
 
-        // Download and load external packages from Quill.toml
+        // Download and load external packages from Quill.yaml
         #[cfg(feature = "native")]
         Self::download_and_load_external_packages(quill, &mut sources, &mut binaries)?;
 
@@ -226,7 +226,7 @@ impl QuillWorld {
         Ok(())
     }
 
-    /// Downloads and loads external packages from Quill.toml.
+    /// Downloads and loads external packages from Quill.yaml.
     #[cfg(feature = "native")]
     fn download_and_load_external_packages(
         quill: &Quill,

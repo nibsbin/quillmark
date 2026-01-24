@@ -23,7 +23,7 @@ def test_quill_metadata(taro_quill_dir):
     """Test accessing quill metadata."""
     quill = Quill.from_path(str(taro_quill_dir))
     metadata = quill.metadata
-    # Metadata is flattened from Quill.toml
+    # Metadata is flattened from Quill.yaml
     assert metadata.get("backend") == "typst"
     # Just verify we can access it
     assert isinstance(metadata, dict)

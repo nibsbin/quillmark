@@ -83,7 +83,7 @@ Foundation layer providing:
 - **Types**: `Backend`, `Artifact`, `OutputFormat`
 - **Parsing**: `ParsedDocument` with `from_markdown()` constructor
 - **Normalization**: Coercion, defaults, bidi/HTML fixes
-- **Template model**: `Quill` (+ `Quill.toml`)
+- **Template model**: `Quill` (+ `Quill.yaml`)
 - **Errors & Diagnostics**: `RenderError`, `Diagnostic`, `Severity`, `Location`
 - **Utilities**: TOML⇄YAML conversion helpers
 
@@ -266,7 +266,7 @@ The AcroForm backend is experimental and currently not recommended for use. No f
 
 ```
 quill-template/
-├─ Quill.toml              # Metadata and configuration
+├─ Quill.yaml              # Metadata and configuration
 ├─ plate.<ext>              # Template file (e.g., plate.typ)
 ├─ packages/               # Backend packages
 └─ assets/                 # Fonts, images, data

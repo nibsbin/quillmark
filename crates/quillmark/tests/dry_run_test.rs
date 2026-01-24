@@ -13,35 +13,39 @@ fn create_test_quill(temp_dir: &TempDir, with_required_field: bool) -> Quill {
 
     let fields_section = if with_required_field {
         r#"
-[fields.title]
-type = "string"
-required = true
-description = "Document title"
-
-[fields.author]
-type = "string"
-required = false
-description = "Document author"
+fields:
+  title:
+    type: "string"
+    required: true
+    description: "Document title"
+  author:
+    type: "string"
+    required: false
+    description: "Document author"
 "#
     } else {
         ""
     };
 
     fs::write(
-        quill_path.join("Quill.toml"),
+        quill_path.join("Quill.yaml"),
         format!(
-            r#"[Quill]
-name = "test_quill"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-description = "Test quill"
+            r#"Quill:
+  name: "test_quill"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  description: "Test quill"
+
 {}
 "#,
             fields_section
+                .replace("=", ":")
+                .replace("[fields.title]", "fields:\n  title:")
+                .replace("[fields.author]", "  author:")
         ),
     )
-    .expect("Failed to write Quill.toml");
+    .expect("Failed to write Quill.yaml");
 
     fs::write(quill_path.join("plate.typ"), "Title: {{ title }}")
         .expect("Failed to write plate.typ");
@@ -128,16 +132,16 @@ fn test_dry_run_invalid_template_filter() {
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
 
     fs::write(
-        quill_path.join("Quill.toml"),
-        r#"[Quill]
-name = "test_quill"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-description = "Test quill"
+        quill_path.join("Quill.yaml"),
+        r#"Quill:
+  name: "test_quill"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  description: "Test quill"
 "#,
     )
-    .expect("Failed to write Quill.toml");
+    .expect("Failed to write Quill.yaml");
 
     // Template uses undefined filter 'nonexistent_filter'
     fs::write(

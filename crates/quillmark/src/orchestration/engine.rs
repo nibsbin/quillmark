@@ -159,7 +159,7 @@ impl Quillmark {
                     )
                     .with_code("quill::missing_version".to_string())
                     .with_hint(
-                        "Add 'version = \"1.0\"' to the [Quill] section of Quill.toml".to_string(),
+                        "Add 'version = \"1.0\"' to the [Quill] section of Quill.yaml".to_string(),
                     ),
                 ),
             })?;
@@ -391,7 +391,7 @@ impl Quillmark {
                     )
                     .with_code("engine::missing_backend".to_string())
                     .with_hint(
-                        "Add 'backend = \"typst\"' to the [Quill] section of Quill.toml"
+                        "Add 'backend = \"typst\"' to the [Quill] section of Quill.yaml"
                             .to_string(),
                     ),
                 ),

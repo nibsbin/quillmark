@@ -1,0 +1,23 @@
+Quill:
+  name: appreciated_letter
+  version: "0.1"
+  backend: typst
+  plate_file: plate.typ
+  example_file: appreciated_letter.md
+  description: Professional letter template with appreciation styling
+
+typst:
+  packages: 
+    - "@preview/appreciated-letter:0.1.0"
+
+fields:
+  sender:
+    description: Sender of letter
+  recipient:
+    description: Recipient of letter
+  date:
+    description: Date of letter
+  subject:
+    description: Subject of letter
+  name:
+    description: Name of sender

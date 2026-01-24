@@ -14,11 +14,7 @@ use std::ops::Deref;
 pub struct QuillValue(serde_json::Value);
 
 impl QuillValue {
-    /// Create a QuillValue from a TOML value
-    pub fn from_toml(toml_val: &toml::Value) -> Result<Self, serde_json::Error> {
-        let json_val = serde_json::to_value(toml_val)?;
-        Ok(QuillValue(json_val))
-    }
+    // from_yaml removed as we use serde_json::Value directly
 
     /// Create a QuillValue from a YAML string
     pub fn from_yaml_str(yaml_str: &str) -> Result<Self, serde_saphyr::Error> {
@@ -108,16 +104,25 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_from_toml() {
-        let toml_str = r#"
-            [package]
-            name = "test"
-            version = "1.0.0"
+    fn test_from_yaml_value() {
+        let yaml_str = r#"
+            package:
+              name: test
+              version: 1.0.0
         "#;
-        let toml_val: toml::Value = toml::from_str(toml_str).unwrap();
-        let quill_val = QuillValue::from_toml(&toml_val).unwrap();
+        let json_val: serde_json::Value = serde_saphyr::from_str(yaml_str).unwrap();
+        let quill_val = QuillValue::from_json(json_val);
 
         assert!(quill_val.as_object().is_some());
+        assert_eq!(
+            quill_val
+                .get("package")
+                .unwrap()
+                .get("name")
+                .unwrap()
+                .as_str(),
+            Some("test")
+        );
     }
 
     #[test]

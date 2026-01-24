@@ -1,0 +1,75 @@
+Quill:
+  name: cmu_letter
+  version: "0.1"
+  backend: typst
+  plate_file: plate.typ
+  example_file: example.md
+  description: Typeset letters that comply with Carnegie Mellon University letterhead standards.
+
+# ==========================================
+# Group 1: Essentials
+# (Recipient, Signature)
+# ==========================================
+
+fields:
+  recipient:
+    title: Recipient's name and address
+    type: array
+    examples: 
+      - ["Mr. John Doe", "123 Main St", "Anytown, USA"]
+    ui:
+      group: Essentials
+    description: The recipient's name and full mailing address.
+
+  signature_block:
+    title: Signature block lines
+    type: array
+    examples: 
+      - ["First M. Last", "Title"]
+    ui:
+      group: Essentials
+    description: "The signer's information. Line 1: Name. Line 2: Title."
+
+# ==========================================
+# Group 2: Letterhead
+# (Static Unit Branding)
+# ==========================================
+
+  department:
+    title: Name of the department or unit
+    type: string
+    examples: 
+      - Department of Electrical and Computer Engineering
+    ui:
+      group: Letterhead
+    description: The department or organizational unit name for the letterhead.
+
+  address:
+    title: Sender's address lines
+    type: array
+    examples: 
+      - ["5000 Forbes Avenue", "Pittsburgh, PA 15213-3890"]
+    ui:
+      group: Letterhead
+    description: The sender's institutional mailing address.
+
+  url:
+    title: Department or university URL
+    type: string
+    examples: 
+      - www.ece.cmu.edu
+    ui:
+      group: Letterhead
+    description: The department or university website URL.
+
+# ==========================================
+# Group 3: Advanced
+# (Date and Formatting)
+# ==========================================
+
+  date:
+    title: Date of the letter
+    type: date
+    ui:
+      group: Advanced
+    description: The date to appear on the letter.
