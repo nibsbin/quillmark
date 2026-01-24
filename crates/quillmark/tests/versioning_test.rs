@@ -491,5 +491,52 @@ fn test_backward_compatibility_unversioned_quill() {
     let markdown = "# Test Content";
     let _parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse");
     // Don't actually render since we don't have fonts - just verify workflow creation works
+
     assert_eq!(workflow.quill_name(), "legacy_quill");
+}
+
+#[test]
+#[cfg(feature = "typst")]
+fn test_resolve_version_with_colon_syntax() {
+    let mut engine = Quillmark::new();
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+
+    // Register versions
+    let quill_1_0 = create_test_quill(&temp_dir, "usaf_memo", "1.0");
+    let quill_2_0 = create_test_quill(&temp_dir, "usaf_memo", "2.0");
+
+    engine
+        .register_quill(quill_1_0)
+        .expect("Failed to register");
+    engine
+        .register_quill(quill_2_0)
+        .expect("Failed to register");
+
+    // Resolve with colon syntax
+    let workflow = engine
+        .workflow("usaf_memo:1.0")
+        .expect("Failed to resolve usaf_memo:1.0");
+
+    assert_eq!(workflow.quill_name(), "usaf_memo");
+}
+
+#[test]
+#[cfg(feature = "typst")]
+fn test_parse_document_with_colon_syntax() {
+    let markdown = r#"---
+QUILL: usaf_memo:0.1
+title: Test
+---
+"#;
+    let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse");
+    let quill_ref = parsed.quill_reference();
+
+    assert_eq!(quill_ref.name, "usaf_memo");
+    match quill_ref.selector {
+        quillmark_core::VersionSelector::Exact(v) => {
+            assert_eq!(v.major, 0);
+            assert_eq!(v.minor, 1);
+        }
+        _ => panic!("Expected Exact version selector for colon syntax"),
+    }
 }

@@ -236,17 +236,19 @@ impl FromStr for QuillReference {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Split on @ to separate name from version
-        let parts: Vec<&str> = s.split('@').collect();
+        // Find separator index (first occurrence of '@' or ':')
+        let separator_idx = s.find('@').or_else(|| s.find(':'));
 
-        if parts.is_empty() {
-            return Err("Empty Quill reference".to_string());
-        }
+        let (name_part, version_part_opt) = match separator_idx {
+            Some(idx) => (&s[..idx], Some(&s[idx + 1..])),
+            None => (s, None),
+        };
 
-        let name = parts[0].to_string();
-        if name.is_empty() {
+        if name_part.is_empty() {
             return Err("Quill name cannot be empty".to_string());
         }
+
+        let name = name_part.to_string();
 
         // Validate name format: [a-z_][a-z0-9_]*
         if !name
@@ -270,9 +272,7 @@ impl FromStr for QuillReference {
         }
 
         // Parse version selector if present
-        let selector = if parts.len() > 1 {
-            // Reconstruct version part (in case there were multiple @ symbols)
-            let version_part = parts[1..].join("@");
+        let selector = if let Some(version_part) = version_part_opt {
             VersionSelector::from_str(&format!("@{}", version_part))?
         } else {
             VersionSelector::Latest
@@ -396,5 +396,15 @@ mod tests {
 
         let ref3 = QuillReference::new("resume".to_string(), VersionSelector::Latest);
         assert_eq!(ref3.to_string(), "resume");
+    }
+    #[test]
+    fn test_quill_reference_parsing_with_colon() {
+        let ref1 = QuillReference::from_str("usaf_memo:0.1").unwrap();
+        assert_eq!(ref1.name, "usaf_memo");
+        assert_eq!(ref1.selector, VersionSelector::Exact(Version::new(0, 1)));
+
+        let ref2 = QuillReference::from_str("name:latest").unwrap();
+        assert_eq!(ref2.name, "name");
+        assert_eq!(ref2.selector, VersionSelector::Latest);
     }
 }
