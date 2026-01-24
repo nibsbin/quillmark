@@ -59,7 +59,7 @@ fields:
 ### Optional Fields
 
 - `plate_file` - Path to plate template (defaults to auto-generated plate)
-- `example_file` - Path to example markdown file
+- `example_file` - Path to example markdown file (defaults to `example.md` if present)
 - `version` - Semantic version of your Quill
 - `author` - Creator of the Quill
 
