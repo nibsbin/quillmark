@@ -787,10 +787,6 @@ impl QuillConfig {
                         &format!("card '{}' field", card_name),
                     )
                 } else if let Some(_toml_fields) = &card_def.fields {
-                    // Fallback if card_def.fields IS populated (from CardSchemaDef struct which might still use toml map if not updated)
-                    // But we should update CardSchemaDef to use serde_json::Map or similar
-                    // Actually CardSchemaDef defined earlier uses toml::value::Table. Need to update that too.
-                    // IMPORTANT: I need to update CardSchemaDef definition above.
                     HashMap::new()
                 } else {
                     HashMap::new()
@@ -1376,7 +1372,6 @@ node_modules/
         assert!(typ_files.contains(&PathBuf::from("plate.typ")));
     }
 
-    #[test]
     #[test]
     fn test_new_standardized_yaml_format() {
         let temp_dir = TempDir::new().unwrap();
@@ -2410,7 +2405,6 @@ description: "A simple string field"
         );
     }
 
-    #[test]
     #[test]
     fn test_parse_card_with_fields_in_yaml() {
         // Test parsing [cards] section with [cards.X.fields.Y] syntax

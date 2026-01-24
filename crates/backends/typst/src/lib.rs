@@ -46,7 +46,7 @@ mod world;
 
 /// Embedded default Quill files
 mod embedded {
-    pub const QUILL_TOML: &str = include_str!("../default_quill/Quill.yaml");
+    pub const QUILL_YAML: &str = include_str!("../default_quill/Quill.yaml");
     pub const PLATE_TYP: &str = include_str!("../default_quill/plate.typ");
     pub const EXAMPLE_MD: &str = include_str!("../default_quill/example.md");
 }
@@ -154,9 +154,9 @@ impl Backend for TypstBackend {
         // Build file tree from embedded files
         let mut files = HashMap::new();
         files.insert(
-            "Quill.toml".to_string(),
+            "Quill.yaml".to_string(),
             FileTreeNode::File {
-                contents: embedded::QUILL_TOML.as_bytes().to_vec(),
+                contents: embedded::QUILL_YAML.as_bytes().to_vec(),
             },
         );
         files.insert(
