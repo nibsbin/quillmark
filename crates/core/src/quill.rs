@@ -48,7 +48,7 @@ pub mod ui_key {
 pub struct UiFieldSchema {
     /// Group name for organizing fields (e.g., "Personal Info", "Preferences")
     pub group: Option<String>,
-    /// Order of the field in the UI (automatically generated based on field position in Quill.toml)
+    /// Order of the field in the UI (automatically generated based on field position in Quill.yaml)
     pub order: Option<i32>,
 }
 
@@ -584,29 +584,29 @@ pub struct QuillConfig {
 struct CardSchemaDef {
     pub title: Option<String>,
     pub description: Option<String>,
-    pub fields: Option<toml::value::Table>,
+    pub fields: Option<serde_json::Map<String, serde_json::Value>>,
     pub ui: Option<UiContainerSchema>,
 }
 
 impl QuillConfig {
-    /// Parse fields from a TOML table, assigning ui.order based on key_order.
+    /// Parse fields from a JSON Value map, assigning ui.order based on key_order.
     ///
     /// This helper ensures consistent field ordering logic for both top-level
     /// fields and card fields.
     ///
     /// # Arguments
-    /// * `fields_table` - The TOML table containing field definitions
-    /// * `key_order` - Vector of field names in their definition order (from toml_edit)
+    /// * `fields_map` - The JSON map containing field definitions
+    /// * `key_order` - Vector of field names in their definition order
     /// * `context` - Context string for error messages (e.g., "field" or "card 'indorsement' field")
     fn parse_fields_with_order(
-        fields_table: &toml::value::Table,
+        fields_map: &serde_json::Map<String, serde_json::Value>,
         key_order: &[String],
         context: &str,
     ) -> HashMap<String, FieldSchema> {
         let mut fields = HashMap::new();
         let mut fallback_counter = 0;
 
-        for (field_name, field_value) in fields_table {
+        for (field_name, field_value) in fields_map {
             // Determine order from key_order, or use fallback counter
             let order = if let Some(idx) = key_order.iter().position(|k| k == field_name) {
                 idx as i32
@@ -616,33 +616,27 @@ impl QuillConfig {
                 o
             };
 
-            match QuillValue::from_toml(field_value) {
-                Ok(quill_value) => {
-                    match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
-                        Ok(mut schema) => {
-                            // Always set ui.order based on position
-                            if schema.ui.is_none() {
-                                schema.ui = Some(UiFieldSchema {
-                                    group: None,
-                                    order: Some(order),
-                                });
-                            } else if let Some(ui) = &mut schema.ui {
-                                ui.order = Some(order);
-                            }
-
-                            fields.insert(field_name.clone(), schema);
-                        }
-                        Err(e) => {
-                            eprintln!(
-                                "Warning: Failed to parse {} '{}': {}",
-                                context, field_name, e
-                            );
+            let quill_value = QuillValue::from_json(field_value.clone());
+            match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
+                Ok(mut schema) => {
+                    // Always set ui.order based on position
+                    if schema.ui.is_none() {
+                        schema.ui = Some(UiFieldSchema {
+                            group: None,
+                            order: Some(order),
+                        });
+                    } else if let Some(ui) = &mut schema.ui {
+                        // Only set if not already set
+                        if ui.order.is_none() {
+                            ui.order = Some(order);
                         }
                     }
+
+                    fields.insert(field_name.clone(), schema);
                 }
                 Err(e) => {
                     eprintln!(
-                        "Warning: Failed to convert {} '{}': {}",
+                        "Warning: Failed to parse {} '{}': {}",
                         context, field_name, e
                     );
                 }
@@ -652,68 +646,59 @@ impl QuillConfig {
         fields
     }
 
-    /// Extract key order from a toml_edit table at the given path.
-    ///
-    /// Returns a vector of key names in their definition order.
-    fn get_key_order(doc: Option<&toml_edit::DocumentMut>, path: &[&str]) -> Vec<String> {
-        doc.and_then(|d| {
-            let mut current: &dyn toml_edit::TableLike = d.as_table();
-            for segment in path {
-                current = current.get(*segment)?.as_table()?;
-            }
-            Some(current.iter().map(|(k, _)| k.to_string()).collect())
-        })
-        .unwrap_or_default()
-    }
-
-    /// Parse QuillConfig from TOML content
-    pub fn from_toml(toml_content: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
-        let quill_toml: toml::Value = toml::from_str(toml_content)
-            .map_err(|e| format!("Failed to parse Quill.toml: {}", e))?;
-
-        // Parse with toml_edit to preserve field order
-        let toml_edit_doc = toml_content.parse::<toml_edit::DocumentMut>().ok();
+    /// Parse QuillConfig from YAML content
+    pub fn from_yaml(yaml_content: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        // Parse YAML into serde_json::Value via serde_saphyr
+        // Note: serde_json with "preserve_order" feature is required for this to work as expected
+        let quill_yaml_val: serde_json::Value = serde_saphyr::from_str(yaml_content)
+            .map_err(|e| format!("Failed to parse Quill.yaml: {}", e))?;
 
         // Extract [Quill] section (required)
-        let quill_section = quill_toml
+        let quill_section = quill_yaml_val
             .get("Quill")
-            .ok_or("Missing required [Quill] section in Quill.toml")?;
+            .ok_or("Missing required 'Quill' section in Quill.yaml")?;
 
         // Extract required fields
         let name = quill_section
             .get("name")
             .and_then(|v| v.as_str())
-            .ok_or("Missing required 'name' field in [Quill] section")?
+            .ok_or("Missing required 'name' field in 'Quill' section")?
             .to_string();
 
         let backend = quill_section
             .get("backend")
             .and_then(|v| v.as_str())
-            .ok_or("Missing required 'backend' field in [Quill] section")?
+            .ok_or("Missing required 'backend' field in 'Quill' section")?
             .to_string();
 
         let description = quill_section
             .get("description")
             .and_then(|v| v.as_str())
-            .ok_or("Missing required 'description' field in [Quill] section")?;
+            .ok_or("Missing required 'description' field in 'Quill' section")?;
 
         if description.trim().is_empty() {
-            return Err("'description' field in [Quill] section cannot be empty".into());
+            return Err("'description' field in 'Quill' section cannot be empty".into());
         }
         let description = description.to_string();
 
         // Extract optional fields (now version is required)
-        let version = quill_section
+        let version_val = quill_section
             .get("version")
-            .and_then(|v| v.as_str())
-            .ok_or("Missing required 'version' field in [Quill] section")?;
+            .ok_or("Missing required 'version' field in 'Quill' section")?;
+
+        // Handle version as string or number (YAML might parse 1.0 as number)
+        let version = if let Some(s) = version_val.as_str() {
+            s.to_string()
+        } else if let Some(n) = version_val.as_f64() {
+            n.to_string()
+        } else {
+            return Err("Invalid 'version' field format".into());
+        };
 
         // Validate version format (must be MAJOR.MINOR)
         use std::str::FromStr;
-        crate::version::Version::from_str(version)
+        crate::version::Version::from_str(&version)
             .map_err(|e| format!("Invalid version '{}': {}", version, e))?;
-
-        let version = version.to_string();
 
         let author = quill_section
             .get("author")
@@ -734,12 +719,11 @@ impl QuillConfig {
         let ui_section: Option<UiContainerSchema> = quill_section
             .get("ui")
             .cloned()
-            .and_then(|v| QuillValue::from_toml(&v).ok())
-            .and_then(|v| serde_json::from_value(v.into_json()).ok());
+            .and_then(|v| serde_json::from_value(v).ok());
 
         // Extract additional metadata from [Quill] section (excluding standard fields)
         let mut metadata = HashMap::new();
-        if let toml::Value::Table(table) = quill_section {
+        if let Some(table) = quill_section.as_object() {
             for (key, value) in table {
                 // Skip standard fields that are stored in dedicated struct fields
                 if key != "name"
@@ -751,70 +735,63 @@ impl QuillConfig {
                     && key != "plate_file"
                     && key != "ui"
                 {
-                    match QuillValue::from_toml(&value) {
-                        Ok(quill_value) => {
-                            metadata.insert(key.clone(), quill_value);
-                        }
-                        Err(e) => {
-                            eprintln!("Warning: Failed to convert field '{}': {}", key, e);
-                        }
-                    }
+                    metadata.insert(key.clone(), QuillValue::from_json(value.clone()));
                 }
             }
         }
 
         // Extract [typst] section (optional)
         let mut typst_config = HashMap::new();
-        if let Some(toml::Value::Table(table)) = quill_toml.get("typst") {
-            for (key, value) in table {
-                match QuillValue::from_toml(value) {
-                    Ok(quill_value) => {
-                        typst_config.insert(key.clone(), quill_value);
-                    }
-                    Err(e) => {
-                        eprintln!("Warning: Failed to convert typst field '{}': {}", key, e);
-                    }
+        if let Some(typst_val) = quill_yaml_val.get("typst") {
+            if let Some(table) = typst_val.as_object() {
+                for (key, value) in table {
+                    typst_config.insert(key.clone(), QuillValue::from_json(value.clone()));
                 }
             }
         }
 
         // Extract [fields] section (optional) using shared helper
-        let fields = if let Some(toml::Value::Table(fields_table)) = quill_toml.get("fields") {
-            let field_order = Self::get_key_order(toml_edit_doc.as_ref(), &["fields"]);
-            Self::parse_fields_with_order(fields_table, &field_order, "field schema")
+        let fields = if let Some(fields_val) = quill_yaml_val.get("fields") {
+            if let Some(fields_map) = fields_val.as_object() {
+                // With preserve_order feature, keys iterator respects insertion order
+                let field_order: Vec<String> = fields_map.keys().cloned().collect();
+                Self::parse_fields_with_order(fields_map, &field_order, "field schema")
+            } else {
+                HashMap::new()
+            }
         } else {
             HashMap::new()
         };
 
         // Extract [cards] section (optional)
         let mut cards: HashMap<String, CardSchema> = HashMap::new();
-        if let Some(cards_value) = quill_toml.get("cards") {
-            // Need to parse cards manually to some extent because we need to process 'fields'
-            // and check for collisions
-
-            let cards_table = cards_value
-                .as_table()
-                .ok_or("'cards' section must be a table")?;
+        if let Some(cards_val) = quill_yaml_val.get("cards") {
+            let cards_table = cards_val
+                .as_object()
+                .ok_or("'cards' section must be an object")?;
 
             for (card_name, card_value) in cards_table {
                 // Parse card basic info using serde
-                let card_def: CardSchemaDef = card_value
-                    .clone()
-                    .try_into()
+                let card_def: CardSchemaDef = serde_json::from_value(card_value.clone())
                     .map_err(|e| format!("Failed to parse card '{}': {}", card_name, e))?;
 
-                // Parse card fields using shared helper
-                let card_fields = if let Some(card_fields_table) = &card_def.fields {
-                    let card_field_order = Self::get_key_order(
-                        toml_edit_doc.as_ref(),
-                        &["cards", card_name, "fields"],
-                    );
+                // Parse card fields
+                let card_fields = if let Some(card_fields_table) =
+                    card_value.get("fields").and_then(|v| v.as_object())
+                {
+                    let card_field_order: Vec<String> = card_fields_table.keys().cloned().collect();
 
                     Self::parse_fields_with_order(
                         card_fields_table,
                         &card_field_order,
                         &format!("card '{}' field", card_name),
                     )
+                } else if let Some(_toml_fields) = &card_def.fields {
+                    // Fallback if card_def.fields IS populated (from CardSchemaDef struct which might still use toml map if not updated)
+                    // But we should update CardSchemaDef to use serde_json::Map or similar
+                    // Actually CardSchemaDef defined earlier uses toml::value::Table. Need to update that too.
+                    // IMPORTANT: I need to update CardSchemaDef definition above.
+                    HashMap::new()
                 } else {
                     HashMap::new()
                 };
@@ -898,21 +875,21 @@ impl Quill {
     /// # Errors
     ///
     /// Returns an error if:
-    /// - Quill.toml is not found in the file tree
-    /// - Quill.toml is not valid UTF-8 or TOML
-    /// - The plate file specified in Quill.toml is not found or not valid UTF-8
+    /// - Quill.yaml is not found in the file tree
+    /// - Quill.yaml is not valid UTF-8 or YAML
+    /// - The plate file specified in Quill.yaml is not found or not valid UTF-8
     /// - Validation fails
     pub fn from_tree(root: FileTreeNode) -> Result<Self, Box<dyn StdError + Send + Sync>> {
-        // Read Quill.toml
-        let quill_toml_bytes = root
-            .get_file("Quill.toml")
-            .ok_or("Quill.toml not found in file tree")?;
+        // Read Quill.yaml
+        let quill_yaml_bytes = root
+            .get_file("Quill.yaml")
+            .ok_or("Quill.yaml not found in file tree")?;
 
-        let quill_toml_content = String::from_utf8(quill_toml_bytes.to_vec())
-            .map_err(|e| format!("Quill.toml is not valid UTF-8: {}", e))?;
+        let quill_yaml_content = String::from_utf8(quill_yaml_bytes.to_vec())
+            .map_err(|e| format!("Quill.yaml is not valid UTF-8: {}", e))?;
 
-        // Parse TOML into QuillConfig
-        let config = QuillConfig::from_toml(&quill_toml_content)?;
+        // Parse YAML into QuillConfig
+        let config = QuillConfig::from_yaml(&quill_yaml_content)?;
 
         // Construct Quill from QuillConfig
         Self::from_config(config, root)
@@ -1110,7 +1087,7 @@ impl Quill {
         Ok(FileTreeNode::Directory { files })
     }
 
-    /// Get the list of typst packages to download, if specified in Quill.toml
+    /// Get the list of typst packages to download, if specified in Quill.yaml
     pub fn typst_packages(&self) -> Vec<String> {
         self.metadata
             .get("typst_packages")
@@ -1400,20 +1377,22 @@ node_modules/
     }
 
     #[test]
-    fn test_new_standardized_toml_format() {
+    #[test]
+    fn test_new_standardized_yaml_format() {
         let temp_dir = TempDir::new().unwrap();
         let quill_dir = temp_dir.path();
 
         // Create test files using new standardized format
-        let toml_content = r#"[Quill]
-name = "my-custom-quill"
-version = "1.0"
-backend = "typst"
-plate_file = "custom_plate.typ"
-description = "Test quill with new format"
-author = "Test Author"
+        let yaml_content = r#"
+Quill:
+  name: my-custom-quill
+  version: 1.0
+  backend: typst
+  plate_file: custom_plate.typ
+  description: Test quill with new format
+  author: Test Author
 "#;
-        fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
+        fs::write(quill_dir.join("Quill.yaml"), yaml_content).unwrap();
         fs::write(
             quill_dir.join("custom_plate.typ"),
             "= Custom Template\n\nThis is a custom template.",
@@ -1423,7 +1402,7 @@ author = "Test Author"
         // Load quill
         let quill = Quill::from_path(quill_dir).unwrap();
 
-        // Test that name comes from TOML, not directory
+        // Test that name comes from YAML, not directory
         assert_eq!(quill.name, "my-custom-quill");
 
         // Test that backend is in metadata
@@ -1585,18 +1564,20 @@ description = "A test quill from tree"
         let mut root_files = HashMap::new();
 
         // Add Quill.toml with example specified
-        let quill_toml = r#"[Quill]
-name = "test-tree-template"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-example_file = "template.md"
-description = "Test tree with template"
+        // Add Quill.yaml with example specified
+        let quill_yaml = r#"
+Quill:
+  name: test-tree-template
+  version: 1.0
+  backend: typst
+  plate_file: plate.typ
+  example_file: template.md
+  description: Test tree with template
 "#;
         root_files.insert(
-            "Quill.toml".to_string(),
+            "Quill.yaml".to_string(),
             FileTreeNode::File {
-                contents: quill_toml.as_bytes().to_vec(),
+                contents: quill_yaml.as_bytes().to_vec(),
             },
         );
 
@@ -1634,8 +1615,8 @@ description = "Test tree with template"
                 "name": "test_from_json"
             },
             "files": {
-                "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test_from_json\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill from JSON\"\n"
+                "Quill.yaml": {
+                    "contents": "Quill:\n  name: test_from_json\n  version: 1.0\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill from JSON\n"
                 },
                 "plate.typ": {
                     "contents": "= Test Plate\n\nThis is test content."
@@ -1657,8 +1638,8 @@ description = "Test tree with template"
         // Create JSON with byte array representation using new format
         let json_str = r#"{
             "files": {
-                "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n"
+                "Quill.yaml": {
+                    "contents": "Quill:\n  name: test\n  version: 1.0\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill\n"
                 },
                 "plate.typ": {
                     "contents": "test plate"
@@ -2086,26 +2067,32 @@ description = "Test quill without plate file"
     }
 
     #[test]
-    fn test_quill_config_from_toml() {
-        // Test parsing QuillConfig from TOML content
-        let toml_content = r#"[Quill]
-name = "test_config"
-version = "1.0"
-backend = "typst"
-description = "Test configuration parsing"
-author = "Test Author"
-plate_file = "plate.typ"
-example_file = "example.md"
+    fn test_quill_config_from_yaml() {
+        // Test parsing QuillConfig from YAML content
+        let yaml_content = r#"
+Quill:
+  name: test_config
+  version: 1.0
+  backend: typst
+  description: Test configuration parsing
+  author: Test Author
+  plate_file: plate.typ
+  example_file: example.md
 
-[typst]
-packages = ["@preview/bubble:0.2.2"]
+typst:
+  packages: 
+    - "@preview/bubble:0.2.2"
 
-[fields]
-title = {description = "Document title", type = "string"}
-author = {type = "string", description = "Document author"}
+fields:
+  title:
+    description: Document title
+    type: string
+  author:
+    type: string
+    description: Document author
 "#;
 
-        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
         // Verify required fields
         assert_eq!(config.document.name, "test_config");
@@ -2137,34 +2124,37 @@ author = {type = "string", description = "Document author"}
     #[test]
     fn test_quill_config_missing_required_fields() {
         // Test that missing required fields result in error
-        let toml_missing_name = r#"[Quill]
-backend = "typst"
-description = "Missing name"
+        let yaml_missing_name = r#"
+Quill:
+  backend: typst
+  description: Missing name
 "#;
-        let result = QuillConfig::from_toml(toml_missing_name);
+        let result = QuillConfig::from_yaml(yaml_missing_name);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
             .to_string()
             .contains("Missing required 'name'"));
 
-        let toml_missing_backend = r#"[Quill]
-name = "test"
-description = "Missing backend"
+        let yaml_missing_backend = r#"
+Quill:
+  name: test
+  description: Missing backend
 "#;
-        let result = QuillConfig::from_toml(toml_missing_backend);
+        let result = QuillConfig::from_yaml(yaml_missing_backend);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
             .to_string()
             .contains("Missing required 'backend'"));
 
-        let toml_missing_description = r#"[Quill]
-name = "test"
-version = "1.0"
-backend = "typst"
+        let yaml_missing_description = r#"
+Quill:
+  name: test
+  version: 1.0
+  backend: typst
 "#;
-        let result = QuillConfig::from_toml(toml_missing_description);
+        let result = QuillConfig::from_yaml(yaml_missing_description);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
@@ -2175,32 +2165,35 @@ backend = "typst"
     #[test]
     fn test_quill_config_empty_description() {
         // Test that empty description results in error
-        let toml_empty_description = r#"[Quill]
-name = "test"
-version = "1.0"
-backend = "typst"
-description = "   "
+        let yaml_empty_description = r#"
+Quill:
+  name: test
+  version: 1.0
+  backend: typst
+  description: "   "
 "#;
-        let result = QuillConfig::from_toml(toml_empty_description);
+        let result = QuillConfig::from_yaml(yaml_empty_description);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("description' field in [Quill] section cannot be empty"));
+            .contains("description' field in 'Quill' section cannot be empty"));
     }
 
     #[test]
     fn test_quill_config_missing_quill_section() {
         // Test that missing [Quill] section results in error
-        let toml_no_section = r#"[fields]
-title = {description = "Title"}
+        let yaml_no_section = r#"
+fields:
+  title:
+    description: Title
 "#;
-        let result = QuillConfig::from_toml(toml_no_section);
+        let result = QuillConfig::from_yaml(yaml_no_section);
         assert!(result.is_err());
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("Missing required [Quill] section"));
+            .contains("Missing required 'Quill' section"));
     }
 
     #[test]
@@ -2208,21 +2201,23 @@ title = {description = "Title"}
         // Test that QuillConfig metadata flows through to Quill
         let mut root_files = HashMap::new();
 
-        let quill_toml = r#"[Quill]
-name = "metadata-test"
-version = "1.0"
-backend = "typst"
-description = "Test metadata flow"
-author = "Test Author"
-custom_field = "custom_value"
+        let quill_yaml = r#"
+Quill:
+  name: metadata-test
+  version: 1.0
+  backend: typst
+  description: Test metadata flow
+  author: Test Author
+  custom_field: custom_value
 
-[typst]
-packages = ["@preview/bubble:0.2.2"]
+typst:
+  packages: 
+    - "@preview/bubble:0.2.2"
 "#;
         root_files.insert(
-            "Quill.toml".to_string(),
+            "Quill.yaml".to_string(),
             FileTreeNode::File {
-                contents: quill_toml.as_bytes().to_vec(),
+                contents: quill_yaml.as_bytes().to_vec(),
             },
         );
 
@@ -2250,22 +2245,23 @@ packages = ["@preview/bubble:0.2.2"]
         // Test the extract_defaults method on Quill
         let mut root_files = HashMap::new();
 
-        let quill_toml = r#"[Quill]
-name = "defaults-test"
-version = "1.0"
-backend = "typst"
-description = "Test defaults extraction"
+        let quill_yaml = r#"
+Quill:
+  name: metadata-test-yaml
+  version: 1.0
+  backend: typst
+  description: Test metadata flow
+  author: Test Author
+  custom_field: custom_value
 
-[fields]
-title = {type = "string", description = "Title"}
-author = {type = "string", description = "Author", default = "Anonymous"}
-status = {type = "string", description = "Status", default = "draft"}
+typst:
+  packages: 
+    - "@preview/bubble:0.2.2"
 "#;
-
         root_files.insert(
-            "Quill.toml".to_string(),
+            "Quill.yaml".to_string(),
             FileTreeNode::File {
-                contents: quill_toml.as_bytes().to_vec(),
+                contents: quill_yaml.as_bytes().to_vec(),
             },
         );
 
@@ -2288,20 +2284,31 @@ status = {type = "string", description = "Status", default = "draft"}
 
     #[test]
     fn test_field_order_preservation() {
-        let toml_content = r#"[Quill]
-name = "order-test"
-version = "1.0"
-backend = "typst"
-description = "Test field order"
+        let yaml_content = r#"
+Quill:
+  name: order-test
+  version: 1.0
+  backend: typst
+  description: Test field order
 
-[fields]
-first = {type = "string", description = "First field"}
-second = {type = "string", description = "Second field"}
-third = {type = "string", description = "Third field", ui = {group = "Test Group"}}
-fourth = {type = "string", description = "Fourth field"}
+fields:
+  first:
+    type: string
+    description: First field
+  second:
+    type: string
+    description: Second field
+  third:
+    type: string
+    description: Third field
+    ui:
+      group: Test Group
+  fourth:
+    type: string
+    description: Fourth field
 "#;
 
-        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
         // Check that fields have correct order based on TOML position
         // Order is automatically generated based on field position
@@ -2325,21 +2332,22 @@ fourth = {type = "string", description = "Fourth field"}
 
     #[test]
     fn test_quill_with_all_ui_properties() {
-        let toml_content = r#"[Quill]
-name = "full-ui-test"
-version = "1.0"
-backend = "typst"
-description = "Test all UI properties"
+        let yaml_content = r#"
+Quill:
+  name: full-ui-test
+  version: 1.0
+  backend: typst
+  description: Test all UI properties
 
-[fields.author]
-description = "The full name of the document author"
-type = "str"
-
-[fields.author.ui]
-group = "Author Info"
+fields:
+  author:
+    description: The full name of the document author
+    type: str
+    ui:
+      group: Author Info
 "#;
 
-        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
         let author_field = &config.document.fields["author"];
         let ui = author_field.ui.as_ref().unwrap();
@@ -2403,32 +2411,34 @@ description: "A simple string field"
     }
 
     #[test]
-    fn test_parse_card_with_fields_in_toml() {
+    #[test]
+    fn test_parse_card_with_fields_in_yaml() {
         // Test parsing [cards] section with [cards.X.fields.Y] syntax
-        let toml_content = r#"[Quill]
-name = "cards-fields-test"
-version = "1.0"
-backend = "typst"
-description = "Test [cards.X.fields.Y] syntax"
+        let yaml_content = r#"
+Quill:
+  name: cards-fields-test
+  version: 1.0
+  backend: typst
+  description: Test [cards.X.fields.Y] syntax
 
-[cards.endorsements]
-title = "Endorsements"
-description = "Chain of endorsements"
-
-[cards.endorsements.fields.name]
-type = "string"
-title = "Endorser Name"
-description = "Name of the endorsing official"
-required = true
-
-[cards.endorsements.fields.org]
-type = "string"
-title = "Organization"
-description = "Endorser's organization"
-default = "Unknown"
+cards:
+  endorsements:
+    title: Endorsements
+    description: Chain of endorsements
+    fields:
+      name:
+        type: string
+        title: Endorser Name
+        description: Name of the endorsing official
+        required: true
+      org:
+        type: string
+        title: Organization
+        description: Endorser's organization
+        default: Unknown
 "#;
 
-        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
         // Verify the card was parsed into config.cards
         assert!(config.cards.contains_key("endorsements"));
@@ -2482,27 +2492,30 @@ invalid_key:
 
     #[test]
     fn test_quill_config_with_cards_section() {
-        let toml_content = r#"[Quill]
-name = "cards-test"
-version = "1.0"
-backend = "typst"
-description = "Test [cards] section"
+        let yaml_content = r#"
+Quill:
+  name: cards-test
+  version: 1.0
+  backend: typst
+  description: Test [cards] section
 
-[fields.regular]
-description = "Regular field"
-type = "string"
+fields:
+  regular:
+    description: Regular field
+    type: string
 
-[cards.indorsements]
-title = "Routing Indorsements"
-description = "Chain of endorsements"
-
-[cards.indorsements.fields.name]
-title = "Name"
-type = "string"
-description = "Name field"
+cards:
+  indorsements:
+    title: Routing Indorsements
+    description: Chain of endorsements
+    fields:
+      name:
+        title: Name
+        type: string
+        description: Name field
 "#;
 
-        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
         // Check regular field
         assert!(config.document.fields.contains_key("regular"));
@@ -2520,17 +2533,19 @@ description = "Name field"
     #[test]
     fn test_quill_config_cards_empty_fields() {
         // Test that cards with no fields section are valid
-        let toml_content = r#"[Quill]
-name = "cards-empty-fields-test"
-version = "1.0"
-backend = "typst"
-description = "Test cards without fields"
+        let yaml_content = r#"
+Quill:
+  name: cards-empty-fields-test
+  version: 1.0
+  backend: typst
+  description: Test cards without fields
 
-[cards.myscope]
-description = "My scope"
+cards:
+  myscope:
+    description: My scope
 "#;
 
-        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let config = QuillConfig::from_yaml(yaml_content).unwrap();
         let card = config.cards.get("myscope").unwrap();
         assert_eq!(card.name, "myscope");
         assert_eq!(card.description, Some("My scope".to_string()));
@@ -2540,21 +2555,24 @@ description = "My scope"
     #[test]
     fn test_quill_config_allows_card_collision() {
         // Test that scope name colliding with field name is ALLOWED
-        let toml_content = r#"[Quill]
-name = "collision-test"
-version = "1.0"
-backend = "typst"
-description = "Test collision"
+        let yaml_content = r#"
+Quill:
+  name: collision-test
+  version: 1.0
+  backend: typst
+  description: Test collision
 
-[fields.conflict]
-description = "Field"
-type = "string"
+fields:
+  conflict:
+    description: Field
+    type: string
 
-[cards.conflict]
-description = "Card"
+cards:
+  conflict:
+    description: Card
 "#;
 
-        let result = QuillConfig::from_toml(toml_content);
+        let result = QuillConfig::from_yaml(yaml_content);
         if let Err(e) = &result {
             panic!(
                 "Card name collision should be allowed, but got error: {}",
@@ -2571,29 +2589,31 @@ description = "Card"
     #[test]
     fn test_quill_config_ordering_with_cards() {
         // Test that fields have proper UI ordering (cards no longer have card-level ordering)
-        let toml_content = r#"[Quill]
-name = "ordering-test"
-version = "1.0"
-backend = "typst"
-description = "Test ordering"
+        let yaml_content = r#"
+Quill:
+  name: ordering-test
+  version: 1.0
+  backend: typst
+  description: Test ordering
 
-[fields.first]
-type = "string"
-description = "First"
+fields:
+  first:
+    type: string
+    description: First
+  zero:
+    type: string
+    description: Zero
 
-[cards.second]
-description = "Second"
-
-[cards.second.fields.card_field]
-type = "string"
-description = "A card field"
-
-[fields.zero]
-type = "string"
-description = "Zero"
+cards:
+  second:
+    description: Second
+    fields:
+      card_field:
+        type: string
+        description: A card field
 "#;
 
-        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
         let first = config.document.fields.get("first").unwrap();
         let zero = config.document.fields.get("zero").unwrap();
@@ -2618,25 +2638,26 @@ description = "Zero"
         // Test that card fields preserve definition order (not alphabetical)
         // defined: z_first, then a_second
         // alphabetical: a_second, then z_first
-        let toml_content = r#"[Quill]
-name = "card-order-test"
-version = "1.0"
-backend = "typst"
-description = "Test card field order"
+        let yaml_content = r#"
+Quill:
+  name: card-order-test
+  version: 1.0
+  backend: typst
+  description: Test card field order
 
-[cards.mycard]
-description = "Test card"
-
-[cards.mycard.fields.z_first]
-type = "string"
-description = "Defined first"
-
-[cards.mycard.fields.a_second]
-type = "string"
-description = "Defined second"
+cards:
+  mycard:
+    description: Test card
+    fields:
+      z_first:
+        type: string
+        description: Defined first
+      a_second:
+        type: string
+        description: Defined second
 "#;
 
-        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let config = QuillConfig::from_yaml(yaml_content).unwrap();
         let card = config.cards.get("mycard").unwrap();
 
         let z_first = card.fields.get("z_first").unwrap();
@@ -2653,29 +2674,36 @@ description = "Defined second"
     }
     #[test]
     fn test_nested_schema_parsing() {
-        let toml_content = r#"[Quill]
-name = "nested-test"
-version = "1.0"
-backend = "typst"
-description = "Test nested elements"
+        let yaml_content = r#"
+Quill:
+  name: nested-test
+  version: 1.0
+  backend: typst
+  description: Test nested elements
 
-[fields.my_list]
-type = "array"
-description = "List of objects"
-items.type = "object"
-items.properties.sub_a.type = "string"
-items.properties.sub_a.description = "Subfield A"
-items.properties.sub_b.type = "number"
-items.properties.sub_b.description = "Subfield B"
-
-[fields.my_obj]
-type = "object"
-description = "Single object"
-properties.child.type = "boolean"
-properties.child.description = "Child field"
+fields:
+  my_list:
+    type: array
+    description: List of objects
+    items:
+      type: object
+      properties:
+        sub_a:
+          type: string
+          description: Subfield A
+        sub_b:
+          type: number
+          description: Subfield B
+  my_obj:
+    type: object
+    description: Single object
+    properties:
+      child:
+        type: boolean
+        description: Child field
 "#;
 
-        let config = QuillConfig::from_toml(toml_content).unwrap();
+        let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
         // Check array with items
         let list_field = config.document.fields.get("my_list").unwrap();

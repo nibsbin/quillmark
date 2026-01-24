@@ -46,7 +46,7 @@ mod world;
 
 /// Embedded default Quill files
 mod embedded {
-    pub const QUILL_TOML: &str = include_str!("../default_quill/Quill.toml");
+    pub const QUILL_TOML: &str = include_str!("../default_quill/Quill.yaml");
     pub const PLATE_TYP: &str = include_str!("../default_quill/plate.typ");
     pub const EXAMPLE_MD: &str = include_str!("../default_quill/example.md");
 }

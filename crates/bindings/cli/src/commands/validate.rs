@@ -95,10 +95,10 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
         )));
     }
 
-    let quill_toml_path = args.quill_path.join("Quill.toml");
-    if !quill_toml_path.exists() {
+    let quill_yaml_path = args.quill_path.join("Quill.yaml");
+    if !quill_yaml_path.exists() {
         return Err(CliError::InvalidArgument(format!(
-            "Quill.toml not found in: {}",
+            "Quill.yaml not found in: {}",
             args.quill_path.display()
         )));
     }
@@ -109,13 +109,13 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
 
     let mut result = ValidationResult::new();
 
-    // Step 1: Parse the TOML config first (before full Quill load)
-    let toml_content = fs::read_to_string(&quill_toml_path).map_err(CliError::Io)?;
+    // Step 1: Parse the YAML config first (before full Quill load)
+    let yaml_content = fs::read_to_string(&quill_yaml_path).map_err(CliError::Io)?;
 
-    let config = match QuillConfig::from_toml(&toml_content) {
+    let config = match QuillConfig::from_yaml(&yaml_content) {
         Ok(c) => c,
         Err(e) => {
-            result.add_error(format!("Failed to parse Quill.toml: {}", e));
+            result.add_error(format!("Failed to parse Quill.yaml: {}", e));
             print_validation_result(&result, args.verbose);
             return Err(CliError::InvalidArgument(
                 "Quill configuration is invalid".to_string(),

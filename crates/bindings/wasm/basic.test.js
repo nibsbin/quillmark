@@ -17,13 +17,13 @@ import { Quillmark } from '@quillmark-wasm'
 // Minimal inline Quill for testing
 const TEST_QUILL = {
   files: {
-    'Quill.toml': {
-      contents: `[Quill]
-name = "test_quill"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-description = "Test quill for smoke tests"
+    'Quill.yaml': {
+      contents: `Quill:
+  name: test_quill
+  version: "1.0"
+  backend: typst
+  plate_file: plate.typ
+  description: Test quill for smoke tests
 `
     },
     'plate.typ': {

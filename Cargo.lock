@@ -2552,8 +2552,6 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
- "toml 0.9.8",
- "toml_edit 0.23.9",
  "unicode-normalization",
 ]
 
@@ -2621,7 +2619,6 @@ dependencies = [
  "serde-saphyr",
  "serde-wasm-bindgen 0.6.5",
  "serde_json",
- "toml 0.9.8",
  "tsify",
  "wasm-bindgen",
  "wasm-bindgen-test",
@@ -3084,6 +3081,7 @@ version = "1.0.145"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "ryu",
@@ -3492,7 +3490,7 @@ dependencies = [
  "serde",
  "serde_spanned 0.6.9",
  "toml_datetime 0.6.11",
- "toml_edit 0.22.27",
+ "toml_edit",
 ]
 
 [[package]]
@@ -3539,19 +3537,6 @@ dependencies = [
  "serde_spanned 0.6.9",
  "toml_datetime 0.6.11",
  "toml_write",
- "winnow",
-]
-
-[[package]]
-name = "toml_edit"
-version = "0.23.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d7cbc3b4b49633d57a0509303158ca50de80ae32c265093b24c414705807832"
-dependencies = [
- "indexmap",
- "toml_datetime 0.7.3",
- "toml_parser",
- "toml_writer",
  "winnow",
 ]
 
