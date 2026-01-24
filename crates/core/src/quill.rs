@@ -1275,8 +1275,8 @@ node_modules/
 
         // Create test files
         fs::write(
-            quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
+            quill_dir.join("Quill.yaml"),
+            "Quill:\n  name: \"test\"\n  version: \"1.0\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("plate.typ"), "test plate").unwrap();
@@ -1318,8 +1318,8 @@ node_modules/
 
         // Create test files
         fs::write(
-            quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
+            quill_dir.join("Quill.yaml"),
+            "Quill:\n  name: \"test\"\n  version: \"1.0\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("plate.typ"), "test template").unwrap();
@@ -1345,8 +1345,8 @@ node_modules/
 
         // Create test directory structure
         fs::write(
-            quill_dir.join("Quill.toml"),
-            "[Quill]\nname = \"test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"",
+            quill_dir.join("Quill.yaml"),
+            "Quill:\n  name: \"test\"\n  version: \"1.0\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test quill\"",
         )
         .unwrap();
         fs::write(quill_dir.join("plate.typ"), "template").unwrap();
@@ -1381,7 +1381,7 @@ node_modules/
         let yaml_content = r#"
 Quill:
   name: my-custom-quill
-  version: 1.0
+  version: "1.0"
   backend: typst
   plate_file: custom_plate.typ
   description: Test quill with new format
@@ -1429,19 +1429,21 @@ Quill:
         let temp_dir = TempDir::new().unwrap();
         let quill_dir = temp_dir.path();
 
-        let toml_content = r#"
-[Quill]
-name = "test-quill"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-description = "Test quill for packages"
+        let yaml_content = r#"
+Quill:
+  name: "test-quill"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  description: "Test quill for packages"
 
-[typst]
-packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
+typst:
+  packages:
+    - "@preview/bubble:0.2.2"
+    - "@preview/example:1.0.0"
 "#;
 
-        fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
+        fs::write(quill_dir.join("Quill.yaml"), yaml_content).unwrap();
         fs::write(quill_dir.join("plate.typ"), "test").unwrap();
 
         let quill = Quill::from_path(quill_dir).unwrap();
@@ -1458,15 +1460,15 @@ packages = ["@preview/bubble:0.2.2", "@preview/example:1.0.0"]
         let quill_dir = temp_dir.path();
 
         // Create test files with example specified
-        let toml_content = r#"[Quill]
-name = "test-with-template"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-example_file = "example.md"
-description = "Test quill with template"
+        let yaml_content = r#"Quill:
+  name: "test-with-template"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  example_file: "example.md"
+  description: "Test quill with template"
 "#;
-        fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
+        fs::write(quill_dir.join("Quill.yaml"), yaml_content).unwrap();
         fs::write(quill_dir.join("plate.typ"), "plate content").unwrap();
         fs::write(
             quill_dir.join("example.md"),
@@ -1493,14 +1495,14 @@ description = "Test quill with template"
         let quill_dir = temp_dir.path();
 
         // Create test files without example specified
-        let toml_content = r#"[Quill]
-name = "test-without-template"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-description = "Test quill without template"
+        let yaml_content = r#"Quill:
+  name: "test-without-template"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  description: "Test quill without template"
 "#;
-        fs::write(quill_dir.join("Quill.toml"), toml_content).unwrap();
+        fs::write(quill_dir.join("Quill.yaml"), yaml_content).unwrap();
         fs::write(quill_dir.join("plate.typ"), "plate content").unwrap();
 
         // Load quill
@@ -1518,18 +1520,18 @@ description = "Test quill without template"
         // Create a simple in-memory file tree
         let mut root_files = HashMap::new();
 
-        // Add Quill.toml
-        let quill_toml = r#"[Quill]
-name = "test-from-tree"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-description = "A test quill from tree"
+        // Add Quill.yaml
+        let quill_yaml = r#"Quill:
+  name: "test-from-tree"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  description: "A test quill from tree"
 "#;
         root_files.insert(
-            "Quill.toml".to_string(),
+            "Quill.yaml".to_string(),
             FileTreeNode::File {
-                contents: quill_toml.as_bytes().to_vec(),
+                contents: quill_yaml.as_bytes().to_vec(),
             },
         );
 
@@ -1558,12 +1560,12 @@ description = "A test quill from tree"
     fn test_from_tree_with_template() {
         let mut root_files = HashMap::new();
 
-        // Add Quill.toml with example specified
+        // Add Quill.yaml with example specified
         // Add Quill.yaml with example specified
         let quill_yaml = r#"
 Quill:
   name: test-tree-template
-  version: 1.0
+  version: "1.0"
   backend: typst
   plate_file: plate.typ
   example_file: template.md
@@ -1611,7 +1613,7 @@ Quill:
             },
             "files": {
                 "Quill.yaml": {
-                    "contents": "Quill:\n  name: test_from_json\n  version: 1.0\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill from JSON\n"
+                    "contents": "Quill:\n  name: test_from_json\n  version: \"1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill from JSON\n"
                 },
                 "plate.typ": {
                     "contents": "= Test Plate\n\nThis is test content."
@@ -1634,7 +1636,7 @@ Quill:
         let json_str = r#"{
             "files": {
                 "Quill.yaml": {
-                    "contents": "Quill:\n  name: test\n  version: 1.0\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill\n"
+                    "contents": "Quill:\n  name: test\n  version: \"1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill\n"
                 },
                 "plate.typ": {
                     "contents": "test plate"
@@ -1670,8 +1672,8 @@ Quill:
         // Test the new tree structure format
         let json_str = r#"{
             "files": {
-                "Quill.toml": {
-                    "contents": "[Quill]\nname = \"test_tree_json\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test tree JSON\"\n"
+                "Quill.yaml": {
+                    "contents": "Quill:\n  name: test_tree_json\n  version: \"1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Test tree JSON\n"
                 },
                 "plate.typ": {
                     "contents": "= Test Plate\n\nTree structure content."
@@ -1691,8 +1693,8 @@ Quill:
         // Test nested directories in tree structure
         let json_str = r#"{
             "files": {
-                "Quill.toml": {
-                    "contents": "[Quill]\nname = \"nested_test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Nested test\"\n"
+                "Quill.yaml": {
+                    "contents": "Quill:\n  name: nested_test\n  version: \"1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Nested test\n"
                 },
                 "plate.typ": {
                     "contents": "plate"
@@ -1725,10 +1727,10 @@ Quill:
         let mut root_files = HashMap::new();
 
         root_files.insert(
-            "Quill.toml".to_string(),
+            "Quill.yaml".to_string(),
             FileTreeNode::File {
                 contents:
-                    b"[Quill]\nname = \"direct_tree\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Direct tree test\"\n"
+                    b"Quill:\n  name: direct_tree\n  version: \"1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Direct tree test\n"
                         .to_vec(),
             },
         );
@@ -1765,14 +1767,14 @@ Quill:
 
     #[test]
     fn test_from_json_with_metadata_override() {
-        // Test that metadata key overrides name from Quill.toml
+        // Test that metadata key overrides name from Quill.yaml
         let json_str = r#"{
             "metadata": {
                 "name": "override_name"
             },
             "files": {
-                "Quill.toml": {
-                    "contents": "[Quill]\nname = \"toml_name\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"TOML name test\"\n"
+                "Quill.yaml": {
+                    "contents": "Quill:\n  name: toml_name\n  version: \"1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: TOML name test\n"
                 },
                 "plate.typ": {
                     "contents": "= plate"
@@ -1781,7 +1783,7 @@ Quill:
         }"#;
 
         let quill = Quill::from_json(json_str).unwrap();
-        // Metadata name should be used as default, but Quill.toml takes precedence
+        // Metadata name should be used as default, but Quill.yaml takes precedence
         // when from_tree is called
         assert_eq!(quill.name, "toml_name");
     }
@@ -1791,8 +1793,8 @@ Quill:
         // Test that empty directories are supported
         let json_str = r#"{
             "files": {
-                "Quill.toml": {
-                    "contents": "[Quill]\nname = \"empty_dir_test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Empty directory test\"\n"
+                "Quill.yaml": {
+                    "contents": "Quill:\n  name: empty_dir_test\n  version: \"1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Empty directory test\n"
                 },
                 "plate.typ": {
                     "contents": "plate"
@@ -1811,11 +1813,11 @@ Quill:
     fn test_dir_exists_and_list_apis() {
         let mut root_files = HashMap::new();
 
-        // Add Quill.toml
+        // Add Quill.yaml
         root_files.insert(
-            "Quill.toml".to_string(),
+            "Quill.yaml".to_string(),
             FileTreeNode::File {
-                contents: b"[Quill]\nname = \"test\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n"
+                contents: b"Quill:\n  name: test\n  version: \"1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill\n"
                     .to_vec(),
             },
         );
@@ -1889,8 +1891,8 @@ Quill:
 
         // Test list_files
         let root_files_list = quill.list_files("");
-        assert_eq!(root_files_list.len(), 2); // Quill.toml and plate.typ
-        assert!(root_files_list.contains(&"Quill.toml".to_string()));
+        assert_eq!(root_files_list.len(), 2); // Quill.yaml and plate.typ
+        assert!(root_files_list.contains(&"Quill.yaml".to_string()));
         assert!(root_files_list.contains(&"plate.typ".to_string()));
 
         let assets_files_list = quill.list_files("assets");
@@ -1916,24 +1918,30 @@ Quill:
     fn test_field_schemas_parsing() {
         let mut root_files = HashMap::new();
 
-        // Add Quill.toml with field schemas
-        let quill_toml = r#"[Quill]
-name = "taro"
-version = "1.0"
-backend = "typst"
-plate_file = "plate.typ"
-example_file = "taro.md"
-description = "Test template for field schemas"
+        // Add Quill.yaml with field schemas
+        let quill_yaml = r#"Quill:
+  name: "taro"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  example_file: "taro.md"
+  description: "Test template for field schemas"
 
-[fields]
-author = {type = "string", description = "Author of document" }
-ice_cream = {type = "string", description = "favorite ice cream flavor"}
-title = {type = "string", description = "title of document" }
+fields:
+  author:
+    type: "string"
+    description: "Author of document"
+  ice_cream:
+    type: "string"
+    description: "favorite ice cream flavor"
+  title:
+    type: "string"
+    description: "title of document"
 "#;
         root_files.insert(
-            "Quill.toml".to_string(),
+            "Quill.yaml".to_string(),
             FileTreeNode::File {
-                contents: quill_toml.as_bytes().to_vec(),
+                contents: quill_yaml.as_bytes().to_vec(),
             },
         );
 
@@ -2037,17 +2045,17 @@ default: "Default value"
         // Test creating a Quill without specifying a plate file
         let mut root_files = HashMap::new();
 
-        // Add Quill.toml without plate field
-        let quill_toml = r#"[Quill]
-name = "test-no-plate"
-version = "1.0"
-backend = "typst"
-description = "Test quill without plate file"
+        // Add Quill.yaml without plate field
+        let quill_yaml = r#"Quill:
+  name: "test-no-plate"
+  version: "1.0"
+  backend: "typst"
+  description: "Test quill without plate file"
 "#;
         root_files.insert(
-            "Quill.toml".to_string(),
+            "Quill.yaml".to_string(),
             FileTreeNode::File {
-                contents: quill_toml.as_bytes().to_vec(),
+                contents: quill_yaml.as_bytes().to_vec(),
             },
         );
 
@@ -2067,7 +2075,7 @@ description = "Test quill without plate file"
         let yaml_content = r#"
 Quill:
   name: test_config
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test configuration parsing
   author: Test Author
@@ -2146,7 +2154,7 @@ Quill:
         let yaml_missing_description = r#"
 Quill:
   name: test
-  version: 1.0
+  version: "1.0"
   backend: typst
 "#;
         let result = QuillConfig::from_yaml(yaml_missing_description);
@@ -2163,7 +2171,7 @@ Quill:
         let yaml_empty_description = r#"
 Quill:
   name: test
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: "   "
 "#;
@@ -2199,7 +2207,7 @@ fields:
         let quill_yaml = r#"
 Quill:
   name: metadata-test
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test metadata flow
   author: Test Author
@@ -2243,7 +2251,7 @@ typst:
         let quill_yaml = r#"
 Quill:
   name: metadata-test-yaml
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test metadata flow
   author: Test Author
@@ -2252,6 +2260,16 @@ Quill:
 typst:
   packages: 
     - "@preview/bubble:0.2.2"
+
+fields:
+  author:
+    type: string
+    default: Anonymous
+  status:
+    type: string
+    default: draft
+  title:
+    type: string
 "#;
         root_files.insert(
             "Quill.yaml".to_string(),
@@ -2282,7 +2300,7 @@ typst:
         let yaml_content = r#"
 Quill:
   name: order-test
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test field order
 
@@ -2330,7 +2348,7 @@ fields:
         let yaml_content = r#"
 Quill:
   name: full-ui-test
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test all UI properties
 
@@ -2411,7 +2429,7 @@ description: "A simple string field"
         let yaml_content = r#"
 Quill:
   name: cards-fields-test
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test [cards.X.fields.Y] syntax
 
@@ -2489,7 +2507,7 @@ invalid_key:
         let yaml_content = r#"
 Quill:
   name: cards-test
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test [cards] section
 
@@ -2530,7 +2548,7 @@ cards:
         let yaml_content = r#"
 Quill:
   name: cards-empty-fields-test
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test cards without fields
 
@@ -2552,7 +2570,7 @@ cards:
         let yaml_content = r#"
 Quill:
   name: collision-test
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test collision
 
@@ -2586,7 +2604,7 @@ cards:
         let yaml_content = r#"
 Quill:
   name: ordering-test
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test ordering
 
@@ -2635,7 +2653,7 @@ cards:
         let yaml_content = r#"
 Quill:
   name: card-order-test
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test card field order
 
@@ -2671,7 +2689,7 @@ cards:
         let yaml_content = r#"
 Quill:
   name: nested-test
-  version: 1.0
+  version: "1.0"
   backend: typst
   description: Test nested elements
 

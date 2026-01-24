@@ -26,13 +26,13 @@ fn create_test_quill(temp_dir: &TempDir, name: &str, version: &str) -> Quill {
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
-        quill_path.join("Quill.toml"),
+        quill_path.join("Quill.yaml"),
         format!(
-            "[Quill]\nname = \"{}\"\nversion = \"{}\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill version {}\"\n",
+            "Quill:\n  name: \"{}\"\n  version: \"{}\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test quill version {}\"\n",
             name, version, version
         ),
     )
-    .expect("Failed to write Quill.toml");
+    .expect("Failed to write Quill.yaml");
     fs::write(
         quill_path.join("plate.typ"),
         format!("= Version {}\n\n#{{{{ title | String(default=\"Test\") }}}}\n\n#{{{{ body | Content }}}}", version),
@@ -470,10 +470,10 @@ fn test_backward_compatibility_unversioned_quill() {
     let quill_path = temp_dir.path().join("legacy_quill");
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
-        quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"legacy_quill\"\nversion = \"0.1\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Legacy quill\"\n",
+        quill_path.join("Quill.yaml"),
+        "Quill:\n  name: \"legacy_quill\"\n  version: \"0.1\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Legacy quill\"\n",
     )
-    .expect("Failed to write Quill.toml");
+    .expect("Failed to write Quill.yaml");
     fs::write(
         quill_path.join("plate.typ"),
         "= Legacy Template\n\n#{{{{ body | Content }}}}",

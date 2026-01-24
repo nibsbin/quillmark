@@ -56,10 +56,10 @@ fn test_quill_engine_register_quill() {
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
-        quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my_test_quill\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
+        quill_path.join("Quill.yaml"),
+        "Quill:\n  name: \"my_test_quill\"\n  version: \"1.0\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test quill\"\n",
     )
-    .expect("Failed to write Quill.toml");
+    .expect("Failed to write Quill.yaml");
     fs::write(quill_path.join("plate.typ"), "Test template").expect("Failed to write plate.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
@@ -86,10 +86,10 @@ fn test_quill_engine_get_workflow() {
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
-        quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my_test_quill\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
+        quill_path.join("Quill.yaml"),
+        "Quill:\n  name: \"my_test_quill\"\n  version: \"1.0\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test quill\"\n",
     )
-    .expect("Failed to write Quill.toml");
+    .expect("Failed to write Quill.yaml");
     fs::write(
         quill_path.join("plate.typ"),
         "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",
@@ -138,10 +138,10 @@ fn test_quill_engine_backend_not_found() {
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
-        quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"bad_backend_quill\"\nversion = \"1.0\"\nbackend = \"non_existent\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
+        quill_path.join("Quill.yaml"),
+        "Quill:\n  name: \"bad_backend_quill\"\n  version: \"1.0\"\n  backend: \"non_existent\"\n  plate_file: \"plate.typ\"\n  description: \"Test quill\"\n",
     )
-    .expect("Failed to write Quill.toml");
+    .expect("Failed to write Quill.yaml");
     fs::write(quill_path.join("plate.typ"), "Test template").expect("Failed to write plate.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
@@ -199,10 +199,10 @@ fn test_quill_engine_load_with_quill_object() {
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
-        quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my_test_quill\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
+        quill_path.join("Quill.yaml"),
+        "Quill:\n  name: \"my_test_quill\"\n  version: \"1.0\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test quill\"\n",
     )
-    .expect("Failed to write Quill.toml");
+    .expect("Failed to write Quill.yaml");
     fs::write(
         quill_path.join("plate.typ"),
         "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",
@@ -233,10 +233,10 @@ fn test_quill_engine_load_with_different_string_types() {
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
-        quill_path.join("Quill.toml"),
-        "[Quill]\nname = \"my_test_quill\"\nversion = \"1.0\"\nbackend = \"typst\"\nplate_file = \"plate.typ\"\ndescription = \"Test quill\"\n",
+        quill_path.join("Quill.yaml"),
+        "Quill:\n  name: \"my_test_quill\"\n  version: \"1.0\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test quill\"\n",
     )
-    .expect("Failed to write Quill.toml");
+    .expect("Failed to write Quill.yaml");
     fs::write(
         quill_path.join("plate.typ"),
         "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",

@@ -76,15 +76,15 @@ fn test_explicit_quill_tag_takes_precedence_over_default() {
 
     fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
     fs::write(
-        quill_path.join("Quill.toml"),
-        r#"[Quill]
-name = "custom_quill"
-version = "1.0"
-backend = "typst"
-description = "Custom test quill"
+        quill_path.join("Quill.yaml"),
+        r#"Quill:
+  name: "custom_quill"
+  version: "1.0"
+  backend: "typst"
+  description: "Custom test quill"
 "#,
     )
-    .expect("Failed to write Quill.toml");
+    .expect("Failed to write Quill.yaml");
 
     let markdown = r#"---
 QUILL: custom_quill
@@ -215,9 +215,9 @@ fn test_second_backend_with_default_quill_does_not_override() {
             // Create a simple default Quill for this backend
             let mut files = HashMap::new();
             files.insert(
-                "Quill.toml".to_string(),
+                "Quill.yaml".to_string(),
                 FileTreeNode::File {
-                    contents: b"[Quill]\nname = \"__default__\"\nbackend = \"second\"\ndescription = \"Second backend default\"\n".to_vec(),
+                    contents: b"Quill:\n  name: \"__default__\"\n  backend: \"second\"\n  version: \"1.0\"\n  description: \"Second backend default\"\n".to_vec(),
                 },
             );
 
