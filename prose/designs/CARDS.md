@@ -7,7 +7,7 @@
 > **Related Documents**:
 > - [SCHEMAS.md](SCHEMAS.md) - Field validation and JSON Schema generation
 > - [PARSE.md](PARSE.md) - CARD block parsing (Extended YAML Metadata Standard)
-> - [QUILL.md](QUILL.md) - Quill.toml structure and data types
+> - [QUILL.md](QUILL.md) - Quill.yaml structure and data types
 > - ~~[SCOPES.md](SCOPES.md)~~ - **Superseded by this document**
 
 ---
@@ -41,9 +41,9 @@ All parsed cards flow into a single `CARDS` array in `ParsedDocument`. Cards are
 
 JSON Schema output uses `$defs` with `oneOf` and an explicit discriminator hint, maximizing LLM consumability.
 
-### 4. TOML Configuration Symmetry
+### 4. YAML Configuration Symmetry
 
-Card field definitions use `[cards.X.fields.Y]` syntax, mirroring top-level `[fields.Y]` for consistency.
+Card field definitions use `cards.X.fields.Y` syntax, mirroring top-level `fields.Y` for consistency.
 
 ---
 
@@ -94,38 +94,38 @@ pub struct QuillConfig {
 
 ---
 
-## Quill.toml Configuration
+## Quill.yaml Configuration
 
 ### Card Definition
 
-```toml
-[cards.indorsements]
-title = "Routing Indorsements"
-description = "Chain of routing endorsements for multi-level correspondence."
-
-[cards.indorsements.fields.from]
-title = "From office/symbol"
-type = "string"
-required = true
-description = "Office symbol of the endorsing official."
-
-[cards.indorsements.fields.for]
-title = "To office/symbol"
-type = "string"
-required = true
-description = "Office symbol receiving the endorsed memo."
-
-[cards.indorsements.fields.signature_block]
-title = "Signature block lines"
-type = "array"
-required = true
-ui.group = "Signature"
-description = "Name, grade, and duty title."
+```yaml
+cards:
+  indorsements:
+    title: Routing Indorsements
+    description: Chain of routing endorsements for multi-level correspondence.
+    fields:
+      from:
+        title: From office/symbol
+        type: string
+        required: true
+        description: Office symbol of the endorsing official.
+      for:
+        title: To office/symbol
+        type: string
+        required: true
+        description: Office symbol receiving the endorsed memo.
+      signature_block:
+        title: Signature block lines
+        type: array
+        required: true
+        ui:
+          group: Signature
+        description: Name, grade, and duty title.
 ```
 
 ### Key Changes from SCOPES.md
 
-| Old (`[cards.X.items.Y]`) | New (`[cards.X.fields.Y]`) |
+| Old (`cards.X.items.Y`) | New (`cards.X.fields.Y`) |
 |---------------------------|----------------------------|
 | `items` keyword | `fields` keyword |
 | Nested in FieldSchema | Separate CardSchema |

@@ -9,7 +9,7 @@ Quill templates support two-segment versioning (`MAJOR.MINOR`). Documents specif
 
 ## When to Use
 
-- **Template authors**: Bump version in `Quill.toml` when releasing changes
+- **Template authors**: Bump version in `Quill.yaml` when releasing changes
 - **Document authors**: Pin versions in QUILL tags for reproducibility
 - **Engine consumers**: Register multiple versions of the same template
 
@@ -58,14 +58,14 @@ Given versions `[1.0, 1.1, 2.0, 2.1, 2.2, 3.0]`:
 
 ## Template Requirements
 
-`Quill.toml` must include a `version` field:
+`Quill.yaml` must include a `version` field:
 
-```toml
-[Quill]
-name = "my_template"
-version = "2.1"           # Required
-backend = "typst"
-description = "..."
+```yaml
+Quill:
+  name: my_template
+  version: "2.1"           # Required
+  backend: typst
+  description: "..."
 ```
 
 ## Error Handling
@@ -174,16 +174,16 @@ QUILL: business_letter@latest
 
 ### Adding Versions to Existing Quills
 
-#### Step 1: Add Version Field to Quill.toml
+#### Step 1: Add Version Field to Quill.yaml
 
-Edit your `Quill.toml`:
+Edit your `Quill.yaml`:
 
-```toml
-[Quill]
-name = "my_template"
-version = "1.0"              # Add this field
-backend = "typst"
-description = "..."
+```yaml
+Quill:
+  name: my_template
+  version: "1.0"              # Add this field
+  backend: typst
+  description: "..."
 ```
 
 **Choosing the initial version:**
@@ -213,13 +213,13 @@ To support multiple versions, organize by version:
 templates/
   my_template/
     v1.0/
-      Quill.toml    # version = "1.0"
+      Quill.yaml    # version: "1.0"
       plate.typ
     v1.1/
-      Quill.toml    # version = "1.1"
+      Quill.yaml    # version: "1.1"
       plate.typ
     v2.0/
-      Quill.toml    # version = "2.0"
+      Quill.yaml    # version: "2.0"
       plate.typ
 ```
 
@@ -271,9 +271,9 @@ When releasing a new version of your template:
    cp -r templates/my_template/v2.1 templates/my_template/v2.2
    ```
 
-3. **Update Quill.toml:**
-   ```toml
-   version = "2.2"  # Update version number
+3. **Update Quill.yaml:**
+   ```yaml
+   version: "2.2"  # Update version number
    ```
 
 4. **Register the new version:**
@@ -291,7 +291,7 @@ When releasing a new version of your template:
 
 The versioning system maintains backward compatibility:
 
-- **Unversioned Quill.toml**: Error - `version` field is now required
+- **Unversioned Quill.yaml**: Error - `version` field is now required
 - **Unversioned QUILL tags**: Work fine - resolve to latest version
 - **Old documents**: Continue working without modification
 

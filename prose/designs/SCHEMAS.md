@@ -17,7 +17,7 @@ The Backend trait defines the interface for implementing backends in the quillma
 
 ## Quill
 
-Quills encapsulate the metadata, configuration, and behavior for generating a specific formatted document. They specify how the inputted ParsedDocument should be composed and compiled to produce a final document. A Quill's `Quill.toml` file specifies the following configuration:
+Quills encapsulate the metadata, configuration, and behavior for generating a specific formatted document. They specify how the inputted ParsedDocument should be composed and compiled to produce a final document. A Quill's `Quill.yaml` file specifies the following configuration:
 
 - name -> str: The name of the Quill (required).
     - Upon registering the Quill to a Quillmark instance, ensure the name has not already been registered
@@ -31,10 +31,10 @@ Quills encapsulate the metadata, configuration, and behavior for generating a sp
 
 ### Quill Field
 
-Developers can define the schema for ParsedDocument input within the `[fields]` section of Quill.toml. This schema will be used for ParsedDocument validation and to build a JSON schema.
+Developers can define the schema for ParsedDocument input within the `fields` section of Quill.yaml. This schema will be used for ParsedDocument validation and to build a JSON schema.
 
 Field properties:
-- name -> str: This is the key; e.g., for the TOML section `[fields.title]`, the name would be "title".
+- name -> str: This is the key; e.g., for the YAML section `fields.title`, the name would be "title".
 - title -> Option[str]: Short label for the field (used in JSON Schema `title` property).
 - description -> str: Detailed description of the field (used in JSON Schema `description` property).
 - type -> "str", "array", "dict", "date", "datetime", or "number": The value type of the field.
@@ -43,9 +43,9 @@ Field properties:
 - examples -> any[]: Example values for the field (used in JSON Schema `examples` array).
 - ui -> Option[Table]: A table containing UI-specific metadata (see below).
 
-**UI Configuration (Nested `[ui]` table):**
+**UI Configuration (Nested `ui` object):**
 - group -> Option[str]: UI group/section name for organizing fields (e.g., "Personal Info").
-- order -> Option[int]: Ordering index for sorting fields in the UI (auto-generated from TOML field position).
+- order -> Option[int]: Ordering index for sorting fields in the UI (auto-generated from YAML field position).
 
 **Implementation Status:**
 | Property | Status |
@@ -54,7 +54,7 @@ Field properties:
 | order | ✅ Implemented (auto-generated) |
 | component | ❌ Not yet implemented |
 
-**Type Mapping (TOML to JSON Schema):**
+**Type Mapping (YAML to JSON Schema):**
 - "str" → "string"
 - "number" → "number"
 - "array" → "array"
@@ -71,7 +71,7 @@ Field properties:
 
 ### JSON Schema Custom Properties
 
-Field schemas support a custom `x-ui` property for UI metadata that is included in the generated JSON schema. This property contains the serialized content of the `[ui]` table from the TOML configuration.
+Field schemas support a custom `x-ui` property for UI metadata that is included in the generated JSON schema. This property contains the serialized content of the `ui` object from the YAML configuration.
 
 - `x-ui`: An object containing UI metadata (group, order)
 

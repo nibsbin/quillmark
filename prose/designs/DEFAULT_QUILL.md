@@ -84,7 +84,7 @@ Add `QUILL: <name>` to the markdown frontmatter or register a default Quill.
 
 The Typst backend already has a default Quill implementation located at:
 - **Path:** `backends/quillmark-typst/default_quill/`
-- **Name:** `__default__` (as defined in `Quill.toml`)
+- **Name:** `__default__` (as defined in `Quill.yaml`)
 - **Plate File:** `plate.typ` (minimal template with metadata and body)
 - **Example:** `example.md`
 

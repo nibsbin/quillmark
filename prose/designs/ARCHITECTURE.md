@@ -60,9 +60,9 @@ High-level data flow:
 
 * Types: `Backend`, `Artifact`, `OutputFormat`
 * Parsing: `ParsedDocument` with `from_markdown()` constructor
-* Template model: `Quill` (+ `Quill.toml`)
+* Template model: `Quill` (+ `Quill.yaml`)
 * Errors & Diagnostics: `RenderError`, `TemplateError`, `Diagnostic`, `Severity`, `Location`
-* Utilities: TOML⇄YAML conversion helpers
+* Utilities: YAML parsing and conversion helpers
 
 **Design Note:** No external backend deps; backends depend on core → no cycles.
 
@@ -251,7 +251,7 @@ The AcroForm backend implements PDF form filling:
 
 ```
 quill-template/
-├─ Quill.toml              # Metadata and configuration
+├─ Quill.yaml              # Metadata and configuration
 ├─ plate.<ext>              # Template file (e.g., plate.typ)
 ├─ packages/               # Backend packages
 └─ assets/                 # Fonts, images, data

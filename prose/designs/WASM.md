@@ -25,7 +25,7 @@ JSON format with a root object containing a `files` key:
 ```json
 {
   "files": {
-    "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\n..." },
+    "Quill.yaml": { "contents": "Quill:\n  name: my-quill\n  ..." },
     "plate.typ": { "contents": "#import \"@local/quillmark-helper:0.1.0\": data, eval-markup\n= Template\n\n#eval-markup(data.BODY)" },
     "assets": {
       "logo.png": { "contents": [137, 80, 78, 71, ...] }
@@ -72,7 +72,7 @@ interface ParsedDocument {
 interface QuillInfo {
   name: string;
   backend: string;  // e.g., "typst"
-  metadata: object;  // Quill metadata from Quill.toml
+  metadata: object;  // Quill metadata from Quill.yaml
   example?: string;  // Example markdown (if available)
   schema: object;  // JSON schema for fields (always includes full schema with UI metadata)
   defaults: object;  // Default values extracted from schema

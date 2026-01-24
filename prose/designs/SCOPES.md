@@ -4,12 +4,12 @@
 >
 > **Note**: This document describes the legacy SCOPE system. The implementation has been replaced with the CARDS architecture which uses a unified `CARDS` array with typed card blocks. See [CARDS.md](CARDS.md) for the current design.
 >
-> This document defines how SCOPE blocks were configured as fields with `type = "scope"` in Quill.toml.
+> This document defines how SCOPE blocks were configured as fields with `type = "scope"` in Quill.yaml.
 
 > **Related Documents**:
 > - [SCHEMAS.md](SCHEMAS.md) - Field validation and JSON Schema generation
 > - [PARSE.md](PARSE.md) - SCOPE block parsing (Extended YAML Metadata Standard)
-> - [QUILL.md](QUILL.md) - Quill.toml structure
+> - [QUILL.md](QUILL.md) - Quill.yaml structure
 
 ---
 
@@ -45,7 +45,7 @@ Scope item fields use the same `FieldSchema` structure as document fields (see [
 
 ### 5. Naming: `items` over `fields` or `scope_fields`
 
-Nested scope field definitions use `[fields.X.items.*]` syntax because:
+Nested scope field definitions use `fields.X.items.*` syntax because:
 
 1. **JSON Schema alignment** - Arrays use `items` to define element schema
 2. **Avoids confusion** - Parent is already `[fields.*]`, reusing `fields` would be ambiguous
@@ -53,35 +53,39 @@ Nested scope field definitions use `[fields.X.items.*]` syntax because:
 
 ### 6. No Nested Scopes (v1)
 
-Scope items cannot themselves be scopes. If `type = "scope"` appears within `[fields.X.items.*]`, parsing fails with an error. This simplification is intentional for v1; nested structures can be reconsidered post-launch.
+Scope items cannot themselves be scopes. If `type = "scope"` appears within `fields.X.items.*`, parsing fails with an error. This simplification is intentional for v1; nested structures can be reconsidered post-launch.
 
 ---
 
-## Quill.toml Structure
+## Quill.yaml Structure
 
 ### Scope Field Definition
 
-```toml
-[fields.endorsements]
-type = "scope"
-title = "Endorsements"
-description = "Chain of endorsements for routing"
-ui.group = "Routing"
+```yaml
+fields:
+  endorsements:
+    type: scope
+    title: Endorsements
+    description: Chain of endorsements for routing
+    ui:
+      group: Routing
 ```
 
 ### Scope Item Field Definition
 
-```toml
-[fields.endorsements.items.name]
-type = "string"
-title = "Endorser Name"
-description = "Name of the endorsing official"
-required = true  # Explicitly required
-
-[fields.endorsements.items.org]
-type = "string"
-title = "Organization"
-default = "Unknown"  # Optional (has default)
+```yaml
+fields:
+  endorsements:
+    items:
+      name:
+        type: string
+        title: Endorser Name
+        description: Name of the endorsing official
+        required: true  # Explicitly required
+      org:
+        type: string
+        title: Organization
+        default: Unknown  # Optional (has default)
 ```
 
 ---
@@ -99,7 +103,7 @@ default = "Unknown"  # Optional (has default)
 
 ### Validation
 
-- Fields with `type = "scope"` validate each item against `[fields.X.items.*]`
+- Fields with `type = "scope"` validate each item against `fields.X.items.*`
 - Default values are applied to each item
 
 > [!IMPORTANT]
@@ -175,7 +179,7 @@ Scope-typed fields use the same UI metadata as other fields:
 | Property | Purpose |
 |----------|---------|
 | `ui.group` | Groups scope in UI sidebar |
-| `ui.order` | Display order (from position in Quill.toml) |
+| `ui.order` | Display order (from position in Quill.yaml) |
 
 Item fields within scopes also use the same UI structure.
 
@@ -185,4 +189,4 @@ Item fields within scopes also use the same UI structure.
 
 - **Parsing**: SCOPE block parsing is defined in [PARSE.md](PARSE.md) §Extended YAML Metadata Standard
 - **Field Types**: Type mappings and validation rules are defined in [SCHEMAS.md](SCHEMAS.md) §Quill Field
-- **Quill Structure**: Base Quill.toml structure is defined in [QUILL.md](QUILL.md) §Metadata Handling
+- **Quill Structure**: Base Quill.yaml structure is defined in [QUILL.md](QUILL.md) §Metadata Handling

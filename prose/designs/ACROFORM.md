@@ -9,17 +9,17 @@ This is an optional backend for `quillmark` that maps markdown/YAML context to P
 The backend handles Quills with the following structure:
 
 example_quill/
-- Quill.toml
+- Quill.yaml
 - form.pdf # we will hardcode this file name for now
 - usaf_form_8.md
 
-Quill.toml uses the default auto plate, so it does not have a plate file.
-```
-[Quill]
-name = "usaf_form_8"
-backend = "acroform"
-example = "usaf_form_8.md"
-description = "Certificate of aircrew qualification"
+Quill.yaml uses the default auto plate, so it does not have a plate file.
+```yaml
+Quill:
+  name: usaf_form_8
+  backend: acroform
+  example: usaf_form_8.md
+  description: Certificate of aircrew qualification
 ```
 
 ## Functionality

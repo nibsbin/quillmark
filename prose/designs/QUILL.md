@@ -92,12 +92,12 @@ pub struct QuillConfig {
 
 ### Standard Format
 
-The JSON format has a root object with a `files` key. The optional `metadata` key provides a default name (Quill.toml name takes precedence).
+The JSON format has a root object with a `files` key. The optional `metadata` key provides a default name (Quill.yaml name takes precedence).
 
 ```json
 {
   "files": {
-    "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\n..." },
+    "Quill.yaml": { "contents": "Quill:\n  name: my-quill\n  ..." },
     "plate.typ": { "contents": "#import \"@local/quillmark-helper:0.1.0\": data, eval-markup\n= Template\n\n#eval-markup(data.BODY)" },
     "assets": {
       "logo.png": { "contents": [137, 80, 78, 71, ...] }
@@ -118,47 +118,53 @@ The JSON format has a root object with a `files` key. The optional `metadata` ke
 1. Root MUST be an object with a `files` key
 2. File nodes MUST have a `contents` key (string or byte array)
 3. Directory nodes are objects without a `contents` key
-4. `Quill.toml` MUST exist and be valid
-5. The plate file referenced in `Quill.toml` MUST exist
+4. `Quill.yaml` MUST exist and be valid
+5. The plate file referenced in `Quill.yaml` MUST exist
 
 ---
 
 ## Metadata Handling
 
-### Quill.toml Structure
+### Quill.yaml Structure
 
-```toml
-[Quill]
-name = "my-quill"
-backend = "typst"
-description = "A beautiful template"  # required
-plate_file = "plate.typ"  # optional - if not provided, auto plate is used
-example_file = "example.md"  # optional
-version = "1.0.0"  # optional
-author = "Template Author"  # optional
+```yaml
+Quill:
+  name: my-quill
+  backend: typst
+  description: A beautiful template  # required
+  plate_file: plate.typ  # optional - if not provided, auto plate is used
+  example_file: example.md  # optional
+  version: "1.0.0"  # optional
+  author: Template Author  # optional
 
-[typst]
-# Typst-specific configuration
-packages = ["@preview/bubble:0.2.2"]
+typst:
+  # Typst-specific configuration
+  packages:
+    - "@preview/bubble:0.2.2"
 
-[fields]
-# Field schemas for template variables
-author = { description = "Author of document", type = "str", default = "Anonymous" }
-title = { description = "Document title", type = "str" }
+fields:
+  # Field schemas for template variables
+  author:
+    description: Author of document
+    type: string
+    default: Anonymous
+  title:
+    description: Document title
+    type: string
 ```
 
 ### Metadata Handling
 
 **Name Resolution:**
-- Always read from `Quill.toml` `[Quill].name` field (required)
+- Always read from `Quill.yaml` `Quill.name` field (required)
 - The `default_name` parameter in constructors is ignored (kept for API compatibility)
 
 **Metadata Storage:**
 - The `metadata` HashMap includes:
-  - `backend` - Backend identifier from `[Quill].backend`
-  - `description` - Template description from `[Quill].description`
-  - `author` - Author name if specified in `[Quill].author`
-  - Any custom fields from `[Quill]` section (excluding standard fields)
+  - `backend` - Backend identifier from `Quill.backend`
+  - `description` - Template description from `Quill.description`
+  - `author` - Author name if specified in `Quill.author`
+  - Any custom fields from `Quill` section (excluding standard fields)
   - Typst configuration with `typst_` prefix (e.g., `typst_packages`)
 
 **Schema Handling:**
@@ -184,7 +190,7 @@ let quill = Quill::from_path("path/to/my-quill")?;
 // Load from JSON (useful for web frontends)
 let json_data = r#"{
   "files": {
-    "Quill.toml": { "contents": "[Quill]\nname = \"demo\"\nbackend = \"typst\"\ndescription = \"Demo quill\"" },
+    "Quill.yaml": { "contents": "Quill:\n  name: demo\n  backend: typst\n  description: Demo quill" },
     "plate.typ": { "contents": "#set document(title: \"{{ title }}\")\n\n{{ body | Content }}" }
   }
 }"#;
