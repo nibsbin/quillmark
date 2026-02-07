@@ -8,7 +8,7 @@
 
 A template-first Markdown rendering system that converts Markdown with YAML frontmatter into PDF, SVG, and other output formats.
 
-Maintained by [tonguetoquill.com](https://www.tonguetoquill.com).
+Maintained by [TTQ](https://tonguetoquill.com).
 
 **UNDER DEVELOPMENT**
 

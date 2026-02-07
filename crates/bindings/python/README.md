@@ -2,6 +2,8 @@
 
 Python bindings for the Quillmark template-first Markdown rendering engine.
 
+Maintained by [TTQ](https://tonguetoquill.com).
+
 ## Installation
 
 ```bash

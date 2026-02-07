@@ -2,6 +2,8 @@
 
 Command-line interface for the Quillmark Markdown rendering system.
 
+Maintained by [TTQ](https://tonguetoquill.com).
+
 ## Overview
 
 `quillmark-cli` is a standalone executable that renders Markdown files with YAML frontmatter into PDF, SVG, and other formats using Quillmark templates.
