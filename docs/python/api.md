@@ -213,6 +213,7 @@ class Quill:
     def examples(self) -> dict[str, list[Any]]:
         """Example field values from schema."""
 
+    @property
     def print_tree(self) -> str:
         """Get file tree representation."""
 
@@ -263,8 +264,8 @@ class ParsedDocument:
     def fields(self) -> dict[str, Any]:
         """All frontmatter fields (includes BODY and CARDS)."""
 
-    def quill_tag(self) -> str:
-        """Get QUILL field value (defaults to '__default__' if not specified)."""
+    def quill_name(self) -> str:
+        """Get QUILL field value from the document."""
 ```
 
 **Example:**
@@ -395,7 +396,7 @@ Source code location information.
 ```python
 class Location:
     @property
-    def file(self) -> str | None:
+    def file(self) -> str:
         """Source file path."""
 
     @property
@@ -432,6 +433,10 @@ class Diagnostic:
     @property
     def hint(self) -> str | None:
         """Helpful hint."""
+
+    @property
+    def source_chain(self) -> list[str]:
+        """Chain of error sources."""
 ```
 
 ## Exceptions
