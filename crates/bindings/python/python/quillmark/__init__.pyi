@@ -17,7 +17,7 @@ class _Severity:
 
 class Location:
     @property
-    def file(self) -> str | None: ...
+    def file(self) -> str: ...
     @property
     def line(self) -> int: ...
     @property
@@ -34,6 +34,8 @@ class Diagnostic:
     def primary(self) -> Location | None: ...
     @property
     def hint(self) -> str | None: ...
+    @property
+    def source_chain(self) -> list[str]: ...
 
 class QuillmarkError(Exception):
     """Base exception for Quillmark errors."""
@@ -141,9 +143,9 @@ class Quill:
     @property
     def backend(self) -> str | None:
         """Backend identifier from metadata"""
-    
+
     @property
-    def plate(self) -> str:
+    def plate(self) -> str | None:
         """Plate template content"""
 
     @property
@@ -159,8 +161,19 @@ class Quill:
         """Field schema definitions declared by the quill (from Quill.yaml)."""
 
     @property
+    def defaults(self) -> dict[str, Any]:
+        """Default field values extracted from schema."""
+
+    @property
+    def examples(self) -> dict[str, list[Any]]:
+        """Example field values extracted from schema."""
+
+    @property
     def print_tree(self) -> str:
         """Get a string representation of the quill file tree."""
+
+    def supported_formats(self) -> list[OutputFormat]:
+        """Get supported output formats for this quill's backend."""
 
 class ParsedDocument:
     """Parsed markdown document with frontmatter."""
@@ -182,9 +195,9 @@ class ParsedDocument:
     @property
     def fields(self) -> dict[str, Any]:
         """Get all frontmatter fields."""
-    
-    def quill_name(self) -> str | None:
-        """Get QUILL field value if present."""
+
+    def quill_name(self) -> str:
+        """Get QUILL field value from the document."""
 
 class RenderResult:
     """Result of rendering operation."""

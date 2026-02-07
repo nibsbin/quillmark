@@ -64,8 +64,8 @@ engine.registered_quills()    # ['my_quill']
 
 # Create workflows
 workflow = engine.workflow(parsed)     # Infer from QUILL tag
-workflow = engine.workflow("name") # By name
-workflow = engine.workflow_from_quill(quill)       # By object
+workflow = engine.workflow("name")     # By name
+workflow = engine.workflow(quill)      # By object
 ```
 
 #### `Quill` - Template Bundle
@@ -78,10 +78,12 @@ quill = Quill.from_path("path/to/quill")
 # Properties
 quill.name              # Quill name
 quill.backend           # Backend identifier (e.g., "typst")
-quill.plate     # Template content
-quill.example           # Example markdown content
+quill.plate             # Template content (optional)
+quill.example           # Example markdown content (optional)
 quill.metadata          # Quill metadata dict
-quill.schemas            # Field documentation dict
+quill.schema            # Field schema definitions
+quill.defaults          # Default field values from schema
+quill.examples          # Example field values from schema
 quill.supported_formats()  # [OutputFormat.PDF, OutputFormat.SVG]
 ```
 
