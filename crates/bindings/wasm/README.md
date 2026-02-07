@@ -2,6 +2,8 @@
 
 WebAssembly bindings for the Quillmark markdown rendering engine.
 
+Maintained by [TTQ](https://tonguetoquill.com).
+
 ## Overview
 
 This crate provides WASM bindings for Quillmark, enabling use in web browsers, Node.js, and other JavaScript/TypeScript environments. All data exchange uses JSON serialization, and JavaScript is responsible for all I/O operations.
