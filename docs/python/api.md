@@ -144,6 +144,62 @@ class Workflow:
     @property
     def quill_name(self) -> str:
         """Quill name."""
+
+    # Dynamic Asset Methods
+    def add_asset(self, filename: str, contents: bytes) -> None:
+        """Add a dynamic asset to the workflow.
+
+        Args:
+            filename: Name of the asset file (e.g., "logo.png")
+            contents: Binary contents of the asset
+
+        Raises:
+            QuillmarkError: If an asset with the same filename already exists
+        """
+
+    def add_assets(self, assets: list[tuple[str, bytes]]) -> None:
+        """Add multiple dynamic assets at once.
+
+        Args:
+            assets: List of tuples (filename, contents)
+
+        Raises:
+            QuillmarkError: If any asset filename collides
+        """
+
+    def clear_assets(self) -> None:
+        """Clear all dynamic assets from the workflow."""
+
+    def dynamic_asset_names(self) -> list[str]:
+        """Get list of dynamic asset filenames currently in the workflow."""
+
+    # Dynamic Font Methods
+    def add_font(self, filename: str, contents: bytes) -> None:
+        """Add a dynamic font to the workflow.
+
+        Args:
+            filename: Name of the font file (e.g., "custom.ttf")
+            contents: Binary contents of the font
+
+        Raises:
+            QuillmarkError: If a font with the same filename already exists
+        """
+
+    def add_fonts(self, fonts: list[tuple[str, bytes]]) -> None:
+        """Add multiple dynamic fonts at once.
+
+        Args:
+            fonts: List of tuples (filename, contents)
+
+        Raises:
+            QuillmarkError: If any font filename collides
+        """
+
+    def clear_fonts(self) -> None:
+        """Clear all dynamic fonts from the workflow."""
+
+    def dynamic_font_names(self) -> list[str]:
+        """Get list of dynamic font filenames currently in the workflow."""
 ```
 
 **Example:**
@@ -159,6 +215,29 @@ workflow.dry_run(parsed)
 
 # Render to specific format
 result = workflow.render(parsed, OutputFormat.PDF)
+```
+
+**Dynamic Assets Example:**
+
+```python
+workflow = engine.workflow("my-quill")
+
+# Add a single asset
+with open("logo.png", "rb") as f:
+    workflow.add_asset("logo.png", f.read())
+
+# Add multiple assets at once
+assets = [
+    ("image1.png", image1_bytes),
+    ("image2.png", image2_bytes),
+]
+workflow.add_assets(assets)
+
+# Check what assets are loaded
+print(workflow.dynamic_asset_names())  # ['logo.png', 'image1.png', 'image2.png']
+
+# Clear all assets
+workflow.clear_assets()
 ```
 
 ### Quill
@@ -304,6 +383,10 @@ class RenderResult:
     @property
     def warnings(self) -> list[Diagnostic]:
         """Warning diagnostics."""
+
+    @property
+    def output_format(self) -> OutputFormat:
+        """Output format that was produced."""
 ```
 
 **Example:**
@@ -311,6 +394,7 @@ class RenderResult:
 ```python
 result = workflow.render(parsed, OutputFormat.PDF)
 
+print(f"Format: {result.output_format}")  # OutputFormat.PDF
 print(f"Artifacts: {len(result.artifacts)}")
 for artifact in result.artifacts:
     print(f"  Format: {artifact.output_format}")
@@ -335,6 +419,16 @@ class Artifact:
     def output_format(self) -> OutputFormat:
         """Output format."""
 
+    @property
+    def mime_type(self) -> str:
+        """MIME type of the artifact.
+
+        Returns:
+            'application/pdf' for PDF
+            'image/svg+xml' for SVG
+            'text/plain' for TXT
+        """
+
     def save(self, path: str | Path) -> None:
         """Save to file."""
 ```
@@ -343,6 +437,10 @@ class Artifact:
 
 ```python
 artifact = result.artifacts[0]
+
+# Check format and mime type
+print(artifact.output_format)  # OutputFormat.PDF
+print(artifact.mime_type)      # 'application/pdf'
 
 # Save to file
 artifact.save("output.pdf")

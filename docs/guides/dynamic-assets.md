@@ -40,10 +40,10 @@ result = workflow.render(parsed)
 ### Multiple Assets
 
 ```python
-assets = {}
+assets = []
 for filename in ["logo.png", "signature.jpg", "chart.svg"]:
     with open(filename, "rb") as f:
-        assets[filename] = f.read()
+        assets.append((filename, f.read()))
 
 workflow.add_assets(assets)
 ```
@@ -59,10 +59,10 @@ with open("CustomFont-Bold.ttf", "rb") as f:
 workflow.add_font("CustomFont-Bold.ttf", font_data)
 
 # Or add multiple fonts
-fonts = {
-    "CustomFont-Regular.ttf": regular_data,
-    "CustomFont-Bold.ttf": bold_data,
-}
+fonts = [
+    ("CustomFont-Regular.ttf", regular_data),
+    ("CustomFont-Bold.ttf", bold_data),
+]
 workflow.add_fonts(fonts)
 ```
 
