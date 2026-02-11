@@ -84,6 +84,13 @@ impl PyQuillmark {
             .map(|s| s.to_string())
             .collect()
     }
+
+    /// Get a registered Quill by name or reference (e.g. "my-quill@1.0")
+    fn get_quill(&self, name_or_ref: String) -> Option<PyQuill> {
+        self.inner
+            .get_quill(&name_or_ref)
+            .map(|q| PyQuill { inner: q.clone() })
+    }
 }
 
 // Workflow wrapper
