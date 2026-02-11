@@ -65,9 +65,14 @@ engine.registered_backends()  # ['typst']
 engine.registered_quills()    # ['my_quill']
 
 # Create workflows
-workflow = engine.workflow(parsed)     # Infer from QUILL tag
-workflow = engine.workflow("name")     # By name
-workflow = engine.workflow(quill)      # By object
+workflow = engine.workflow(parsed)          # Infer from QUILL tag
+workflow = engine.workflow("name")          # By name (latest version)
+workflow = engine.workflow("name@1.0")      # By reference (specific version)
+workflow = engine.workflow(quill)           # By object
+
+# Retrieve registered quills
+quill = engine.get_quill("name")            # Get latest version
+quill = engine.get_quill("name@1.0")        # Get specific version
 ```
 
 #### `Quill` - Template Bundle

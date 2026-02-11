@@ -66,7 +66,15 @@ result = workflow.render(parsed, OutputFormat.PDF)
 - `supported_formats` - Supported output formats (property)
 - `quill_name` - Quill name (property)
 
-**Note**: Dynamic asset and font injection methods are not currently supported in Python bindings.
+**Dynamic Asset/Font Methods:**
+- `add_asset(filename, contents)` - Add a dynamic asset
+- `add_assets(assets)` - Add multiple assets at once
+- `clear_assets()` - Clear all dynamic assets
+- `dynamic_asset_names()` - Get list of asset filenames
+- `add_font(filename, contents)` - Add a dynamic font
+- `add_fonts(fonts)` - Add multiple fonts at once
+- `clear_fonts()` - Clear all dynamic fonts
+- `dynamic_font_names()` - Get list of font filenames
 
 #### 3. `Quill` - Template Bundle
 
@@ -110,8 +118,8 @@ for artifact in result.artifacts:
 ```
 
 **Properties:**
-- `RenderResult.artifacts`, `RenderResult.warnings`
-- `Artifact.bytes`, `Artifact.output_format`
+- `RenderResult.artifacts`, `RenderResult.warnings`, `RenderResult.output_format`
+- `Artifact.bytes`, `Artifact.output_format`, `Artifact.mime_type`
 
 **Methods:**
 - `Artifact.save(path)` - Save artifact to file

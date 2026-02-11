@@ -80,8 +80,7 @@ class Quillmark:
 class Workflow:
     """Sealed workflow for executing the render pipeline.
     
-    Note: Dynamic asset and font injection is not currently supported in Python bindings.
-    Assets must be included in the quill bundle.
+    Supports dynamic asset and font injection at runtime via add_asset/add_font methods.
     """
     
     def render(
@@ -124,6 +123,60 @@ class Workflow:
     @property
     def quill_name(self) -> str:
         """Get quill name."""
+
+    def add_asset(self, filename: str, contents: bytes) -> None:
+        """Add a dynamic asset to the workflow.
+        
+        Args:
+            filename: Name of the asset file (e.g., "logo.png")
+            contents: Binary contents of the asset
+        
+        Raises:
+            QuillmarkError: If an asset with the same filename already exists
+        """
+
+    def add_assets(self, assets: list[tuple[str, bytes]]) -> None:
+        """Add multiple dynamic assets at once.
+        
+        Args:
+            assets: List of tuples (filename, contents)
+        
+        Raises:
+            QuillmarkError: If any asset filename collides
+        """
+
+    def clear_assets(self) -> None:
+        """Clear all dynamic assets from the workflow."""
+
+    def dynamic_asset_names(self) -> list[str]:
+        """Get list of dynamic asset filenames currently in the workflow."""
+
+    def add_font(self, filename: str, contents: bytes) -> None:
+        """Add a dynamic font to the workflow.
+        
+        Args:
+            filename: Name of the font file (e.g., "custom.ttf")
+            contents: Binary contents of the font
+        
+        Raises:
+            QuillmarkError: If a font with the same filename already exists
+        """
+
+    def add_fonts(self, fonts: list[tuple[str, bytes]]) -> None:
+        """Add multiple dynamic fonts at once.
+        
+        Args:
+            fonts: List of tuples (filename, contents)
+        
+        Raises:
+            QuillmarkError: If any font filename collides
+        """
+
+    def clear_fonts(self) -> None:
+        """Clear all dynamic fonts from the workflow."""
+
+    def dynamic_font_names(self) -> list[str]:
+        """Get list of dynamic font filenames currently in the workflow."""
 
 class Quill:
     """Template bundle containing plate templates and assets."""
@@ -210,6 +263,10 @@ class RenderResult:
     def warnings(self) -> list[Diagnostic]:
         """Warning diagnostics"""
 
+    @property
+    def output_format(self) -> OutputFormat:
+        """Output format that was produced"""
+
 class Artifact:
     """Output artifact (PDF, SVG, etc.)."""
     
@@ -220,6 +277,10 @@ class Artifact:
     @property
     def output_format(self) -> OutputFormat:
         """Output format"""
+
+    @property
+    def mime_type(self) -> str:
+        """MIME type of the artifact (e.g., 'application/pdf', 'image/svg+xml')"""
     
     def save(self, path: str | Path) -> None:
         """Save artifact to file."""

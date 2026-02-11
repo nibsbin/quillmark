@@ -84,6 +84,13 @@ impl PyQuillmark {
             .map(|s| s.to_string())
             .collect()
     }
+
+    /// Get a registered Quill by name or reference (e.g. "my-quill@1.0")
+    fn get_quill(&self, name_or_ref: String) -> Option<PyQuill> {
+        self.inner
+            .get_quill(&name_or_ref)
+            .map(|q| PyQuill { inner: q.clone() })
+    }
 }
 
 // Workflow wrapper
@@ -134,6 +141,76 @@ impl PyWorkflow {
     #[getter]
     fn quill_name(&self) -> &str {
         self.inner.quill_name()
+    }
+
+    /// Add a dynamic asset to the workflow.
+    ///
+    /// Args:
+    ///     filename: Name of the asset file (e.g., "logo.png")
+    ///     contents: Binary contents of the asset
+    ///
+    /// Raises:
+    ///     QuillmarkError: If an asset with the same filename already exists
+    fn add_asset(&mut self, filename: String, contents: Vec<u8>) -> PyResult<()> {
+        self.inner
+            .add_asset(filename, contents)
+            .map_err(convert_render_error)
+    }
+
+    /// Add multiple dynamic assets at once.
+    ///
+    /// Args:
+    ///     assets: List of tuples (filename, contents)
+    ///
+    /// Raises:
+    ///     QuillmarkError: If any asset filename collides
+    fn add_assets(&mut self, assets: Vec<(String, Vec<u8>)>) -> PyResult<()> {
+        self.inner.add_assets(assets).map_err(convert_render_error)
+    }
+
+    /// Clear all dynamic assets from the workflow.
+    fn clear_assets(&mut self) {
+        self.inner.clear_assets()
+    }
+
+    /// Get list of dynamic asset filenames currently in the workflow.
+    fn dynamic_asset_names(&self) -> Vec<String> {
+        self.inner.dynamic_asset_names()
+    }
+
+    /// Add a dynamic font to the workflow.
+    ///
+    /// Args:
+    ///     filename: Name of the font file (e.g., "custom.ttf")
+    ///     contents: Binary contents of the font
+    ///
+    /// Raises:
+    ///     QuillmarkError: If a font with the same filename already exists
+    fn add_font(&mut self, filename: String, contents: Vec<u8>) -> PyResult<()> {
+        self.inner
+            .add_font(filename, contents)
+            .map_err(convert_render_error)
+    }
+
+    /// Add multiple dynamic fonts at once.
+    ///
+    /// Args:
+    ///     fonts: List of tuples (filename, contents)
+    ///
+    /// Raises:
+    ///     QuillmarkError: If any font filename collides
+    fn add_fonts(&mut self, fonts: Vec<(String, Vec<u8>)>) -> PyResult<()> {
+        self.inner.add_fonts(fonts).map_err(convert_render_error)
+    }
+
+    /// Clear all dynamic fonts from the workflow.
+    fn clear_fonts(&mut self) {
+        self.inner.clear_fonts()
+    }
+
+    /// Get list of dynamic font filenames currently in the workflow.
+    fn dynamic_font_names(&self) -> Vec<String> {
+        self.inner.dynamic_font_names()
     }
 }
 
@@ -323,6 +400,11 @@ impl PyRenderResult {
             .map(|d| PyDiagnostic { inner: d.into() })
             .collect()
     }
+
+    #[getter]
+    fn output_format(&self) -> PyOutputFormat {
+        self.inner.output_format.into()
+    }
 }
 
 // Artifact wrapper
@@ -352,6 +434,15 @@ impl PyArtifact {
                 path, e
             ))
         })
+    }
+
+    #[getter]
+    fn mime_type(&self) -> &'static str {
+        match self.output_format {
+            OutputFormat::Pdf => "application/pdf",
+            OutputFormat::Svg => "image/svg+xml",
+            OutputFormat::Txt => "text/plain",
+        }
     }
 }
 
