@@ -61,7 +61,7 @@ class Quillmark:
         """Get workflow for rendering.
 
         Args:
-            quill_ref: Quill name (str), Quill object, or ParsedDocument
+            quill_ref: Quill name (str) or reference (e.g. "name@1.0"), Quill object, or ParsedDocument
 
         Returns:
             Workflow for rendering
@@ -76,6 +76,16 @@ class Quillmark:
 
     def registered_quills(self) -> list[str]:
         """Get registered quill names."""
+
+    def get_quill(self, name_or_ref: str) -> Quill | None:
+        """Get a registered quill by name or reference.
+
+        Args:
+            name_or_ref: Quill name (str) or reference (e.g. "name@1.0")
+
+        Returns:
+            Quill object or None if not found
+        """
 ```
 
 **Example:**
@@ -94,9 +104,15 @@ engine.register_quill(quill)
 print(engine.registered_quills())  # ['my-quill']
 
 # Create workflow (multiple ways)
-workflow = engine.workflow("my-quill")       # by name
+# Create workflow (multiple ways)
+workflow = engine.workflow("my-quill")       # by name (latest)
+workflow = engine.workflow("my-quill@1.0")   # by reference (specific version)
 workflow = engine.workflow(quill)            # by Quill object
 workflow = engine.workflow(parsed_document)  # by ParsedDocument (uses QUILL field)
+
+# Retrieve quill
+quill = engine.get_quill("my-quill")
+quill_v1 = engine.get_quill("my-quill@1.0")
 ```
 
 ### Workflow
