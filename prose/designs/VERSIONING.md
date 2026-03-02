@@ -264,7 +264,7 @@ To pin to a specific version, add `@version`:
 
 ```markdown
 ---
-QUILL: my_template@1.0.0    # Pinned to 1.0.0
+QUILL: my_template@1.0.0    # Exact version 1.0.0
 ---
 ```
 

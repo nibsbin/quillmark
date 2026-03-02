@@ -167,7 +167,8 @@ impl Quillmark {
                     )
                     .with_code("quill::missing_version".to_string())
                     .with_hint(
-                        "Add 'version = \"1.0.0\"' to the [Quill] section of Quill.yaml".to_string(),
+                        "Add 'version = \"1.0.0\"' to the [Quill] section of Quill.yaml"
+                            .to_string(),
                     ),
                 ),
             })?;

@@ -98,7 +98,11 @@ pub struct Version {
 impl Version {
     /// Create a new version
     pub fn new(major: u32, minor: u32, patch: u32) -> Self {
-        Self { major, minor, patch }
+        Self {
+            major,
+            minor,
+            patch,
+        }
     }
 }
 
@@ -107,9 +111,9 @@ impl FromStr for Version {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split('.').collect();
-        
+
         // Support both two-segment (MAJOR.MINOR) and three-segment (MAJOR.MINOR.PATCH)
-        if parts.len() < 2 || parts.len() > 3 {
+        if !matches!(parts.len(), 2 | 3) {
             return Err(format!(
                 "Invalid version format '{}': expected MAJOR.MINOR.PATCH or MAJOR.MINOR (e.g., '2.1.0' or '2.1')",
                 s
@@ -133,7 +137,11 @@ impl FromStr for Version {
             0
         };
 
-        Ok(Version { major, minor, patch })
+        Ok(Version {
+            major,
+            minor,
+            patch,
+        })
     }
 }
 
@@ -199,7 +207,7 @@ impl FromStr for VersionSelector {
 
         // Count segments to determine selector type
         let parts: Vec<&str> = version_str.split('.').collect();
-        
+
         match parts.len() {
             // Three segments: exact version (MAJOR.MINOR.PATCH)
             3 => {
@@ -432,7 +440,10 @@ mod tests {
 
     #[test]
     fn test_version_selector_display() {
-        assert_eq!(VersionSelector::Exact(Version::new(2, 1, 0)).to_string(), "@2.1.0");
+        assert_eq!(
+            VersionSelector::Exact(Version::new(2, 1, 0)).to_string(),
+            "@2.1.0"
+        );
         assert_eq!(VersionSelector::Minor(2, 1).to_string(), "@2.1");
         assert_eq!(VersionSelector::Major(2).to_string(), "@2");
         assert_eq!(VersionSelector::Latest.to_string(), "@latest");
@@ -490,10 +501,7 @@ mod tests {
         );
         assert_eq!(ref1.to_string(), "resume@2.1.0");
 
-        let ref1b = QuillReference::new(
-            "resume".to_string(),
-            VersionSelector::Minor(2, 1),
-        );
+        let ref1b = QuillReference::new("resume".to_string(), VersionSelector::Minor(2, 1));
         assert_eq!(ref1b.to_string(), "resume@2.1");
 
         let ref2 = QuillReference::new("resume".to_string(), VersionSelector::Major(2));
@@ -512,7 +520,10 @@ mod tests {
         // Exact version with colon separator
         let ref1b = QuillReference::from_str("usaf_memo:0.1.0").unwrap();
         assert_eq!(ref1b.name, "usaf_memo");
-        assert_eq!(ref1b.selector, VersionSelector::Exact(Version::new(0, 1, 0)));
+        assert_eq!(
+            ref1b.selector,
+            VersionSelector::Exact(Version::new(0, 1, 0))
+        );
 
         let ref2 = QuillReference::from_str("name:latest").unwrap();
         assert_eq!(ref2.name, "name");

@@ -169,7 +169,7 @@ fn test_resolve_exact_version_selector() {
 #[test]
 #[cfg(feature = "typst")]
 fn test_parse_document_with_version_syntax() {
-    // Parse document with QUILL: resume_template@2.1
+    // Parse document with QUILL: resume_template@2.1 (minor selector in semver)
     let markdown = r#"---
 QUILL: resume_template@2.1
 title: Test Document
@@ -184,13 +184,13 @@ title: Test Document
     let quill_ref = parsed.quill_reference();
     assert_eq!(quill_ref.name, "resume_template");
 
-    // Check that it's an Exact version selector
+    // Two-segment version creates Minor selector
     match quill_ref.selector {
-        quillmark_core::VersionSelector::Exact(v) => {
-            assert_eq!(v.major, 2);
-            assert_eq!(v.minor, 1);
+        quillmark_core::VersionSelector::Minor(major, minor) => {
+            assert_eq!(major, 2);
+            assert_eq!(minor, 1);
         }
-        _ => panic!("Expected Exact version selector"),
+        _ => panic!("Expected Minor version selector for two-segment version"),
     }
 }
 
@@ -532,11 +532,12 @@ title: Test
     let quill_ref = parsed.quill_reference();
 
     assert_eq!(quill_ref.name, "usaf_memo");
+    // Two-segment version with colon syntax is a Minor selector in semver
     match quill_ref.selector {
-        quillmark_core::VersionSelector::Exact(v) => {
-            assert_eq!(v.major, 0);
-            assert_eq!(v.minor, 1);
+        quillmark_core::VersionSelector::Minor(major, minor) => {
+            assert_eq!(major, 0);
+            assert_eq!(minor, 1);
         }
-        _ => panic!("Expected Exact version selector for colon syntax"),
+        _ => panic!("Expected Minor version selector for colon syntax"),
     }
 }
