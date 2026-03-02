@@ -14,7 +14,7 @@ This directory contains design documents that describe the architecture and comp
 - **[PARSE.md](PARSE.md)** - Markdown parsing and Extended YAML Metadata Standard
 - **[QUILL.md](QUILL.md)** - Quill template bundle structure, file tree API, and JSON contract
 - **[QUILL_VALUE.md](QUILL_VALUE.md)** - Unified value type for TOML/YAML/JSON conversions
-- **[VERSIONING.md](VERSIONING.md)** - Two-segment version system for reproducible rendering
+- **[VERSIONING.md](VERSIONING.md)** - Two-segment Quill template versioning (not semver) for reproducible rendering
 - **[SCHEMAS.md](SCHEMAS.md)** - Configuration schemas and field validation
 - **[CARDS.md](CARDS.md)** - Composable cards architecture with unified CARDS array
 - ~~**[SCOPES.md](SCOPES.md)**~~ - *Superseded by CARDS.md*

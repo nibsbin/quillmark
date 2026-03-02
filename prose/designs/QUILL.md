@@ -56,7 +56,7 @@ pub struct QuillConfig {
     pub description: String,
     /// Backend identifier (e.g., "typst")
     pub backend: String,
-    /// Semantic version of the quill
+    /// Two-segment version (MAJOR.MINOR), see VERSIONING.md
     pub version: Option<String>,
     /// Author of the quill
     pub author: Option<String>,
