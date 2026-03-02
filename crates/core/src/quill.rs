@@ -695,7 +695,7 @@ impl QuillConfig {
             return Err("Invalid 'version' field format".into());
         };
 
-        // Validate version format (must be MAJOR.MINOR)
+        // Validate version format (semver: MAJOR.MINOR.PATCH or MAJOR.MINOR)
         use std::str::FromStr;
         crate::version::Version::from_str(&version)
             .map_err(|e| format!("Invalid version '{}': {}", version, e))?;
