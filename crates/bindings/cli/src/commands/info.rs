@@ -178,7 +178,12 @@ fn count_schema_fields(schema: &quillmark_core::QuillValue) -> usize {
         .as_json()
         .get("properties")
         .and_then(|p| p.as_object())
-        .map(|props| props.keys().filter(|k| *k != "BODY" && *k != "CARDS").count())
+        .map(|props| {
+            props
+                .keys()
+                .filter(|k| *k != "BODY" && *k != "CARDS")
+                .count()
+        })
         .unwrap_or(0)
 }
 
