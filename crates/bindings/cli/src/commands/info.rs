@@ -61,8 +61,15 @@ fn print_json(quill: &Quill) -> Result<()> {
     // Add counts
     info.insert(
         "field_count".to_string(),
-        serde_json::Value::Number(quill.extract_defaults().len().into()),
+        serde_json::Value::Number(count_schema_fields(&quill.schema).into()),
     );
+    let card_count = count_schema_cards(&quill.schema);
+    if card_count > 0 {
+        info.insert(
+            "card_count".to_string(),
+            serde_json::Value::Number(card_count.into()),
+        );
+    }
     info.insert(
         "has_plate".to_string(),
         serde_json::Value::Bool(quill.plate.is_some()),

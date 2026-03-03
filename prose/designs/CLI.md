@@ -37,12 +37,12 @@ quillmark render [OPTIONS] <MARKDOWN_FILE>
 
 **Current Implementation:**
 - `render` - Render markdown file to output format
+- `schema` - Retrieve the Quill's field schema
+- `validate` - Validate quill configuration
+- `info` - Display quill template metadata and information
 
 **Future Subcommands** (not yet implemented):
-- `info` - Display quill template information
 - `list` - List available quills
-- `validate` - Validate markdown against quill schema
-- `schema` - Retrieve the Quill's field schema
 
 ---
 
@@ -135,18 +135,44 @@ quillmark schema ./quills/usaf_memo -o schema.json
 
 ---
 
+### Command: `info`
+
+Display metadata and information about a quill template.
+
+**Signature:**
+```
+quillmark info <QUILL_PATH> [OPTIONS]
+```
+
+**Required Arguments:**
+- `<QUILL_PATH>` - Path to quill directory
+
+**Options:**
+- `--json` - Output as JSON instead of human-readable format
+
+**Behavior:**
+1. Load quill from filesystem
+2. Extract metadata (name, version, author, description, backend)
+3. Count fields, cards, defaults, and examples from schema
+4. Output in human-readable or JSON format
+
+**Examples:**
+```bash
+# Display quill info in human-readable format
+quillmark info ./quills/usaf_memo
+
+# Display quill info as JSON
+quillmark info --json ./quills/usaf_memo
+```
+
+---
+
 ### Future Commands
 
 The following commands are planned but not yet implemented:
 
-#### `info` - Display Quill Information
-Display metadata, supported formats, and field schemas for a quill template.
-
 #### `list` - List Available Quills
 Discover and list quills from a directory or directory tree.
-
-#### `validate` - Validate Markdown
-Validate markdown frontmatter against a quill's JSON schema.
 
 See "Future Enhancements" section for more details on planned features.
 
@@ -163,7 +189,10 @@ crates/bindings/cli/
     ├── main.rs          # Entry point, CLI parsing
     ├── commands/
     │   ├── mod.rs       # Command module exports
-    │   └── render.rs    # Render command implementation
+    │   ├── info.rs      # Info command implementation
+    │   ├── render.rs    # Render command implementation
+    │   ├── schema.rs    # Schema command implementation
+    │   └── validate.rs  # Validate command implementation
     ├── output.rs        # Output path derivation and file writing
     └── errors.rs        # Error handling and display
 ```
