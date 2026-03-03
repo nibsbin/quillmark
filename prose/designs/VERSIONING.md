@@ -82,9 +82,9 @@ Version errors provide actionable diagnostics:
 Error: Version not found
   Template: resume_template
   Requested: @2.3
-  Available: 3.0, 2.2, 2.1, 2.0, 1.0
+  Available: 3.0.0, 2.2.0, 2.1.0, 2.0.0, 1.0.0
 
-  Suggestion: Use @2 for latest 2.x (currently 2.2)
+  Suggestion: Use @2 for latest 2.x.x (currently 2.2.0)
 ```
 
 See [ERROR.md](ERROR.md) for error handling patterns.
@@ -100,9 +100,9 @@ use quillmark_core::Quill;
 let mut engine = Quillmark::new();
 
 // Load different versions of the same template
-let resume_v1 = Quill::from_path("templates/resume/v1.0")?;
-let resume_v2 = Quill::from_path("templates/resume/v2.0")?;
-let resume_v2_1 = Quill::from_path("templates/resume/v2.1")?;
+let resume_v1 = Quill::from_path("templates/resume/v1.0.0")?;
+let resume_v2 = Quill::from_path("templates/resume/v2.0.0")?;
+let resume_v2_1 = Quill::from_path("templates/resume/v2.1.0")?;
 
 // All versions coexist in the registry
 engine.register_quill(resume_v1)?;
