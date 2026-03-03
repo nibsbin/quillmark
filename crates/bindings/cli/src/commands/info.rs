@@ -3,6 +3,10 @@ use clap::Parser;
 use quillmark::Quill;
 use std::path::PathBuf;
 
+/// Standard metadata keys that are surfaced as top-level fields in the output.
+/// These are excluded from the "additional metadata" section.
+const STANDARD_METADATA_KEYS: &[&str] = &["backend", "version", "author", "description"];
+
 #[derive(Parser)]
 pub struct InfoArgs {
     /// Path to quill directory
@@ -82,7 +86,7 @@ fn print_json(quill: &Quill) -> Result<()> {
     // Add any additional metadata (excluding the standard fields already included)
     let mut extra_metadata = serde_json::Map::new();
     for (key, value) in &quill.metadata {
-        if key != "backend" && key != "version" && key != "author" && key != "description" {
+        if !STANDARD_METADATA_KEYS.contains(&key.as_str()) {
             extra_metadata.insert(key.clone(), value.as_json().clone());
         }
     }
@@ -160,7 +164,7 @@ fn print_human_readable(quill: &Quill) {
     let extra_keys: Vec<&String> = quill
         .metadata
         .keys()
-        .filter(|k| *k != "backend" && *k != "version" && *k != "author" && *k != "description")
+        .filter(|k| !STANDARD_METADATA_KEYS.contains(&k.as_str()))
         .collect();
     if !extra_keys.is_empty() {
         println!("  Metadata:");
