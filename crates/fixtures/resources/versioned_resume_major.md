@@ -50,4 +50,4 @@ Full-stack developer specializing in modern web technologies with a focus on use
 
 ---
 
-*This resume uses major version selector (@2) to automatically get the latest 2.x template*
+*This resume uses major version selector (@2) to automatically get the latest 2.x.x template*

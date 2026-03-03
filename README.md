@@ -15,7 +15,7 @@ Maintained by [TTQ](https://tonguetoquill.com).
 ## Features
 
 - **Template-first design**: Quill templates control structure and styling, Markdown provides content
-- **Version management**: Two-segment versioning (`MAJOR.MINOR`) for reproducible rendering with flexible version selectors
+- **Version management**: Semantic versioning (`MAJOR.MINOR.PATCH`) for reproducible rendering with flexible version selectors
 - **YAML metadata**: Extended YAML support for inline metadata blocks
 - **Multiple backends**:
   - PDF and SVG output via Typst backend
@@ -64,12 +64,13 @@ let pdf_bytes = &result.artifacts[0].bytes;
 
 ## Version Management
 
-Quillmark supports two-segment versioning for templates, enabling reproducible rendering:
+Quillmark supports semantic versioning for templates, enabling reproducible rendering:
 
 ```yaml
 ---
-QUILL: "template@2.1"      # Pin to exact version
-QUILL: "template@2"        # Latest 2.x version
+QUILL: "template@2.1.0"    # Pin to exact version
+QUILL: "template@2.1"      # Latest 2.1.x version
+QUILL: "template@2"        # Latest 2.x.x version
 QUILL: "template@latest"   # Latest overall
 QUILL: "template"          # Latest overall (default)
 ---
@@ -79,7 +80,7 @@ Templates specify versions in `Quill.yaml`:
 ```yaml
 Quill:
   name: resume_template
-  version: "2.1"
+  version: "2.1.0"
   backend: typst
 ```
 

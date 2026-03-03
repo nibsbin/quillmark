@@ -4,14 +4,14 @@
 //!
 //! ## Overview
 //!
-//! This module provides types for managing Quill template versions using a
-//! two-segment versioning scheme (MAJOR.MINOR). This is simpler than semantic
-//! versioning while still providing meaningful compatibility signaling.
+//! This module provides types for managing Quill template versions using
+//! semantic versioning (MAJOR.MINOR.PATCH). This follows industry standard
+//! semver conventions for compatibility signaling.
 //!
 //! ## Key Types
 //!
-//! - [`Version`]: Two-segment version number (MAJOR.MINOR)
-//! - [`VersionSelector`]: Specifies which version to use (exact, major, or latest)
+//! - [`Version`]: Semantic version number (MAJOR.MINOR.PATCH)
+//! - [`VersionSelector`]: Specifies which version to use (exact, major, minor, or latest)
 //! - [`QuillReference`]: Complete reference to a Quill with name and version
 //!
 //! ## Examples
@@ -22,10 +22,15 @@
 //! use quillmark_core::version::Version;
 //! use std::str::FromStr;
 //!
-//! let v = Version::from_str("2.1").unwrap();
+//! let v = Version::from_str("2.1.0").unwrap();
 //! assert_eq!(v.major, 2);
 //! assert_eq!(v.minor, 1);
-//! assert_eq!(v.to_string(), "2.1");
+//! assert_eq!(v.patch, 0);
+//! assert_eq!(v.to_string(), "2.1.0");
+//!
+//! // Two-segment versions are also supported (patch defaults to 0)
+//! let v2 = Version::from_str("2.1").unwrap();
+//! assert_eq!(v2.patch, 0);
 //! ```
 //!
 //! ### Version Comparison
@@ -34,8 +39,8 @@
 //! use quillmark_core::version::Version;
 //! use std::str::FromStr;
 //!
-//! let v1 = Version::from_str("1.0").unwrap();
-//! let v2 = Version::from_str("2.1").unwrap();
+//! let v1 = Version::from_str("1.0.0").unwrap();
+//! let v2 = Version::from_str("2.1.0").unwrap();
 //! assert!(v1 < v2);
 //! ```
 //!
@@ -45,7 +50,7 @@
 //! use quillmark_core::version::QuillReference;
 //! use std::str::FromStr;
 //!
-//! let ref1 = QuillReference::from_str("resume_template@2.1").unwrap();
+//! let ref1 = QuillReference::from_str("resume_template@2.1.0").unwrap();
 //! assert_eq!(ref1.name, "resume_template");
 //!
 //! let ref2 = QuillReference::from_str("resume_template@2").unwrap();
@@ -57,11 +62,12 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
 
-/// Two-segment version number (MAJOR.MINOR)
+/// Semantic version number (MAJOR.MINOR.PATCH)
 ///
-/// Versions use a simple two-segment scheme where:
+/// Versions follow semantic versioning conventions where:
 /// - MAJOR indicates breaking changes
-/// - MINOR indicates compatible changes (features, fixes, improvements)
+/// - MINOR indicates new features (backward-compatible)
+/// - PATCH indicates bug fixes (backward-compatible)
 ///
 /// # Examples
 ///
@@ -69,24 +75,34 @@ use std::str::FromStr;
 /// use quillmark_core::version::Version;
 /// use std::str::FromStr;
 ///
-/// let v = Version::new(2, 1);
-/// assert_eq!(v.to_string(), "2.1");
+/// let v = Version::new(2, 1, 0);
+/// assert_eq!(v.to_string(), "2.1.0");
 ///
-/// let parsed = Version::from_str("2.1").unwrap();
+/// let parsed = Version::from_str("2.1.0").unwrap();
 /// assert_eq!(parsed, v);
+///
+/// // Two-segment versions are also supported (patch defaults to 0)
+/// let v2 = Version::from_str("2.1").unwrap();
+/// assert_eq!(v2, Version::new(2, 1, 0));
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Version {
     /// Major version number (breaking changes)
     pub major: u32,
-    /// Minor version number (compatible changes)
+    /// Minor version number (new features, backward-compatible)
     pub minor: u32,
+    /// Patch version number (bug fixes, backward-compatible)
+    pub patch: u32,
 }
 
 impl Version {
     /// Create a new version
-    pub fn new(major: u32, minor: u32) -> Self {
-        Self { major, minor }
+    pub fn new(major: u32, minor: u32, patch: u32) -> Self {
+        Self {
+            major,
+            minor,
+            patch,
+        }
     }
 }
 
@@ -95,9 +111,11 @@ impl FromStr for Version {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split('.').collect();
-        if parts.len() != 2 {
+
+        // Support both two-segment (MAJOR.MINOR) and three-segment (MAJOR.MINOR.PATCH)
+        if !matches!(parts.len(), 2 | 3) {
             return Err(format!(
-                "Invalid version format '{}': expected MAJOR.MINOR (e.g., '2.1')",
+                "Invalid version format '{}': expected MAJOR.MINOR.PATCH or MAJOR.MINOR (e.g., '2.1.0' or '2.1')",
                 s
             ));
         }
@@ -110,13 +128,26 @@ impl FromStr for Version {
             .parse::<u32>()
             .map_err(|_| format!("Invalid minor version '{}': must be a number", parts[1]))?;
 
-        Ok(Version { major, minor })
+        // Default patch to 0 for backward compatibility with two-segment versions
+        let patch = if parts.len() == 3 {
+            parts[2]
+                .parse::<u32>()
+                .map_err(|_| format!("Invalid patch version '{}': must be a number", parts[2]))?
+        } else {
+            0
+        };
+
+        Ok(Version {
+            major,
+            minor,
+            patch,
+        })
     }
 }
 
 impl fmt::Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}.{}", self.major, self.minor)
+        write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
     }
 }
 
@@ -129,7 +160,10 @@ impl PartialOrd for Version {
 impl Ord for Version {
     fn cmp(&self, other: &Self) -> Ordering {
         match self.major.cmp(&other.major) {
-            Ordering::Equal => self.minor.cmp(&other.minor),
+            Ordering::Equal => match self.minor.cmp(&other.minor) {
+                Ordering::Equal => self.patch.cmp(&other.patch),
+                other => other,
+            },
             other => other,
         }
     }
@@ -143,15 +177,18 @@ impl Ord for Version {
 /// use quillmark_core::version::VersionSelector;
 /// use std::str::FromStr;
 ///
-/// let exact = VersionSelector::from_str("@2.1").unwrap();
+/// let exact = VersionSelector::from_str("@2.1.0").unwrap();
+/// let minor = VersionSelector::from_str("@2.1").unwrap();
 /// let major = VersionSelector::from_str("@2").unwrap();
 /// let latest = VersionSelector::from_str("@latest").unwrap();
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum VersionSelector {
-    /// Match exactly this version (e.g., "@2.1")
+    /// Match exactly this version (e.g., "@2.1.0")
     Exact(Version),
-    /// Match latest minor version in this major series (e.g., "@2")
+    /// Match latest patch version in this minor series (e.g., "@2.1")
+    Minor(u32, u32),
+    /// Match latest minor/patch version in this major series (e.g., "@2")
     Major(u32),
     /// Match the highest version available (e.g., "@latest" or unspecified)
     Latest,
@@ -168,21 +205,40 @@ impl FromStr for VersionSelector {
             return Ok(VersionSelector::Latest);
         }
 
-        // Try parsing as full version (MAJOR.MINOR)
-        if version_str.contains('.') {
-            let version = Version::from_str(version_str)?;
-            return Ok(VersionSelector::Exact(version));
-        }
+        // Count segments to determine selector type
+        let parts: Vec<&str> = version_str.split('.').collect();
 
-        // Parse as major-only version
-        let major = version_str.parse::<u32>().map_err(|_| {
-            format!(
-                "Invalid version selector '{}': expected number, MAJOR.MINOR, or 'latest'",
+        match parts.len() {
+            // Three segments: exact version (MAJOR.MINOR.PATCH)
+            3 => {
+                let version = Version::from_str(version_str)?;
+                Ok(VersionSelector::Exact(version))
+            }
+            // Two segments: minor selector (MAJOR.MINOR -> latest MAJOR.MINOR.x)
+            2 => {
+                let major = parts[0].parse::<u32>().map_err(|_| {
+                    format!("Invalid major version '{}': must be a number", parts[0])
+                })?;
+                let minor = parts[1].parse::<u32>().map_err(|_| {
+                    format!("Invalid minor version '{}': must be a number", parts[1])
+                })?;
+                Ok(VersionSelector::Minor(major, minor))
+            }
+            // One segment: major selector or invalid
+            1 => {
+                let major = version_str.parse::<u32>().map_err(|_| {
+                    format!(
+                        "Invalid version selector '{}': expected number, MAJOR.MINOR, MAJOR.MINOR.PATCH, or 'latest'",
+                        version_str
+                    )
+                })?;
+                Ok(VersionSelector::Major(major))
+            }
+            _ => Err(format!(
+                "Invalid version selector '{}': expected number, MAJOR.MINOR, MAJOR.MINOR.PATCH, or 'latest'",
                 version_str
-            )
-        })?;
-
-        Ok(VersionSelector::Major(major))
+            )),
+        }
     }
 }
 
@@ -190,6 +246,7 @@ impl fmt::Display for VersionSelector {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             VersionSelector::Exact(v) => write!(f, "@{}", v),
+            VersionSelector::Minor(major, minor) => write!(f, "@{}.{}", major, minor),
             VersionSelector::Major(m) => write!(f, "@{}", m),
             VersionSelector::Latest => write!(f, "@latest"),
         }
@@ -297,71 +354,124 @@ mod tests {
 
     #[test]
     fn test_version_parsing() {
+        // Three-segment semver
+        let v = Version::from_str("2.1.0").unwrap();
+        assert_eq!(v.major, 2);
+        assert_eq!(v.minor, 1);
+        assert_eq!(v.patch, 0);
+        assert_eq!(v.to_string(), "2.1.0");
+
+        // Three-segment with non-zero patch
+        let v2 = Version::from_str("1.2.3").unwrap();
+        assert_eq!(v2.major, 1);
+        assert_eq!(v2.minor, 2);
+        assert_eq!(v2.patch, 3);
+        assert_eq!(v2.to_string(), "1.2.3");
+    }
+
+    #[test]
+    fn test_version_parsing_two_segment_backward_compat() {
+        // Two-segment backward compatibility (patch defaults to 0)
         let v = Version::from_str("2.1").unwrap();
         assert_eq!(v.major, 2);
         assert_eq!(v.minor, 1);
-        assert_eq!(v.to_string(), "2.1");
+        assert_eq!(v.patch, 0);
+        assert_eq!(v.to_string(), "2.1.0");
     }
 
     #[test]
     fn test_version_invalid() {
         assert!(Version::from_str("2").is_err());
-        assert!(Version::from_str("2.1.0").is_err());
+        assert!(Version::from_str("2.1.0.0").is_err());
         assert!(Version::from_str("abc").is_err());
         assert!(Version::from_str("2.x").is_err());
+        assert!(Version::from_str("2.1.x").is_err());
     }
 
     #[test]
     fn test_version_ordering() {
-        let v1_0 = Version::new(1, 0);
-        let v1_1 = Version::new(1, 1);
-        let v2_0 = Version::new(2, 0);
-        let v2_1 = Version::new(2, 1);
+        let v1_0_0 = Version::new(1, 0, 0);
+        let v1_0_1 = Version::new(1, 0, 1);
+        let v1_1_0 = Version::new(1, 1, 0);
+        let v2_0_0 = Version::new(2, 0, 0);
+        let v2_1_0 = Version::new(2, 1, 0);
 
-        assert!(v1_0 < v1_1);
-        assert!(v1_1 < v2_0);
-        assert!(v2_0 < v2_1);
-        assert_eq!(v1_0, v1_0);
+        assert!(v1_0_0 < v1_0_1);
+        assert!(v1_0_1 < v1_1_0);
+        assert!(v1_1_0 < v2_0_0);
+        assert!(v2_0_0 < v2_1_0);
+        assert_eq!(v1_0_0, v1_0_0);
     }
 
     #[test]
     fn test_version_selector_parsing() {
-        let exact = VersionSelector::from_str("@2.1").unwrap();
-        assert_eq!(exact, VersionSelector::Exact(Version::new(2, 1)));
+        // Exact version (three segments)
+        let exact = VersionSelector::from_str("@2.1.0").unwrap();
+        assert_eq!(exact, VersionSelector::Exact(Version::new(2, 1, 0)));
 
+        // Minor selector (two segments)
+        let minor = VersionSelector::from_str("@2.1").unwrap();
+        assert_eq!(minor, VersionSelector::Minor(2, 1));
+
+        // Major selector (one segment)
         let major = VersionSelector::from_str("@2").unwrap();
         assert_eq!(major, VersionSelector::Major(2));
 
+        // Latest (explicit)
         let latest1 = VersionSelector::from_str("@latest").unwrap();
         assert_eq!(latest1, VersionSelector::Latest);
 
+        // Latest (empty string)
         let latest2 = VersionSelector::from_str("").unwrap();
         assert_eq!(latest2, VersionSelector::Latest);
     }
 
     #[test]
     fn test_version_selector_without_at() {
-        let exact = VersionSelector::from_str("2.1").unwrap();
-        assert_eq!(exact, VersionSelector::Exact(Version::new(2, 1)));
+        let exact = VersionSelector::from_str("2.1.0").unwrap();
+        assert_eq!(exact, VersionSelector::Exact(Version::new(2, 1, 0)));
+
+        let minor = VersionSelector::from_str("2.1").unwrap();
+        assert_eq!(minor, VersionSelector::Minor(2, 1));
 
         let major = VersionSelector::from_str("2").unwrap();
         assert_eq!(major, VersionSelector::Major(2));
     }
 
     #[test]
-    fn test_quill_reference_parsing() {
-        let ref1 = QuillReference::from_str("resume_template@2.1").unwrap();
-        assert_eq!(ref1.name, "resume_template");
-        assert_eq!(ref1.selector, VersionSelector::Exact(Version::new(2, 1)));
+    fn test_version_selector_display() {
+        assert_eq!(
+            VersionSelector::Exact(Version::new(2, 1, 0)).to_string(),
+            "@2.1.0"
+        );
+        assert_eq!(VersionSelector::Minor(2, 1).to_string(), "@2.1");
+        assert_eq!(VersionSelector::Major(2).to_string(), "@2");
+        assert_eq!(VersionSelector::Latest.to_string(), "@latest");
+    }
 
+    #[test]
+    fn test_quill_reference_parsing() {
+        // Exact version (three segments)
+        let ref1 = QuillReference::from_str("resume_template@2.1.0").unwrap();
+        assert_eq!(ref1.name, "resume_template");
+        assert_eq!(ref1.selector, VersionSelector::Exact(Version::new(2, 1, 0)));
+
+        // Minor selector (two segments)
+        let ref1b = QuillReference::from_str("resume_template@2.1").unwrap();
+        assert_eq!(ref1b.name, "resume_template");
+        assert_eq!(ref1b.selector, VersionSelector::Minor(2, 1));
+
+        // Major selector
         let ref2 = QuillReference::from_str("resume_template@2").unwrap();
         assert_eq!(ref2.name, "resume_template");
         assert_eq!(ref2.selector, VersionSelector::Major(2));
 
+        // Latest (explicit)
         let ref3 = QuillReference::from_str("resume_template@latest").unwrap();
         assert_eq!(ref3.name, "resume_template");
         assert_eq!(ref3.selector, VersionSelector::Latest);
 
+        // Latest (implicit)
         let ref4 = QuillReference::from_str("resume_template").unwrap();
         assert_eq!(ref4.name, "resume_template");
         assert_eq!(ref4.selector, VersionSelector::Latest);
@@ -370,26 +480,29 @@ mod tests {
     #[test]
     fn test_quill_reference_invalid_names() {
         // Must start with lowercase or underscore
-        assert!(QuillReference::from_str("Resume@2.1").is_err());
-        assert!(QuillReference::from_str("1resume@2.1").is_err());
+        assert!(QuillReference::from_str("Resume@2.1.0").is_err());
+        assert!(QuillReference::from_str("1resume@2.1.0").is_err());
 
         // Must contain only lowercase, digits, underscores
-        assert!(QuillReference::from_str("resume-template@2.1").is_err());
-        assert!(QuillReference::from_str("resume.template@2.1").is_err());
+        assert!(QuillReference::from_str("resume-template@2.1.0").is_err());
+        assert!(QuillReference::from_str("resume.template@2.1.0").is_err());
 
         // Valid names
-        assert!(QuillReference::from_str("resume_template@2.1").is_ok());
-        assert!(QuillReference::from_str("_private@2.1").is_ok());
-        assert!(QuillReference::from_str("template2@2.1").is_ok());
+        assert!(QuillReference::from_str("resume_template@2.1.0").is_ok());
+        assert!(QuillReference::from_str("_private@2.1.0").is_ok());
+        assert!(QuillReference::from_str("template2@2.1.0").is_ok());
     }
 
     #[test]
     fn test_quill_reference_display() {
         let ref1 = QuillReference::new(
             "resume".to_string(),
-            VersionSelector::Exact(Version::new(2, 1)),
+            VersionSelector::Exact(Version::new(2, 1, 0)),
         );
-        assert_eq!(ref1.to_string(), "resume@2.1");
+        assert_eq!(ref1.to_string(), "resume@2.1.0");
+
+        let ref1b = QuillReference::new("resume".to_string(), VersionSelector::Minor(2, 1));
+        assert_eq!(ref1b.to_string(), "resume@2.1");
 
         let ref2 = QuillReference::new("resume".to_string(), VersionSelector::Major(2));
         assert_eq!(ref2.to_string(), "resume@2");
@@ -399,9 +512,18 @@ mod tests {
     }
     #[test]
     fn test_quill_reference_parsing_with_colon() {
+        // Minor selector with colon separator
         let ref1 = QuillReference::from_str("usaf_memo:0.1").unwrap();
         assert_eq!(ref1.name, "usaf_memo");
-        assert_eq!(ref1.selector, VersionSelector::Exact(Version::new(0, 1)));
+        assert_eq!(ref1.selector, VersionSelector::Minor(0, 1));
+
+        // Exact version with colon separator
+        let ref1b = QuillReference::from_str("usaf_memo:0.1.0").unwrap();
+        assert_eq!(ref1b.name, "usaf_memo");
+        assert_eq!(
+            ref1b.selector,
+            VersionSelector::Exact(Version::new(0, 1, 0))
+        );
 
         let ref2 = QuillReference::from_str("name:latest").unwrap();
         assert_eq!(ref2.name, "name");

@@ -7,7 +7,7 @@ def test_get_quill_versioning(taro_quill_dir):
     engine = Quillmark()
     quill = Quill.from_path(str(taro_quill_dir))
     
-    # Register the quill (assuming it has a version in Quill.yaml, e.g., 1.0)
+    # Register the quill (assuming it has a version in Quill.yaml, e.g., 1.0.0)
     engine.register_quill(quill)
     
     # Test valid retrieval by name (implicitly latest)
@@ -15,7 +15,7 @@ def test_get_quill_versioning(taro_quill_dir):
     assert retrieved is not None
     assert retrieved.name == "taro"
     
-    # Test valid retrieval by exact version (assuming taro is 1.0 or similar)
+    # Test valid retrieval by exact version (assuming taro is 1.0.0 or similar)
     # We first check the version to be sure
     version = quill.metadata.get("version")
     assert version is not None

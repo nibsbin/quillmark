@@ -48,7 +48,7 @@ fn test_register_multiple_versions_same_quill() {
     let mut engine = Quillmark::new();
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
 
-    // Register versions 1.0, 1.1, 2.0 of same quill
+    // Register two-segment versions to verify backward compatibility
     let quill_1_0 = create_test_quill(&temp_dir, "resume_template", "1.0");
     let quill_1_1 = create_test_quill(&temp_dir, "resume_template", "1.1");
     let quill_2_0 = create_test_quill(&temp_dir, "resume_template", "2.0");
@@ -90,7 +90,7 @@ fn test_resolve_major_version_selector() {
     let mut engine = Quillmark::new();
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
 
-    // Register versions 2.0, 2.1, 2.2, 3.0
+    // Register two-segment versions to verify major selector compatibility
     let quill_2_0 = create_test_quill(&temp_dir, "resume_template", "2.0");
     let quill_2_1 = create_test_quill(&temp_dir, "resume_template", "2.1");
     let quill_2_2 = create_test_quill(&temp_dir, "resume_template", "2.2");
@@ -109,7 +109,7 @@ fn test_resolve_major_version_selector() {
         .register_quill(quill_3_0)
         .expect("Failed to register");
 
-    // Resolve @2 -> should get 2.2 (latest 2.x)
+    // Resolve @2 -> should get latest 2.x.x (2.2.0 equivalent)
     let workflow_2 = engine
         .workflow("resume_template@2")
         .expect("Failed to resolve @2");
@@ -131,10 +131,10 @@ fn test_resolve_exact_version_selector() {
     let mut engine = Quillmark::new();
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
 
-    // Register versions 2.0, 2.1, 2.2
-    let quill_2_0 = create_test_quill(&temp_dir, "resume_template", "2.0");
-    let quill_2_1 = create_test_quill(&temp_dir, "resume_template", "2.1");
-    let quill_2_2 = create_test_quill(&temp_dir, "resume_template", "2.2");
+    // Register semver versions for exact selector behavior
+    let quill_2_0 = create_test_quill(&temp_dir, "resume_template", "2.0.0");
+    let quill_2_1 = create_test_quill(&temp_dir, "resume_template", "2.1.0");
+    let quill_2_2 = create_test_quill(&temp_dir, "resume_template", "2.2.0");
 
     engine
         .register_quill(quill_2_0)
@@ -146,21 +146,21 @@ fn test_resolve_exact_version_selector() {
         .register_quill(quill_2_2)
         .expect("Failed to register");
 
-    // Resolve @2.1 -> should get exactly 2.1
+    // Resolve @2.1.0 -> should get exactly 2.1.0
     let workflow = engine
-        .workflow("resume_template@2.1")
-        .expect("Failed to resolve @2.1");
+        .workflow("resume_template@2.1.0")
+        .expect("Failed to resolve @2.1.0");
 
     // Verify correct quill name
     assert_eq!(workflow.quill_name(), "resume_template");
     // Version resolution works - workflow was created successfully
 
-    // Resolve @2.5 (not registered) -> should error
-    let result_not_found = engine.workflow("resume_template@2.5");
+    // Resolve @2.5.0 (not registered) -> should error
+    let result_not_found = engine.workflow("resume_template@2.5.0");
     assert!(result_not_found.is_err());
     match result_not_found {
         Err(quillmark::RenderError::VersionNotFound { diag }) => {
-            assert!(diag.message.contains("2.5"));
+            assert!(diag.message.contains("2.5.0"));
         }
         _ => panic!("Expected VersionNotFound error"),
     }
@@ -169,7 +169,7 @@ fn test_resolve_exact_version_selector() {
 #[test]
 #[cfg(feature = "typst")]
 fn test_parse_document_with_version_syntax() {
-    // Parse document with QUILL: resume_template@2.1
+    // Parse document with QUILL: resume_template@2.1 (minor selector in semver)
     let markdown = r#"---
 QUILL: resume_template@2.1
 title: Test Document
@@ -184,13 +184,13 @@ title: Test Document
     let quill_ref = parsed.quill_reference();
     assert_eq!(quill_ref.name, "resume_template");
 
-    // Check that it's an Exact version selector
+    // Two-segment version creates Minor selector
     match quill_ref.selector {
-        quillmark_core::VersionSelector::Exact(v) => {
-            assert_eq!(v.major, 2);
-            assert_eq!(v.minor, 1);
+        quillmark_core::VersionSelector::Minor(major, minor) => {
+            assert_eq!(major, 2);
+            assert_eq!(minor, 1);
         }
-        _ => panic!("Expected Exact version selector"),
+        _ => panic!("Expected Minor version selector for two-segment version"),
     }
 }
 
@@ -532,11 +532,12 @@ title: Test
     let quill_ref = parsed.quill_reference();
 
     assert_eq!(quill_ref.name, "usaf_memo");
+    // Two-segment version with colon syntax is a Minor selector in semver
     match quill_ref.selector {
-        quillmark_core::VersionSelector::Exact(v) => {
-            assert_eq!(v.major, 0);
-            assert_eq!(v.minor, 1);
+        quillmark_core::VersionSelector::Minor(major, minor) => {
+            assert_eq!(major, 0);
+            assert_eq!(minor, 1);
         }
-        _ => panic!("Expected Exact version selector for colon syntax"),
+        _ => panic!("Expected Minor version selector for colon syntax"),
     }
 }

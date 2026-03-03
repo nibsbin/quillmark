@@ -31,8 +31,16 @@ impl VersionedQuillSet {
     fn resolve(&self, selector: &VersionSelector) -> Option<&Quill> {
         match selector {
             VersionSelector::Exact(v) => self.versions.get(v),
+            VersionSelector::Minor(major, minor) => {
+                // Find the highest patch version with matching major.minor
+                self.versions
+                    .iter()
+                    .rev()
+                    .find(|(v, _)| v.major == *major && v.minor == *minor)
+                    .map(|(_, quill)| quill)
+            }
             VersionSelector::Major(major) => {
-                // Find the highest minor version with matching major
+                // Find the highest minor/patch version with matching major
                 self.versions
                     .iter()
                     .rev()
@@ -140,7 +148,7 @@ impl Quillmark {
     /// - Backend exists and is registered
     /// - Plate file extension matches backend requirements
     /// - Auto-plate is allowed if no plate file is specified
-    /// - Version is valid (MAJOR.MINOR format)
+    /// - Version is valid semver format (MAJOR.MINOR.PATCH or MAJOR.MINOR)
     ///
     /// Multiple versions of the same quill can be registered.
     pub fn register_quill(&mut self, quill: Quill) -> Result<(), RenderError> {
@@ -159,7 +167,8 @@ impl Quillmark {
                     )
                     .with_code("quill::missing_version".to_string())
                     .with_hint(
-                        "Add 'version = \"1.0\"' to the [Quill] section of Quill.yaml".to_string(),
+                        "Add 'version = \"1.0.0\"' to the [Quill] section of Quill.yaml"
+                            .to_string(),
                     ),
                 ),
             })?;
@@ -174,7 +183,7 @@ impl Quillmark {
                     ),
                 )
                 .with_code("quill::invalid_version".to_string())
-                .with_hint("Version must be in MAJOR.MINOR format (e.g., '2.1')".to_string()),
+                .with_hint("Version must be in semver format (e.g., '2.1.0' or '2.1')".to_string()),
             ),
         })?;
 
@@ -292,6 +301,14 @@ impl Quillmark {
                     } else {
                         format!("Available versions: {}", available_str.join(", "))
                     }
+                }
+                VersionSelector::Minor(major, minor) => {
+                    format!(
+                        "No versions found in {}.{}.x series. Available versions: {}",
+                        major,
+                        minor,
+                        available_str.join(", ")
+                    )
                 }
                 VersionSelector::Major(m) => {
                     format!(
