@@ -1,6 +1,6 @@
 {
   "name": "@quillmark/registry",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Unified API for discovering, loading, packaging, and registering Quills with the WASM engine",
   "main": "./dist/index.js",
   "scripts": {
@@ -13,7 +13,13 @@
     "type": "git",
     "url": "git+https://github.com/nibsbin/quillmark-registry.git"
   },
-  "keywords": ["quillmark", "wasm", "typst", "template", "registry"],
+  "keywords": [
+    "quillmark",
+    "wasm",
+    "typst",
+    "template",
+    "registry"
+  ],
   "author": "Quillmark",
   "license": "Apache-2.0",
   "type": "module",
