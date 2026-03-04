@@ -13,8 +13,8 @@
     "type": "git",
     "url": "git+https://github.com/nibsbin/quillmark-registry.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["quillmark", "wasm", "typst", "template", "registry"],
+  "author": "Quillmark",
   "license": "Apache-2.0",
   "type": "module",
   "bugs": {
