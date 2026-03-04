@@ -476,16 +476,9 @@ impl Quillmark {
     /// ```
     pub fn get_quill(&self, name_or_ref: &str) -> Option<&Quill> {
         // Parse input as QuillReference (defaults to Latest if no version specified)
-        // If parsing fails, treat as name lookup directly (backward compatibility for invalid ref names that might be keys?)
-        // Actually, QuillReference is quite permissive for names, but let's be safe.
-        if let Ok(quill_ref) = QuillReference::from_str(name_or_ref) {
-            self.resolve_quill_reference(&quill_ref).ok()
-        } else {
-            // Fallback: try raw name lookup with Latest version
-            self.quills
-                .get(name_or_ref)
-                .and_then(|vs| vs.resolve(&VersionSelector::Latest))
-        }
+        QuillReference::from_str(name_or_ref)
+            .ok()
+            .and_then(|quill_ref| self.resolve_quill_reference(&quill_ref).ok())
     }
 
     /// Get a reference to a quill's metadata by name (returns latest version).
