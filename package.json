@@ -1,0 +1,51 @@
+{
+  "name": "@quillmark/registry",
+  "version": "1.0.0",
+  "description": "Unified API for discovering, loading, packaging, and registering Quills with the WASM engine",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nibsbin/quillmark-registry.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/nibsbin/quillmark-registry/issues"
+  },
+  "homepage": "https://github.com/nibsbin/quillmark-registry#readme",
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "@quillmark/wasm": "^0.36.0"
+  },
+  "peerDependenciesMeta": {
+    "@quillmark/wasm": {
+      "optional": false
+    }
+  }
+}
