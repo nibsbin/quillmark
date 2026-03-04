@@ -57,7 +57,7 @@ impl Quillmark {
             .map_err(|e| e.to_js_value())?;
 
         // Convert to WASM type
-        let quill_name = parsed.quill_reference().name.clone();
+        let quill_name = parsed.quill_reference().to_string();
 
         // Convert fields HashMap to JSON
         let mut fields_obj = serde_json::Map::new();
@@ -216,11 +216,11 @@ impl Quillmark {
             .map_err(WasmError::from)
             .map_err(|e| e.to_js_value())?;
 
-        // Infer quill name from parsed document's quill reference
-        let quill_name = &parsed.quill_reference().name;
+        // Infer quill reference from parsed document
+        let quill_ref = parsed.quill_reference().to_string();
 
-        let workflow = self.inner.workflow(quill_name).map_err(|e| {
-            WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
+        let workflow = self.inner.workflow(quill_ref.as_str()).map_err(|e| {
+            WasmError::from(format!("Quill '{}' not found: {}", quill_ref, e)).to_js_value()
         })?;
 
         workflow
@@ -239,11 +239,11 @@ impl Quillmark {
             .map_err(WasmError::from)
             .map_err(|e| e.to_js_value())?;
 
-        // Infer quill name from parsed document's quill reference
-        let quill_name = &parsed.quill_reference().name;
+        // Infer quill reference from parsed document
+        let quill_ref = parsed.quill_reference().to_string();
 
-        let workflow = self.inner.workflow(quill_name).map_err(|e| {
-            WasmError::from(format!("Quill '{}' not found: {}", quill_name, e)).to_js_value()
+        let workflow = self.inner.workflow(quill_ref.as_str()).map_err(|e| {
+            WasmError::from(format!("Quill '{}' not found: {}", quill_ref, e)).to_js_value()
         })?;
 
         let json_data = workflow
