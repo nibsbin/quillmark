@@ -449,6 +449,18 @@ impl Quillmark {
         self.quills.keys().map(|s| s.as_str()).collect()
     }
 
+    /// Get a list of registered quills with their exact versions.
+    /// Returns strings in the format "name@version" (e.g. "resume-template@2.1.0").
+    pub fn registered_quill_versions(&self) -> Vec<String> {
+        let mut result = Vec::new();
+        for (name, version_set) in &self.quills {
+            for version in version_set.available_versions() {
+                result.push(format!("{}@{}", name, version));
+            }
+        }
+        result
+    }
+
     /// Get a reference to a registered quill by name (returns latest version).
     ///
     /// Returns `None` if the quill is not registered.
@@ -496,22 +508,45 @@ impl Quillmark {
         self.get_quill(name).map(|quill| &quill.metadata)
     }
 
-    /// Unregister all versions of a quill by name.
+    /// Unregister a quill by name or specific version.
     ///
-    /// Returns `true` if the quill was registered and has been removed,
-    /// `false` if the quill was not found.
+    /// If a base name is provided (e.g., "my-quill"), all versions of that quill are removed.
+    /// If a versioned name is provided (e.g., "my-quill@2.1.0"), only that specific version
+    /// is removed.
+    ///
+    /// Returns `true` if any quill/version was removed, `false` if not found.
     ///
     /// # Example
     ///
     /// ```no_run
     /// # use quillmark::Quillmark;
     /// # let mut engine = Quillmark::new();
+    /// if engine.unregister_quill("my-quill@2.1.0") {
+    ///     println!("Specific version unregistered");
+    /// }
     /// if engine.unregister_quill("my-quill") {
-    ///     println!("Quill unregistered");
+    ///     println!("All remaining versions unregistered");
     /// }
     /// ```
-    pub fn unregister_quill(&mut self, name: &str) -> bool {
-        self.quills.remove(name).is_some()
+    pub fn unregister_quill(&mut self, name_or_ref: &str) -> bool {
+        // Try parsing as a reference to handle specific version unregistration
+        if let Ok(quill_ref) = QuillReference::from_str(name_or_ref) {
+            if let VersionSelector::Exact(v) = quill_ref.selector {
+                // Remove specific version
+                if let Some(version_set) = self.quills.get_mut(&quill_ref.name) {
+                    let removed = version_set.versions.remove(&v).is_some();
+                    // Clean up empty sets
+                    if version_set.versions.is_empty() {
+                        self.quills.remove(&quill_ref.name);
+                    }
+                    return removed;
+                }
+                return false;
+            }
+        }
+
+        // Default behavior: treat as base name and remove all versions
+        self.quills.remove(name_or_ref).is_some()
     }
 }
 
