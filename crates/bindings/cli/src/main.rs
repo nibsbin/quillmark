@@ -24,6 +24,9 @@ enum Commands {
 
     /// Validate a quill's configuration (including defaults)
     Validate(commands::validate::ValidateArgs),
+
+    /// Display metadata and information about a quill
+    Info(commands::info::InfoArgs),
 }
 
 fn main() {
@@ -33,6 +36,7 @@ fn main() {
         Commands::Render(args) => commands::render::execute(args),
         Commands::Schema(args) => commands::schema::execute(args),
         Commands::Validate(args) => commands::validate::execute(args),
+        Commands::Info(args) => commands::info::execute(args),
     };
 
     if let Err(e) = result {
