@@ -341,19 +341,39 @@ impl Quillmark {
         })
     }
 
-    /// List registered Quill names
-    #[wasm_bindgen(js_name = listQuills)]
-    pub fn list_quills(&self) -> Vec<String> {
-        self.inner
-            .registered_quills()
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
+    /// Resolve a Quill reference to a registered Quill, or null if not available
+    ///
+    /// Accepts a quill reference string like "resume-template", "resume-template@2",
+    /// or "resume-template@2.1.0". Returns QuillInfo if the engine can resolve it
+    /// locally, or null if an external fetch is needed.
+    #[wasm_bindgen(js_name = resolveQuill)]
+    pub fn resolve_quill(&self, quill_ref: &str) -> JsValue {
+        match self.fetch_quill_info(quill_ref) {
+            Ok(info) => {
+                let serializer =
+                    serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+                use serde::Serialize;
+                info.serialize(&serializer).unwrap_or(JsValue::NULL)
+            }
+            Err(_) => JsValue::NULL,
+        }
     }
 
-    /// Unregister a Quill (free memory)
+    /// List registered Quills with their exact versions
+    ///
+    /// Returns strings in the format "name@version" (e.g. "resume-template@2.1.0")
+    #[wasm_bindgen(js_name = listQuills)]
+    pub fn list_quills(&self) -> Vec<String> {
+        self.inner.registered_quill_versions()
+    }
+
+    /// Unregister a Quill by name or specific version
+    ///
+    /// If a base name is provided (e.g., "my-quill"), all versions of that quill are freed.
+    /// If a versioned name is provided (e.g., "my-quill@2.1.0"), only that specific version is freed.
+    /// Returns true if something was unregistered, false if not found.
     #[wasm_bindgen(js_name = unregisterQuill)]
-    pub fn unregister_quill(&mut self, name: &str) {
-        self.inner.unregister_quill(name);
+    pub fn unregister_quill(&mut self, name_or_ref: &str) -> bool {
+        self.inner.unregister_quill(name_or_ref)
     }
 }
