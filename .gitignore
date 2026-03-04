@@ -1,3 +1,6 @@
+# Test fixtures
+.test-fixtures/
+
 # Logs
 logs
 *.log
