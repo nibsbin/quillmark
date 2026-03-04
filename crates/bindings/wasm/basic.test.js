@@ -71,7 +71,7 @@ describe('quillmark-wasm smoke tests', () => {
     }).not.toThrow()
 
     const quills = engine.listQuills()
-    expect(quills).toContain('test_quill')
+    expect(quills).toContain('test_quill@1.0.0')
   })
 
   it('should get quill info after registration', () => {
@@ -188,11 +188,11 @@ this is not valid yaml
     const engine = new Quillmark()
     engine.registerQuill(TEST_QUILL)
 
-    expect(engine.listQuills()).toContain('test_quill')
+    expect(engine.listQuills()).toContain('test_quill@1.0.0')
 
     engine.unregisterQuill('test_quill')
 
-    expect(engine.listQuills()).not.toContain('test_quill')
+    expect(engine.listQuills()).not.toContain('test_quill@1.0')
   })
 
   it('should accept assets as plain JavaScript objects', () => {
