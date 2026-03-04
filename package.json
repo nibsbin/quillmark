@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "description": "Unified API for discovering, loading, packaging, and registering Quills with the WASM engine",
   "main": "./dist/index.js",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
