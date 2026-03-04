@@ -125,65 +125,6 @@ author: Test Author
 }
 
 #[test]
-#[ignore = "Test obsolete after MiniJinja removal - filters and template composition no longer exist"]
-fn test_dry_run_invalid_template_filter() {
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill_path = temp_dir.path().join("test_quill");
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
-
-    fs::write(
-        quill_path.join("Quill.yaml"),
-        r#"Quill:
-  name: "test_quill"
-  version: "1.0"
-  backend: "typst"
-  plate_file: "plate.typ"
-  description: "Test quill"
-"#,
-    )
-    .expect("Failed to write Quill.yaml");
-
-    // Template uses undefined filter 'nonexistent_filter'
-    fs::write(
-        quill_path.join("plate.typ"),
-        "Title: {{ title | nonexistent_filter }}",
-    )
-    .expect("Failed to write plate.typ");
-
-    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-
-    let mut engine = Quillmark::new();
-    engine
-        .register_quill(quill)
-        .expect("Failed to register quill");
-
-    let workflow = engine
-        .workflow("test_quill")
-        .expect("Failed to load workflow");
-
-    let markdown = r#"---
-title: My Document
----
-
-# Content
-"#;
-
-    let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-
-    // dry_run should fail for undefined filter
-    let result = workflow.dry_run(&parsed);
-    assert!(result.is_err(), "dry_run should fail for undefined filter");
-
-    let err = result.unwrap_err();
-    let err_str = format!("{:?}", err);
-    assert!(
-        err_str.contains("TemplateFailed") || err_str.contains("filter"),
-        "Error should indicate template failure: {}",
-        err_str
-    );
-}
-
-#[test]
 fn test_dry_run_no_schema() {
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
     let quill = create_test_quill(&temp_dir, false); // No required fields
