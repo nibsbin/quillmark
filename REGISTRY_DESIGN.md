@@ -4,12 +4,15 @@
 
 ## Dependencies
 
-| Package              | Version   | Role                                                                                                                                                                            |
-| -------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@quillmark/wasm`    | `^0.36.0` | Peer dependency. Provides the `Quillmark` engine instance passed to the registry constructor. The registry calls `registerQuill()`, `resolveQuill()`, and `listQuills()` on it. |
-| `jszip` (or similar) | `^3.x`    | `HttpSource`: unzips fetched quill archives. `FileSystemSource.packageForHttp()`: zips quill directories for static hosting.                                                    |
+| Package           | Version   | Role                                                                                                                                                                                           |
+| ----------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@quillmark/wasm` | `^0.36.0` | Peer dependency. Consumer provides an engine instance satisfying the `QuillmarkEngine` interface. The registry calls `registerQuill()`, `resolveQuill()`, and `listQuills()` on it.             |
+| `jszip`           | `^3.10.1` | `HttpSource`: unzips fetched quill archives. `FileSystemSource.packageForHttp()`: zips quill directories for static hosting.                                                                   |
+| `yaml`            | `^2.8.2`  | `FileSystemSource`: parses `Quill.yaml` files in quill directories to extract metadata (name, version, description).                                                                           |
 
 `@quillmark/wasm` is a **peer dependency** — the consumer provides the engine instance. The registry never imports or instantiates `Quillmark` itself; it only calls methods on the instance it receives.
+
+The registry defines a `QuillmarkEngine` interface for the subset of engine methods it actually uses (`registerQuill`, `resolveQuill`, `listQuills`). The consumer passes any object satisfying this interface — typically a `Quillmark` instance from `@quillmark/wasm`.
 
 No dependency on `@quillmark/web-utils`. The registry replaces it entirely — `loaders.fromZip()` logic moves into `HttpSource` internals.
 
@@ -37,7 +40,7 @@ QuillSource  →  QuillRegistry(source, engine)  →  engine.registerQuill()
 | `FileSystemSource` | Node.js           | Local directory (e.g., `tonguetoquill-collection/quills/`) |
 | `HttpSource`       | Browser + Node.js | Base URL serving zips + manifest                           |
 
-**QuillRegistry** — orchestrates sources, resolves versions, caches loaded Quills. The registry is constructed with both a `QuillSource` and a `Quillmark` engine instance. On `resolve()`, it fetches quill data from the source and pushes it to that engine instance via `registerQuill()`. The registry is the single source of truth for discovery and loading; the engine is the single source of truth for rendering.
+**QuillRegistry** — orchestrates sources, resolves versions, caches loaded Quills. The registry is constructed with both a `QuillSource` and a `QuillmarkEngine` instance (via `QuillRegistryOptions`). On `resolve()`, it fetches quill data from the source and pushes it to that engine instance via `registerQuill()`. The registry is the single source of truth for discovery and loading; the engine is the single source of truth for rendering.
 
 ## Integration Model
 
@@ -68,28 +71,56 @@ interface QuillSource {
 }
 ```
 
+### QuillData
+
+```ts
+/**
+ * Opaque to the registry. Defined and validated by @quillmark/wasm.
+ * In practice: a Record<string, Uint8Array> mapping relative file paths
+ * to their binary contents (template files, assets, fonts, Typst packages).
+ * Built by FileSystemSource via recursive directory read, or by HttpSource
+ * via zip extraction.
+ */
+type QuillData = unknown;
+```
+
 ### QuillBundle
 
 ```ts
 interface QuillBundle {
 	name: string;
 	version: string;
-	/** Opaque payload passed to engine.registerQuill().
-	 *  Shape is defined by @quillmark/wasm — the registry passes it through untouched.
-	 *  Currently: the JSON structure returned by loaders.fromZip() or equivalent
-	 *  filesystem read (template files, assets, fonts, Typst packages). */
+	/** Payload passed to engine.registerQuill().
+	 *  In practice: Record<string, Uint8Array> — a map of relative file paths
+	 *  to their binary contents (from filesystem read or zip extraction). */
 	data: QuillData;
 	metadata: QuillMetadata;
 }
+```
 
-/** Opaque to the registry. Defined and validated by @quillmark/wasm. */
-type QuillData = unknown;
+### QuillInfo
+
+```ts
+/** Info returned by the engine after registering or resolving a quill. */
+interface QuillInfo {
+	name: string;
+	version: string;
+}
 ```
 
 ### QuillRegistry
 
+Constructed with a `QuillRegistryOptions` object containing the source and engine:
+
 ```ts
-interface QuillRegistry {
+interface QuillRegistryOptions {
+	source: QuillSource;
+	engine: QuillmarkEngine;
+}
+
+class QuillRegistry {
+	constructor(options: QuillRegistryOptions);
+
 	// Discovery
 	getManifest(): Promise<QuillManifest>;
 	getAvailableQuills(): Promise<QuillMetadata[]>;
@@ -100,42 +131,42 @@ interface QuillRegistry {
 	// Convenience
 	preload(names: string[]): Promise<void>;
 
-	// State — delegates to engine.resolveQuill() / engine.listQuills()
+	// State — delegates to engine.resolveQuill()
 	isLoaded(name: string): boolean;
 }
 ```
 
-### Engine API (v0.36.0, unchanged by registry)
+### QuillmarkEngine (interface the registry depends on)
+
+The registry defines a minimal `QuillmarkEngine` interface for the engine methods it actually calls. This decouples the registry from the full `Quillmark` class — any object satisfying this interface works.
 
 ```ts
-class Quillmark {
-	// Registration
-	registerQuill(quill_json: any): QuillInfo;
-	unregisterQuill(name_or_ref: string): boolean;
-
-	// Discovery — the registry uses these to avoid redundant fetches
+interface QuillmarkEngine {
+	registerQuill(quill_json: unknown): QuillInfo;
 	resolveQuill(quill_ref: string): QuillInfo | null; // "usaf_memo", "usaf_memo@2.1.0"
 	listQuills(): string[]; // ["usaf_memo@1.0.0", "classic_resume@2.1.0"]
-
-	// Metadata
-	getQuillInfo(name: string): QuillInfo;
-	getStrippedSchema(name: string): any; // Schema without x-ui fields (for LLMs)
-
-	// Parsing + rendering
-	static parseMarkdown(markdown: string): ParsedDocument;
-	render(parsed: ParsedDocument, opts: RenderOptions): RenderResult;
-	compileData(markdown: string): any; // Intermediate data, for debugging
-	dryRun(markdown: string): void; // Validation without rendering
 }
 ```
+
+The full `Quillmark` class from `@quillmark/wasm` satisfies this interface and exposes additional methods (`unregisterQuill`, `getQuillInfo`, `getStrippedSchema`, `parseMarkdown`, `render`, etc.) that the registry does not depend on. App code calls those methods directly on the engine instance.
 
 The registry calls `engine.registerQuill()` as part of `resolve()`, and uses `engine.resolveQuill()` to check whether a quill is already loaded before fetching from a source. App code calls `engine.getQuillInfo()` and `engine.render()` as before.
 
 ### Built-in Sources
 
-**`FileSystemSource`** — Node.js only. Reads Quill directories from disk and passes their contents to the engine (which handles `Quill.yaml` parsing internally). Also exposes `packageForHttp()` to zip quills and write a manifest for static hosting.
+**`FileSystemSource`** — Node.js only. Reads Quill directories from disk, parses `Quill.yaml` (via the `yaml` package) for metadata, and reads all files recursively into `Record<string, Uint8Array>` file maps. Also exposes `packageForHttp()` to zip quills and write a manifest for static hosting. Constructor takes a single `quillsDir` path.
 
-**`HttpSource`** — Browser or Node.js. Fetches zips and manifest from any HTTP endpoint (local static directory, CDN, remote server). Accepts an optional pre-loaded manifest to skip the initial fetch (for SSR bootstrap). Appends `?v={version}` to zip URLs for cache-busting.
+**`HttpSource`** — Browser or Node.js. Fetches zips and manifest from any HTTP endpoint (local static directory, CDN, remote server). Constructed with `HttpSourceOptions`:
+
+```ts
+interface HttpSourceOptions {
+	baseUrl: string; // Base URL serving zips + manifest
+	manifest?: QuillManifest; // Optional pre-loaded manifest (for SSR bootstrap)
+	fetch?: typeof globalThis.fetch; // Optional custom fetch (for testing / non-browser)
+}
+```
+
+Appends `?v={version}` to zip URLs for cache-busting. Caches the manifest after first fetch.
 
 ## Static Hosting / Remote Serving
 
@@ -164,6 +195,12 @@ class RegistryError extends Error {
 	code: RegistryErrorCode;
 	quillName?: string;
 	version?: string;
+
+	constructor(
+		code: RegistryErrorCode,
+		message: string,
+		options?: { quillName?: string; version?: string; cause?: unknown },
+	);
 }
 ```
 
@@ -183,7 +220,7 @@ The registry maintains an in-memory cache of resolved `QuillBundle` objects, key
 
 ## Version Resolution
 
-The registry owns version resolution. When a quill reference includes a version (e.g., `usaf_memo:0.1`), the registry resolves the exact match. When no version is specified, it resolves to latest available.
+The registry owns version resolution. When a quill reference includes a version (e.g., `usaf_memo@0.1`), the registry resolves the exact match. When no version is specified, it resolves to latest available.
 
 The resolution flow:
 
@@ -199,7 +236,7 @@ Future: version ranges, pinning, deprecation warnings — all live in the regist
 | Current location                     | Moves to                            |
 | ------------------------------------ | ----------------------------------- |
 | `web-utils.loaders.fromZip()`        | `HttpSource` internals              |
-| `Quill.yaml` parsing in build script | Engine via `registerQuill()`        |
+| `Quill.yaml` parsing in build script | `FileSystemSource` (via `yaml` pkg) |
 | Manifest generation in build script  | `FileSystemSource.getManifest()`    |
 | Zip packaging in build script        | `FileSystemSource.packageForHttp()` |
 | `preloadQuills()` in client service  | `registry.preload()`                |
