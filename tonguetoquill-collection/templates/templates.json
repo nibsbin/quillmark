@@ -1,0 +1,44 @@
+[
+	{
+		"name": "USAF Memo",
+		"description": "Official U.S. Air Force memorandum template",
+		"file": "usaf_template.md",
+		"production": true
+	},
+	{
+		"name": "USSF Memo",
+		"description": "Official U.S. Space Force memorandum template",
+		"file": "ussf_template.md",
+		"production": true
+	},
+	{
+		"name": "Letter of Counseling",
+		"description": "Letter of Counseling template",
+		"file": "loc.md",
+		"production": false
+	},
+	{
+		"name": "Rebuttal",
+		"description": "Rebuttal template for LOC",
+		"file": "rebuttal.md",
+		"production": true
+	},
+	{
+		"name": "Taro Template",
+		"description": "Official Taro ice cream template",
+		"file": "taro.md",
+		"production": false
+	},
+	{
+		"name": "CMU Letter",
+		"description": "Carnegie Mellon University academic letter template",
+		"file": "cmu_letter_template.md",
+		"production": true
+	},
+	{
+		"name": "Pass Request",
+		"description": "USAF special pass request memorandum template",
+		"file": "pass_request.md",
+		"production": true
+	}
+]
