@@ -8,10 +8,10 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: publish
+    # Permissions are the most important part of OIDC
     permissions:
       contents: read
-      id-token: write # Required for npm provenance
+      id-token: write 
 
     steps:
       - name: Checkout code
@@ -20,19 +20,21 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
+          node-version: '22'
+          # No registry-url needed for Trusted Publishing!
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Run linter
+      - name: Static Analysis (Lint)
         run: npm run lint
 
-      - name: Run tests
+      - name: Run Tests
         run: npm test
 
-      - name: Build package
+      - name: Build Package
         run: npm run build
 
       - name: Publish to npm
+        # Ensure 'Trusted Publishers' is configured in your npmjs.com settings
         run: npm publish --provenance --access public
