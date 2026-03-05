@@ -132,10 +132,11 @@ describe('FileSystemSource', () => {
 			const source = new FileSystemSource(TEST_DIR);
 			const bundle = await source.loadQuill('usaf_memo', '1.0.0');
 
-			const data = bundle.data as Record<string, Uint8Array>;
-			expect(data['Quill.yaml']).toBeDefined();
-			expect(data['template.typ']).toBeDefined();
-			expect(data['assets/logo.txt']).toBeDefined();
+			const data = bundle.data as { files: Record<string, unknown> };
+			expect(data.files['Quill.yaml']).toBeDefined();
+			expect(data.files['template.typ']).toBeDefined();
+			const assets = data.files['assets'] as Record<string, unknown>;
+			expect(assets['logo.txt']).toBeDefined();
 		});
 
 		it('should throw quill_not_found for unknown quill', async () => {

@@ -145,9 +145,9 @@ describe('HttpSource', () => {
 			expect(bundle.metadata.name).toBe('usaf_memo');
 			expect(bundle.metadata.description).toBe('USAF Memo');
 
-			const data = bundle.data as Record<string, Uint8Array>;
-			expect(data['Quill.yaml']).toBeDefined();
-			expect(data['template.typ']).toBeDefined();
+			const data = bundle.data as { files: Record<string, unknown> };
+			expect(data.files['Quill.yaml']).toBeDefined();
+			expect(data.files['template.typ']).toBeDefined();
 		});
 
 		it('should append ?v={version} for cache-busting', async () => {

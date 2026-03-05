@@ -14,7 +14,13 @@ function createMockBundle(name: string, version: string): QuillBundle {
 	return {
 		name,
 		version,
-		data: { files: { 'Quill.yaml': `name: ${name}\nversion: ${version}` } },
+		data: {
+			files: {
+				'Quill.yaml': {
+					contents: `Quill:\n  name: ${name}\n  version: ${version}\n  backend: typst\n  plate_file: plate.typ\n`,
+				},
+			},
+		},
 		metadata: { name, version },
 	};
 }
@@ -47,27 +53,53 @@ function createMockEngine(): QuillmarkEngine {
 
 	return {
 		registerQuill: vi.fn((data: unknown) => {
-			// Simulate engine behavior: extract name/version from data
-			const bundle = data as Record<string, unknown>;
-			const files = bundle.files as Record<string, string>;
-			const yamlContent = files?.['Quill.yaml'] ?? '';
+			// Walk the tree to find Quill.yaml contents
+			const tree = data as { files?: Record<string, unknown> };
+			const yamlNode = tree?.files?.['Quill.yaml'] as { contents?: string } | undefined;
+			const yamlContent = yamlNode?.contents ?? '';
 			const nameMatch = yamlContent.match(/name:\s*(\S+)/);
-			const versionMatch = yamlContent.match(/version:\s*(\S+)/);
+			const versionMatch = yamlContent.match(/version:\s*"?(\S+)"?/);
 			const name = nameMatch?.[1] ?? 'unknown';
 			const version = versionMatch?.[1] ?? '0.0.0';
-			const info = { name, version };
-			registered.set(`${name}@${version}`, info);
-			return info;
+			registered.set(`${name}@${version}`, { name, version });
+			return {
+				name,
+				backend: 'typst',
+				metadata: { version },
+				schema: {},
+				defaults: {},
+				examples: {},
+				supportedFormats: ['pdf'],
+			};
 		}),
 		resolveQuill: vi.fn((ref: string) => {
 			// Check exact ref first, then name-only
 			if (registered.has(ref)) {
-				return registered.get(ref)!;
+				const info = registered.get(ref)!;
+				return {
+					name: info.name,
+					backend: 'typst',
+					metadata: { version: info.version },
+					schema: {},
+					defaults: {},
+					examples: {},
+					supportedFormats: ['pdf'],
+				};
 			}
 			// If ref doesn't contain @, search by name
 			if (!ref.includes('@')) {
-				for (const [key, info] of registered.entries()) {
-					if (info.name === ref) return info;
+				for (const [, info] of registered.entries()) {
+					if (info.name === ref) {
+						return {
+							name: info.name,
+							backend: 'typst',
+							metadata: { version: info.version },
+							schema: {},
+							defaults: {},
+							examples: {},
+							supportedFormats: ['pdf'],
+						};
+					}
 				}
 			}
 			return null;

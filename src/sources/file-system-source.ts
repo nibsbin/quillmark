@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import JSZip from 'jszip';
 import type { QuillBundle, QuillManifest, QuillMetadata, QuillSource } from '../types.js';
 import { RegistryError } from '../errors.js';
+import { toEngineFileTree } from '../format.js';
 
 /** Reads files from a directory recursively, returning a map of relative paths to contents. */
 async function readDirRecursive(
@@ -193,7 +194,7 @@ export class FileSystemSource implements QuillSource {
 		return {
 			name,
 			version: resolvedVersion,
-			data: files,
+			data: toEngineFileTree(files),
 			metadata,
 		};
 	}

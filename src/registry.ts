@@ -58,7 +58,8 @@ export class QuillRegistry {
 		const quillRef = version ? `${name}@${version}` : name;
 		const engineInfo = this.engine.resolveQuill(quillRef);
 		if (engineInfo) {
-			const cacheKey = `${engineInfo.name}@${engineInfo.version}`;
+			const engineVersion = (engineInfo.metadata?.version as string) ?? '';
+			const cacheKey = `${engineInfo.name}@${engineVersion}`;
 			const cached = this.cache.get(cacheKey);
 			if (cached) {
 				return cached;

@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import type { QuillBundle, QuillManifest, QuillSource } from '../types.js';
 import { RegistryError } from '../errors.js';
+import { toEngineFileTree } from '../format.js';
 
 export interface HttpSourceOptions {
 	/** Base URL serving zips + manifest (e.g., "https://cdn.example.com/quills/"). */
@@ -143,7 +144,7 @@ export class HttpSource implements QuillSource {
 		return {
 			name: entry.name,
 			version: resolvedVersion,
-			data: files,
+			data: toEngineFileTree(files),
 			metadata: entry,
 		};
 	}
