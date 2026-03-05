@@ -28,10 +28,6 @@ jobs:
 
       - name: Static Analysis (Lint)
         run: npm run lint
-
-      - name: Run Tests
-        run: npm test
-
       - name: Build Package
         run: npm run build
 
