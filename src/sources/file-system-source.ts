@@ -57,10 +57,17 @@ async function readQuillMetadata(quillDir: string): Promise<QuillMetadata> {
 	};
 }
 
-/** Lists subdirectories of a given directory. Returns directory names. */
+/** Lists subdirectories of a given directory. Filters out dot-prefixed entries. */
 async function listSubdirectories(dirPath: string): Promise<string[]> {
 	const entries = await fs.readdir(dirPath, { withFileTypes: true });
-	return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+	return entries
+		.filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+		.map((e) => e.name);
+}
+
+/** Returns true if the string looks like a semver version (digits and dots only). */
+function isSemver(value: string): boolean {
+	return /^\d+\.\d+\.\d+/.test(value);
 }
 
 /**
@@ -140,6 +147,7 @@ export class FileSystemSource implements QuillSource {
 			}
 
 			for (const versionDir of versionDirs) {
+				if (!isSemver(versionDir)) continue;
 				const versionPath = path.join(quillNameDir, versionDir);
 				try {
 					const metadata = await readQuillMetadata(versionPath);
@@ -199,6 +207,22 @@ export class FileSystemSource implements QuillSource {
 		}
 
 		const metadata = await readQuillMetadata(quillDir);
+
+		// Validate name/version match directory path
+		if (metadata.name !== name) {
+			throw new RegistryError(
+				'load_error',
+				`Quill.yaml name "${metadata.name}" does not match expected name "${name}"`,
+				{ quillName: name, version: resolvedVersion },
+			);
+		}
+		if (metadata.version !== resolvedVersion) {
+			throw new RegistryError(
+				'load_error',
+				`Quill.yaml version "${metadata.version}" does not match expected version "${resolvedVersion}"`,
+				{ quillName: name, version: resolvedVersion },
+			);
+		}
 
 		let files: Record<string, Uint8Array>;
 		try {
@@ -266,8 +290,17 @@ export class FileSystemSource implements QuillSource {
 			});
 		}
 
+		// Filter to valid semver directories only
+		const semverDirs = versionDirs.filter(isSemver);
+
+		if (semverDirs.length === 0) {
+			throw new RegistryError('quill_not_found', `Quill "${name}" has no valid version directories`, {
+				quillName: name,
+			});
+		}
+
 		// Sort by semver descending, return highest
-		versionDirs.sort((a, b) => compareSemver(b, a));
-		return versionDirs[0];
+		semverDirs.sort((a, b) => compareSemver(b, a));
+		return semverDirs[0];
 	}
 }

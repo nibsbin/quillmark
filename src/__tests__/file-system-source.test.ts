@@ -192,6 +192,99 @@ describe('FileSystemSource', () => {
 		});
 	});
 
+	describe('edge cases', () => {
+		it('should ignore dot-prefixed directories at the quill name level', async () => {
+			await createQuillDir('usaf_memo', '1.0.0');
+			// Create a .git directory that should be ignored
+			await fs.mkdir(path.join(TEST_DIR, '.git'), { recursive: true });
+
+			const source = new FileSystemSource(TEST_DIR);
+			const manifest = await source.getManifest();
+
+			expect(manifest.quills).toHaveLength(1);
+			expect(manifest.quills[0].name).toBe('usaf_memo');
+		});
+
+		it('should ignore dot-prefixed directories at the version level', async () => {
+			await createQuillDir('usaf_memo', '1.0.0');
+			// Create a .DS_Store-like directory inside the quill name dir
+			await fs.mkdir(path.join(TEST_DIR, 'usaf_memo', '.hidden'), { recursive: true });
+
+			const source = new FileSystemSource(TEST_DIR);
+			const manifest = await source.getManifest();
+
+			expect(manifest.quills).toHaveLength(1);
+			expect(manifest.quills[0].version).toBe('1.0.0');
+		});
+
+		it('should ignore non-semver directories at the version level', async () => {
+			await createQuillDir('usaf_memo', '1.0.0');
+			// Create a non-semver directory (e.g., "draft") that should be ignored
+			const draftDir = path.join(TEST_DIR, 'usaf_memo', 'draft');
+			await fs.mkdir(draftDir, { recursive: true });
+			await fs.writeFile(
+				path.join(draftDir, 'Quill.yaml'),
+				'name: usaf_memo\nversion: draft',
+			);
+
+			const source = new FileSystemSource(TEST_DIR);
+			const manifest = await source.getManifest();
+
+			expect(manifest.quills).toHaveLength(1);
+			expect(manifest.quills[0].version).toBe('1.0.0');
+		});
+
+		it('should resolve latest ignoring non-semver directories', async () => {
+			await createQuillDir('usaf_memo', '0.1.0');
+			await createQuillDir('usaf_memo', '1.0.0');
+			// Add a non-semver dir that would sort wrong without filtering
+			const draftDir = path.join(TEST_DIR, 'usaf_memo', 'draft');
+			await fs.mkdir(draftDir, { recursive: true });
+
+			const source = new FileSystemSource(TEST_DIR);
+			const bundle = await source.loadQuill('usaf_memo');
+
+			expect(bundle.version).toBe('1.0.0');
+		});
+
+		it('should throw load_error from loadQuill when Quill.yaml name mismatches', async () => {
+			// Create a valid directory structure but with wrong name in Quill.yaml
+			const quillDir = path.join(TEST_DIR, 'usaf_memo', '1.0.0');
+			await fs.mkdir(quillDir, { recursive: true });
+			await fs.writeFile(
+				path.join(quillDir, 'Quill.yaml'),
+				'name: wrong_name\nversion: 1.0.0',
+			);
+
+			const source = new FileSystemSource(TEST_DIR);
+			try {
+				await source.loadQuill('usaf_memo', '1.0.0');
+				expect.unreachable('Should have thrown');
+			} catch (err) {
+				expect(err).toBeInstanceOf(RegistryError);
+				expect((err as RegistryError).code).toBe('load_error');
+			}
+		});
+
+		it('should throw load_error from loadQuill when Quill.yaml version mismatches', async () => {
+			const quillDir = path.join(TEST_DIR, 'usaf_memo', '1.0.0');
+			await fs.mkdir(quillDir, { recursive: true });
+			await fs.writeFile(
+				path.join(quillDir, 'Quill.yaml'),
+				'name: usaf_memo\nversion: 9.9.9',
+			);
+
+			const source = new FileSystemSource(TEST_DIR);
+			try {
+				await source.loadQuill('usaf_memo', '1.0.0');
+				expect.unreachable('Should have thrown');
+			} catch (err) {
+				expect(err).toBeInstanceOf(RegistryError);
+				expect((err as RegistryError).code).toBe('load_error');
+			}
+		});
+	});
+
 	describe('packageForHttp()', () => {
 		it('should write zips and manifest.json to output directory', async () => {
 			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo');
