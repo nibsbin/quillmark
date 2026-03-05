@@ -37,7 +37,7 @@ QuillSource  →  QuillRegistry(source, engine)  →  engine.registerQuill()
 
 | Source             | Environment       | Reads from                                                 |
 | ------------------ | ----------------- | ---------------------------------------------------------- |
-| `FileSystemSource` | Node.js           | Local directory (e.g., `tonguetoquill-collection/quills/`) |
+| `FileSystemSource` | Node.js           | Versioned local directory (e.g., `quills/{name}/{version}/`) |
 | `HttpSource`       | Browser + Node.js | Base URL serving zips + manifest                           |
 
 **QuillRegistry** — orchestrates sources, resolves versions, caches loaded Quills. The registry is constructed with both a `QuillSource` and a `QuillmarkEngine` instance (via `QuillRegistryOptions`). On `resolve()`, it fetches quill data from the source and pushes it to that engine instance via `registerQuill()`. The registry is the single source of truth for discovery and loading; the engine is the single source of truth for rendering.
@@ -154,7 +154,28 @@ The registry calls `engine.registerQuill()` as part of `resolve()`, and uses `en
 
 ### Built-in Sources
 
-**`FileSystemSource`** — Node.js only. Reads Quill directories from disk, parses `Quill.yaml` (via the `yaml` package) for metadata, and reads all files recursively into `Record<string, Uint8Array>` file maps. Also exposes `packageForHttp()` to zip quills and write a manifest for static hosting. Constructor takes a single `quillsDir` path.
+**`FileSystemSource`** — Node.js only. Reads Quill directories from disk using a versioned layout:
+
+```
+quillsDir/
+  usaf_memo/
+    0.1.0/
+      Quill.yaml     ← name: usaf_memo, version: 0.1.0
+      template.typ
+    1.0.0/
+      Quill.yaml     ← name: usaf_memo, version: 1.0.0
+      template.typ
+  classic_resume/
+    2.1.0/
+      Quill.yaml
+      template.typ
+```
+
+Each subdirectory of `quillsDir` is a quill name; subdirectories within are version directories. Each version directory must contain a `Quill.yaml` with `name` and `version` fields that match their respective directory names.
+
+When `loadQuill()` is called without a version, the source resolves to the latest version by semver-sorting the version directories.
+
+Also exposes `packageForHttp()` to zip quills and write a manifest for static hosting. Constructor takes a single `quillsDir` path.
 
 **`HttpSource`** — Browser or Node.js. Fetches zips and manifest from any HTTP endpoint (local static directory, CDN, remote server). Constructed with `HttpSourceOptions`:
 
@@ -237,6 +258,7 @@ Future: version ranges, pinning, deprecation warnings — all live in the regist
 | ------------------------------------ | ----------------------------------- |
 | `web-utils.loaders.fromZip()`        | `HttpSource` internals              |
 | `Quill.yaml` parsing in build script | `FileSystemSource` (via `yaml` pkg) |
+| Quill versioning via single directory| `FileSystemSource` versioned layout |
 | Manifest generation in build script  | `FileSystemSource.getManifest()`    |
 | Zip packaging in build script        | `FileSystemSource.packageForHttp()` |
 | `preloadQuills()` in client service  | `registry.preload()`                |

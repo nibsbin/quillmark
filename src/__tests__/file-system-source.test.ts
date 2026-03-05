@@ -9,7 +9,7 @@ const TEST_DIR = path.join(import.meta.dirname, '../../.test-fixtures/quills');
 const OUTPUT_DIR = path.join(import.meta.dirname, '../../.test-fixtures/output');
 
 async function createQuillDir(name: string, version: string, description?: string) {
-	const quillDir = path.join(TEST_DIR, name);
+	const quillDir = path.join(TEST_DIR, name, version);
 	await fs.mkdir(quillDir, { recursive: true });
 
 	const yaml = [
@@ -42,7 +42,7 @@ describe('FileSystemSource', () => {
 	});
 
 	describe('getManifest()', () => {
-		it('should return a manifest with all quills', async () => {
+		it('should return a manifest with all quill versions', async () => {
 			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo');
 			await createQuillDir('classic_resume', '2.1.0');
 
@@ -56,6 +56,18 @@ describe('FileSystemSource', () => {
 			const usaf = manifest.quills.find((q) => q.name === 'usaf_memo')!;
 			expect(usaf.version).toBe('1.0.0');
 			expect(usaf.description).toBe('USAF Memo');
+		});
+
+		it('should return multiple versions of the same quill', async () => {
+			await createQuillDir('usaf_memo', '0.1.0', 'USAF Memo v0.1');
+			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo v1.0');
+
+			const source = new FileSystemSource(TEST_DIR);
+			const manifest = await source.getManifest();
+
+			expect(manifest.quills).toHaveLength(2);
+			const versions = manifest.quills.map((q) => q.version).sort();
+			expect(versions).toEqual(['0.1.0', '1.0.0']);
 		});
 
 		it('should return empty manifest for empty directory', async () => {
@@ -74,36 +86,80 @@ describe('FileSystemSource', () => {
 				expect((err as RegistryError).code).toBe('source_unavailable');
 			}
 		});
+
+		it('should throw load_error when Quill.yaml name mismatches directory', async () => {
+			// Create a directory where the Quill.yaml name doesn't match
+			const quillDir = path.join(TEST_DIR, 'usaf_memo', '1.0.0');
+			await fs.mkdir(quillDir, { recursive: true });
+			await fs.writeFile(
+				path.join(quillDir, 'Quill.yaml'),
+				'name: wrong_name\nversion: 1.0.0',
+			);
+
+			const source = new FileSystemSource(TEST_DIR);
+			await expect(source.getManifest()).rejects.toThrow(RegistryError);
+			try {
+				await source.getManifest();
+			} catch (err) {
+				expect(err).toBeInstanceOf(RegistryError);
+				expect((err as RegistryError).code).toBe('load_error');
+			}
+		});
+
+		it('should throw load_error when Quill.yaml version mismatches directory', async () => {
+			const quillDir = path.join(TEST_DIR, 'usaf_memo', '1.0.0');
+			await fs.mkdir(quillDir, { recursive: true });
+			await fs.writeFile(
+				path.join(quillDir, 'Quill.yaml'),
+				'name: usaf_memo\nversion: 2.0.0',
+			);
+
+			const source = new FileSystemSource(TEST_DIR);
+			await expect(source.getManifest()).rejects.toThrow(RegistryError);
+			try {
+				await source.getManifest();
+			} catch (err) {
+				expect(err).toBeInstanceOf(RegistryError);
+				expect((err as RegistryError).code).toBe('load_error');
+			}
+		});
 	});
 
 	describe('loadQuill()', () => {
-		it('should load a quill by name', async () => {
-			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo');
+		it('should load a quill by name (resolves to latest version)', async () => {
+			await createQuillDir('usaf_memo', '0.1.0', 'USAF Memo v0.1');
+			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo v1.0');
 
 			const source = new FileSystemSource(TEST_DIR);
 			const bundle = await source.loadQuill('usaf_memo');
 
 			expect(bundle.name).toBe('usaf_memo');
 			expect(bundle.version).toBe('1.0.0');
-			expect(bundle.metadata.name).toBe('usaf_memo');
-			expect(bundle.metadata.version).toBe('1.0.0');
-			expect(bundle.metadata.description).toBe('USAF Memo');
-
-			// Data should contain the quill files
-			const data = bundle.data as Record<string, Uint8Array>;
-			expect(data['Quill.yaml']).toBeDefined();
-			expect(data['template.typ']).toBeDefined();
-			expect(data['assets/logo.txt']).toBeDefined();
+			expect(bundle.metadata.description).toBe('USAF Memo v1.0');
 		});
 
-		it('should load a quill by name and version', async () => {
-			await createQuillDir('usaf_memo', '1.0.0');
+		it('should load a quill by name and exact version', async () => {
+			await createQuillDir('usaf_memo', '0.1.0', 'USAF Memo v0.1');
+			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo v1.0');
+
+			const source = new FileSystemSource(TEST_DIR);
+			const bundle = await source.loadQuill('usaf_memo', '0.1.0');
+
+			expect(bundle.name).toBe('usaf_memo');
+			expect(bundle.version).toBe('0.1.0');
+			expect(bundle.metadata.description).toBe('USAF Memo v0.1');
+		});
+
+		it('should include all quill files in data', async () => {
+			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo');
 
 			const source = new FileSystemSource(TEST_DIR);
 			const bundle = await source.loadQuill('usaf_memo', '1.0.0');
 
-			expect(bundle.name).toBe('usaf_memo');
-			expect(bundle.version).toBe('1.0.0');
+			const data = bundle.data as Record<string, Uint8Array>;
+			expect(data['Quill.yaml']).toBeDefined();
+			expect(data['template.typ']).toBeDefined();
+			expect(data['assets/logo.txt']).toBeDefined();
 		});
 
 		it('should throw quill_not_found for unknown quill', async () => {
@@ -161,6 +217,23 @@ describe('FileSystemSource', () => {
 			expect(zip.file('Quill.yaml')).not.toBeNull();
 			expect(zip.file('template.typ')).not.toBeNull();
 			expect(zip.file('assets/logo.txt')).not.toBeNull();
+		});
+
+		it('should package multiple versions of the same quill', async () => {
+			await createQuillDir('usaf_memo', '0.1.0');
+			await createQuillDir('usaf_memo', '1.0.0');
+
+			const source = new FileSystemSource(TEST_DIR);
+			await source.packageForHttp(OUTPUT_DIR);
+
+			const files = await fs.readdir(OUTPUT_DIR);
+			expect(files).toContain('usaf_memo@0.1.0.zip');
+			expect(files).toContain('usaf_memo@1.0.0.zip');
+
+			const manifestContent = JSON.parse(
+				await fs.readFile(path.join(OUTPUT_DIR, 'manifest.json'), 'utf-8'),
+			);
+			expect(manifestContent.quills).toHaveLength(2);
 		});
 
 		it('should create output directory if it does not exist', async () => {

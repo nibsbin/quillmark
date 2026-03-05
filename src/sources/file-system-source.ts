@@ -57,11 +57,54 @@ async function readQuillMetadata(quillDir: string): Promise<QuillMetadata> {
 	};
 }
 
+/** Lists subdirectories of a given directory. Returns directory names. */
+async function listSubdirectories(dirPath: string): Promise<string[]> {
+	const entries = await fs.readdir(dirPath, { withFileTypes: true });
+	return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+}
+
+/**
+ * Compares two semver version strings. Returns a negative number if a < b,
+ * zero if equal, positive if a > b. Handles versions with any number of
+ * numeric segments (e.g., "1.0.0", "0.1", "2.1.0").
+ */
+function compareSemver(a: string, b: string): number {
+	const partsA = a.split('.').map(Number);
+	const partsB = b.split('.').map(Number);
+	const len = Math.max(partsA.length, partsB.length);
+
+	for (let i = 0; i < len; i++) {
+		const numA = partsA[i] ?? 0;
+		const numB = partsB[i] ?? 0;
+		if (numA !== numB) return numA - numB;
+	}
+
+	return 0;
+}
+
 /**
  * Node.js-only QuillSource that reads Quill directories from the local filesystem.
  *
- * Each subdirectory of the provided `quillsDir` is treated as a quill.
- * Each must contain a `Quill.yaml` with at least `name` and `version` fields.
+ * Expects a versioned directory layout:
+ *
+ * ```
+ * quillsDir/
+ *   usaf_memo/
+ *     0.1.0/
+ *       Quill.yaml
+ *       template.typ
+ *     1.0.0/
+ *       Quill.yaml
+ *       template.typ
+ *   classic_resume/
+ *     2.1.0/
+ *       Quill.yaml
+ *       template.typ
+ * ```
+ *
+ * Each version directory must contain a `Quill.yaml` with at least `name` and `version`
+ * fields. The `name` must match the parent directory and `version` must match the
+ * version directory name.
  *
  * Also exposes `packageForHttp(outputDir)` to zip quills and write a manifest
  * for static hosting.
@@ -74,10 +117,9 @@ export class FileSystemSource implements QuillSource {
 	}
 
 	async getManifest(): Promise<QuillManifest> {
-		let entries: string[];
+		let quillNames: string[];
 		try {
-			const dirEntries = await fs.readdir(this.quillsDir, { withFileTypes: true });
-			entries = dirEntries.filter((e) => e.isDirectory()).map((e) => e.name);
+			quillNames = await listSubdirectories(this.quillsDir);
 		} catch (err) {
 			throw new RegistryError(
 				'source_unavailable',
@@ -87,65 +129,106 @@ export class FileSystemSource implements QuillSource {
 		}
 
 		const quills: QuillMetadata[] = [];
-		for (const dirName of entries) {
-			const quillDir = path.join(this.quillsDir, dirName);
-			const metadata = await readQuillMetadata(quillDir);
-			quills.push(metadata);
+		for (const quillName of quillNames) {
+			const quillNameDir = path.join(this.quillsDir, quillName);
+			let versionDirs: string[];
+			try {
+				versionDirs = await listSubdirectories(quillNameDir);
+			} catch {
+				// Skip entries that aren't readable directories
+				continue;
+			}
+
+			for (const versionDir of versionDirs) {
+				const versionPath = path.join(quillNameDir, versionDir);
+				try {
+					const metadata = await readQuillMetadata(versionPath);
+
+					// Validate name/version match directory names
+					if (metadata.name !== quillName) {
+						throw new RegistryError(
+							'load_error',
+							`Quill.yaml name "${metadata.name}" does not match directory name "${quillName}"`,
+						);
+					}
+					if (metadata.version !== versionDir) {
+						throw new RegistryError(
+							'load_error',
+							`Quill.yaml version "${metadata.version}" does not match directory name "${versionDir}"`,
+						);
+					}
+
+					quills.push(metadata);
+				} catch (err) {
+					if (err instanceof RegistryError) throw err;
+					// Skip directories without valid Quill.yaml
+				}
+			}
 		}
 
 		return { quills };
 	}
 
 	async loadQuill(name: string, version?: string): Promise<QuillBundle> {
-		const manifest = await this.getManifest();
-		const entry = manifest.quills.find(
-			(q) => q.name === name && (version === undefined || q.version === version),
-		);
+		// If no version specified, resolve to latest
+		const resolvedVersion = version ?? (await this.resolveLatestVersion(name));
 
-		if (!entry) {
-			if (version && manifest.quills.some((q) => q.name === name)) {
+		const quillDir = path.join(this.quillsDir, name, resolvedVersion);
+
+		// Verify directory exists
+		try {
+			await fs.access(quillDir);
+		} catch {
+			// Check if the quill name exists at all to give a better error
+			const nameDir = path.join(this.quillsDir, name);
+			try {
+				await fs.access(nameDir);
+				// Name exists but version doesn't
 				throw new RegistryError(
 					'version_not_found',
-					`Quill "${name}" exists but version "${version}" was not found`,
-					{ quillName: name, version },
+					`Quill "${name}" exists but version "${resolvedVersion}" was not found`,
+					{ quillName: name, version: resolvedVersion },
 				);
+			} catch (err) {
+				if (err instanceof RegistryError) throw err;
+				throw new RegistryError('quill_not_found', `Quill "${name}" not found in source`, {
+					quillName: name,
+					version: resolvedVersion,
+				});
 			}
-			throw new RegistryError('quill_not_found', `Quill "${name}" not found in source`, {
-				quillName: name,
-				version,
-			});
 		}
 
-		const quillDir = await this.findQuillDir(entry.name, entry.version);
+		const metadata = await readQuillMetadata(quillDir);
+
 		let files: Record<string, Uint8Array>;
 		try {
 			files = await readDirRecursive(quillDir);
 		} catch (err) {
 			throw new RegistryError('load_error', `Failed to read quill directory: ${quillDir}`, {
 				quillName: name,
-				version: entry.version,
+				version: resolvedVersion,
 				cause: err,
 			});
 		}
 
 		return {
-			name: entry.name,
-			version: entry.version,
+			name: metadata.name,
+			version: metadata.version,
 			data: files,
-			metadata: entry,
+			metadata,
 		};
 	}
 
 	/**
 	 * Packages all quills for HTTP static hosting.
-	 * Zips each quill directory and writes the zips plus a `manifest.json` to `outputDir`.
+	 * Zips each quill version directory and writes the zips plus a `manifest.json` to `outputDir`.
 	 */
 	async packageForHttp(outputDir: string): Promise<void> {
 		await fs.mkdir(outputDir, { recursive: true });
 
 		const manifest = await this.getManifest();
 		for (const entry of manifest.quills) {
-			const quillDir = await this.findQuillDir(entry.name, entry.version);
+			const quillDir = path.join(this.quillsDir, entry.name, entry.version);
 			const files = await readDirRecursive(quillDir);
 
 			const zip = new JSZip();
@@ -161,26 +244,30 @@ export class FileSystemSource implements QuillSource {
 		await fs.writeFile(path.join(outputDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 	}
 
-	/** Finds the directory for a quill by scanning subdirectories and matching metadata. */
-	private async findQuillDir(name: string, version: string): Promise<string> {
-		const dirEntries = await fs.readdir(this.quillsDir, { withFileTypes: true });
-		const dirs = dirEntries.filter((e) => e.isDirectory()).map((e) => e.name);
+	/**
+	 * Resolves the latest version for a quill by listing version directories
+	 * and picking the highest semver.
+	 */
+	private async resolveLatestVersion(name: string): Promise<string> {
+		const nameDir = path.join(this.quillsDir, name);
 
-		for (const dirName of dirs) {
-			const quillDir = path.join(this.quillsDir, dirName);
-			try {
-				const metadata = await readQuillMetadata(quillDir);
-				if (metadata.name === name && metadata.version === version) {
-					return quillDir;
-				}
-			} catch {
-				// Skip directories that don't have valid Quill.yaml
-			}
+		let versionDirs: string[];
+		try {
+			versionDirs = await listSubdirectories(nameDir);
+		} catch {
+			throw new RegistryError('quill_not_found', `Quill "${name}" not found in source`, {
+				quillName: name,
+			});
 		}
 
-		throw new RegistryError('quill_not_found', `Quill directory for "${name}@${version}" not found`, {
-			quillName: name,
-			version,
-		});
+		if (versionDirs.length === 0) {
+			throw new RegistryError('quill_not_found', `Quill "${name}" has no versions`, {
+				quillName: name,
+			});
+		}
+
+		// Sort by semver descending, return highest
+		versionDirs.sort((a, b) => compareSemver(b, a));
+		return versionDirs[0];
 	}
 }
