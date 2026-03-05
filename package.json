@@ -8,6 +8,8 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "tsc --noEmit",
     "preversion": "npm test",
     "postversion": "git push --follow-tags",
