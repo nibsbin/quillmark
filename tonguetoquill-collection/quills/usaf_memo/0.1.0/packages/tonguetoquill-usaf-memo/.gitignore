@@ -1,0 +1,14 @@
+dev_assets/
+.claude/
+.github/
+pdfs/
+**.pdf
+tests/
+build.sh
+.gitignore~*
+orchestration.txt
+prose/
+
+template/
+README.md
+LIMITATIONS.md

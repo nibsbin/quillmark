@@ -1,9 +1,9 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import JSZip from 'jszip';
-import { parse as parseYaml } from 'yaml';
 import type { QuillBundle, QuillManifest, QuillMetadata, QuillSource } from '../types.js';
 import { RegistryError } from '../errors.js';
+import { toEngineFileTree } from '../format.js';
 
 /** Reads files from a directory recursively, returning a map of relative paths to contents. */
 async function readDirRecursive(
@@ -28,33 +28,18 @@ async function readDirRecursive(
 	return files;
 }
 
-/** Extracts metadata from a Quill.yaml file within a quill directory. */
-async function readQuillMetadata(quillDir: string): Promise<QuillMetadata> {
+/**
+ * Verifies that a Quill.yaml file exists in the given quill directory.
+ * Name and version are derived from the directory structure; Quill.yaml
+ * content is parsed by the @quillmark/wasm engine at registration time.
+ */
+async function assertQuillYamlExists(quillDir: string): Promise<void> {
 	const yamlPath = path.join(quillDir, 'Quill.yaml');
-
-	let content: string;
 	try {
-		content = await fs.readFile(yamlPath, 'utf-8');
-	} catch (err) {
-		throw new RegistryError('load_error', `Failed to read Quill.yaml in ${quillDir}`, {
-			cause: err,
-		});
+		await fs.access(yamlPath);
+	} catch {
+		throw new RegistryError('load_error', `Missing Quill.yaml in ${quillDir}`);
 	}
-
-	const parsed = parseYaml(content);
-
-	if (!parsed || typeof parsed.name !== 'string' || typeof parsed.version !== 'string') {
-		throw new RegistryError(
-			'load_error',
-			`Invalid Quill.yaml in ${quillDir}: missing name or version`,
-		);
-	}
-
-	return {
-		name: parsed.name,
-		version: parsed.version,
-		...(typeof parsed.description === 'string' ? { description: parsed.description } : {}),
-	};
 }
 
 /** Lists subdirectories of a given directory. Filters out dot-prefixed entries. */
@@ -109,9 +94,9 @@ function compareSemver(a: string, b: string): number {
  *       template.typ
  * ```
  *
- * Each version directory must contain a `Quill.yaml` with at least `name` and `version`
- * fields. The `name` must match the parent directory and `version` must match the
- * version directory name.
+ * Each version directory must contain a `Quill.yaml` file. Name and version are
+ * derived from the directory structure; Quill.yaml content is validated by the
+ * @quillmark/wasm engine at registration time.
  *
  * Also exposes `packageForHttp(outputDir)` to zip quills and write a manifest
  * for static hosting.
@@ -150,23 +135,8 @@ export class FileSystemSource implements QuillSource {
 				if (!isSemver(versionDir)) continue;
 				const versionPath = path.join(quillNameDir, versionDir);
 				try {
-					const metadata = await readQuillMetadata(versionPath);
-
-					// Validate name/version match directory names
-					if (metadata.name !== quillName) {
-						throw new RegistryError(
-							'load_error',
-							`Quill.yaml name "${metadata.name}" does not match directory name "${quillName}"`,
-						);
-					}
-					if (metadata.version !== versionDir) {
-						throw new RegistryError(
-							'load_error',
-							`Quill.yaml version "${metadata.version}" does not match directory name "${versionDir}"`,
-						);
-					}
-
-					quills.push(metadata);
+					await assertQuillYamlExists(versionPath);
+					quills.push({ name: quillName, version: versionDir });
 				} catch (err) {
 					if (err instanceof RegistryError) throw err;
 					// Skip directories without valid Quill.yaml
@@ -206,23 +176,9 @@ export class FileSystemSource implements QuillSource {
 			}
 		}
 
-		const metadata = await readQuillMetadata(quillDir);
+		await assertQuillYamlExists(quillDir);
 
-		// Validate name/version match directory path
-		if (metadata.name !== name) {
-			throw new RegistryError(
-				'load_error',
-				`Quill.yaml name "${metadata.name}" does not match expected name "${name}"`,
-				{ quillName: name, version: resolvedVersion },
-			);
-		}
-		if (metadata.version !== resolvedVersion) {
-			throw new RegistryError(
-				'load_error',
-				`Quill.yaml version "${metadata.version}" does not match expected version "${resolvedVersion}"`,
-				{ quillName: name, version: resolvedVersion },
-			);
-		}
+		const metadata: QuillMetadata = { name, version: resolvedVersion };
 
 		let files: Record<string, Uint8Array>;
 		try {
@@ -236,9 +192,9 @@ export class FileSystemSource implements QuillSource {
 		}
 
 		return {
-			name: metadata.name,
-			version: metadata.version,
-			data: files,
+			name,
+			version: resolvedVersion,
+			data: toEngineFileTree(files),
 			metadata,
 		};
 	}

@@ -55,7 +55,6 @@ describe('FileSystemSource', () => {
 
 			const usaf = manifest.quills.find((q) => q.name === 'usaf_memo')!;
 			expect(usaf.version).toBe('1.0.0');
-			expect(usaf.description).toBe('USAF Memo');
 		});
 
 		it('should return multiple versions of the same quill', async () => {
@@ -87,32 +86,11 @@ describe('FileSystemSource', () => {
 			}
 		});
 
-		it('should throw load_error when Quill.yaml name mismatches directory', async () => {
-			// Create a directory where the Quill.yaml name doesn't match
+		it('should throw load_error when Quill.yaml is missing from version directory', async () => {
+			// Create a directory structure without Quill.yaml
 			const quillDir = path.join(TEST_DIR, 'usaf_memo', '1.0.0');
 			await fs.mkdir(quillDir, { recursive: true });
-			await fs.writeFile(
-				path.join(quillDir, 'Quill.yaml'),
-				'name: wrong_name\nversion: 1.0.0',
-			);
-
-			const source = new FileSystemSource(TEST_DIR);
-			await expect(source.getManifest()).rejects.toThrow(RegistryError);
-			try {
-				await source.getManifest();
-			} catch (err) {
-				expect(err).toBeInstanceOf(RegistryError);
-				expect((err as RegistryError).code).toBe('load_error');
-			}
-		});
-
-		it('should throw load_error when Quill.yaml version mismatches directory', async () => {
-			const quillDir = path.join(TEST_DIR, 'usaf_memo', '1.0.0');
-			await fs.mkdir(quillDir, { recursive: true });
-			await fs.writeFile(
-				path.join(quillDir, 'Quill.yaml'),
-				'name: usaf_memo\nversion: 2.0.0',
-			);
+			await fs.writeFile(path.join(quillDir, 'template.typ'), '// template');
 
 			const source = new FileSystemSource(TEST_DIR);
 			await expect(source.getManifest()).rejects.toThrow(RegistryError);
@@ -135,7 +113,6 @@ describe('FileSystemSource', () => {
 
 			expect(bundle.name).toBe('usaf_memo');
 			expect(bundle.version).toBe('1.0.0');
-			expect(bundle.metadata.description).toBe('USAF Memo v1.0');
 		});
 
 		it('should load a quill by name and exact version', async () => {
@@ -147,7 +124,6 @@ describe('FileSystemSource', () => {
 
 			expect(bundle.name).toBe('usaf_memo');
 			expect(bundle.version).toBe('0.1.0');
-			expect(bundle.metadata.description).toBe('USAF Memo v0.1');
 		});
 
 		it('should include all quill files in data', async () => {
@@ -156,10 +132,11 @@ describe('FileSystemSource', () => {
 			const source = new FileSystemSource(TEST_DIR);
 			const bundle = await source.loadQuill('usaf_memo', '1.0.0');
 
-			const data = bundle.data as Record<string, Uint8Array>;
-			expect(data['Quill.yaml']).toBeDefined();
-			expect(data['template.typ']).toBeDefined();
-			expect(data['assets/logo.txt']).toBeDefined();
+			const data = bundle.data as { files: Record<string, unknown> };
+			expect(data.files['Quill.yaml']).toBeDefined();
+			expect(data.files['template.typ']).toBeDefined();
+			const assets = data.files['assets'] as Record<string, unknown>;
+			expect(assets['logo.txt']).toBeDefined();
 		});
 
 		it('should throw quill_not_found for unknown quill', async () => {
@@ -247,32 +224,11 @@ describe('FileSystemSource', () => {
 			expect(bundle.version).toBe('1.0.0');
 		});
 
-		it('should throw load_error from loadQuill when Quill.yaml name mismatches', async () => {
-			// Create a valid directory structure but with wrong name in Quill.yaml
+		it('should throw load_error from loadQuill when Quill.yaml is missing', async () => {
+			// Create a directory structure without Quill.yaml
 			const quillDir = path.join(TEST_DIR, 'usaf_memo', '1.0.0');
 			await fs.mkdir(quillDir, { recursive: true });
-			await fs.writeFile(
-				path.join(quillDir, 'Quill.yaml'),
-				'name: wrong_name\nversion: 1.0.0',
-			);
-
-			const source = new FileSystemSource(TEST_DIR);
-			try {
-				await source.loadQuill('usaf_memo', '1.0.0');
-				expect.unreachable('Should have thrown');
-			} catch (err) {
-				expect(err).toBeInstanceOf(RegistryError);
-				expect((err as RegistryError).code).toBe('load_error');
-			}
-		});
-
-		it('should throw load_error from loadQuill when Quill.yaml version mismatches', async () => {
-			const quillDir = path.join(TEST_DIR, 'usaf_memo', '1.0.0');
-			await fs.mkdir(quillDir, { recursive: true });
-			await fs.writeFile(
-				path.join(quillDir, 'Quill.yaml'),
-				'name: usaf_memo\nversion: 9.9.9',
-			);
+			await fs.writeFile(path.join(quillDir, 'template.typ'), '// template');
 
 			const source = new FileSystemSource(TEST_DIR);
 			try {

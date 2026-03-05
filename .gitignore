@@ -1,5 +1,6 @@
 # Test fixtures
 .test-fixtures/
+.test-fixtures-compat/
 
 # Logs
 logs
