@@ -33,7 +33,10 @@ export function toEngineFileTree(flatFiles: Record<string, Uint8Array>): {
 		const parts = filePath.split(/[/\\]/);
 		let current = tree as Record<string, Record<string, unknown>>;
 		for (let i = 0; i < parts.length - 1; i++) {
-			current[parts[i]] = (current[parts[i]] as Record<string, unknown>) ?? {};
+			const existing = current[parts[i]];
+			if (existing === undefined || existing === null) {
+				current[parts[i]] = {} as Record<string, unknown>;
+			}
 			current = current[parts[i]] as Record<string, Record<string, unknown>>;
 		}
 		const fileName = parts[parts.length - 1];

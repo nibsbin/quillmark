@@ -258,7 +258,7 @@ describe('registerQuill compatibility with @quillmark/wasm', () => {
 			const fsInfo = fsEngine.resolveQuill('classic_resume')!;
 			const httpInfo = httpEngine.resolveQuill('classic_resume')!;
 			expect(fsInfo.name).toBe(httpInfo.name);
-			expect(fsInfo.metadata.version).toBe(httpInfo.metadata.version);
+			expect(fsInfo.metadata.version as string).toBe(httpInfo.metadata.version as string);
 			expect(fsBundle.name).toBe(httpBundle.name);
 			expect(fsBundle.version).toBe(httpBundle.version);
 
