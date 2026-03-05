@@ -43,7 +43,10 @@ async function readQuillMetadata(quillDir: string): Promise<QuillMetadata> {
 
 	const parsed = parseYaml(content);
 
-	if (!parsed || typeof parsed.name !== 'string' || typeof parsed.version !== 'string') {
+	// Support both flat format (name: ...) and nested format (Quill:\n  name: ...)
+	const meta = parsed?.Quill ?? parsed;
+
+	if (!meta || typeof meta.name !== 'string' || typeof meta.version !== 'string') {
 		throw new RegistryError(
 			'load_error',
 			`Invalid Quill.yaml in ${quillDir}: missing name or version`,
@@ -51,9 +54,9 @@ async function readQuillMetadata(quillDir: string): Promise<QuillMetadata> {
 	}
 
 	return {
-		name: parsed.name,
-		version: parsed.version,
-		...(typeof parsed.description === 'string' ? { description: parsed.description } : {}),
+		name: meta.name,
+		version: meta.version,
+		...(typeof meta.description === 'string' ? { description: meta.description } : {}),
 	};
 }
 
