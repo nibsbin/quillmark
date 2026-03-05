@@ -4,7 +4,8 @@
   "description": "Unified API for discovering, loading, packaging, and registering Quills with the WASM engine",
   "main": "./dist/index.js",
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "tsc",
