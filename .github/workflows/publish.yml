@@ -8,10 +8,9 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # Permissions are the most important part of OIDC
     permissions:
       contents: read
-      id-token: write 
+      id-token: write # Required to generate the OIDC token
 
     steps:
       - name: Checkout code
@@ -21,7 +20,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-          # No registry-url needed for Trusted Publishing!
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: npm ci
@@ -36,5 +35,5 @@ jobs:
         run: npm run build
 
       - name: Publish to npm
-        # Ensure 'Trusted Publishers' is configured in your npmjs.com settings
+        # No 'env' or 'NODE_AUTH_TOKEN' needed anymore!
         run: npm publish --provenance --access public
