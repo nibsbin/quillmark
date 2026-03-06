@@ -40,7 +40,7 @@
     "jszip": "^3.10.1"
   },
   "devDependencies": {
-    "@quillmark/wasm": "^0.36.0",
+    "@quillmark/wasm": "^0.37.0",
     "@types/node": "^25.3.3",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"

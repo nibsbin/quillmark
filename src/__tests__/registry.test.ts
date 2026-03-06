@@ -154,7 +154,7 @@ describe('QuillRegistry', () => {
 
 		it('should resolve with specific version', async () => {
 			const registry = new QuillRegistry({ source, engine });
-			const bundle = await registry.resolve('usaf_memo', '1.0.0');
+			const bundle = await registry.resolve('usaf_memo@1.0.0');
 
 			expect(bundle.name).toBe('usaf_memo');
 			expect(bundle.version).toBe('1.0.0');
@@ -177,14 +177,14 @@ describe('QuillRegistry', () => {
 			const registry = new QuillRegistry({ source, engine });
 
 			// First resolve
-			await registry.resolve('usaf_memo', '1.0.0');
+			await registry.resolve('usaf_memo@1.0.0');
 			expect(source.loadQuill).toHaveBeenCalledTimes(1);
 
 			// Reset the engine mock to not find it (test cache path specifically)
 			vi.mocked(engine.resolveQuill).mockReturnValue(null);
 
 			// Second resolve with same version: hits registry cache
-			await registry.resolve('usaf_memo', '1.0.0');
+			await registry.resolve('usaf_memo@1.0.0');
 			expect(source.loadQuill).toHaveBeenCalledTimes(1);
 		});
 
@@ -204,7 +204,7 @@ describe('QuillRegistry', () => {
 			const registry = new QuillRegistry({ source, engine });
 
 			try {
-				await registry.resolve('usaf_memo', '9.9.9');
+				await registry.resolve('usaf_memo@9.9.9');
 				expect.unreachable('Should have thrown');
 			} catch (err) {
 				expect(err).toBeInstanceOf(RegistryError);
@@ -225,7 +225,7 @@ describe('QuillRegistry', () => {
 		it('should resolve specific versions of quills', async () => {
 			const registry = new QuillRegistry({ source, engine });
 			await registry.preload([
-				{ name: 'usaf_memo', version: '1.0.0' },
+				'usaf_memo@1.0.0',
 				'classic_resume',
 			]);
 

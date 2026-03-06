@@ -43,7 +43,7 @@ export class QuillRegistry {
 	}
 
 	/**
-	 * Resolves a quill by name and optional version.
+	 * Resolves a quill by a reference string (e.g., `name@version` or just `name`).
 	 *
 	 * Resolution flow:
 	 * 1. Check engine via resolveQuill() — return immediately if already registered
@@ -53,10 +53,12 @@ export class QuillRegistry {
 	 *
 	 * When no version is specified, resolves to latest available.
 	 */
-	async resolve(name: string, version?: string): Promise<QuillBundle> {
+	async resolve(ref: string): Promise<QuillBundle> {
+		// Parse ref into name and optional version
+		const [name, version] = ref.split('@');
+
 		// 1. Check engine — return immediately if already registered
-		const quillRef = version ? `${name}@${version}` : name;
-		const engineInfo = this.engine.resolveQuill(quillRef);
+		const engineInfo = this.engine.resolveQuill(ref);
 		if (engineInfo) {
 			const engineVersion = engineInfo.metadata?.version;
 			if (typeof engineVersion === 'string') {
@@ -68,7 +70,7 @@ export class QuillRegistry {
 			}
 		}
 
-		// 2. Check registry cache
+		// 2. Check registry cache (only for explicit versioned lookups)
 		if (version) {
 			const cacheKey = `${name}@${version}`;
 			const cached = this.cache.get(cacheKey);
@@ -91,21 +93,11 @@ export class QuillRegistry {
 	}
 
 	/**
-	 * Preloads multiple quills. Fail-fast: if any quill fails to load,
-	 * rejects immediately. Callers who want best-effort can call resolve()
-	 * individually and catch per-quill.
-	 * 
-	 * Accepts an array of quill names, or objects with `name` and optional `version`.
+	 * Preloads multiple quills using reference strings (e.g., `name@version`).
+	 * Fail-fast: if any quill fails to load, rejects immediately.
 	 */
-	async preload(quills: Array<string | { name: string; version?: string }>): Promise<void> {
-		await Promise.all(
-			quills.map((q) => {
-				if (typeof q === 'string') {
-					return this.resolve(q);
-				}
-				return this.resolve(q.name, q.version);
-			})
-		);
+	async preload(refs: string[]): Promise<void> {
+		await Promise.all(refs.map((ref) => this.resolve(ref)));
 	}
 
 	/**
