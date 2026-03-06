@@ -139,8 +139,7 @@ where
                             }
                         } else if !list_item_first_block {
                             // Continuation paragraph in list item: blank line + indent
-                            let cont_indent =
-                                "  ".repeat(list_stack.len());
+                            let cont_indent = "  ".repeat(list_stack.len());
                             if !end_newline {
                                 output.push('\n');
                             }
