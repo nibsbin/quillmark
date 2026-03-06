@@ -121,8 +121,8 @@ class Workflow:
         """Get supported output formats."""
     
     @property
-    def quill_name(self) -> str:
-        """Get quill name."""
+    def quill_ref(self) -> str:
+        """Get quill reference (name@version)."""
 
     def add_asset(self, filename: str, contents: bytes) -> None:
         """Add a dynamic asset to the workflow.
@@ -249,8 +249,8 @@ class ParsedDocument:
     def fields(self) -> dict[str, Any]:
         """Get all frontmatter fields."""
 
-    def quill_name(self) -> str:
-        """Get QUILL field value from the document."""
+    def quill_ref(self) -> str:
+        """Get quill reference from the document."""
 
 class RenderResult:
     """Result of rendering operation."""

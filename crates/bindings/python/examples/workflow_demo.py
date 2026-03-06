@@ -64,7 +64,7 @@ The secret of getting ahead is getting started... with taro ice cream.
     
     parsed = ParsedDocument.from_markdown(markdown)
     print(f"  ✓ Parsed document")
-    print(f"  ✓ Quill name from document: {parsed.quill_name()}")
+    print(f"  ✓ Quill ref from document: {parsed.quill_ref()}")
     print(f"  ✓ Document fields: {list(parsed.fields.keys())}")
     print()
     
@@ -91,7 +91,7 @@ The secret of getting ahead is getting started... with taro ice cream.
     print(f"  • Supported formats: {supported_formats}")
     print()
     
-    print(f"  ✓ Created workflow for quill: {workflow.quill_name}")
+    print(f"  ✓ Created workflow for quill: {workflow.quill_ref}")
     print(f"  ✓ Backend: {workflow.backend_id}")
     print(f"  ✓ Workflow supported formats: {workflow.supported_formats}")
     print()

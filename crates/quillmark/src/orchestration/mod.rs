@@ -160,7 +160,7 @@
 //! let workflow = engine.workflow("my-quill").unwrap();
 //!
 //! println!("Backend: {}", workflow.backend_id());
-//! println!("Quill: {}", workflow.quill_name());
+//! println!("Quill: {}", workflow.quill_ref());
 //! println!("Formats: {:?}", workflow.supported_formats());
 //! ```
 
