@@ -293,8 +293,8 @@ impl FromStr for QuillReference {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Find separator index (first occurrence of '@' or ':')
-        let separator_idx = s.find('@').or_else(|| s.find(':'));
+        // Find separator index (first occurrence of '@')
+        let separator_idx = s.find('@');
 
         let (name_part, version_part_opt) = match separator_idx {
             Some(idx) => (&s[..idx], Some(&s[idx + 1..])),
@@ -509,24 +509,5 @@ mod tests {
 
         let ref3 = QuillReference::new("resume".to_string(), VersionSelector::Latest);
         assert_eq!(ref3.to_string(), "resume");
-    }
-    #[test]
-    fn test_quill_reference_parsing_with_colon() {
-        // Minor selector with colon separator
-        let ref1 = QuillReference::from_str("usaf_memo:0.1").unwrap();
-        assert_eq!(ref1.name, "usaf_memo");
-        assert_eq!(ref1.selector, VersionSelector::Minor(0, 1));
-
-        // Exact version with colon separator
-        let ref1b = QuillReference::from_str("usaf_memo:0.1.0").unwrap();
-        assert_eq!(ref1b.name, "usaf_memo");
-        assert_eq!(
-            ref1b.selector,
-            VersionSelector::Exact(Version::new(0, 1, 0))
-        );
-
-        let ref2 = QuillReference::from_str("name:latest").unwrap();
-        assert_eq!(ref2.name, "name");
-        assert_eq!(ref2.selector, VersionSelector::Latest);
     }
 }

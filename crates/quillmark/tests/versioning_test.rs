@@ -514,8 +514,8 @@ fn test_resolve_version_with_colon_syntax() {
 
     // Resolve with colon syntax
     let workflow = engine
-        .workflow("usaf_memo:1.0")
-        .expect("Failed to resolve usaf_memo:1.0");
+        .workflow("usaf_memo@1.0")
+        .expect("Failed to resolve usaf_memo@1.0");
 
     assert_eq!(workflow.quill_name(), "usaf_memo");
 }
@@ -524,7 +524,7 @@ fn test_resolve_version_with_colon_syntax() {
 #[cfg(feature = "typst")]
 fn test_parse_document_with_colon_syntax() {
     let markdown = r#"---
-QUILL: usaf_memo:0.1
+QUILL: usaf_memo@0.1
 title: Test
 ---
 "#;
