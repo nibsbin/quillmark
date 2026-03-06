@@ -8,7 +8,7 @@ Implementation notes for `quillmark-core/src/parse.rs`.
 
 ### ParsedDocument
 
-Stores fields and body in a single `HashMap<String, QuillValue>`.
+Stores fields and body in a single `BTreeMap<String, QuillValue>`.
 
 - Body stored under `BODY_FIELD = "BODY"`
 - Quill reference defaults to `__default__@latest` when not specified

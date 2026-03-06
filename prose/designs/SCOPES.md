@@ -153,7 +153,7 @@ Scope-typed fields generate as array properties:
 
 Extend existing `FieldSchema` struct (see [QUILL.md](QUILL.md)):
 
-- Add `items: Option<HashMap<String, FieldSchema>>` for scope item fields
+- Add `items: Option<BTreeMap<String, FieldSchema>>` for scope item fields
 
 ### Type Recognition
 

@@ -171,12 +171,12 @@ These tests require actual PDF rendering which needs fonts. All version logic te
 ### 1. ParsedDocument::with_quill_tag Signature Change
 **Before:**
 ```rust
-pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: String) -> Self
+pub fn with_quill_tag(fields: BTreeMap<String, QuillValue>, quill_tag: String) -> Self
 ```
 
 **After:**
 ```rust
-pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: String) -> Result<Self, ParseError>
+pub fn with_quill_tag(fields: BTreeMap<String, QuillValue>, quill_tag: String) -> Result<Self, ParseError>
 ```
 
 **Migration:** Add `?` operator or `.unwrap()` at call sites:

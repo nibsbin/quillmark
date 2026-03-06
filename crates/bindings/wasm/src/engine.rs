@@ -59,7 +59,7 @@ impl Quillmark {
         // Convert to WASM type
         let quill_ref = parsed.quill_reference().to_string();
 
-        // Convert fields HashMap to JSON
+        // Convert fields BTreeMap to JSON
         let mut fields_obj = serde_json::Map::new();
         for (key, value) in parsed.fields() {
             fields_obj.insert(key.clone(), value.as_json().clone());
@@ -277,7 +277,7 @@ impl Quillmark {
         let quill_ref_to_use = opts.quill_ref.unwrap_or_else(|| parsed.quill_ref.clone());
 
         // Reconstruct a core ParsedDocument from the WASM type
-        // Convert JSON value to HashMap<String, QuillValue>
+        // Convert JSON value to BTreeMap<String, QuillValue>
         let fields_json = parsed.fields;
         let quill_ref_str = parsed.quill_ref; // Move quill_ref out
 

@@ -114,7 +114,7 @@ QUILL: taro@0
 **Location:** `crates/core/src/parse.rs:74-81`
 
 ```rust
-pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: String) -> Self {
+pub fn with_quill_tag(fields: BTreeMap<String, QuillValue>, quill_tag: String) -> Self {
     let quill_ref = quill_tag.parse().unwrap_or_else(|_| {
         // Silent fallback - treats parse error as quill name
         QuillReference::latest(quill_tag)
@@ -317,7 +317,7 @@ fn test_latest_selector_with_multiple_versions() {
 
 **Option A: Propagate Parse Error (Preferred)**
 ```rust
-pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: String) -> Result<Self, ParseError> {
+pub fn with_quill_tag(fields: BTreeMap<String, QuillValue>, quill_tag: String) -> Result<Self, ParseError> {
     let quill_ref = QuillReference::from_str(&quill_tag)
         .map_err(|e| ParseError::InvalidStructure(
             format!("Invalid QUILL tag '{}': {}", quill_tag, e)
@@ -328,7 +328,7 @@ pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: String) ->
 
 **Option B: Log Warning + Fallback (Backward Compatible)**
 ```rust
-pub fn with_quill_tag(fields: HashMap<String, QuillValue>, quill_tag: String) -> Self {
+pub fn with_quill_tag(fields: BTreeMap<String, QuillValue>, quill_tag: String) -> Self {
     let quill_ref = quill_tag.parse().unwrap_or_else(|e| {
         eprintln!("Warning: Failed to parse QUILL tag '{}': {}. Treating as quill name.", quill_tag, e);
         QuillReference::latest(quill_tag)

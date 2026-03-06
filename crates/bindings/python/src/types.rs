@@ -277,7 +277,7 @@ impl PyQuill {
 
     #[getter]
     fn defaults<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        // Convert cached defaults HashMap to Python dict
+        // Convert cached defaults BTreeMap to Python dict
         let dict = PyDict::new(py);
         for (key, value) in self.inner.extract_defaults() {
             dict.set_item(key, quillvalue_to_py(py, value)?)?;
@@ -287,7 +287,7 @@ impl PyQuill {
 
     #[getter]
     fn examples<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        // Convert cached examples HashMap to Python dict of lists
+        // Convert cached examples BTreeMap to Python dict of lists
         let dict = PyDict::new(py);
         for (key, values) in self.inner.extract_examples() {
             let py_list = pyo3::types::PyList::empty(py);

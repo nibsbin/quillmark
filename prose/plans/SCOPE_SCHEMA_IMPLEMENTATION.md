@@ -33,7 +33,7 @@
 ### Changes Required
 
 1. **Extend FieldSchema struct** (`quill.rs` line 21-35) ✅
-   - Add `items: Option<HashMap<String, FieldSchema>>` for scope item fields
+   - Add `items: Option<BTreeMap<String, FieldSchema>>` for scope item fields
    - Add `"items"` to known keys list (line 60)
 
 2. **Update `from_quill_value`** (`quill.rs` line 51-133) ✅
@@ -69,7 +69,7 @@
 1. **Scope Item Defaults Extraction** (`schema.rs`)
    - Added `extract_scope_item_defaults()` function
    - Extracts default values from `items.properties.*.default` in JSON Schema
-   - Returns `HashMap<scope_name, HashMap<item_field, default_value>>`
+   - Returns `BTreeMap<scope_name, BTreeMap<item_field, default_value>>`
 
 2. **Scope Item Defaults Application** (`schema.rs`)
    - Added `apply_scope_item_defaults()` function

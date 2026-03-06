@@ -138,7 +138,7 @@ const strippedSchema = info.getStrippedSchema();
 The WASM `Quillmark` struct wraps the core `quillmark::Quillmark` engine and delegates all quill registry operations to it. This ensures:
 
 - **Single source of truth**: Quills are stored only in the core engine
-- **Memory efficiency**: No duplicate HashMap in WASM layer
+- **Memory efficiency**: No duplicate BTreeMap in WASM layer
 - **Consistency**: Impossible for registries to drift
 - **Simplified code**: No synchronization overhead
 

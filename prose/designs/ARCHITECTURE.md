@@ -174,7 +174,7 @@ Quillmark supports advanced markdown parsing with the **Extended YAML Metadata S
 ### Basic Frontmatter
 
 - YAML delimited by `---` at document start
-- Converted to `HashMap<String, QuillValue>`
+- Converted to `BTreeMap<String, QuillValue>`
 - Body stored under reserved `BODY_FIELD` constant
 - Fail-fast error reporting for malformed YAML
 

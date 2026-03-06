@@ -60,7 +60,7 @@ pub struct CardSchema {
     /// Detailed description of this card type
     pub description: Option<String>,
     /// Field definitions for this card type
-    pub fields: HashMap<String, FieldSchema>,
+    pub fields: BTreeMap<String, FieldSchema>,
 }
 ```
 
@@ -87,8 +87,8 @@ pub struct FieldSchema {
 ```rust
 pub struct QuillConfig {
     // ... existing fields ...
-    pub fields: HashMap<String, FieldSchema>,   // [fields.X]
-    pub cards: HashMap<String, CardSchema>,     // [cards.X]
+    pub fields: BTreeMap<String, FieldSchema>,   // [fields.X]
+    pub cards: BTreeMap<String, CardSchema>,     // [cards.X]
 }
 ```
 

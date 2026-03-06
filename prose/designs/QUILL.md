@@ -11,7 +11,7 @@
 ## Design Principles
 
 1. **Separation of Concerns**: Metadata and files are completely separate
-2. **Tree Structure**: Internal representation uses tree + HashMap hybrid for optimal performance
+2. **Tree Structure**: Internal representation uses tree + BTreeMap hybrid for optimal performance
 3. **Explicit over Implicit**: No magic, no reserved keys mixed with file entries
 4. **Frontend-Friendly**: JSON format is intuitive and easy to construct
 5. **Type-Safe**: Clear schemas for metadata and file structures
@@ -25,12 +25,12 @@
 ```rust
 pub enum FileTreeNode {
     File { contents: Vec<u8> },
-    Directory { files: HashMap<String, FileTreeNode> },
+    Directory { files: BTreeMap<String, FileTreeNode> },
 }
 
 pub struct Quill {
     /// Quill-specific metadata
-    pub metadata: HashMap<String, QuillValue>,
+    pub metadata: BTreeMap<String, QuillValue>,
     /// Name of the quill
     pub name: String,
     /// Backend identifier (e.g., "typst")
@@ -42,9 +42,9 @@ pub struct Quill {
     /// Field JSON schema (single source of truth for schema and defaults)
     pub schema: QuillValue,
     /// Cached default values extracted from schema (for performance)
-    pub defaults: HashMap<String, QuillValue>,
+    pub defaults: BTreeMap<String, QuillValue>,
     /// Cached example values extracted from schema (for performance)
-    pub examples: HashMap<String, Vec<QuillValue>>,
+    pub examples: BTreeMap<String, Vec<QuillValue>>,
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }
@@ -65,26 +65,28 @@ pub struct QuillConfig {
     /// Plate file
     pub plate_file: Option<String>,
     /// Field schemas
-    pub fields: HashMap<String, FieldSchema>,
+    pub fields: BTreeMap<String, FieldSchema>,
     /// Additional metadata from [Quill] section (excluding standard fields)
-    pub metadata: HashMap<String, QuillValue>,
+    pub metadata: BTreeMap<String, QuillValue>,
     /// Typst-specific configuration from `[typst]` section
-    pub typst_config: HashMap<String, QuillValue>,
+    pub typst_config: BTreeMap<String, QuillValue>,
 }
 ```
 
 ### Design Rationale
 
-**Why Tree + HashMap?**
+**Why Tree + BTreeMap?**
 - Directory operations are essential (`list_files()`, `dir_exists()`)
 - Typical Quill depth is shallow (1-3 levels)
 - Memory efficient with no redundant path storage
 - Clear semantics with explicit files vs directories
+- Deterministic iteration order (sorted keys) for reproducible output
 
 **Performance:**
-- Per-directory lookup: O(1) via HashMap
-- Deep path access: O(depth) - negligible for typical structures
+- Per-directory lookup: O(log n) via BTreeMap
+- Deep path access: O(depth × log n) - negligible for typical structures
 - Memory: O(total_files) with no path duplication
+- Iteration: always sorted, no need to sort after retrieval
 
 ---
 
@@ -154,7 +156,7 @@ title = { description = "Document title", type = "str" }
 - The `default_name` parameter in constructors is ignored (kept for API compatibility)
 
 **Metadata Storage:**
-- The `metadata` HashMap includes:
+- The `metadata` BTreeMap includes:
   - `backend` - Backend identifier from `[Quill].backend`
   - `description` - Template description from `[Quill].description`
   - `author` - Author name if specified in `[Quill].author`

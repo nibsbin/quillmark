@@ -48,7 +48,7 @@ pub enum RenderError {
 **Before:**
 ```rust
 pub fn with_quill_tag(
-    fields: HashMap<String, QuillValue>,
+    fields: BTreeMap<String, QuillValue>,
     quill_tag: String
 ) -> Self
 ```
@@ -56,7 +56,7 @@ pub fn with_quill_tag(
 **After:**
 ```rust
 pub fn with_quill_tag(
-    fields: HashMap<String, QuillValue>,
+    fields: BTreeMap<String, QuillValue>,
     quill_tag: String
 ) -> Result<Self, ParseError>
 ```

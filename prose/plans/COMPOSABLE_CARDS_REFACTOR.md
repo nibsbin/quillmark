@@ -15,7 +15,7 @@ pub struct CardSchema {
     pub name: String,
     pub title: Option<String>,
     pub description: String,
-    pub fields: HashMap<String, FieldSchema>,
+    pub fields: BTreeMap<String, FieldSchema>,
 }
 ```
 
@@ -25,14 +25,14 @@ Remove `items` field (line ~36).
 
 #### [MODIFY] QuillConfig
 
-Add `cards: HashMap<String, CardSchema>` field.
+Add `cards: BTreeMap<String, CardSchema>` field.
 
 #### [MODIFY] QuillConfig::from_toml
 
 Update `[cards]` parsing to:
 1. Create `CardSchema` instead of `FieldSchema`
 2. Parse `[cards.X.fields.Y]` instead of `[cards.X.items.Y]`
-3. Store in `cards` HashMap, not `fields`
+3. Store in `cards` BTreeMap, not `fields`
 
 ---
 
@@ -46,8 +46,8 @@ Rename to `build_schema` and accept both fields and cards:
 
 ```rust
 pub fn build_schema(
-    fields: &HashMap<String, FieldSchema>,
-    cards: &HashMap<String, CardSchema>,
+    fields: &BTreeMap<String, FieldSchema>,
+    cards: &BTreeMap<String, CardSchema>,
 ) -> Result<QuillValue, RenderError>
 ```
 
