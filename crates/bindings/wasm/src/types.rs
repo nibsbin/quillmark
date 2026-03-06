@@ -206,7 +206,7 @@ impl IntoWasmAbi for QuillInfo {
 /// Parsed markdown document
 ///
 /// Returned by `Quillmark.parseMarkdown()`. Contains the parsed YAML frontmatter
-/// fields and the quill name (from QUILL field or "__default__" if not specified).
+/// fields and the quill reference (from QUILL field or "__default__" if not specified).
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
@@ -214,8 +214,8 @@ pub struct ParsedDocument {
     /// YAML frontmatter fields
     #[tsify(type = "Record<string, any>")]
     pub fields: serde_json::Value,
-    /// The quill name (from QUILL field or "__default__")
-    pub quill_name: String,
+    /// The quill reference (from QUILL field or "__default__")
+    pub quill_ref: String,
 }
 
 impl IntoWasmAbi for ParsedDocument {
@@ -241,7 +241,7 @@ pub struct RenderOptions {
     pub assets: Option<serde_json::Value>,
     /// Optional quill name that overrides or fills in for the markdown's QUILL frontmatter field
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub quill_name: Option<String>,
+    pub quill_ref: Option<String>,
 }
 
 impl Default for RenderOptions {
@@ -249,7 +249,7 @@ impl Default for RenderOptions {
         RenderOptions {
             format: Some(OutputFormat::Pdf),
             assets: None,
-            quill_name: None,
+            quill_ref: None,
         }
     }
 }
@@ -370,7 +370,7 @@ mod tests {
         let options = RenderOptions {
             format: Some(OutputFormat::Pdf),
             assets: None,
-            quill_name: None,
+            quill_ref: None,
         };
         let json = serde_json::to_string(&options).unwrap();
         assert!(json.contains("\"format\":\"pdf\""));
@@ -379,20 +379,20 @@ mod tests {
         let options_from_json: RenderOptions = serde_json::from_str(r#"{"format":"svg"}"#).unwrap();
         assert_eq!(options_from_json.format, Some(OutputFormat::Svg));
 
-        // Test with quill_name
+        // Test with quill_ref
         let options_with_quill = RenderOptions {
             format: Some(OutputFormat::Pdf),
             assets: None,
-            quill_name: Some("test_quill".to_string()),
+            quill_ref: Some("test_quill".to_string()),
         };
         let json_with_quill = serde_json::to_string(&options_with_quill).unwrap();
-        assert!(json_with_quill.contains("\"quillName\":\"test_quill\""));
+        assert!(json_with_quill.contains("\"quillRef\":\"test_quill\""));
 
-        // Test deserialization with quill_name
+        // Test deserialization with quill_ref
         let options_from_json_with_quill: RenderOptions =
-            serde_json::from_str(r#"{"format":"pdf","quillName":"my_quill"}"#).unwrap();
+            serde_json::from_str(r#"{"format":"pdf","quillRef":"my_quill"}"#).unwrap();
         assert_eq!(
-            options_from_json_with_quill.quill_name,
+            options_from_json_with_quill.quill_ref,
             Some("my_quill".to_string())
         );
     }
@@ -624,7 +624,7 @@ mod tests {
 
         let parsed_doc = ParsedDocument {
             fields: serde_json::Value::Object(fields_obj),
-            quill_name: "test-quill".to_string(),
+            quill_ref: "test-quill".to_string(),
         };
 
         // Serialize and verify structure
@@ -632,10 +632,7 @@ mod tests {
         assert!(json.is_object());
 
         let obj = json.as_object().unwrap();
-        assert_eq!(
-            obj.get("quillName").unwrap().as_str().unwrap(),
-            "test-quill"
-        );
+        assert_eq!(obj.get("quillRef").unwrap().as_str().unwrap(), "test-quill");
 
         // Verify fields is an object (not a Map)
         let fields = obj.get("fields").unwrap();

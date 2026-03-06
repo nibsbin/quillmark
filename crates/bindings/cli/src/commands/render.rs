@@ -73,17 +73,17 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             path.clone()
         } else {
             // Try to get QUILL field from frontmatter
-            let quill_name = &parsed.quill_reference().name;
+            let quill_ref = parsed.quill_reference().to_string();
 
             // Check if a QUILL field was specified (not the default "__default__")
-            if quill_name == "__default__" {
+            if quill_ref == "__default__" {
                 return Err(CliError::InvalidArgument(
                     "No QUILL field in frontmatter and --quill not specified".to_string(),
                 ));
             }
 
             // If QUILL field is a path, use it directly
-            let quill_candidate = PathBuf::from(quill_name);
+            let quill_candidate = PathBuf::from(&quill_ref);
             if quill_candidate.exists() && quill_candidate.is_dir() {
                 quill_candidate
             } else {
@@ -91,7 +91,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 let markdown_dir = markdown_path
                     .parent()
                     .unwrap_or_else(|| std::path::Path::new("."));
-                markdown_dir.join(quill_name)
+                markdown_dir.join(&quill_ref)
             }
         };
 

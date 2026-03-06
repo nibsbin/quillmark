@@ -12,8 +12,8 @@ from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat
 from conftest import QUILLS_PATH
 
 
-def test_parsed_document_quill_name():
-    """Test that ParsedDocument exposes quill_name property."""
+def test_parsed_document_quill_ref():
+    """Test that ParsedDocument exposes quill_ref method."""
     markdown_with_quill = """---
 QUILL: my_quill
 title: Test
@@ -22,7 +22,7 @@ title: Test
 # Content
 """
     parsed = ParsedDocument.from_markdown(markdown_with_quill)
-    assert parsed.quill_name() == "my_quill"
+    assert parsed.quill_ref() == "my_quill"
     
     markdown_without_quill = """---
 title: Test
@@ -31,7 +31,7 @@ title: Test
 # Content
 """
     parsed2 = ParsedDocument.from_markdown(markdown_without_quill)
-    assert parsed2.quill_name() == "__default__"
+    assert parsed2.quill_ref() == "__default__"
 
 
 def test_quill_properties(taro_quill_dir):
@@ -79,11 +79,11 @@ def test_workflow_from_parsed_with_quill_tag(taro_quill_dir, taro_md):
 """
     
     parsed = ParsedDocument.from_markdown(markdown_with_tag)
-    assert parsed.quill_name() == quill.name
+    assert parsed.quill_ref() == quill.name
     
     # Create workflow from parsed document
     workflow = engine.workflow(parsed)
-    assert workflow.quill_name == quill.name
+    assert quill.name in workflow.quill_ref
     assert workflow.backend_id == quill.backend
 
 
@@ -120,8 +120,8 @@ This is a test document.
 """
     parsed = ParsedDocument.from_markdown(markdown)
     
-    # Verify ParsedDocument.quill_name
-    assert parsed.quill_name() == "taro"
+    # Verify ParsedDocument.quill_ref
+    assert parsed.quill_ref() == "taro"
     
     # Step 3: Retrieve Quill object and inspect properties
     # Consumer can use this information to configure render options
@@ -146,7 +146,7 @@ This is a test document.
     # workflow = engine.workflow(quill)
     
     # Verify workflow properties
-    assert workflow.quill_name == "taro"
+    assert "taro" in workflow.quill_ref
     assert workflow.backend_id == "typst"
     assert OutputFormat.PDF in workflow.supported_formats
     

@@ -49,7 +49,7 @@ The Python API provides opinionated visibility over the rendering workflow:
 1. **Load Quill** - Load template bundles from the filesystem
 2. **Parse Markdown** - Parse Markdown with YAML frontmatter into `ParsedDocument`
 3. **Inspect Quill** - Retrieve quill properties (metadata, field schemas, supported formats)
-4. **Create Workflow** - Build a rendering pipeline from quill or parsed document
+4. **Create Workflow** - Build a rendering pipeline. Note that the quill reference is optional to specify and can be inferred from the markdown content's frontmatter.
 5. **Render** - Generate output artifacts with configurable options
 
 ### Core Classes
@@ -102,7 +102,7 @@ Represents parsed Markdown with frontmatter.
 parsed = ParsedDocument.from_markdown(markdown)
 
 parsed.body()           # Document body (str | None)
-parsed.quill_name()     # QUILL field value (str | None)
+parsed.quill_ref()      # Quill reference string (str)
 parsed.get_field(key)   # Get specific field (Any | None)
 parsed.fields           # All frontmatter fields (dict)
 ```
@@ -118,7 +118,7 @@ workflow = engine.workflow("my_quill")
 result = workflow.render(parsed, OutputFormat.PDF)
 
 # Query properties
-workflow.quill_name           # "my_quill"
+workflow.quill_ref            # "my_quill@1.0"
 workflow.backend_id           # "typst"
 workflow.supported_formats    # [OutputFormat.PDF, OutputFormat.SVG]
 ```

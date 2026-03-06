@@ -71,17 +71,17 @@ fn test_register_multiple_versions_same_quill() {
     let workflow_1_0 = engine
         .workflow("resume_template@1.0")
         .expect("Failed to load v1.0");
-    assert_eq!(workflow_1_0.quill_name(), "resume_template");
+    assert_eq!(workflow_1_0.quill_ref(), "resume_template@1.0");
 
     let workflow_1_1 = engine
         .workflow("resume_template@1.1")
         .expect("Failed to load v1.1");
-    assert_eq!(workflow_1_1.quill_name(), "resume_template");
+    assert_eq!(workflow_1_1.quill_ref(), "resume_template@1.1");
 
     let workflow_2_0 = engine
         .workflow("resume_template@2.0")
         .expect("Failed to load v2.0");
-    assert_eq!(workflow_2_0.quill_name(), "resume_template");
+    assert_eq!(workflow_2_0.quill_ref(), "resume_template@2.0");
 }
 
 #[test]
@@ -114,15 +114,15 @@ fn test_resolve_major_version_selector() {
         .workflow("resume_template@2")
         .expect("Failed to resolve @2");
 
-    // Verify correct quill name
-    assert_eq!(workflow_2.quill_name(), "resume_template");
+    // Verify correct quill ref
+    assert_eq!(workflow_2.quill_ref(), "resume_template@2.2");
     // Version resolution works - workflow was created successfully
 
     // Resolve @3 -> should get 3.0
     let workflow_3 = engine
         .workflow("resume_template@3")
         .expect("Failed to resolve @3");
-    assert_eq!(workflow_3.quill_name(), "resume_template");
+    assert_eq!(workflow_3.quill_ref(), "resume_template@3.0");
 }
 
 #[test]
@@ -151,8 +151,8 @@ fn test_resolve_exact_version_selector() {
         .workflow("resume_template@2.1.0")
         .expect("Failed to resolve @2.1.0");
 
-    // Verify correct quill name
-    assert_eq!(workflow.quill_name(), "resume_template");
+    // Verify correct quill ref
+    assert_eq!(workflow.quill_ref(), "resume_template@2.1.0");
     // Version resolution works - workflow was created successfully
 
     // Resolve @2.5.0 (not registered) -> should error
@@ -298,7 +298,7 @@ title: Test Document
         .expect("Failed to create workflow from document");
 
     // Verify correct version is selected (should be 2.1)
-    assert_eq!(workflow.quill_name(), "resume_template");
+    assert_eq!(workflow.quill_ref(), "resume_template@2.1");
     // Version resolution worked - workflow was created successfully
 }
 
@@ -420,9 +420,9 @@ fn test_latest_selector_with_multiple_versions() {
         .workflow("resume_template@latest")
         .expect("Failed to resolve @latest");
 
-    // Both should work - verify quill name
-    assert_eq!(workflow_implicit.quill_name(), "resume_template");
-    assert_eq!(workflow_explicit.quill_name(), "resume_template");
+    // Both should work - verify quill ref
+    assert_eq!(workflow_implicit.quill_ref(), "resume_template@3.0");
+    assert_eq!(workflow_explicit.quill_ref(), "resume_template@3.0");
     // Both should use version 3.0 (highest version)
 }
 
@@ -456,7 +456,7 @@ title: Test Document
     let workflow = engine.workflow(&parsed).expect("Failed to create workflow");
 
     // Should use latest version (2.0)
-    assert_eq!(workflow.quill_name(), "resume_template");
+    assert_eq!(workflow.quill_ref(), "resume_template@2.0");
     // Version resolution worked - workflow was created successfully
 }
 
@@ -492,7 +492,7 @@ fn test_backward_compatibility_unversioned_quill() {
     let _parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse");
     // Don't actually render since we don't have fonts - just verify workflow creation works
 
-    assert_eq!(workflow.quill_name(), "legacy_quill");
+    assert_eq!(workflow.quill_ref(), "legacy_quill@0.1");
 }
 
 #[test]
@@ -514,17 +514,17 @@ fn test_resolve_version_with_colon_syntax() {
 
     // Resolve with colon syntax
     let workflow = engine
-        .workflow("usaf_memo:1.0")
-        .expect("Failed to resolve usaf_memo:1.0");
+        .workflow("usaf_memo@1.0")
+        .expect("Failed to resolve usaf_memo@1.0");
 
-    assert_eq!(workflow.quill_name(), "usaf_memo");
+    assert_eq!(workflow.quill_ref(), "usaf_memo@1.0");
 }
 
 #[test]
 #[cfg(feature = "typst")]
 fn test_parse_document_with_colon_syntax() {
     let markdown = r#"---
-QUILL: usaf_memo:0.1
+QUILL: usaf_memo@0.1
 title: Test
 ---
 "#;

@@ -148,7 +148,7 @@ fn test_workflow_with_custom_backend() {
 
     // Verify workflow properties
     assert_eq!(workflow.backend_id(), "mock-txt");
-    assert_eq!(workflow.quill_name(), "custom_backend_quill");
+    assert!(workflow.quill_ref().starts_with("custom_backend_quill@"));
     assert!(workflow.supported_formats().contains(&OutputFormat::Txt));
 
     // Test rendering with the custom backend

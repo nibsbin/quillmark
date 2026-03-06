@@ -139,8 +139,8 @@ impl PyWorkflow {
     }
 
     #[getter]
-    fn quill_name(&self) -> &str {
-        self.inner.quill_name()
+    fn quill_ref(&self) -> String {
+        self.inner.quill_ref()
     }
 
     /// Add a dynamic asset to the workflow.
@@ -367,8 +367,8 @@ impl PyParsedDocument {
         Ok(dict)
     }
 
-    fn quill_name(&self) -> &str {
-        &self.inner.quill_reference().name
+    fn quill_ref(&self) -> String {
+        self.inner.quill_reference().to_string()
     }
 }
 

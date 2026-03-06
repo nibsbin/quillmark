@@ -41,7 +41,7 @@ fn test_with_asset_basic() {
         .add_asset("taro.png", taro_picture.to_vec())
         .expect("Should add asset");
 
-    assert_eq!(workflow.quill_name(), "taro");
+    assert!(workflow.quill_ref().starts_with("taro@"));
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn test_with_assets_multiple() {
         .add_assets(assets)
         .expect("Should add multiple assets");
 
-    assert_eq!(workflow.quill_name(), "taro");
+    assert!(workflow.quill_ref().starts_with("taro@"));
 }
 
 #[test]
@@ -112,5 +112,5 @@ fn test_clear_assets() {
         .add_asset("more_taro.png", vec![10, 11, 12])
         .expect("Should add more_taro.png again after clearing");
 
-    assert_eq!(workflow.quill_name(), "taro");
+    assert!(workflow.quill_ref().starts_with("taro@"));
 }

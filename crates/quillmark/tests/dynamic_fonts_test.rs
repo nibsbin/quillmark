@@ -47,7 +47,7 @@ fn test_with_font_basic() {
         .add_font("custom.ttf", font_data.clone())
         .expect("Should add font");
 
-    assert_eq!(workflow.quill_name(), "taro");
+    assert!(workflow.quill_ref().starts_with("taro@"));
 }
 
 #[test]
@@ -90,7 +90,7 @@ fn test_with_fonts_multiple() {
         .add_fonts(fonts)
         .expect("Should add multiple fonts");
 
-    assert_eq!(workflow.quill_name(), "taro");
+    assert!(workflow.quill_ref().starts_with("taro@"));
 }
 
 #[test]
@@ -118,7 +118,7 @@ fn test_clear_fonts() {
         .add_font("font2.ttf", vec![10, 11, 12])
         .expect("Should add font2.ttf again after clearing");
 
-    assert_eq!(workflow.quill_name(), "taro");
+    assert!(workflow.quill_ref().starts_with("taro@"));
 }
 
 #[test]
@@ -137,7 +137,7 @@ fn test_with_font_and_asset_together() {
         .add_font("custom.ttf", vec![4, 5, 6])
         .expect("Should add font");
 
-    assert_eq!(workflow.quill_name(), "taro");
+    assert!(workflow.quill_ref().starts_with("taro@"));
 }
 
 #[test]

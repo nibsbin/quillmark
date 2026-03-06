@@ -206,9 +206,15 @@ impl Workflow {
         self.backend.supported_formats()
     }
 
-    /// Get the quill name used by this workflow.
-    pub fn quill_name(&self) -> &str {
-        &self.quill.name
+    /// Get the quill reference (name@version) used by this workflow.
+    pub fn quill_ref(&self) -> String {
+        let version = self
+            .quill
+            .metadata
+            .get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0.0.0");
+        format!("{}@{}", self.quill.name, version)
     }
 
     /// Return the list of dynamic asset filenames currently stored in the workflow.

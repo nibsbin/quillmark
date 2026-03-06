@@ -59,7 +59,7 @@ class Quillmark:
         """Register a quill template with the engine."""
     
     def workflow(self, quill_ref: str | Quill | ParsedDocument) -> Workflow:
-        """Load a workflow from a quill reference.
+        """Load a workflow from a quill reference. Note that the quill reference is optional to specify and can be inferred from the markdown content's frontmatter when passing a ParsedDocument.
 
         Accepts:
             - str: Quill name (must be registered)
@@ -121,8 +121,8 @@ class Workflow:
         """Get supported output formats."""
     
     @property
-    def quill_name(self) -> str:
-        """Get quill name."""
+    def quill_ref(self) -> str:
+        """Get quill reference (name@version)."""
 
     def add_asset(self, filename: str, contents: bytes) -> None:
         """Add a dynamic asset to the workflow.
@@ -249,8 +249,8 @@ class ParsedDocument:
     def fields(self) -> dict[str, Any]:
         """Get all frontmatter fields."""
 
-    def quill_name(self) -> str:
-        """Get QUILL field value from the document."""
+    def quill_ref(self) -> str:
+        """Get quill reference from the document."""
 
 class RenderResult:
     """Result of rendering operation."""
