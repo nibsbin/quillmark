@@ -125,7 +125,7 @@ Additional methods for managing the engine and debugging:
 {
   format?: 'pdf' | 'svg' | 'txt',  // Output format (default: 'pdf')
   assets?: Record<string, Uint8Array>,  // Additional assets to inject as plain object (not Map)
-  quillName?: string  // Override quillName from ParsedDocument
+  quillName?: string  // Override quillRef from ParsedDocument
 }
 ```
 
@@ -136,7 +136,7 @@ Returned by `parseMarkdown()`:
 ```typescript
 {
   fields: object,  // YAML frontmatter fields
-  quillName: string  // Template name from QUILL field (or "__default__")
+  quillRef: string  // Quill reference from QUILL field (or "__default__")
 }
 ```
 

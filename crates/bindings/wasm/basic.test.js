@@ -60,7 +60,7 @@ describe('quillmark-wasm smoke tests', () => {
     expect(parsed.fields instanceof Object).toBe(true)
     expect(parsed.fields.title).toBe('Test Document')
     expect(parsed.fields.author).toBe('Test Author')
-    expect(parsed.quillName).toBe('test_quill')
+    expect(parsed.quillRef).toBe('test_quill')
   })
 
   it('should create engine and register quill', () => {
@@ -261,7 +261,7 @@ This document has no QUILL tag.`
 
     // Parse should set quillTag to __default__
     const parsed = Quillmark.parseMarkdown(markdownWithoutQuill)
-    expect(parsed.quillName).toBe("__default__")
+    expect(parsed.quillRef).toBe("__default__")
     expect(parsed.fields.title).toBe('Default Test')
 
     // The engine auto-registers a __default__ quill from the Typst backend
