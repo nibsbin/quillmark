@@ -127,11 +127,13 @@ The `push_typst` function processes a stream of markdown events from `pulldown_c
 
 ### State Management
 
-The converter maintains three pieces of state:
+The converter maintains these pieces of state:
 
 1. **`end_newline: bool`** - Tracks whether we're currently at the end of a line (used to avoid duplicate newlines)
 2. **`list_stack: Vec<ListType>`** - Stack tracking nested list contexts (bullet vs. ordered)
 3. **`in_list_item: bool`** - Tracks whether we're inside a list item (affects paragraph spacing)
+4. **`list_item_first_block: bool`** - Tracks whether the current block is the first in a list item (subsequent blocks get continuation indent)
+5. **`in_code_block: bool`** - Tracks whether we're inside a code block (disables text escaping)
 
 ### List Type
 
@@ -166,10 +168,11 @@ The converter handles markdown events in a match expression, processing both sta
 - `TagEnd::Paragraph` → Two newlines for paragraph separation
 
 **Inside Lists:**
-- `Tag::Paragraph` → No extra spacing (natural flow within list items)
-- `TagEnd::Paragraph` → No extra spacing
+- First block: `Tag::Paragraph` → No extra spacing (content follows list marker directly)
+- Subsequent blocks: `Tag::Paragraph` → Blank line + continuation indent (2 spaces per nesting level)
+- `TagEnd::Paragraph` → Newline, marks block as complete
 
-This dual behavior prevents excessive whitespace in list items while maintaining proper paragraph separation elsewhere.
+This enables proper multi-paragraph list items in Typst with correct continuation indentation.
 
 ### Lists
 
@@ -247,7 +250,6 @@ The following markdown features are not currently implemented but have design co
 - Tables (intentionally excluded)
 - Images (to be handled separately by asset system)
 - Block quotes (see design below)
-- Code blocks (see design below)
 - Horizontal rules (see design below)
 
 ---
@@ -267,17 +269,21 @@ s.replace('\\', "\\\\")  // MUST BE FIRST
 
 If other replacements come first, you'll double-escape their backslashes.
 
-### List Item Spacing
+### List Item Continuation
 
-The `in_list_item` flag prevents paragraphs within list items from adding extra newlines. Without this:
+Multiple blocks within a list item use proper Typst continuation syntax. The first block follows the list marker directly. Subsequent blocks are separated by a blank line and indented to align with the first block's content:
 
 ```markdown
-- Item with
+- First paragraph.
 
-  multiple paragraphs
+  Second paragraph.
+
+  ```
+  code block
+  ```
 ```
 
-Would produce excessive spacing in Typst. The flag ensures natural text flow within list items.
+The `list_item_first_block` flag tracks whether we're on the first block, and `list_stack.len()` determines the continuation indent depth (2 spaces per nesting level).
 
 ### List Marker Conversion
 
@@ -671,7 +677,7 @@ fn main() {
 ```
 ````
 
-**Current Status:** Not implemented
+**Current Status:** ✅ Implemented
 
 **Typst Syntax:**
 ```typst
@@ -949,7 +955,7 @@ The double backslash in markdown becomes single backslash in parser output, whic
 | Block quotes | Not impl. | Medium | Medium | Needs depth tracking for flattening |
 | Lists | ✅ Done | - | - | Fully implemented with nesting |
 | Inline code | ✅ Done | - | - | Working |
-| Code blocks | Not impl. | High | Medium | Needs state flag and no-escape logic |
+| Code blocks | ✅ Done | - | - | Fenced and indented, with language hints |
 | Links | ✅ Done | - | - | Working with autolinks |
 | Images | Not impl. | Medium | High | Needs asset system coordination |
 | Horizontal rules | Not impl. | Low | Simple | Direct mapping to #line() |
