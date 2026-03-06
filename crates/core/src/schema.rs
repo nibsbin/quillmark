@@ -2358,17 +2358,13 @@ mod tests {
         let mut schema_json = schema.as_json().clone();
 
         // Before stripping, x-ui should be present
-        assert!(schema_json["properties"]["from"]
-            .get("x-ui")
-            .is_some());
+        assert!(schema_json["properties"]["from"].get("x-ui").is_some());
 
         // Strip x-ui
         strip_schema_fields(&mut schema_json, &["x-ui"]);
 
         // After stripping, x-ui should be gone
-        assert!(schema_json["properties"]["from"]
-            .get("x-ui")
-            .is_none());
+        assert!(schema_json["properties"]["from"].get("x-ui").is_none());
     }
 
     #[test]
