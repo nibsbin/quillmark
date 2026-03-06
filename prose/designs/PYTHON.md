@@ -64,7 +64,7 @@ result = workflow.render(parsed, OutputFormat.PDF)
 - `dry_run(parsed)` - Schema validation without backend compilation
 - `backend_id` - Backend identifier (property)
 - `supported_formats` - Supported output formats (property)
-- `quill_name` - Quill name (property)
+- `quill_ref` - Quill reference (property)
 
 **Dynamic Asset/Font Methods:**
 - `add_asset(filename, contents)` - Add a dynamic asset
@@ -107,7 +107,7 @@ title = parsed.get_field("title")
 - `body()` - Get document body content
 - `get_field(key)` - Get frontmatter field value
 - `fields()` - Get all frontmatter fields
-- `quill_name()` - Get QUILL field value if present
+- `quill_ref()` - Get quill reference from document
 
 #### 5. `RenderResult`, `Artifact`
 

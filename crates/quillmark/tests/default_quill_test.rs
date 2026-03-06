@@ -61,7 +61,7 @@ This is a test document without a QUILL tag.
         .workflow(&parsed)
         .expect("Failed to load workflow with default Quill");
 
-    assert_eq!(workflow.quill_name(), "__default__");
+    assert!(workflow.quill_ref().starts_with("__default__@"));
 }
 
 #[test]
@@ -108,7 +108,7 @@ Content here.
     // Should use custom quill, not default
     let workflow = engine.workflow(&parsed).expect("Failed to load workflow");
 
-    assert_eq!(workflow.quill_name(), "custom_quill");
+    assert!(workflow.quill_ref().starts_with("custom_quill@"));
 }
 
 #[test]
@@ -131,7 +131,7 @@ Content
     // provide default_quill() and no manually registered default.
     //
     // The actual error scenario is tested indirectly through the improved error
-    // message in workflow_from_quill_name when __default__ doesn't exist.
+    // message in workflow when __default__ doesn't exist.
 }
 
 #[test]
@@ -172,7 +172,7 @@ fn test_default_quill_properties() {
         .workflow("__default__")
         .expect("Failed to load default workflow");
 
-    assert_eq!(workflow.quill_name(), "__default__");
+    assert!(workflow.quill_ref().starts_with("__default__@"));
     assert_eq!(workflow.backend_id(), "typst");
     assert!(workflow.supported_formats().contains(&OutputFormat::Pdf));
     assert!(workflow.supported_formats().contains(&OutputFormat::Svg));

@@ -107,7 +107,7 @@ fn test_quill_engine_get_workflow() {
         .expect("Failed to load workflow");
 
     // Verify workflow properties
-    assert_eq!(workflow.quill_name(), "my_test_quill");
+    assert!(workflow.quill_ref().starts_with("my_test_quill@"));
     assert_eq!(workflow.backend_id(), "typst");
     assert!(workflow.supported_formats().contains(&OutputFormat::Pdf));
 }
@@ -218,7 +218,7 @@ fn test_quill_engine_load_with_quill_object() {
     let workflow = engine.workflow(&quill).expect("Failed to load workflow");
 
     // Verify workflow properties
-    assert_eq!(workflow.quill_name(), "my_test_quill");
+    assert!(workflow.quill_ref().starts_with("my_test_quill@"));
     assert_eq!(workflow.backend_id(), "typst");
     assert!(workflow.supported_formats().contains(&OutputFormat::Pdf));
 }
@@ -252,12 +252,12 @@ fn test_quill_engine_load_with_different_string_types() {
     let workflow1 = engine
         .workflow("my_test_quill")
         .expect("Failed to load with &str");
-    assert_eq!(workflow1.quill_name(), "my_test_quill");
+    assert!(workflow1.quill_ref().starts_with("my_test_quill@"));
 
     // Test with &String
-    let quill_name = String::from("my_test_quill");
+    let quill_ref_str = String::from("my_test_quill");
     let workflow2 = engine
-        .workflow(&quill_name)
+        .workflow(&quill_ref_str)
         .expect("Failed to load with &String");
-    assert_eq!(workflow2.quill_name(), "my_test_quill");
+    assert!(workflow2.quill_ref().starts_with("my_test_quill@"));
 }

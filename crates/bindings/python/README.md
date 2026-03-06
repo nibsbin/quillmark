@@ -102,7 +102,7 @@ Represents parsed Markdown with frontmatter.
 parsed = ParsedDocument.from_markdown(markdown)
 
 parsed.body()           # Document body (str | None)
-parsed.quill_name()     # QUILL field value (str | None)
+parsed.quill_ref()      # Quill reference string (str)
 parsed.get_field(key)   # Get specific field (Any | None)
 parsed.fields           # All frontmatter fields (dict)
 ```
@@ -118,7 +118,7 @@ workflow = engine.workflow("my_quill")
 result = workflow.render(parsed, OutputFormat.PDF)
 
 # Query properties
-workflow.quill_name           # "my_quill"
+workflow.quill_ref            # "my_quill@1.0"
 workflow.backend_id           # "typst"
 workflow.supported_formats    # [OutputFormat.PDF, OutputFormat.SVG]
 ```
