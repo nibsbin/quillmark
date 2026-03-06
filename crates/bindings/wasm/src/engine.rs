@@ -265,7 +265,7 @@ impl Quillmark {
     /// Render a ParsedDocument to final artifacts (PDF, SVG, TXT)
     ///
     /// Note that the quill reference is optional to specify and can be inferred from the markdown content's frontmatter.
-    /// Uses the Quill specified in options.quill_name if provided,
+    /// Uses the Quill specified in options.quill_ref if provided,
     /// otherwise infers it from the ParsedDocument's quill_ref field.
     #[wasm_bindgen]
     pub fn render(

@@ -1705,7 +1705,7 @@ QUILL: second
     }
 
     #[test]
-    fn test_invalid_quill_name() {
+    fn test_invalid_quill_ref() {
         let markdown = r#"---
 QUILL: Invalid-Name
 ---"#;
@@ -2605,7 +2605,7 @@ Body content."#;
     }
 
     #[test]
-    fn test_invalid_quill_name_uppercase() {
+    fn test_invalid_quill_ref_uppercase() {
         let markdown = "---\nQUILL: MyQuill\n---\n\nBody.";
         let result = decompose(markdown);
         assert!(result.is_err());
