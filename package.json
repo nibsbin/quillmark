@@ -56,7 +56,7 @@
     "dist"
   ],
   "peerDependencies": {
-    "@quillmark/wasm": "^0.36.0"
+    "@quillmark/wasm": "^0.37.0"
   },
   "peerDependenciesMeta": {
     "@quillmark/wasm": {
