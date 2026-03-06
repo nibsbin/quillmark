@@ -73,9 +73,19 @@ Field properties:
 
 Field schemas support a custom `x-ui` property for UI metadata that is included in the generated JSON schema. This property contains the serialized content of the `[ui]` table from the TOML configuration.
 
-- `x-ui`: An object containing UI metadata (group, order)
+- `x-ui`: An object containing UI metadata (group, order, visible_when)
 
 This property follows the JSON Schema specification for custom extensions. Validation logic ignores this property, but frontend UIs consume it for dynamic wizard generation.
+
+#### `visible_when` — Conditional Field Visibility
+
+The `visible_when` property declares when a field should be visible in the UI. It maps sibling field names to arrays of accepted values:
+
+- **AND across keys**: all conditions must match for the field to be visible
+- **OR within values**: the sibling field's current value must match any value in the array
+- **Absent `visible_when`**: the field is always visible
+
+This is a UI hint, not a validation constraint. Fields hidden by `visible_when` remain valid in the schema — extraneous data is harmless.
 
 **Example**:
 ```json
@@ -91,6 +101,17 @@ This property follows the JSON Schema specification for custom extensions. Valid
       "x-ui": {
         "group": "Author Info",
         "order": 1
+      }
+    },
+    "from": {
+      "type": "string",
+      "title": "From office/symbol",
+      "x-ui": {
+        "group": "Addressing",
+        "order": 0,
+        "visible_when": {
+          "format": ["standard", "separate_page"]
+        }
       }
     }
   }
