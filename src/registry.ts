@@ -94,9 +94,18 @@ export class QuillRegistry {
 	 * Preloads multiple quills. Fail-fast: if any quill fails to load,
 	 * rejects immediately. Callers who want best-effort can call resolve()
 	 * individually and catch per-quill.
+	 * 
+	 * Accepts an array of quill names, or objects with `name` and optional `version`.
 	 */
-	async preload(names: string[]): Promise<void> {
-		await Promise.all(names.map((name) => this.resolve(name)));
+	async preload(quills: Array<string | { name: string; version?: string }>): Promise<void> {
+		await Promise.all(
+			quills.map((q) => {
+				if (typeof q === 'string') {
+					return this.resolve(q);
+				}
+				return this.resolve(q.name, q.version);
+			})
+		);
 	}
 
 	/**

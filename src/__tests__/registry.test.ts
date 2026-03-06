@@ -222,6 +222,18 @@ describe('QuillRegistry', () => {
 			expect(engine.registerQuill).toHaveBeenCalledTimes(2);
 		});
 
+		it('should resolve specific versions of quills', async () => {
+			const registry = new QuillRegistry({ source, engine });
+			await registry.preload([
+				{ name: 'usaf_memo', version: '1.0.0' },
+				'classic_resume',
+			]);
+
+			expect(source.loadQuill).toHaveBeenCalledWith('usaf_memo', '1.0.0');
+			expect(source.loadQuill).toHaveBeenCalledWith('classic_resume', undefined);
+			expect(engine.registerQuill).toHaveBeenCalledTimes(2);
+		});
+
 		it('should fail-fast if any quill fails', async () => {
 			const registry = new QuillRegistry({ source, engine });
 
