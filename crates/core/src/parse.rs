@@ -46,7 +46,7 @@
 //!
 //! See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) for comprehensive documentation of the Extended YAML Metadata Standard.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use crate::error::ParseError;
@@ -59,13 +59,13 @@ pub const BODY_FIELD: &str = "BODY";
 /// A parsed markdown document with frontmatter
 #[derive(Debug, Clone)]
 pub struct ParsedDocument {
-    fields: HashMap<String, QuillValue>,
+    fields: BTreeMap<String, QuillValue>,
     quill_ref: QuillReference,
 }
 
 impl ParsedDocument {
     /// Create a new ParsedDocument with the given fields
-    pub fn new(fields: HashMap<String, QuillValue>) -> Self {
+    pub fn new(fields: BTreeMap<String, QuillValue>) -> Self {
         Self {
             fields,
             quill_ref: QuillReference::latest("__default__".to_string()),
@@ -73,7 +73,7 @@ impl ParsedDocument {
     }
 
     /// Create a ParsedDocument from fields and quill reference
-    pub fn with_quill_ref(fields: HashMap<String, QuillValue>, quill_ref: QuillReference) -> Self {
+    pub fn with_quill_ref(fields: BTreeMap<String, QuillValue>, quill_ref: QuillReference) -> Self {
         Self { fields, quill_ref }
     }
 
@@ -98,7 +98,7 @@ impl ParsedDocument {
     }
 
     /// Get all fields (including body)
-    pub fn fields(&self) -> &HashMap<String, QuillValue> {
+    pub fn fields(&self) -> &BTreeMap<String, QuillValue> {
         &self.fields
     }
 
@@ -110,12 +110,12 @@ impl ParsedDocument {
     ///
     /// # Arguments
     ///
-    /// * `defaults` - A HashMap of field names to their default QuillValues
+    /// * `defaults` - A BTreeMap of field names to their default QuillValues
     ///
     /// # Returns
     ///
     /// A new ParsedDocument with defaults applied for missing fields
-    pub fn with_defaults(&self, defaults: &HashMap<String, QuillValue>) -> Self {
+    pub fn with_defaults(&self, defaults: &BTreeMap<String, QuillValue>) -> Self {
         let mut fields = self.fields.clone();
 
         for (field_name, default_value) in defaults {
@@ -515,7 +515,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
         });
     }
 
-    let mut fields = HashMap::new();
+    let mut fields = BTreeMap::new();
 
     // Find all metadata blocks
     let blocks = find_metadata_blocks(markdown)?;
@@ -562,14 +562,14 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
         let block = &blocks[idx];
 
         // Get parsed JSON fields directly (already parsed in find_metadata_blocks)
-        let json_fields: HashMap<String, serde_json::Value> = match &block.yaml_value {
+        let json_fields: BTreeMap<String, serde_json::Value> = match &block.yaml_value {
             Some(serde_json::Value::Object(mapping)) => mapping
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect(),
             Some(serde_json::Value::Null) => {
                 // Null value (from whitespace-only YAML) - treat as empty mapping
-                HashMap::new()
+                BTreeMap::new()
             }
             Some(_) => {
                 // Non-mapping, non-null YAML (e.g., scalar, sequence) - this is an error for frontmatter
@@ -577,7 +577,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
                     "Invalid YAML frontmatter: expected a mapping".to_string(),
                 ));
             }
-            None => HashMap::new(),
+            None => BTreeMap::new(),
         };
 
         // Convert JSON values to QuillValue at boundary
@@ -591,14 +591,14 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
         if block.quill_ref.is_some() {
             // Quill directive blocks can have YAML content (becomes part of frontmatter)
             if let Some(ref json_val) = block.yaml_value {
-                let json_fields: HashMap<String, serde_json::Value> = match json_val {
+                let json_fields: BTreeMap<String, serde_json::Value> = match json_val {
                     serde_json::Value::Object(mapping) => mapping
                         .iter()
                         .map(|(k, v)| (k.clone(), v.clone()))
                         .collect(),
                     serde_json::Value::Null => {
                         // Null value (from whitespace-only YAML) - treat as empty mapping
-                        HashMap::new()
+                        BTreeMap::new()
                     }
                     _ => {
                         return Err(crate::error::ParseError::InvalidStructure(
@@ -821,9 +821,9 @@ Content here."#;
 
     #[test]
     fn test_with_defaults_empty_document() {
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
 
-        let mut defaults = HashMap::new();
+        let mut defaults = BTreeMap::new();
         defaults.insert(
             "status".to_string(),
             QuillValue::from_json(serde_json::json!("draft")),
@@ -834,7 +834,7 @@ Content here."#;
         );
 
         // Create an empty parsed document
-        let doc = ParsedDocument::new(HashMap::new());
+        let doc = ParsedDocument::new(BTreeMap::new());
         let doc_with_defaults = doc.with_defaults(&defaults);
 
         // Check that defaults were applied
@@ -860,16 +860,16 @@ Content here."#;
 
     #[test]
     fn test_with_defaults_preserves_existing_values() {
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
 
-        let mut defaults = HashMap::new();
+        let mut defaults = BTreeMap::new();
         defaults.insert(
             "status".to_string(),
             QuillValue::from_json(serde_json::json!("draft")),
         );
 
         // Create document with existing status
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "status".to_string(),
             QuillValue::from_json(serde_json::json!("published")),
@@ -891,9 +891,9 @@ Content here."#;
 
     #[test]
     fn test_with_defaults_partial_application() {
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
 
-        let mut defaults = HashMap::new();
+        let mut defaults = BTreeMap::new();
         defaults.insert(
             "status".to_string(),
             QuillValue::from_json(serde_json::json!("draft")),
@@ -904,7 +904,7 @@ Content here."#;
         );
 
         // Create document with only one field
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "status".to_string(),
             QuillValue::from_json(serde_json::json!("published")),
@@ -936,11 +936,11 @@ Content here."#;
 
     #[test]
     fn test_with_defaults_no_defaults() {
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
 
-        let defaults = HashMap::new(); // Empty defaults map
+        let defaults = BTreeMap::new(); // Empty defaults map
 
-        let doc = ParsedDocument::new(HashMap::new());
+        let doc = ParsedDocument::new(BTreeMap::new());
         let doc_with_defaults = doc.with_defaults(&defaults);
 
         // No defaults should be applied
@@ -949,15 +949,15 @@ Content here."#;
 
     #[test]
     fn test_with_defaults_complex_types() {
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
 
-        let mut defaults = HashMap::new();
+        let mut defaults = BTreeMap::new();
         defaults.insert(
             "tags".to_string(),
             QuillValue::from_json(serde_json::json!(["default", "tag"])),
         );
 
-        let doc = ParsedDocument::new(HashMap::new());
+        let doc = ParsedDocument::new(BTreeMap::new());
         let doc_with_defaults = doc.with_defaults(&defaults);
 
         // Complex default value should be applied
@@ -973,7 +973,7 @@ Content here."#;
 
     #[test]
     fn test_with_coercion_singular_to_array() {
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
 
         let schema = QuillValue::from_json(serde_json::json!({
             "$schema": "https://json-schema.org/draft/2019-09/schema",
@@ -983,7 +983,7 @@ Content here."#;
             }
         }));
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "tags".to_string(),
             QuillValue::from_json(serde_json::json!("single-tag")),
@@ -1001,7 +1001,7 @@ Content here."#;
 
     #[test]
     fn test_with_coercion_string_to_boolean() {
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
 
         let schema = QuillValue::from_json(serde_json::json!({
             "$schema": "https://json-schema.org/draft/2019-09/schema",
@@ -1011,7 +1011,7 @@ Content here."#;
             }
         }));
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "active".to_string(),
             QuillValue::from_json(serde_json::json!("true")),
@@ -1025,7 +1025,7 @@ Content here."#;
 
     #[test]
     fn test_with_coercion_string_to_number() {
-        use std::collections::HashMap;
+        use std::collections::BTreeMap;
 
         let schema = QuillValue::from_json(serde_json::json!({
             "$schema": "https://json-schema.org/draft/2019-09/schema",
@@ -1035,7 +1035,7 @@ Content here."#;
             }
         }));
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "count".to_string(),
             QuillValue::from_json(serde_json::json!("42")),

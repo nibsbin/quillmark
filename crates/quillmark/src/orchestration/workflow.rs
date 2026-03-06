@@ -2,15 +2,15 @@ use quillmark_core::{
     normalize::normalize_document, Backend, Diagnostic, OutputFormat, ParsedDocument, Quill,
     RenderError, RenderOptions, RenderResult, Severity,
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 /// Sealed workflow for rendering Markdown documents. See [module docs](super) for usage patterns.
 pub struct Workflow {
     backend: Arc<dyn Backend>,
     quill: Quill,
-    dynamic_assets: HashMap<String, Vec<u8>>,
-    dynamic_fonts: HashMap<String, Vec<u8>>,
+    dynamic_assets: BTreeMap<String, Vec<u8>>,
+    dynamic_fonts: BTreeMap<String, Vec<u8>>,
 }
 
 impl Workflow {
@@ -20,8 +20,8 @@ impl Workflow {
         Ok(Self {
             backend,
             quill,
-            dynamic_assets: HashMap::new(),
-            dynamic_fonts: HashMap::new(),
+            dynamic_assets: BTreeMap::new(),
+            dynamic_fonts: BTreeMap::new(),
         })
     }
 
@@ -96,8 +96,8 @@ impl Workflow {
     /// Apply schema defaults to fields before JSON serialization
     fn apply_schema_defaults(
         &self,
-        fields: &HashMap<String, quillmark_core::QuillValue>,
-    ) -> HashMap<String, quillmark_core::QuillValue> {
+        fields: &BTreeMap<String, quillmark_core::QuillValue>,
+    ) -> BTreeMap<String, quillmark_core::QuillValue> {
         use quillmark_core::QuillValue;
 
         let mut result = fields.clone();
@@ -123,7 +123,7 @@ impl Workflow {
     }
 
     /// Convert fields to JSON Value for injection
-    fn fields_to_json(fields: &HashMap<String, quillmark_core::QuillValue>) -> serde_json::Value {
+    fn fields_to_json(fields: &BTreeMap<String, quillmark_core::QuillValue>) -> serde_json::Value {
         let mut json_map = serde_json::Map::new();
         for (key, value) in fields {
             json_map.insert(key.clone(), value.as_json().clone());

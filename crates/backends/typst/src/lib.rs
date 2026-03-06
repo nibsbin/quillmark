@@ -63,7 +63,7 @@ use quillmark_core::{
     Artifact, Backend, Diagnostic, OutputFormat, Quill, QuillValue, RenderError, RenderOptions,
     RenderResult, Severity,
 };
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Typst backend implementation for Quillmark.
 pub struct TypstBackend;
@@ -142,9 +142,9 @@ impl Backend for TypstBackend {
 
     fn transform_fields(
         &self,
-        fields: &HashMap<String, QuillValue>,
+        fields: &BTreeMap<String, QuillValue>,
         schema: &QuillValue,
-    ) -> HashMap<String, QuillValue> {
+    ) -> BTreeMap<String, QuillValue> {
         transform_markdown_fields(fields, schema)
     }
 
@@ -152,7 +152,7 @@ impl Backend for TypstBackend {
         use quillmark_core::FileTreeNode;
 
         // Build file tree from embedded files
-        let mut files = HashMap::new();
+        let mut files = BTreeMap::new();
         files.insert(
             "Quill.yaml".to_string(),
             FileTreeNode::File {
@@ -204,9 +204,9 @@ fn is_markdown_field(field_schema: &serde_json::Value) -> bool {
 /// their content using `mark_to_typst()`. This includes recursive handling
 /// of CARDS arrays.
 fn transform_markdown_fields(
-    fields: &HashMap<String, QuillValue>,
+    fields: &BTreeMap<String, QuillValue>,
     schema: &QuillValue,
-) -> HashMap<String, QuillValue> {
+) -> BTreeMap<String, QuillValue> {
     let mut result = fields.clone();
 
     // Get the properties object from the schema
@@ -273,8 +273,8 @@ fn transform_cards_array(
 
                 // Look up the schema for this card type
                 if let Some(card_schema_json) = defs.and_then(|d| d.get(&def_name)) {
-                    // Convert the card object to HashMap<String, QuillValue>
-                    let mut card_fields: HashMap<String, QuillValue> = HashMap::new();
+                    // Convert the card object to BTreeMap<String, QuillValue>
+                    let mut card_fields: BTreeMap<String, QuillValue> = BTreeMap::new();
                     for (k, v) in card_obj {
                         card_fields.insert(k.clone(), QuillValue::from_json(v.clone()));
                     }
@@ -347,7 +347,7 @@ mod tests {
             }
         }));
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "title".to_string(),
             QuillValue::from_json(json!("My Title")),
@@ -377,7 +377,7 @@ mod tests {
             }
         }));
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "title".to_string(),
             QuillValue::from_json(json!("My Title")),
@@ -401,7 +401,7 @@ mod tests {
             }
         }));
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "BODY".to_string(),
             QuillValue::from_json(json!("_italic_ text")),

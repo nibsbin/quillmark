@@ -1,7 +1,7 @@
 use quillmark_core::{
     Backend, Diagnostic, Quill, QuillReference, RenderError, Severity, Version, VersionSelector,
 };
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -67,16 +67,16 @@ impl VersionedQuillSet {
 
 /// High-level engine for orchestrating backends and quills. See [module docs](super) for usage patterns.
 pub struct Quillmark {
-    backends: HashMap<String, Arc<dyn Backend>>,
-    quills: HashMap<String, VersionedQuillSet>,
+    backends: BTreeMap<String, Arc<dyn Backend>>,
+    quills: BTreeMap<String, VersionedQuillSet>,
 }
 
 impl Quillmark {
     /// Create a new Quillmark with auto-registered backends based on enabled features.
     pub fn new() -> Self {
         let mut engine = Self {
-            backends: HashMap::new(),
-            quills: HashMap::new(),
+            backends: BTreeMap::new(),
+            quills: BTreeMap::new(),
         };
 
         // Auto-register backends based on enabled features
@@ -504,7 +504,7 @@ impl Quillmark {
     pub fn get_quill_metadata(
         &self,
         name: &str,
-    ) -> Option<&HashMap<String, quillmark_core::value::QuillValue>> {
+    ) -> Option<&BTreeMap<String, quillmark_core::value::QuillValue>> {
         self.get_quill(name).map(|quill| &quill.metadata)
     }
 

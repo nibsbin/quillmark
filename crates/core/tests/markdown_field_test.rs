@@ -5,11 +5,11 @@ use quillmark_core::{
     ParsedDocument, QuillValue,
 };
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[test]
 fn test_markdown_field_schema_generation() {
-    let mut fields = HashMap::new();
+    let mut fields = BTreeMap::new();
     fields.insert(
         "description".to_string(),
         FieldSchema {
@@ -35,7 +35,7 @@ fn test_markdown_field_schema_generation() {
         ui: None,
     };
 
-    let schema = build_schema(&doc_schema, &HashMap::new()).unwrap();
+    let schema = build_schema(&doc_schema, &BTreeMap::new()).unwrap();
     let schema_json = schema.as_json();
 
     let desc_prop = schema_json
@@ -60,7 +60,7 @@ fn test_markdown_field_schema_generation() {
 #[test]
 fn test_markdown_field_normalization() {
     // 1. Define schema with a Markdown field and a String field
-    let mut fields = HashMap::new();
+    let mut fields = BTreeMap::new();
     fields.insert(
         "markdown_field".to_string(),
         FieldSchema {
@@ -102,10 +102,10 @@ fn test_markdown_field_normalization() {
         ui: None,
     };
 
-    let schema = build_schema(&doc_schema, &HashMap::new()).unwrap();
+    let schema = build_schema(&doc_schema, &BTreeMap::new()).unwrap();
 
     // 2. Create a document with chevrons in both fields
-    let mut doc_fields = HashMap::new();
+    let mut doc_fields = BTreeMap::new();
     doc_fields.insert(
         "markdown_field".to_string(),
         QuillValue::from_json(json!("This has <<guillemets>>")),

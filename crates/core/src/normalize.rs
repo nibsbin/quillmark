@@ -52,7 +52,7 @@
 use crate::error::MAX_NESTING_DEPTH;
 use crate::parse::BODY_FIELD;
 use crate::value::QuillValue;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use unicode_normalization::UnicodeNormalization;
 
 /// Errors that can occur during normalization
@@ -357,9 +357,9 @@ fn normalize_json_value(value: serde_json::Value, is_body: bool) -> serde_json::
 /// ```
 /// use quillmark_core::normalize::normalize_fields;
 /// use quillmark_core::QuillValue;
-/// use std::collections::HashMap;
+/// use std::collections::BTreeMap;
 ///
-/// let mut fields = HashMap::new();
+/// let mut fields = BTreeMap::new();
 /// fields.insert("title".to_string(), QuillValue::from_json(serde_json::json!("<<hello>>")));
 /// fields.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("**bold** \u{202D}**more**")));
 ///
@@ -371,7 +371,7 @@ fn normalize_json_value(value: serde_json::Value, is_body: bool) -> serde_json::
 /// // Body has bidi chars stripped, chevrons preserved
 /// assert_eq!(result.get("BODY").unwrap().as_str().unwrap(), "**bold** **more**");
 /// ```
-pub fn normalize_fields(fields: HashMap<String, QuillValue>) -> HashMap<String, QuillValue> {
+pub fn normalize_fields(fields: BTreeMap<String, QuillValue>) -> BTreeMap<String, QuillValue> {
     fields
         .into_iter()
         .map(|(key, value)| {
@@ -445,10 +445,10 @@ pub fn normalize_field_name(name: &str) -> String {
 ///
 /// ```
 /// use quillmark_core::{ParsedDocument, QuillValue, normalize::normalize_document};
-/// use std::collections::HashMap;
+/// use std::collections::BTreeMap;
 ///
 /// // Direct construction (e.g., from API or database)
-/// let mut fields = HashMap::new();
+/// let mut fields = BTreeMap::new();
 /// fields.insert("title".to_string(), QuillValue::from_json(serde_json::json!("Test")));
 /// fields.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("<<content>>")));
 ///
@@ -691,7 +691,7 @@ mod tests {
 
     #[test]
     fn test_normalize_fields_body_bidi() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("**bold** \u{202D}**more**")),
@@ -706,7 +706,7 @@ mod tests {
 
     #[test]
     fn test_normalize_fields_body_chevrons_preserved() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("<<raw>>")),
@@ -719,7 +719,7 @@ mod tests {
 
     #[test]
     fn test_normalize_fields_body_chevrons_and_bidi() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             BODY_FIELD.to_string(),
             QuillValue::from_json(serde_json::json!("<<raw>> \u{202D}**bold**")),
@@ -735,7 +735,7 @@ mod tests {
 
     #[test]
     fn test_normalize_fields_other_field_chevrons_preserved() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "title".to_string(),
             QuillValue::from_json(serde_json::json!("<<hello>>")),
@@ -748,7 +748,7 @@ mod tests {
 
     #[test]
     fn test_normalize_fields_other_field_bidi_stripped() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "title".to_string(),
             QuillValue::from_json(serde_json::json!("he\u{202D}llo")),
@@ -760,7 +760,7 @@ mod tests {
 
     #[test]
     fn test_normalize_fields_nested_values() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "items".to_string(),
             QuillValue::from_json(serde_json::json!(["<<a>>", "\u{202D}b"])),
@@ -775,7 +775,7 @@ mod tests {
 
     #[test]
     fn test_normalize_fields_object_values() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "meta".to_string(),
             QuillValue::from_json(serde_json::json!({
@@ -800,7 +800,7 @@ mod tests {
 
     #[test]
     fn test_normalize_fields_non_string_unchanged() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "count".to_string(),
             QuillValue::from_json(serde_json::json!(42)),
@@ -856,7 +856,7 @@ mod tests {
     fn test_normalize_document_basic() {
         use crate::parse::ParsedDocument;
 
-        let mut fields = std::collections::HashMap::new();
+        let mut fields = std::collections::BTreeMap::new();
         fields.insert(
             "title".to_string(),
             crate::value::QuillValue::from_json(serde_json::json!("<<placeholder>>")),
@@ -885,7 +885,7 @@ mod tests {
         use crate::version::QuillReference;
         use std::str::FromStr;
 
-        let fields = std::collections::HashMap::new();
+        let fields = std::collections::BTreeMap::new();
         let quill_ref = QuillReference::from_str("custom_quill").unwrap();
         let doc = ParsedDocument::with_quill_ref(fields, quill_ref);
         let normalized = super::normalize_document(doc).unwrap();
@@ -897,7 +897,7 @@ mod tests {
     fn test_normalize_document_idempotent() {
         use crate::parse::ParsedDocument;
 
-        let mut fields = std::collections::HashMap::new();
+        let mut fields = std::collections::BTreeMap::new();
         fields.insert(
             BODY_FIELD.to_string(),
             crate::value::QuillValue::from_json(serde_json::json!("<<content>>")),

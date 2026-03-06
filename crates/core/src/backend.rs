@@ -84,7 +84,7 @@
 use crate::error::RenderError;
 use crate::value::QuillValue;
 use crate::{OutputFormat, Quill, RenderOptions};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Backend trait for rendering different output formats
 pub trait Backend: Send + Sync {
@@ -124,7 +124,7 @@ pub trait Backend: Send + Sync {
     ///
     /// ```no_run
     /// # use quillmark_core::{Backend, Quill, FileTreeNode};
-    /// # use std::collections::HashMap;
+    /// # use std::collections::BTreeMap;
     /// # struct MyBackend;
     /// # impl Backend for MyBackend {
     /// #     fn id(&self) -> &'static str { "my" }
@@ -133,7 +133,7 @@ pub trait Backend: Send + Sync {
     /// #     fn compile(&self, _: &str, _: &Quill, _: &quillmark_core::RenderOptions, _: &serde_json::Value) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> { todo!() }
     /// fn default_quill(&self) -> Option<Quill> {
     ///     // Build embedded default Quill from files
-    ///     let mut files = HashMap::new();
+    ///     let mut files = BTreeMap::new();
     ///     files.insert("Quill.yaml".to_string(), FileTreeNode::File {
     ///         contents: b"Quill:\n  name: __default__\n  backend: my\n".to_vec(),
     ///     });
@@ -167,14 +167,14 @@ pub trait Backend: Send + Sync {
     ///
     /// ```no_run
     /// # use quillmark_core::{QuillValue, Backend};
-    /// # use std::collections::HashMap;
+    /// # use std::collections::BTreeMap;
     /// # struct MyBackend;
     /// # impl MyBackend {
     /// fn transform_fields(
     ///     &self,
-    ///     fields: &HashMap<String, QuillValue>,
+    ///     fields: &BTreeMap<String, QuillValue>,
     ///     schema: &QuillValue,
-    /// ) -> HashMap<String, QuillValue> {
+    /// ) -> BTreeMap<String, QuillValue> {
     ///     // Transform markdown fields to backend-specific format
     ///     fields.clone()
     /// }
@@ -182,9 +182,9 @@ pub trait Backend: Send + Sync {
     /// ```
     fn transform_fields(
         &self,
-        fields: &HashMap<String, QuillValue>,
+        fields: &BTreeMap<String, QuillValue>,
         _schema: &QuillValue,
-    ) -> HashMap<String, QuillValue> {
+    ) -> BTreeMap<String, QuillValue> {
         // Default: return fields unchanged
         fields.clone()
     }

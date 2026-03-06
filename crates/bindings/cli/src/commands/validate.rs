@@ -3,7 +3,7 @@ use clap::Parser;
 use quillmark::Quill;
 use quillmark_core::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
 use quillmark_core::QuillValue;
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 
@@ -199,7 +199,7 @@ fn validate_file_references(
 }
 
 fn validate_field_schemas(
-    fields: &HashMap<String, FieldSchema>,
+    fields: &BTreeMap<String, FieldSchema>,
     result: &mut ValidationResult,
     context: &str,
 ) {

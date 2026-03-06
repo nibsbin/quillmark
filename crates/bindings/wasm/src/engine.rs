@@ -281,7 +281,7 @@ impl Quillmark {
         let fields_json = parsed.fields;
         let quill_ref_str = parsed.quill_ref; // Move quill_ref out
 
-        let mut fields = std::collections::HashMap::new();
+        let mut fields = std::collections::BTreeMap::new();
 
         if let serde_json::Value::Object(obj) = fields_json {
             for (key, value) in obj {

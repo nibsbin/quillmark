@@ -183,7 +183,7 @@ fn test_second_backend_with_default_quill_does_not_override() {
     use quillmark::Quill;
     use quillmark_core::Backend;
     use quillmark_core::FileTreeNode;
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     // Create a second mock backend that also provides a default Quill
     struct SecondBackend;
@@ -213,7 +213,7 @@ fn test_second_backend_with_default_quill_does_not_override() {
 
         fn default_quill(&self) -> Option<Quill> {
             // Create a simple default Quill for this backend
-            let mut files = HashMap::new();
+            let mut files = BTreeMap::new();
             files.insert(
                 "Quill.yaml".to_string(),
                 FileTreeNode::File {

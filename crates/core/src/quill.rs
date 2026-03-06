@@ -1,6 +1,6 @@
 //! Quill template bundle types and implementations.
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
@@ -69,7 +69,7 @@ pub struct CardSchema {
     /// Detailed description of this card type
     pub description: Option<String>,
     /// List of fields in the card
-    pub fields: HashMap<String, FieldSchema>,
+    pub fields: BTreeMap<String, FieldSchema>,
     /// UI layout hints
     pub ui: Option<UiContainerSchema>,
 }
@@ -149,7 +149,7 @@ pub struct FieldSchema {
     /// Enum values for string fields (restricts valid values)
     pub enum_values: Option<Vec<String>>,
     /// Properties for dict/object types (nested field schemas)
-    pub properties: Option<HashMap<String, Box<FieldSchema>>>,
+    pub properties: Option<BTreeMap<String, Box<FieldSchema>>>,
     /// Item schema for array types
     pub items: Option<Box<FieldSchema>>,
 }
@@ -207,7 +207,7 @@ impl FieldSchema {
             required: def.required,
             enum_values: def.enum_values,
             properties: if let Some(props) = def.properties {
-                let mut p = HashMap::new();
+                let mut p = BTreeMap::new();
                 for (key, value) in props {
                     p.insert(
                         key.clone(),
@@ -244,7 +244,7 @@ pub enum FileTreeNode {
     /// A directory containing other files and directories
     Directory {
         /// The files and subdirectories in this directory
-        files: HashMap<String, FileTreeNode>,
+        files: BTreeMap<String, FileTreeNode>,
     },
 }
 
@@ -375,7 +375,7 @@ impl FileTreeNode {
                         files
                             .entry(component.clone())
                             .or_insert_with(|| FileTreeNode::Directory {
-                                files: HashMap::new(),
+                                files: BTreeMap::new(),
                             });
                 }
                 FileTreeNode::File { .. } => {
@@ -411,7 +411,7 @@ impl FileTreeNode {
             Ok(FileTreeNode::File { contents })
         } else if let Some(obj) = value.as_object() {
             // It's a directory (either empty or with nested files)
-            let mut files = HashMap::new();
+            let mut files = BTreeMap::new();
             for (name, child_value) in obj {
                 files.insert(name.clone(), Self::from_json_value(child_value)?);
             }
@@ -535,7 +535,7 @@ impl QuillIgnore {
 #[derive(Debug, Clone)]
 pub struct Quill {
     /// Quill-specific metadata
-    pub metadata: HashMap<String, QuillValue>,
+    pub metadata: BTreeMap<String, QuillValue>,
     /// Name of the quill
     pub name: String,
     /// Backend identifier (e.g., "typst")
@@ -547,9 +547,9 @@ pub struct Quill {
     /// Field JSON schema (single source of truth for schema and defaults)
     pub schema: QuillValue,
     /// Cached default values extracted from schema (for performance)
-    pub defaults: HashMap<String, QuillValue>,
+    pub defaults: BTreeMap<String, QuillValue>,
     /// Cached example values extracted from schema (for performance)
-    pub examples: HashMap<String, Vec<QuillValue>>,
+    pub examples: BTreeMap<String, Vec<QuillValue>>,
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }
@@ -570,13 +570,13 @@ pub struct QuillConfig {
     /// Plate file (template)
     pub plate_file: Option<String>,
     /// Card definitions (reusable sub-schemas)
-    pub cards: HashMap<String, CardSchema>,
+    pub cards: BTreeMap<String, CardSchema>,
     /// Additional unstructured metadata
     #[serde(flatten)]
-    pub metadata: HashMap<String, QuillValue>,
+    pub metadata: BTreeMap<String, QuillValue>,
     /// Typst specific configuration
     #[serde(default)]
-    pub typst_config: HashMap<String, QuillValue>,
+    pub typst_config: BTreeMap<String, QuillValue>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -602,8 +602,8 @@ impl QuillConfig {
         fields_map: &serde_json::Map<String, serde_json::Value>,
         key_order: &[String],
         context: &str,
-    ) -> HashMap<String, FieldSchema> {
-        let mut fields = HashMap::new();
+    ) -> BTreeMap<String, FieldSchema> {
+        let mut fields = BTreeMap::new();
         let mut fallback_counter = 0;
 
         for (field_name, field_value) in fields_map {
@@ -722,7 +722,7 @@ impl QuillConfig {
             .and_then(|v| serde_json::from_value(v).ok());
 
         // Extract additional metadata from [Quill] section (excluding standard fields)
-        let mut metadata = HashMap::new();
+        let mut metadata = BTreeMap::new();
         if let Some(table) = quill_section.as_object() {
             for (key, value) in table {
                 // Skip standard fields that are stored in dedicated struct fields
@@ -741,7 +741,7 @@ impl QuillConfig {
         }
 
         // Extract [typst] section (optional)
-        let mut typst_config = HashMap::new();
+        let mut typst_config = BTreeMap::new();
         if let Some(typst_val) = quill_yaml_val.get("typst") {
             if let Some(table) = typst_val.as_object() {
                 for (key, value) in table {
@@ -757,14 +757,14 @@ impl QuillConfig {
                 let field_order: Vec<String> = fields_map.keys().cloned().collect();
                 Self::parse_fields_with_order(fields_map, &field_order, "field schema")
             } else {
-                HashMap::new()
+                BTreeMap::new()
             }
         } else {
-            HashMap::new()
+            BTreeMap::new()
         };
 
         // Extract [cards] section (optional)
-        let mut cards: HashMap<String, CardSchema> = HashMap::new();
+        let mut cards: BTreeMap<String, CardSchema> = BTreeMap::new();
         if let Some(cards_val) = quill_yaml_val.get("cards") {
             let cards_table = cards_val
                 .as_object()
@@ -787,9 +787,9 @@ impl QuillConfig {
                         &format!("card '{}' field", card_name),
                     )
                 } else if let Some(_toml_fields) = &card_def.fields {
-                    HashMap::new()
+                    BTreeMap::new()
                 } else {
-                    HashMap::new()
+                    BTreeMap::new()
                 };
 
                 let card_schema = CardSchema {
@@ -1035,7 +1035,7 @@ impl Quill {
             .ok_or("Missing or invalid 'files' key")?;
 
         // Parse file tree
-        let mut root_files = HashMap::new();
+        let mut root_files = BTreeMap::new();
         for (key, value) in files_obj {
             root_files.insert(key.clone(), FileTreeNode::from_json_value(value)?);
         }
@@ -1056,11 +1056,11 @@ impl Quill {
 
         if !current_dir.exists() {
             return Ok(FileTreeNode::Directory {
-                files: HashMap::new(),
+                files: BTreeMap::new(),
             });
         }
 
-        let mut files = HashMap::new();
+        let mut files = BTreeMap::new();
 
         for entry in fs::read_dir(current_dir)? {
             let entry = entry?;
@@ -1112,20 +1112,20 @@ impl Quill {
 
     /// Get default values from the cached schema defaults
     ///
-    /// Returns a reference to the pre-computed defaults HashMap that was extracted
+    /// Returns a reference to the pre-computed defaults BTreeMap that was extracted
     /// during Quill construction. This is more efficient than re-parsing the schema.
     ///
     /// This is used by `ParsedDocument::with_defaults()` to apply default values
     /// to missing fields.
-    pub fn extract_defaults(&self) -> &HashMap<String, QuillValue> {
+    pub fn extract_defaults(&self) -> &BTreeMap<String, QuillValue> {
         &self.defaults
     }
 
     /// Get example values from the cached schema examples
     ///
-    /// Returns a reference to the pre-computed examples HashMap that was extracted
+    /// Returns a reference to the pre-computed examples BTreeMap that was extracted
     /// during Quill construction. This is more efficient than re-parsing the schema.
-    pub fn extract_examples(&self) -> &HashMap<String, Vec<QuillValue>> {
+    pub fn extract_examples(&self) -> &BTreeMap<String, Vec<QuillValue>> {
         &self.examples
     }
 
@@ -1564,7 +1564,7 @@ typst:
     #[test]
     fn test_from_tree() {
         // Create a simple in-memory file tree
-        let mut root_files = HashMap::new();
+        let mut root_files = BTreeMap::new();
 
         // Add Quill.yaml
         let quill_yaml = r#"Quill:
@@ -1604,7 +1604,7 @@ typst:
 
     #[test]
     fn test_from_tree_with_template() {
-        let mut root_files = HashMap::new();
+        let mut root_files = BTreeMap::new();
 
         // Add Quill.yaml with example specified
         // Add Quill.yaml with example specified
@@ -1770,7 +1770,7 @@ Quill:
     #[test]
     fn test_from_tree_structure_direct() {
         // Test using from_tree_structure directly
-        let mut root_files = HashMap::new();
+        let mut root_files = BTreeMap::new();
 
         root_files.insert(
             "Quill.yaml".to_string(),
@@ -1789,7 +1789,7 @@ Quill:
         );
 
         // Add a nested directory
-        let mut src_files = HashMap::new();
+        let mut src_files = BTreeMap::new();
         src_files.insert(
             "main.rs".to_string(),
             FileTreeNode::File {
@@ -1857,7 +1857,7 @@ Quill:
 
     #[test]
     fn test_dir_exists_and_list_apis() {
-        let mut root_files = HashMap::new();
+        let mut root_files = BTreeMap::new();
 
         // Add Quill.yaml
         root_files.insert(
@@ -1877,7 +1877,7 @@ Quill:
         );
 
         // Add assets directory with files
-        let mut assets_files = HashMap::new();
+        let mut assets_files = BTreeMap::new();
         assets_files.insert(
             "logo.png".to_string(),
             FileTreeNode::File {
@@ -1892,7 +1892,7 @@ Quill:
         );
 
         // Add subdirectory in assets
-        let mut fonts_files = HashMap::new();
+        let mut fonts_files = BTreeMap::new();
         fonts_files.insert(
             "font.ttf".to_string(),
             FileTreeNode::File {
@@ -1915,7 +1915,7 @@ Quill:
         root_files.insert(
             "empty".to_string(),
             FileTreeNode::Directory {
-                files: HashMap::new(),
+                files: BTreeMap::new(),
             },
         );
 
@@ -1962,7 +1962,7 @@ Quill:
 
     #[test]
     fn test_field_schemas_parsing() {
-        let mut root_files = HashMap::new();
+        let mut root_files = BTreeMap::new();
 
         // Add Quill.yaml with field schemas
         let quill_yaml = r#"Quill:
@@ -2089,7 +2089,7 @@ default: "Default value"
     #[test]
     fn test_quill_without_plate_file() {
         // Test creating a Quill without specifying a plate file
-        let mut root_files = HashMap::new();
+        let mut root_files = BTreeMap::new();
 
         // Add Quill.yaml without plate field
         let quill_yaml = r#"Quill:
@@ -2248,7 +2248,7 @@ fields:
     #[test]
     fn test_quill_from_config_metadata() {
         // Test that QuillConfig metadata flows through to Quill
-        let mut root_files = HashMap::new();
+        let mut root_files = BTreeMap::new();
 
         let quill_yaml = r#"
 Quill:
@@ -2292,7 +2292,7 @@ typst:
     #[test]
     fn test_extract_defaults_method() {
         // Test the extract_defaults method on Quill
-        let mut root_files = HashMap::new();
+        let mut root_files = BTreeMap::new();
 
         let quill_yaml = r#"
 Quill:

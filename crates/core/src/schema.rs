@@ -6,7 +6,7 @@
 use crate::quill::{field_key, ui_key, CardSchema, FieldSchema, FieldType};
 use crate::{QuillValue, RenderError};
 use serde_json::{json, Map, Value};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 /// Build a single field property JSON Schema object from a FieldSchema
 fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
@@ -199,7 +199,7 @@ fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
 /// - `CARDS` array with `oneOf` refs and `x-discriminator`
 pub fn build_schema(
     document: &CardSchema,
-    definitions: &HashMap<String, CardSchema>,
+    definitions: &BTreeMap<String, CardSchema>,
 ) -> Result<QuillValue, RenderError> {
     let mut properties = Map::new();
     let mut required_fields = Vec::new();
@@ -346,7 +346,7 @@ pub fn strip_schema_fields(schema: &mut Value, fields: &[&str]) {
 
 /// Backwards-compatible wrapper for build_schema (no cards)
 pub fn build_schema_from_fields(
-    field_schemas: &HashMap<String, FieldSchema>,
+    field_schemas: &BTreeMap<String, FieldSchema>,
 ) -> Result<QuillValue, RenderError> {
     let document = CardSchema {
         name: "root".to_string(),
@@ -355,13 +355,13 @@ pub fn build_schema_from_fields(
         fields: field_schemas.clone(),
         ui: None,
     };
-    build_schema(&document, &HashMap::new())
+    build_schema(&document, &BTreeMap::new())
 }
 
 /// Extract default values from a JSON Schema
 ///
 /// Parses the JSON schema's "properties" object and extracts any "default" values
-/// defined for each property. Returns a HashMap mapping field names to their default
+/// defined for each property. Returns a BTreeMap mapping field names to their default
 /// values.
 ///
 /// # Arguments
@@ -370,11 +370,11 @@ pub fn build_schema_from_fields(
 ///
 /// # Returns
 ///
-/// A HashMap of field names to their default QuillValues
+/// A BTreeMap of field names to their default QuillValues
 pub fn extract_defaults_from_schema(
     schema: &QuillValue,
-) -> HashMap<String, crate::value::QuillValue> {
-    let mut defaults = HashMap::new();
+) -> BTreeMap<String, crate::value::QuillValue> {
+    let mut defaults = BTreeMap::new();
 
     // Get the properties object from the schema
     if let Some(properties) = schema.as_json().get("properties") {
@@ -397,7 +397,7 @@ pub fn extract_defaults_from_schema(
 /// Extract example values from a JSON Schema
 ///
 /// Parses the JSON schema's "properties" object and extracts any "examples" arrays
-/// defined for each property. Returns a HashMap mapping field names to their examples
+/// defined for each property. Returns a BTreeMap mapping field names to their examples
 /// (as an array of QuillValues).
 ///
 /// # Arguments
@@ -406,11 +406,11 @@ pub fn extract_defaults_from_schema(
 ///
 /// # Returns
 ///
-/// A HashMap of field names to their examples (``Vec<QuillValue>``)
+/// A BTreeMap of field names to their examples (``Vec<QuillValue>``)
 pub fn extract_examples_from_schema(
     schema: &QuillValue,
-) -> HashMap<String, Vec<crate::value::QuillValue>> {
-    let mut examples = HashMap::new();
+) -> BTreeMap<String, Vec<crate::value::QuillValue>> {
+    let mut examples = BTreeMap::new();
 
     // Get the properties object from the schema
     if let Some(properties) = schema.as_json().get("properties") {
@@ -446,12 +446,12 @@ pub fn extract_examples_from_schema(
 ///
 /// # Returns
 ///
-/// A HashMap of card field names to their item defaults:
-/// `HashMap<card_field_name, HashMap<item_field_name, default_value>>`
+/// A BTreeMap of card field names to their item defaults:
+/// `BTreeMap<card_field_name, BTreeMap<item_field_name, default_value>>`
 pub fn extract_card_item_defaults(
     schema: &QuillValue,
-) -> HashMap<String, HashMap<String, QuillValue>> {
-    let mut card_defaults = HashMap::new();
+) -> BTreeMap<String, BTreeMap<String, QuillValue>> {
+    let mut card_defaults = BTreeMap::new();
 
     // Get the properties object from the schema
     if let Some(properties) = schema.as_json().get("properties") {
@@ -473,7 +473,7 @@ pub fn extract_card_item_defaults(
                     // Get properties of items
                     if let Some(item_props) = items_schema.get("properties") {
                         if let Some(item_props_obj) = item_props.as_object() {
-                            let mut item_defaults = HashMap::new();
+                            let mut item_defaults = BTreeMap::new();
 
                             for (item_field_name, item_field_schema) in item_props_obj {
                                 // Extract default value if present
@@ -510,11 +510,11 @@ pub fn extract_card_item_defaults(
 ///
 /// # Returns
 ///
-/// A new HashMap with default values applied to card items
+/// A new BTreeMap with default values applied to card items
 pub fn apply_card_item_defaults(
-    fields: &HashMap<String, QuillValue>,
-    card_defaults: &HashMap<String, HashMap<String, QuillValue>>,
-) -> HashMap<String, QuillValue> {
+    fields: &BTreeMap<String, QuillValue>,
+    card_defaults: &BTreeMap<String, BTreeMap<String, QuillValue>>,
+) -> BTreeMap<String, QuillValue> {
     let mut result = fields.clone();
 
     for (card_name, item_defaults) in card_defaults {
@@ -557,7 +557,7 @@ pub fn apply_card_item_defaults(
 /// Validate a document's fields against a JSON Schema
 pub fn validate_document(
     schema: &QuillValue,
-    fields: &HashMap<String, crate::value::QuillValue>,
+    fields: &BTreeMap<String, crate::value::QuillValue>,
 ) -> Result<(), Vec<String>> {
     // Convert fields to JSON Value for validation
     let mut doc_json = Map::new();
@@ -686,8 +686,8 @@ fn validate_cards_array(document_schema: &QuillValue, cards_array: &[Value]) -> 
 
                 // Look up the schema for this card type
                 if let Some(card_schema_json) = defs.and_then(|d| d.get(&def_name)) {
-                    // Convert the card object to HashMap<String, QuillValue> for recursion
-                    let mut card_fields = HashMap::new();
+                    // Convert the card object to BTreeMap<String, QuillValue> for recursion
+                    let mut card_fields = BTreeMap::new();
                     for (k, v) in card_obj {
                         card_fields.insert(k.clone(), QuillValue::from_json(v.clone()));
                     }
@@ -842,12 +842,12 @@ fn coerce_value(value: &QuillValue, expected_type: &str) -> QuillValue {
 ///
 /// # Returns
 ///
-/// A new HashMap with coerced field values
+/// A new BTreeMap with coerced field values
 pub fn coerce_document(
     schema: &QuillValue,
-    fields: &HashMap<String, QuillValue>,
-) -> HashMap<String, QuillValue> {
-    let mut coerced_fields = HashMap::new();
+    fields: &BTreeMap<String, QuillValue>,
+) -> BTreeMap<String, QuillValue> {
+    let mut coerced_fields = BTreeMap::new();
 
     // Get the properties object from the schema
     let properties = match schema.as_json().get("properties") {
@@ -915,8 +915,8 @@ fn coerce_cards_array(document_schema: &QuillValue, cards_array: &[Value]) -> Ve
 
                 // Look up the schema for this card type
                 if let Some(card_schema_json) = defs.and_then(|d| d.get(&def_name)) {
-                    // Convert the card object to HashMap<String, QuillValue> for coerce_document
-                    let mut card_fields = HashMap::new();
+                    // Convert the card object to BTreeMap<String, QuillValue> for coerce_document
+                    let mut card_fields = BTreeMap::new();
                     for (k, v) in card_obj {
                         card_fields.insert(k.clone(), QuillValue::from_json(v.clone()));
                     }
@@ -954,7 +954,7 @@ mod tests {
 
     #[test]
     fn test_build_schema_simple() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         let schema = FieldSchema::new(
             "author".to_string(),
             FieldType::String,
@@ -973,7 +973,7 @@ mod tests {
 
     #[test]
     fn test_build_schema_with_default() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         let mut schema = FieldSchema::new(
             "Field with default".to_string(),
             FieldType::String,
@@ -988,7 +988,7 @@ mod tests {
 
     #[test]
     fn test_build_schema_date_types() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
 
         let date_schema = FieldSchema::new(
             "Date field".to_string(),
@@ -1030,7 +1030,7 @@ mod tests {
             "additionalProperties": true
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "title".to_string(),
             QuillValue::from_json(json!("Test Title")),
@@ -1053,7 +1053,7 @@ mod tests {
             "additionalProperties": true
         });
 
-        let fields = HashMap::new(); // empty, missing required field
+        let fields = BTreeMap::new(); // empty, missing required field
 
         let result = validate_document(&QuillValue::from_json(schema), &fields);
         assert!(result.is_err());
@@ -1072,7 +1072,7 @@ mod tests {
             "additionalProperties": true
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "count".to_string(),
             QuillValue::from_json(json!("not a number")),
@@ -1094,7 +1094,7 @@ mod tests {
             "additionalProperties": true
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert("title".to_string(), QuillValue::from_json(json!("Test")));
         fields.insert("extra".to_string(), QuillValue::from_json(json!("allowed")));
 
@@ -1104,7 +1104,7 @@ mod tests {
 
     #[test]
     fn test_build_schema_with_example() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         let mut schema = FieldSchema::new(
             "memo_for".to_string(),
             FieldType::Array,
@@ -1130,7 +1130,7 @@ mod tests {
 
     #[test]
     fn test_build_schema_includes_default_in_properties() {
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         let mut schema = FieldSchema::new(
             "ice_cream".to_string(),
             FieldType::String,
@@ -1322,7 +1322,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "tags".to_string(),
             QuillValue::from_json(json!("single-tag")),
@@ -1347,7 +1347,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "tags".to_string(),
             QuillValue::from_json(json!(["tag1", "tag2"])),
@@ -1371,7 +1371,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert("active".to_string(), QuillValue::from_json(json!("true")));
         fields.insert("enabled".to_string(), QuillValue::from_json(json!("FALSE")));
 
@@ -1393,7 +1393,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert("flag1".to_string(), QuillValue::from_json(json!(0)));
         fields.insert("flag2".to_string(), QuillValue::from_json(json!(1)));
         fields.insert("flag3".to_string(), QuillValue::from_json(json!(42)));
@@ -1418,7 +1418,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert("flag1".to_string(), QuillValue::from_json(json!(0.0)));
         fields.insert("flag2".to_string(), QuillValue::from_json(json!(0.5)));
         fields.insert("flag3".to_string(), QuillValue::from_json(json!(-1.5)));
@@ -1445,7 +1445,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert("count".to_string(), QuillValue::from_json(json!("42")));
         fields.insert("price".to_string(), QuillValue::from_json(json!("19.99")));
 
@@ -1466,7 +1466,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert("active".to_string(), QuillValue::from_json(json!(true)));
         fields.insert("disabled".to_string(), QuillValue::from_json(json!(false)));
 
@@ -1483,7 +1483,7 @@ mod tests {
             "type": "object"
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert("title".to_string(), QuillValue::from_json(json!("Test")));
 
         let coerced = coerce_document(&QuillValue::from_json(schema), &fields);
@@ -1502,7 +1502,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert("title".to_string(), QuillValue::from_json(json!("Test")));
 
         let coerced = coerce_document(&QuillValue::from_json(schema), &fields);
@@ -1522,7 +1522,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         // Case 1: Single item string array -> should unwrap
         fields.insert(
             "title".to_string(),
@@ -1560,7 +1560,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert("tags".to_string(), QuillValue::from_json(json!("single")));
         fields.insert("active".to_string(), QuillValue::from_json(json!("true")));
         fields.insert("count".to_string(), QuillValue::from_json(json!("42")));
@@ -1591,7 +1591,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "count".to_string(),
             QuillValue::from_json(json!("not-a-number")),
@@ -1616,7 +1616,7 @@ mod tests {
             }
         });
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "items".to_string(),
             QuillValue::from_json(json!({"key": "value"})),
@@ -1637,8 +1637,8 @@ mod tests {
         // Test that cards are generated in $defs with discriminator
         use crate::quill::CardSchema;
 
-        let fields = HashMap::new();
-        let mut cards = HashMap::new();
+        let fields = BTreeMap::new();
+        let mut cards = BTreeMap::new();
 
         let name_schema = FieldSchema::new(
             "name".to_string(),
@@ -1646,7 +1646,7 @@ mod tests {
             Some("Name field".to_string()),
         );
 
-        let mut card_fields = HashMap::new();
+        let mut card_fields = BTreeMap::new();
         card_fields.insert("name".to_string(), name_schema);
 
         let card = CardSchema {
@@ -1694,8 +1694,8 @@ mod tests {
         // Test that CARDS array is generated with oneOf but without x-discriminator
         use crate::quill::CardSchema;
 
-        let fields = HashMap::new();
-        let mut cards = HashMap::new();
+        let fields = BTreeMap::new();
+        let mut cards = BTreeMap::new();
 
         let mut name_schema = FieldSchema::new(
             "name".to_string(),
@@ -1711,7 +1711,7 @@ mod tests {
         );
         org_schema.default = Some(QuillValue::from_json(json!("Unknown")));
 
-        let mut card_fields = HashMap::new();
+        let mut card_fields = BTreeMap::new();
         card_fields.insert("name".to_string(), name_schema);
         card_fields.insert("org".to_string(), org_schema);
 
@@ -1840,17 +1840,17 @@ mod tests {
     #[test]
     fn test_apply_card_item_defaults() {
         // Set up card defaults
-        let mut item_defaults = HashMap::new();
+        let mut item_defaults = BTreeMap::new();
         item_defaults.insert(
             "org".to_string(),
             QuillValue::from_json(json!("Default Org")),
         );
 
-        let mut card_defaults = HashMap::new();
+        let mut card_defaults = BTreeMap::new();
         card_defaults.insert("endorsements".to_string(), item_defaults);
 
         // Set up document fields with card items missing the 'org' field
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "endorsements".to_string(),
             QuillValue::from_json(json!([
@@ -1876,17 +1876,17 @@ mod tests {
 
     #[test]
     fn test_apply_card_item_defaults_empty_card() {
-        let mut item_defaults = HashMap::new();
+        let mut item_defaults = BTreeMap::new();
         item_defaults.insert(
             "org".to_string(),
             QuillValue::from_json(json!("Default Org")),
         );
 
-        let mut card_defaults = HashMap::new();
+        let mut card_defaults = BTreeMap::new();
         card_defaults.insert("endorsements".to_string(), item_defaults);
 
         // Empty endorsements array
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert("endorsements".to_string(), QuillValue::from_json(json!([])));
 
         let result = apply_card_item_defaults(&fields, &card_defaults);
@@ -1898,17 +1898,17 @@ mod tests {
 
     #[test]
     fn test_apply_card_item_defaults_no_matching_card() {
-        let mut item_defaults = HashMap::new();
+        let mut item_defaults = BTreeMap::new();
         item_defaults.insert(
             "org".to_string(),
             QuillValue::from_json(json!("Default Org")),
         );
 
-        let mut card_defaults = HashMap::new();
+        let mut card_defaults = BTreeMap::new();
         card_defaults.insert("endorsements".to_string(), item_defaults);
 
         // Document has different card field
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         fields.insert(
             "reviews".to_string(),
             QuillValue::from_json(json!([{ "author": "Bob" }])),
@@ -1945,7 +1945,7 @@ mod tests {
         });
 
         // Valid: has required 'name' field
-        let mut valid_fields = HashMap::new();
+        let mut valid_fields = BTreeMap::new();
         valid_fields.insert(
             "endorsements".to_string(),
             QuillValue::from_json(json!([{ "name": "John" }])),
@@ -1955,7 +1955,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Invalid: missing required 'name' field
-        let mut invalid_fields = HashMap::new();
+        let mut invalid_fields = BTreeMap::new();
         invalid_fields.insert(
             "endorsements".to_string(),
             QuillValue::from_json(json!([{ "org": "SomeOrg" }])),
@@ -1968,7 +1968,7 @@ mod tests {
     fn test_validate_document_invalid_card_type() {
         use crate::quill::{CardSchema, FieldSchema};
 
-        let mut card_fields = HashMap::new();
+        let mut card_fields = BTreeMap::new();
         card_fields.insert(
             "field1".to_string(),
             FieldSchema::new(
@@ -1977,7 +1977,7 @@ mod tests {
                 Some("desc".to_string()),
             ),
         );
-        let mut card_schemas = HashMap::new();
+        let mut card_schemas = BTreeMap::new();
         card_schemas.insert(
             "valid_card".to_string(),
             CardSchema {
@@ -1993,12 +1993,12 @@ mod tests {
             name: "root".to_string(),
             title: None,
             description: None,
-            fields: HashMap::new(),
+            fields: BTreeMap::new(),
             ui: None,
         };
         let schema = build_schema(&document, &card_schemas).unwrap();
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         // invalid card
         let invalid_card = json!({
             "CARD": "invalid_type",
@@ -2020,7 +2020,7 @@ mod tests {
 
     #[test]
     fn test_coerce_document_cards() {
-        let mut card_fields = HashMap::new();
+        let mut card_fields = BTreeMap::new();
         let count_schema = FieldSchema::new(
             "Count".to_string(),
             FieldType::Number,
@@ -2035,7 +2035,7 @@ mod tests {
         );
         card_fields.insert("active".to_string(), active_schema);
 
-        let mut card_schemas = HashMap::new();
+        let mut card_schemas = BTreeMap::new();
         card_schemas.insert(
             "test_card".to_string(),
             CardSchema {
@@ -2051,12 +2051,12 @@ mod tests {
             name: "root".to_string(),
             title: None,
             description: None,
-            fields: HashMap::new(),
+            fields: BTreeMap::new(),
             ui: None,
         };
         let schema = build_schema(&document, &card_schemas).unwrap();
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         let card_value = json!({
             "CARD": "test_card",
             "count": "42",
@@ -2078,7 +2078,7 @@ mod tests {
 
     #[test]
     fn test_validate_document_card_fields() {
-        let mut card_fields = HashMap::new();
+        let mut card_fields = BTreeMap::new();
         let count_schema = FieldSchema::new(
             "Count".to_string(),
             FieldType::Number,
@@ -2086,7 +2086,7 @@ mod tests {
         );
         card_fields.insert("count".to_string(), count_schema);
 
-        let mut card_schemas = HashMap::new();
+        let mut card_schemas = BTreeMap::new();
         card_schemas.insert(
             "test_card".to_string(),
             CardSchema {
@@ -2102,12 +2102,12 @@ mod tests {
             name: "root".to_string(),
             title: None,
             description: None,
-            fields: HashMap::new(),
+            fields: BTreeMap::new(),
             ui: None,
         };
         let schema = build_schema(&document, &card_schemas).unwrap();
 
-        let mut fields = HashMap::new();
+        let mut fields = BTreeMap::new();
         let card_value = json!({
             "CARD": "test_card",
             "count": "not a number" // Invalid type
@@ -2148,7 +2148,7 @@ mod tests {
             order: Some(0),
         });
 
-        let mut card_fields = HashMap::new();
+        let mut card_fields = BTreeMap::new();
         card_fields.insert("from".to_string(), field_schema);
 
         let card = CardSchema {
@@ -2159,7 +2159,7 @@ mod tests {
             ui: None,
         };
 
-        let mut cards = HashMap::new();
+        let mut cards = BTreeMap::new();
         cards.insert("indorsement".to_string(), card);
 
         // Create empty root doc
@@ -2167,7 +2167,7 @@ mod tests {
             name: "root".to_string(),
             title: None,
             description: None,
-            fields: HashMap::new(),
+            fields: BTreeMap::new(),
             ui: None,
         };
 
@@ -2195,7 +2195,7 @@ mod tests {
             Some("Name".to_string()),
         );
 
-        let mut card_fields = HashMap::new();
+        let mut card_fields = BTreeMap::new();
         card_fields.insert("name".to_string(), field_schema);
 
         let card = CardSchema {
@@ -2208,14 +2208,14 @@ mod tests {
             }),
         };
 
-        let mut cards = HashMap::new();
+        let mut cards = BTreeMap::new();
         cards.insert("meta_card".to_string(), card);
 
         let document = CardSchema {
             name: "root".to_string(),
             title: None,
             description: None,
-            fields: HashMap::new(),
+            fields: BTreeMap::new(),
             ui: Some(ui_schema),
         };
 
