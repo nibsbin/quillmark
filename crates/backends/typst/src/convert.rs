@@ -112,7 +112,8 @@ where
     let mut list_stack: Vec<ListType> = Vec::new();
     let mut strong_stack: Vec<StrongKind> = Vec::new();
     let mut in_list_item = false; // Track if we're inside a list item
-    let mut need_para_space = false; // Track if we need space before next paragraph in list item
+    let mut list_item_first_block = false; // Track if we're on the first block of a list item
+    let mut in_code_block = false; // Track if we're inside a code block
     let mut depth = 0; // Track nesting depth for DoS prevention
     let iter = iter.peekable();
 
@@ -130,22 +131,49 @@ where
 
                 match tag {
                     Tag::Paragraph => {
-                        // Only add newlines for paragraphs that are NOT inside list items
                         if !in_list_item {
                             // Don't add extra newlines if we're already at start of line
                             if !end_newline {
                                 output.push('\n');
                                 end_newline = true;
                             }
-                        } else if need_para_space {
-                            // Add space to join with previous paragraph in list item
-                            output.push(' ');
+                        } else if !list_item_first_block {
+                            // Continuation paragraph in list item: blank line + indent
+                            let cont_indent = "  ".repeat(list_stack.len());
+                            if !end_newline {
+                                output.push('\n');
+                            }
+                            output.push('\n');
+                            output.push_str(&cont_indent);
                             end_newline = false;
                         }
-                        // Typst doesn't need explicit paragraph tags for simple paragraphs
                     }
-                    Tag::CodeBlock(_) => {
-                        // Code blocks are handled, no special tracking needed
+                    Tag::CodeBlock(kind) => {
+                        in_code_block = true;
+                        if in_list_item {
+                            // Code block inside list item: continuation indent
+                            let cont_indent = "  ".repeat(list_stack.len());
+                            if !list_item_first_block {
+                                if !end_newline {
+                                    output.push('\n');
+                                }
+                                output.push('\n');
+                            } else if !end_newline {
+                                output.push('\n');
+                            }
+                            output.push_str(&cont_indent);
+                            list_item_first_block = false;
+                        } else if !end_newline {
+                            output.push('\n');
+                        }
+                        output.push_str("```");
+                        if let pulldown_cmark::CodeBlockKind::Fenced(lang) = kind {
+                            if !lang.is_empty() {
+                                output.push_str(&lang);
+                            }
+                        }
+                        output.push('\n');
+                        end_newline = true;
                     }
                     Tag::HtmlBlock => {
                         // HTML blocks are handled, no special tracking needed
@@ -165,8 +193,8 @@ where
                         list_stack.push(list_type);
                     }
                     Tag::Item => {
-                        in_list_item = true; // We're now inside a list item
-                        need_para_space = false; // Reset paragraph space tracker
+                        in_list_item = true;
+                        list_item_first_block = true;
                         if let Some(list_type) = list_stack.last() {
                             let indent = "  ".repeat(list_stack.len().saturating_sub(1));
 
@@ -234,20 +262,34 @@ where
 
                 match tag {
                     TagEnd::Paragraph => {
-                        // Only handle paragraph endings when NOT inside list items
                         if !in_list_item {
                             output.push('\n');
                             output.push('\n'); // Extra newline for paragraph separation
                             end_newline = true;
                         } else {
-                            // Mark that the next paragraph in this list item needs a space
-                            // This ensures "First line.\n\nSecond line." becomes "First line. Second line."
-                            // matching the behavior of soft breaks (single newline)
-                            need_para_space = true;
+                            // End of a block within a list item
+                            list_item_first_block = false;
+                            if !end_newline {
+                                output.push('\n');
+                                end_newline = true;
+                            }
                         }
                     }
                     TagEnd::CodeBlock => {
-                        // Code blocks are handled, no special tracking needed
+                        in_code_block = false;
+                        if !end_newline {
+                            output.push('\n');
+                        }
+                        if in_list_item {
+                            let cont_indent = "  ".repeat(list_stack.len());
+                            output.push_str(&cont_indent);
+                        }
+                        output.push_str("```\n");
+                        if !in_list_item {
+                            output.push('\n');
+                        }
+                        end_newline = true;
+                        list_item_first_block = false;
                     }
                     TagEnd::HtmlBlock => {
                         // HTML blocks are handled, no special tracking needed
@@ -260,8 +302,8 @@ where
                         }
                     }
                     TagEnd::Item => {
-                        in_list_item = false; // We're no longer inside a list item
-                                              // Only add newline if we're not already at end of line
+                        in_list_item = false;
+                        list_item_first_block = false;
                         if !end_newline {
                             output.push('\n');
                             end_newline = true;
@@ -302,10 +344,15 @@ where
                 }
             }
             Event::Text(text) => {
-                // Normal text processing
-                let escaped = escape_markup(&text);
-                output.push_str(&escaped);
-                end_newline = escaped.ends_with('\n');
+                if in_code_block {
+                    // Code block content - no escaping needed
+                    output.push_str(&text);
+                    end_newline = text.ends_with('\n');
+                } else {
+                    let escaped = escape_markup(&text);
+                    output.push_str(&escaped);
+                    end_newline = escaped.ends_with('\n');
+                }
             }
             Event::Code(text) => {
                 // Inline code
@@ -1261,14 +1308,72 @@ mod tests {
     }
 
     #[test]
-    fn test_list_item_paragraph_separation_with_space() {
-        // Two newlines in a list item should join text with a space
-        // (matching the behavior of single newlines / soft breaks)
+    fn test_list_item_paragraph_separation() {
+        // Two paragraphs in a list item should produce continuation with blank line + indent
         let markdown = "- First line.\n\n  Second line.";
         let typst = mark_to_typst(markdown).unwrap();
-        // Previously this was "- First line.Second line." (missing space)
-        // Now it should be "- First line. Second line."
-        assert_eq!(typst, "- First line. Second line.\n\n");
+        assert_eq!(typst, "- First line.\n\n  Second line.\n\n");
+    }
+
+    #[test]
+    fn test_list_item_three_paragraphs() {
+        let markdown = "- Para 1.\n\n  Para 2.\n\n  Para 3.";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "- Para 1.\n\n  Para 2.\n\n  Para 3.\n\n");
+    }
+
+    #[test]
+    fn test_list_item_multiple_items_with_continuation() {
+        let markdown = "- Item 1\n\n  More text.\n\n- Item 2";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "- Item 1\n\n  More text.\n- Item 2\n\n");
+    }
+
+    #[test]
+    fn test_ordered_list_multi_para() {
+        let markdown = "1. First para.\n\n   Second para.\n\n2. Next item.";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "+ First para.\n\n  Second para.\n+ Next item.\n\n");
+    }
+
+    #[test]
+    fn test_code_block_standalone() {
+        let markdown = "```rust\nfn main() {}\n```";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "```rust\nfn main() {}\n```\n\n");
+    }
+
+    #[test]
+    fn test_code_block_no_lang() {
+        let markdown = "```\nhello\n```";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "```\nhello\n```\n\n");
+    }
+
+    #[test]
+    fn test_code_block_no_escaping() {
+        // Special chars in code blocks should NOT be escaped
+        let markdown = "```\n*bold* #heading $math$\n```";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(typst, "```\n*bold* #heading $math$\n```\n\n");
+    }
+
+    #[test]
+    fn test_code_block_in_list_item() {
+        let markdown = "- Item text\n\n  ```\n  code here\n  ```";
+        let typst = mark_to_typst(markdown).unwrap();
+        // pulldown_cmark strips indentation from code block content
+        assert_eq!(typst, "- Item text\n\n  ```\ncode here\n  ```\n\n");
+    }
+
+    #[test]
+    fn test_code_block_between_paragraphs_in_list() {
+        let markdown = "- First para.\n\n  ```\n  code\n  ```\n\n  After code.";
+        let typst = mark_to_typst(markdown).unwrap();
+        assert_eq!(
+            typst,
+            "- First para.\n\n  ```\ncode\n  ```\n\n  After code.\n\n"
+        );
     }
 
     #[test]
@@ -1937,7 +2042,7 @@ mod robustness_tests {
     fn test_list_with_multiple_paragraphs() {
         let markdown = "- First para\n\n  Second para in same item";
         let result = mark_to_typst(markdown).unwrap();
-        assert!(result.contains("First para"));
+        assert_eq!(result, "- First para\n\n  Second para in same item\n\n");
     }
 
     #[test]
@@ -2028,20 +2133,20 @@ mod robustness_tests {
         assert!(result.contains("- child"));
     }
 
-    // Code block handling (currently ignored but should not crash)
+    // Code block handling
 
     #[test]
-    fn test_fenced_code_block_ignored() {
+    fn test_fenced_code_block() {
         let markdown = "```rust\nfn main() {}\n```";
-        let result = mark_to_typst(markdown);
-        assert!(result.is_ok());
+        let result = mark_to_typst(markdown).unwrap();
+        assert_eq!(result, "```rust\nfn main() {}\n```\n\n");
     }
 
     #[test]
-    fn test_indented_code_block_ignored() {
+    fn test_indented_code_block() {
         let markdown = "    fn main() {}\n    println!()";
-        let result = mark_to_typst(markdown);
-        assert!(result.is_ok());
+        let result = mark_to_typst(markdown).unwrap();
+        assert_eq!(result, "```\nfn main() {}\nprintln!()\n```\n\n");
     }
 
     // Inline code edge cases
