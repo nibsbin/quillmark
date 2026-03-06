@@ -241,7 +241,7 @@ pub struct RenderOptions {
     pub assets: Option<serde_json::Value>,
     /// Optional quill name that overrides or fills in for the markdown's QUILL frontmatter field
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub quill_name: Option<String>,
+    pub quill_ref: Option<String>,
 }
 
 impl Default for RenderOptions {
@@ -249,7 +249,7 @@ impl Default for RenderOptions {
         RenderOptions {
             format: Some(OutputFormat::Pdf),
             assets: None,
-            quill_name: None,
+            quill_ref: None,
         }
     }
 }
@@ -370,7 +370,7 @@ mod tests {
         let options = RenderOptions {
             format: Some(OutputFormat::Pdf),
             assets: None,
-            quill_name: None,
+            quill_ref: None,
         };
         let json = serde_json::to_string(&options).unwrap();
         assert!(json.contains("\"format\":\"pdf\""));
@@ -379,20 +379,20 @@ mod tests {
         let options_from_json: RenderOptions = serde_json::from_str(r#"{"format":"svg"}"#).unwrap();
         assert_eq!(options_from_json.format, Some(OutputFormat::Svg));
 
-        // Test with quill_name
+        // Test with quill_ref
         let options_with_quill = RenderOptions {
             format: Some(OutputFormat::Pdf),
             assets: None,
-            quill_name: Some("test_quill".to_string()),
+            quill_ref: Some("test_quill".to_string()),
         };
         let json_with_quill = serde_json::to_string(&options_with_quill).unwrap();
-        assert!(json_with_quill.contains("\"quillName\":\"test_quill\""));
+        assert!(json_with_quill.contains("\"quillRef\":\"test_quill\""));
 
-        // Test deserialization with quill_name
+        // Test deserialization with quill_ref
         let options_from_json_with_quill: RenderOptions =
-            serde_json::from_str(r#"{"format":"pdf","quillName":"my_quill"}"#).unwrap();
+            serde_json::from_str(r#"{"format":"pdf","quillRef":"my_quill"}"#).unwrap();
         assert_eq!(
-            options_from_json_with_quill.quill_name,
+            options_from_json_with_quill.quill_ref,
             Some("my_quill".to_string())
         );
     }
