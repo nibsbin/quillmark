@@ -24,6 +24,8 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
 
 - [Quickstart Guide](getting-started/quickstart.md) - Get up and running in minutes (Python, Rust, JavaScript)
 - [Concepts](getting-started/concepts.md) - Understand Quillmark's design and pipeline
+- [Quill.yaml Reference](guides/quill-yaml-reference.md) - Complete YAML authoring reference
+- [Conditional Fields](guides/conditional-fields.md) - Show/hide fields with `visible_when`
 - [Rust API Documentation](https://docs.rs/quillmark/latest/quillmark/) - Complete Rust API reference
 - [GitHub Repository](https://github.com/nibsbin/quillmark)
 

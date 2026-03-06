@@ -185,6 +185,58 @@ classification: UNCLASSIFIED
 classification: SECRET//NOFORN
 ```
 
+## Indorsements (Cards)
+
+The `usaf_memo` quill supports routing endorsements as cards. Each endorsement adds an official response or forwarding action.
+
+### Endorsement Format Types
+
+The `format` field controls the style:
+
+| Format | Description | Shows from/for fields? |
+|--------|-------------|----------------------|
+| `standard` | Formal endorsement on same page | Yes |
+| `informal` | Less formal routing | No |
+| `separate_page` | Starts on a new page | Yes |
+
+The `from` and `for` addressing fields use [conditional visibility](../guides/conditional-fields.md) — they appear in the UI only for `standard` and `separate_page` formats, and are hidden for `informal`.
+
+### Endorsement Example
+
+```markdown
+~~~indorsement
+from: 123 FW/CC
+for: HQ/CC
+format: standard
+signature_block:
+  - JANE A. DOE, Colonel, USAF
+  - Commander
+~~~
+
+The 123rd Fighter Wing concurs with the attached memorandum.
+
+~~~indorsement
+format: informal
+signature_block:
+  - JOHN B. SMITH, Lt Col, USAF
+  - Deputy Commander
+~~~
+
+Forwarded for action.
+```
+
+### Endorsement Fields
+
+| Field | Type | Required | Default | Conditional |
+|-------|------|----------|---------|-------------|
+| `from` | string | no | `ORG/SYMBOL` | Visible when format is `standard` or `separate_page` |
+| `for` | string | no | `ORG/SYMBOL` | Visible when format is `standard` or `separate_page` |
+| `signature_block` | array | yes | — | Always visible |
+| `format` | string | no | `standard` | Always visible |
+| `attachments` | array | no | — | Always visible |
+| `cc` | array | no | — | Always visible |
+| `date` | string | no | — | Always visible |
+
 ## Markdown Body Guidelines
 
 The USAF memo quill has specific formatting conventions:
