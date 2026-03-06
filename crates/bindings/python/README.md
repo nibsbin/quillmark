@@ -49,7 +49,7 @@ The Python API provides opinionated visibility over the rendering workflow:
 1. **Load Quill** - Load template bundles from the filesystem
 2. **Parse Markdown** - Parse Markdown with YAML frontmatter into `ParsedDocument`
 3. **Inspect Quill** - Retrieve quill properties (metadata, field schemas, supported formats)
-4. **Create Workflow** - Build a rendering pipeline from quill or parsed document
+4. **Create Workflow** - Build a rendering pipeline. Note that the quill reference is optional to specify and can be inferred from the markdown content's frontmatter.
 5. **Render** - Generate output artifacts with configurable options
 
 ### Core Classes

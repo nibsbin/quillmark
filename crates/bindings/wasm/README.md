@@ -108,7 +108,7 @@ The main workflow for rendering documents:
 - `static parseMarkdown(markdown)` - Parse markdown into a ParsedDocument (Step 1)
 - `registerQuill(quillJson)` - Register a Quill template bundle from JSON (Step 2)
 - `getQuillInfo(name)` - Get shallow Quill metadata and configuration options (Step 3)
-- `render(parsedDoc, options)` - Render a ParsedDocument to final artifacts (Step 4)
+- `render(parsedDoc, options)` - Render a ParsedDocument to final artifacts. Note that the quill reference in `options` is optional to specify and can be inferred from the markdown content's frontmatter (Step 4)
 
 ### Utility Methods
 

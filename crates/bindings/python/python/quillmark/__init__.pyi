@@ -59,7 +59,7 @@ class Quillmark:
         """Register a quill template with the engine."""
     
     def workflow(self, quill_ref: str | Quill | ParsedDocument) -> Workflow:
-        """Load a workflow from a quill reference.
+        """Load a workflow from a quill reference. Note that the quill reference is optional to specify and can be inferred from the markdown content's frontmatter when passing a ParsedDocument.
 
         Accepts:
             - str: Quill name (must be registered)
