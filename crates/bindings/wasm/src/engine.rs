@@ -265,7 +265,7 @@ impl Quillmark {
     /// Render a ParsedDocument to final artifacts (PDF, SVG, TXT)
     ///
     /// Note that the quill reference is optional to specify and can be inferred from the markdown content's frontmatter.
-    /// Uses the Quill specified in options.quill_name if provided,
+    /// Uses the Quill specified in options.quill_ref if provided,
     /// otherwise infers it from the ParsedDocument's quill_ref field.
     #[wasm_bindgen]
     pub fn render(
@@ -274,7 +274,7 @@ impl Quillmark {
         opts: RenderOptions,
     ) -> Result<RenderResult, JsValue> {
         // Determine which quill ref to use (before consuming parsed)
-        let quill_ref_to_use = opts.quill_name.unwrap_or_else(|| parsed.quill_ref.clone());
+        let quill_ref_to_use = opts.quill_ref.unwrap_or_else(|| parsed.quill_ref.clone());
 
         // Reconstruct a core ParsedDocument from the WASM type
         // Convert JSON value to HashMap<String, QuillValue>

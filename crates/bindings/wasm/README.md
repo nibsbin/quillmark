@@ -107,7 +107,6 @@ The main workflow for rendering documents:
 
 - `static parseMarkdown(markdown)` - Parse markdown into a ParsedDocument (Step 1)
 - `registerQuill(quillJson)` - Register a Quill template bundle from JSON (Step 2)
-- `getQuillInfo(name)` - Get shallow Quill metadata and configuration options (Step 3)
 - `render(parsedDoc, options)` - Render a ParsedDocument to final artifacts. Note that the quill reference in `options` is optional to specify and can be inferred from the markdown content's frontmatter (Step 4)
 
 ### Utility Methods
@@ -115,17 +114,19 @@ The main workflow for rendering documents:
 Additional methods for managing the engine and debugging:
 
 - `new Quillmark()` - Create a new engine instance
-- `processPlate(quillName, markdown)` - Debug helper that processes markdown through the template engine and returns the intermediate template source code (e.g., Typst, LaTeX) without compiling to final artifacts. Useful for inspecting template output during development.
+- `renderQuill(RenderOptions, markdown)` - Load markdown and map it onto an internally fetched Quill, resolving to `RenderResult` including output format, the artifact byte slice buffer, and time to render
+- `processPlate(quillRef, markdown)` - Debug helper that processes markdown through the template engine and returns the intermediate template source code (e.g., Typst, LaTeX) without compiling to final artifacts. Useful for inspecting template output during development.
+- `fetchQuillInfo(quillRef)` - Fetches metadata and schema about an available Quill from the configured registry without loading the full filesystem or rendering context.
 - `listQuills()` - List all registered Quill names
 - `unregisterQuill(name)` - Unregister a Quill to free memory
 
 ### Render Options
 
 ```typescript
-{
-  format?: 'pdf' | 'svg' | 'txt',  // Output format (default: 'pdf')
-  assets?: Record<string, Uint8Array>,  // Additional assets to inject as plain object (not Map)
-  quillName?: string  // Override quillRef from ParsedDocument
+type RenderOptions = {
+  format?: 'pdf' | 'svg' | 'txt'
+  quillRef?: string  // Override quillRef from ParsedDocument
+  assets?: Record<string, Uint8Array | number[]> 
 }
 ```
 

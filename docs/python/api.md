@@ -158,8 +158,8 @@ class Workflow:
         """Supported output formats."""
 
     @property
-    def quill_name(self) -> str:
-        """Quill name."""
+    def quill_ref(self) -> str:
+        """Quill reference."""
 
     # Dynamic Asset Methods
     def add_asset(self, filename: str, contents: bytes) -> None:
@@ -359,7 +359,7 @@ class ParsedDocument:
     def fields(self) -> dict[str, Any]:
         """All frontmatter fields (includes BODY and CARDS)."""
 
-    def quill_name(self) -> str:
+    def quill_ref(self) -> str:
         """Get QUILL field value from the document."""
 ```
 

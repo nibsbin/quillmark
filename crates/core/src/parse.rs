@@ -166,7 +166,7 @@ struct MetadataBlock {
     end: usize,                            // Position after closing "---\n"
     yaml_value: Option<serde_json::Value>, // Parsed YAML as JSON (None if empty or parse failed)
     tag: Option<String>,                   // Field name from CARD key
-    quill_name: Option<String>,            // Quill name from QUILL key
+    quill_ref: Option<String>,             // Quill reference from QUILL key
 }
 
 /// Validate tag name follows pattern [a-z_][a-z0-9_]*
@@ -364,7 +364,7 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                 // Uses configured budget to limit nesting depth (prevents stack overflow)
                 // Normalize: treat whitespace-only content as empty frontmatter
                 let content = content.trim();
-                let (tag, quill_name, yaml_value) = if !content.is_empty() {
+                let (tag, quill_ref, yaml_value) = if !content.is_empty() {
                     // Try to parse the YAML with security budgets
                     match serde_saphyr::from_str_with_options::<serde_json::Value>(
                         content,
@@ -476,7 +476,7 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                     end: abs_closing_pos + closing_len, // After closing delimiter
                     yaml_value,
                     tag,
-                    quill_name,
+                    quill_ref,
                 });
 
                 // Check card count limit to prevent memory exhaustion
@@ -532,22 +532,22 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
     // Collect all card items into unified CARDS array
     let mut cards_array: Vec<serde_json::Value> = Vec::new();
     let mut global_frontmatter_index: Option<usize> = None;
-    let mut quill_name: Option<String> = None;
+    let mut quill_ref: Option<String> = None;
 
     // First pass: identify global frontmatter, quill directive, and validate
     for (idx, block) in blocks.iter().enumerate() {
         if idx == 0 {
             // Top-level frontmatter: can have QUILL or neither (not considered a card)
-            if let Some(ref name) = block.quill_name {
-                quill_name = Some(name.clone());
+            if let Some(ref name) = block.quill_ref {
+                quill_ref = Some(name.clone());
             }
             // If it has neither QUILL nor CARD, it's global frontmatter
-            if block.tag.is_none() && block.quill_name.is_none() {
+            if block.tag.is_none() && block.quill_ref.is_none() {
                 global_frontmatter_index = Some(idx);
             }
         } else {
             // Inline blocks (idx > 0): MUST have CARD, cannot have QUILL
-            if block.quill_name.is_some() {
+            if block.quill_ref.is_some() {
                 return Err(crate::error::ParseError::InvalidStructure("QUILL directive can only appear in the top-level frontmatter, not in inline blocks. Use CARD instead.".to_string()));
             }
             if block.tag.is_none() {
@@ -588,7 +588,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
 
     // Process blocks with quill directives
     for block in &blocks {
-        if block.quill_name.is_some() {
+        if block.quill_ref.is_some() {
             // Quill directive blocks can have YAML content (becomes part of frontmatter)
             if let Some(ref json_val) = block.yaml_value {
                 let json_fields: HashMap<String, serde_json::Value> = match json_val {
@@ -677,8 +677,8 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
     // Body ends at the first card block or EOF
     let first_non_card_block_idx = blocks
         .iter()
-        .position(|b| b.tag.is_none() && b.quill_name.is_none())
-        .or_else(|| blocks.iter().position(|b| b.quill_name.is_some()));
+        .position(|b| b.tag.is_none() && b.quill_ref.is_none())
+        .or_else(|| blocks.iter().position(|b| b.quill_ref.is_some()));
 
     let (body_start, body_end) = if let Some(idx) = first_non_card_block_idx {
         // Body starts after the first non-card block (global frontmatter or quill)
@@ -725,7 +725,7 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
         });
     }
 
-    let quill_tag = quill_name.unwrap_or_else(|| "__default__".to_string());
+    let quill_tag = quill_ref.unwrap_or_else(|| "__default__".to_string());
     let quill_ref = QuillReference::from_str(&quill_tag).map_err(|e| {
         ParseError::InvalidStructure(format!("Invalid QUILL tag '{}': {}", quill_tag, e))
     })?;
@@ -1705,7 +1705,7 @@ QUILL: second
     }
 
     #[test]
-    fn test_invalid_quill_name() {
+    fn test_invalid_quill_ref() {
         let markdown = r#"---
 QUILL: Invalid-Name
 ---"#;
@@ -2605,7 +2605,7 @@ Body content."#;
     }
 
     #[test]
-    fn test_invalid_quill_name_uppercase() {
+    fn test_invalid_quill_ref_uppercase() {
         let markdown = "---\nQUILL: MyQuill\n---\n\nBody.";
         let result = decompose(markdown);
         assert!(result.is_err());
