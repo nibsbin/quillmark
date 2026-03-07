@@ -1,6 +1,6 @@
 {
   "name": "@quillmark/registry",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Unified API for discovering, loading, packaging, and registering Quills with the WASM engine",
   "main": "./dist/index.js",
   "publishConfig": {
