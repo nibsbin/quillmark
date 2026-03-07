@@ -8,7 +8,7 @@ Unified API for discovering, loading, and registering Quills with the Quillmark 
 npm install @quillmark/registry
 ```
 
-**Peer dependency:** Requires `@quillmark/wasm@^0.36.0` — you provide the engine instance.
+**Peer dependency:** Requires `@quillmark/wasm@>=0.39.0` — you provide the engine instance.
 
 ## Quick Start
 
@@ -55,7 +55,7 @@ const registry = new QuillRegistry({ source, engine });
 
 | Method | Description |
 |---|---|
-| `resolve(name, version?)` | Resolves a quill by name. Fetches from source, caches, and registers with the engine. Returns a `QuillBundle`. |
+| `resolve(ref)` | Resolves a quill reference (`name` or `name@version`). Fetches from source, caches, and registers with the engine. Returns a `QuillBundle`. |
 | `preload(names)` | Resolves multiple quills in parallel. Fail-fast — rejects immediately if any quill fails. |
 | `getManifest()` | Returns the full `QuillManifest` from the source. |
 | `getAvailableQuills()` | Returns `QuillMetadata[]` for all quills in the source. |
@@ -77,7 +77,7 @@ Zip URLs use the format `{baseUrl}{name}@{version}.zip?v={version}` for cache-bu
 
 ### `FileSystemSource`
 
-Node.js-only source that reads quill directories from disk. Each subdirectory must contain a `Quill.yaml` with `name` and `version` fields.
+Node.js-only source that reads quill directories from disk. Each version directory must contain a `Quill.yaml` file; name and version are derived from the directory structure.
 
 ```ts
 const source = new FileSystemSource('/path/to/quills');
@@ -126,7 +126,7 @@ try {
 
 ## Version Resolution
 
-When a version is provided, the registry resolves an exact match. When omitted, it resolves to the latest available. The registry checks the engine first (via `resolveQuill()`) to avoid redundant fetches, then checks its in-memory cache, and only hits the source if needed.
+Use `name@version` to resolve an exact version (for example, `usaf_memo@1.0.0`). When version is omitted (for example, `usaf_memo`), it resolves to the latest available. The registry checks the engine first (via `resolveQuill()`) to avoid redundant fetches, then checks its in-memory cache, and only hits the source if needed.
 
 ## License
 
