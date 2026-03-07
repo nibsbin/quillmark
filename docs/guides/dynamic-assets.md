@@ -20,10 +20,11 @@ This is useful for:
 ### Single Asset
 
 ```python
-from quillmark import Quillmark, ParsedDocument
+from quillmark import Quillmark, Quill, ParsedDocument
 
 engine = Quillmark()
-workflow = engine.workflow("my-quill")
+quill = Quill.from_path("./my-quill")
+workflow = engine.workflow(quill)
 
 # Load image data
 with open("logo.png", "rb") as f:
@@ -91,12 +92,13 @@ print(workflow.dynamic_font_names())  # ['CustomFont-Bold.ttf']
 ## Complete Example
 
 ```python
-from quillmark import Quillmark, ParsedDocument, OutputFormat
+from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat
 
 def render_invoice(customer_name: str, logo_path: str):
     # Setup
     engine = Quillmark()
-    workflow = engine.workflow("invoice")
+    quill = Quill.from_path("./invoice")
+    workflow = engine.workflow(quill)
 
     # Add customer logo dynamically (accessible as assets/DYNAMIC_ASSET__customer-logo.png)
     with open(logo_path, "rb") as f:

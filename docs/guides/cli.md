@@ -4,14 +4,8 @@ Command-line interface for Quillmark rendering.
 
 ## Installation
 
-The CLI is available when installing Quillmark:
-
 ```bash
-# Using uv
-uv tool install quillmark
-
-# Using pip
-pip install quillmark
+cargo install quillmark-cli
 ```
 
 ## Commands
@@ -21,41 +15,40 @@ pip install quillmark
 Render markdown documents to PDF, SVG, or text. Optionally emit compiled JSON data.
 
 ```bash
-quillmark render [OPTIONS] <INPUT>
+quillmark render [OPTIONS] [MARKDOWN_FILE]
 ```
 
 **Arguments:**
 
-- `<INPUT>`: Markdown file path or `-` for stdin
+- `[MARKDOWN_FILE]`: Path to markdown file with YAML frontmatter (optional — when omitted, the quill's example content is used, which requires `--quill`)
 
 **Options:**
 
-- `--quill <PATH>`: Path to quill directory (required unless using `--quill-name`)
-- `--quill-name <NAME>`: Use registered quill by name
-- `--output <PATH>` / `-o <PATH>`: Output file path (default: stdout)
-- `--format <FORMAT>` / `-f <FORMAT>`: Output format: `pdf`, `svg`, `txt`
-- `--output-data <PATH>`: Write compiled JSON data (after coercion/defaults/transform_fields) to a file
-- `--verbose` / `-v`: Enable verbose logging
-- `--quiet` / `-q`: Suppress non-error output
-- `--stdout`: Force output to stdout
+- `-q <PATH>` / `--quill <PATH>`: Path to quill directory (optional if the markdown frontmatter contains a `QUILL` field)
+- `-o <PATH>` / `--output <PATH>`: Output file path (default: derived from input filename, e.g. `input.pdf`)
+- `-f <FORMAT>` / `--format <FORMAT>`: Output format: `pdf`, `svg`, `txt` (default: `pdf`)
+- `--output-data <DATA_FILE>`: Write compiled JSON data (after coercion/defaults/transform_fields) to a file
+- `-v` / `--verbose`: Show detailed processing information
+- `--quiet`: Suppress all non-error output
+- `--stdout`: Write output to stdout instead of file
 
 **Examples:**
 
 ```bash
 # Render to PDF
-quillmark render --quill ./invoice-quill input.md -o output.pdf
+quillmark render -q ./invoice-quill input.md -o output.pdf
 
 # Render to SVG
-quillmark render --quill ./my-quill input.md -f svg -o output.svg
+quillmark render -q ./my-quill input.md -f svg -o output.svg
 
 # Emit compiled data for inspection
-quillmark render --quill ./my-quill input.md --output-data data.json
-
-# Render from stdin
-cat input.md | quillmark render --quill ./my-quill -o output.pdf
+quillmark render -q ./my-quill input.md --output-data data.json
 
 # Output to stdout
-quillmark render --quill ./my-quill input.md --stdout > output.pdf
+quillmark render -q ./my-quill input.md --stdout > output.pdf
+
+# Render the quill's built-in example
+quillmark render -q ./my-quill
 ```
 
 ### schema
@@ -63,16 +56,16 @@ quillmark render --quill ./my-quill input.md --stdout > output.pdf
 Extract JSON schema from a quill's field definitions.
 
 ```bash
-quillmark schema [OPTIONS] <QUILL>
+quillmark schema [OPTIONS] <QUILL_PATH>
 ```
 
 **Arguments:**
 
-- `<QUILL>`: Path to quill directory
+- `<QUILL_PATH>`: Path to quill directory
 
 **Options:**
 
-- `--output <PATH>` / `-o <PATH>`: Output file (default: stdout)
+- `-o <FILE>` / `--output <FILE>`: Output file (default: stdout)
 
 **Examples:**
 
@@ -92,17 +85,16 @@ quillmark schema ./my-quill | jq '.properties.title'
 Validate quill configuration and structure.
 
 ```bash
-quillmark validate [OPTIONS] <QUILL>
+quillmark validate [OPTIONS] <QUILL_PATH>
 ```
 
 **Arguments:**
 
-- `<QUILL>`: Path to quill directory
+- `<QUILL_PATH>`: Path to quill directory
 
 **Options:**
 
-- `--verbose` / `-v`: Show detailed validation info
-- `--quiet` / `-q`: Only show errors
+- `-v` / `--verbose`: Show verbose output with all validation details
 
 **Examples:**
 
@@ -112,18 +104,41 @@ quillmark validate ./my-quill
 
 # Verbose validation
 quillmark validate ./my-quill -v
+```
 
-# Quiet mode (exit code only)
-quillmark validate ./my-quill -q && echo "Valid"
+### info
+
+Display metadata and information about a quill.
+
+```bash
+quillmark info [OPTIONS] <QUILL_PATH>
+```
+
+**Arguments:**
+
+- `<QUILL_PATH>`: Path to quill directory
+
+**Options:**
+
+- `--json`: Output as machine-readable JSON instead of human-readable format
+
+**Examples:**
+
+```bash
+# Display quill info
+quillmark info ./my-quill
+
+# Output as JSON
+quillmark info ./my-quill --json
+
+# Use with other tools
+quillmark info ./my-quill --json | jq '.name'
 ```
 
 ## Exit Codes
 
 - `0`: Success
-- `1`: General error (invalid arguments, file not found)
-- `2`: Parse error (invalid YAML/markdown)
-- `3`: Template error (template composition failed)
-- `4`: Compilation error (backend compilation failed)
+- `1`: Error (invalid arguments, file not found, parse error, compilation error, etc.)
 
 ## Common Workflows
 
@@ -135,7 +150,7 @@ quillmark validate ./my-quill -q && echo "Valid"
 
 for file in inputs/*.md; do
     output="outputs/$(basename "$file" .md).pdf"
-    quillmark render --quill ./my-quill "$file" -o "$output"
+    quillmark render -q ./my-quill "$file" -o "$output"
 done
 ```
 
@@ -158,9 +173,9 @@ echo "✓ All quills valid"
 
 ```bash
 # Generate multiple formats
-quillmark render --quill ./my-quill input.md -f pdf -o output.pdf
-quillmark render --quill ./my-quill input.md -f svg -o output.svg
-quillmark render --quill ./my-quill input.md -f txt -o output.txt
+quillmark render -q ./my-quill input.md -f pdf -o output.pdf
+quillmark render -q ./my-quill input.md -f svg -o output.svg
+quillmark render -q ./my-quill input.md -f txt -o output.txt
 ```
 
 ## Environment Variables
@@ -170,7 +185,7 @@ quillmark render --quill ./my-quill input.md -f txt -o output.txt
 
 ## Notes
 
-- When `--output` is omitted, output goes to stdout
+- When `--output` is omitted, the output filename is derived from the input filename (e.g., `input.md` → `input.pdf`)
+- Use `--stdout` to send output to stdout instead of a file
 - Use `--` to separate options from positional arguments if needed
-- Binary output (PDF, etc.) to stdout requires `--stdout` or redirection
 - Verbose mode shows template composition and compilation details

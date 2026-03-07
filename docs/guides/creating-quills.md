@@ -55,12 +55,12 @@ fields:
 - `name` - Unique identifier for your Quill
 - `backend` - Backend to use (`"typst"` or `"acroform"`)
 - `description` - Human-readable description
+- `version` - Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`)
 
 ### Optional Fields
 
 - `plate_file` - Path to plate template (defaults to auto-generated plate)
 - `example_file` - Path to example markdown file (defaults to `example.md` if present)
-- `version` - Semantic version of your Quill
 - `author` - Creator of the Quill
 
 ### Field Schemas
@@ -96,9 +96,10 @@ Supported `type` values:
 - `number`
 - `boolean`
 - `array`
-- `dict`
+- `object`
 - `date`
 - `datetime`
+- `markdown`
 
 ### UI Configuration
 
@@ -306,22 +307,16 @@ quill = Quill.from_path("path/to/my-quill")
 engine.register_quill(quill)
 ```
 
-### From JSON
+### From a Quill Object
+
+You can also pass a `Quill` object directly to `workflow()` without registering it first:
 
 ```python
-import json
 from quillmark import Quillmark, Quill
 
-quill_data = {
-    "files": {
-        "Quill.yaml": {"contents": "..."},
-        "plate.typ": {"contents": "..."}
-    }
-}
-
-quill = Quill.from_json(json.dumps(quill_data))
+quill = Quill.from_path("path/to/my-quill")
 engine = Quillmark()
-engine.register_quill(quill)
+workflow = engine.workflow(quill)
 ```
 
 ## Best Practices

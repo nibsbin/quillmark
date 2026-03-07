@@ -202,6 +202,27 @@ author: Jane Doe
 
 If no `QUILL` key is specified, Quillmark uses the `__default__` template provided by the backend (if available).
 
+#### Version Selectors
+
+You can pin a specific version of a Quill template using `@version` syntax:
+
+```markdown
+---
+QUILL: my-template@2.1
+title: Document Title
+---
+```
+
+Supported version selectors:
+
+| Syntax | Meaning |
+|--------|---------|
+| `template` | Latest version (default) |
+| `template@latest` | Latest version (explicit) |
+| `template@2` | Latest 2.x.x |
+| `template@2.1` | Latest 2.1.x |
+| `template@2.1.0` | Exact version 2.1.0 |
+
 ### Rules for Extended Metadata
 
 - **CARD key**: Creates card blocks - all blocks with CARD keys are collected into a CARDS array
@@ -291,4 +312,4 @@ Quillmark handles both Unix (`\n`) and Windows (`\r\n`) line endings automatical
 
 - [Create your own Quill](creating-quills.md)
 - [Learn about the Typst backend](typst-backend.md)
-- [Explore template filters](creating-quills.md#available-filters)
+- [Quill.yaml Reference](quill-yaml-reference.md)
