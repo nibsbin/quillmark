@@ -74,11 +74,10 @@ interface QuillSource {
 
 ```ts
 /**
- * Opaque to the registry. Defined and validated by @quillmark/wasm.
- * In practice: the nested file-tree object expected by `registerQuill()`,
- * with files under a `files` object and each file as `{ contents: ... }`.
- * Built by FileSystemSource/HttpSource by reading bytes, then converting
- * to the engine shape (`string` for text files, `number[]` for binary files).
+ * Opaque to registry callers. Shape is defined and validated by @quillmark/wasm.
+ * The registry passes this payload through to `registerQuill()` without inspecting it.
+ * Current built-in sources produce the nested engine file-tree format (`{ files: ... }`)
+ * where file nodes contain `{ contents: string | number[] }`.
  */
 type QuillData = unknown;
 ```
@@ -102,8 +101,8 @@ interface QuillBundle {
 /** Info returned by the engine after registering or resolving a quill. */
 interface QuillInfo {
 	name: string;
-	backend: string;
-	metadata: Record<string, unknown>;
+	backend: string; // Rendering backend (for example, "typst")
+	metadata: Record<string, unknown>; // Engine-provided metadata; includes version
 	example?: string;
 	schema: Record<string, unknown>;
 	defaults: Record<string, unknown>;
@@ -111,6 +110,8 @@ interface QuillInfo {
 	supportedFormats: string[];
 }
 ```
+
+Version is exposed by the engine in `metadata.version`.
 
 ### QuillRegistry
 

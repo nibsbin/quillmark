@@ -56,7 +56,7 @@ const registry = new QuillRegistry({ source, engine });
 | Method | Description |
 |---|---|
 | `resolve(ref)` | Resolves a quill reference (`name` or `name@version`). Fetches from source, caches, and registers with the engine. Returns a `QuillBundle`. |
-| `preload(names)` | Resolves multiple quills in parallel. Fail-fast — rejects immediately if any quill fails. |
+| `preload(refs)` | Resolves multiple quill references in parallel. Fail-fast — rejects immediately if any quill fails. |
 | `getManifest()` | Returns the full `QuillManifest` from the source. |
 | `getAvailableQuills()` | Returns `QuillMetadata[]` for all quills in the source. |
 | `isLoaded(name)` | Returns `true` if the quill is registered in the engine. |
@@ -126,7 +126,7 @@ try {
 
 ## Version Resolution
 
-Use `name@version` to resolve an exact version (for example, `usaf_memo@1.0.0`). When version is omitted (for example, `usaf_memo`), it resolves to the latest available. The registry checks the engine first (via `resolveQuill()`) to avoid redundant fetches, then checks its in-memory cache, and only hits the source if needed.
+The `ref` parameter accepts either `name` (for example, `usaf_memo`) or `name@version` (for example, `usaf_memo@1.0.0`). When version is omitted, it resolves to the latest available. The registry checks the engine first (via `resolveQuill()`) to avoid redundant fetches, then checks its in-memory cache, and only hits the source if needed.
 
 ## License
 
