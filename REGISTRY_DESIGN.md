@@ -6,9 +6,8 @@
 
 | Package           | Version   | Role                                                                                                                                                                                           |
 | ----------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@quillmark/wasm` | `^0.36.0` | Peer dependency. Consumer provides an engine instance satisfying the `QuillmarkEngine` interface. The registry calls `registerQuill()`, `resolveQuill()`, and `listQuills()` on it.             |
+| `@quillmark/wasm` | `>=0.39.0` | Peer dependency. Consumer provides an engine instance satisfying the `QuillmarkEngine` interface. The registry calls `registerQuill()`, `resolveQuill()`, and `listQuills()` on it.             |
 | `jszip`           | `^3.10.1` | `HttpSource`: unzips fetched quill archives. `FileSystemSource.packageForHttp()`: zips quill directories for static hosting.                                                                   |
-| `yaml`            | `^2.8.2`  | `FileSystemSource`: parses `Quill.yaml` files in quill directories to extract metadata (name, version, description).                                                                           |
 
 `@quillmark/wasm` is a **peer dependency** — the consumer provides the engine instance. The registry never imports or instantiates `Quillmark` itself; it only calls methods on the instance it receives.
 
@@ -75,11 +74,10 @@ interface QuillSource {
 
 ```ts
 /**
- * Opaque to the registry. Defined and validated by @quillmark/wasm.
- * In practice: a Record<string, Uint8Array> mapping relative file paths
- * to their binary contents (template files, assets, fonts, Typst packages).
- * Built by FileSystemSource via recursive directory read, or by HttpSource
- * via zip extraction.
+ * Opaque to registry callers. Shape is defined and validated by @quillmark/wasm.
+ * The registry passes this payload through to `registerQuill()` without inspecting it.
+ * Current built-in sources produce the nested engine file-tree format (`{ files: ... }`)
+ * where file nodes contain `{ contents: string | number[] }`.
  */
 type QuillData = unknown;
 ```
@@ -91,8 +89,7 @@ interface QuillBundle {
 	name: string;
 	version: string;
 	/** Payload passed to engine.registerQuill().
-	 *  In practice: Record<string, Uint8Array> — a map of relative file paths
-	 *  to their binary contents (from filesystem read or zip extraction). */
+	 *  In practice: nested engine file-tree format (`{ files: ... }`). */
 	data: QuillData;
 	metadata: QuillMetadata;
 }
@@ -104,9 +101,17 @@ interface QuillBundle {
 /** Info returned by the engine after registering or resolving a quill. */
 interface QuillInfo {
 	name: string;
-	version: string;
+	backend: string; // Rendering backend (for example, "typst")
+	metadata: Record<string, unknown>; // Engine-provided metadata; includes version
+	example?: string;
+	schema: Record<string, unknown>;
+	defaults: Record<string, unknown>;
+	examples: Record<string, unknown[]>;
+	supportedFormats: string[];
 }
 ```
+
+Version is exposed by the engine in `metadata.version`.
 
 ### QuillRegistry
 
@@ -126,10 +131,10 @@ class QuillRegistry {
 	getAvailableQuills(): Promise<QuillMetadata[]>;
 
 	// Loading — resolves from source, caches, and registers with engine
-	resolve(name: string, version?: string): Promise<QuillBundle>;
+	resolve(ref: string): Promise<QuillBundle>;
 
 	// Convenience
-	preload(names: string[]): Promise<void>;
+	preload(refs: string[]): Promise<void>;
 
 	// State — delegates to engine.resolveQuill()
 	isLoaded(name: string): boolean;
@@ -171,7 +176,7 @@ quillsDir/
       template.typ
 ```
 
-Each subdirectory of `quillsDir` is a quill name; subdirectories within are version directories. Each version directory must contain a `Quill.yaml` with `name` and `version` fields that match their respective directory names.
+Each subdirectory of `quillsDir` is a quill name; subdirectories within are version directories. Each version directory must contain a `Quill.yaml` file. Name/version are derived from directory structure.
 
 When `loadQuill()` is called without a version, the source resolves to the latest version by semver-sorting the version directories.
 
@@ -257,13 +262,13 @@ Future: version ranges, pinning, deprecation warnings — all live in the regist
 | Current location                     | Moves to                            |
 | ------------------------------------ | ----------------------------------- |
 | `web-utils.loaders.fromZip()`        | `HttpSource` internals              |
-| `Quill.yaml` parsing in build script | `FileSystemSource` (via `yaml` pkg) |
+| `Quill.yaml` existence checks in build script | `FileSystemSource` |
 | Quill versioning via single directory| `FileSystemSource` versioned layout |
 | Manifest generation in build script  | `FileSystemSource.getManifest()`    |
 | Zip packaging in build script        | `FileSystemSource.packageForHttp()` |
 | `preloadQuills()` in client service  | `registry.preload()`                |
 | `loadQuillZip()` in server service   | `FileSystemSource.loadQuill()`      |
-| Version string in Quill.yaml         | Registry-managed metadata           |
+| Name/version resolution              | Directory layout + registry logic   |
 | `@quillmark/web-utils` dependency    | Removed entirely                    |
 
 ## What Stays Outside the Registry
