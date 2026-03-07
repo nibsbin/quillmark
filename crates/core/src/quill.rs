@@ -40,6 +40,8 @@ pub mod ui_key {
     pub const ORDER: &str = "order";
     /// Whether the field or specific component is hide-body (no body editor)
     pub const HIDE_BODY: &str = "hide_body";
+    /// Conditional visibility rules: field → accepted values
+    pub const VISIBLE_WHEN: &str = "visible_when";
 }
 
 /// UI-specific metadata for field rendering
@@ -50,6 +52,11 @@ pub struct UiFieldSchema {
     pub group: Option<String>,
     /// Order of the field in the UI (automatically generated based on field position in Quill.yaml)
     pub order: Option<i32>,
+    /// Conditional visibility: map of sibling field name → accepted values.
+    /// The field is visible when ALL conditions match (AND across keys, OR within each key's values).
+    /// Example: `visible_when: { format: [standard, separate_page] }` means show this field
+    /// only when the sibling `format` field has value "standard" or "separate_page".
+    pub visible_when: Option<HashMap<String, Vec<String>>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -624,6 +631,7 @@ impl QuillConfig {
                         schema.ui = Some(UiFieldSchema {
                             group: None,
                             order: Some(order),
+                            visible_when: None,
                         });
                     } else if let Some(ui) = &mut schema.ui {
                         // Only set if not already set

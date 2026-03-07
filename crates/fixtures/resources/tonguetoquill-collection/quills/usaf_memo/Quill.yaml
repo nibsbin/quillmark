@@ -171,6 +171,8 @@ cards:
         default: ORG/SYMBOL
         ui:
           group: Addressing
+          visible_when:
+            format: [standard, separate_page]
         description: Office symbol or Rank Name of the endorsing official (e.g., 'ORG/SYMBOL').
 
       for:
@@ -179,6 +181,8 @@ cards:
         default: ORG/SYMBOL
         ui:
           group: Addressing
+          visible_when:
+            format: [standard, separate_page]
         description: Office symbol or organization receiving the endorsed memo.
 
       signature_block:

@@ -115,7 +115,32 @@ fields:
 ```
 
 Supported UI properties:
+
 - `group` - Group name for organizing fields in the UI
+- `visible_when` - Conditionally show/hide based on sibling field values
+
+#### Conditional Visibility
+
+Use `visible_when` to show fields only when they're relevant:
+
+```yaml
+fields:
+  format:
+    type: string
+    enum: [standard, informal]
+    default: standard
+
+  from:
+    type: string
+    ui:
+      group: Addressing
+      visible_when:
+        format: [standard]
+```
+
+The `from` field only appears when `format` is `"standard"`. See the [Conditional Fields](conditional-fields.md) guide for the full specification.
+
+For a complete reference of all YAML properties, see the [Quill.yaml Reference](quill-yaml-reference.md).
 
 ## Plate Templates
 
@@ -309,5 +334,7 @@ engine.register_quill(quill)
 
 ## Next Steps
 
+- [Quill.yaml Reference](quill-yaml-reference.md) - Complete YAML property reference
+- [Conditional Fields](conditional-fields.md) - Show/hide fields with `visible_when`
 - [Learn about Quill Markdown syntax](quill-markdown.md)
 - [Explore the Typst backend](typst-backend.md)
