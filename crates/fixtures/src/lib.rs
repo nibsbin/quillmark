@@ -6,14 +6,36 @@ pub fn resource_path(name: &str) -> PathBuf {
     Path::new(manifest_dir).join("resources").join(name)
 }
 
-/// Get the path to tonguetoquill-collection quills
+/// Get the path to a quill fixture in `resources/quills/`.
+///
+/// If the quill directory contains versioned subdirectories (e.g. `0.1.0/`),
+/// the latest version directory is returned automatically.
 pub fn quills_path(name: &str) -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
-    Path::new(manifest_dir)
+    let quill_dir = Path::new(manifest_dir)
         .join("resources")
-        .join("tonguetoquill-collection")
         .join("quills")
-        .join(name)
+        .join(name);
+
+    // If Quill.yaml lives directly in the directory, return as-is.
+    if quill_dir.join("Quill.yaml").exists() {
+        return quill_dir;
+    }
+
+    // Otherwise look for versioned subdirectories and pick the latest.
+    if let Ok(entries) = std::fs::read_dir(&quill_dir) {
+        let mut versions: Vec<String> = entries
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .filter_map(|e| e.file_name().into_string().ok())
+            .collect();
+        versions.sort();
+        if let Some(latest) = versions.last() {
+            return quill_dir.join(latest);
+        }
+    }
+
+    quill_dir
 }
 
 /// Get the example output directory path
