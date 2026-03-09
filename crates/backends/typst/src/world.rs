@@ -685,9 +685,13 @@ name = "minimal-package"
         let quill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()
             .unwrap()
-            .join("quillmark-fixtures")
+            .parent()
+            .unwrap()
+            .join("fixtures")
             .join("resources")
-            .join("usaf_memo");
+            .join("quills")
+            .join("usaf_memo")
+            .join("0.1.0");
 
         if !quill_path.exists() {
             // Skip test if fixture not found

@@ -122,8 +122,8 @@ quillmark render [OPTIONS] <MARKDOWN_FILE>
 
 ```bash
 quillmark render \
-  quillmark-fixtures/resources/tonguetoquill-collection/quills/usaf_memo/usaf_memo.md \
-  --quill quillmark-fixtures/resources/tonguetoquill-collection/quills/usaf_memo \
+  crates/fixtures/resources/quills/usaf_memo/0.1.0/example.md \
+  --quill crates/fixtures/resources/quills/usaf_memo/0.1.0 \
   -o usaf_memo_output.pdf
 ```
 
