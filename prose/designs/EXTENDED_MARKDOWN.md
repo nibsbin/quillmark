@@ -80,6 +80,7 @@ Quillmark supports a specific subset of CommonMark to ensure security and consis
     *   **Strict Fence Rules:** Only exactly three backticks (```) are recognized as code fence delimiters.
     *   Tildes (`~~~`) are NOT treated as code fences.
     *   Four or more backticks (````) are NOT treated as code fences.
+*   **Tables:** GFM-style pipe tables with optional column alignment.
 
 ### Unsupported Features
 These features are intentionally ignored or rendered as plain text:
@@ -87,7 +88,7 @@ These features are intentionally ignored or rendered as plain text:
 *   **Thematic Breaks:** `***`, `___`, `---` (ignored).
 *   **Images:** `![alt](src)` (ignored).
 *   **HTML:** Raw HTML tags are ignored, except for comments.
-*   **Complex formatting:** Tables, Math, Footnotes, Blockquotes.
+*   **Complex formatting:** Math, Footnotes, Blockquotes.
 
 ### HTML Comments
 Standard `<!-- comments -->` are supported as non-rendering content. Nested comments are handled safely.

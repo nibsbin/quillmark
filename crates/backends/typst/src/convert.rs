@@ -103,6 +103,15 @@ enum StrongKind {
     Underline, // Source was __...__
 }
 
+fn typst_alignment(align: &pulldown_cmark::Alignment) -> &'static str {
+    match align {
+        pulldown_cmark::Alignment::None => "auto",
+        pulldown_cmark::Alignment::Left => "left",
+        pulldown_cmark::Alignment::Center => "center",
+        pulldown_cmark::Alignment::Right => "right",
+    }
+}
+
 /// Converts an iterator of markdown events to Typst markup
 fn push_typst<'a, I>(output: &mut String, source: &str, iter: I) -> Result<(), ConversionError>
 where
@@ -114,6 +123,7 @@ where
     let mut in_list_item = false; // Track if we're inside a list item
     let mut list_item_first_block = false; // Track if we're on the first block of a list item
     let mut in_code_block = false; // Track if we're inside a code block
+    let mut table_alignments: Vec<pulldown_cmark::Alignment> = Vec::new(); // Column alignments for current table
     let mut depth = 0; // Track nesting depth for DoS prevention
     let iter = iter.peekable();
 
@@ -251,6 +261,41 @@ where
                         output.push(' ');
                         end_newline = false;
                     }
+                    Tag::Table(alignments) => {
+                        if !end_newline {
+                            output.push('\n');
+                        }
+                        let col_count = alignments.len();
+                        output.push_str(&format!("#table(\n  columns: {},\n", col_count));
+                        // Emit align array if any column has non-default alignment
+                        if alignments
+                            .iter()
+                            .any(|a| !matches!(a, pulldown_cmark::Alignment::None))
+                        {
+                            output.push_str("  align: (");
+                            for (i, align) in alignments.iter().enumerate() {
+                                if i > 0 {
+                                    output.push_str(", ");
+                                }
+                                output.push_str(typst_alignment(align));
+                            }
+                            output.push_str("),\n");
+                        }
+                        table_alignments = alignments;
+                        end_newline = false;
+                    }
+                    Tag::TableHead => {
+                        output.push_str("  table.header(");
+                        end_newline = false;
+                    }
+                    Tag::TableRow => {
+                        output.push_str("  ");
+                        end_newline = false;
+                    }
+                    Tag::TableCell => {
+                        output.push('[');
+                        end_newline = false;
+                    }
                     _ => {
                         // Ignore other start tags not in requirements
                     }
@@ -338,6 +383,23 @@ where
                         output.push('\n'); // Extra newline after heading
                         end_newline = true;
                     }
+                    TagEnd::Table => {
+                        output.push_str(")\n\n");
+                        table_alignments.clear();
+                        end_newline = true;
+                    }
+                    TagEnd::TableHead => {
+                        output.push_str("),\n");
+                        end_newline = false;
+                    }
+                    TagEnd::TableRow => {
+                        output.push('\n');
+                        end_newline = true;
+                    }
+                    TagEnd::TableCell => {
+                        output.push_str("], ");
+                        end_newline = false;
+                    }
                     _ => {
                         // Ignore other end tags not in requirements
                     }
@@ -371,7 +433,7 @@ where
             }
             _ => {
                 // Ignore other events not specified in requirements
-                // (math, footnotes, tables, etc.)
+                // (math, footnotes, etc.)
                 // Note: HTML events are converted to Text in MarkdownFixer
             }
         }
@@ -1009,6 +1071,7 @@ pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
 
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
+    options.insert(pulldown_cmark::Options::ENABLE_TABLES);
 
     let parser = Parser::new_ext(&preprocessed, options);
     let fixer = MarkdownFixer::new(parser.into_offset_iter(), &preprocessed);
@@ -1882,6 +1945,104 @@ mod tests {
             mark_to_typst("outer~~inner~~asdf").unwrap(),
             "outer#strike[inner]asdf\n\n"
         );
+    }
+
+    // Tests for Tables
+
+    #[test]
+    fn test_basic_table() {
+        let md = "| Name | Age |\n|------|-----|\n| Alice | 30 |\n| Bob | 25 |";
+        let out = mark_to_typst(md).unwrap();
+        assert_eq!(
+            out,
+            "#table(\n  columns: 2,\n  table.header([Name], [Age], ),\n  [Alice], [30], \n  [Bob], [25], \n)\n\n"
+        );
+    }
+
+    #[test]
+    fn test_table_default_alignment() {
+        // No alignment specified — no align: row emitted
+        let md = "| A | B |\n|---|---|\n| 1 | 2 |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            !out.contains("align:"),
+            "should not emit align when all default"
+        );
+        assert!(out.contains("#table(\n  columns: 2,\n"));
+    }
+
+    #[test]
+    fn test_table_with_alignment() {
+        let md = "| L | C | R |\n|:---|:---:|---:|\n| a | b | c |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("  align: (left, center, right),\n"));
+        assert!(out.contains("#table(\n  columns: 3,\n"));
+    }
+
+    #[test]
+    fn test_table_header_only() {
+        let md = "| Name | Value |\n|------|-------|\n";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.starts_with("#table(\n  columns: 2,\n"));
+        assert!(out.contains("table.header([Name], [Value], )"));
+        assert!(out.ends_with(")\n\n"));
+    }
+
+    #[test]
+    fn test_table_single_column() {
+        let md = "| Item |\n|------|\n| A |\n| B |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.starts_with("#table(\n  columns: 1,\n"));
+        assert!(out.contains("table.header([Item], )"));
+        assert!(out.contains("[A], \n"));
+        assert!(out.contains("[B], \n"));
+    }
+
+    #[test]
+    fn test_table_empty_cell() {
+        let md = "| A | B |\n|---|---|\n| | x |";
+        let out = mark_to_typst(md).unwrap();
+        // Empty cell becomes []
+        assert!(out.contains("[], [x], "));
+    }
+
+    #[test]
+    fn test_table_with_formatting_in_cells() {
+        let md = "| Name | Note |\n|------|------|\n| **bold** | _italic_ |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("[#strong[bold]]"));
+        assert!(out.contains("[#emph[italic]]"));
+    }
+
+    #[test]
+    fn test_table_with_inline_code_in_cells() {
+        let md = "| Func | Desc |\n|------|------|\n| `foo()` | does stuff |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("[`foo()`]"));
+    }
+
+    #[test]
+    fn test_table_with_link_in_cell() {
+        let md = "| Site |\n|------|\n| [Example](https://example.com) |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("[#link(\"https://example.com\")[Example]]"));
+    }
+
+    #[test]
+    fn test_table_special_chars_in_cells() {
+        let md = "| Col |\n|-----|\n| use #tag |";
+        let out = mark_to_typst(md).unwrap();
+        // # must be escaped in cell text
+        assert!(out.contains("[use \\#tag]"));
+    }
+
+    #[test]
+    fn test_table_in_document_with_paragraphs() {
+        let md = "Before.\n\n| A |\n|---|\n| 1 |\n\nAfter.";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("Before.\n\n"));
+        assert!(out.contains("#table("));
+        assert!(out.contains("After.\n\n"));
     }
 }
 
