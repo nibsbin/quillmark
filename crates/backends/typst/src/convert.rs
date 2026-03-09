@@ -268,7 +268,10 @@ where
                         let col_count = alignments.len();
                         output.push_str(&format!("#table(\n  columns: {},\n", col_count));
                         // Emit align array if any column has non-default alignment
-                        if alignments.iter().any(|a| !matches!(a, pulldown_cmark::Alignment::None)) {
+                        if alignments
+                            .iter()
+                            .any(|a| !matches!(a, pulldown_cmark::Alignment::None))
+                        {
                             output.push_str("  align: (");
                             for (i, align) in alignments.iter().enumerate() {
                                 if i > 0 {
@@ -1961,7 +1964,10 @@ mod tests {
         // No alignment specified — no align: row emitted
         let md = "| A | B |\n|---|---|\n| 1 | 2 |";
         let out = mark_to_typst(md).unwrap();
-        assert!(!out.contains("align:"), "should not emit align when all default");
+        assert!(
+            !out.contains("align:"),
+            "should not emit align when all default"
+        );
         assert!(out.contains("#table(\n  columns: 2,\n"));
     }
 
