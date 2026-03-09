@@ -21,7 +21,10 @@ def main():
     
     # Resolve versioned subdirectory if needed
     if not (taro_dir / "Quill.yaml").exists():
-        versions = sorted(p.name for p in taro_dir.iterdir() if p.is_dir())
+        versions = sorted(
+            (p.name for p in taro_dir.iterdir() if p.is_dir()),
+            key=lambda v: [int(x) for x in v.split(".") if x.isdigit()],
+        )
         if versions:
             taro_dir = taro_dir / versions[-1]
     

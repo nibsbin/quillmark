@@ -29,7 +29,12 @@ pub fn quills_path(name: &str) -> PathBuf {
             .filter(|e| e.path().is_dir())
             .filter_map(|e| e.file_name().into_string().ok())
             .collect();
-        versions.sort();
+        versions.sort_by(|a, b| {
+            let parse = |s: &str| -> Vec<u64> {
+                s.split('.').filter_map(|p| p.parse().ok()).collect()
+            };
+            parse(a).cmp(&parse(b))
+        });
         if let Some(latest) = versions.last() {
             return quill_dir.join(latest);
         }

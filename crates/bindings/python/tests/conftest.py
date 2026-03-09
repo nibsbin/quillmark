@@ -18,7 +18,10 @@ def _latest_version(quill_dir: Path) -> Path:
     """Return the latest versioned subdirectory of a quill, or the dir itself."""
     if (quill_dir / "Quill.yaml").exists():
         return quill_dir
-    versions = sorted(p.name for p in quill_dir.iterdir() if p.is_dir())
+    versions = sorted(
+        (p.name for p in quill_dir.iterdir() if p.is_dir()),
+        key=lambda v: [int(x) for x in v.split(".") if x.isdigit()],
+    )
     if versions:
         return quill_dir / versions[-1]
     return quill_dir
