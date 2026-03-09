@@ -17,7 +17,16 @@ def main():
     # Find the taro quill in fixtures
     script_dir = Path(__file__).parent
     repo_root = script_dir.parent.parent.parent.parent
-    taro_dir = repo_root / "crates" / "fixtures" / "resources" / "tonguetoquill-collection" / "quills" / "taro"
+    taro_dir = repo_root / "crates" / "fixtures" / "resources" / "quills" / "taro"
+    
+    # Resolve versioned subdirectory if needed
+    if not (taro_dir / "Quill.yaml").exists():
+        versions = sorted(
+            (p.name for p in taro_dir.iterdir() if p.is_dir()),
+            key=lambda v: [int(x) for x in v.split(".") if x.isdigit()],
+        )
+        if versions:
+            taro_dir = taro_dir / versions[-1]
     
     if not taro_dir.exists():
         print(f"Error: Could not find taro quill at {taro_dir}")

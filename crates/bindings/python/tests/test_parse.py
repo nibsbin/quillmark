@@ -10,7 +10,7 @@ from pathlib import Path
 
 WORKSPACE_ROOT = Path(__file__).resolve().parents[4]
 RESOURCES_PATH = WORKSPACE_ROOT / "crates" / "fixtures" / "resources"
-QUILLS_PATH = RESOURCES_PATH / "tonguetoquill-collection" / "quills"
+QUILLS_PATH = RESOURCES_PATH / "quills"
 
 
 def test_parse_markdown(taro_md):
