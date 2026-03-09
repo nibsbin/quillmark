@@ -30,9 +30,8 @@ pub fn quills_path(name: &str) -> PathBuf {
             .filter_map(|e| e.file_name().into_string().ok())
             .collect();
         versions.sort_by(|a, b| {
-            let parse = |s: &str| -> Vec<u64> {
-                s.split('.').filter_map(|p| p.parse().ok()).collect()
-            };
+            let parse =
+                |s: &str| -> Vec<u64> { s.split('.').filter_map(|p| p.parse().ok()).collect() };
             parse(a).cmp(&parse(b))
         });
         if let Some(latest) = versions.last() {
