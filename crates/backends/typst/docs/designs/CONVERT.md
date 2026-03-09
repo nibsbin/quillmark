@@ -235,6 +235,49 @@ This enables proper multi-paragraph list items in Typst with correct continuatio
 
 This preserves markdown's distinction between soft line wrapping and explicit line breaks.
 
+### Tables
+
+Markdown GFM tables are converted to Typst's native `#table()` function.
+
+**Example:**
+```markdown
+| Name | Age | City |
+|------|:---:|-----:|
+| Alice | 30 | NYC |
+| Bob | 25 | LA |
+```
+↓
+```typst
+#table(
+  columns: 3,
+  align: (auto, center, right),
+  table.header([Name], [Age], [City]),
+  [Alice], [30], [NYC],
+  [Bob], [25], [LA],
+)
+```
+
+**Implementation:**
+- `Tag::Table(alignments)` → `#table(\n  columns: N,\n` + optional `align: (…),\n`
+- `Tag::TableHead` → `  table.header(`
+- `TagEnd::TableHead` → `),\n`
+- `Tag::TableRow` → `  ` (indent)
+- `TagEnd::TableRow` → `\n`
+- `Tag::TableCell` → `[`
+- `TagEnd::TableCell` → `], `
+- `TagEnd::Table` → `)\n\n`
+
+**Alignment mapping:**
+
+| Markdown | Typst |
+|----------|-------|
+| (none)   | `auto` |
+| `:---`   | `left` |
+| `:---:`  | `center` |
+| `---:`   | `right` |
+
+The `align:` parameter is only emitted when at least one column has a non-default (non-`None`) alignment. Cell content supports all inline formatting: bold, italic, strikethrough, underline, inline code, links.
+
 ### Text Content
 
 - `Event::Text` → Escaped with `escape_markup()` and appended
@@ -247,7 +290,6 @@ The following markdown features are not currently implemented but have design co
 - HTML tags (intentionally excluded)
 - Math expressions (intentionally excluded)
 - Footnotes (intentionally excluded)
-- Tables (intentionally excluded)
 - Images (to be handled separately by asset system)
 - Block quotes (see design below)
 - Horizontal rules (see design below)
@@ -952,6 +994,7 @@ The double backslash in markdown becomes single backslash in parser output, whic
 | Italic | ✅ Done | - | - | Working |
 | Bold | ✅ Done | - | - | Working |
 | Bold+Italic | ✅ Done | - | - | Works via nesting |
+| Tables (GFM) | ✅ Done | - | - | Maps to Typst #table() with alignment support |
 | Block quotes | Not impl. | Medium | Medium | Needs depth tracking for flattening |
 | Lists | ✅ Done | - | - | Fully implemented with nesting |
 | Inline code | ✅ Done | - | - | Working |
@@ -982,8 +1025,7 @@ For detailed designs of unimplemented CommonMark features, see the [CommonMark F
 
 Additional potential enhancements beyond CommonMark:
 
-1. **Tables** - Support markdown table syntax (GFM extension)
-2. **Task lists** - Checkboxes in lists `- [ ]` and `- [x]` (GFM extension)
+1. **Task lists** - Checkboxes in lists `- [ ]` and `- [x]` (GFM extension)
 3. **Footnotes** - Reference-style footnotes
 4. **Definition lists** - Term and definition pairs
 5. **Custom extensions** - Plugin system for domain-specific markdown features
