@@ -29,6 +29,27 @@ async function readDirRecursive(
 	return files;
 }
 
+/** Lists files in a directory recursively, returning relative paths (without reading contents). */
+async function listFilesRecursive(
+	dirPath: string,
+	basePath: string = dirPath,
+): Promise<string[]> {
+	const paths: string[] = [];
+	const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+	for (const entry of entries) {
+		const fullPath = path.join(dirPath, entry.name);
+
+		if (entry.isDirectory()) {
+			paths.push(...(await listFilesRecursive(fullPath, basePath)));
+		} else if (entry.isFile()) {
+			paths.push(path.relative(basePath, fullPath));
+		}
+	}
+
+	return paths;
+}
+
 /**
  * Verifies that a Quill.yaml file exists in the given quill directory.
  * Name and version are derived from the directory structure; Quill.yaml
@@ -212,8 +233,7 @@ export class FileSystemSource implements QuillSource {
 
 		for (const entry of manifest.quills) {
 			const quillDir = path.join(this.quillsDir, entry.name, entry.version);
-			const files = await readDirRecursive(quillDir);
-			const fileList = Object.keys(files);
+			const fileList = await listFilesRecursive(quillDir);
 
 			const packed = await packDirectory(quillDir, fileList);
 			const compressed = brotliCompressSync(packed, {

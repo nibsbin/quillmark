@@ -51,7 +51,10 @@ export async function packFiles(files: Record<string, Uint8Array>): Promise<Uint
 	try {
 		const sortedPaths = Object.keys(files).sort();
 		for (const filePath of sortedPaths) {
-			const fullPath = path.join(tmpDir, ...filePath.split('/'));
+			const fullPath = path.resolve(tmpDir, ...filePath.split('/'));
+			if (!fullPath.startsWith(tmpDir + path.sep) && fullPath !== tmpDir) {
+				throw new Error(`Path traversal detected: "${filePath}"`);
+			}
 			await fs.mkdir(path.dirname(fullPath), { recursive: true });
 			await fs.writeFile(fullPath, files[filePath]);
 		}
