@@ -85,7 +85,7 @@ describe('registerQuill compatibility with @quillmark/wasm', () => {
 	});
 
 	describe('HttpSource → real Quillmark engine', () => {
-		it('should register minimal_quill loaded via HttpSource zip', async () => {
+		it('should register minimal_quill loaded via HttpSource bundle', async () => {
 			wasm = new Quillmark();
 			const engine = wasm as unknown as QuillmarkEngine;
 
@@ -103,12 +103,12 @@ describe('registerQuill compatibility with @quillmark/wasm', () => {
 				if (urlStr.includes('manifest.json')) {
 					return new Response(manifestJson);
 				}
-				const zipMatch = urlStr.match(/\/([^/?]+\.zip)/);
-				if (zipMatch) {
-					const zipPath = path.join(HTTP_OUTPUT_DIR, zipMatch[1]);
+				const bundleMatch = urlStr.match(/\/([^/?]+\.tar\.br)/);
+				if (bundleMatch) {
+					const bundlePath = path.join(HTTP_OUTPUT_DIR, bundleMatch[1]);
 					try {
-						const zipData = await fs.readFile(zipPath);
-						return new Response(zipData);
+						const bundleData = await fs.readFile(bundlePath);
+						return new Response(bundleData);
 					} catch {
 						return new Response(null, { status: 404 });
 					}
@@ -134,7 +134,7 @@ describe('registerQuill compatibility with @quillmark/wasm', () => {
 			wasm.free();
 		});
 
-		it('should register all quills via HttpSource zips', async () => {
+		it('should register all quills via HttpSource bundles', async () => {
 			wasm = new Quillmark();
 			const engine = wasm as unknown as QuillmarkEngine;
 
@@ -152,12 +152,12 @@ describe('registerQuill compatibility with @quillmark/wasm', () => {
 				if (urlStr.includes('manifest.json')) {
 					return new Response(manifestJson);
 				}
-				const zipMatch = urlStr.match(/\/([^/?]+\.zip)/);
-				if (zipMatch) {
-					const zipPath = path.join(HTTP_OUTPUT_DIR, zipMatch[1]);
+				const bundleMatch = urlStr.match(/\/([^/?]+\.tar\.br)/);
+				if (bundleMatch) {
+					const bundlePath = path.join(HTTP_OUTPUT_DIR, bundleMatch[1]);
 					try {
-						const zipData = await fs.readFile(zipPath);
-						return new Response(zipData);
+						const bundleData = await fs.readFile(bundlePath);
+						return new Response(bundleData);
 					} catch {
 						return new Response(null, { status: 404 });
 					}
@@ -199,12 +199,12 @@ describe('registerQuill compatibility with @quillmark/wasm', () => {
 				if (urlStr.includes('manifest.json')) {
 					return new Response(manifestJson);
 				}
-				const zipMatch = urlStr.match(/\/([^/?]+\.zip)/);
-				if (zipMatch) {
-					const zipPath = path.join(HTTP_OUTPUT_DIR, zipMatch[1]);
+				const bundleMatch = urlStr.match(/\/([^/?]+\.tar\.br)/);
+				if (bundleMatch) {
+					const bundlePath = path.join(HTTP_OUTPUT_DIR, bundleMatch[1]);
 					try {
-						const zipData = await fs.readFile(zipPath);
-						return new Response(zipData);
+						const bundleData = await fs.readFile(bundlePath);
+						return new Response(bundleData);
 					} catch {
 						return new Response(null, { status: 404 });
 					}

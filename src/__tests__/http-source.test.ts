@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import JSZip from 'jszip';
+import { brotliCompressSync, constants } from 'node:zlib';
 import { HttpSource } from '../sources/http-source.js';
 import { RegistryError } from '../errors.js';
 import type { QuillManifest } from '../types.js';
+import { packFiles } from '../bundle.js';
 
 const MANIFEST: QuillManifest = {
 	quills: [
@@ -11,12 +12,17 @@ const MANIFEST: QuillManifest = {
 	],
 };
 
-/** Creates a mock zip containing test files. */
-async function createMockZip(): Promise<ArrayBuffer> {
-	const zip = new JSZip();
-	zip.file('Quill.yaml', 'name: usaf_memo\nversion: 1.0.0');
-	zip.file('template.typ', '// Template');
-	return zip.generateAsync({ type: 'arraybuffer' });
+/** Creates a mock Brotli-compressed bundle containing test files. */
+async function createMockBundle(): Promise<ArrayBuffer> {
+	const encoder = new TextEncoder();
+	const packed = await packFiles({
+		'Quill.yaml': encoder.encode('name: usaf_memo\nversion: 1.0.0'),
+		'template.typ': encoder.encode('// Template'),
+	});
+	const compressed = brotliCompressSync(packed, {
+		params: { [constants.BROTLI_PARAM_QUALITY]: 6 },
+	});
+	return compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength);
 }
 
 /** Creates a mock fetch function with programmable responses. */
@@ -126,11 +132,11 @@ describe('HttpSource', () => {
 	});
 
 	describe('loadQuill()', () => {
-		it('should fetch and unzip a quill', async () => {
-			const zipData = await createMockZip();
+		it('should fetch and decompress a quill', async () => {
+			const brData = await createMockBundle();
 			const mockFetch = createMockFetch({
 				'manifest.json': { ok: true, body: MANIFEST },
-				'usaf_memo@1.0.0.zip': { ok: true, body: zipData },
+				'usaf_memo@1.0.0.tar.br': { ok: true, body: brData },
 			});
 
 			const source = new HttpSource({
@@ -151,10 +157,10 @@ describe('HttpSource', () => {
 		});
 
 		it('should append ?v={version} for cache-busting', async () => {
-			const zipData = await createMockZip();
+			const brData = await createMockBundle();
 			const mockFetch = createMockFetch({
 				'manifest.json': { ok: true, body: MANIFEST },
-				'usaf_memo@1.0.0.zip': { ok: true, body: zipData },
+				'usaf_memo@1.0.0.tar.br': { ok: true, body: brData },
 			});
 
 			const source = new HttpSource({
@@ -164,7 +170,7 @@ describe('HttpSource', () => {
 
 			await source.loadQuill('usaf_memo', '1.0.0');
 			expect(mockFetch).toHaveBeenCalledWith(
-				'https://cdn.example.com/quills/usaf_memo@1.0.0.zip?v=1.0.0',
+				'https://cdn.example.com/quills/usaf_memo@1.0.0.tar.br?v=1.0.0',
 			);
 		});
 
@@ -208,10 +214,10 @@ describe('HttpSource', () => {
 			}
 		});
 
-		it('should throw load_error on fetch failure for zip', async () => {
+		it('should throw load_error on fetch failure for bundle', async () => {
 			const mockFetch = createMockFetch({
 				'manifest.json': { ok: true, body: MANIFEST },
-				'usaf_memo@1.0.0.zip': { ok: false, status: 500 },
+				'usaf_memo@1.0.0.tar.br': { ok: false, status: 500 },
 			});
 
 			const source = new HttpSource({

@@ -1,9 +1,10 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import JSZip from 'jszip';
+import { brotliCompressSync, constants } from 'node:zlib';
 import type { QuillBundle, QuillManifest, QuillMetadata, QuillSource } from '../types.js';
 import { RegistryError } from '../errors.js';
 import { toEngineFileTree } from '../format.js';
+import { packDirectory } from '../bundle.js';
 
 /** Reads files from a directory recursively, returning a map of relative paths to contents. */
 async function readDirRecursive(
@@ -26,6 +27,27 @@ async function readDirRecursive(
 	}
 
 	return files;
+}
+
+/** Lists files in a directory recursively, returning relative paths (without reading contents). */
+async function listFilesRecursive(
+	dirPath: string,
+	basePath: string = dirPath,
+): Promise<string[]> {
+	const paths: string[] = [];
+	const entries = await fs.readdir(dirPath, { withFileTypes: true });
+
+	for (const entry of entries) {
+		const fullPath = path.join(dirPath, entry.name);
+
+		if (entry.isDirectory()) {
+			paths.push(...(await listFilesRecursive(fullPath, basePath)));
+		} else if (entry.isFile()) {
+			paths.push(path.relative(basePath, fullPath));
+		}
+	}
+
+	return paths;
 }
 
 /**
@@ -98,7 +120,7 @@ function compareSemver(a: string, b: string): number {
  * derived from the directory structure; Quill.yaml content is validated by the
  * @quillmark/wasm engine at registration time.
  *
- * Also exposes `packageForHttp(outputDir)` to zip quills and write a manifest
+ * Also exposes `packageForHttp(outputDir)` to create Brotli-compressed tar bundles and write a manifest
  * for static hosting.
  */
 export class FileSystemSource implements QuillSource {
@@ -201,25 +223,25 @@ export class FileSystemSource implements QuillSource {
 
 	/**
 	 * Packages all quills for HTTP static hosting.
-	 * Zips each quill version directory and writes the zips plus a `manifest.json` to `outputDir`.
+	 * Creates a tar archive of each quill version, Brotli-compresses it, and writes
+	 * `.tar.br` bundles plus a `manifest.json` to `outputDir`.
 	 */
 	async packageForHttp(outputDir: string): Promise<void> {
 		await fs.mkdir(outputDir, { recursive: true });
 
 		const manifest = await this.getManifest();
+
 		for (const entry of manifest.quills) {
 			const quillDir = path.join(this.quillsDir, entry.name, entry.version);
-			const files = await readDirRecursive(quillDir);
+			const fileList = await listFilesRecursive(quillDir);
 
-			const zip = new JSZip();
-			const sortedPaths = Object.keys(files).sort();
-			for (const relativePath of sortedPaths) {
-				zip.file(relativePath, files[relativePath], { date: new Date('2024-02-24T02:24:24Z') });
-			}
+			const packed = await packDirectory(quillDir, fileList);
+			const compressed = brotliCompressSync(packed, {
+				params: { [constants.BROTLI_PARAM_QUALITY]: 6 },
+			});
 
-			const zipBuffer = await zip.generateAsync({ type: 'uint8array' });
-			const zipFileName = `${entry.name}@${entry.version}.zip`;
-			await fs.writeFile(path.join(outputDir, zipFileName), zipBuffer);
+			const bundleFileName = `${entry.name}@${entry.version}.tar.br`;
+			await fs.writeFile(path.join(outputDir, bundleFileName), compressed);
 		}
 
 		await fs.writeFile(path.join(outputDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
