@@ -24,34 +24,36 @@ describe('render every Quill in the registry', () => {
 
 	it('should render every quill and version without error', async () => {
 		const manifest = await source.getManifest();
+		const wasm = new Quillmark();
 
-		for (const quill of manifest.quills) {
-			const wasm = new Quillmark();
+		try {
 			const engine = wasm as unknown as QuillmarkEngine;
 			const registry = new QuillRegistry({ source, engine });
 
-			const bundle = await registry.resolve(`${quill.name}@${quill.version}`);
-			expect(bundle.name).toBe(quill.name);
-			expect(bundle.version).toBe(quill.version);
+			for (const quill of manifest.quills) {
+				const bundle = await registry.resolve(`${quill.name}@${quill.version}`);
+				expect(bundle.name).toBe(quill.name);
+				expect(bundle.version).toBe(quill.version);
 
-			const info = engine.resolveQuill(quill.name) as unknown as WasmQuillInfo;
-			expect(info).not.toBeNull();
-			expect(info.supportedFormats.length).toBeGreaterThan(0);
+				const info = engine.resolveQuill(quill.name) as unknown as WasmQuillInfo;
+				expect(info).not.toBeNull();
+				expect(info.supportedFormats.length).toBeGreaterThan(0);
 
-			// The example field contains markdown content embedded in the quill
-			expect(info.example).toBeTruthy();
+				// The example field contains markdown content embedded in the quill
+				expect(info.example).toBeTruthy();
 
-			// Replace the colon-style QUILL reference (e.g. "name:0.1") with
-			// the engine-compatible "@" format (e.g. "name@0.1.0")
-			const ref = `${quill.name}@${quill.version}`;
-			const exampleMd = info.example!.replace(/^QUILL:.*$/m, `QUILL: ${ref}`);
+				// Replace the colon-style QUILL reference (e.g. "name:0.1") with
+				// the engine-compatible "@" format (e.g. "name@0.1.0")
+				const ref = `${quill.name}@${quill.version}`;
+				const exampleMd = info.example!.replace(/^QUILL:.*$/m, `QUILL: ${ref}`);
 
-			const parsed = Quillmark.parseMarkdown(exampleMd);
-			const result = wasm.render(parsed, { format: info.supportedFormats[0] });
+				const parsed = Quillmark.parseMarkdown(exampleMd);
+				const result = wasm.render(parsed, { format: info.supportedFormats[0] });
 
-			expect(result.artifacts.length).toBeGreaterThan(0);
-			expect(result.artifacts[0].bytes.length).toBeGreaterThan(0);
-
+				expect(result.artifacts.length).toBeGreaterThan(0);
+				expect(result.artifacts[0].bytes.length).toBeGreaterThan(0);
+			}
+		} finally {
 			wasm.free();
 		}
 	});
