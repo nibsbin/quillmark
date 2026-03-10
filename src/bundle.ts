@@ -9,7 +9,7 @@ import { zipSync, unzipSync } from 'fflate';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-/** Earliest valid date for zip archives (DOS date minimum: 1980-01-01). */
+/** Fixed date for deterministic zip output (DOS date minimum: 1980-01-01). */
 const ZIP_EPOCH = new Date('1980-01-01T00:00:00Z');
 
 /**
