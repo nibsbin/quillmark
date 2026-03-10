@@ -295,5 +295,22 @@ describe('FileSystemSource', () => {
 			const files = await fs.readdir(nestedOutput);
 			expect(files).toContain('manifest.json');
 		});
+
+		it('should produce deterministic (byte-identical) zip files across runs', async () => {
+			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo');
+
+			const source = new FileSystemSource(TEST_DIR);
+
+			const outputDir1 = path.join(OUTPUT_DIR, 'run1');
+			const outputDir2 = path.join(OUTPUT_DIR, 'run2');
+
+			await source.packageForHttp(outputDir1);
+			await source.packageForHttp(outputDir2);
+
+			const zip1 = await fs.readFile(path.join(outputDir1, 'usaf_memo@1.0.0.zip'));
+			const zip2 = await fs.readFile(path.join(outputDir2, 'usaf_memo@1.0.0.zip'));
+
+			expect(zip1.equals(zip2)).toBe(true);
+		});
 	});
 });
