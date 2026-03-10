@@ -212,8 +212,9 @@ export class FileSystemSource implements QuillSource {
 			const files = await readDirRecursive(quillDir);
 
 			const zip = new JSZip();
-			for (const [relativePath, content] of Object.entries(files)) {
-				zip.file(relativePath, content);
+			const sortedPaths = Object.keys(files).sort();
+			for (const relativePath of sortedPaths) {
+				zip.file(relativePath, files[relativePath], { date: new Date('2017-01-01T00:00:00Z') });
 			}
 
 			const zipBuffer = await zip.generateAsync({ type: 'uint8array' });
