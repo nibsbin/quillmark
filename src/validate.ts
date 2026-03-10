@@ -135,7 +135,8 @@ export async function validateQuills(
 					format: info.supportedFormats[0],
 				});
 
-				if (result.artifacts.length === 0 || result.artifacts[0].bytes.length === 0) {
+				const firstArtifact = result.artifacts[0];
+				if (!firstArtifact || firstArtifact.bytes.length === 0) {
 					entry.error = 'Render produced no output artifacts';
 				} else {
 					entry.rendered = true;
