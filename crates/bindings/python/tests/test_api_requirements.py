@@ -9,7 +9,7 @@ This test ensures that:
 
 import pytest
 from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat
-from conftest import QUILLS_PATH
+from conftest import QUILLS_PATH, _latest_version
 
 
 def test_parsed_document_quill_ref():
@@ -79,7 +79,7 @@ def test_workflow_from_parsed_with_quill_tag(taro_quill_dir, taro_md):
 """
     
     parsed = ParsedDocument.from_markdown(markdown_with_tag)
-    assert parsed.quill_ref() == quill.name
+    assert quill.name in parsed.quill_ref()
     
     # Create workflow from parsed document
     workflow = engine.workflow(parsed)
@@ -104,7 +104,7 @@ def test_full_workflow_as_specified():
     repo_root = Path(__file__).resolve().parents[2]
     taro_dir = QUILLS_PATH / "taro"
     
-    quill = Quill.from_path(str(taro_dir))
+    quill = Quill.from_path(str(_latest_version(taro_dir)))
     engine.register_quill(quill)
     
     # Step 2: Parse markdown (with quill tag)
