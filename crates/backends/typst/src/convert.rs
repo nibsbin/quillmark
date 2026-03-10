@@ -112,6 +112,12 @@ fn typst_alignment(align: &pulldown_cmark::Alignment) -> &'static str {
     }
 }
 
+/// Returns true if the HTML string is a `<br>` tag (any common variant).
+fn is_br_tag(html: &str) -> bool {
+    let lower = html.trim().to_ascii_lowercase();
+    lower == "<br>" || lower == "<br/>" || lower == "<br />"
+}
+
 /// Converts an iterator of markdown events to Typst markup
 fn push_typst<'a, I>(output: &mut String, source: &str, iter: I) -> Result<(), ConversionError>
 where
@@ -434,7 +440,8 @@ where
             _ => {
                 // Ignore other events not specified in requirements
                 // (math, footnotes, etc.)
-                // Note: HTML events are converted to Text in MarkdownFixer
+                // Note: <br> HTML tags are converted to HardBreak in MarkdownFixer;
+                // all other HTML is stripped.
             }
         }
     }
@@ -859,8 +866,11 @@ where
             // 2. Pull from inner
             let (event, range) = self.inner.next()?;
 
-            // 3. Strip HTML entirely (we don't support HTML in Typst output)
+            // 3. Convert <br> tags to HardBreak; strip all other HTML
             let (event, range) = match event {
+                Event::InlineHtml(ref html) | Event::Html(ref html) if is_br_tag(html) => {
+                    (Event::HardBreak, range)
+                }
                 Event::Html(_) | Event::InlineHtml(_) => continue,
                 other => (other, range),
             };
@@ -2043,6 +2053,222 @@ mod tests {
         assert!(out.contains("Before.\n\n"));
         assert!(out.contains("#table("));
         assert!(out.contains("After.\n\n"));
+    }
+
+    // Edge case tests for table conversion robustness
+
+    #[test]
+    fn test_table_pipe_in_cell() {
+        // Escaped pipe character should appear in cell content
+        let md = "| A |\n|---|\n| a\\|b |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("[a|b]"),
+            "pipe should be literal in cell: {out}"
+        );
+    }
+
+    #[test]
+    fn test_table_strikethrough_in_cell() {
+        let md = "| A |\n|---|\n| ~~deleted~~ |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("[#strike[deleted]]"),
+            "strikethrough should work in cells: {out}"
+        );
+    }
+
+    #[test]
+    fn test_table_multiple_consecutive() {
+        let md = "| A |\n|---|\n| 1 |\n\n| B |\n|---|\n| 2 |";
+        let out = mark_to_typst(md).unwrap();
+        assert_eq!(
+            out.matches("#table(").count(),
+            2,
+            "should have two tables: {out}"
+        );
+        assert!(out.contains("table.header([A]"));
+        assert!(out.contains("table.header([B]"));
+    }
+
+    #[test]
+    fn test_table_mixed_alignment() {
+        // Some columns aligned, some default
+        let md = "| L | D | R |\n|:---|---|---:|\n| a | b | c |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("align: (left, auto, right),"),
+            "mixed alignment: {out}"
+        );
+    }
+
+    #[test]
+    fn test_table_all_alignment_types() {
+        let md = "| L | C | R | D |\n|:---|:---:|---:|---|\n| a | b | c | d |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("align: (left, center, right, auto),"),
+            "all alignments: {out}"
+        );
+    }
+
+    #[test]
+    fn test_table_wide() {
+        let md = "| A | B | C | D | E | F |\n|---|---|---|---|---|---|\n| 1 | 2 | 3 | 4 | 5 | 6 |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("columns: 6,"), "wide table columns: {out}");
+        assert!(out.contains("[1], [2], [3], [4], [5], [6],"));
+    }
+
+    #[test]
+    fn test_table_nested_bold_italic() {
+        let md = "| A |\n|---|\n| **bold** and _italic_ |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("#strong[bold]"), "bold in cell: {out}");
+        assert!(out.contains("#emph[italic]"), "italic in cell: {out}");
+    }
+
+    #[test]
+    fn test_table_typst_special_chars() {
+        // All Typst-special characters that need escaping
+        let md = "| A |\n|---|\n| $100 @ref ~space {brace} |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("\\$100"), "dollar escaped: {out}");
+        assert!(out.contains("\\@ref"), "at escaped: {out}");
+        assert!(out.contains("\\~space"), "tilde escaped: {out}");
+        assert!(out.contains("\\{brace\\}"), "braces escaped: {out}");
+    }
+
+    #[test]
+    fn test_table_angle_brackets_in_cell() {
+        let md = "| A |\n|---|\n| a < b > c |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("\\<"), "< escaped: {out}");
+        assert!(out.contains("\\>"), "> escaped: {out}");
+    }
+
+    #[test]
+    fn test_table_double_slash_in_cell() {
+        let md = "| A |\n|---|\n| a // comment |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("\\/\\/"), "double slash escaped: {out}");
+    }
+
+    #[test]
+    fn test_table_square_brackets_in_cell() {
+        let md = "| A |\n|---|\n| [item] |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("\\[item\\]"), "brackets escaped: {out}");
+    }
+
+    #[test]
+    fn test_table_curly_braces_in_cell() {
+        let md = "| A |\n|---|\n| {value} |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("\\{value\\}"), "braces escaped: {out}");
+    }
+
+    #[test]
+    fn test_table_br_tag_in_cell() {
+        // <br> is the standard way to create line breaks within table cells
+        let md = "| A |\n|---|\n| line1<br>line2 |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("line1\nline2"),
+            "<br> should produce line break in cell: {out}"
+        );
+    }
+
+    #[test]
+    fn test_table_br_tag_variants() {
+        // Test <br/> and <br /> variants
+        let md_slash = "| A |\n|---|\n| a<br/>b |";
+        let out_slash = mark_to_typst(md_slash).unwrap();
+        assert!(
+            out_slash.contains("a\nb"),
+            "<br/> should produce line break: {out_slash}"
+        );
+
+        let md_space_slash = "| A |\n|---|\n| a<br />b |";
+        let out_space_slash = mark_to_typst(md_space_slash).unwrap();
+        assert!(
+            out_space_slash.contains("a\nb"),
+            "<br /> should produce line break: {out_space_slash}"
+        );
+    }
+
+    #[test]
+    fn test_table_unicode_in_cell() {
+        let md = "| Status |\n|--------|\n| ✅ Done |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("✅ Done"), "unicode in cell: {out}");
+    }
+
+    #[test]
+    fn test_table_emoji_in_cell() {
+        let md = "| A |\n|---|\n| 🎉 Party 🚀 |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("🎉 Party 🚀"), "emoji in cell: {out}");
+    }
+
+    #[test]
+    fn test_table_after_heading() {
+        let md = "# Title\n\n| A |\n|---|\n| 1 |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("= Title\n\n"), "heading before table: {out}");
+        assert!(out.contains("#table("), "table after heading: {out}");
+    }
+
+    #[test]
+    fn test_table_after_list() {
+        let md = "- item1\n- item2\n\n| A |\n|---|\n| 1 |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("- item1"), "list before table: {out}");
+        assert!(out.contains("#table("), "table after list: {out}");
+    }
+
+    #[test]
+    fn test_table_many_rows() {
+        let md = "| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |\n| 5 | 6 |\n| 7 | 8 |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("[1], [2],"), "row 1: {out}");
+        assert!(out.contains("[3], [4],"), "row 2: {out}");
+        assert!(out.contains("[5], [6],"), "row 3: {out}");
+        assert!(out.contains("[7], [8],"), "row 4: {out}");
+    }
+
+    #[test]
+    fn test_table_bold_link_in_cell() {
+        let md = "| A |\n|---|\n| **[link](https://x.com)** |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("#strong[#link("), "bold link in cell: {out}");
+    }
+
+    #[test]
+    fn test_table_code_with_special_chars() {
+        // Characters inside inline code should NOT be escaped
+        let md = "| A |\n|---|\n| `a#b$c@d` |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("`a#b$c@d`"),
+            "code content should be literal: {out}"
+        );
+    }
+
+    #[test]
+    fn test_table_empty_minimal() {
+        // Single empty header cell, no body rows
+        let md = "| |\n|---|";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("#table("), "should create table: {out}");
+        assert!(out.contains("columns: 1,"), "single column: {out}");
+    }
+
+    #[test]
+    fn test_table_multiple_empty_cells() {
+        let md = "| A | B | C |\n|---|---|---|\n| | | |";
+        let out = mark_to_typst(md).unwrap();
+        assert!(out.contains("[], [], [],"), "multiple empty cells: {out}");
     }
 }
 
