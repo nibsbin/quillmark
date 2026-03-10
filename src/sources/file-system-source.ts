@@ -214,7 +214,7 @@ export class FileSystemSource implements QuillSource {
 			const zip = new JSZip();
 			const sortedPaths = Object.keys(files).sort();
 			for (const relativePath of sortedPaths) {
-				zip.file(relativePath, files[relativePath], { date: new Date('2017-01-01T00:00:00Z') });
+				zip.file(relativePath, files[relativePath], { date: new Date('2024-02-24T02:24:24Z') });
 			}
 
 			const zipBuffer = await zip.generateAsync({ type: 'uint8array' });
