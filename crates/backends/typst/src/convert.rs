@@ -2062,7 +2062,10 @@ mod tests {
         // Escaped pipe character should appear in cell content
         let md = "| A |\n|---|\n| a\\|b |";
         let out = mark_to_typst(md).unwrap();
-        assert!(out.contains("[a|b]"), "pipe should be literal in cell: {out}");
+        assert!(
+            out.contains("[a|b]"),
+            "pipe should be literal in cell: {out}"
+        );
     }
 
     #[test]
@@ -2111,8 +2114,7 @@ mod tests {
 
     #[test]
     fn test_table_wide() {
-        let md =
-            "| A | B | C | D | E | F |\n|---|---|---|---|---|---|\n| 1 | 2 | 3 | 4 | 5 | 6 |";
+        let md = "| A | B | C | D | E | F |\n|---|---|---|---|---|---|\n| 1 | 2 | 3 | 4 | 5 | 6 |";
         let out = mark_to_typst(md).unwrap();
         assert!(out.contains("columns: 6,"), "wide table columns: {out}");
         assert!(out.contains("[1], [2], [3], [4], [5], [6],"));
@@ -2149,30 +2151,21 @@ mod tests {
     fn test_table_double_slash_in_cell() {
         let md = "| A |\n|---|\n| a // comment |";
         let out = mark_to_typst(md).unwrap();
-        assert!(
-            out.contains("\\/\\/"),
-            "double slash escaped: {out}"
-        );
+        assert!(out.contains("\\/\\/"), "double slash escaped: {out}");
     }
 
     #[test]
     fn test_table_square_brackets_in_cell() {
         let md = "| A |\n|---|\n| [item] |";
         let out = mark_to_typst(md).unwrap();
-        assert!(
-            out.contains("\\[item\\]"),
-            "brackets escaped: {out}"
-        );
+        assert!(out.contains("\\[item\\]"), "brackets escaped: {out}");
     }
 
     #[test]
     fn test_table_curly_braces_in_cell() {
         let md = "| A |\n|---|\n| {value} |";
         let out = mark_to_typst(md).unwrap();
-        assert!(
-            out.contains("\\{value\\}"),
-            "braces escaped: {out}"
-        );
+        assert!(out.contains("\\{value\\}"), "braces escaped: {out}");
     }
 
     #[test]
@@ -2215,10 +2208,7 @@ mod tests {
     fn test_table_emoji_in_cell() {
         let md = "| A |\n|---|\n| 🎉 Party 🚀 |";
         let out = mark_to_typst(md).unwrap();
-        assert!(
-            out.contains("🎉 Party 🚀"),
-            "emoji in cell: {out}"
-        );
+        assert!(out.contains("🎉 Party 🚀"), "emoji in cell: {out}");
     }
 
     #[test]
@@ -2251,10 +2241,7 @@ mod tests {
     fn test_table_bold_link_in_cell() {
         let md = "| A |\n|---|\n| **[link](https://x.com)** |";
         let out = mark_to_typst(md).unwrap();
-        assert!(
-            out.contains("#strong[#link("),
-            "bold link in cell: {out}"
-        );
+        assert!(out.contains("#strong[#link("), "bold link in cell: {out}");
     }
 
     #[test]
@@ -2281,10 +2268,7 @@ mod tests {
     fn test_table_multiple_empty_cells() {
         let md = "| A | B | C |\n|---|---|---|\n| | | |";
         let out = mark_to_typst(md).unwrap();
-        assert!(
-            out.contains("[], [], [],"),
-            "multiple empty cells: {out}"
-        );
+        assert!(out.contains("[], [], [],"), "multiple empty cells: {out}");
     }
 }
 
