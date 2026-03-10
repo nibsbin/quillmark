@@ -3,8 +3,8 @@ import * as path from 'node:path';
 import { Quillmark, init } from '@quillmark/wasm';
 import { validateQuills } from '../validate.js';
 
-/** Path to the real quill fixtures from the tonguetoquill-collection. */
-const QUILLS_DIR = path.join(import.meta.dirname, '../../tonguetoquill-collection/quills');
+/** Path to the minimal quill fixtures for integration tests. */
+const QUILLS_DIR = path.join(import.meta.dirname, 'fixtures/quills');
 
 describe('validateQuills', () => {
 	beforeAll(() => {
