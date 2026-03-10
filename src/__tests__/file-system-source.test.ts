@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { brotliDecompressSync } from 'node:zlib';
 import { FileSystemSource } from '../sources/file-system-source.js';
 import { RegistryError } from '../errors.js';
 import { unpackFiles } from '../bundle.js';
@@ -243,7 +242,7 @@ describe('FileSystemSource', () => {
 	});
 
 	describe('packageForHttp()', () => {
-		it('should write .tar.br bundles and manifest.json to output directory', async () => {
+		it('should write .zip bundles and manifest.json to output directory', async () => {
 			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo');
 			await createQuillDir('classic_resume', '2.1.0');
 
@@ -255,16 +254,15 @@ describe('FileSystemSource', () => {
 			const manifestContent = JSON.parse(await fs.readFile(manifestPath, 'utf-8'));
 			expect(manifestContent.quills).toHaveLength(2);
 
-			// Verify .tar.br files were written
+			// Verify .zip files were written
 			const files = await fs.readdir(OUTPUT_DIR);
-			expect(files).toContain('usaf_memo@1.0.0.tar.br');
-			expect(files).toContain('classic_resume@2.1.0.tar.br');
+			expect(files).toContain('usaf_memo@1.0.0.zip');
+			expect(files).toContain('classic_resume@2.1.0.zip');
 			expect(files).toContain('manifest.json');
 
 			// Verify bundle contents
-			const brData = await fs.readFile(path.join(OUTPUT_DIR, 'usaf_memo@1.0.0.tar.br'));
-			const decompressed = brotliDecompressSync(brData);
-			const unpacked = await unpackFiles(new Uint8Array(decompressed));
+			const zipData = await fs.readFile(path.join(OUTPUT_DIR, 'usaf_memo@1.0.0.zip'));
+			const unpacked = await unpackFiles(new Uint8Array(zipData));
 			expect(unpacked['Quill.yaml']).toBeDefined();
 			expect(unpacked['template.typ']).toBeDefined();
 			expect(unpacked['assets/logo.txt']).toBeDefined();
@@ -278,8 +276,8 @@ describe('FileSystemSource', () => {
 			await source.packageForHttp(OUTPUT_DIR);
 
 			const files = await fs.readdir(OUTPUT_DIR);
-			expect(files).toContain('usaf_memo@0.1.0.tar.br');
-			expect(files).toContain('usaf_memo@1.0.0.tar.br');
+			expect(files).toContain('usaf_memo@0.1.0.zip');
+			expect(files).toContain('usaf_memo@1.0.0.zip');
 
 			const manifestContent = JSON.parse(
 				await fs.readFile(path.join(OUTPUT_DIR, 'manifest.json'), 'utf-8'),
@@ -298,7 +296,7 @@ describe('FileSystemSource', () => {
 			expect(files).toContain('manifest.json');
 		});
 
-		it('should produce deterministic (byte-identical) .tar.br files across runs', async () => {
+		it('should produce deterministic (byte-identical) .zip files across runs', async () => {
 			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo');
 
 			const source = new FileSystemSource(TEST_DIR);
@@ -312,10 +310,10 @@ describe('FileSystemSource', () => {
 			await new Promise((r) => setTimeout(r, 50));
 			await source.packageForHttp(outputDir2);
 
-			const br1 = await fs.readFile(path.join(outputDir1, 'usaf_memo@1.0.0.tar.br'));
-			const br2 = await fs.readFile(path.join(outputDir2, 'usaf_memo@1.0.0.tar.br'));
+			const zip1 = await fs.readFile(path.join(outputDir1, 'usaf_memo@1.0.0.zip'));
+			const zip2 = await fs.readFile(path.join(outputDir2, 'usaf_memo@1.0.0.zip'));
 
-			expect(br1.equals(br2)).toBe(true);
+			expect(zip1.equals(zip2)).toBe(true);
 		});
 	});
 });

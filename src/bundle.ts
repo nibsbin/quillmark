@@ -1,93 +1,47 @@
 /**
- * Tar archive packing/unpacking for bundling quill files.
+ * Zip archive packing/unpacking for bundling quill files.
  *
- * Uses node-tar for standards-compliant POSIX tar archives.
- * Packing is deterministic: paths are sorted lexicographically
- * and all metadata (uid, gid, mtime) is fixed.
+ * Uses fflate for lightweight, cross-platform zip support.
+ * Packing is deterministic: paths are sorted lexicographically.
  */
 
-import { create as tarCreate, Parser as TarParser } from 'tar';
+import { zipSync, unzipSync } from 'fflate';
 import * as fs from 'node:fs/promises';
-import * as os from 'node:os';
 import * as path from 'node:path';
 
-/** Collects all chunks from an async iterable into a single Uint8Array. */
-async function collectStream(stream: AsyncIterable<Buffer | Uint8Array>): Promise<Uint8Array> {
-	const chunks: Buffer[] = [];
-	for await (const chunk of stream) {
-		chunks.push(Buffer.from(chunk));
-	}
-	return new Uint8Array(Buffer.concat(chunks));
-}
+/** Fixed date for deterministic zip output (DOS date minimum: 1980-01-01). */
+const ZIP_EPOCH = new Date('1980-01-01T00:00:00Z');
 
 /**
- * Creates a tar archive directly from a directory on disk using node-tar.
- * Entries are sorted lexicographically and metadata is fixed for deterministic output.
+ * Creates a zip archive directly from a directory on disk.
+ * Entries are sorted lexicographically for deterministic output.
  */
 export async function packDirectory(dirPath: string, fileList: string[]): Promise<Uint8Array> {
 	const sorted = [...fileList].sort();
-	if (sorted.length === 0) {
-		// node-tar requires at least one entry; return a minimal empty archive (two zero blocks)
-		return new Uint8Array(1024);
+	const entries: Record<string, Uint8Array> = {};
+	for (const filePath of sorted) {
+		const fullPath = path.join(dirPath, filePath);
+		entries[filePath] = new Uint8Array(await fs.readFile(fullPath));
 	}
-	const stream = tarCreate(
-		{
-			cwd: dirPath,
-			portable: true,
-			mtime: new Date(0),
-		},
-		sorted,
-	);
-	return collectStream(stream);
+	return zipSync(entries, { level: 0, mtime: ZIP_EPOCH });
 }
 
 /**
- * Packs a flat file map into a tar archive using node-tar.
- * Files are written to a temporary directory, then archived.
+ * Packs a flat file map into a zip archive.
  * Paths are sorted lexicographically for deterministic output.
  */
 export async function packFiles(files: Record<string, Uint8Array>): Promise<Uint8Array> {
-	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'quill-pack-'));
-	try {
-		const sortedPaths = Object.keys(files).sort();
-		for (const filePath of sortedPaths) {
-			const fullPath = path.resolve(tmpDir, ...filePath.split('/'));
-			if (!fullPath.startsWith(tmpDir + path.sep) && fullPath !== tmpDir) {
-				throw new Error(`Path traversal detected: "${filePath}"`);
-			}
-			await fs.mkdir(path.dirname(fullPath), { recursive: true });
-			await fs.writeFile(fullPath, files[filePath]);
-		}
-		return packDirectory(tmpDir, sortedPaths);
-	} finally {
-		await fs.rm(tmpDir, { recursive: true, force: true });
+	const sorted = Object.keys(files).sort();
+	const entries: Record<string, Uint8Array> = {};
+	for (const filePath of sorted) {
+		entries[filePath] = files[filePath];
 	}
+	return zipSync(entries, { level: 0, mtime: ZIP_EPOCH });
 }
 
 /**
- * Unpacks a tar archive into a flat file map using node-tar.
+ * Unpacks a zip archive into a flat file map.
  */
 export async function unpackFiles(data: Uint8Array): Promise<Record<string, Uint8Array>> {
-	const files: Record<string, Uint8Array> = {};
-
-	return new Promise((resolve, reject) => {
-		const parser = new TarParser({
-			onReadEntry: (entry) => {
-				if (entry.type === 'File') {
-					const chunks: Buffer[] = [];
-					entry.on('data', (d: Buffer) => chunks.push(d));
-					entry.on('end', () => {
-						files[entry.path] = new Uint8Array(Buffer.concat(chunks));
-					});
-				} else {
-					entry.resume();
-				}
-			},
-		});
-
-		parser.on('end', () => resolve(files));
-		parser.on('error', reject);
-		parser.write(Buffer.from(data));
-		parser.end();
-	});
+	return unzipSync(data);
 }

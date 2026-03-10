@@ -1,6 +1,5 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { brotliCompressSync, constants } from 'node:zlib';
 import type { QuillBundle, QuillManifest, QuillMetadata, QuillSource } from '../types.js';
 import { RegistryError } from '../errors.js';
 import { toEngineFileTree } from '../format.js';
@@ -120,7 +119,7 @@ function compareSemver(a: string, b: string): number {
  * derived from the directory structure; Quill.yaml content is validated by the
  * @quillmark/wasm engine at registration time.
  *
- * Also exposes `packageForHttp(outputDir)` to create Brotli-compressed tar bundles and write a manifest
+ * Also exposes `packageForHttp(outputDir)` to create zip bundles and write a manifest
  * for static hosting.
  */
 export class FileSystemSource implements QuillSource {
@@ -223,8 +222,8 @@ export class FileSystemSource implements QuillSource {
 
 	/**
 	 * Packages all quills for HTTP static hosting.
-	 * Creates a tar archive of each quill version, Brotli-compresses it, and writes
-	 * `.tar.br` bundles plus a `manifest.json` to `outputDir`.
+	 * Creates a zip archive of each quill version and writes
+	 * `.zip` bundles plus a `manifest.json` to `outputDir`.
 	 */
 	async packageForHttp(outputDir: string): Promise<void> {
 		await fs.mkdir(outputDir, { recursive: true });
@@ -236,12 +235,9 @@ export class FileSystemSource implements QuillSource {
 			const fileList = await listFilesRecursive(quillDir);
 
 			const packed = await packDirectory(quillDir, fileList);
-			const compressed = brotliCompressSync(packed, {
-				params: { [constants.BROTLI_PARAM_QUALITY]: 6 },
-			});
 
-			const bundleFileName = `${entry.name}@${entry.version}.tar.br`;
-			await fs.writeFile(path.join(outputDir, bundleFileName), compressed);
+			const bundleFileName = `${entry.name}@${entry.version}.zip`;
+			await fs.writeFile(path.join(outputDir, bundleFileName), packed);
 		}
 
 		await fs.writeFile(path.join(outputDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
