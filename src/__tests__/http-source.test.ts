@@ -13,9 +13,9 @@ const MANIFEST: QuillManifest = {
 };
 
 /** Creates a mock Brotli-compressed bundle containing test files. */
-function createMockBundle(): ArrayBuffer {
+async function createMockBundle(): Promise<ArrayBuffer> {
 	const encoder = new TextEncoder();
-	const packed = packFiles({
+	const packed = await packFiles({
 		'Quill.yaml': encoder.encode('name: usaf_memo\nversion: 1.0.0'),
 		'template.typ': encoder.encode('// Template'),
 	});
@@ -133,7 +133,7 @@ describe('HttpSource', () => {
 
 	describe('loadQuill()', () => {
 		it('should fetch and decompress a quill', async () => {
-			const brData = createMockBundle();
+			const brData = await createMockBundle();
 			const mockFetch = createMockFetch({
 				'manifest.json': { ok: true, body: MANIFEST },
 				'usaf_memo@1.0.0.tar.br': { ok: true, body: brData },
@@ -157,7 +157,7 @@ describe('HttpSource', () => {
 		});
 
 		it('should append ?v={version} for cache-busting', async () => {
-			const brData = createMockBundle();
+			const brData = await createMockBundle();
 			const mockFetch = createMockFetch({
 				'manifest.json': { ok: true, body: MANIFEST },
 				'usaf_memo@1.0.0.tar.br': { ok: true, body: brData },

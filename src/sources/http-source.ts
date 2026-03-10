@@ -118,7 +118,7 @@ export class HttpSource implements QuillSource {
 		try {
 			const brData = new Uint8Array(await response.arrayBuffer());
 			const decompressed = brotliDecompressSync(brData);
-			files = unpackFiles(new Uint8Array(decompressed));
+			files = await unpackFiles(new Uint8Array(decompressed));
 		} catch (err) {
 			throw new RegistryError('load_error', `Failed to decompress quill "${name}"`, {
 				quillName: name,

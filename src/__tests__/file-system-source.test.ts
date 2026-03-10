@@ -264,7 +264,7 @@ describe('FileSystemSource', () => {
 			// Verify bundle contents
 			const brData = await fs.readFile(path.join(OUTPUT_DIR, 'usaf_memo@1.0.0.tar.br'));
 			const decompressed = brotliDecompressSync(brData);
-			const unpacked = unpackFiles(new Uint8Array(decompressed));
+			const unpacked = await unpackFiles(new Uint8Array(decompressed));
 			expect(unpacked['Quill.yaml']).toBeDefined();
 			expect(unpacked['template.typ']).toBeDefined();
 			expect(unpacked['assets/logo.txt']).toBeDefined();

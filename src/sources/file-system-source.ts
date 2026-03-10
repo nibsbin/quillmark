@@ -4,7 +4,7 @@ import { brotliCompressSync, constants } from 'node:zlib';
 import type { QuillBundle, QuillManifest, QuillMetadata, QuillSource } from '../types.js';
 import { RegistryError } from '../errors.js';
 import { toEngineFileTree } from '../format.js';
-import { packFiles } from '../bundle.js';
+import { packDirectory } from '../bundle.js';
 
 /** Reads files from a directory recursively, returning a map of relative paths to contents. */
 async function readDirRecursive(
@@ -213,14 +213,9 @@ export class FileSystemSource implements QuillSource {
 		for (const entry of manifest.quills) {
 			const quillDir = path.join(this.quillsDir, entry.name, entry.version);
 			const files = await readDirRecursive(quillDir);
+			const fileList = Object.keys(files);
 
-			// Normalize OS-native path separators to forward slashes
-			const normalized: Record<string, Uint8Array> = {};
-			for (const [relativePath, content] of Object.entries(files)) {
-				normalized[relativePath.split(path.sep).join('/')] = content;
-			}
-
-			const packed = packFiles(normalized);
+			const packed = await packDirectory(quillDir, fileList);
 			const compressed = brotliCompressSync(packed, {
 				params: { [constants.BROTLI_PARAM_QUALITY]: 6 },
 			});

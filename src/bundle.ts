@@ -1,139 +1,90 @@
 /**
- * Minimal ustar tar archive packer/unpacker for bundling quill files.
+ * Tar archive packing/unpacking for bundling quill files.
  *
- * Uses the POSIX ustar format (512-byte headers, zero-padded content blocks).
- * All metadata (mode, uid, gid, mtime) is fixed for deterministic output.
- * Paths are sorted lexicographically before packing.
+ * Uses node-tar for standards-compliant POSIX tar archives.
+ * Packing is deterministic: paths are sorted lexicographically
+ * and all metadata (uid, gid, mtime) is fixed.
  */
 
-const BLOCK = 512;
+import { create as tarCreate, Parser as TarParser } from 'tar';
+import * as fs from 'node:fs/promises';
+import * as os from 'node:os';
+import * as path from 'node:path';
 
-/** Writes an ASCII string into a Uint8Array at the given offset. */
-function writeString(buf: Uint8Array, offset: number, str: string, len: number): void {
-	for (let i = 0; i < Math.min(str.length, len); i++) {
-		buf[offset + i] = str.charCodeAt(i);
+/** Collects all chunks from an async iterable into a single Uint8Array. */
+async function collectStream(stream: AsyncIterable<Buffer | Uint8Array>): Promise<Uint8Array> {
+	const chunks: Buffer[] = [];
+	for await (const chunk of stream) {
+		chunks.push(Buffer.from(chunk));
 	}
-}
-
-/** Reads a null-terminated ASCII string from a Uint8Array. */
-function readString(buf: Uint8Array, offset: number, len: number): string {
-	let end = offset;
-	while (end < offset + len && buf[end] !== 0) end++;
-	return String.fromCharCode(...buf.subarray(offset, end));
+	return new Uint8Array(Buffer.concat(chunks));
 }
 
 /**
- * Creates a single tar entry (header + zero-padded content) for a regular file.
- * @throws {Error} if the file path exceeds 100 bytes (ustar name field limit).
+ * Creates a tar archive directly from a directory on disk using node-tar.
+ * Entries are sorted lexicographically and metadata is fixed for deterministic output.
  */
-function createTarEntry(name: string, content: Uint8Array): Uint8Array {
-	if (name.length > 100) {
-		throw new Error(`Tar entry path exceeds 100 bytes: "${name}"`);
+export async function packDirectory(dirPath: string, fileList: string[]): Promise<Uint8Array> {
+	const sorted = [...fileList].sort();
+	if (sorted.length === 0) {
+		// node-tar requires at least one entry; return a minimal empty archive (two zero blocks)
+		return new Uint8Array(1024);
 	}
-
-	const header = new Uint8Array(BLOCK);
-	const paddedSize = Math.ceil(content.length / BLOCK) * BLOCK;
-
-	// name (0–99)
-	writeString(header, 0, name, 100);
-	// mode (100–107): 0644
-	writeString(header, 100, '0000644\0', 8);
-	// uid (108–115)
-	writeString(header, 108, '0000000\0', 8);
-	// gid (116–123)
-	writeString(header, 116, '0000000\0', 8);
-	// size (124–135): octal, null-terminated
-	writeString(header, 124, content.length.toString(8).padStart(11, '0') + '\0', 12);
-	// mtime (136–147): fixed at 0 for determinism
-	writeString(header, 136, '00000000000\0', 12);
-	// checksum placeholder (148–155): 8 spaces
-	for (let i = 148; i < 156; i++) header[i] = 0x20;
-	// typeflag (156): '0' = regular file
-	header[156] = 0x30;
-	// magic (257–262): "ustar\0"
-	writeString(header, 257, 'ustar\0', 6);
-	// version (263–264): "00"
-	writeString(header, 263, '00', 2);
-
-	// Compute and write header checksum
-	let checksum = 0;
-	for (let i = 0; i < BLOCK; i++) checksum += header[i];
-	writeString(header, 148, checksum.toString(8).padStart(6, '0') + '\0 ', 8);
-
-	const entry = new Uint8Array(BLOCK + paddedSize);
-	entry.set(header, 0);
-	entry.set(content, BLOCK);
-	return entry;
+	const stream = tarCreate(
+		{
+			cwd: dirPath,
+			portable: true,
+			mtime: new Date(0),
+		},
+		sorted,
+	);
+	return collectStream(stream);
 }
 
 /**
- * Packs a flat file map into a ustar tar archive.
+ * Packs a flat file map into a tar archive using node-tar.
+ * Files are written to a temporary directory, then archived.
  * Paths are sorted lexicographically for deterministic output.
  */
-export function packFiles(files: Record<string, Uint8Array>): Uint8Array {
-	const sortedPaths = Object.keys(files).sort();
-	const entries: Uint8Array[] = [];
-	let totalSize = 0;
-
-	for (const p of sortedPaths) {
-		const entry = createTarEntry(p, files[p]);
-		entries.push(entry);
-		totalSize += entry.length;
+export async function packFiles(files: Record<string, Uint8Array>): Promise<Uint8Array> {
+	const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'quill-pack-'));
+	try {
+		const sortedPaths = Object.keys(files).sort();
+		for (const filePath of sortedPaths) {
+			const fullPath = path.join(tmpDir, ...filePath.split('/'));
+			await fs.mkdir(path.dirname(fullPath), { recursive: true });
+			await fs.writeFile(fullPath, files[filePath]);
+		}
+		return packDirectory(tmpDir, sortedPaths);
+	} finally {
+		await fs.rm(tmpDir, { recursive: true, force: true });
 	}
-
-	// End-of-archive marker: two 512-byte zero blocks
-	totalSize += BLOCK * 2;
-
-	const archive = new Uint8Array(totalSize);
-	let offset = 0;
-	for (const entry of entries) {
-		archive.set(entry, offset);
-		offset += entry.length;
-	}
-	// Trailing zero blocks are already zeros (Uint8Array default)
-
-	return archive;
 }
 
 /**
- * Unpacks a ustar tar archive into a flat file map.
+ * Unpacks a tar archive into a flat file map using node-tar.
  */
-export function unpackFiles(data: Uint8Array): Record<string, Uint8Array> {
+export async function unpackFiles(data: Uint8Array): Promise<Record<string, Uint8Array>> {
 	const files: Record<string, Uint8Array> = {};
-	let offset = 0;
 
-	while (offset + BLOCK <= data.length) {
-		const header = data.subarray(offset, offset + BLOCK);
-		// End-of-archive: zero block
-		let allZero = true;
-		for (let i = 0; i < BLOCK; i++) {
-			if (header[i] !== 0) {
-				allZero = false;
-				break;
-			}
-		}
-		if (allZero) break;
+	return new Promise((resolve, reject) => {
+		const parser = new TarParser({
+			onReadEntry: (entry) => {
+				if (entry.type === 'File') {
+					const chunks: Buffer[] = [];
+					entry.on('data', (d: Buffer) => chunks.push(d));
+					entry.on('end', () => {
+						files[entry.path] = new Uint8Array(Buffer.concat(chunks));
+					});
+				} else {
+					entry.resume();
+				}
+			},
+		});
 
-		const name = readString(header, 0, 100);
-		const sizeStr = readString(header, 124, 12);
-		const size = parseInt(sizeStr, 8);
-		if (Number.isNaN(size)) {
-			throw new Error(`Corrupted tar archive: invalid size field "${sizeStr}"`);
-		}
-		const typeflag = header[156];
-		offset += BLOCK;
-
-		if (offset + size > data.length) {
-			throw new Error(`Corrupted tar archive: entry "${name}" extends beyond data`);
-		}
-
-		// '0' (0x30) or '\0' (0x00) = regular file
-		if (typeflag === 0x30 || typeflag === 0) {
-			files[name] = data.slice(offset, offset + size);
-		}
-
-		offset += Math.ceil(size / BLOCK) * BLOCK;
-	}
-
-	return files;
+		parser.on('end', () => resolve(files));
+		parser.on('error', reject);
+		parser.write(Buffer.from(data));
+		parser.end();
+	});
 }

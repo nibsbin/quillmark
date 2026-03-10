@@ -59,5 +59,8 @@
     "@quillmark/wasm": {
       "optional": false
     }
+  },
+  "dependencies": {
+    "tar": "^7.5.11"
   }
 }
