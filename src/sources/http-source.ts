@@ -1,7 +1,8 @@
-import { unzipSync } from 'fflate';
+import { brotliDecompressSync } from 'node:zlib';
 import type { QuillBundle, QuillManifest, QuillSource } from '../types.js';
 import { RegistryError } from '../errors.js';
 import { toEngineFileTree } from '../format.js';
+import { unpackFiles } from '../bundle.js';
 
 export interface HttpSourceOptions {
 	/** Base URL serving zips + manifest (e.g., "https://cdn.example.com/quills/"). */
@@ -13,12 +14,10 @@ export interface HttpSourceOptions {
 }
 
 /**
- * QuillSource that fetches quill zips and manifest from any HTTP endpoint.
+ * QuillSource that fetches Brotli-compressed quill tar bundles and manifest from any HTTP endpoint.
  *
  * Supports local static serving, CDN hosting, and remote quill registries
- * with the same interface. Appends `?v={version}` to zip URLs for cache-busting.
- *
- * Works in both browser and Node.js environments.
+ * with the same interface. Appends `?v={version}` to bundle URLs for cache-busting.
  */
 export class HttpSource implements QuillSource {
 	private baseUrl: string;
@@ -93,14 +92,14 @@ export class HttpSource implements QuillSource {
 		}
 
 		const resolvedVersion = entry.version;
-		const zipFileName = `${name}@${resolvedVersion}.zip`;
-		const zipUrl = `${this.baseUrl}${zipFileName}?v=${resolvedVersion}`;
+		const bundleFileName = `${name}@${resolvedVersion}.tar.br`;
+		const bundleUrl = `${this.baseUrl}${bundleFileName}?v=${resolvedVersion}`;
 
 		let response: Response;
 		try {
-			response = await this.fetchFn(zipUrl);
+			response = await this.fetchFn(bundleUrl);
 		} catch (err) {
-			throw new RegistryError('load_error', `Failed to fetch quill zip from ${zipUrl}`, {
+			throw new RegistryError('load_error', `Failed to fetch quill bundle from ${bundleUrl}`, {
 				quillName: name,
 				version: resolvedVersion,
 				cause: err,
@@ -110,23 +109,18 @@ export class HttpSource implements QuillSource {
 		if (!response.ok) {
 			throw new RegistryError(
 				'load_error',
-				`Failed to fetch quill zip: ${response.status} ${response.statusText}`,
+				`Failed to fetch quill bundle: ${response.status} ${response.statusText}`,
 				{ quillName: name, version: resolvedVersion },
 			);
 		}
 
 		let files: Record<string, Uint8Array>;
 		try {
-			const zipData = new Uint8Array(await response.arrayBuffer());
-			const unzipped = unzipSync(zipData);
-			files = {};
-			for (const [relativePath, content] of Object.entries(unzipped)) {
-				if (!relativePath.endsWith('/')) {
-					files[relativePath] = content;
-				}
-			}
+			const brData = new Uint8Array(await response.arrayBuffer());
+			const decompressed = brotliDecompressSync(brData);
+			files = unpackFiles(new Uint8Array(decompressed));
 		} catch (err) {
-			throw new RegistryError('load_error', `Failed to unzip quill "${name}"`, {
+			throw new RegistryError('load_error', `Failed to decompress quill "${name}"`, {
 				quillName: name,
 				version: resolvedVersion,
 				cause: err,
