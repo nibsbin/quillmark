@@ -103,7 +103,7 @@ describe('registerQuill compatibility with @quillmark/wasm', () => {
 				if (urlStr.includes('manifest.json')) {
 					return new Response(manifestJson);
 				}
-				const bundleMatch = urlStr.match(/\/([^/?]+\.tar\.br)/);
+				const bundleMatch = urlStr.match(/\/([^/?]+\.zip)/);
 				if (bundleMatch) {
 					const bundlePath = path.join(HTTP_OUTPUT_DIR, bundleMatch[1]);
 					try {
@@ -152,7 +152,7 @@ describe('registerQuill compatibility with @quillmark/wasm', () => {
 				if (urlStr.includes('manifest.json')) {
 					return new Response(manifestJson);
 				}
-				const bundleMatch = urlStr.match(/\/([^/?]+\.tar\.br)/);
+				const bundleMatch = urlStr.match(/\/([^/?]+\.zip)/);
 				if (bundleMatch) {
 					const bundlePath = path.join(HTTP_OUTPUT_DIR, bundleMatch[1]);
 					try {
@@ -199,7 +199,7 @@ describe('registerQuill compatibility with @quillmark/wasm', () => {
 				if (urlStr.includes('manifest.json')) {
 					return new Response(manifestJson);
 				}
-				const bundleMatch = urlStr.match(/\/([^/?]+\.tar\.br)/);
+				const bundleMatch = urlStr.match(/\/([^/?]+\.zip)/);
 				if (bundleMatch) {
 					const bundlePath = path.join(HTTP_OUTPUT_DIR, bundleMatch[1]);
 					try {

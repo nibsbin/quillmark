@@ -1,4 +1,3 @@
-import { brotliDecompressSync } from 'node:zlib';
 import type { QuillBundle, QuillManifest, QuillSource } from '../types.js';
 import { RegistryError } from '../errors.js';
 import { toEngineFileTree } from '../format.js';
@@ -14,7 +13,7 @@ export interface HttpSourceOptions {
 }
 
 /**
- * QuillSource that fetches Brotli-compressed quill tar bundles and manifest from any HTTP endpoint.
+ * QuillSource that fetches quill zip bundles and manifest from any HTTP endpoint.
  *
  * Supports local static serving, CDN hosting, and remote quill registries
  * with the same interface. Appends `?v={version}` to bundle URLs for cache-busting.
@@ -92,7 +91,7 @@ export class HttpSource implements QuillSource {
 		}
 
 		const resolvedVersion = entry.version;
-		const bundleFileName = `${name}@${resolvedVersion}.tar.br`;
+		const bundleFileName = `${name}@${resolvedVersion}.zip`;
 		const bundleUrl = `${this.baseUrl}${bundleFileName}?v=${resolvedVersion}`;
 
 		let response: Response;
@@ -116,11 +115,10 @@ export class HttpSource implements QuillSource {
 
 		let files: Record<string, Uint8Array>;
 		try {
-			const brData = new Uint8Array(await response.arrayBuffer());
-			const decompressed = brotliDecompressSync(brData);
-			files = await unpackFiles(new Uint8Array(decompressed));
+			const zipData = new Uint8Array(await response.arrayBuffer());
+			files = await unpackFiles(zipData);
 		} catch (err) {
-			throw new RegistryError('load_error', `Failed to decompress quill "${name}"`, {
+			throw new RegistryError('load_error', `Failed to unpack quill "${name}"`, {
 				quillName: name,
 				version: resolvedVersion,
 				cause: err,
