@@ -114,10 +114,8 @@ fn typst_alignment(align: &pulldown_cmark::Alignment) -> &'static str {
 
 /// Returns true if the HTML string is a `<br>` tag (any common variant).
 fn is_br_tag(html: &str) -> bool {
-    let trimmed = html.trim();
-    trimmed.eq_ignore_ascii_case("<br>")
-        || trimmed.eq_ignore_ascii_case("<br/>")
-        || trimmed.eq_ignore_ascii_case("<br />")
+    let lower = html.trim().to_ascii_lowercase();
+    lower == "<br>" || lower == "<br/>" || lower == "<br />"
 }
 
 /// Converts an iterator of markdown events to Typst markup
@@ -870,8 +868,9 @@ where
 
             // 3. Convert <br> tags to HardBreak; strip all other HTML
             let (event, range) = match event {
-                Event::InlineHtml(ref html) if is_br_tag(html) => (Event::HardBreak, range),
-                Event::Html(ref html) if is_br_tag(html) => (Event::HardBreak, range),
+                Event::InlineHtml(ref html) | Event::Html(ref html) if is_br_tag(html) => {
+                    (Event::HardBreak, range)
+                }
                 Event::Html(_) | Event::InlineHtml(_) => continue,
                 other => (other, range),
             };
