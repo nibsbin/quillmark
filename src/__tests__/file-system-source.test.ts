@@ -310,7 +310,7 @@ describe('FileSystemSource', () => {
 			const zip1 = await fs.readFile(path.join(outputDir1, 'usaf_memo@1.0.0.zip'));
 			const zip2 = await fs.readFile(path.join(outputDir2, 'usaf_memo@1.0.0.zip'));
 
-			expect(Buffer.from(zip1).equals(Buffer.from(zip2))).toBe(true);
+			expect(zip1.equals(zip2)).toBe(true);
 		});
 	});
 });
