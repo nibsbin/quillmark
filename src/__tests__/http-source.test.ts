@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import JSZip from 'jszip';
+import { zipSync, strToU8 } from 'fflate';
 import { HttpSource } from '../sources/http-source.js';
 import { RegistryError } from '../errors.js';
 import type { QuillManifest } from '../types.js';
@@ -12,11 +12,12 @@ const MANIFEST: QuillManifest = {
 };
 
 /** Creates a mock zip containing test files. */
-async function createMockZip(): Promise<ArrayBuffer> {
-	const zip = new JSZip();
-	zip.file('Quill.yaml', 'name: usaf_memo\nversion: 1.0.0');
-	zip.file('template.typ', '// Template');
-	return zip.generateAsync({ type: 'arraybuffer' });
+function createMockZip(): ArrayBuffer {
+	const data = zipSync({
+		'Quill.yaml': strToU8('name: usaf_memo\nversion: 1.0.0'),
+		'template.typ': strToU8('// Template'),
+	});
+	return data.buffer as ArrayBuffer;
 }
 
 /** Creates a mock fetch function with programmable responses. */
@@ -127,7 +128,7 @@ describe('HttpSource', () => {
 
 	describe('loadQuill()', () => {
 		it('should fetch and unzip a quill', async () => {
-			const zipData = await createMockZip();
+			const zipData = createMockZip();
 			const mockFetch = createMockFetch({
 				'manifest.json': { ok: true, body: MANIFEST },
 				'usaf_memo@1.0.0.zip': { ok: true, body: zipData },
@@ -151,7 +152,7 @@ describe('HttpSource', () => {
 		});
 
 		it('should append ?v={version} for cache-busting', async () => {
-			const zipData = await createMockZip();
+			const zipData = createMockZip();
 			const mockFetch = createMockFetch({
 				'manifest.json': { ok: true, body: MANIFEST },
 				'usaf_memo@1.0.0.zip': { ok: true, body: zipData },

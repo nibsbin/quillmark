@@ -1,4 +1,4 @@
-import JSZip from 'jszip';
+import { unzipSync } from 'fflate';
 import type { QuillBundle, QuillManifest, QuillSource } from '../types.js';
 import { RegistryError } from '../errors.js';
 import { toEngineFileTree } from '../format.js';
@@ -117,22 +117,14 @@ export class HttpSource implements QuillSource {
 
 		let files: Record<string, Uint8Array>;
 		try {
-			const zipData = await response.arrayBuffer();
-			const zip = await JSZip.loadAsync(zipData);
+			const zipData = new Uint8Array(await response.arrayBuffer());
+			const unzipped = unzipSync(zipData);
 			files = {};
-			const zipEntries: Promise<void>[] = [];
-
-			zip.forEach((relativePath, zipEntry) => {
-				if (!zipEntry.dir) {
-					zipEntries.push(
-						zipEntry.async('uint8array').then((content) => {
-							files[relativePath] = content;
-						}),
-					);
+			for (const [relativePath, content] of Object.entries(unzipped)) {
+				if (!relativePath.endsWith('/')) {
+					files[relativePath] = content;
 				}
-			});
-
-			await Promise.all(zipEntries);
+			}
 		} catch (err) {
 			throw new RegistryError('load_error', `Failed to unzip quill "${name}"`, {
 				quillName: name,

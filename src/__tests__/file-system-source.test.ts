@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { unzipSync } from 'fflate';
 import { FileSystemSource } from '../sources/file-system-source.js';
 import { RegistryError } from '../errors.js';
-import JSZip from 'jszip';
 
 const TEST_DIR = path.join(import.meta.dirname, '../../.test-fixtures/quills');
 const OUTPUT_DIR = path.join(import.meta.dirname, '../../.test-fixtures/output');
@@ -262,10 +262,10 @@ describe('FileSystemSource', () => {
 
 			// Verify zip contents
 			const zipData = await fs.readFile(path.join(OUTPUT_DIR, 'usaf_memo@1.0.0.zip'));
-			const zip = await JSZip.loadAsync(zipData);
-			expect(zip.file('Quill.yaml')).not.toBeNull();
-			expect(zip.file('template.typ')).not.toBeNull();
-			expect(zip.file('assets/logo.txt')).not.toBeNull();
+			const zip = unzipSync(new Uint8Array(zipData));
+			expect(zip['Quill.yaml']).toBeDefined();
+			expect(zip['template.typ']).toBeDefined();
+			expect(zip['assets/logo.txt']).toBeDefined();
 		});
 
 		it('should package multiple versions of the same quill', async () => {
@@ -305,6 +305,9 @@ describe('FileSystemSource', () => {
 			const outputDir2 = path.join(OUTPUT_DIR, 'run2');
 
 			await source.packageForHttp(outputDir1);
+
+			// Wait briefly so that any wall-clock-dependent metadata would differ
+			await new Promise((r) => setTimeout(r, 50));
 			await source.packageForHttp(outputDir2);
 
 			const zip1 = await fs.readFile(path.join(outputDir1, 'usaf_memo@1.0.0.zip'));

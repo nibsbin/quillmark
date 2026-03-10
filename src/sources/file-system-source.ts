@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import JSZip from 'jszip';
+import { zipSync, type Zippable } from 'fflate';
 import type { QuillBundle, QuillManifest, QuillMetadata, QuillSource } from '../types.js';
 import { RegistryError } from '../errors.js';
 import { toEngineFileTree } from '../format.js';
@@ -207,17 +207,20 @@ export class FileSystemSource implements QuillSource {
 		await fs.mkdir(outputDir, { recursive: true });
 
 		const manifest = await this.getManifest();
+		const fixedMtime = new Date('2024-02-24T02:24:24Z');
+
 		for (const entry of manifest.quills) {
 			const quillDir = path.join(this.quillsDir, entry.name, entry.version);
 			const files = await readDirRecursive(quillDir);
 
-			const zip = new JSZip();
+			const entries: Zippable = {};
 			const sortedPaths = Object.keys(files).sort();
 			for (const relativePath of sortedPaths) {
-				zip.file(relativePath, files[relativePath], { date: new Date('2024-02-24T02:24:24Z') });
+				const zipPath = relativePath.split(path.sep).join('/');
+				entries[zipPath] = [files[relativePath], { level: 6, mtime: fixedMtime }];
 			}
 
-			const zipBuffer = await zip.generateAsync({ type: 'uint8array' });
+			const zipBuffer = zipSync(entries);
 			const zipFileName = `${entry.name}@${entry.version}.zip`;
 			await fs.writeFile(path.join(outputDir, zipFileName), zipBuffer);
 		}
