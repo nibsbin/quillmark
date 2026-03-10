@@ -54,7 +54,7 @@ describe('registerQuill compatibility with @quillmark/wasm', () => {
 			const manifest = await registry.getManifest();
 
 			for (const quill of manifest.quills) {
-				await registry.resolve(quill.name, quill.version);
+				await registry.resolve(`${quill.name}@${quill.version}`);
 			}
 
 			const listed = engine.listQuills();
@@ -172,7 +172,7 @@ describe('registerQuill compatibility with @quillmark/wasm', () => {
 			const registry = new QuillRegistry({ source: httpSource, engine });
 
 			for (const quill of manifest.quills) {
-				await registry.resolve(quill.name, quill.version);
+				await registry.resolve(`${quill.name}@${quill.version}`);
 			}
 
 			const listed = engine.listQuills();
