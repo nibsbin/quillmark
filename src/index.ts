@@ -24,3 +24,12 @@ export type { HttpSourceOptions } from './sources/http-source.js';
 // Registry
 export { QuillRegistry } from './registry.js';
 export type { QuillRegistryOptions } from './registry.js';
+
+// Validation
+export { validateQuills } from './validate.js';
+export type {
+	QuillValidationEngine,
+	ValidateQuillsOptions,
+	QuillValidationEntry,
+	ValidateQuillsResult,
+} from './validate.js';
