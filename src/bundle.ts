@@ -9,8 +9,12 @@ import { zipSync, unzipSync } from 'fflate';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
-/** Fixed date for deterministic zip output (DOS date minimum: 1980-01-01). */
-const ZIP_EPOCH = new Date('1980-01-01T00:00:00Z');
+/**
+ * Fixed date for deterministic zip output (DOS date minimum: 1980-01-01).
+ * Constructed via local-time components so that fflate's getFullYear() etc.
+ * always return 1980-01-01 00:00:00 regardless of the host timezone.
+ */
+const ZIP_EPOCH = new Date(1980, 0, 1);
 
 /**
  * Creates a zip archive directly from a directory on disk.
