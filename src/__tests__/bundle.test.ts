@@ -83,4 +83,26 @@ describe('packFiles / unpackFiles', () => {
 		// Check type flag is '0' (regular file)
 		expect(packed[156]).toBe(0x30);
 	});
+
+	it('should throw for paths exceeding 100 bytes', () => {
+		const longPath = 'a'.repeat(101);
+		const files = { [longPath]: new Uint8Array(0) };
+		expect(() => packFiles(files)).toThrow('exceeds 100 bytes');
+	});
+
+	it('should throw for corrupted archive with invalid size', () => {
+		// Create a valid archive, then corrupt the size field
+		const packed = packFiles({ 'test.txt': new TextEncoder().encode('hi') });
+		const corrupted = new Uint8Array(packed);
+		// Overwrite size field (offset 124–135) with garbage
+		for (let i = 124; i < 136; i++) corrupted[i] = 0x58; // 'X'
+		expect(() => unpackFiles(corrupted)).toThrow('invalid size field');
+	});
+
+	it('should throw for truncated archive', () => {
+		const packed = packFiles({ 'test.txt': new TextEncoder().encode('hello world') });
+		// Truncate: keep header but cut the data short
+		const truncated = packed.slice(0, 512 + 2);
+		expect(() => unpackFiles(truncated)).toThrow('extends beyond data');
+	});
 });

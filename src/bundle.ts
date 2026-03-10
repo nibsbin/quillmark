@@ -24,8 +24,13 @@ function readString(buf: Uint8Array, offset: number, len: number): string {
 
 /**
  * Creates a single tar entry (header + zero-padded content) for a regular file.
+ * @throws {Error} if the file path exceeds 100 bytes (ustar name field limit).
  */
 function createTarEntry(name: string, content: Uint8Array): Uint8Array {
+	if (name.length > 100) {
+		throw new Error(`Tar entry path exceeds 100 bytes: "${name}"`);
+	}
+
 	const header = new Uint8Array(BLOCK);
 	const paddedSize = Math.ceil(content.length / BLOCK) * BLOCK;
 
@@ -110,9 +115,17 @@ export function unpackFiles(data: Uint8Array): Record<string, Uint8Array> {
 		if (allZero) break;
 
 		const name = readString(header, 0, 100);
-		const size = parseInt(readString(header, 124, 12), 8);
+		const sizeStr = readString(header, 124, 12);
+		const size = parseInt(sizeStr, 8);
+		if (Number.isNaN(size)) {
+			throw new Error(`Corrupted tar archive: invalid size field "${sizeStr}"`);
+		}
 		const typeflag = header[156];
 		offset += BLOCK;
+
+		if (offset + size > data.length) {
+			throw new Error(`Corrupted tar archive: entry "${name}" extends beyond data`);
+		}
 
 		// '0' (0x30) or '\0' (0x00) = regular file
 		if (typeflag === 0x30 || typeflag === 0) {
