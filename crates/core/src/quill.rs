@@ -112,7 +112,7 @@ impl FieldType {
             "number" => Some(FieldType::Number),
             "boolean" => Some(FieldType::Boolean),
             "array" => Some(FieldType::Array),
-            "object" => Some(FieldType::Object),
+            "object" | "dict" => Some(FieldType::Object),
             "date" => Some(FieldType::Date),
             "datetime" => Some(FieldType::DateTime),
             "markdown" => Some(FieldType::Markdown),
