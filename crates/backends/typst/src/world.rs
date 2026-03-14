@@ -451,7 +451,7 @@ impl QuillWorld {
         entrypoint: Option<&str>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Find all files in the package directory
-        let package_pattern = format!("{}/**", package_dir.to_string_lossy());
+        let package_pattern = format!("{}/*", package_dir.to_string_lossy());
         let package_files = quill.find_files(&package_pattern);
 
         for file_path in package_files {
