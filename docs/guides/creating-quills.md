@@ -90,16 +90,57 @@ Each field can specify:
 - `examples` - Array of example values
 - `required` - Whether the field must be present
 - `enum` - Restrict string fields to specific values
+- `properties` - Nested field schemas (for `dict` type)
+- `items` - Item schema (for `array` type)
 
 Supported `type` values:
 - `string` or `str`
 - `number`
 - `boolean`
 - `array`
-- `object`
+- `dict` (also accepted as `object`)
 - `date`
 - `datetime`
 - `markdown`
+
+### Nested Dict Fields
+
+Use `dict` with `properties` to define structured objects:
+
+```yaml
+fields:
+  address:
+    description: Mailing address
+    type: dict
+    properties:
+      street:
+        type: string
+        required: true
+      city:
+        type: string
+        required: true
+      zip:
+        type: string
+```
+
+### Arrays of Dicts
+
+Combine `array` with an `items` schema of type `dict` for lists of structured objects:
+
+```yaml
+fields:
+  recipients:
+    description: List of recipients
+    type: array
+    items:
+      type: dict
+      properties:
+        name:
+          type: string
+          required: true
+        email:
+          type: string
+```
 
 ### UI Configuration
 
