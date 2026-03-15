@@ -19,7 +19,7 @@
 //
 // Basic usage:
 //
-// #import "@preview/tonguetoquill-cmu-letter:0.1.0": frontmatter, mainmatter, backmatter
+// #import "@local/tonguetoquill-cmu-letter:0.1.0": frontmatter, mainmatter, backmatter
 //
 // #show: frontmatter.with(
 //   wordmark: image("assets/cmu-wordmark.svg"),

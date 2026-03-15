@@ -250,7 +250,7 @@ impl QuillWorld {
 
         // Parse and download each package
         for package_str in packages_list {
-            // Parse package spec from string (e.g., "@preview/bubble:0.2.2")
+            // Parse package spec from string (e.g., "@local/bubble:0.2.2")
             match package_str.parse::<PackageSpec>() {
                 Ok(spec) => {
                     // Download/prepare the package
@@ -612,7 +612,7 @@ fn parse_package_toml(
     let namespace = package_section
         .get("namespace")
         .and_then(|v| v.as_str())
-        .unwrap_or("preview")
+        .unwrap_or("local")
         .to_string();
 
     let name = package_section
@@ -672,7 +672,7 @@ name = "minimal-package"
         let package_info = parse_package_toml(toml_content).unwrap();
         assert_eq!(package_info.name, "minimal-package");
         assert_eq!(package_info.version, "0.1.0");
-        assert_eq!(package_info.namespace, "preview");
+        assert_eq!(package_info.namespace, "local");
         assert_eq!(package_info.entrypoint, "lib.typ");
     }
 

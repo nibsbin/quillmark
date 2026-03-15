@@ -1,5 +1,5 @@
 #import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
-#import "@preview/tonguetoquill-cmu-letter:0.1.0": backmatter, frontmatter, mainmatter
+#import "@local/tonguetoquill-cmu-letter:0.1.0": backmatter, frontmatter, mainmatter
 
 #show: frontmatter.with(
   wordmark: image("assets/cmu-wordmark.svg"),

@@ -1,5 +1,5 @@
 #import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
-#import "@preview/ttq-classic-resume:0.1.0": *
+#import "@local/ttq-classic-resume:0.1.0": *
 
 #show: resume
 
