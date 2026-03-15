@@ -332,11 +332,38 @@ impl QuillWorld {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use std::fs;
 
+        // Canonicalize package root once for symlink-safe path comparison
+        let canonical_root = package_root.canonicalize().map_err(|e| {
+            format!(
+                "Failed to canonicalize package root {}: {}",
+                package_root.display(),
+                e
+            )
+        })?;
+
         for entry in fs::read_dir(current_dir)? {
             let entry = entry?;
             let path = entry.path();
 
-            if path.is_file() {
+            // Resolve symlinks: canonicalize the path and verify it is still
+            // under the package root to prevent path-traversal via symlinks.
+            let canonical_path = path.canonicalize().map_err(|e| {
+                format!(
+                    "Failed to canonicalize path for security validation {}: {}",
+                    path.display(),
+                    e
+                )
+            })?;
+            if !canonical_path.starts_with(&canonical_root) {
+                eprintln!(
+                    "Warning: Skipping {} (resolves to {} which is outside package root)",
+                    path.display(),
+                    canonical_path.display()
+                );
+                continue;
+            }
+
+            if canonical_path.is_file() {
                 // Calculate relative path from package root
                 let relative_path = path
                     .strip_prefix(package_root)
@@ -346,7 +373,7 @@ impl QuillWorld {
                 let file_id = FileId::new(Some(spec.clone()), virtual_path);
 
                 // Load file contents
-                let contents = fs::read(&path)?;
+                let contents = fs::read(&canonical_path)?;
 
                 // Determine if it's a source or binary file
                 if let Some(ext) = path.extension() {
@@ -362,7 +389,7 @@ impl QuillWorld {
                     // No extension, treat as binary
                     binaries.insert(file_id, Bytes::new(contents));
                 }
-            } else if path.is_dir() {
+            } else if canonical_path.is_dir() {
                 // Recursively process subdirectories
                 Self::load_package_files_recursive(&path, package_root, sources, binaries, spec)?;
             }
