@@ -56,6 +56,9 @@ use crate::version::QuillReference;
 /// The field name used to store the document body
 pub const BODY_FIELD: &str = "BODY";
 
+/// The field name used to store the auto-generated card label
+pub const CARD_LABEL_FIELD: &str = "CARD_LABEL";
+
 /// A parsed markdown document with frontmatter
 #[derive(Debug, Clone)]
 pub struct ParsedDocument {
@@ -385,8 +388,9 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                                     ));
                                 }
 
-                                // Check for reserved field names (BODY, CARDS)
-                                const RESERVED_FIELDS: &[&str] = &["BODY", "CARDS"];
+                                // Check for reserved field names (BODY, CARDS, CARD_LABEL)
+                                const RESERVED_FIELDS: &[&str] =
+                                    &["BODY", "CARDS", CARD_LABEL_FIELD];
                                 for reserved in RESERVED_FIELDS {
                                     if mapping.contains_key(*reserved) {
                                         return Err(crate::error::ParseError::InvalidStructure(
@@ -710,6 +714,42 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
         BODY_FIELD.to_string(),
         QuillValue::from_json(serde_json::Value::String(global_body.to_string())),
     );
+
+    // Auto-number cards: add CARD_LABEL to each card
+    // When multiple cards of the same type exist, label them "{type} 1", "{type} 2", etc.
+    if !cards_array.is_empty() {
+        // Count cards per type
+        let mut type_counts: HashMap<String, usize> = HashMap::new();
+        for card in &cards_array {
+            if let Some(card_type) = card.get("CARD").and_then(|v| v.as_str()) {
+                *type_counts.entry(card_type.to_string()).or_insert(0) += 1;
+            }
+        }
+
+        // Assign labels with per-type counters
+        let mut type_counters: HashMap<String, usize> = HashMap::new();
+        for card in &mut cards_array {
+            if let Some(card_obj) = card.as_object_mut() {
+                if let Some(card_type) = card_obj.get("CARD").and_then(|v| v.as_str()) {
+                    let card_type = card_type.to_string();
+                    let count = type_counts.get(&card_type).copied().unwrap_or(1);
+                    let counter = type_counters.entry(card_type.clone()).or_insert(0);
+                    *counter += 1;
+
+                    let label = if count > 1 {
+                        format!("{} {}", card_type, counter)
+                    } else {
+                        card_type
+                    };
+
+                    card_obj.insert(
+                        CARD_LABEL_FIELD.to_string(),
+                        serde_json::Value::String(label),
+                    );
+                }
+            }
+        }
+    }
 
     // Always add CARDS array to fields (may be empty)
     fields.insert(
@@ -1328,6 +1368,21 @@ CARDS: []
     }
 
     #[test]
+    fn test_reserved_field_card_label_rejected() {
+        let markdown = r#"---
+title: Test
+CARD_LABEL: custom
+---"#;
+
+        let result = decompose(markdown);
+        assert!(result.is_err(), "CARD_LABEL is a reserved field name");
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Reserved field name"));
+    }
+
+    #[test]
     fn test_delimiter_inside_fenced_code_block_backticks() {
         let markdown = r#"---
 title: Test
@@ -1611,6 +1666,192 @@ rating: 4
 
         // Total fields: title, author, date, body, CARDS = 5
         assert_eq!(doc.fields().len(), 5);
+    }
+
+    #[test]
+    fn test_card_label_single_type_single_card() {
+        // Single card of a type should NOT be numbered
+        let markdown = r#"---
+title: Test
+---
+
+---
+CARD: items
+name: Widget A
+---
+
+Body."#;
+
+        let doc = decompose(markdown).unwrap();
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 1);
+
+        let card = cards[0].as_object().unwrap();
+        assert_eq!(
+            card.get(CARD_LABEL_FIELD).unwrap().as_str().unwrap(),
+            "items"
+        );
+    }
+
+    #[test]
+    fn test_card_label_single_type_multiple_cards() {
+        // Multiple cards of the same type should be numbered starting at 1
+        let markdown = r#"---
+CARD: items
+name: Item 1
+---
+
+First.
+
+---
+CARD: items
+name: Item 2
+---
+
+Second.
+
+---
+CARD: items
+name: Item 3
+---
+
+Third."#;
+
+        let doc = decompose(markdown).unwrap();
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 3);
+
+        assert_eq!(
+            cards[0]
+                .as_object()
+                .unwrap()
+                .get(CARD_LABEL_FIELD)
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "items 1"
+        );
+        assert_eq!(
+            cards[1]
+                .as_object()
+                .unwrap()
+                .get(CARD_LABEL_FIELD)
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "items 2"
+        );
+        assert_eq!(
+            cards[2]
+                .as_object()
+                .unwrap()
+                .get(CARD_LABEL_FIELD)
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "items 3"
+        );
+    }
+
+    #[test]
+    fn test_card_label_mixed_types() {
+        // Mixed types: types with multiple cards get numbered, single cards don't
+        let markdown = r#"---
+title: Catalog
+---
+
+---
+CARD: products
+name: Widget A
+---
+
+Body A.
+
+---
+CARD: products
+name: Widget B
+---
+
+Body B.
+
+---
+CARD: reviews
+product: Widget A
+rating: 5
+---
+
+Great!
+
+---
+CARD: products
+name: Widget C
+---
+
+Body C."#;
+
+        let doc = decompose(markdown).unwrap();
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 4);
+
+        // products appear 3 times, so they get numbered
+        assert_eq!(
+            cards[0]
+                .as_object()
+                .unwrap()
+                .get(CARD_LABEL_FIELD)
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "products 1"
+        );
+        assert_eq!(
+            cards[1]
+                .as_object()
+                .unwrap()
+                .get(CARD_LABEL_FIELD)
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "products 2"
+        );
+
+        // reviews appears once, so no number
+        assert_eq!(
+            cards[2]
+                .as_object()
+                .unwrap()
+                .get(CARD_LABEL_FIELD)
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "reviews"
+        );
+
+        // products 3 (continues the numbering)
+        assert_eq!(
+            cards[3]
+                .as_object()
+                .unwrap()
+                .get(CARD_LABEL_FIELD)
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "products 3"
+        );
+    }
+
+    #[test]
+    fn test_card_label_empty_cards() {
+        // No cards should result in empty CARDS array (no labels to add)
+        let markdown = r#"---
+title: No Cards
+---
+
+Just body content."#;
+
+        let doc = decompose(markdown).unwrap();
+        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+        assert_eq!(cards.len(), 0);
     }
 
     #[test]

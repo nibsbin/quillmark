@@ -41,7 +41,7 @@
 //! - [Examples](https://github.com/nibsbin/quillmark/tree/main/examples) - Working examples
 
 pub mod parse;
-pub use parse::{ParsedDocument, BODY_FIELD};
+pub use parse::{ParsedDocument, BODY_FIELD, CARD_LABEL_FIELD};
 
 pub mod backend;
 pub use backend::Backend;
