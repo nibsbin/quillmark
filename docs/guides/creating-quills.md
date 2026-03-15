@@ -160,6 +160,21 @@ Supported UI properties:
 
 - `group` - Group name for organizing fields in the UI
 - `visible_when` - Conditionally show/hide based on sibling field values
+- `hide_body` - Disable the markdown body editor for the document (document-level `ui` only)
+
+#### Disabling the Body Editor
+
+Some Quills are purely metadata-driven and don't use a markdown body at all. Set `hide_body: true` in the document-level `ui` block to signal to consumers (form builders, UI wizards) that the body editor should not be shown:
+
+```yaml
+Quill:
+  name: my-quill
+  backend: typst
+  ui:
+    hide_body: true
+```
+
+This is a UI hint only — it does not remove the `BODY` field from the schema or prevent the backend from receiving body content.
 
 #### Conditional Visibility
 
