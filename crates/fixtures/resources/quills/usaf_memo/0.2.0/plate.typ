@@ -1,5 +1,5 @@
 #import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
-#import "@preview/tonguetoquill-usaf-memo:1.1.0": backmatter, frontmatter, indorsement, mainmatter
+#import "@local/tonguetoquill-usaf-memo:1.1.0": backmatter, frontmatter, indorsement, mainmatter
 
 // Frontmatter configuration
 #show: frontmatter.with(
