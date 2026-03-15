@@ -73,7 +73,8 @@ pub enum NormalizationError {
 fn is_bidi_char(c: char) -> bool {
     matches!(
         c,
-        '\u{200E}' // LEFT-TO-RIGHT MARK (LRM)
+        '\u{061C}' // ARABIC LETTER MARK (ALM)
+        | '\u{200E}' // LEFT-TO-RIGHT MARK (LRM)
         | '\u{200F}' // RIGHT-TO-LEFT MARK (RLM)
         | '\u{202A}' // LEFT-TO-RIGHT EMBEDDING (LRE)
         | '\u{202B}' // RIGHT-TO-LEFT EMBEDDING (RLE)
@@ -94,6 +95,7 @@ fn is_bidi_char(c: char) -> bool {
 ///
 /// # Characters Stripped
 ///
+/// - U+061C (ARABIC LETTER MARK, ALM)
 /// - U+200E (LEFT-TO-RIGHT MARK, LRM)
 /// - U+200F (RIGHT-TO-LEFT MARK, RLM)
 /// - U+202A (LEFT-TO-RIGHT EMBEDDING, LRE)
@@ -528,8 +530,15 @@ mod tests {
 
     #[test]
     fn test_strip_bidi_all_chars() {
-        let all_bidi = "\u{200E}\u{200F}\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}";
+        let all_bidi = "\u{061C}\u{200E}\u{200F}\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}";
         assert_eq!(strip_bidi_formatting(all_bidi), "");
+    }
+
+    #[test]
+    fn test_strip_bidi_arabic_letter_mark() {
+        // U+061C ARABIC LETTER MARK (ALM) should be stripped
+        assert_eq!(strip_bidi_formatting("hello\u{061C}world"), "helloworld");
+        assert_eq!(strip_bidi_formatting("\u{061C}**bold**"), "**bold**");
     }
 
     #[test]

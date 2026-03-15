@@ -118,6 +118,37 @@ fn is_br_tag(html: &str) -> bool {
     lower == "<br>" || lower == "<br/>" || lower == "<br />"
 }
 
+/// Sanitizes a code-block language tag for safe inclusion in Typst raw blocks.
+///
+/// Only allows alphanumeric characters, hyphens, underscores, dots, and plus signs,
+/// which are the characters commonly found in language identifiers (e.g., "c++",
+/// "objective-c", "file.typ"). Characters like `#`, newlines, backticks, and other
+/// Typst-special characters are treated as the end of the valid identifier.
+/// This prevents injection via newlines or Typst-special characters in the info string.
+fn sanitize_lang_tag(lang: &str) -> String {
+    lang.chars()
+        .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '+'))
+        .collect()
+}
+
+/// Returns the length of the longest consecutive run of backtick characters in the string.
+/// Used to determine how many backticks are needed for safe Typst raw text delimiters.
+fn longest_backtick_run(s: &str) -> usize {
+    let mut max_run = 0;
+    let mut current_run = 0;
+    for ch in s.chars() {
+        if ch == '`' {
+            current_run += 1;
+            if current_run > max_run {
+                max_run = current_run;
+            }
+        } else {
+            current_run = 0;
+        }
+    }
+    max_run
+}
+
 /// Converts an iterator of markdown events to Typst markup
 fn push_typst<'a, I>(output: &mut String, source: &str, iter: I) -> Result<(), ConversionError>
 where
@@ -184,8 +215,9 @@ where
                         }
                         output.push_str("```");
                         if let pulldown_cmark::CodeBlockKind::Fenced(lang) = kind {
-                            if !lang.is_empty() {
-                                output.push_str(&lang);
+                            let sanitized = sanitize_lang_tag(&lang);
+                            if !sanitized.is_empty() {
+                                output.push_str(&sanitized);
                             }
                         }
                         output.push('\n');
@@ -423,10 +455,21 @@ where
                 }
             }
             Event::Code(text) => {
-                // Inline code
-                output.push('`');
+                // Inline code: use enough backticks to avoid delimiter collision
+                let max_run = longest_backtick_run(&text);
+                let delim_len = max_run + 1;
+                let delim: String = std::iter::repeat('`').take(delim_len).collect();
+                output.push_str(&delim);
+                // When using multi-backtick delimiters, Typst requires spaces
+                // to separate the delimiters from the content
+                if delim_len > 1 {
+                    output.push(' ');
+                }
                 output.push_str(&text);
-                output.push('`');
+                if delim_len > 1 {
+                    output.push(' ');
+                }
+                output.push_str(&delim);
                 end_newline = false;
             }
             Event::HardBreak => {
@@ -2861,5 +2904,106 @@ More text with `inline code`."#;
             "Should produce underline: {}",
             result
         );
+    }
+
+    // Security tests: inline code backtick injection
+    #[test]
+    fn test_inline_code_backtick_injection() {
+        // Content with a backtick must use multi-backtick delimiters
+        // to prevent breaking out of Typst raw text
+        let result = mark_to_typst("`` `inject` ``").unwrap();
+        // The content is "`inject`" — must not produce `...`inject`...`
+        // which would break the raw text delimiters
+        assert!(
+            !result.contains("``inject``"),
+            "Backticks should not form nested delimiters"
+        );
+        // Multi-backtick delimiters should be used
+        assert!(
+            result.contains("`` "),
+            "Should use double-backtick delimiters"
+        );
+    }
+
+    #[test]
+    fn test_inline_code_consecutive_backticks() {
+        // Content with consecutive backticks
+        let result = mark_to_typst("``` `` ```").unwrap();
+        // Content is "``" — needs at least 3 backtick delimiters
+        assert!(
+            result.contains("```"),
+            "Should use triple-backtick delimiters for double-backtick content"
+        );
+    }
+
+    // Security tests: code block language string sanitization
+    #[test]
+    fn test_code_block_lang_sanitized_simple() {
+        // Normal language tags should pass through
+        let result = mark_to_typst("```rust\ncode\n```").unwrap();
+        assert_eq!(result, "```rust\ncode\n```\n\n");
+    }
+
+    #[test]
+    fn test_code_block_lang_sanitized_special_chars() {
+        // Language tag with special characters should be sanitized
+        // pulldown-cmark extracts info string as-is; we strip dangerous chars
+        let result = mark_to_typst("```rust#evil\ncode\n```").unwrap();
+        // '#' should be stripped, only "rust" remains
+        assert!(
+            result.starts_with("```rust\n"),
+            "Lang tag should be sanitized to 'rust': got {}",
+            result
+        );
+        assert!(
+            !result.contains("#evil"),
+            "Special chars should be stripped from lang tag"
+        );
+    }
+
+    #[test]
+    fn test_code_block_lang_allows_common_identifiers() {
+        // c++, objective-c, c_sharp etc. should be preserved
+        let result = mark_to_typst("```c++\ncode\n```").unwrap();
+        assert!(
+            result.starts_with("```c++\n"),
+            "c++ lang tag should be preserved"
+        );
+
+        let result = mark_to_typst("```objective-c\ncode\n```").unwrap();
+        assert!(
+            result.starts_with("```objective-c\n"),
+            "objective-c lang tag should be preserved"
+        );
+    }
+
+    // Security tests: sanitize_lang_tag unit tests
+    #[test]
+    fn test_sanitize_lang_tag_basic() {
+        assert_eq!(sanitize_lang_tag("rust"), "rust");
+        assert_eq!(sanitize_lang_tag("c++"), "c++");
+        assert_eq!(sanitize_lang_tag("objective-c"), "objective-c");
+        assert_eq!(sanitize_lang_tag("file.typ"), "file.typ");
+    }
+
+    #[test]
+    fn test_sanitize_lang_tag_strips_injection() {
+        // Newlines, Typst markup chars, etc. should be stripped
+        assert_eq!(sanitize_lang_tag("rust\n#import"), "rust");
+        assert_eq!(sanitize_lang_tag("rust`code`"), "rust");
+        assert_eq!(sanitize_lang_tag("rust[evil]"), "rust");
+        assert_eq!(sanitize_lang_tag("rust$math$"), "rust");
+        assert_eq!(sanitize_lang_tag(""), "");
+    }
+
+    // Security test: longest_backtick_run helper
+    #[test]
+    fn test_longest_backtick_run() {
+        assert_eq!(longest_backtick_run("no backticks"), 0);
+        assert_eq!(longest_backtick_run("one ` here"), 1);
+        assert_eq!(longest_backtick_run("two `` here"), 2);
+        assert_eq!(longest_backtick_run("mixed ` and `` here"), 2);
+        assert_eq!(longest_backtick_run("```"), 3);
+        assert_eq!(longest_backtick_run(""), 0);
     }
 }
