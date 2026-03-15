@@ -594,9 +594,12 @@ where
         let bytes = source_slice.as_bytes();
 
         // Check if this text starts with __ and we have a pending underline opener
-        if bytes.len() >= 2
+        // Skip if the __ is part of a longer underscore run (3+ consecutive underscores)
+        let starts_with_marker = bytes.len() >= 2
             && bytes[0] == b'_'
             && bytes[1] == b'_'
+            && !(bytes.len() >= 3 && bytes[2] == b'_');
+        if starts_with_marker
             && self
                 .pending_markers
                 .last()
@@ -626,6 +629,15 @@ where
             }
 
             if i + 1 < bytes.len() && bytes[i] == b'_' && bytes[i + 1] == b'_' {
+                // Skip __ that is part of a longer underscore run (3+ consecutive underscores)
+                // e.g., "________________" should be literal text, not underline markers
+                let prev_is_underscore = i > 0 && bytes[i - 1] == b'_';
+                let next_is_underscore = i + 2 < bytes.len() && bytes[i + 2] == b'_';
+                if prev_is_underscore || next_is_underscore {
+                    i += 1;
+                    continue;
+                }
+
                 // Found __
                 let before = &source_slice[last_end..i];
                 if !before.is_empty() {
@@ -2789,5 +2801,65 @@ More text with `inline code`."#;
         let markdown = "(*italic*)";
         let result = mark_to_typst(markdown).unwrap();
         assert_eq!(result, "(#emph[italic])\n\n");
+    }
+
+    // Tests for long underscore runs (fill-in-the-blank lines)
+    #[test]
+    fn test_long_underscore_run_as_literal_text() {
+        // Long underscore runs should be treated as literal text, not underline markers
+        let input = "I acknowledge receipt and understanding of this letter on ________________ at ___________ hours.";
+        let result = mark_to_typst(input).unwrap();
+        // All underscores should be escaped, no brackets
+        assert!(
+            !result.contains('['),
+            "Should not contain opening brackets: {}",
+            result
+        );
+        assert!(
+            !result.contains(']'),
+            "Should not contain closing brackets: {}",
+            result
+        );
+        assert!(
+            result.contains("\\_"),
+            "Underscores should be escaped: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_triple_underscore_as_literal() {
+        // Three consecutive underscores should be literal
+        let input = "fill in: ___";
+        let result = mark_to_typst(input).unwrap();
+        assert!(
+            !result.contains('['),
+            "Should not contain brackets: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_four_underscores_as_literal() {
+        // Four consecutive underscores should be literal
+        let input = "fill in: ____";
+        let result = mark_to_typst(input).unwrap();
+        assert!(
+            !result.contains('['),
+            "Should not contain brackets: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_double_underscore_underline_still_works() {
+        // Regular __underlined__ should still produce underline formatting
+        let input = "__underlined text__";
+        let result = mark_to_typst(input).unwrap();
+        assert!(
+            result.contains("#underline["),
+            "Should produce underline: {}",
+            result
+        );
     }
 }
