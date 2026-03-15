@@ -118,6 +118,24 @@ fn is_br_tag(html: &str) -> bool {
     lower == "<br>" || lower == "<br/>" || lower == "<br />"
 }
 
+/// Returns the length of the longest consecutive run of backtick characters in the string.
+/// Used to determine how many backticks are needed for safe Typst raw text delimiters.
+fn longest_backtick_run(s: &str) -> usize {
+    let mut max_run = 0;
+    let mut current_run = 0;
+    for ch in s.chars() {
+        if ch == '`' {
+            current_run += 1;
+            if current_run > max_run {
+                max_run = current_run;
+            }
+        } else {
+            current_run = 0;
+        }
+    }
+    max_run
+}
+
 /// Converts an iterator of markdown events to Typst markup
 fn push_typst<'a, I>(output: &mut String, source: &str, iter: I) -> Result<(), ConversionError>
 where
@@ -423,10 +441,21 @@ where
                 }
             }
             Event::Code(text) => {
-                // Inline code
-                output.push('`');
+                // Inline code: use enough backticks to avoid delimiter collision
+                let max_run = longest_backtick_run(&text);
+                let delim_len = max_run + 1;
+                let delim: String = std::iter::repeat('`').take(delim_len).collect();
+                output.push_str(&delim);
+                // When using multi-backtick delimiters, Typst requires spaces
+                // to separate the delimiters from the content
+                if delim_len > 1 {
+                    output.push(' ');
+                }
                 output.push_str(&text);
-                output.push('`');
+                if delim_len > 1 {
+                    output.push(' ');
+                }
+                output.push_str(&delim);
                 end_newline = false;
             }
             Event::HardBreak => {
