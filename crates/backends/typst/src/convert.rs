@@ -2790,4 +2790,17 @@ More text with `inline code`."#;
         let result = mark_to_typst(markdown).unwrap();
         assert_eq!(result, "(#emph[italic])\n\n");
     }
+
+    #[test]
+    fn test_debug_long_underscores() {
+        let input = "I acknowledge receipt and understanding of this letter on ________________ at ___________ hours.";
+        let result = mark_to_typst(input).unwrap();
+        eprintln!("OUTPUT: {:?}", result);
+        // This should NOT contain unmatched brackets
+        // Count opening and closing brackets
+        let opens: usize = result.matches('[').count();
+        let closes: usize = result.matches(']').count();
+        eprintln!("Opens: {}, Closes: {}", opens, closes);
+        assert_eq!(opens, closes, "Mismatched brackets in output: {}", result);
+    }
 }
