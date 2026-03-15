@@ -348,12 +348,17 @@ impl QuillWorld {
             // Resolve symlinks: canonicalize the path and verify it is still
             // under the package root to prevent path-traversal via symlinks.
             let canonical_path = path.canonicalize().map_err(|e| {
-                format!("Failed to canonicalize {}: {}", path.display(), e)
+                format!(
+                    "Failed to canonicalize path for security validation {}: {}",
+                    path.display(),
+                    e
+                )
             })?;
             if !canonical_path.starts_with(&canonical_root) {
                 eprintln!(
-                    "Warning: Skipping {} (resolves outside package root)",
-                    path.display()
+                    "Warning: Skipping {} (resolves to {} which is outside package root)",
+                    path.display(),
+                    canonical_path.display()
                 );
                 continue;
             }

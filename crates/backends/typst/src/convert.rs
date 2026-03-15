@@ -121,8 +121,9 @@ fn is_br_tag(html: &str) -> bool {
 /// Sanitizes a code-block language tag for safe inclusion in Typst raw blocks.
 ///
 /// Only allows alphanumeric characters, hyphens, underscores, dots, and plus signs,
-/// which are the characters commonly found in language identifiers (e.g., "c++", "c#"
-/// becomes "c" since '#' is stripped, but "objective-c" is preserved).
+/// which are the characters commonly found in language identifiers (e.g., "c++",
+/// "objective-c", "file.typ"). Characters like `#`, newlines, backticks, and other
+/// Typst-special characters are treated as the end of the valid identifier.
 /// This prevents injection via newlines or Typst-special characters in the info string.
 fn sanitize_lang_tag(lang: &str) -> String {
     lang.chars()
@@ -2913,9 +2914,15 @@ More text with `inline code`."#;
         let result = mark_to_typst("`` `inject` ``").unwrap();
         // The content is "`inject`" — must not produce `...`inject`...`
         // which would break the raw text delimiters
-        assert!(!result.contains("``inject``"), "Backticks should not form nested delimiters");
+        assert!(
+            !result.contains("``inject``"),
+            "Backticks should not form nested delimiters"
+        );
         // Multi-backtick delimiters should be used
-        assert!(result.contains("`` "), "Should use double-backtick delimiters");
+        assert!(
+            result.contains("`` "),
+            "Should use double-backtick delimiters"
+        );
     }
 
     #[test]
@@ -2923,7 +2930,10 @@ More text with `inline code`."#;
         // Content with consecutive backticks
         let result = mark_to_typst("``` `` ```").unwrap();
         // Content is "``" — needs at least 3 backtick delimiters
-        assert!(result.contains("```"), "Should use triple-backtick delimiters for double-backtick content");
+        assert!(
+            result.contains("```"),
+            "Should use triple-backtick delimiters for double-backtick content"
+        );
     }
 
     // Security tests: code block language string sanitization
@@ -2940,18 +2950,31 @@ More text with `inline code`."#;
         // pulldown-cmark extracts info string as-is; we strip dangerous chars
         let result = mark_to_typst("```rust#evil\ncode\n```").unwrap();
         // '#' should be stripped, only "rust" remains
-        assert!(result.starts_with("```rust\n"), "Lang tag should be sanitized to 'rust': got {}", result);
-        assert!(!result.contains("#evil"), "Special chars should be stripped from lang tag");
+        assert!(
+            result.starts_with("```rust\n"),
+            "Lang tag should be sanitized to 'rust': got {}",
+            result
+        );
+        assert!(
+            !result.contains("#evil"),
+            "Special chars should be stripped from lang tag"
+        );
     }
 
     #[test]
     fn test_code_block_lang_allows_common_identifiers() {
         // c++, objective-c, c_sharp etc. should be preserved
         let result = mark_to_typst("```c++\ncode\n```").unwrap();
-        assert!(result.starts_with("```c++\n"), "c++ lang tag should be preserved");
+        assert!(
+            result.starts_with("```c++\n"),
+            "c++ lang tag should be preserved"
+        );
 
         let result = mark_to_typst("```objective-c\ncode\n```").unwrap();
-        assert!(result.starts_with("```objective-c\n"), "objective-c lang tag should be preserved");
+        assert!(
+            result.starts_with("```objective-c\n"),
+            "objective-c lang tag should be preserved"
+        );
     }
 
     // Security tests: sanitize_lang_tag unit tests
