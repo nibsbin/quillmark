@@ -2810,9 +2810,21 @@ More text with `inline code`."#;
         let input = "I acknowledge receipt and understanding of this letter on ________________ at ___________ hours.";
         let result = mark_to_typst(input).unwrap();
         // All underscores should be escaped, no brackets
-        assert!(!result.contains('['), "Should not contain opening brackets: {}", result);
-        assert!(!result.contains(']'), "Should not contain closing brackets: {}", result);
-        assert!(result.contains("\\_"), "Underscores should be escaped: {}", result);
+        assert!(
+            !result.contains('['),
+            "Should not contain opening brackets: {}",
+            result
+        );
+        assert!(
+            !result.contains(']'),
+            "Should not contain closing brackets: {}",
+            result
+        );
+        assert!(
+            result.contains("\\_"),
+            "Underscores should be escaped: {}",
+            result
+        );
     }
 
     #[test]
@@ -2820,7 +2832,11 @@ More text with `inline code`."#;
         // Three consecutive underscores should be literal
         let input = "fill in: ___";
         let result = mark_to_typst(input).unwrap();
-        assert!(!result.contains('['), "Should not contain brackets: {}", result);
+        assert!(
+            !result.contains('['),
+            "Should not contain brackets: {}",
+            result
+        );
     }
 
     #[test]
@@ -2828,7 +2844,11 @@ More text with `inline code`."#;
         // Four consecutive underscores should be literal
         let input = "fill in: ____";
         let result = mark_to_typst(input).unwrap();
-        assert!(!result.contains('['), "Should not contain brackets: {}", result);
+        assert!(
+            !result.contains('['),
+            "Should not contain brackets: {}",
+            result
+        );
     }
 
     #[test]
@@ -2836,6 +2856,10 @@ More text with `inline code`."#;
         // Regular __underlined__ should still produce underline formatting
         let input = "__underlined text__";
         let result = mark_to_typst(input).unwrap();
-        assert!(result.contains("#underline["), "Should produce underline: {}", result);
+        assert!(
+            result.contains("#underline["),
+            "Should produce underline: {}",
+            result
+        );
     }
 }
