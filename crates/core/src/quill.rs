@@ -42,6 +42,8 @@ pub mod ui_key {
     pub const HIDE_BODY: &str = "hide_body";
     /// Conditional visibility rules: field → accepted values
     pub const VISIBLE_WHEN: &str = "visible_when";
+    /// Compact rendering hint for UI consumers
+    pub const COMPACT: &str = "compact";
 }
 
 /// UI-specific metadata for field rendering
@@ -57,6 +59,8 @@ pub struct UiFieldSchema {
     /// Example: `visible_when: { format: [standard, separate_page] }` means show this field
     /// only when the sibling `format` field has value "standard" or "separate_page".
     pub visible_when: Option<HashMap<String, Vec<String>>>,
+    /// Compact rendering hint: when true, the UI should render this field in a compact style
+    pub compact: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -632,6 +636,7 @@ impl QuillConfig {
                             group: None,
                             order: Some(order),
                             visible_when: None,
+                            compact: None,
                         });
                     } else if let Some(ui) = &mut schema.ui {
                         // Only set if not already set
@@ -2092,6 +2097,20 @@ default: "Default value"
             schema2.default.as_ref().and_then(|v| v.as_str()),
             Some("Default value")
         );
+    }
+
+    #[test]
+    fn test_field_schema_ui_compact() {
+        let yaml_str = r#"
+type: "string"
+description: "A compact field"
+ui:
+  compact: true
+"#;
+        let quill_value = QuillValue::from_yaml_str(yaml_str).unwrap();
+        let schema =
+            FieldSchema::from_quill_value("compact_field".to_string(), &quill_value).unwrap();
+        assert_eq!(schema.ui.as_ref().unwrap().compact, Some(true));
     }
 
     #[test]
