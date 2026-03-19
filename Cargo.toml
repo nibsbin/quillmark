@@ -102,6 +102,12 @@ codegen-units = 16 # Balance parallelization with optimization
 panic = "abort"    # Smaller binary, slightly faster
 strip = true       # Remove debug symbols (size)
 
+# CLI binary: optimize for size (smaller install via cargo install)
+[profile.release.package.quillmark-cli]
+opt-level = "z"
+lto = true
+codegen-units = 1
+
 # WASM-specific optimizations
 [profile.wasm-release]
 inherits = "release"
