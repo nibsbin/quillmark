@@ -79,6 +79,10 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
             ui_obj.insert(ui_key::VISIBLE_WHEN.to_string(), Value::Object(vw_obj));
         }
 
+        if let Some(compact) = ui.compact {
+            ui_obj.insert(ui_key::COMPACT.to_string(), Value::Bool(compact));
+        }
+
         if !ui_obj.is_empty() {
             property.insert("x-ui".to_string(), Value::Object(ui_obj));
         }
@@ -2157,6 +2161,7 @@ mod tests {
             group: Some("Header".to_string()),
             order: Some(0),
             visible_when: None,
+            compact: None,
         });
 
         let mut card_fields = HashMap::new();
@@ -2188,6 +2193,38 @@ mod tests {
 
         assert_eq!(from_field["x-ui"]["group"], "Header");
         assert_eq!(from_field["x-ui"]["order"], 0);
+    }
+
+    #[test]
+    fn test_compact_field_ui_metadata() {
+        use crate::quill::{CardSchema, UiFieldSchema};
+
+        let mut field_schema = FieldSchema::new(
+            "rank".to_string(),
+            FieldType::String,
+            Some("Rank".to_string()),
+        );
+        field_schema.ui = Some(UiFieldSchema {
+            group: None,
+            order: Some(0),
+            visible_when: None,
+            compact: Some(true),
+        });
+
+        let mut fields = HashMap::new();
+        fields.insert("rank".to_string(), field_schema);
+
+        let document = CardSchema {
+            name: "root".to_string(),
+            title: None,
+            description: None,
+            fields,
+            ui: None,
+        };
+
+        let schema = build_schema(&document, &HashMap::new()).unwrap();
+        let rank_field = &schema.as_json()["properties"]["rank"];
+        assert_eq!(rank_field["x-ui"]["compact"], true);
     }
 
     #[test]
@@ -2262,6 +2299,7 @@ mod tests {
             group: Some("Addressing".to_string()),
             order: Some(0),
             visible_when: Some(visible_when),
+            compact: None,
         });
 
         // Field without visible_when (always visible)
@@ -2279,6 +2317,7 @@ mod tests {
             group: Some("Additional".to_string()),
             order: Some(1),
             visible_when: None,
+            compact: None,
         });
 
         let mut card_fields = HashMap::new();
@@ -2341,6 +2380,7 @@ mod tests {
             group: Some("Addressing".to_string()),
             order: Some(0),
             visible_when: Some(visible_when),
+            compact: None,
         });
 
         let mut fields = HashMap::new();
