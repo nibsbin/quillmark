@@ -21,7 +21,6 @@ npm install
 |---|---|
 | `npm run build` | Compile TypeScript (`tsc`) |
 | `npm test` | Run the test suite once (Vitest) |
-| `npm run test:watch` | Run tests in watch mode |
 | `npm run lint` | Type-check without emitting (`tsc --noEmit`) |
 
 Make sure **both lint and tests pass** before opening a pull request:
