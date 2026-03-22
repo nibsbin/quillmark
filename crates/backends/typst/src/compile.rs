@@ -138,7 +138,7 @@ const DEFAULT_PPI: f32 = 144.0;
 /// * `quill` - The quill template containing assets and configuration
 /// * `plated_content` - The plate file content (Typst source)
 /// * `json_data` - JSON string containing the document data
-/// * `ppi` - Pixels per inch. Uses [`DEFAULT_PPI`] (144.0) when `None`.
+/// * `ppi` - Pixels per inch. Defaults to 144.0 when `None`.
 pub fn compile_to_png(
     quill: &Quill,
     plated_content: &str,
