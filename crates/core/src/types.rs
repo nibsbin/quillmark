@@ -9,6 +9,8 @@ pub enum OutputFormat {
     Svg,
     /// Portable Document Format output
     Pdf,
+    /// Portable Network Graphics output (raster)
+    Png,
 }
 
 /// An artifact produced by rendering.
@@ -25,4 +27,8 @@ pub struct Artifact {
 pub struct RenderOptions {
     /// Optional output format specification
     pub output_format: Option<OutputFormat>,
+    /// Pixels per inch for raster output formats (e.g., PNG).
+    /// Ignored for vector/document formats (PDF, SVG, TXT).
+    /// Defaults to 144.0 (2x at 72pt/inch) when `None`.
+    pub ppi: Option<f32>,
 }

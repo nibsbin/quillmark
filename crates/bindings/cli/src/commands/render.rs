@@ -20,7 +20,7 @@ pub struct RenderArgs {
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
 
-    /// Output format: pdf, svg, txt
+    /// Output format: pdf, svg, png, txt
     #[arg(short, long, value_name = "FORMAT", default_value = "pdf")]
     format: String,
 
@@ -174,10 +174,11 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     let output_format = match args.format.to_lowercase().as_str() {
         "pdf" => OutputFormat::Pdf,
         "svg" => OutputFormat::Svg,
+        "png" => OutputFormat::Png,
         "txt" => OutputFormat::Txt,
         _ => {
             return Err(CliError::InvalidArgument(format!(
-                "Invalid output format: {}. Must be one of: pdf, svg, txt",
+                "Invalid output format: {}. Must be one of: pdf, svg, png, txt",
                 args.format
             )));
         }

@@ -1,11 +1,12 @@
 //! # Typst Compilation
 //!
-//! This module compiles Typst documents to output formats (PDF and SVG).
+//! This module compiles Typst documents to output formats (PDF, SVG, and PNG).
 //!
 //! ## Functions
 //!
 //! - [`compile_to_pdf()`] - Compile Typst to PDF format
 //! - [`compile_to_svg()`] - Compile Typst to SVG format (one file per page)
+//! - [`compile_to_png()`] - Compile Typst to PNG format (one image per page) at a given PPI
 //!
 //! ## Quick Example
 //!
@@ -25,7 +26,7 @@
 //!
 //! 1. Creates a `QuillWorld` with the quill's assets and packages
 //! 2. Compiles the Typst document using the Typst compiler
-//! 3. Converts to target format (PDF or SVG)
+//! 3. Converts to target format (PDF, SVG, or PNG)
 //! 4. Returns output bytes
 //!
 //! The output bytes can be written to a file or returned directly to the caller.
@@ -120,6 +121,58 @@ pub fn compile_to_svg(
     for page in &document.pages {
         let svg = typst_svg::svg(page);
         pages.push(svg.into_bytes());
+    }
+
+    Ok(pages)
+}
+
+/// Default pixels per inch for PNG rendering (2x at 72pt/inch).
+const DEFAULT_PPI: f32 = 144.0;
+
+/// Compiles a Typst document to PNG format with JSON data injection.
+///
+/// Returns one PNG image (as bytes) per page.
+///
+/// # Arguments
+///
+/// * `quill` - The quill template containing assets and configuration
+/// * `plated_content` - The plate file content (Typst source)
+/// * `json_data` - JSON string containing the document data
+/// * `ppi` - Pixels per inch. Uses [`DEFAULT_PPI`] (144.0) when `None`.
+pub fn compile_to_png(
+    quill: &Quill,
+    plated_content: &str,
+    json_data: &str,
+    ppi: Option<f32>,
+) -> Result<Vec<Vec<u8>>, RenderError> {
+    let world = QuillWorld::new_with_data(quill, plated_content, json_data).map_err(|e| {
+        RenderError::EngineCreation {
+            diag: Box::new(
+                Diagnostic::new(
+                    Severity::Error,
+                    format!("Failed to create Typst compilation environment: {}", e),
+                )
+                .with_code("typst::world_creation".to_string())
+                .with_source(e),
+            ),
+        }
+    })?;
+
+    let document = compile_document(&world)?;
+
+    let ppi = ppi.unwrap_or(DEFAULT_PPI);
+
+    let mut pages = Vec::new();
+    for page in &document.pages {
+        let pixmap = typst_render::render(page, ppi / 72.0);
+        let png_data = pixmap.encode_png().map_err(|e| RenderError::CompilationFailed {
+            diags: vec![Diagnostic::new(
+                Severity::Error,
+                format!("PNG encoding failed: {}", e),
+            )
+            .with_code("typst::png_encoding".to_string())],
+        })?;
+        pages.push(png_data);
     }
 
     Ok(pages)

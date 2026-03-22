@@ -21,6 +21,7 @@ toml = "~0.9"
 typst = { workspace = true }
 typst-kit = { workspace = true, default-features = false, features = ["fonts"] }
 typst-pdf = { workspace = true }
+typst-render = { workspace = true }
 typst-svg = { workspace = true }
 dirs = { workspace = true, optional = true }
 

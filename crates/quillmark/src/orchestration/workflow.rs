@@ -52,6 +52,19 @@ impl Workflow {
         parsed: &ParsedDocument,
         format: Option<OutputFormat>,
     ) -> Result<RenderResult, RenderError> {
+        self.render_with_options(parsed, format, None)
+    }
+
+    /// Render with explicit pixels-per-inch for raster formats (PNG).
+    ///
+    /// `ppi` is ignored for vector/document formats (PDF, SVG, TXT).
+    /// When `None`, defaults to 144.0 (2x at 72pt/inch).
+    pub fn render_with_options(
+        &self,
+        parsed: &ParsedDocument,
+        format: Option<OutputFormat>,
+        ppi: Option<f32>,
+    ) -> Result<RenderResult, RenderError> {
         // Compile the data first
         let json_data = self.compile_data(parsed)?;
 
@@ -62,7 +75,13 @@ impl Workflow {
         let prepared_quill = self.prepare_quill_with_assets();
 
         // Pass plate content and JSON data to backend
-        self.render_plate_with_quill_and_data(&plate_content, format, &prepared_quill, &json_data)
+        self.render_plate_with_quill_and_data(
+            &plate_content,
+            format,
+            ppi,
+            &prepared_quill,
+            &json_data,
+        )
     }
 
     /// Internal method to render content with a specific quill and JSON data
@@ -70,6 +89,7 @@ impl Workflow {
         &self,
         content: &str,
         format: Option<OutputFormat>,
+        ppi: Option<f32>,
         quill: &Quill,
         json_data: &serde_json::Value,
     ) -> Result<RenderResult, RenderError> {
@@ -87,6 +107,7 @@ impl Workflow {
 
         let render_opts = RenderOptions {
             output_format: format,
+            ppi,
         };
 
         self.backend

@@ -334,7 +334,7 @@ impl Quillmark {
 
         let output_format = opts.format.map(|f| f.into());
         let result = workflow
-            .render(&parsed, output_format)
+            .render_with_options(&parsed, output_format, opts.ppi)
             .map_err(|e| WasmError::from(e).to_js_value())?;
 
         Ok(RenderResult {
