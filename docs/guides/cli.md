@@ -12,7 +12,7 @@ cargo install quillmark-cli
 
 ### render
 
-Render markdown documents to PDF, SVG, or text. Optionally emit compiled JSON data.
+Render markdown documents to PDF, SVG, PNG, or text. Optionally emit compiled JSON data.
 
 ```bash
 quillmark render [OPTIONS] [MARKDOWN_FILE]
@@ -26,7 +26,7 @@ quillmark render [OPTIONS] [MARKDOWN_FILE]
 
 - `-q <PATH>` / `--quill <PATH>`: Path to quill directory (optional if the markdown frontmatter contains a `QUILL` field)
 - `-o <PATH>` / `--output <PATH>`: Output file path (default: derived from input filename, e.g. `input.pdf`)
-- `-f <FORMAT>` / `--format <FORMAT>`: Output format: `pdf`, `svg`, `txt` (default: `pdf`)
+- `-f <FORMAT>` / `--format <FORMAT>`: Output format: `pdf`, `svg`, `png`, `txt` (default: `pdf`)
 - `--output-data <DATA_FILE>`: Write compiled JSON data (after coercion/defaults/transform_fields) to a file
 - `-v` / `--verbose`: Show detailed processing information
 - `--quiet`: Suppress all non-error output
@@ -175,6 +175,7 @@ echo "✓ All quills valid"
 # Generate multiple formats
 quillmark render -q ./my-quill input.md -f pdf -o output.pdf
 quillmark render -q ./my-quill input.md -f svg -o output.svg
+quillmark render -q ./my-quill input.md -f png -o output.png
 quillmark render -q ./my-quill input.md -f txt -o output.txt
 ```
 

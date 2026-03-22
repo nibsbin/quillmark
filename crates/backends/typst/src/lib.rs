@@ -128,8 +128,7 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Svg))
             }
             OutputFormat::Png => {
-                let png_pages =
-                    compile::compile_to_png(quill, plate_content, &json_str, opts.ppi)?;
+                let png_pages = compile::compile_to_png(quill, plate_content, &json_str, opts.ppi)?;
                 let artifacts = png_pages
                     .into_iter()
                     .map(|bytes| Artifact {

@@ -1,13 +1,13 @@
 # Typst Backend
 
-The Typst backend generates professional PDF and SVG documents using the [Typst](https://typst.app/) typesetting system.
+The Typst backend generates professional PDF, SVG, and PNG documents using the [Typst](https://typst.app/) typesetting system.
 
 ## Overview
 
 Typst is a modern typesetting system designed as a better alternative to LaTeX. The Quillmark Typst backend:
 
 - Converts Markdown to Typst markup via backend `transform_fields`
-- Compiles Typst code to PDF or SVG
+- Compiles Typst code to PDF, SVG, or PNG
 - Supports dynamic package loading
 - Handles fonts and assets automatically (including dynamic assets/fonts)
 - Provides JSON data injection via helper package
@@ -202,7 +202,7 @@ Reference them in your plate:
 
 ## Output Formats
 
-The Typst backend supports multiple output formats:
+The Typst backend supports three output formats:
 
 ### PDF
 
@@ -221,6 +221,59 @@ svg_bytes = result.artifacts[0].bytes
 ```
 
 SVG output is useful for web applications and scalable graphics.
+
+### PNG
+
+PNG renders each page to a raster image. The resolution is controlled via the `ppi` (pixels per inch) option, which defaults to **144 PPI** (2× at 72pt/inch, suitable for retina screen previews). Use 300 PPI or higher for print-quality output.
+
+**Python** — use `render_with_options` from the Rust API or pass `ppi` through the workflow:
+
+```python
+from quillmark import OutputFormat
+
+# Default PPI (144 — retina screen preview)
+result = workflow.render(parsed, OutputFormat.PNG)
+
+# One artifact per page
+for i, artifact in enumerate(result.artifacts):
+    artifact.save(f"page-{i}.png")
+```
+
+**JavaScript/WASM:**
+
+```javascript
+// Default PPI (144 — retina screen preview)
+const result = engine.render(parsed, { format: 'png' });
+
+// Print quality at 300 PPI
+const printResult = engine.render(parsed, { format: 'png', ppi: 300 });
+
+// One artifact per page
+for (const artifact of printResult.artifacts) {
+  console.log(artifact.mimeType);  // 'image/png'
+}
+```
+
+**Rust:**
+
+```rust
+use quillmark_core::{OutputFormat, RenderOptions};
+
+let opts = RenderOptions {
+    output_format: Some(OutputFormat::Png),
+    ppi: Some(300.0),  // print quality; None defaults to 144.0
+};
+```
+
+**PPI guidelines:**
+
+| PPI | Use case |
+|-----|----------|
+| 72  | Low-res web thumbnails |
+| 144 | Default — retina screen preview (2×) |
+| 192 | High-DPI screen display |
+| 300 | Standard print quality |
+| 600 | High-quality print / archival |
 
 ## Advanced Features
 

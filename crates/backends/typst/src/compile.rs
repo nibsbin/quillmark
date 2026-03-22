@@ -165,13 +165,15 @@ pub fn compile_to_png(
     let mut pages = Vec::new();
     for page in &document.pages {
         let pixmap = typst_render::render(page, ppi / 72.0);
-        let png_data = pixmap.encode_png().map_err(|e| RenderError::CompilationFailed {
-            diags: vec![Diagnostic::new(
-                Severity::Error,
-                format!("PNG encoding failed: {}", e),
-            )
-            .with_code("typst::png_encoding".to_string())],
-        })?;
+        let png_data = pixmap
+            .encode_png()
+            .map_err(|e| RenderError::CompilationFailed {
+                diags: vec![Diagnostic::new(
+                    Severity::Error,
+                    format!("PNG encoding failed: {}", e),
+                )
+                .with_code("typst::png_encoding".to_string())],
+            })?;
         pages.push(png_data);
     }
 
