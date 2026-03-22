@@ -1,115 +1,52 @@
 # Error Handling System
 
-Quillmark's error handling system provides structured diagnostics with source location tracking for actionable error reporting.
+> **Implementation**: `quillmark-core/src/error.rs`
 
-> **Implementation**: See `quillmark-core/src/error.rs` for complete API documentation
+## Types
 
-## Overview
+**`Severity`**: `Error` | `Warning` | `Note`
 
-The error handling system is designed to:
+**`Location`**: file name, line (1-indexed), column (1-indexed)
 
-* Preserve **source location** information (file, line, column) where available
-* Maintain **machine-readable** and **pretty-printable** diagnostics
-* Provide **helpful hints** for common error scenarios
-* Support **error chaining** to preserve context through the stack
-* Enable **cross-language serialization** for Python and WASM bindings
+**`Diagnostic`**: severity, optional error code, message, primary location, optional hint, source error chain
 
-## Core Architecture
+**`RenderError`**: main error enum — engine creation, invalid frontmatter, template rendering, backend compilation (may contain multiple diagnostics), format/backend support, resource collision, size limits, schema validation, invalid schema, quill configuration
 
-### Error Types
-
-**`Severity`**: Error level classification
-- `Error` - Fatal errors that prevent completion
-- `Warning` - Non-fatal issues that may need attention
-- `Note` - Informational messages
-
-**`Location`**: Source position tracking with file name, line number (1-indexed), and column number (1-indexed)
-
-**`Diagnostic`**: Structured error information containing:
-- Severity level
-- Optional error code (e.g., "E001", "typst::syntax")
-- Human-readable message
-- Primary source location
-- Optional hint for fixing the error
-- Source error chain for error propagation
-
-**`RenderError`**: Main error enum for rendering operations with variants for:
-- Engine creation failures
-- Invalid frontmatter
-- Template rendering errors
-- Backend compilation failures (may contain multiple diagnostics)
-- Format/backend support errors
-- Resource collision errors
-- Size limit violations
-- Schema validation failures
-- Invalid schema definitions
-- Quill configuration errors
-
-**`SerializableDiagnostic`**: Cross-language compatible version of `Diagnostic` with flattened source chain for Python and WASM bindings
+**`SerializableDiagnostic`**: flattened `Diagnostic` for Python and WASM FFI boundaries
 
 ## Bindings Error Delegation
 
-Language bindings (Python and WASM) **delegate error handling to core types** rather than creating wrapper error types:
+Python and WASM bindings delegate to core types:
 
-- **Python bindings**: Use `PyDiagnostic` which wraps `SerializableDiagnostic` from core, converting `RenderError` to Python exceptions with attached diagnostic payloads
-- **WASM bindings**: Use a lightweight `WasmError` wrapper around `SerializableDiagnostic` (single or multiple), serializing to JSON for JavaScript consumption via `serde_wasm_bindgen`. This preserves the structured diagnostic data including error codes and hints.
-
-This approach ensures:
-- **Consistency**: All error information originates from core types
-- **Maintainability**: Single source of truth for error structure
-- **Extensibility**: New error fields automatically propagate to bindings
-- **Type safety**: Core types guarantee correct error structure
-
-Bindings should convert `RenderError` to language-specific exceptions/errors while preserving the diagnostic information in structured form.
+- **Python**: `PyDiagnostic` wraps `SerializableDiagnostic`, converting `RenderError` to Python exceptions with attached diagnostic payloads
+- **WASM**: `WasmError` wraps `SerializableDiagnostic` (single or multiple), serialized to JSON via `serde_wasm_bindgen`
 
 ## Backend Error Mapping
 
-Backends convert their native error types to Quillmark's structured diagnostics.
+### AcroForm (MiniJinja)
 
-### Template Engine (AcroForm MiniJinja)
+Template failures → `RenderError::TemplateFailed` with:
+- Line/column extracted when available
+- Hints based on error kind (undefined variables, syntax errors)
+- Error codes: `"acroform::template"`
 
-MiniJinja is only used by the AcroForm backend. Template failures are converted to `RenderError::TemplateFailed` with:
-- Line/column extraction when available
-- Context-aware hints based on error kind (undefined variables, syntax errors, etc.)
-- Preserved error chain via `source` field
-- Structured error codes (e.g., "acroform::template")
+### Typst
 
-### Typst Backend
+Typst diagnostics mapped via `map_typst_errors()`:
+- Severity levels mapped (Error/Warning)
+- Spans resolved to file/line/column
+- Error codes: `"typst::<error_type>"`
 
-Typst diagnostics are mapped via `map_typst_errors()`:
-- Severity levels mapped appropriately (Error/Warning)
-- Spans resolved to precise file/line/column locations
-- Hints preserved from Typst errors
-- Error codes in format "typst::error_type" (e.g., "typst::unknown_variable")
-
-See `backends/quillmark-typst/src/error_mapping.rs` for implementation details.
+See `backends/quillmark-typst/src/error_mapping.rs`.
 
 ## Error Presentation
 
-**Pretty Printing**: The `Diagnostic::fmt_pretty()` method provides human-readable output:
+**Pretty printing** (`Diagnostic::fmt_pretty()`):
 ```
 [ERROR] Undefined variable (E001) at template.typ:10:5
   hint: Check variable spelling
 ```
 
-**Consolidated Printing**: The `print_errors()` helper handles all `RenderError` variants and formats them consistently.
+**Consolidated printing**: `print_errors()` handles all `RenderError` variants.
 
-**Machine-Readable**: All diagnostic types implement `serde::Serialize` for JSON export and tooling integration.
-
-## Best Practices
-
-### For Backend Implementors
-
-1. **Return structured diagnostics** - Convert native backend errors to `Diagnostic` objects with appropriate severity, location, and hints
-2. **Provide actionable hints** - Match common error patterns and suggest concrete fixes
-3. **Use consistent error codes** - Format as `backend::error_type` (e.g., "typst::unknown_variable")
-4. **Map source locations** - Extract precise file/line/column information when available
-5. **Test error paths** - Verify error messages are helpful and locations are accurate
-
-### For Application Developers
-
-1. **Use `print_errors()` for CLI** - Provides consistent formatting across all error types
-2. **Handle `Result` types explicitly** - Never unwrap rendering results; use proper error handling
-3. **Check warnings** - Inspect `RenderResult.warnings` and display to users
-4. **Serialize for tooling** - All diagnostic types support JSON serialization via `serde`
-5. **Preserve error context** - Use error chaining to maintain full diagnostic information
+**Machine-readable**: all diagnostic types implement `serde::Serialize`.
