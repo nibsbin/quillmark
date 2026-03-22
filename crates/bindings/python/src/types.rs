@@ -314,7 +314,11 @@ impl PyQuill {
 
         // Determine supported formats based on backend
         let formats = match backend {
-            "typst" => vec![PyOutputFormat::PDF, PyOutputFormat::SVG],
+            "typst" => vec![
+                PyOutputFormat::PDF,
+                PyOutputFormat::SVG,
+                PyOutputFormat::PNG,
+            ],
             "acroform" => vec![PyOutputFormat::PDF],
             _ => vec![],
         };
@@ -442,6 +446,7 @@ impl PyArtifact {
             OutputFormat::Pdf => "application/pdf",
             OutputFormat::Svg => "image/svg+xml",
             OutputFormat::Txt => "text/plain",
+            OutputFormat::Png => "image/png",
         }
     }
 }

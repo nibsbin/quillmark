@@ -224,7 +224,7 @@ class Workflow:
 workflow = engine.workflow("my-quill")
 
 print(f"Backend: {workflow.backend_id}")  # 'typst'
-print(f"Formats: {workflow.supported_formats}")  # [PDF, SVG]
+print(f"Formats: {workflow.supported_formats}")  # [PDF, SVG, PNG]
 
 # Validate before rendering
 workflow.dry_run(parsed)
@@ -442,6 +442,7 @@ class Artifact:
         Returns:
             'application/pdf' for PDF
             'image/svg+xml' for SVG
+            'image/png' for PNG
             'text/plain' for TXT
         """
 
@@ -477,6 +478,7 @@ Output format enumeration.
 class OutputFormat:
     PDF = "pdf"
     SVG = "svg"
+    PNG = "png"
     TXT = "txt"
 ```
 
@@ -488,6 +490,7 @@ from quillmark import OutputFormat
 # Use in render calls
 result = workflow.render(parsed, OutputFormat.PDF)
 result = workflow.render(parsed, OutputFormat.SVG)
+result = workflow.render(parsed, OutputFormat.PNG)  # default 144 PPI
 ```
 
 ### Severity

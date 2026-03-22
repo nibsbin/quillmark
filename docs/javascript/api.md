@@ -186,13 +186,20 @@ Render a parsed document to artifacts.
 **Example:**
 ```javascript
 const parsed = Quillmark.parseMarkdown(markdown);
-const result = engine.render(parsed, { 
-  format: 'pdf',
-  quillName: 'my-quill'
-});
 
-// Save PDF
-const blob = new Blob([result.artifacts[0].bytes], { type: 'application/pdf' });
+// Render to PDF
+const pdfResult = engine.render(parsed, { format: 'pdf', quillName: 'my-quill' });
+const pdfBlob = new Blob([pdfResult.artifacts[0].bytes], { type: 'application/pdf' });
+
+// Render to PNG at 300 PPI (print quality)
+const pngResult = engine.render(parsed, { format: 'png', ppi: 300 });
+// One artifact per page
+for (const artifact of pngResult.artifacts) {
+  const imgBlob = new Blob([artifact.bytes], { type: 'image/png' });
+}
+
+// Render to PNG at default PPI (144 — retina screen preview)
+const previewResult = engine.render(parsed, { format: 'png' });
 ```
 
 ##### listQuills
@@ -258,7 +265,7 @@ interface QuillInfo {
   schema: object;
   defaults: object;
   examples: object;
-  supportedFormats: Array<'pdf' | 'svg' | 'txt'>;
+  supportedFormats: Array<'pdf' | 'svg' | 'png' | 'txt'>;
   getStrippedSchema(): object;  // Returns schema without UI metadata ("x-ui" fields)
 }
 ```
@@ -280,10 +287,10 @@ const strippedSchema = info.getStrippedSchema();
 
 ```typescript
 interface RenderOptions {
-  format?: 'pdf' | 'svg' | 'txt';
+  format?: 'pdf' | 'svg' | 'png' | 'txt';
   assets?: Record<string, Uint8Array>;
   quillName?: string;
-  outputData?: boolean; // reserved for future use
+  ppi?: number;
 }
 ```
 
@@ -291,6 +298,7 @@ interface RenderOptions {
 - `format` - Output format (defaults to first supported format)
 - `assets` - Additional runtime assets as byte arrays
 - `quillName` - Override QUILL field or use specific Quill
+- `ppi` - Pixels per inch for PNG output (default: `144.0` — 2× at 72pt/inch). Ignored for PDF/SVG/TXT.
 
 **Example:**
 ```javascript
@@ -310,7 +318,7 @@ interface RenderResult {
   artifacts: Artifact[];
   warnings: Diagnostic[];
   renderTimeMs: number;
-  outputFormat: 'pdf' | 'svg' | 'txt';
+  outputFormat: 'pdf' | 'svg' | 'png' | 'txt';
 }
 ```
 
@@ -329,7 +337,7 @@ if (result.warnings.length > 0) {
 
 ```typescript
 interface Artifact {
-  format: 'pdf' | 'svg' | 'txt';
+  format: 'pdf' | 'svg' | 'png' | 'txt';
   bytes: Uint8Array;
   mimeType: string;
 }

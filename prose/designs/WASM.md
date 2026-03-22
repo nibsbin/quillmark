@@ -77,25 +77,26 @@ interface QuillInfo {
   schema: object;  // JSON schema for fields (always includes full schema with UI metadata)
   defaults: object;  // Default values extracted from schema
   examples: object;  // Example values extracted from schema
-  supportedFormats: Array<'pdf' | 'svg' | 'txt'>;  // Formats this backend supports
+  supportedFormats: Array<'pdf' | 'svg' | 'png' | 'txt'>;  // Formats this backend supports
   getStrippedSchema(): object;  // Returns schema without UI metadata ("x-ui" fields)
 }
 
 interface RenderOptions {
-  format?: 'pdf' | 'svg' | 'txt';
+  format?: 'pdf' | 'svg' | 'png' | 'txt';
   assets?: Record<string, number[]>;  // Asset name to byte array mapping
   quillName?: string;  // overrides/fills in QUILL frontmatter field
+  ppi?: number;  // pixels per inch for PNG output (default: 144.0)
 }
 
 interface RenderResult {
   artifacts: Artifact[];
   warnings: Diagnostic[];
-  outputFormat: 'pdf' | 'svg' | 'txt';
+  outputFormat: 'pdf' | 'svg' | 'png' | 'txt';
   renderTimeMs: number;
 }
 
 interface Artifact {
-  outputFormat: 'pdf' | 'svg' | 'txt';
+  outputFormat: 'pdf' | 'svg' | 'png' | 'txt';
   bytes: number[];  // Byte array
   mime_type: string;
 }

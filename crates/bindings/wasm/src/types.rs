@@ -13,6 +13,7 @@ pub enum OutputFormat {
     Pdf,
     Svg,
     Txt,
+    Png,
 }
 
 impl From<OutputFormat> for quillmark_core::OutputFormat {
@@ -21,6 +22,7 @@ impl From<OutputFormat> for quillmark_core::OutputFormat {
             OutputFormat::Pdf => quillmark_core::OutputFormat::Pdf,
             OutputFormat::Svg => quillmark_core::OutputFormat::Svg,
             OutputFormat::Txt => quillmark_core::OutputFormat::Txt,
+            OutputFormat::Png => quillmark_core::OutputFormat::Png,
         }
     }
 }
@@ -31,6 +33,7 @@ impl From<quillmark_core::OutputFormat> for OutputFormat {
             quillmark_core::OutputFormat::Pdf => OutputFormat::Pdf,
             quillmark_core::OutputFormat::Svg => OutputFormat::Svg,
             quillmark_core::OutputFormat::Txt => OutputFormat::Txt,
+            quillmark_core::OutputFormat::Png => OutputFormat::Png,
         }
     }
 }
@@ -123,6 +126,7 @@ impl Artifact {
             OutputFormat::Pdf => "application/pdf".to_string(),
             OutputFormat::Svg => "image/svg+xml".to_string(),
             OutputFormat::Txt => "text/plain".to_string(),
+            OutputFormat::Png => "image/png".to_string(),
         }
     }
 }
@@ -242,6 +246,11 @@ pub struct RenderOptions {
     /// Optional quill name that overrides or fills in for the markdown's QUILL frontmatter field
     #[serde(skip_serializing_if = "Option::is_none")]
     pub quill_ref: Option<String>,
+    /// Pixels per inch for raster output formats (PNG).
+    /// Ignored for vector/document formats (PDF, SVG, TXT).
+    /// Defaults to 144.0 (2x at 72pt/inch) when omitted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ppi: Option<f32>,
 }
 
 impl Default for RenderOptions {
@@ -250,6 +259,7 @@ impl Default for RenderOptions {
             format: Some(OutputFormat::Pdf),
             assets: None,
             quill_ref: None,
+            ppi: None,
         }
     }
 }
@@ -371,6 +381,7 @@ mod tests {
             format: Some(OutputFormat::Pdf),
             assets: None,
             quill_ref: None,
+            ppi: None,
         };
         let json = serde_json::to_string(&options).unwrap();
         assert!(json.contains("\"format\":\"pdf\""));
@@ -384,6 +395,7 @@ mod tests {
             format: Some(OutputFormat::Pdf),
             assets: None,
             quill_ref: Some("test_quill".to_string()),
+            ppi: None,
         };
         let json_with_quill = serde_json::to_string(&options_with_quill).unwrap();
         assert!(json_with_quill.contains("\"quillRef\":\"test_quill\""));

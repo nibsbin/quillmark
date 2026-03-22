@@ -74,7 +74,7 @@ impl Backend for TypstBackend {
     }
 
     fn supported_formats(&self) -> &'static [OutputFormat] {
-        &[OutputFormat::Pdf, OutputFormat::Svg]
+        &[OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Png]
     }
 
     fn plate_extension_types(&self) -> &'static [&'static str] {
@@ -126,6 +126,17 @@ impl Backend for TypstBackend {
                     })
                     .collect();
                 Ok(RenderResult::new(artifacts, OutputFormat::Svg))
+            }
+            OutputFormat::Png => {
+                let png_pages = compile::compile_to_png(quill, plate_content, &json_str, opts.ppi)?;
+                let artifacts = png_pages
+                    .into_iter()
+                    .map(|bytes| Artifact {
+                        bytes,
+                        output_format: OutputFormat::Png,
+                    })
+                    .collect();
+                Ok(RenderResult::new(artifacts, OutputFormat::Png))
             }
             OutputFormat::Txt => Err(RenderError::FormatNotSupported {
                 diag: Box::new(
