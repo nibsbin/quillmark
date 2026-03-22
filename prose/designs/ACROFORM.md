@@ -1,49 +1,21 @@
 # backends/quillmark-acroform
 
-> **Status**: Implemented
+Status: **Implemented** (2026-03-22)  
+Source: `crates/backends/acroform`
 
-This is an optional backend for `quillmark` that maps markdown/YAML context to PDF AcroForms.
+## Quill Expectations
+- Quill.yaml must set `backend: acroform`. No plate file is required (`plate_extension_types` is empty).
+- Bundle typically contains a single `form.pdf` plus optional `example.md`.
 
-## Quill
+## Compilation Flow
+1. Load PDF form with `acroform` crate.
+2. For each field:
+   - Prefer tooltip templating using `description__{{ template }}`.
+   - Otherwise treat the existing field value as a MiniJinja template.
+3. Render templates with the JSON from `Workflow::compile_data()`.
+4. Write rendered values back to a PDF and return as a single `Artifact` (PDF).
 
-The backend handles Quills with the following structure:
-
-example_quill/
-- Quill.toml
-- form.pdf # we will hardcode this file name for now
-- usaf_form_8.md
-
-Quill.toml uses the default auto plate, so it does not have a plate file.
-```
-[Quill]
-name = "usaf_form_8"
-backend = "acroform"
-example = "usaf_form_8.md"
-description = "Certificate of aircrew qualification"
-```
-
-## Functionality
-
-The backends/quillmark-acroform backend fills PDF form fields using MiniJinja templating. Fields are templated in two ways:
-
-1. **Tooltip-based templating**: Extract template from field description/tooltip using `description__{{template}}` format
-2. **Value-based templating**: Use the current field value as a template if no tooltip template exists
-
-The backend uses the workspace's minijinja dependency to render templates with the plate JSON context. PDF manipulation is handled using the `acroform` crate: https://crates.io/crates/acroform
-
-## Compilation
-
-1. Use acroform to read the PDF form and extract field names/values
-2. For each field, use minijinja to render the templated value with the plate JSON context
-3. Use acroform to write the rendered field values back to an output PDF form
-4. Return the output PDF form as a byte vector
-
-## Considerations
-
-- Plate content is ignored (`plate_extension_types` is empty); all data comes from injected JSON.
-- If you need any dependencies like `serde_json`, pin them in the workspace `Cargo.toml`.
-
-## Resources
-
-- See the `backends/quillmark-typst` crate for an example of backend implementation.
-- Use the `quillmark-fixtures/resources/usaf_form_8` as a test Quill.
+## Notes
+- Ignores plate content entirely; all inputs come from JSON.
+- Templates can reference any document field or card (`CARDS`) present in the JSON.
+- Output formats: PDF only.

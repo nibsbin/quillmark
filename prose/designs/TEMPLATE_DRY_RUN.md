@@ -8,9 +8,8 @@ Dry run provides a lightweight validation path that stops before backend compila
 
 1. Type coercion against the Quill schema (`ParsedDocument::with_coercion`)
 2. JSON Schema validation (`schema::validate_document`)
-3. Normalization (bidi stripping, HTML fence fixes)
 
-No plate composition or backend compilation occurs; errors are limited to parsing/validation/normalization.
+No normalization, backend `transform_fields`, defaults application, or compilation runs. It is strictly a schema check after coercion.
 
 ## Error Surfacing
 

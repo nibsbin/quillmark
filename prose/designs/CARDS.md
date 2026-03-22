@@ -1,229 +1,43 @@
-# Composable Cards Architecture
+# Cards
 
-> **Status**: Implemented
->
-> This document defines the composable cards system for structured, repeatable content blocks.
+Status: **Implemented** (2026-03-22)  
+Scope: Typed, repeatable content blocks parsed into a unified `CARDS` array.
 
-> **Related Documents**:
-> - [SCHEMAS.md](SCHEMAS.md) - Field validation and JSON Schema generation
-> - [PARSE.md](PARSE.md) - CARD block parsing (Extended YAML Metadata Standard)
-> - [QUILL.md](QUILL.md) - Quill.toml structure and data types
-> - ~~[SCOPES.md](SCOPES.md)~~ - **Superseded by this document**
+## Canonical Behavior
+- Parser collects every `---` block with `CARD: <name>` into `CARDS`, preserving order. Name regex: `[a-z_][a-z0-9_]*`.
+- `CARDS` is always present (possibly empty). Each card object includes `CARD` and `BODY` plus any block fields.
+- Global and card field names may overlap; only `BODY`/`CARDS` are reserved.
 
----
-
-## Overview
-
-Cards are structured metadata blocks that appear inline within document content. Unlike frontmatter fields (which define document-level metadata), cards represent repeatable, typed content units that can be composed in any order.
-
-**Key capabilities:**
-
-1. **Unified array** - All cards stored in single `CARDS` array
-2. **Discriminated union** - Cards typed via `CARD` discriminator field
-3. **Composable ordering** - Multiple card types interleaved freely
-4. **Schema referencing** - Card schemas in `$defs` with OpenAPI 3.0-style discriminator
-
----
-
-## Design Principles
-
-### 1. Cards Are First-Class Types
-
-Cards have their own `CardSchema` struct, separate from `FieldSchema`. This reflects their distinct purpose:
-- **Fields**: Document-level metadata (frontmatter)
-- **Cards**: Structured in-body content blocks
-
-### 2. Unified CARDS Array
-
-All parsed cards flow into a single `CARDS` array in `ParsedDocument`. Cards are discriminated by the `CARD` field which matches the card type name.
-
-### 3. OpenAPI 3.0 Discriminator Pattern
-
-JSON Schema output uses `$defs` with `oneOf` and an explicit discriminator hint, maximizing LLM consumability.
-
-### 4. TOML Configuration Symmetry
-
-Card field definitions use `[cards.X.fields.Y]` syntax, mirroring top-level `[fields.Y]` for consistency.
-
----
-
-## Data Model
-
-### CardSchema Struct
-
-```rust
-pub struct CardSchema {
-    /// Card type name (e.g., "indorsements")
-    pub name: String,
-    /// Short label for the card type
-    pub title: Option<String>,
-    /// Detailed description of this card type
-    pub description: Option<String>,
-    /// Field definitions for this card type
-    pub fields: HashMap<String, FieldSchema>,
-}
+## Defining Cards (Quill.yaml)
+```yaml
+cards:
+  product:
+    title: "Product"
+    description: "Catalog item"
+    ui: { hide_body: true }          # optional
+    fields:
+      name:    { type: "string", required: true }
+      price:   { type: "number" }
+      details: { type: "markdown" }
 ```
+- Field syntax matches document fields; supports defaults, examples, enum, nested objects/arrays, and `x-ui` hints (`group/order/visible_when/compact`).
 
-### FieldSchema (Unchanged)
+## JSON Schema Shape
+- Each card becomes a `$defs.<card>_card` object containing:
+  - `CARD` const discriminator.
+  - Properties for card fields + required list.
+  - Optional `x-ui` (`hide_body`).
+- `CARDS` property uses `oneOf` + discriminator mapping to those defs.
 
-Regular fields remain unchanged. The `items` field is **removed** since cards are no longer nested properties:
+## Pipeline
+1. Parse → `CARDS`.
+2. `coerce_document` recurses into cards using their `$defs`.
+3. Validation uses generated schema; defaults/examples applied after backend `transform_fields`.
 
-```rust
-pub struct FieldSchema {
-    pub name: String,
-    pub title: Option<String>,
-    pub r#type: Option<String>,
-    pub description: String,
-    pub default: Option<QuillValue>,
-    pub examples: Option<QuillValue>,
-    pub ui: Option<UiSchema>,
-    pub required: bool,
-    // NO items field - cards have their own schema
-}
-```
+## Consumption
+- Typst helper exposes `data.CARDS[*]` (markdown fields pre-converted to Typst markup).
+- AcroForm receives the same JSON for MiniJinja templating.
+- WASM/Python/Rust expose identical JSON from `Workflow::compile_data()`.
 
-### QuillConfig
-
-```rust
-pub struct QuillConfig {
-    // ... existing fields ...
-    pub fields: HashMap<String, FieldSchema>,   // [fields.X]
-    pub cards: HashMap<String, CardSchema>,     // [cards.X]
-}
-```
-
----
-
-## Quill.toml Configuration
-
-### Card Definition
-
-```toml
-[cards.indorsements]
-title = "Routing Indorsements"
-description = "Chain of routing endorsements for multi-level correspondence."
-
-[cards.indorsements.fields.from]
-title = "From office/symbol"
-type = "string"
-required = true
-description = "Office symbol of the endorsing official."
-
-[cards.indorsements.fields.for]
-title = "To office/symbol"
-type = "string"
-required = true
-description = "Office symbol receiving the endorsed memo."
-
-[cards.indorsements.fields.signature_block]
-title = "Signature block lines"
-type = "array"
-required = true
-ui.group = "Signature"
-description = "Name, grade, and duty title."
-```
-
-### Key Changes from SCOPES.md
-
-| Old (`[cards.X.items.Y]`) | New (`[cards.X.fields.Y]`) |
-|---------------------------|----------------------------|
-| `items` keyword | `fields` keyword |
-| Nested in FieldSchema | Separate CardSchema |
-| Schema as nested property | Schema in `$defs` |
-
----
-
-## JSON Schema Output
-
-### Structure
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2019-09/schema",
-  "type": "object",
-  "$defs": {
-    "indorsements_card": {
-      "type": "object",
-      "title": "Routing Indorsements",
-      "description": "Chain of routing endorsements...",
-      "properties": {
-        "CARD": { "const": "indorsements" },
-        "from": { "type": "string", "title": "From office/symbol", ... },
-        "for": { "type": "string", "title": "To office/symbol", ... }
-      },
-      "required": ["CARD", "from", "for"]
-    }
-  },
-  "properties": {
-    "subject": { "type": "string", ... },
-    "CARDS": {
-      "type": "array",
-      "items": {
-        "oneOf": [
-          { "$ref": "#/$defs/indorsements_card" }
-        ],
-        "x-discriminator": {
-          "propertyName": "CARD",
-          "mapping": {
-            "indorsements": "#/$defs/indorsements_card"
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-### OpenAPI 3.0 Discriminator
-
-The `x-discriminator` extension follows OpenAPI 3.0 semantics:
-
-| Property | Purpose |
-|----------|---------|
-| `propertyName` | Field to inspect for type discrimination |
-| `mapping` | Maps discriminator values to schema refs |
-
-Each card schema includes:
-- `"CARD": { "const": "..." }` — Enforces discriminator value
-- `"required": ["CARD", ...]` — Ensures discriminator is present
-
----
-
-## Consumption in Backends
-
-- **Typst**: Cards appear under `data.CARDS` via the helper package. Markdown fields marked with `contentMediaType = "text/markdown"` are pre-converted to Typst markup.
-- **AcroForm**: Cards are available in the JSON context for MiniJinja templates as `CARDS`.
-- **Bindings**: `Workflow::compile_data()` exposes the exact JSON used for rendering.
-
----
-
-## Markdown Syntax
-
-Cards use the `CARD:` key in inline metadata blocks:
-
-```markdown
----
-title: Main Document
----
-
-Main content here.
-
----
-CARD: indorsements
-from: ORG1/SYMBOL
-for: ORG2/SYMBOL
-signature_block:
-  - "JOHN DOE, Lt Col, USAF"
-  - "Commander"
----
-
-Indorsement body content.
-```
-
----
-
-## Cross-References
-
-- **Parsing**: CARD block parsing in [PARSE.md](PARSE.md) §Extended YAML Metadata Standard
-- **Field Types**: Type mappings in [SCHEMAS.md](SCHEMAS.md) §Quill Field
-- **Quill Structure**: QuillConfig in [QUILL.md](QUILL.md) §Metadata Handling
+Related: [SCHEMAS.md](SCHEMAS.md), [EXTENDED_MARKDOWN.md](EXTENDED_MARKDOWN.md), [PARSE.md](PARSE.md).  
+Legacy scopes are documented only in [SCOPES.md](SCOPES.md) as superseded.

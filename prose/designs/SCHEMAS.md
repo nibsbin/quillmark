@@ -1,119 +1,45 @@
 # Schema and Validation
 
-This document describes the configuration and data schemas used in Quillmark.
+Status: **Implemented** (2026-03-22)  
+Sources: `crates/core/src/schema.rs`, `crates/core/src/quill.rs`, `crates/quillmark/src/orchestration/workflow.rs`
 
-## Backend
+## TL;DR
+- JSON Schema is generated from `Quill.yaml` (`fields` + `cards`).
+- Card schemas live in `$defs` with a `CARD` discriminator and `oneOf`.
+- `contentMediaType = "text/markdown"` marks fields that Typst transforms to Typst markup.
+- Defaults/examples are cached from the generated schema; applied after backend field transforms.
+- Validation uses the same schema across CLI, Python, WASM, and Rust API.
 
-### Backend Trait Schema
+## Field Model
+- Types: `string`, `number`, `boolean`, `array`, `object`, `date`, `datetime`, `markdown` (→ `contentMediaType: "text/markdown"`).
+- Common keys: `title`, `description`, `default`, `examples`, `enum`, `required`.
+- Nested: `items` (for arrays), `properties` + nested required (for objects).
+- UI hints → `x-ui`:
+  - `group`, `order` (declaration order is default), `visible_when` (AND across keys, OR across values), `compact`.
 
-The Backend trait defines the interface for implementing backends in the quillmark system. Implementations must define the following:
+## Cards
+- Defined under `cards.<name>.fields.*` in `Quill.yaml`.
+- JSON Schema places each card in `$defs` with:
+  - `CARD` const property, required fields, optional `title/description`.
+  - `x-ui` on cards supports `hide_body`.
+- The document schema includes `CARDS` as an array with `oneOf` + discriminator mapping.
 
-- `id() -> &str`: Backend identifier (e.g., "typst", "acroform").
-- `supported_formats() -> &[OutputFormat]`: Output formats supported by the backend.
-- `plate_extension_types() -> &[&str]`: Accepted plate extensions (e.g., `[".typ"]`). Use empty slice to indicate "no plate required".
-- `compile(plate, quill, opts, json_data)`: Compile raw plate content plus JSON document data into artifacts.
-- `transform_fields(fields, schema)`: Optional backend-specific field shaping before JSON serialization (e.g., markdown→Typst markup).
-- `default_quill() -> Option<Quill>`: Optional embedded default quill for zero-config use.
+## Generation & Validation
+1. Build field/card schemas → JSON Schema map.
+2. Cache defaults/examples for quick access.
+3. `Workflow::compile_data` pipeline:
+   - `with_coercion(schema)` (string→number/boolean, boolean↔number, singular→array, etc.)
+   - `validate_document(schema, fields)`
+   - normalize, backend `transform_fields`, then apply cached defaults.
+4. `Workflow::dry_run` performs coercion + validation only (no normalization/transform/backend).
 
-## Quill
+## Coercion Highlights
+- Strings `"true"/"false"` → bool.
+- Numbers ↔ bool (0/1).
+- Numeric strings → numbers.
+- Singular values → arrays when schema expects array.
 
-Quills encapsulate the metadata, configuration, and behavior for generating a specific formatted document. They specify how the inputted ParsedDocument should be composed and compiled to produce a final document. A Quill's `Quill.toml` file specifies the following configuration:
-
-- name -> str: The name of the Quill (required).
-    - Upon registering the Quill to a Quillmark instance, ensure the name has not already been registered
-- description -> str: A brief description of the Quill (required, cannot be empty).
-- backend -> str: The backend identifier to use (required).
-    - Upon registering the Quill to a Quillmark instance, ensure the backend is already registered
-- author -> Option[str]: The author of the Quill.
-- version -> Option[str]: The version of the Quill.
-- plate_file -> Option[str]: Path to a custom plate file. If provided, its extension must be in the backend's `plate_extension_types`. If omitted, the backend is expected to work without a plate (e.g., AcroForm) or use its own default plate.
-- example_file -> Option[str]: Path to an example markdown file demonstrating the Quill's capabilities. Developers should include usage instructions in the content for human and LLM consumers.
-
-### Quill Field
-
-Developers can define the schema for ParsedDocument input within the `[fields]` section of Quill.toml. This schema will be used for ParsedDocument validation and to build a JSON schema.
-
-Field properties:
-- name -> str: This is the key; e.g., for the TOML section `[fields.title]`, the name would be "title".
-- title -> Option[str]: Short label for the field (used in JSON Schema `title` property).
-- description -> str: Detailed description of the field (used in JSON Schema `description` property).
-- type -> "str", "array", "dict", "date", "datetime", or "number": The value type of the field.
-- default -> any: The default value for the field.
-- required -> bool: Whether this field is required (default: false).
-- examples -> any[]: Example values for the field (used in JSON Schema `examples` array).
-- ui -> Option[Table]: A table containing UI-specific metadata (see below).
-
-**UI Configuration (Nested `[ui]` table):**
-- group -> Option[str]: UI group/section name for organizing fields (e.g., "Personal Info").
-- order -> Option[int]: Ordering index for sorting fields in the UI (auto-generated from TOML field position).
-
-**Implementation Status:**
-| Property | Status |
-|----------|--------|
-| group | ✅ Implemented |
-| order | ✅ Implemented (auto-generated) |
-| component | ❌ Not yet implemented |
-
-**Type Mapping (TOML to JSON Schema):**
-- "str" → "string"
-- "number" → "number"
-- "array" → "array"
-- "dict" → "object"
-- "date" → "string" with format "date"
-- "datetime" → "string" with format "date-time"
-- "scope" → See [CARDS.md](CARDS.md) for card type handling
-- `contentMediaType = "text/markdown"` → Marks fields that the Typst backend will convert to Typst markup via `transform_fields`
-
-**Required Field Logic:**
-- Fields are **optional by default** (aligns with JSON Schema standard)
-- Use `required = true` to mark mandatory fields
-- This applies to both document-level fields and scope item fields
-
-### JSON Schema Custom Properties
-
-Field schemas support a custom `x-ui` property for UI metadata that is included in the generated JSON schema. This property contains the serialized content of the `[ui]` table from the TOML configuration.
-
-- `x-ui`: An object containing UI metadata (group, order, visible_when)
-
-This property follows the JSON Schema specification for custom extensions. Validation logic ignores this property, but frontend UIs consume it for dynamic wizard generation.
-
-#### `visible_when` — Conditional Field Visibility
-
-The `visible_when` property declares when a field should be visible in the UI. It maps sibling field names to arrays of accepted values:
-
-- **AND across keys**: all conditions must match for the field to be visible
-- **OR within values**: the sibling field's current value must match any value in the array
-- **Absent `visible_when`**: the field is always visible
-
-This is a UI hint, not a validation constraint. Fields hidden by `visible_when` remain valid in the schema — extraneous data is harmless.
-
-**Example**:
-```json
-{
-  "type": "object",
-  "properties": {
-    "author": {
-      "type": "string",
-      "title": "Author Name",
-      "description": "The full name of the document author. Include middle initial if applicable.",
-      "default": "Anonymous",
-      "examples": ["John Doe", "Jane Smith"],
-      "x-ui": {
-        "group": "Author Info",
-        "order": 1
-      }
-    },
-    "from": {
-      "type": "string",
-      "title": "From office/symbol",
-      "x-ui": {
-        "group": "Addressing",
-        "order": 0,
-        "visible_when": {
-          "format": ["standard", "separate_page"]
-        }
-      }
-    }
-  }
-}
-```
+## References
+- Parser surface: [EXTENDED_MARKDOWN.md](EXTENDED_MARKDOWN.md)
+- Card design: [CARDS.md](CARDS.md)
+- Data injection: [GLUE_METADATA.md](GLUE_METADATA.md)

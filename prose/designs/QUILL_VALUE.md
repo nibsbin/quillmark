@@ -1,37 +1,16 @@
-# QuillValue - Centralized Value Type
+# QuillValue
 
-> **Status**: Implemented  
-> **Implementation**: `quillmark-core/src/value.rs`
+Status: **Implemented** (2026-03-22)  
+Source: `crates/core/src/value.rs`
 
-## Overview
+`QuillValue` is the single value type used across parsing, schemas, metadata, and FFI. It wraps `serde_json::Value` with a small convenience surface.
 
-`QuillValue` is a unified value type centralizing TOML/YAML/JSON conversions. Backed by `serde_json::Value`, it provides a single canonical representation for metadata and fields.
-
-## Design Principles
-
-1. **JSON Foundation** - Use `serde_json::Value` for simplicity and broad ecosystem support
-2. **Conversion Boundaries** - Convert TOML/YAML to `QuillValue` at system boundaries
-3. **Newtype Pattern** - Wrap JSON to add domain-specific methods and control API
-
-## Implementation
-
-```rust
-pub struct QuillValue(serde_json::Value);
-```
-
-**Conversion methods:** `from_toml()`, `from_yaml_str()`, `from_json()`, `as_json()`, `into_json()`
-
-**Delegating methods:** `is_null()`, `as_str()`, `as_bool()`, `as_i64()`, `as_array()`, `as_object()`, `get(key)`
-- `get(key)` - Field access with `QuillValue` wrapping
-
-### Deref Implementation
-
-Implements `Deref<Target = serde_json::Value>` for transparent access to JSON methods.
+## API
+- Constructors: `from_json(serde_json::Value)`, `from_yaml_str(&str)` (via `serde_saphyr`), `into_json()`, `as_json()`.
+- Accessors: `as_str`, `as_bool`, `as_i64`, `as_u64`, `as_f64`, `as_array`/`as_sequence`, `as_object`, `get(key)`, `is_null`.
+- `Deref<Target = serde_json::Value>` for direct JSON use.
 
 ## Usage
-
-Used throughout the system:
-- Quill metadata and schemas
-- Parsed document fields
-- Field default and example values
-- FFI boundaries (Python, WASM)
+- Parsed frontmatter fields (`ParsedDocument.fields`).
+- Quill metadata, typst config, schemas, defaults/examples.
+- Serialized diagnostics for Python/WASM bindings.
