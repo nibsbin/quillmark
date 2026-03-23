@@ -1,20 +1,18 @@
-# backends/quillmark-acroform
+# AcroForm Backend
 
 > **Status**: Implemented
+> **Implementation**: `crates/backends/quillmark-acroform/`
 
-This is an optional backend for `quillmark` that maps markdown/YAML context to PDF AcroForms.
+## Quill Structure
 
-## Quill
-
-The backend handles Quills with the following structure:
-
-example_quill/
-- Quill.toml
-- form.pdf # we will hardcode this file name for now
-- usaf_form_8.md
-
-Quill.toml uses the default auto plate, so it does not have a plate file.
 ```
+example_quill/
+├── Quill.toml
+├── form.pdf
+└── example.md
+```
+
+```toml
 [Quill]
 name = "usaf_form_8"
 backend = "acroform"
@@ -22,28 +20,21 @@ example = "usaf_form_8.md"
 description = "Certificate of aircrew qualification"
 ```
 
-## Functionality
-
-The backends/quillmark-acroform backend fills PDF form fields using MiniJinja templating. Fields are templated in two ways:
-
-1. **Tooltip-based templating**: Extract template from field description/tooltip using `description__{{template}}` format
-2. **Value-based templating**: Use the current field value as a template if no tooltip template exists
-
-The backend uses the workspace's minijinja dependency to render templates with the plate JSON context. PDF manipulation is handled using the `acroform` crate: https://crates.io/crates/acroform
+No plate file; `plate_extension_types` is empty and plate content is ignored.
 
 ## Compilation
 
-1. Use acroform to read the PDF form and extract field names/values
-2. For each field, use minijinja to render the templated value with the plate JSON context
-3. Use acroform to write the rendered field values back to an output PDF form
-4. Return the output PDF form as a byte vector
+1. Read PDF form and extract field names/values via `acroform` crate
+2. For each field, render the templated value with MiniJinja using injected JSON context
+3. Write rendered values back to an output PDF form
+4. Return output PDF as byte vector
 
-## Considerations
+## Templating
 
-- Plate content is ignored (`plate_extension_types` is empty); all data comes from injected JSON.
-- If you need any dependencies like `serde_json`, pin them in the workspace `Cargo.toml`.
+- **Tooltip-based**: extract template from field description/tooltip using `description__{{template}}` format
+- **Value-based**: use the current field value as a template if no tooltip template exists
 
-## Resources
+## Reference
 
-- See the `backends/quillmark-typst` crate for an example of backend implementation.
-- Use the `quillmark-fixtures/resources/usaf_form_8` as a test Quill.
+- `backends/quillmark-typst` — reference backend implementation
+- `quillmark-fixtures/resources/usaf_form_8` — test quill
