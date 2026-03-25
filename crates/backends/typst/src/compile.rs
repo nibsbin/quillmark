@@ -172,44 +172,62 @@ pub fn render_document_pages(
     format: OutputFormat,
     ppi: Option<f32>,
 ) -> Result<RenderResult, RenderError> {
-    let page_indices: Vec<usize> = match pages {
-        Some(slice) => slice.to_vec(),
-        None => (0..document.pages.len()).collect(),
-    };
-
-    if let Some(invalid) = page_indices
-        .iter()
-        .copied()
-        .find(|&idx| idx >= document.pages.len())
-    {
-        return Err(RenderError::CompilationFailed {
-            diags: vec![Diagnostic::new(
-                Severity::Error,
-                format!(
-                    "Page index {} out of bounds (page_count={})",
-                    invalid,
-                    document.pages.len()
-                ),
-            )
-            .with_code("typst::page_index_out_of_bounds".to_string())],
+    // PDF does not support selective page rendering
+    if format == OutputFormat::Pdf && pages.is_some() {
+        return Err(RenderError::FormatNotSupported {
+            diag: Box::new(
+                Diagnostic::new(
+                    Severity::Error,
+                    "PDF does not support page selection; pass null/None to render the full document, or use PNG/SVG".to_string(),
+                )
+                .with_code("typst::pdf_page_selection_not_supported".to_string()),
+            ),
         });
     }
 
+    let page_count = document.pages.len();
+    let requested_indices: Vec<usize> = match pages {
+        Some(slice) => slice.to_vec(),
+        None => (0..page_count).collect(),
+    };
+
+    // Partition into valid and out-of-bounds indices, preserving requested order
+    let mut warnings = Vec::new();
+    let valid_indices: Vec<usize> = requested_indices
+        .into_iter()
+        .filter(|&idx| {
+            if idx >= page_count {
+                warnings.push(Diagnostic::new(
+                    Severity::Warning,
+                    format!(
+                        "Page index {} out of bounds (page_count={}), skipped",
+                        idx, page_count
+                    ),
+                ).with_code("typst::page_index_out_of_bounds".to_string()));
+                false
+            } else {
+                true
+            }
+        })
+        .collect();
+
     match format {
         OutputFormat::Svg => {
-            let artifacts = page_indices
+            let artifacts = valid_indices
                 .into_iter()
                 .map(|idx| Artifact {
                     bytes: typst_svg::svg(&document.pages[idx]).into_bytes(),
                     output_format: OutputFormat::Svg,
                 })
                 .collect();
-            Ok(RenderResult::new(artifacts, OutputFormat::Svg))
+            let mut result = RenderResult::new(artifacts, OutputFormat::Svg);
+            result.warnings = warnings;
+            Ok(result)
         }
         OutputFormat::Png => {
             let scale = ppi.unwrap_or(DEFAULT_PPI) / 72.0;
-            let mut artifacts = Vec::with_capacity(page_indices.len());
-            for idx in page_indices {
+            let mut artifacts = Vec::with_capacity(valid_indices.len());
+            for idx in valid_indices {
                 let pixmap = typst_render::render(&document.pages[idx], scale);
                 let png_data = pixmap
                     .encode_png()
@@ -225,7 +243,9 @@ pub fn render_document_pages(
                     output_format: OutputFormat::Png,
                 });
             }
-            Ok(RenderResult::new(artifacts, OutputFormat::Png))
+            let mut result = RenderResult::new(artifacts, OutputFormat::Png);
+            result.warnings = warnings;
+            Ok(result)
         }
         OutputFormat::Pdf => {
             let pdf = typst_pdf::pdf(document, &PdfOptions::default()).map_err(|e| {

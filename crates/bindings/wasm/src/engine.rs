@@ -6,6 +6,7 @@ use crate::types::{
     RenderResult,
 };
 use std::str::FromStr;
+use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
 // Cross-platform helper to get current time in milliseconds as f64.
@@ -35,7 +36,7 @@ pub struct Quillmark {
 
 #[wasm_bindgen]
 pub struct CompiledDocument {
-    workflow: quillmark::Workflow,
+    backend: Arc<dyn quillmark_core::Backend>,
     inner: quillmark_core::CompiledDocument,
 }
 
@@ -349,12 +350,14 @@ impl Quillmark {
             WasmError::from(format!("Quill '{}' not found: {}", quill_ref_to_use, e)).to_js_value()
         })?;
 
+        let backend = workflow.backend();
+
         let compiled = workflow
             .compile(&parsed)
             .map_err(|e| WasmError::from(e).to_js_value())?;
 
         Ok(CompiledDocument {
-            workflow,
+            backend,
             inner: compiled,
         })
     }
@@ -437,7 +440,7 @@ impl CompiledDocument {
         let start = now_ms();
 
         let result = self
-            .workflow
+            .backend
             .render_pages(
                 &self.inner,
                 page_indices.as_deref(),

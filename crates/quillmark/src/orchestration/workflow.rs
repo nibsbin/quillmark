@@ -240,6 +240,11 @@ impl Workflow {
         }
     }
 
+    /// Get a reference-counted handle to the backend.
+    pub fn backend(&self) -> Arc<dyn Backend> {
+        Arc::clone(&self.backend)
+    }
+
     /// Get the backend identifier (e.g., "typst").
     pub fn backend_id(&self) -> &str {
         self.backend.id()
