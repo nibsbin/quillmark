@@ -197,13 +197,16 @@ pub fn render_document_pages(
         .into_iter()
         .filter(|&idx| {
             if idx >= page_count {
-                warnings.push(Diagnostic::new(
-                    Severity::Warning,
-                    format!(
-                        "Page index {} out of bounds (page_count={}), skipped",
-                        idx, page_count
-                    ),
-                ).with_code("typst::page_index_out_of_bounds".to_string()));
+                warnings.push(
+                    Diagnostic::new(
+                        Severity::Warning,
+                        format!(
+                            "Page index {} out of bounds (page_count={}), skipped",
+                            idx, page_count
+                        ),
+                    )
+                    .with_code("typst::page_index_out_of_bounds".to_string()),
+                );
                 false
             } else {
                 true
