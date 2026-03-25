@@ -1,6 +1,6 @@
 use quillmark_core::{
-    normalize::normalize_document, Backend, Diagnostic, OutputFormat, ParsedDocument, Quill,
-    RenderError, RenderOptions, RenderResult, Severity,
+    normalize::normalize_document, Backend, CompiledDocument, Diagnostic, OutputFormat,
+    ParsedDocument, Quill, RenderError, RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -53,6 +53,29 @@ impl Workflow {
         format: Option<OutputFormat>,
     ) -> Result<RenderResult, RenderError> {
         self.render_with_options(parsed, format, None)
+    }
+
+    /// Compile parsed data into a backend-specific compiled document for selective page rendering.
+    pub fn compile(&self, parsed: &ParsedDocument) -> Result<CompiledDocument, RenderError> {
+        let json_data = self.compile_data(parsed)?;
+        let plate_content = self.get_plate_content()?.unwrap_or_default();
+        let prepared_quill = self.prepare_quill_with_assets();
+        self.backend
+            .compile_to_document(&plate_content, &prepared_quill, &json_data)
+    }
+
+    /// Render selected pages from a compiled document.
+    ///
+    /// - `pages = None` renders all pages.
+    /// - `pages = Some(&[])` renders zero artifacts.
+    pub fn render_pages(
+        &self,
+        doc: &CompiledDocument,
+        pages: Option<&[usize]>,
+        format: OutputFormat,
+        ppi: Option<f32>,
+    ) -> Result<RenderResult, RenderError> {
+        self.backend.render_pages(doc, pages, format, ppi)
     }
 
     /// Render with explicit pixels-per-inch for raster formats (PNG).
@@ -215,6 +238,11 @@ impl Workflow {
                 })
             }
         }
+    }
+
+    /// Get a reference-counted handle to the backend.
+    pub fn backend(&self) -> Arc<dyn Backend> {
+        Arc::clone(&self.backend)
     }
 
     /// Get the backend identifier (e.g., "typst").

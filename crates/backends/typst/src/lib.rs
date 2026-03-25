@@ -60,8 +60,8 @@ pub mod fuzz_utils {
 
 use convert::mark_to_typst;
 use quillmark_core::{
-    Artifact, Backend, Diagnostic, OutputFormat, Quill, QuillValue, RenderError, RenderOptions,
-    RenderResult, Severity,
+    Artifact, Backend, CompiledDocument, Diagnostic, OutputFormat, Quill, QuillValue, RenderError,
+    RenderOptions, RenderResult, Severity,
 };
 use std::collections::HashMap;
 
@@ -149,6 +149,39 @@ impl Backend for TypstBackend {
                 ),
             }),
         }
+    }
+
+    fn compile_to_document(
+        &self,
+        plate_content: &str,
+        quill: &Quill,
+        json_data: &serde_json::Value,
+    ) -> Result<CompiledDocument, RenderError> {
+        let json_str = serde_json::to_string(json_data).unwrap_or_else(|_| "{}".to_string());
+        let document = compile::compile_to_document(quill, plate_content, &json_str)?;
+        let page_count = document.pages.len();
+        Ok(CompiledDocument::new(Box::new(document), page_count))
+    }
+
+    fn render_pages(
+        &self,
+        doc: &CompiledDocument,
+        pages: Option<&[usize]>,
+        format: OutputFormat,
+        ppi: Option<f32>,
+    ) -> Result<RenderResult, RenderError> {
+        let paged_doc = doc
+            .as_any()
+            .downcast_ref::<typst::layout::PagedDocument>()
+            .ok_or_else(|| RenderError::CompilationFailed {
+                diags: vec![Diagnostic::new(
+                    Severity::Error,
+                    "Compiled document type mismatch for typst backend".to_string(),
+                )
+                .with_code("typst::compiled_document_type_mismatch".to_string())],
+            })?;
+
+        compile::render_document_pages(paged_doc, pages, format, ppi)
     }
 
     fn transform_fields(

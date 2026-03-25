@@ -65,7 +65,7 @@ mod engine;
 mod error;
 mod types;
 
-pub use engine::Quillmark;
+pub use engine::{CompiledDocument, Quillmark};
 pub use error::WasmError;
 pub use types::*;
 
