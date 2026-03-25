@@ -253,6 +253,27 @@ pub struct RenderOptions {
     pub ppi: Option<f32>,
 }
 
+/// Options for compile() phase in the split compile/render pipeline.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify, Default)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct CompileOptions {
+    /// Optional quill reference that overrides the parsed document's `quillRef`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub quill_ref: Option<String>,
+}
+
+/// Options for rendering pages from a previously compiled document.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(rename_all = "camelCase")]
+pub struct RenderPagesOptions {
+    pub format: OutputFormat,
+    /// Pixels per inch for PNG output.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ppi: Option<f32>,
+}
+
 impl Default for RenderOptions {
     fn default() -> Self {
         RenderOptions {

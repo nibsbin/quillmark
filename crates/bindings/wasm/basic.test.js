@@ -139,6 +139,24 @@ describe('quillmark-wasm smoke tests', () => {
     // expect(result.artifacts[0].mimeType).toBe('application/pdf')
   })
 
+  it('should support compile + renderPages with pageCount', () => {
+    const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
+    const engine = new Quillmark()
+    engine.registerQuill(TEST_QUILL)
+
+    const compiled = engine.compile(parsed, { quillRef: 'test_quill' })
+    expect(typeof compiled.pageCount).toBe('number')
+    expect(compiled.pageCount).toBeGreaterThan(0)
+
+    const allPages = compiled.renderPages(undefined, { format: 'svg' })
+    expect(allPages.artifacts.length).toBe(compiled.pageCount)
+    expect(allPages.artifacts[0].mimeType).toBe('image/svg+xml')
+
+    const subset = compiled.renderPages([0, 0], { format: 'png', ppi: 80 })
+    expect(subset.artifacts.length).toBe(2)
+    expect(subset.artifacts[0].mimeType).toBe('image/png')
+  })
+
   it('should handle error: unregistered quill', () => {
     const engine = new Quillmark()
 

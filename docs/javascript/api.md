@@ -202,6 +202,28 @@ for (const artifact of pngResult.artifacts) {
 const previewResult = engine.render(parsed, { format: 'png' });
 ```
 
+##### compile
+
+```typescript
+compile(parsedDoc: ParsedDocument, options?: CompileOptions): CompiledDocument
+```
+
+Compile once, then render selected pages on demand.
+
+**Example:**
+```javascript
+const parsed = Quillmark.parseMarkdown(markdown);
+const compiled = engine.compile(parsed, { quillRef: 'my-quill' });
+
+console.log(compiled.pageCount);
+
+// render all pages
+const all = compiled.renderPages(undefined, { format: 'png', ppi: 80 });
+
+// render selected pages in requested order (duplicates allowed)
+const subset = compiled.renderPages([4, 5, 6], { format: 'svg' });
+```
+
 ##### listQuills
 
 ```typescript

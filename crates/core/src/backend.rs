@@ -83,7 +83,7 @@
 
 use crate::error::RenderError;
 use crate::value::QuillValue;
-use crate::{OutputFormat, Quill, RenderOptions};
+use crate::{CompiledDocument, Diagnostic, OutputFormat, Quill, RenderOptions, Severity};
 use std::collections::HashMap;
 
 /// Backend trait for rendering different output formats
@@ -113,6 +113,55 @@ pub trait Backend: Send + Sync {
         opts: &RenderOptions,
         json_data: &serde_json::Value,
     ) -> Result<crate::RenderResult, RenderError>;
+
+    /// Compile a document to an opaque backend-specific handle for selective page rendering.
+    ///
+    /// Default implementation returns a "not supported" error so existing backends do not
+    /// need to implement this method.
+    fn compile_to_document(
+        &self,
+        _plate_content: &str,
+        _quill: &Quill,
+        _json_data: &serde_json::Value,
+    ) -> Result<CompiledDocument, RenderError> {
+        Err(RenderError::UnsupportedBackend {
+            diag: Box::new(
+                Diagnostic::new(
+                    Severity::Error,
+                    format!(
+                        "Backend '{}' does not support compile_to_document()",
+                        self.id()
+                    ),
+                )
+                .with_code("backend::compile_to_document_not_supported".to_string()),
+            ),
+        })
+    }
+
+    /// Render selected pages from a previously compiled document.
+    ///
+    /// - `pages = None` renders all pages in document order.
+    /// - `pages = Some(&[])` renders zero pages.
+    ///
+    /// Default implementation returns a "not supported" error so existing backends do not
+    /// need to implement this method.
+    fn render_pages(
+        &self,
+        _doc: &CompiledDocument,
+        _pages: Option<&[usize]>,
+        _format: OutputFormat,
+        _ppi: Option<f32>,
+    ) -> Result<crate::RenderResult, RenderError> {
+        Err(RenderError::UnsupportedBackend {
+            diag: Box::new(
+                Diagnostic::new(
+                    Severity::Error,
+                    format!("Backend '{}' does not support render_pages()", self.id()),
+                )
+                .with_code("backend::render_pages_not_supported".to_string()),
+            ),
+        })
+    }
 
     /// Provide an embedded default Quill for this backend.
     ///
