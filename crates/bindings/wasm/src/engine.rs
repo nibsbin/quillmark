@@ -1,7 +1,10 @@
 //! Quillmark WASM Engine - Simplified API
 
 use crate::error::WasmError;
-use crate::types::{OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderResult};
+use crate::types::{
+    CompileOptions, OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderPagesOptions,
+    RenderResult,
+};
 use std::str::FromStr;
 use wasm_bindgen::prelude::*;
 
@@ -28,6 +31,12 @@ fn now_ms() -> f64 {
 #[wasm_bindgen]
 pub struct Quillmark {
     inner: quillmark::Quillmark,
+}
+
+#[wasm_bindgen]
+pub struct CompiledDocument {
+    workflow: quillmark::Workflow,
+    inner: quillmark_core::CompiledDocument,
 }
 
 impl Default for Quillmark {
@@ -273,31 +282,11 @@ impl Quillmark {
         parsed: ParsedDocument,
         opts: RenderOptions,
     ) -> Result<RenderResult, JsValue> {
-        // Determine which quill ref to use (before consuming parsed)
-        let quill_ref_to_use = opts.quill_ref.unwrap_or_else(|| parsed.quill_ref.clone());
-
-        // Reconstruct a core ParsedDocument from the WASM type
-        // Convert JSON value to HashMap<String, QuillValue>
-        let fields_json = parsed.fields;
-        let quill_ref_str = parsed.quill_ref; // Move quill_ref out
-
-        let mut fields = std::collections::HashMap::new();
-
-        if let serde_json::Value::Object(obj) = fields_json {
-            for (key, value) in obj {
-                fields.insert(key, quillmark_core::value::QuillValue::from_json(value));
-            }
-        }
-
-        let quill_ref =
-            quillmark_core::version::QuillReference::from_str(&quill_ref_str).map_err(|e| {
-                JsValue::from_str(&format!(
-                    "Invalid QUILL reference '{}': {}",
-                    quill_ref_str, e
-                ))
-            })?;
-
-        let parsed = quillmark_core::ParsedDocument::with_quill_ref(fields, quill_ref);
+        let quill_ref_to_use = opts
+            .quill_ref
+            .clone()
+            .unwrap_or_else(|| parsed.quill_ref.clone());
+        let parsed = Self::to_core_parsed(parsed)?;
 
         // Load the workflow
         let mut workflow = self.inner.workflow(&quill_ref_to_use).map_err(|e| {
@@ -345,6 +334,31 @@ impl Quillmark {
         })
     }
 
+    /// Compile a parsed document into an opaque compiled document handle.
+    #[wasm_bindgen]
+    pub fn compile(
+        &mut self,
+        parsed: ParsedDocument,
+        opts: Option<CompileOptions>,
+    ) -> Result<CompiledDocument, JsValue> {
+        let opts = opts.unwrap_or_default();
+        let quill_ref_to_use = opts.quill_ref.unwrap_or_else(|| parsed.quill_ref.clone());
+        let parsed = Self::to_core_parsed(parsed)?;
+
+        let workflow = self.inner.workflow(&quill_ref_to_use).map_err(|e| {
+            WasmError::from(format!("Quill '{}' not found: {}", quill_ref_to_use, e)).to_js_value()
+        })?;
+
+        let compiled = workflow
+            .compile(&parsed)
+            .map_err(|e| WasmError::from(e).to_js_value())?;
+
+        Ok(CompiledDocument {
+            workflow,
+            inner: compiled,
+        })
+    }
+
     /// Resolve a Quill reference to a registered Quill, or null if not available
     ///
     /// Accepts a quill reference string like "resume-template", "resume-template@2",
@@ -379,5 +393,64 @@ impl Quillmark {
     #[wasm_bindgen(js_name = unregisterQuill)]
     pub fn unregister_quill(&mut self, name_or_ref: &str) -> bool {
         self.inner.unregister_quill(name_or_ref)
+    }
+
+    fn to_core_parsed(parsed: ParsedDocument) -> Result<quillmark_core::ParsedDocument, JsValue> {
+        let mut fields = std::collections::HashMap::new();
+
+        if let serde_json::Value::Object(obj) = parsed.fields {
+            for (key, value) in obj {
+                fields.insert(key, quillmark_core::value::QuillValue::from_json(value));
+            }
+        }
+
+        let quill_ref = quillmark_core::version::QuillReference::from_str(&parsed.quill_ref)
+            .map_err(|e| {
+                JsValue::from_str(&format!(
+                    "Invalid QUILL reference '{}': {}",
+                    parsed.quill_ref, e
+                ))
+            })?;
+
+        Ok(quillmark_core::ParsedDocument::with_quill_ref(
+            fields, quill_ref,
+        ))
+    }
+}
+
+#[wasm_bindgen]
+impl CompiledDocument {
+    /// Number of pages in this compiled document.
+    #[wasm_bindgen(getter, js_name = pageCount)]
+    pub fn page_count(&self) -> usize {
+        self.inner.page_count
+    }
+
+    /// Render selected pages. `pages = null/undefined` renders all pages.
+    #[wasm_bindgen(js_name = renderPages)]
+    pub fn render_pages(
+        &self,
+        pages: Option<Vec<u32>>,
+        opts: RenderPagesOptions,
+    ) -> Result<RenderResult, JsValue> {
+        let page_indices = pages.map(|v| v.into_iter().map(|i| i as usize).collect::<Vec<_>>());
+        let start = now_ms();
+
+        let result = self
+            .workflow
+            .render_pages(
+                &self.inner,
+                page_indices.as_deref(),
+                opts.format.into(),
+                opts.ppi,
+            )
+            .map_err(|e| WasmError::from(e).to_js_value())?;
+
+        Ok(RenderResult {
+            artifacts: result.artifacts.into_iter().map(Into::into).collect(),
+            warnings: result.warnings.into_iter().map(Into::into).collect(),
+            output_format: result.output_format.into(),
+            render_time_ms: now_ms() - start,
+        })
     }
 }

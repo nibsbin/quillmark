@@ -37,7 +37,9 @@ use typst_pdf::PdfOptions;
 
 use crate::error_mapping::map_typst_errors;
 use crate::world::QuillWorld;
-use quillmark_core::{Diagnostic, Quill, RenderError, Severity};
+use quillmark_core::{
+    Artifact, Diagnostic, OutputFormat, Quill, RenderError, RenderResult, Severity,
+};
 
 /// Internal compilation function
 fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
@@ -56,15 +58,12 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
     }
 }
 
-/// Compiles a Typst document to PDF format with JSON data injection.
-///
-/// This function creates a `@local/quillmark-helper:0.1.0` package containing
-/// the JSON data, which can be imported by the plate file.
-pub fn compile_to_pdf(
+/// Compile Typst source into a paged document with injected JSON data.
+pub fn compile_to_document(
     quill: &Quill,
     plated_content: &str,
     json_data: &str,
-) -> Result<Vec<u8>, RenderError> {
+) -> Result<PagedDocument, RenderError> {
     let world = QuillWorld::new_with_data(quill, plated_content, json_data).map_err(|e| {
         RenderError::EngineCreation {
             diag: Box::new(
@@ -78,7 +77,19 @@ pub fn compile_to_pdf(
         }
     })?;
 
-    let document = compile_document(&world)?;
+    compile_document(&world)
+}
+
+/// Compiles a Typst document to PDF format with JSON data injection.
+///
+/// This function creates a `@local/quillmark-helper:0.1.0` package containing
+/// the JSON data, which can be imported by the plate file.
+pub fn compile_to_pdf(
+    quill: &Quill,
+    plated_content: &str,
+    json_data: &str,
+) -> Result<Vec<u8>, RenderError> {
+    let document = compile_to_document(quill, plated_content, json_data)?;
 
     let pdf = typst_pdf::pdf(&document, &PdfOptions::default()).map_err(|e| {
         RenderError::CompilationFailed {
@@ -102,20 +113,7 @@ pub fn compile_to_svg(
     plated_content: &str,
     json_data: &str,
 ) -> Result<Vec<Vec<u8>>, RenderError> {
-    let world = QuillWorld::new_with_data(quill, plated_content, json_data).map_err(|e| {
-        RenderError::EngineCreation {
-            diag: Box::new(
-                Diagnostic::new(
-                    Severity::Error,
-                    format!("Failed to create Typst compilation environment: {}", e),
-                )
-                .with_code("typst::world_creation".to_string())
-                .with_source(e),
-            ),
-        }
-    })?;
-
-    let document = compile_document(&world)?;
+    let document = compile_to_document(quill, plated_content, json_data)?;
 
     let mut pages = Vec::new();
     for page in &document.pages {
@@ -145,20 +143,7 @@ pub fn compile_to_png(
     json_data: &str,
     ppi: Option<f32>,
 ) -> Result<Vec<Vec<u8>>, RenderError> {
-    let world = QuillWorld::new_with_data(quill, plated_content, json_data).map_err(|e| {
-        RenderError::EngineCreation {
-            diag: Box::new(
-                Diagnostic::new(
-                    Severity::Error,
-                    format!("Failed to create Typst compilation environment: {}", e),
-                )
-                .with_code("typst::world_creation".to_string())
-                .with_source(e),
-            ),
-        }
-    })?;
-
-    let document = compile_document(&world)?;
+    let document = compile_to_document(quill, plated_content, json_data)?;
 
     let ppi = ppi.unwrap_or(DEFAULT_PPI);
 
@@ -178,4 +163,96 @@ pub fn compile_to_png(
     }
 
     Ok(pages)
+}
+
+/// Render selected pages from an already-compiled Typst document.
+pub fn render_document_pages(
+    document: &PagedDocument,
+    pages: Option<&[usize]>,
+    format: OutputFormat,
+    ppi: Option<f32>,
+) -> Result<RenderResult, RenderError> {
+    let page_indices: Vec<usize> = match pages {
+        Some(slice) => slice.to_vec(),
+        None => (0..document.pages.len()).collect(),
+    };
+
+    if let Some(invalid) = page_indices
+        .iter()
+        .copied()
+        .find(|&idx| idx >= document.pages.len())
+    {
+        return Err(RenderError::CompilationFailed {
+            diags: vec![Diagnostic::new(
+                Severity::Error,
+                format!(
+                    "Page index {} out of bounds (page_count={})",
+                    invalid,
+                    document.pages.len()
+                ),
+            )
+            .with_code("typst::page_index_out_of_bounds".to_string())],
+        });
+    }
+
+    match format {
+        OutputFormat::Svg => {
+            let artifacts = page_indices
+                .into_iter()
+                .map(|idx| Artifact {
+                    bytes: typst_svg::svg(&document.pages[idx]).into_bytes(),
+                    output_format: OutputFormat::Svg,
+                })
+                .collect();
+            Ok(RenderResult::new(artifacts, OutputFormat::Svg))
+        }
+        OutputFormat::Png => {
+            let scale = ppi.unwrap_or(DEFAULT_PPI) / 72.0;
+            let mut artifacts = Vec::with_capacity(page_indices.len());
+            for idx in page_indices {
+                let pixmap = typst_render::render(&document.pages[idx], scale);
+                let png_data = pixmap
+                    .encode_png()
+                    .map_err(|e| RenderError::CompilationFailed {
+                        diags: vec![Diagnostic::new(
+                            Severity::Error,
+                            format!("PNG encoding failed: {}", e),
+                        )
+                        .with_code("typst::png_encoding".to_string())],
+                    })?;
+                artifacts.push(Artifact {
+                    bytes: png_data,
+                    output_format: OutputFormat::Png,
+                });
+            }
+            Ok(RenderResult::new(artifacts, OutputFormat::Png))
+        }
+        OutputFormat::Pdf => {
+            let pdf = typst_pdf::pdf(document, &PdfOptions::default()).map_err(|e| {
+                RenderError::CompilationFailed {
+                    diags: vec![Diagnostic::new(
+                        Severity::Error,
+                        format!("PDF generation failed: {:?}", e),
+                    )
+                    .with_code("typst::pdf_generation".to_string())],
+                }
+            })?;
+            Ok(RenderResult::new(
+                vec![Artifact {
+                    bytes: pdf,
+                    output_format: OutputFormat::Pdf,
+                }],
+                OutputFormat::Pdf,
+            ))
+        }
+        OutputFormat::Txt => Err(RenderError::FormatNotSupported {
+            diag: Box::new(
+                Diagnostic::new(
+                    Severity::Error,
+                    "TXT output is not supported for Typst".into(),
+                )
+                .with_code("typst::format_not_supported".to_string()),
+            ),
+        }),
+    }
 }
