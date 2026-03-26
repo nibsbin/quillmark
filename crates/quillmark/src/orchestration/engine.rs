@@ -69,6 +69,7 @@ impl VersionedQuillSet {
 pub struct Quillmark {
     backends: HashMap<String, Arc<dyn Backend>>,
     quills: HashMap<String, VersionedQuillSet>,
+    warnings: Vec<Diagnostic>,
 }
 
 impl Quillmark {
@@ -77,6 +78,7 @@ impl Quillmark {
         let mut engine = Self {
             backends: HashMap::new(),
             quills: HashMap::new(),
+            warnings: Vec::new(),
         };
 
         // Auto-register backends based on enabled features
@@ -133,13 +135,24 @@ impl Quillmark {
         if !self.quills.contains_key("__default__") {
             if let Some(default_quill) = default_quill {
                 if let Err(e) = self.register_quill(default_quill) {
-                    eprintln!(
-                        "Warning: Failed to register default Quill from backend '{}': {}",
-                        id, e
+                    self.warnings.push(
+                        Diagnostic::new(
+                            Severity::Warning,
+                            format!(
+                                "Failed to register default Quill from backend '{}': {}",
+                                id, e
+                            ),
+                        )
+                        .with_code("engine::default_quill_registration_failed".to_string()),
                     );
                 }
             }
         }
+    }
+
+    /// Drain and return accumulated non-fatal warnings from engine operations.
+    pub fn take_warnings(&mut self) -> Vec<Diagnostic> {
+        std::mem::take(&mut self.warnings)
     }
 
     /// Register a quill template with the engine by name.
@@ -546,5 +559,82 @@ impl Quillmark {
 impl Default for Quillmark {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quillmark_core::{
+        Artifact, FileTreeNode, OutputFormat, QuillValue, RenderOptions, RenderResult,
+    };
+
+    struct BadDefaultBackend;
+
+    impl Backend for BadDefaultBackend {
+        fn id(&self) -> &'static str {
+            "bad-default"
+        }
+
+        fn supported_formats(&self) -> &'static [OutputFormat] {
+            &[OutputFormat::Txt]
+        }
+
+        fn plate_extension_types(&self) -> &'static [&'static str] {
+            &[".txt"]
+        }
+
+        fn compile(
+            &self,
+            plated: &str,
+            _quill: &Quill,
+            _opts: &RenderOptions,
+            _json_data: &serde_json::Value,
+        ) -> Result<RenderResult, RenderError> {
+            Ok(RenderResult::new(
+                vec![Artifact {
+                    bytes: plated.as_bytes().to_vec(),
+                    output_format: OutputFormat::Txt,
+                }],
+                OutputFormat::Txt,
+            ))
+        }
+
+        fn default_quill(&self) -> Option<Quill> {
+            Some(Quill {
+                metadata: HashMap::new(),
+                name: "__default__".to_string(),
+                backend: self.id().to_string(),
+                plate: None,
+                example: None,
+                schema: QuillValue::from_json(serde_json::json!({ "type": "object" })),
+                defaults: HashMap::new(),
+                examples: HashMap::new(),
+                files: FileTreeNode::Directory {
+                    files: HashMap::new(),
+                },
+            })
+        }
+    }
+
+    #[test]
+    fn register_backend_collects_default_quill_registration_warning() {
+        let mut engine = Quillmark {
+            backends: HashMap::new(),
+            quills: HashMap::new(),
+            warnings: Vec::new(),
+        };
+        engine.register_backend(Box::new(BadDefaultBackend));
+
+        let warnings = engine.take_warnings();
+        assert_eq!(warnings.len(), 1);
+        assert_eq!(
+            warnings[0].code.as_deref(),
+            Some("engine::default_quill_registration_failed")
+        );
+        assert!(warnings[0]
+            .message
+            .contains("Failed to register default Quill from backend 'bad-default'"));
+        assert!(engine.take_warnings().is_empty());
     }
 }
