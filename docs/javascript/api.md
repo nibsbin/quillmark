@@ -210,6 +210,12 @@ compile(parsedDoc: ParsedDocument, options?: CompileOptions): CompiledDocument
 
 Compile once, then render selected pages on demand.
 
+`CompiledDocument.renderPages(pages, options)` behavior:
+- `pages` is optional and 0-based.
+- `null`/`undefined` renders all pages in document order.
+- Out-of-bounds indices are skipped and returned as warnings.
+- Explicit page selection is not supported for `format: 'pdf'` (throws).
+
 **Example:**
 ```javascript
 const parsed = Quillmark.parseMarkdown(markdown);
