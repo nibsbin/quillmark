@@ -1562,3 +1562,35 @@ fields:
     assert!(obj_props.contains_key("child"));
     assert_eq!(obj_props["child"].r#type, FieldType::Boolean);
 }
+
+#[test]
+fn test_quill_config_from_yaml_collects_non_fatal_field_warnings() {
+    let yaml_content = r#"
+Quill:
+  name: warning-config
+  version: "1.0"
+  backend: typst
+  description: Warning collection test
+
+fields:
+  valid_field:
+    type: string
+    description: Valid
+  broken_field:
+    description: Missing required type
+"#;
+
+    let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();
+
+    assert!(config.document.fields.contains_key("valid_field"));
+    assert!(!config.document.fields.contains_key("broken_field"));
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0].severity, Severity::Warning);
+    assert_eq!(
+        warnings[0].code.as_deref(),
+        Some("quill::field_parse_warning")
+    );
+    assert!(warnings[0]
+        .message
+        .contains("Failed to parse field schema 'broken_field'"));
+}

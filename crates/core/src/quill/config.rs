@@ -4,9 +4,11 @@ use std::error::Error as StdError;
 
 use serde::{Deserialize, Serialize};
 
+use crate::error::{Diagnostic, Severity};
 use crate::value::QuillValue;
 
 use super::{CardSchema, FieldSchema, UiContainerSchema, UiFieldSchema};
+
 /// Top-level configuration for a Quillmark project
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QuillConfig {
@@ -55,6 +57,7 @@ impl QuillConfig {
         fields_map: &serde_json::Map<String, serde_json::Value>,
         key_order: &[String],
         context: &str,
+        warnings: &mut Vec<Diagnostic>,
     ) -> HashMap<String, FieldSchema> {
         let mut fields = HashMap::new();
         let mut fallback_counter = 0;
@@ -90,9 +93,12 @@ impl QuillConfig {
                     fields.insert(field_name.clone(), schema);
                 }
                 Err(e) => {
-                    eprintln!(
-                        "Warning: Failed to parse {} '{}': {}",
-                        context, field_name, e
+                    warnings.push(
+                        Diagnostic::new(
+                            Severity::Warning,
+                            format!("Failed to parse {} '{}': {}", context, field_name, e),
+                        )
+                        .with_code("quill::field_parse_warning".to_string()),
                     );
                 }
             }
@@ -103,6 +109,16 @@ impl QuillConfig {
 
     /// Parse QuillConfig from YAML content
     pub fn from_yaml(yaml_content: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        let (config, _warnings) = Self::from_yaml_with_warnings(yaml_content)?;
+        Ok(config)
+    }
+
+    /// Parse QuillConfig from YAML content while collecting non-fatal warnings.
+    pub fn from_yaml_with_warnings(
+        yaml_content: &str,
+    ) -> Result<(Self, Vec<Diagnostic>), Box<dyn StdError + Send + Sync>> {
+        let mut warnings = Vec::new();
+
         // Parse YAML into serde_json::Value via serde_saphyr
         // Note: serde_json with "preserve_order" feature is required for this to work as expected
         let quill_yaml_val: serde_json::Value = serde_saphyr::from_str(yaml_content)
@@ -210,7 +226,12 @@ impl QuillConfig {
             if let Some(fields_map) = fields_val.as_object() {
                 // With preserve_order feature, keys iterator respects insertion order
                 let field_order: Vec<String> = fields_map.keys().cloned().collect();
-                Self::parse_fields_with_order(fields_map, &field_order, "field schema")
+                Self::parse_fields_with_order(
+                    fields_map,
+                    &field_order,
+                    "field schema",
+                    &mut warnings,
+                )
             } else {
                 HashMap::new()
             }
@@ -240,6 +261,7 @@ impl QuillConfig {
                         card_fields_table,
                         &card_field_order,
                         &format!("card '{}' field", card_name),
+                        &mut warnings,
                     )
                 } else if let Some(_toml_fields) = &card_def.fields {
                     HashMap::new()
@@ -268,16 +290,19 @@ impl QuillConfig {
             ui: ui_section,
         };
 
-        Ok(QuillConfig {
-            document,
-            backend,
-            version,
-            author,
-            example_file,
-            plate_file,
-            cards,
-            metadata,
-            typst_config,
-        })
+        Ok((
+            QuillConfig {
+                document,
+                backend,
+                version,
+                author,
+                example_file,
+                plate_file,
+                cards,
+                metadata,
+                typst_config,
+            },
+            warnings,
+        ))
     }
 }

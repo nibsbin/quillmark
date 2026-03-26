@@ -69,6 +69,7 @@ impl VersionedQuillSet {
 pub struct Quillmark {
     backends: HashMap<String, Arc<dyn Backend>>,
     quills: HashMap<String, VersionedQuillSet>,
+    warnings: Vec<Diagnostic>,
 }
 
 impl Quillmark {
@@ -77,6 +78,7 @@ impl Quillmark {
         let mut engine = Self {
             backends: HashMap::new(),
             quills: HashMap::new(),
+            warnings: Vec::new(),
         };
 
         // Auto-register backends based on enabled features
@@ -133,13 +135,29 @@ impl Quillmark {
         if !self.quills.contains_key("__default__") {
             if let Some(default_quill) = default_quill {
                 if let Err(e) = self.register_quill(default_quill) {
-                    eprintln!(
-                        "Warning: Failed to register default Quill from backend '{}': {}",
-                        id, e
+                    self.warnings.push(
+                        Diagnostic::new(
+                            Severity::Warning,
+                            format!(
+                                "Failed to register default Quill from backend '{}': {}",
+                                id, e
+                            ),
+                        )
+                        .with_code("engine::default_quill_registration_failed".to_string()),
                     );
                 }
             }
         }
+    }
+
+    /// Returns all currently accumulated non-fatal engine warnings.
+    pub fn warnings(&self) -> &[Diagnostic] {
+        &self.warnings
+    }
+
+    /// Drains and returns all currently accumulated non-fatal engine warnings.
+    pub fn take_warnings(&mut self) -> Vec<Diagnostic> {
+        std::mem::take(&mut self.warnings)
     }
 
     /// Register a quill template with the engine by name.

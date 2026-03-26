@@ -23,6 +23,34 @@ This review focused on architectural maintainability in core orchestration and p
 
 **Recommendation:** return structured non-fatal diagnostics (or use a logger interface injected at boundary layers) and keep direct console output in binaries only.
 
+**Proposed implementation plan:**
+
+1. **Introduce a warnings collector type in core**
+   - Add a small `NonFatalDiagnostic` (or `WarningEvent`) struct that carries a stable code, human-readable message, and optional location/context.
+   - Add a `WarningSink` abstraction (trait or callback) with a no-op default so library callers are not forced to handle warnings.
+
+2. **Refactor `QuillConfig::parse_fields_with_order` to emit warnings instead of printing**
+   - Replace `eprintln!` branches with pushes to the warning collector.
+   - Return parsed fields plus collected warnings, or accept a mutable sink parameter.
+   - Keep existing tolerant behavior (continue on recoverable field parse failures) so runtime behavior remains backward compatible.
+
+3. **Refactor `engine.register_backend` default-quill failure handling**
+   - Remove direct `eprintln!` usage and surface a warning through the same sink/collector pipeline.
+   - Ensure backend registration still succeeds when failure is non-fatal, but warning metadata preserves backend id and failure reason.
+
+4. **Add boundary-layer wiring in CLI/bindings**
+   - In CLI entrypoints, map emitted warnings to current stderr formatting so user-visible behavior is preserved.
+   - In library/bindings contexts, expose warnings to callers as structured data rather than forcing console output.
+
+5. **Add targeted tests and migration guardrails**
+   - Unit tests: verify warning emission content for parse failures and default-quill registration failures.
+   - Integration tests: verify no stderr output occurs from core library paths under normal execution.
+   - Add a changelog note documenting the new warning channel and recommended migration pattern for downstream callers.
+
+6. **Follow-up cleanup**
+   - Audit other `eprintln!` usages in `crates/core` and `crates/quillmark` orchestration paths for similar conversion.
+   - Keep binary-specific stderr output in `crates/bindings/cli` only, establishing a clear boundary rule.
+
 ---
 
 ### 2) Duplicated workflow pipeline preparation
