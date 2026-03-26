@@ -13,6 +13,12 @@ pub struct Workflow {
     dynamic_fonts: HashMap<String, Vec<u8>>,
 }
 
+struct PreparedRenderContext {
+    json_data: serde_json::Value,
+    plate_content: String,
+    prepared_quill: Quill,
+}
+
 impl Workflow {
     /// Create a new Workflow with the specified backend and quill.
     pub fn new(backend: Arc<dyn Backend>, quill: Quill) -> Result<Self, RenderError> {
@@ -57,11 +63,12 @@ impl Workflow {
 
     /// Compile parsed data into a backend-specific compiled document for selective page rendering.
     pub fn compile(&self, parsed: &ParsedDocument) -> Result<CompiledDocument, RenderError> {
-        let json_data = self.compile_data(parsed)?;
-        let plate_content = self.get_plate_content()?.unwrap_or_default();
-        let prepared_quill = self.prepare_quill_with_assets();
-        self.backend
-            .compile_to_document(&plate_content, &prepared_quill, &json_data)
+        let context = self.prepare_render_context(parsed)?;
+        self.backend.compile_to_document(
+            &context.plate_content,
+            &context.prepared_quill,
+            &context.json_data,
+        )
     }
 
     /// Render selected pages from a compiled document.
@@ -88,23 +95,27 @@ impl Workflow {
         format: Option<OutputFormat>,
         ppi: Option<f32>,
     ) -> Result<RenderResult, RenderError> {
-        // Compile the data first
-        let json_data = self.compile_data(parsed)?;
-
-        // Get plate content directly (no MiniJinja composition)
-        let plate_content = self.get_plate_content()?.unwrap_or_default();
-
-        // Prepare quill with dynamic assets
-        let prepared_quill = self.prepare_quill_with_assets();
+        let context = self.prepare_render_context(parsed)?;
 
         // Pass plate content and JSON data to backend
         self.render_plate_with_quill_and_data(
-            &plate_content,
+            &context.plate_content,
             format,
             ppi,
-            &prepared_quill,
-            &json_data,
+            &context.prepared_quill,
+            &context.json_data,
         )
+    }
+
+    fn prepare_render_context(
+        &self,
+        parsed: &ParsedDocument,
+    ) -> Result<PreparedRenderContext, RenderError> {
+        Ok(PreparedRenderContext {
+            json_data: self.compile_data(parsed)?,
+            plate_content: self.get_plate_content()?.unwrap_or_default(),
+            prepared_quill: self.prepare_quill_with_assets(),
+        })
     }
 
     /// Internal method to render content with a specific quill and JSON data
