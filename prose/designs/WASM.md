@@ -20,8 +20,14 @@ class Quillmark {
   compileData(markdown: string): object;
   dryRun(markdown: string): void;
   render(parsed: ParsedDocument, options?: RenderOptions): RenderResult;
+  compile(parsed: ParsedDocument, options?: CompileOptions): CompiledDocument;
   listQuills(): string[];
   unregisterQuill(name: string): void;
+}
+
+class CompiledDocument {
+  readonly pageCount: number;
+  renderPages(pages?: number[] | null, options?: RenderPagesOptions): RenderResult;
 }
 ```
 
@@ -52,6 +58,16 @@ interface RenderOptions {
   ppi?: number;  // PNG pixels per inch (default: 144.0)
 }
 
+interface CompileOptions {
+  assets?: Record<string, number[]>;
+  quillName?: string;
+}
+
+interface RenderPagesOptions {
+  format?: 'pdf' | 'svg' | 'png';
+  ppi?: number;
+}
+
 interface RenderResult {
   artifacts: Artifact[];
   warnings: Diagnostic[];
@@ -80,6 +96,15 @@ interface Diagnostic {
 ## Quill Selection
 
 Via QUILL frontmatter field, or via `quillName` in `RenderOptions`.
+
+## Selective Page Rendering
+
+- `compile()` performs layout once and returns a `CompiledDocument`.
+- `CompiledDocument.renderPages()` renders selected pages without recompiling.
+- Page indices are 0-based; returned artifacts preserve requested order and allow duplicates.
+- `pages = null | undefined` renders all pages in document order.
+- Out-of-bounds page indices are skipped and surfaced as warnings.
+- PDF does not support explicit page selection; passing `pages` with `format: 'pdf'` returns an error.
 
 ## Error Handling
 
