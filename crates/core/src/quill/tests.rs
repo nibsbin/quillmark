@@ -1,6 +1,7 @@
 //! Tests for quill types and loading.
 
 use super::*;
+use crate::Severity;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;
