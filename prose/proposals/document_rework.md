@@ -164,13 +164,41 @@ pub fn project_schema(schema: &QuillValue, projection: SchemaProjection) -> Quil
 
 **Why:** The current `strip_schema_fields(&mut schema, &["x-ui"])` requires every call site to know which fields to remove. Adding a new internal field or a new consumer means updating scattered call sites. A projection enum centralizes the logic — "I need the AI view" — and the filtering rules live in one place.
 
+### 8. Defaults and coercion: operate on QuillConfig directly
+
+Today defaults and coercion round-trip through JSON Schema:
+
+```
+QuillConfig → build_schema() → JSON Schema → extract_defaults() → defaults
+                                            → with_coercion(&schema)
+```
+
+This is unnecessary. `QuillConfig` already has all the information — field types, defaults, enum constraints. The JSON Schema is just a serialization of what `CardSchema` and `FieldSchema` already express.
+
+**Proposed data flow:**
+
+```
+QuillConfig ─→ extract_defaults()  → HashMap<String, QuillValue>
+            ─→ with_coercion()     → coerced fields
+            ─→ build_schema()      → JSON Schema (for validation + export only)
+```
+
+- `with_defaults()` takes `&QuillConfig` — iterates `main().fields` directly
+- `with_coercion()` takes `&QuillConfig` — reads `FieldSchema.r#type` directly
+- `build_schema()` becomes a pure serialization function — renders `QuillConfig` as JSON Schema
+- `jsonschema` validation remains, operating on the serialized JSON Schema. This is the one load-bearing use of JSON Schema. External consumers don't validate against it independently, so this can be revisited later if custom validation proves worthwhile.
+
+**Why:** Eliminates the round-trip. Faster, one code path for defaults, and divergence between config and schema is caught by validation as a safety net.
+
 ## Scope
 
 ### In scope
 - `QuillConfig` struct change (`document` + `cards HashMap` -> `cards: Vec<CardSchema>`)
 - `main()`, `card_definitions()`, `card_definitions_map()` accessors
 - Quill.yaml parsing: `main:` section replaces root `fields:`
-- Schema projection functions for AI and UI consumers
+- Schema projection API replacing `strip_schema_fields`
+- Defaults and coercion extracted from `QuillConfig` directly
+- `build_schema()` refactored to pure serialization
 - Update all consumers: `load.rs`, `schema.rs`, CLI `validate`, tests
 - Update fixture Quill.yaml files to use `main:` format
 
@@ -179,6 +207,7 @@ pub fn project_schema(schema: &QuillValue, projection: SchemaProjection) -> Quil
 - Changes to markdown parsing or `ParsedDocument` structure
 - Changes to template/plate variable access patterns
 - Prompt engineering layer for AI authoring guidance
+- Replacing `jsonschema` crate with custom validation
 
 ## Files affected
 
