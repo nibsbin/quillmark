@@ -36,10 +36,8 @@ impl Workflow {
     pub fn compile_data(&self, parsed: &ParsedDocument) -> Result<serde_json::Value, RenderError> {
         // Apply coercion from QuillConfig directly
         let coerced_fields = self.quill.config.coerce_fields(parsed.fields());
-        let parsed_coerced = ParsedDocument::with_quill_ref(
-            coerced_fields,
-            parsed.quill_reference().clone(),
-        );
+        let parsed_coerced =
+            ParsedDocument::with_quill_ref(coerced_fields, parsed.quill_reference().clone());
         self.validate_document(&parsed_coerced)?;
 
         // Normalize document: strip bidi characters and fix HTML comment fences
@@ -198,10 +196,8 @@ impl Workflow {
     /// where you want to validate inputs before incurring compilation costs.
     pub fn dry_run(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
         let coerced_fields = self.quill.config.coerce_fields(parsed.fields());
-        let parsed_coerced = ParsedDocument::with_quill_ref(
-            coerced_fields,
-            parsed.quill_reference().clone(),
-        );
+        let parsed_coerced =
+            ParsedDocument::with_quill_ref(coerced_fields, parsed.quill_reference().clone());
         self.validate_document(&parsed_coerced)?;
         Ok(())
     }

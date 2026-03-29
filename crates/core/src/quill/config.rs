@@ -64,7 +64,9 @@ impl QuillConfig {
 
     /// Returns a named card definition by name.
     pub fn card_definition(&self, name: &str) -> Option<&CardSchema> {
-        self.card_definitions().iter().find(|card| card.name == name)
+        self.card_definitions()
+            .iter()
+            .find(|card| card.name == name)
     }
 
     /// Extract default values from the main card's field schemas.
@@ -201,9 +203,7 @@ impl QuillConfig {
                     if n.is_nan() {
                         return QuillValue::from_json(serde_json::Value::Bool(false));
                     }
-                    return QuillValue::from_json(serde_json::Value::Bool(
-                        n.abs() > f64::EPSILON,
-                    ));
+                    return QuillValue::from_json(serde_json::Value::Bool(n.abs() > f64::EPSILON));
                 }
                 value.clone()
             }
