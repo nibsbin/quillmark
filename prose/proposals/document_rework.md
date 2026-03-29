@@ -138,13 +138,31 @@ Main card fields remain top-level in `ParsedDocument`. Card instances remain in 
 
 `QuillConfig` is the single source of truth for the schema. JSON Schema is one projection — a serialization format chosen for its ecosystem benefits (validation libraries, AI familiarity, UI tooling).
 
-Different consumers get different projections of the same `QuillConfig`:
+The raw schema returned by `build_schema()` is the **validation schema** — the full JSON Schema with `CARDS` array property, `$defs`, `oneOf` dispatch. This is the default. No projection needed for internal validation.
 
-- **Validation projection (internal):** Full JSON Schema with `CARDS` array property, `$defs`, `oneOf` dispatch. Used by the engine to validate `ParsedDocument` after parsing.
+External consumers get **projections** — curated views derived from the raw schema:
+
 - **AI projection:** Strips the `CARDS` property and `x-ui` extensions. Keeps `$defs` so AI consumers can reference card type field definitions. The markdown authoring format (separate `---` blocks with `CARD:` discriminator) is communicated via the prompt engineering layer, not the schema.
 - **UI projection:** Strips `CARDS` property. Keeps `$defs` and `x-ui` for form generation.
 
-This extends the existing `strip_schema_fields` pattern already used to strip `x-ui` before exposing the schema to consumers. One schema definition in code, multiple filtered views.
+### 7. Schema projection API: projection-oriented, not strip-oriented
+
+Replace the current `strip_schema_fields` (subtractive, caller-driven) with a projection-oriented API (intent-driven, centralized):
+
+```rust
+/// Schema projections for external consumers.
+/// The raw schema (from build_schema) is the validation view — no projection needed.
+pub enum SchemaProjection {
+    AI,  // strips CARDS, x-ui
+    UI,  // strips CARDS, keeps x-ui
+}
+
+pub fn project_schema(schema: &QuillValue, projection: SchemaProjection) -> QuillValue {
+    // ...
+}
+```
+
+**Why:** The current `strip_schema_fields(&mut schema, &["x-ui"])` requires every call site to know which fields to remove. Adding a new internal field or a new consumer means updating scattered call sites. A projection enum centralizes the logic — "I need the AI view" — and the filtering rules live in one place.
 
 ## Scope
 
