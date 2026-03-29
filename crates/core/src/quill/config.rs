@@ -12,8 +12,10 @@ use super::{CardSchema, FieldSchema, UiContainerSchema, UiFieldSchema};
 /// Top-level configuration for a Quillmark project
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QuillConfig {
-    /// The root document schema
-    pub document: CardSchema,
+    /// Quill package name
+    pub name: String,
+    /// Ordered card schemas where index 0 is always the main card.
+    pub cards: Vec<CardSchema>,
     /// Backend to use for rendering (e.g., "typst", "html")
     pub backend: String,
     /// Version of the Quillmark spec
@@ -24,8 +26,6 @@ pub struct QuillConfig {
     pub example_file: Option<String>,
     /// Plate file (template)
     pub plate_file: Option<String>,
-    /// Card definitions (reusable sub-schemas)
-    pub cards: HashMap<String, CardSchema>,
     /// Additional unstructured metadata
     #[serde(flatten)]
     pub metadata: HashMap<String, QuillValue>,
@@ -44,6 +44,29 @@ struct CardSchemaDef {
 }
 
 impl QuillConfig {
+    /// Returns the main document card schema (`cards[0]`).
+    pub fn main(&self) -> &CardSchema {
+        &self.cards[0]
+    }
+
+    /// Returns all named card definitions (everything except main).
+    pub fn card_definitions(&self) -> &[CardSchema] {
+        &self.cards[1..]
+    }
+
+    /// Returns named card definitions as a map keyed by card name.
+    pub fn card_definitions_map(&self) -> HashMap<String, CardSchema> {
+        self.card_definitions()
+            .iter()
+            .map(|card| (card.name.clone(), card.clone()))
+            .collect()
+    }
+
+    /// Returns a named card definition by name.
+    pub fn card_definition(&self, name: &str) -> Option<&CardSchema> {
+        self.card_definitions().iter().find(|card| card.name == name)
+    }
+
     /// Parse fields from a JSON Value map, assigning ui.order based on key_order.
     ///
     /// This helper ensures consistent field ordering logic for both top-level
@@ -221,8 +244,28 @@ impl QuillConfig {
             }
         }
 
-        // Extract [fields] section (optional) using shared helper
-        let fields = if let Some(fields_val) = quill_yaml_val.get("fields") {
+        // Extract [main] section (preferred) with legacy fallback to root `fields`.
+        let main_obj_opt = quill_yaml_val.get("main").and_then(|v| v.as_object());
+
+        // Extract main.fields (optional)
+        let fields = if let Some(main_obj) = main_obj_opt {
+            if let Some(fields_val) = main_obj.get("fields") {
+                if let Some(fields_map) = fields_val.as_object() {
+                    // With preserve_order feature, keys iterator respects insertion order
+                    let field_order: Vec<String> = fields_map.keys().cloned().collect();
+                    Self::parse_fields_with_order(
+                        fields_map,
+                        &field_order,
+                        "field schema",
+                        &mut warnings,
+                    )
+                } else {
+                    HashMap::new()
+                }
+            } else {
+                HashMap::new()
+            }
+        } else if let Some(fields_val) = quill_yaml_val.get("fields") {
             if let Some(fields_map) = fields_val.as_object() {
                 // With preserve_order feature, keys iterator respects insertion order
                 let field_order: Vec<String> = fields_map.keys().cloned().collect();
@@ -239,8 +282,22 @@ impl QuillConfig {
             HashMap::new()
         };
 
+        // Extract main.ui (optional)
+        let main_ui: Option<UiContainerSchema> = main_obj_opt
+            .and_then(|main_obj| main_obj.get("ui"))
+            .cloned()
+            .and_then(|v| serde_json::from_value(v).ok());
+
+        // Main card is always first.
+        let mut cards: Vec<CardSchema> = vec![CardSchema {
+            name: "main".to_string(),
+            title: Some("main".to_string()),
+            description: Some(description),
+            fields,
+            ui: main_ui.or(ui_section),
+        }];
+
         // Extract [cards] section (optional)
-        let mut cards: HashMap<String, CardSchema> = HashMap::new();
         if let Some(cards_val) = quill_yaml_val.get("cards") {
             let cards_table = cards_val
                 .as_object()
@@ -277,28 +334,19 @@ impl QuillConfig {
                     ui: card_def.ui,
                 };
 
-                cards.insert(card_name.clone(), card_schema);
+                cards.push(card_schema);
             }
         }
 
-        // Create document schema from root fields
-        let document = CardSchema {
-            name: name.clone(),
-            title: Some(name),
-            description: Some(description),
-            fields,
-            ui: ui_section,
-        };
-
         Ok((
             QuillConfig {
-                document,
+                name,
+                cards,
                 backend,
                 version,
                 author,
                 example_file,
                 plate_file,
-                cards,
                 metadata,
                 typst_config,
             },

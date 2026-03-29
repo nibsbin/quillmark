@@ -921,10 +921,11 @@ fields:
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
     // Verify required fields
-    assert_eq!(config.document.name, "test_config");
+    assert_eq!(config.name, "test_config");
+    assert_eq!(config.main().name, "main");
     assert_eq!(config.backend, "typst");
     assert_eq!(
-        config.document.description,
+        config.main().description,
         Some("Test configuration parsing".to_string())
     );
 
@@ -938,11 +939,11 @@ fields:
     assert!(config.typst_config.contains_key("packages"));
 
     // Verify field schemas
-    assert_eq!(config.document.fields.len(), 2);
-    assert!(config.document.fields.contains_key("title"));
-    assert!(config.document.fields.contains_key("author"));
+    assert_eq!(config.main().fields.len(), 2);
+    assert!(config.main().fields.contains_key("title"));
+    assert!(config.main().fields.contains_key("author"));
 
-    let title_field = &config.document.fields["title"];
+    let title_field = &config.main().fields["title"];
     assert_eq!(title_field.description, Some("Document title".to_string()));
     assert_eq!(title_field.r#type, FieldType::String);
 }
@@ -1149,20 +1150,20 @@ fields:
     // Check that fields have correct order based on TOML position
     // Order is automatically generated based on field position
 
-    let first = config.document.fields.get("first").unwrap();
+    let first = config.main().fields.get("first").unwrap();
     assert_eq!(first.ui.as_ref().unwrap().order, Some(0));
 
-    let second = config.document.fields.get("second").unwrap();
+    let second = config.main().fields.get("second").unwrap();
     assert_eq!(second.ui.as_ref().unwrap().order, Some(1));
 
-    let third = config.document.fields.get("third").unwrap();
+    let third = config.main().fields.get("third").unwrap();
     assert_eq!(third.ui.as_ref().unwrap().order, Some(2));
     assert_eq!(
         third.ui.as_ref().unwrap().group,
         Some("Test Group".to_string())
     );
 
-    let fourth = config.document.fields.get("fourth").unwrap();
+    let fourth = config.main().fields.get("fourth").unwrap();
     assert_eq!(fourth.ui.as_ref().unwrap().order, Some(3));
 }
 
@@ -1185,7 +1186,7 @@ fields:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    let author_field = &config.document.fields["author"];
+    let author_field = &config.main().fields["author"];
     let ui = author_field.ui.as_ref().unwrap();
     assert_eq!(ui.group, Some("Author Info".to_string()));
     assert_eq!(ui.order, Some(0)); // First field should have order 0
@@ -1275,8 +1276,8 @@ cards:
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
     // Verify the card was parsed into config.cards
-    assert!(config.cards.contains_key("endorsements"));
-    let card = config.cards.get("endorsements").unwrap();
+    assert!(config.card_definition("endorsements").is_some());
+    let card = config.card_definition("endorsements").unwrap();
 
     assert_eq!(card.name, "endorsements");
     assert_eq!(card.title, Some("Endorsements".to_string()));
@@ -1352,13 +1353,13 @@ cards:
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
     // Check regular field
-    assert!(config.document.fields.contains_key("regular"));
-    let regular = config.document.fields.get("regular").unwrap();
+    assert!(config.main().fields.contains_key("regular"));
+    let regular = config.main().fields.get("regular").unwrap();
     assert_eq!(regular.r#type, FieldType::String);
 
-    // Check card is in config.cards (not config.document.fields)
-    assert!(config.cards.contains_key("indorsements"));
-    let card = config.cards.get("indorsements").unwrap();
+    // Check card is in config.cards (not config.main().fields)
+    assert!(config.card_definition("indorsements").is_some());
+    let card = config.card_definition("indorsements").unwrap();
     assert_eq!(card.title, Some("Routing Indorsements".to_string()));
     assert_eq!(card.description, Some("Chain of endorsements".to_string()));
     assert!(card.fields.contains_key("name"));
@@ -1380,7 +1381,7 @@ cards:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let card = config.cards.get("myscope").unwrap();
+    let card = config.card_definition("myscope").unwrap();
     assert_eq!(card.name, "myscope");
     assert_eq!(card.description, Some("My scope".to_string()));
     assert!(card.fields.is_empty());
@@ -1416,8 +1417,8 @@ cards:
     assert!(result.is_ok());
 
     let config = result.unwrap();
-    assert!(config.document.fields.contains_key("conflict"));
-    assert!(config.cards.contains_key("conflict"));
+    assert!(config.main().fields.contains_key("conflict"));
+    assert!(config.card_definition("conflict").is_some());
 }
 
 #[test]
@@ -1449,9 +1450,9 @@ cards:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    let first = config.document.fields.get("first").unwrap();
-    let zero = config.document.fields.get("zero").unwrap();
-    let second = config.cards.get("second").unwrap();
+    let first = config.main().fields.get("first").unwrap();
+    let zero = config.main().fields.get("zero").unwrap();
+    let second = config.card_definition("second").unwrap();
 
     // Check field ordering
     let ord_first = first.ui.as_ref().unwrap().order.unwrap();
@@ -1492,7 +1493,7 @@ cards:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let card = config.cards.get("mycard").unwrap();
+    let card = config.card_definition("mycard").unwrap();
 
     let z_first = card.fields.get("z_first").unwrap();
     let a_second = card.fields.get("a_second").unwrap();
@@ -1540,7 +1541,7 @@ fields:
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
     // Check array with items
-    let list_field = config.document.fields.get("my_list").unwrap();
+    let list_field = config.main().fields.get("my_list").unwrap();
     assert_eq!(list_field.r#type, FieldType::Array);
     assert!(list_field.items.is_some());
 
@@ -1555,7 +1556,7 @@ fields:
     assert_eq!(props["sub_b"].r#type, FieldType::Number);
 
     // Check object with properties
-    let obj_field = config.document.fields.get("my_obj").unwrap();
+    let obj_field = config.main().fields.get("my_obj").unwrap();
     assert_eq!(obj_field.r#type, FieldType::Object);
     assert!(obj_field.properties.is_some());
 
@@ -1583,8 +1584,8 @@ fields:
 
     let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();
 
-    assert!(config.document.fields.contains_key("valid_field"));
-    assert!(!config.document.fields.contains_key("broken_field"));
+    assert!(config.main().fields.contains_key("valid_field"));
+    assert!(!config.main().fields.contains_key("broken_field"));
     assert_eq!(warnings.len(), 1);
     assert_eq!(warnings[0].severity, Severity::Warning);
     assert_eq!(
