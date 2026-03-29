@@ -358,6 +358,31 @@ pub fn strip_schema_fields(schema: &mut Value, fields: &[&str]) {
     }
 }
 
+/// Projection variants for external schema consumers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchemaProjection {
+    /// AI-friendly authoring projection: strips CARDS and all x-ui metadata.
+    AI,
+    /// UI projection: strips CARDS but preserves x-ui metadata.
+    UI,
+}
+
+/// Project a validation schema into an external-consumer view.
+pub fn project_schema(schema: &QuillValue, projection: SchemaProjection) -> QuillValue {
+    let mut projected = schema.as_json().clone();
+    if let Value::Object(ref mut obj) = projected {
+        if let Some(Value::Object(properties)) = obj.get_mut("properties") {
+            properties.remove("CARDS");
+        }
+    }
+
+    if matches!(projection, SchemaProjection::AI) {
+        strip_schema_fields(&mut projected, &["x-ui"]);
+    }
+
+    QuillValue::from_json(projected)
+}
+
 /// Backwards-compatible wrapper for build_schema (no cards)
 pub fn build_schema_from_fields(
     field_schemas: &HashMap<String, FieldSchema>,
@@ -2441,14 +2466,14 @@ cards:
 "#;
 
         let config = crate::quill::QuillConfig::from_yaml(yaml).unwrap();
-        let card = config.cards.get("endorsement").unwrap();
+        let card = config.card_definition("endorsement").unwrap();
         let from_field = card.fields.get("from").unwrap();
         let ui = from_field.ui.as_ref().unwrap();
         let vw = ui.visible_when.as_ref().unwrap();
         assert_eq!(vw.get("format").unwrap(), &vec!["standard".to_string()]);
 
         // Build schema and verify x-ui output
-        let schema = build_schema(&config.document, &config.cards).unwrap();
+        let schema = build_schema(config.main(), &config.card_definitions_map()).unwrap();
         let card_def = &schema.as_json()["$defs"]["endorsement_card"];
         let from_prop = &card_def["properties"]["from"];
         assert_eq!(from_prop["x-ui"]["visible_when"]["format"][0], "standard");

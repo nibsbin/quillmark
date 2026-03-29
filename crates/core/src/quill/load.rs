@@ -103,7 +103,7 @@ impl Quill {
         metadata.insert(
             "description".to_string(),
             QuillValue::from_json(serde_json::Value::String(
-                config.document.description.clone().unwrap_or_default(),
+                config.main().description.clone().unwrap_or_default(),
             )),
         );
 
@@ -126,7 +126,7 @@ impl Quill {
 
         // Build JSON schema from field and card schemas
         // Build JSON schema from field and card schemas
-        let schema = crate::schema::build_schema(&config.document, &config.cards)
+        let schema = crate::schema::build_schema(config.main(), &config.card_definitions_map())
             .map_err(|e| format!("Failed to build JSON schema from field schemas: {}", e))?;
 
         // Read the plate content from plate file (if specified)
@@ -181,7 +181,7 @@ impl Quill {
 
         let quill = Quill {
             metadata,
-            name: config.document.name,
+            name: config.name,
             backend: config.backend,
             plate: plate_content,
             example: example_content,

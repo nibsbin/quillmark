@@ -6,17 +6,18 @@ Quill:
   example_file: example.md
   description: A simple document template for testing
 
-fields:
-  author:
-    title: Author of document
-    type: string
-  ice_cream:
-    title: favorite ice cream flavor
-    type: string
-    default: taro
-  title:
-    title: title of document
-    type: string
+main:
+  fields:
+    author:
+      title: Author of document
+      type: string
+    ice_cream:
+      title: favorite ice cream flavor
+      type: string
+      default: taro
+    title:
+      title: title of document
+      type: string
 
 cards:
   quotes:
