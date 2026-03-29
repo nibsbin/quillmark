@@ -62,11 +62,13 @@ cards:
         type: string
 ```
 
+Do **not** keep document UI container settings in `Quill.ui`; canonical location is `main.ui`.
+
 ---
 
-## Optional: move document UI settings under `main.ui`
+## ✅ Required: move document UI settings under `main.ui`
 
-If you previously used container UI settings under `Quill.ui`, you can place them under `main.ui`.
+If you previously used container UI settings under `Quill.ui`, move them to `main.ui` as part of this migration.
 
 ### Before
 
@@ -114,18 +116,18 @@ main:
 
 ---
 
-## Compatibility note
+## Compatibility note (transition only)
 
-Current parser behavior still accepts legacy root-level `fields:` for backward compatibility, but authors should migrate to `main.fields` now.
+Current parser behavior still accepts legacy root-level `fields:` for backward compatibility, but that is a temporary transition aid. Treat it as deprecated and migrate immediately.
 
 If both are present, prefer using only `main.fields` to avoid ambiguity.
 
 ---
 
-## Quick migration checklist
+## Opinionated migration checklist (do all of it)
 
 - [ ] Add a `main:` section.
 - [ ] Move root `fields:` into `main.fields:`.
-- [ ] (Optional) Move root/Quill container UI metadata to `main.ui:`.
+- [ ] Move root/Quill container UI metadata to `main.ui:`.
 - [ ] Keep named reusable cards under `cards:`.
 - [ ] Re-run validation (`quillmark validate <quill-dir>` or your existing CI checks).
