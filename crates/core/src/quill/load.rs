@@ -103,7 +103,7 @@ impl Quill {
         metadata.insert(
             "description".to_string(),
             QuillValue::from_json(serde_json::Value::String(
-                config.document.description.clone().unwrap_or_default(),
+                config.main().description.clone().unwrap_or_default(),
             )),
         );
 
@@ -124,10 +124,9 @@ impl Quill {
             metadata.insert(format!("typst_{}", key), value.clone());
         }
 
-        // Build JSON schema from field and card schemas
-        // Build JSON schema from field and card schemas
-        let schema = crate::schema::build_schema(&config.document, &config.cards)
-            .map_err(|e| format!("Failed to build JSON schema from field schemas: {}", e))?;
+        // Build JSON schema from config (pure serialization for validation)
+        let schema = crate::schema::build_schema_from_config(&config)
+            .map_err(|e| format!("Failed to build JSON schema from config: {}", e))?;
 
         // Read the plate content from plate file (if specified)
         let plate_content: Option<String> = if let Some(ref plate_file_name) = config.plate_file {
@@ -175,16 +174,17 @@ impl Quill {
             None
         };
 
-        // Extract and cache defaults and examples from schema for performance
-        let defaults = crate::schema::extract_defaults_from_schema(&schema);
-        let examples = crate::schema::extract_examples_from_schema(&schema);
+        // Extract and cache defaults and examples from config directly
+        let defaults = config.extract_defaults();
+        let examples = config.extract_examples();
 
         let quill = Quill {
             metadata,
-            name: config.document.name,
-            backend: config.backend,
+            name: config.name.clone(),
+            backend: config.backend.clone(),
             plate: plate_content,
             example: example_content,
+            config,
             schema,
             defaults,
             examples,

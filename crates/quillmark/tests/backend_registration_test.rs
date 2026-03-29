@@ -101,6 +101,23 @@ impl Backend for InvalidDefaultQuillBackend {
             plate: Some("hello".to_string()),
             example: None,
             metadata: std::collections::HashMap::new(), // missing required version
+            config: quillmark_core::quill::QuillConfig {
+                name: "__default__".to_string(),
+                cards: vec![quillmark_core::quill::CardSchema {
+                    name: "main".to_string(),
+                    title: Some("main".to_string()),
+                    description: None,
+                    fields: std::collections::HashMap::new(),
+                    ui: None,
+                }],
+                backend: self.id().to_string(),
+                version: "0.1".to_string(),
+                author: "test".to_string(),
+                example_file: None,
+                plate_file: None,
+                metadata: std::collections::HashMap::new(),
+                typst_config: std::collections::HashMap::new(),
+            },
             schema: QuillValue::from_json(serde_json::json!({
                 "type": "object",
                 "properties": {}

@@ -3,7 +3,7 @@
 //! This module provides utilities for converting TOML field definitions to JSON Schema
 //! and validating ParsedDocument data against schemas.
 
-use crate::quill::{field_key, ui_key, CardSchema, FieldSchema, FieldType};
+use crate::quill::{field_key, ui_key, CardSchema, FieldSchema, FieldType, QuillConfig};
 use crate::{QuillValue, RenderError};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
@@ -205,12 +205,24 @@ fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
     def
 }
 
-/// Build a JSON Schema from field and card schemas
+/// Build a JSON Schema from a QuillConfig.
+///
+/// This is a pure serialization function — it renders the QuillConfig as
+/// a JSON Schema for validation and external consumers. The QuillConfig
+/// is the authoritative schema model.
 ///
 /// Generates a JSON Schema with:
-/// - Regular fields in `properties`
-/// - Card schemas in `$defs`
-/// - `CARDS` array with `oneOf` refs and `x-discriminator`
+/// - Main card fields in `properties`
+/// - Card type schemas in `$defs`
+/// - `CARDS` array with `oneOf` refs
+pub fn build_schema_from_config(config: &QuillConfig) -> Result<QuillValue, RenderError> {
+    let definitions = config.card_definitions_map();
+    build_schema(config.main(), &definitions)
+}
+
+/// Build a JSON Schema from field and card schemas.
+///
+/// Prefer `build_schema_from_config` when a `QuillConfig` is available.
 pub fn build_schema(
     document: &CardSchema,
     definitions: &HashMap<String, CardSchema>,
@@ -335,7 +347,7 @@ pub fn build_schema(
 ///
 /// * `schema` - A mutable reference to the JSON Value to strip
 /// * `fields` - A slice of field names to remove
-pub fn strip_schema_fields(schema: &mut Value, fields: &[&str]) {
+fn strip_schema_fields(schema: &mut Value, fields: &[&str]) {
     match schema {
         Value::Object(map) => {
             // Remove matching top-level keys
@@ -356,6 +368,31 @@ pub fn strip_schema_fields(schema: &mut Value, fields: &[&str]) {
         }
         _ => {}
     }
+}
+
+/// Projection variants for external schema consumers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchemaProjection {
+    /// AI-friendly authoring projection: strips CARDS and all x-ui metadata.
+    AI,
+    /// UI projection: strips CARDS but preserves x-ui metadata.
+    UI,
+}
+
+/// Project a validation schema into an external-consumer view.
+pub fn project_schema(schema: &QuillValue, projection: SchemaProjection) -> QuillValue {
+    let mut projected = schema.as_json().clone();
+    if let Value::Object(ref mut obj) = projected {
+        if let Some(Value::Object(properties)) = obj.get_mut("properties") {
+            properties.remove("CARDS");
+        }
+    }
+
+    if matches!(projection, SchemaProjection::AI) {
+        strip_schema_fields(&mut projected, &["x-ui"]);
+    }
+
+    QuillValue::from_json(projected)
 }
 
 /// Backwards-compatible wrapper for build_schema (no cards)
@@ -2365,10 +2402,10 @@ mod tests {
     }
 
     #[test]
-    fn test_visible_when_stripped() {
+    fn test_visible_when_stripped_via_projection() {
         use crate::quill::UiFieldSchema;
 
-        // Verify visible_when is removed by strip_schema_fields
+        // Verify visible_when is removed by AI projection
         let mut field = FieldSchema::new(
             "from".to_string(),
             FieldType::String,
@@ -2395,16 +2432,21 @@ mod tests {
         };
 
         let schema = build_schema(&document, &HashMap::new()).unwrap();
-        let mut schema_json = schema.as_json().clone();
 
-        // Before stripping, x-ui should be present
-        assert!(schema_json["properties"]["from"].get("x-ui").is_some());
+        // Before projection, x-ui should be present
+        assert!(schema.as_json()["properties"]["from"].get("x-ui").is_some());
 
-        // Strip x-ui
-        strip_schema_fields(&mut schema_json, &["x-ui"]);
+        // AI projection strips x-ui
+        let projected = project_schema(&schema, SchemaProjection::AI);
+        assert!(projected.as_json()["properties"]["from"]
+            .get("x-ui")
+            .is_none());
 
-        // After stripping, x-ui should be gone
-        assert!(schema_json["properties"]["from"].get("x-ui").is_none());
+        // UI projection preserves x-ui
+        let ui_projected = project_schema(&schema, SchemaProjection::UI);
+        assert!(ui_projected.as_json()["properties"]["from"]
+            .get("x-ui")
+            .is_some());
     }
 
     #[test]
@@ -2441,14 +2483,14 @@ cards:
 "#;
 
         let config = crate::quill::QuillConfig::from_yaml(yaml).unwrap();
-        let card = config.cards.get("endorsement").unwrap();
+        let card = config.card_definition("endorsement").unwrap();
         let from_field = card.fields.get("from").unwrap();
         let ui = from_field.ui.as_ref().unwrap();
         let vw = ui.visible_when.as_ref().unwrap();
         assert_eq!(vw.get("format").unwrap(), &vec!["standard".to_string()]);
 
         // Build schema and verify x-ui output
-        let schema = build_schema(&config.document, &config.cards).unwrap();
+        let schema = build_schema(config.main(), &config.card_definitions_map()).unwrap();
         let card_def = &schema.as_json()["$defs"]["endorsement_card"];
         let from_prop = &card_def["properties"]["from"];
         assert_eq!(from_prop["x-ui"]["visible_when"]["format"][0], "standard");

@@ -6,27 +6,28 @@ Quill:
   example_file: example.md
   description: A clean and modern classic resume template.
 
-fields:
-  name:
-    title: Full Name
-    type: string
-    required: true
-    examples:
-      - John Doe
-    ui:
-      group: Personal Info
+main:
+  fields:
+    name:
+      title: Full Name
+      type: string
+      required: true
+      examples:
+        - John Doe
+      ui:
+        group: Personal Info
 
-  contacts:
-    title: Contact Information
-    type: array
-    required: true
-    examples:
-      - - john.doe@example.com
-        - 123-456-7890
-        - linkedin.com/in/johndoe
-    ui:
-      group: Personal Info
-    description: List of contact details (email, phone, links, etc.)
+    contacts:
+      title: Contact Information
+      type: array
+      required: true
+      examples:
+        - - john.doe@example.com
+          - 123-456-7890
+          - linkedin.com/in/johndoe
+      ui:
+        group: Personal Info
+      description: List of contact details (email, phone, links, etc.)
 
 cards:
   experience_section:

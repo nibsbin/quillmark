@@ -31,11 +31,13 @@ pub struct Quill {
     pub plate: Option<String>,
     /// Markdown template content (optional)
     pub example: Option<String>,
-    /// Field JSON schema (single source of truth for schema and defaults)
+    /// Parsed configuration — the authoritative schema model.
+    pub config: QuillConfig,
+    /// JSON Schema (serialized from config, used for validation only)
     pub schema: QuillValue,
-    /// Cached default values extracted from schema (for performance)
+    /// Cached default values extracted from config (for performance)
     pub defaults: HashMap<String, QuillValue>,
-    /// Cached example values extracted from schema (for performance)
+    /// Cached example values extracted from config (for performance)
     pub examples: HashMap<String, Vec<QuillValue>>,
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,

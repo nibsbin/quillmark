@@ -10,14 +10,15 @@ typst:
   packages: 
     - "@preview/appreciated-letter:0.1.0"
 
-fields:
-  sender:
-    description: Sender of letter
-  recipient:
-    description: Recipient of letter
-  date:
-    description: Date of letter
-  subject:
-    description: Subject of letter
-  name:
-    description: Name of sender
+main:
+  fields:
+    sender:
+      description: Sender of letter
+    recipient:
+      description: Recipient of letter
+    date:
+      description: Date of letter
+    subject:
+      description: Subject of letter
+    name:
+      description: Name of sender

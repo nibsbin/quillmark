@@ -184,24 +184,24 @@ impl Quillmark {
         })
     }
 
-    /// Get the stripped JSON schema of a Quill (removes UI metadata)
+    /// Get the AI-projected JSON schema of a Quill (strips UI metadata and CARDS)
     ///
     /// This returns the schema in a format suitable for feeding to LLMs or
-    /// other consumers that don't need the UI configuration "x-ui" fields.
+    /// other consumers that don't need the UI configuration "x-ui" fields
+    /// or the internal CARDS array structure.
     #[wasm_bindgen(js_name = getStrippedSchema)]
     pub fn get_stripped_schema(&self, name: &str) -> Result<JsValue, JsValue> {
         let quill = self.inner.get_quill(name).ok_or_else(|| {
             WasmError::from(format!("Quill '{}' not registered", name)).to_js_value()
         })?;
 
-        // Clone the schema and strip it
-        // We use the same logic as QuillInfo::get_stripped_schema but apply it directly
-        // to avoid round-tripping through QuillInfo
-        let mut schema_json = quill.schema.clone().as_json().clone();
-        quillmark_core::schema::strip_schema_fields(&mut schema_json, &["x-ui"]);
+        let projected = quillmark_core::schema::project_schema(
+            &quill.schema,
+            quillmark_core::schema::SchemaProjection::AI,
+        );
 
         // Convert serde_json::Value to JsValue via JSON string to ensure clean object conversion
-        let json_str = serde_json::to_string(&schema_json).map_err(|e| {
+        let json_str = serde_json::to_string(projected.as_json()).map_err(|e| {
             WasmError::from(format!("Failed to serialize schema: {}", e)).to_js_value()
         })?;
 
