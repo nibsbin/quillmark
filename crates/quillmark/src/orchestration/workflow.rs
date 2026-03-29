@@ -34,8 +34,12 @@ impl Workflow {
     /// Render Markdown with YAML frontmatter to output artifacts. See [module docs](super) for examples.
     /// Compile the document to JSON data suitable for the backend
     pub fn compile_data(&self, parsed: &ParsedDocument) -> Result<serde_json::Value, RenderError> {
-        // Apply coercion and validate
-        let parsed_coerced = parsed.with_coercion(&self.quill.schema);
+        // Apply coercion from QuillConfig directly
+        let coerced_fields = self.quill.config.coerce_fields(parsed.fields());
+        let parsed_coerced = ParsedDocument::with_quill_ref(
+            coerced_fields,
+            parsed.quill_reference().clone(),
+        );
         self.validate_document(&parsed_coerced)?;
 
         // Normalize document: strip bidi characters and fix HTML comment fences
@@ -148,29 +152,16 @@ impl Workflow {
             .compile(content, quill, &render_opts, json_data)
     }
 
-    /// Apply schema defaults to fields before JSON serialization
+    /// Apply defaults from QuillConfig to fill missing fields
     fn apply_schema_defaults(
         &self,
         fields: &HashMap<String, quillmark_core::QuillValue>,
     ) -> HashMap<String, quillmark_core::QuillValue> {
-        use quillmark_core::QuillValue;
-
         let mut result = fields.clone();
 
-        // Extract properties from schema if it exists
-        if let Some(properties_value) = self.quill.schema.get("properties") {
-            if let Some(properties) = properties_value.as_object() {
-                for (field_name, field_schema) in properties {
-                    // If field is missing and schema has a default, apply it
-                    if !result.contains_key(field_name) {
-                        if let Some(default_value) = field_schema.get("default") {
-                            result.insert(
-                                field_name.clone(),
-                                QuillValue::from_json(default_value.clone()),
-                            );
-                        }
-                    }
-                }
+        for (field_name, default_value) in &self.quill.defaults {
+            if !result.contains_key(field_name) {
+                result.insert(field_name.clone(), default_value.clone());
             }
         }
 
@@ -206,7 +197,11 @@ impl Workflow {
     /// This is useful for fast feedback loops in LLM-driven document generation,
     /// where you want to validate inputs before incurring compilation costs.
     pub fn dry_run(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
-        let parsed_coerced = parsed.with_coercion(&self.quill.schema);
+        let coerced_fields = self.quill.config.coerce_fields(parsed.fields());
+        let parsed_coerced = ParsedDocument::with_quill_ref(
+            coerced_fields,
+            parsed.quill_reference().clone(),
+        );
         self.validate_document(&parsed_coerced)?;
         Ok(())
     }

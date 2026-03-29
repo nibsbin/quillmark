@@ -67,6 +67,185 @@ impl QuillConfig {
         self.card_definitions().iter().find(|card| card.name == name)
     }
 
+    /// Extract default values from the main card's field schemas.
+    ///
+    /// Returns a HashMap of field names to their default QuillValues,
+    /// reading directly from `FieldSchema.default` without round-tripping
+    /// through JSON Schema.
+    pub fn extract_defaults(&self) -> HashMap<String, QuillValue> {
+        let mut defaults = HashMap::new();
+        for (field_name, field_schema) in &self.main().fields {
+            if let Some(ref default_value) = field_schema.default {
+                defaults.insert(field_name.clone(), default_value.clone());
+            }
+        }
+        defaults
+    }
+
+    /// Extract example values from the main card's field schemas.
+    ///
+    /// Returns a HashMap of field names to their example values,
+    /// reading directly from `FieldSchema.examples` without round-tripping
+    /// through JSON Schema.
+    pub fn extract_examples(&self) -> HashMap<String, Vec<QuillValue>> {
+        let mut examples = HashMap::new();
+        for (field_name, field_schema) in &self.main().fields {
+            if let Some(ref examples_value) = field_schema.examples {
+                if let Some(examples_array) = examples_value.as_array() {
+                    let examples_vec: Vec<QuillValue> = examples_array
+                        .iter()
+                        .map(|v| QuillValue::from_json(v.clone()))
+                        .collect();
+                    if !examples_vec.is_empty() {
+                        examples.insert(field_name.clone(), examples_vec);
+                    }
+                }
+            }
+        }
+        examples
+    }
+
+    /// Coerce document fields to match expected schema types, reading types
+    /// directly from `FieldSchema` without round-tripping through JSON Schema.
+    ///
+    /// Handles both main card fields (top-level) and card instances in the
+    /// `CARDS` array.
+    pub fn coerce_fields(
+        &self,
+        fields: &HashMap<String, QuillValue>,
+    ) -> HashMap<String, QuillValue> {
+        let mut coerced = HashMap::new();
+
+        for (field_name, field_value) in fields {
+            if let Some(field_schema) = self.main().fields.get(field_name) {
+                coerced.insert(
+                    field_name.clone(),
+                    Self::coerce_value(field_value, &field_schema.r#type),
+                );
+            } else {
+                coerced.insert(field_name.clone(), field_value.clone());
+            }
+        }
+
+        // Coerce card instances in CARDS array
+        if let Some(cards_value) = coerced.get("CARDS") {
+            if let Some(cards_array) = cards_value.as_array() {
+                let coerced_cards = self.coerce_cards_array(cards_array);
+                coerced.insert(
+                    "CARDS".to_string(),
+                    QuillValue::from_json(serde_json::Value::Array(coerced_cards)),
+                );
+            }
+        }
+
+        coerced
+    }
+
+    fn coerce_cards_array(&self, cards_array: &[serde_json::Value]) -> Vec<serde_json::Value> {
+        let mut coerced_cards = Vec::new();
+
+        for card in cards_array {
+            if let Some(card_obj) = card.as_object() {
+                if let Some(card_type) = card_obj.get("CARD").and_then(|v| v.as_str()) {
+                    if let Some(card_schema) = self.card_definition(card_type) {
+                        let mut coerced_card = serde_json::Map::new();
+                        for (k, v) in card_obj {
+                            if let Some(field_schema) = card_schema.fields.get(k) {
+                                let qv = QuillValue::from_json(v.clone());
+                                coerced_card.insert(
+                                    k.clone(),
+                                    Self::coerce_value(&qv, &field_schema.r#type).into_json(),
+                                );
+                            } else {
+                                coerced_card.insert(k.clone(), v.clone());
+                            }
+                        }
+                        coerced_cards.push(serde_json::Value::Object(coerced_card));
+                        continue;
+                    }
+                }
+            }
+            coerced_cards.push(card.clone());
+        }
+
+        coerced_cards
+    }
+
+    fn coerce_value(value: &QuillValue, expected_type: &super::FieldType) -> QuillValue {
+        use super::FieldType;
+
+        let json_value = value.as_json();
+        match expected_type {
+            FieldType::Array => {
+                if json_value.is_array() {
+                    return value.clone();
+                }
+                QuillValue::from_json(serde_json::Value::Array(vec![json_value.clone()]))
+            }
+            FieldType::Boolean => {
+                if let Some(b) = json_value.as_bool() {
+                    return QuillValue::from_json(serde_json::Value::Bool(b));
+                }
+                if let Some(s) = json_value.as_str() {
+                    let lower = s.to_lowercase();
+                    if lower == "true" {
+                        return QuillValue::from_json(serde_json::Value::Bool(true));
+                    } else if lower == "false" {
+                        return QuillValue::from_json(serde_json::Value::Bool(false));
+                    }
+                }
+                if let Some(n) = json_value.as_i64() {
+                    return QuillValue::from_json(serde_json::Value::Bool(n != 0));
+                }
+                if let Some(n) = json_value.as_f64() {
+                    if n.is_nan() {
+                        return QuillValue::from_json(serde_json::Value::Bool(false));
+                    }
+                    return QuillValue::from_json(serde_json::Value::Bool(
+                        n.abs() > f64::EPSILON,
+                    ));
+                }
+                value.clone()
+            }
+            FieldType::Number => {
+                if json_value.is_number() {
+                    return value.clone();
+                }
+                if let Some(s) = json_value.as_str() {
+                    if let Ok(i) = s.parse::<i64>() {
+                        return QuillValue::from_json(serde_json::Number::from(i).into());
+                    }
+                    if let Ok(f) = s.parse::<f64>() {
+                        if let Some(num) = serde_json::Number::from_f64(f) {
+                            return QuillValue::from_json(num.into());
+                        }
+                    }
+                }
+                if let Some(b) = json_value.as_bool() {
+                    let n = if b { 1 } else { 0 };
+                    return QuillValue::from_json(serde_json::Value::Number(
+                        serde_json::Number::from(n),
+                    ));
+                }
+                value.clone()
+            }
+            FieldType::String | FieldType::Date | FieldType::DateTime | FieldType::Markdown => {
+                if json_value.is_string() {
+                    return value.clone();
+                }
+                if let Some(arr) = json_value.as_array() {
+                    if arr.len() == 1 {
+                        if let Some(s) = arr[0].as_str() {
+                            return QuillValue::from_json(serde_json::Value::String(s.to_string()));
+                        }
+                    }
+                }
+                value.clone()
+            }
+            FieldType::Object => value.clone(),
+        }
+    }
+
     /// Parse fields from a JSON Value map, assigning ui.order based on key_order.
     ///
     /// This helper ensures consistent field ordering logic for both top-level

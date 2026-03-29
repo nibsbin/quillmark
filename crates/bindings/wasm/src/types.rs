@@ -185,14 +185,17 @@ pub struct QuillInfo {
 }
 
 impl QuillInfo {
-    /// Get a stripped version of the schema without UI metadata
+    /// Get an AI-projected version of the schema without UI metadata or CARDS
     ///
-    /// Returns a new QuillInfo with the schema field stripped of "x-ui" metadata.
-    /// This is useful when you need to expose the schema without UI-specific information.
+    /// Returns the schema stripped of "x-ui" metadata and the CARDS array property.
+    /// This is useful when exposing the schema to LLMs or other external consumers.
     pub fn get_stripped_schema(&self) -> serde_json::Value {
-        let mut stripped_schema = self.schema.clone();
-        quillmark_core::schema::strip_schema_fields(&mut stripped_schema, &["x-ui"]);
-        stripped_schema
+        let schema_value = quillmark_core::QuillValue::from_json(self.schema.clone());
+        let projected = quillmark_core::schema::project_schema(
+            &schema_value,
+            quillmark_core::schema::SchemaProjection::AI,
+        );
+        projected.into_json()
     }
 }
 
