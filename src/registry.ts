@@ -107,7 +107,7 @@ export class QuillRegistry {
 
 	/** Returns metadata for all available quills from the source manifest. */
 	async getAvailableQuills(): Promise<QuillMetadata[]> {
-		const manifest = await this.source.getManifest();
+		const manifest = await this.manifestPromise;
 		return manifest.quills;
 	}
 
@@ -127,21 +127,12 @@ export class QuillRegistry {
 		const cachedPromise = this.fetched.get(cacheKey);
 		if (cachedPromise) return cachedPromise;
 
-		const fetchPromise = this.source.loadQuill(name, version).then((bundle) => {
-			const resolvedKey = `${bundle.name}@${bundle.version}`;
-			this.fetched.set(resolvedKey, fetchPromise);
-			this.fetched.set(canonicalRef, fetchPromise);
-			return bundle;
-		}).catch((error) => {
+		const fetchPromise = this.source.loadQuill(name, version).catch((error) => {
 			this.fetched.delete(cacheKey);
-			this.fetched.delete(canonicalRef);
 			throw error;
 		});
 
 		this.fetched.set(cacheKey, fetchPromise);
-		if (canonicalRef !== cacheKey) {
-			this.fetched.set(canonicalRef, fetchPromise);
-		}
 		return fetchPromise;
 	}
 
