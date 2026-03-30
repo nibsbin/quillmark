@@ -23,8 +23,11 @@ export interface QuillRegistryOptions {
 export class QuillRegistry {
 	private source: QuillSource;
 	private engine: QuillmarkEngine;
-	/** In-memory cache of resolved QuillBundle objects, keyed by `name@version`. */
-	private cache: Map<string, QuillBundle> = new Map();
+	/**
+	 * In-memory cache of in-flight and settled resolve operations.
+	 * Keyed by quill ref (`name` or `name@version`).
+	 */
+	private inflight: Map<string, Promise<QuillBundle>> = new Map();
 
 	constructor(options: QuillRegistryOptions) {
 		this.source = options.source;
@@ -54,6 +57,11 @@ export class QuillRegistry {
 	 * When no version is specified, resolves to latest available.
 	 */
 	async resolve(ref: string): Promise<QuillBundle> {
+		const cachedPromise = this.inflight.get(ref);
+		if (cachedPromise) {
+			return cachedPromise;
+		}
+
 		// Parse ref into name and optional version
 		const [name, version] = ref.split('@');
 
@@ -63,8 +71,9 @@ export class QuillRegistry {
 			const engineVersion = engineInfo.metadata?.version;
 			if (typeof engineVersion === 'string') {
 				const cacheKey = `${engineInfo.name}@${engineVersion}`;
-				const cached = this.cache.get(cacheKey);
+				const cached = this.inflight.get(cacheKey);
 				if (cached) {
+					this.inflight.set(ref, cached);
 					return cached;
 				}
 			}
@@ -73,23 +82,29 @@ export class QuillRegistry {
 		// 2. Check registry cache (only for explicit versioned lookups)
 		if (version) {
 			const cacheKey = `${name}@${version}`;
-			const cached = this.cache.get(cacheKey);
+			const cached = this.inflight.get(cacheKey);
 			if (cached) {
+				this.inflight.set(ref, cached);
 				return cached;
 			}
 		}
 
-		// 3. Ask source for the bundle
-		const bundle = await this.source.loadQuill(name, version);
+		const resolvePromise = this.source
+			.loadQuill(name, version)
+			.then((bundle) => {
+				this.engine.registerQuill(bundle.data);
+				const resolvedKey = `${bundle.name}@${bundle.version}`;
+				this.inflight.set(resolvedKey, resolvePromise);
+				this.inflight.set(ref, resolvePromise);
+				return bundle;
+			})
+			.catch((error) => {
+				this.inflight.delete(ref);
+				throw error;
+			});
 
-		// 4. Register with engine
-		this.engine.registerQuill(bundle.data);
-
-		// Cache the resolved bundle
-		const cacheKey = `${bundle.name}@${bundle.version}`;
-		this.cache.set(cacheKey, bundle);
-
-		return bundle;
+		this.inflight.set(ref, resolvePromise);
+		return resolvePromise;
 	}
 
 	/**
