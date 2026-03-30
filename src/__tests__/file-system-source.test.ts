@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import { FileSystemSource } from '../sources/file-system-source.js';
@@ -314,6 +314,18 @@ describe('FileSystemSource', () => {
 			const zip2 = await fs.readFile(path.join(outputDir2, 'usaf_memo@1.0.0.zip'));
 
 			expect(zip1.equals(zip2)).toBe(true);
+		});
+
+		it('should throw when manifest contains duplicate name+version entries', async () => {
+			const source = new FileSystemSource(TEST_DIR);
+			vi.spyOn(source, 'getManifest').mockResolvedValue({
+				quills: [
+					{ name: 'usaf_memo', version: '1.0.0' },
+					{ name: 'usaf_memo', version: '1.0.0' },
+				],
+			});
+
+			await expect(source.packageForHttp(OUTPUT_DIR)).rejects.toThrow(RegistryError);
 		});
 	});
 });

@@ -229,6 +229,17 @@ export class FileSystemSource implements QuillSource {
 		await fs.mkdir(outputDir, { recursive: true });
 
 		const manifest = await this.getManifest();
+		const seenRefs = new Set<string>();
+		for (const entry of manifest.quills) {
+			const ref = `${entry.name}@${entry.version}`;
+			if (seenRefs.has(ref)) {
+				throw new RegistryError(
+					'load_error',
+					`Duplicate quill entry "${ref}" found while packaging manifest`,
+				);
+			}
+			seenRefs.add(ref);
+		}
 
 		for (const entry of manifest.quills) {
 			const quillDir = path.join(this.quillsDir, entry.name, entry.version);

@@ -12,10 +12,10 @@ const MANIFEST: QuillManifest = {
 };
 
 /** Creates a mock zip bundle containing test files. */
-async function createMockBundle(): Promise<ArrayBuffer> {
+async function createMockBundle(version: string = '1.0.0'): Promise<ArrayBuffer> {
 	const encoder = new TextEncoder();
 	const packed = await packFiles({
-		'Quill.yaml': encoder.encode('name: usaf_memo\nversion: 1.0.0'),
+		'Quill.yaml': encoder.encode(`name: usaf_memo\nversion: ${version}`),
 		'template.typ': encoder.encode('// Template'),
 	});
 	return packed.buffer.slice(packed.byteOffset, packed.byteOffset + packed.byteLength);
@@ -150,6 +150,33 @@ describe('HttpSource', () => {
 			const data = bundle.data as { files: Record<string, unknown> };
 			expect(data.files['Quill.yaml']).toBeDefined();
 			expect(data.files['template.typ']).toBeDefined();
+		});
+
+		it('should resolve latest version regardless of manifest entry order', async () => {
+			const manifest: QuillManifest = {
+				quills: [
+					{ name: 'usaf_memo', version: '1.0.0' },
+					{ name: 'usaf_memo', version: '2.0.0' },
+				],
+			};
+			const v1Data = await createMockBundle('1.0.0');
+			const v2Data = await createMockBundle('2.0.0');
+			const mockFetch = createMockFetch({
+				'manifest.json': { ok: true, body: manifest },
+				'usaf_memo@1.0.0.zip': { ok: true, body: v1Data },
+				'usaf_memo@2.0.0.zip': { ok: true, body: v2Data },
+			});
+
+			const source = new HttpSource({
+				baseUrl: 'https://cdn.example.com/quills/',
+				fetch: mockFetch,
+			});
+
+			const bundle = await source.loadQuill('usaf_memo');
+			expect(bundle.version).toBe('2.0.0');
+			expect(mockFetch).toHaveBeenCalledWith(
+				'https://cdn.example.com/quills/usaf_memo@2.0.0.zip?v=2.0.0',
+			);
 		});
 
 		it('should append ?v={version} for cache-busting', async () => {

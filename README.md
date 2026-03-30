@@ -15,15 +15,21 @@ npm install @quillmark/registry
 ### Browser (HTTP source)
 
 ```ts
-import { Quillmark } from '@quillmark/wasm';
+import { Quillmark, init } from '@quillmark/wasm';
 import { QuillRegistry, HttpSource } from '@quillmark/registry';
 
-const engine = new Quillmark();
 const source = new HttpSource({ baseUrl: 'https://cdn.example.com/quills/' });
-const registry = new QuillRegistry({ source, engine });
+const registry = new QuillRegistry({ source });
+
+// Start fetching while @quillmark/wasm initializes
+const fetched = registry.fetch('usaf_memo@1.0.0');
+init();
+const engine = new Quillmark();
+registry.setEngine(engine);
+await fetched;
 
 // Resolve a quill — fetches, caches, and registers with the engine
-const bundle = await registry.resolve('usaf_memo');
+const bundle = await registry.resolve('usaf_memo'); // or await registry.resolve('usaf_memo@1.0.0')
 
 // Engine is now ready to render
 const parsed = Quillmark.parseMarkdown(myMarkdown);
@@ -55,8 +61,9 @@ const registry = new QuillRegistry({ source, engine });
 
 | Method | Description |
 |---|---|
-| `resolve(ref)` | Resolves a quill reference (`name` or `name@version`). Fetches from source, caches, and registers with the engine. Returns a `QuillBundle`. |
-| `preload(refs)` | Resolves multiple quill references in parallel. Fail-fast — rejects immediately if any quill fails. |
+| `fetch(canonicalRef)` | Fetches a quill bundle by canonical ref (`name@version`, full semver) and caches it. Does not register with the engine. |
+| `resolve(ref)` | Resolves a quill reference (`name`, `name@version`, or semver selector like `name@1` / `name@1.2`). Reuses fetched bundles when present, otherwise fetches on demand, then registers with the engine. Returns a `QuillBundle`. |
+| `setEngine(engine)` | Attaches or replaces the engine used by `resolve()`. Useful when fetching before `@quillmark/wasm` initialization completes. |
 | `getManifest()` | Returns the full `QuillManifest` from the source. |
 | `getAvailableQuills()` | Returns `QuillMetadata[]` for all quills in the source. |
 | `isLoaded(name)` | Returns `true` if the quill is registered in the engine. |
@@ -126,7 +133,7 @@ try {
 
 ## Version Resolution
 
-The `ref` parameter accepts either `name` (for example, `usaf_memo`) or `name@version` (for example, `usaf_memo@1.0.0`). When version is omitted, it resolves to the latest available. The registry checks the engine first (via `resolveQuill()`) to avoid redundant fetches, then checks its in-memory cache, and only hits the source if needed.
+`fetch()` requires a canonical ref (`name@version`) using full semver (for example, `usaf_memo@1.0.0`). `resolve()` accepts `name`, canonical `name@version`, or semver selectors with missing segments (for example, `usaf_memo@1` or `usaf_memo@1.2`) and picks the highest matching version. Fetches are deduplicated in-memory to prevent duplicate source loads under races.
 
 ## License
 
