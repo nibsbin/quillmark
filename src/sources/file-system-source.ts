@@ -77,25 +77,6 @@ function isSemver(value: string): boolean {
 }
 
 /**
- * Compares two semver version strings. Returns a negative number if a < b,
- * zero if equal, positive if a > b. Handles versions with any number of
- * numeric segments (e.g., "1.0.0", "0.1", "2.1.0").
- */
-function compareSemver(a: string, b: string): number {
-	const partsA = a.split('.').map(Number);
-	const partsB = b.split('.').map(Number);
-	const len = Math.max(partsA.length, partsB.length);
-
-	for (let i = 0; i < len; i++) {
-		const numA = partsA[i] ?? 0;
-		const numB = partsB[i] ?? 0;
-		if (numA !== numB) return numA - numB;
-	}
-
-	return 0;
-}
-
-/**
  * Node.js-only QuillSource that reads Quill directories from the local filesystem.
  *
  * Expects a versioned directory layout:
@@ -168,11 +149,8 @@ export class FileSystemSource implements QuillSource {
 		return { quills };
 	}
 
-	async loadQuill(name: string, version?: string): Promise<QuillBundle> {
-		// If no version specified, resolve to latest
-		const resolvedVersion = version ?? (await this.resolveLatestVersion(name));
-
-		const quillDir = path.join(this.quillsDir, name, resolvedVersion);
+	async loadQuill(name: string, version: string): Promise<QuillBundle> {
+		const quillDir = path.join(this.quillsDir, name, version);
 
 		// Verify directory exists
 		try {
@@ -185,21 +163,21 @@ export class FileSystemSource implements QuillSource {
 				// Name exists but version doesn't
 				throw new RegistryError(
 					'version_not_found',
-					`Quill "${name}" exists but version "${resolvedVersion}" was not found`,
-					{ quillName: name, version: resolvedVersion },
+					`Quill "${name}" exists but version "${version}" was not found`,
+					{ quillName: name, version },
 				);
 			} catch (err) {
 				if (err instanceof RegistryError) throw err;
 				throw new RegistryError('quill_not_found', `Quill "${name}" not found in source`, {
 					quillName: name,
-					version: resolvedVersion,
+					version,
 				});
 			}
 		}
 
 		await assertQuillYamlExists(quillDir);
 
-		const metadata: QuillMetadata = { name, version: resolvedVersion };
+		const metadata: QuillMetadata = { name, version };
 
 		let files: Record<string, Uint8Array>;
 		try {
@@ -207,14 +185,14 @@ export class FileSystemSource implements QuillSource {
 		} catch (err) {
 			throw new RegistryError('load_error', `Failed to read quill directory: ${quillDir}`, {
 				quillName: name,
-				version: resolvedVersion,
+				version,
 				cause: err,
 			});
 		}
 
 		return {
 			name,
-			version: resolvedVersion,
+			version,
 			data: toEngineFileTree(files),
 			metadata,
 		};
@@ -254,39 +232,4 @@ export class FileSystemSource implements QuillSource {
 		await fs.writeFile(path.join(outputDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 	}
 
-	/**
-	 * Resolves the latest version for a quill by listing version directories
-	 * and picking the highest semver.
-	 */
-	private async resolveLatestVersion(name: string): Promise<string> {
-		const nameDir = path.join(this.quillsDir, name);
-
-		let versionDirs: string[];
-		try {
-			versionDirs = await listSubdirectories(nameDir);
-		} catch {
-			throw new RegistryError('quill_not_found', `Quill "${name}" not found in source`, {
-				quillName: name,
-			});
-		}
-
-		if (versionDirs.length === 0) {
-			throw new RegistryError('quill_not_found', `Quill "${name}" has no versions`, {
-				quillName: name,
-			});
-		}
-
-		// Filter to valid semver directories only
-		const semverDirs = versionDirs.filter(isSemver);
-
-		if (semverDirs.length === 0) {
-			throw new RegistryError('quill_not_found', `Quill "${name}" has no valid version directories`, {
-				quillName: name,
-			});
-		}
-
-		// Sort by semver descending, return highest
-		semverDirs.sort((a, b) => compareSemver(b, a));
-		return semverDirs[0];
-	}
 }

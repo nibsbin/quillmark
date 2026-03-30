@@ -104,7 +104,7 @@ Implement this to create custom sources:
 ```ts
 interface QuillSource {
   getManifest(): Promise<QuillManifest>;
-  loadQuill(name: string, version?: string): Promise<QuillBundle>;
+  loadQuill(name: string, version: string): Promise<QuillBundle>;
 }
 ```
 
@@ -133,7 +133,7 @@ try {
 
 ## Version Resolution
 
-`fetch()` requires a canonical ref (`name@version`) using full semver (for example, `usaf_memo@1.0.0`). `resolve()` accepts `name`, canonical `name@version`, or semver selectors with missing segments (for example, `usaf_memo@1` or `usaf_memo@1.2`) and picks the highest matching version. Fetches are deduplicated in-memory to prevent duplicate source loads under races.
+`fetch()` requires a canonical ref (`name@version`) using full semver (for example, `usaf_memo@1.0.0`). `resolve()` accepts `name`, canonical `name@version`, or semver selectors with missing segments (for example, `usaf_memo@1` or `usaf_memo@1.2`) and picks the highest matching version from a manifest that is loaded eagerly when the registry is constructed. Fetches are deduplicated in-memory to prevent duplicate source loads under races.
 
 ## License
 

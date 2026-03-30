@@ -31,10 +31,8 @@ function createMockSource(bundles: QuillBundle[]): QuillSource {
 	};
 	return {
 		getManifest: vi.fn(async () => manifest),
-		loadQuill: vi.fn(async (name: string, version?: string) => {
-			const bundle = bundles.find(
-				(b) => b.name === name && (version === undefined || b.version === version),
-			);
+		loadQuill: vi.fn(async (name: string, version: string) => {
+			const bundle = bundles.find((b) => b.name === name && b.version === version);
 			if (!bundle) {
 				if (version && bundles.some((b) => b.name === name)) {
 					throw new RegistryError('version_not_found', `Version ${version} not found`, {
@@ -196,7 +194,7 @@ describe('QuillRegistry', () => {
 
 			expect(bundle.name).toBe('usaf_memo');
 			expect(bundle.version).toBe('1.0.0');
-			expect(source.loadQuill).toHaveBeenCalledWith('usaf_memo', undefined);
+			expect(source.loadQuill).toHaveBeenCalledWith('usaf_memo', '1.0.0');
 			expect(engine.registerQuill).toHaveBeenCalledWith(bundle.data);
 		});
 
@@ -243,10 +241,13 @@ describe('QuillRegistry', () => {
 			// First resolve: hits source and registers
 			await registry.resolve('usaf_memo');
 			expect(source.loadQuill).toHaveBeenCalledTimes(1);
+			expect(source.getManifest).toHaveBeenCalledTimes(1);
 
-			// Second resolve: engine already has it, returns from cache
+			// Second resolve: re-evaluates latest from startup-loaded manifest,
+			// reuses canonical fetch without reloading manifest.
 			await registry.resolve('usaf_memo');
 			expect(source.loadQuill).toHaveBeenCalledTimes(1);
+			expect(source.getManifest).toHaveBeenCalledTimes(1);
 		});
 
 		it('should use registry cache for versioned lookups', async () => {
@@ -302,8 +303,8 @@ describe('QuillRegistry', () => {
 			const deferred = Promise.withResolvers<QuillBundle>();
 			vi.mocked(source.loadQuill).mockReturnValueOnce(deferred.promise);
 
-			const first = registry.resolve('usaf_memo');
-			const second = registry.resolve('usaf_memo');
+			const first = registry.resolve('usaf_memo@1.0.0');
+			const second = registry.resolve('usaf_memo@1.0.0');
 
 			expect(source.loadQuill).toHaveBeenCalledTimes(1);
 

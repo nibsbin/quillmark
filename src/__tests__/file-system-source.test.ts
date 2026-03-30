@@ -104,18 +104,18 @@ describe('FileSystemSource', () => {
 	});
 
 	describe('loadQuill()', () => {
-		it('should load a quill by name (resolves to latest version)', async () => {
+		it('should load a quill by name and exact version', async () => {
 			await createQuillDir('usaf_memo', '0.1.0', 'USAF Memo v0.1');
 			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo v1.0');
 
 			const source = new FileSystemSource(TEST_DIR);
-			const bundle = await source.loadQuill('usaf_memo');
+			const bundle = await source.loadQuill('usaf_memo', '1.0.0');
 
 			expect(bundle.name).toBe('usaf_memo');
 			expect(bundle.version).toBe('1.0.0');
 		});
 
-		it('should load a quill by name and exact version', async () => {
+		it('should load an older exact version', async () => {
 			await createQuillDir('usaf_memo', '0.1.0', 'USAF Memo v0.1');
 			await createQuillDir('usaf_memo', '1.0.0', 'USAF Memo v1.0');
 
@@ -144,7 +144,7 @@ describe('FileSystemSource', () => {
 
 			const source = new FileSystemSource(TEST_DIR);
 			try {
-				await source.loadQuill('nonexistent');
+				await source.loadQuill('nonexistent', '1.0.0');
 				expect.unreachable('Should have thrown');
 			} catch (err) {
 				expect(err).toBeInstanceOf(RegistryError);
@@ -211,7 +211,7 @@ describe('FileSystemSource', () => {
 			expect(manifest.quills[0].version).toBe('1.0.0');
 		});
 
-		it('should resolve latest ignoring non-semver directories', async () => {
+		it('should load exact version while ignoring non-semver directories in discovery', async () => {
 			await createQuillDir('usaf_memo', '0.1.0');
 			await createQuillDir('usaf_memo', '1.0.0');
 			// Add a non-semver dir that would sort wrong without filtering
@@ -219,7 +219,7 @@ describe('FileSystemSource', () => {
 			await fs.mkdir(draftDir, { recursive: true });
 
 			const source = new FileSystemSource(TEST_DIR);
-			const bundle = await source.loadQuill('usaf_memo');
+			const bundle = await source.loadQuill('usaf_memo', '1.0.0');
 
 			expect(bundle.version).toBe('1.0.0');
 		});

@@ -3,20 +3,6 @@ import { RegistryError } from '../errors.js';
 import { toEngineFileTree } from '../format.js';
 import { unpackFiles } from '../bundle.js';
 
-function compareSemver(a: string, b: string): number {
-	const partsA = a.split('.').map(Number);
-	const partsB = b.split('.').map(Number);
-	const len = Math.max(partsA.length, partsB.length);
-
-	for (let i = 0; i < len; i++) {
-		const numA = partsA[i] ?? 0;
-		const numB = partsB[i] ?? 0;
-		if (numA !== numB) return numA - numB;
-	}
-
-	return 0;
-}
-
 export interface HttpSourceOptions {
 	/** Base URL serving zips + manifest (e.g., "https://cdn.example.com/quills/"). */
 	baseUrl: string;
@@ -84,13 +70,10 @@ export class HttpSource implements QuillSource {
 		return manifest;
 	}
 
-	async loadQuill(name: string, version?: string): Promise<QuillBundle> {
+	async loadQuill(name: string, version: string): Promise<QuillBundle> {
 		const manifest = await this.getManifest();
 		const matchingByName = manifest.quills.filter((q) => q.name === name);
-		let entry =
-			version === undefined
-				? matchingByName.sort((a, b) => compareSemver(b.version, a.version))[0]
-				: matchingByName.find((q) => q.version === version);
+		const entry = matchingByName.find((q) => q.version === version);
 
 		if (!entry) {
 			if (version && matchingByName.length > 0) {

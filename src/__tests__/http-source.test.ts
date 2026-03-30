@@ -140,7 +140,7 @@ describe('HttpSource', () => {
 				fetch: mockFetch,
 			});
 
-			const bundle = await source.loadQuill('usaf_memo');
+			const bundle = await source.loadQuill('usaf_memo', '1.0.0');
 
 			expect(bundle.name).toBe('usaf_memo');
 			expect(bundle.version).toBe('1.0.0');
@@ -152,7 +152,7 @@ describe('HttpSource', () => {
 			expect(data.files['template.typ']).toBeDefined();
 		});
 
-		it('should resolve latest version regardless of manifest entry order', async () => {
+		it('should load the exact requested version regardless of manifest entry order', async () => {
 			const manifest: QuillManifest = {
 				quills: [
 					{ name: 'usaf_memo', version: '1.0.0' },
@@ -172,7 +172,7 @@ describe('HttpSource', () => {
 				fetch: mockFetch,
 			});
 
-			const bundle = await source.loadQuill('usaf_memo');
+			const bundle = await source.loadQuill('usaf_memo', '2.0.0');
 			expect(bundle.version).toBe('2.0.0');
 			expect(mockFetch).toHaveBeenCalledWith(
 				'https://cdn.example.com/quills/usaf_memo@2.0.0.zip?v=2.0.0',
@@ -208,7 +208,7 @@ describe('HttpSource', () => {
 			});
 
 			try {
-				await source.loadQuill('nonexistent');
+				await source.loadQuill('nonexistent', '1.0.0');
 				expect.unreachable('Should have thrown');
 			} catch (err) {
 				expect(err).toBeInstanceOf(RegistryError);

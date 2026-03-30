@@ -48,6 +48,18 @@ function matchesSemverSelector(version: string, selector: string): boolean {
 	return true;
 }
 
+function chooseHighestVersion(versions: string[]): string | null {
+	if (versions.length === 0) return null;
+	const copy = [...versions];
+	copy.sort((a, b) => compareSemver(b, a));
+	return copy[0] ?? null;
+}
+
+function isCanonicalRef(ref: string): boolean {
+	const [name, version, ...rest] = ref.split('@');
+	return Boolean(name && version && rest.length === 0 && isCanonicalSemver(version));
+}
+
 /**
  * Orchestrates quill sources, resolves versions, caches loaded quills,
  * and registers them with the engine.
@@ -60,6 +72,7 @@ function matchesSemverSelector(version: string, selector: string): boolean {
 export class QuillRegistry {
 	private source: QuillSource;
 	private engine: QuillmarkEngine | null;
+	private manifestPromise: Promise<QuillManifest>;
 	/**
 	 * In-memory cache of in-flight and settled fetch operations.
 	 * Keyed by quill ref (`name` or `name@version`).
@@ -76,6 +89,10 @@ export class QuillRegistry {
 	constructor(options: QuillRegistryOptions) {
 		this.source = options.source;
 		this.engine = options.engine ?? null;
+		// Eagerly load the manifest at startup so resolve() can assume availability.
+		this.manifestPromise = this.source.getManifest();
+		// Prevent unhandled rejection noise if consumers never await manifest-dependent APIs.
+		void this.manifestPromise.catch(() => undefined);
 	}
 
 	/** Attaches or replaces the engine instance used by resolve(). */
@@ -85,7 +102,7 @@ export class QuillRegistry {
 
 	/** Returns the manifest from the underlying source. */
 	async getManifest(): Promise<QuillManifest> {
-		return this.source.getManifest();
+		return this.manifestPromise;
 	}
 
 	/** Returns metadata for all available quills from the source manifest. */
@@ -147,9 +164,10 @@ export class QuillRegistry {
 			);
 		}
 
-		const cachedPromise = this.resolving.get(ref);
-		if (cachedPromise) {
-			return cachedPromise;
+		const canonicalInput = isCanonicalRef(ref);
+		const inFlight = this.resolving.get(ref);
+		if (inFlight) {
+			return inFlight;
 		}
 
 		const resolvePromise = this.fetchForResolve(ref)
@@ -157,12 +175,13 @@ export class QuillRegistry {
 				await this.ensureRegistered(bundle);
 				const resolvedKey = `${bundle.name}@${bundle.version}`;
 				this.resolving.set(resolvedKey, resolvePromise);
-				this.resolving.set(ref, resolvePromise);
 				return bundle;
 			})
-			.catch((error) => {
-				this.resolving.delete(ref);
-				throw error;
+			.finally(() => {
+				// Keep canonical refs cached, but do not pin selector/name refs.
+				if (!canonicalInput) {
+					this.resolving.delete(ref);
+				}
 			});
 
 		this.resolving.set(ref, resolvePromise);
@@ -178,8 +197,10 @@ export class QuillRegistry {
 	}
 
 	private async fetchForResolve(ref: string): Promise<QuillBundle> {
-		const cached = this.fetched.get(ref);
-		if (cached) return cached;
+		if (isCanonicalRef(ref)) {
+			const cached = this.fetched.get(ref);
+			if (cached) return cached;
+		}
 
 		const [name, version] = ref.split('@');
 		if (version) {
@@ -194,7 +215,7 @@ export class QuillRegistry {
 					}
 				}
 
-				const manifest = await this.source.getManifest();
+				const manifest = await this.getManifest();
 				const manifestByName = manifest.quills.filter((q) => q.name === name);
 				const candidateVersionsFromManifest = manifestByName
 					.filter((q) => matchesSemverSelector(q.version, selector))
@@ -218,44 +239,25 @@ export class QuillRegistry {
 						{ quillName: name, version: selector },
 					);
 				}
-				candidateVersions.sort((a, b) => compareSemver(b, a));
-				const canonicalVersion = candidateVersions[0]!;
+				const canonicalVersion = chooseHighestVersion(candidateVersions)!;
 				const canonicalRef = `${name}@${canonicalVersion}`;
-				const promise = this.fetch(canonicalRef);
-				this.fetched.set(ref, promise);
-				return promise;
+				return this.fetch(canonicalRef);
 			}
 			return this.fetch(`${name}@${version}`);
 		}
 
-		const prefix = `${name}@`;
-		const candidates: Array<{ version: string; promise: Promise<QuillBundle> }> = [];
-		for (const [key, promise] of this.fetched.entries()) {
-			if (!key.startsWith(prefix)) continue;
-			const cachedVersion = key.slice(prefix.length);
-			candidates.push({ version: cachedVersion, promise });
-		}
-		if (candidates.length > 0) {
-			candidates.sort((a, b) => compareSemver(b.version, a.version));
-			const chosen = candidates[0]!;
-			this.fetched.set(ref, chosen.promise);
-			return chosen.promise;
-		}
-
-		const fetchPromise = this.source
-			.loadQuill(name, undefined)
-			.then((bundle) => {
-				const canonical = `${bundle.name}@${bundle.version}`;
-				this.fetched.set(canonical, fetchPromise);
-				this.fetched.set(ref, fetchPromise);
-				return bundle;
-			})
-			.catch((error) => {
-				this.fetched.delete(ref);
-				throw error;
+		const manifest = await this.getManifest();
+		const manifestByName = manifest.quills.filter((q) => q.name === name).map((q) => q.version);
+		const cachedVersionsByName = [...this.fetched.keys()]
+			.filter((k) => k.startsWith(`${name}@`))
+			.map((k) => k.slice(name.length + 1));
+		const latestVersion = chooseHighestVersion([...new Set([...manifestByName, ...cachedVersionsByName])]);
+		if (!latestVersion) {
+			throw new RegistryError('quill_not_found', `Quill "${name}" not found in source`, {
+				quillName: name,
 			});
-		this.fetched.set(ref, fetchPromise);
-		return fetchPromise;
+		}
+		return this.fetch(`${name}@${latestVersion}`);
 	}
 
 	private async ensureRegistered(bundle: QuillBundle): Promise<void> {

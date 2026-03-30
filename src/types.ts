@@ -31,7 +31,7 @@ export interface QuillBundle {
 /** Pluggable backend that knows how to list and fetch Quills from a specific location. */
 export interface QuillSource {
 	getManifest(): Promise<QuillManifest>;
-	loadQuill(name: string, version?: string): Promise<QuillBundle>;
+	loadQuill(name: string, version: string): Promise<QuillBundle>;
 }
 
 /**
