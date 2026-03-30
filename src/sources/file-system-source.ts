@@ -71,9 +71,9 @@ async function listSubdirectories(dirPath: string): Promise<string[]> {
 		.map((e) => e.name);
 }
 
-/** Returns true if the string looks like a semver version (digits and dots only). */
+/** Returns true if the string is exactly a three-part semver version (digits and dots only). */
 function isSemver(value: string): boolean {
-	return /^\d+\.\d+\.\d+/.test(value);
+	return /^\d+\.\d+\.\d+$/.test(value);
 }
 
 /**
