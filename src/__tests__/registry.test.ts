@@ -188,6 +188,23 @@ describe('QuillRegistry', () => {
 			expect(source.loadQuill).toHaveBeenCalledTimes(1);
 		});
 
+		it('should coalesce concurrent resolve() calls for the same ref', async () => {
+			const registry = new QuillRegistry({ source, engine });
+			const deferred = Promise.withResolvers<QuillBundle>();
+			vi.mocked(source.loadQuill).mockReturnValueOnce(deferred.promise);
+
+			const first = registry.resolve('usaf_memo');
+			const second = registry.resolve('usaf_memo');
+
+			expect(source.loadQuill).toHaveBeenCalledTimes(1);
+
+			deferred.resolve(createMockBundle('usaf_memo', '1.0.0'));
+			const [firstResolved, secondResolved] = await Promise.all([first, second]);
+			expect(firstResolved).toBe(secondResolved);
+			expect(firstResolved).toMatchObject({ name: 'usaf_memo', version: '1.0.0' });
+			expect(engine.registerQuill).toHaveBeenCalledTimes(1);
+		});
+
 		it('should throw quill_not_found for unknown quill', async () => {
 			const registry = new QuillRegistry({ source, engine });
 
