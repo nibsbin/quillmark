@@ -140,6 +140,9 @@ export class QuillRegistry {
 	 * Resolves a quill by reference (e.g., `name@version` or `name`) and
 	 * ensures it is registered with the attached engine.
 	 *
+	 * For callers that need a canonical ref, derive it from the returned bundle:
+	 * `${bundle.name}@${bundle.version}`.
+	 *
 	 * Resolution flow:
 	 * 1. Check resolve cache — return if cached
 	 * 2. Fetch bundle (or reuse fetch cache)
