@@ -187,7 +187,17 @@ pub fn fix_html_comment_fences(s: &str) -> String {
         // Find matching closer AFTER the opener
         if let Some(close_idx) = s[abs_open..].find("-->") {
             let abs_close = abs_open + close_idx;
-            let after_fence = abs_close + 3;
+            let mut after_fence = abs_close + 3;
+
+            // Handle `<!--- ... --->` style fences by treating the extra
+            // hyphen as part of the comment content, not leaked trailing text.
+            let opener_has_extra_hyphen =
+                s.get(abs_open + 4..).is_some_and(|rest| rest.starts_with('-'));
+            if opener_has_extra_hyphen
+                && s.get(after_fence..).is_some_and(|rest| rest.starts_with('-'))
+            {
+                after_fence += 1;
+            }
 
             // Append everything up to and including the closing fence
             result.push_str(&s[current_pos..after_fence]);
@@ -693,6 +703,22 @@ mod tests {
         assert_eq!(
             fix_html_comment_fences("<!-- comment -->\r\nSome text"),
             "<!-- comment -->\r\nSome text"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_triple_hyphen_single_line() {
+        assert_eq!(
+            fix_html_comment_fences("<!--- comment --->Trailing text"),
+            "<!--- comment --->\nTrailing text"
+        );
+    }
+
+    #[test]
+    fn test_fix_html_comment_triple_hyphen_multiline() {
+        assert_eq!(
+            fix_html_comment_fences("<!---\ncomment\n--->Trailing text"),
+            "<!---\ncomment\n--->\nTrailing text"
         );
     }
 
