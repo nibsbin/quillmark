@@ -1659,10 +1659,7 @@ fields:
 
     let summary = config.main().fields.get("summary").unwrap();
     assert_eq!(summary.r#type, FieldType::Markdown);
-    assert_eq!(
-        summary.ui.as_ref().unwrap().multiline,
-        Some(true)
-    );
+    assert_eq!(summary.ui.as_ref().unwrap().multiline, Some(true));
 
     let notes = config.main().fields.get("notes").unwrap();
     assert_eq!(notes.r#type, FieldType::Markdown);
