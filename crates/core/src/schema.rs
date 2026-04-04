@@ -927,57 +927,10 @@ pub fn coerce_document(
         if let Some(field_schema) = properties_obj.get(field_name) {
             // Get the expected type
             if let Some(expected_type) = field_schema.get("type").and_then(|t| t.as_str()) {
-                // Apply coercion
+                // Apply coercion, then recursively coerce array item properties if present
                 let coerced_value = coerce_value(field_value, expected_type);
-
-                // For array fields with items.properties, recursively coerce each element
                 let coerced_value = if expected_type == "array" {
-                    if let Some(arr) = coerced_value.as_array() {
-                        if let Some(items_schema) = field_schema.get("items") {
-                            if let Some(item_props) =
-                                items_schema.get("properties").and_then(|p| p.as_object())
-                            {
-                                let coerced_items: Vec<Value> = arr
-                                    .iter()
-                                    .map(|elem| {
-                                        if let Some(obj) = elem.as_object() {
-                                            let mut coerced_elem = Map::new();
-                                            for (k, v) in obj {
-                                                if let Some(prop_schema) = item_props.get(k) {
-                                                    if let Some(prop_type) = prop_schema
-                                                        .get("type")
-                                                        .and_then(|t| t.as_str())
-                                                    {
-                                                        let qv =
-                                                            QuillValue::from_json(v.clone());
-                                                        coerced_elem.insert(
-                                                            k.clone(),
-                                                            coerce_value(&qv, prop_type)
-                                                                .into_json(),
-                                                        );
-                                                    } else {
-                                                        coerced_elem.insert(k.clone(), v.clone());
-                                                    }
-                                                } else {
-                                                    coerced_elem.insert(k.clone(), v.clone());
-                                                }
-                                            }
-                                            Value::Object(coerced_elem)
-                                        } else {
-                                            elem.clone()
-                                        }
-                                    })
-                                    .collect();
-                                QuillValue::from_json(Value::Array(coerced_items))
-                            } else {
-                                coerced_value
-                            }
-                        } else {
-                            coerced_value
-                        }
-                    } else {
-                        coerced_value
-                    }
+                    coerce_array_item_properties(coerced_value, field_schema)
                 } else {
                     coerced_value
                 };
@@ -1002,6 +955,54 @@ pub fn coerce_document(
     }
 
     coerced_fields
+}
+
+/// Recursively coerce each object element in an array using the field schema's `items.properties`.
+///
+/// When an array field declares `items: { type: object, properties: {...} }`, values arriving
+/// as strings (e.g. `"95"` for a number property) must be coerced to their declared types.
+/// This helper is only called for `"array"` fields and is a no-op when `items.properties` is
+/// absent.
+fn coerce_array_item_properties(array_value: QuillValue, field_schema: &Value) -> QuillValue {
+    let arr = match array_value.as_array() {
+        Some(a) => a,
+        None => return array_value,
+    };
+
+    let item_props = match field_schema
+        .get("items")
+        .and_then(|s| s.get("properties"))
+        .and_then(|p| p.as_object())
+    {
+        Some(p) => p,
+        None => return array_value,
+    };
+
+    let coerced_items: Vec<Value> = arr
+        .iter()
+        .map(|elem| {
+            if let Some(obj) = elem.as_object() {
+                let mut coerced_elem = Map::new();
+                for (k, v) in obj {
+                    if let Some(prop_type) = item_props
+                        .get(k)
+                        .and_then(|s| s.get("type"))
+                        .and_then(|t| t.as_str())
+                    {
+                        let qv = QuillValue::from_json(v.clone());
+                        coerced_elem.insert(k.clone(), coerce_value(&qv, prop_type).into_json());
+                    } else {
+                        coerced_elem.insert(k.clone(), v.clone());
+                    }
+                }
+                Value::Object(coerced_elem)
+            } else {
+                elem.clone()
+            }
+        })
+        .collect();
+
+    QuillValue::from_json(Value::Array(coerced_items))
 }
 
 /// Helper to recursively coerce an array of card objects

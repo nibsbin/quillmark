@@ -36,7 +36,7 @@ Field properties:
 | `"datetime"` | `"string"` + `format: "date-time"` |
 | `"markdown"` | `"string"` + `contentMediaType: "text/markdown"` |
 
-> `type: object` is only valid inside `items` for typed array rows. Standalone `type: object` fields are rejected at parse time with a warning.
+> `type: object` is only valid inside `items` for typed array rows (e.g. `items: {type: object, properties: {...}}`). Standalone `type: object` fields are rejected at parse time with a warning.
 
 `contentMediaType = "text/markdown"` marks fields the Typst backend converts to Typst markup via `transform_fields`.
 
