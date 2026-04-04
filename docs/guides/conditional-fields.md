@@ -264,4 +264,3 @@ When a user selects `informal` as the format, the `from` and `for` fields disapp
 
 - [Quill.yaml Reference](quill-yaml-reference.md) — complete YAML property reference
 - [Creating Quills](creating-quills.md) — hands-on tutorial
-- [USAF Memo](../quills/usaf-memo.md) — full quill documentation with endorsements
