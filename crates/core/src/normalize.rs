@@ -191,6 +191,7 @@ pub fn fix_html_comment_fences(s: &str) -> String {
 
             // Handle `<!--- ... --->` style fences by treating the extra
             // hyphen as part of the comment content, not leaked trailing text.
+            // 4 == "<!--".len(); check whether opener is `<!---` (extra hyphen).
             let opener_has_extra_hyphen =
                 s.get(abs_open + 4..).is_some_and(|rest| rest.starts_with('-'));
             if opener_has_extra_hyphen
