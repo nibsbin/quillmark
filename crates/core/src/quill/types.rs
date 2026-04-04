@@ -36,6 +36,8 @@ pub mod ui_key {
     pub const ORDER: &str = "order";
     /// Whether the field or specific component is hide-body (no body editor)
     pub const HIDE_BODY: &str = "hide_body";
+    /// Default name template for card instances
+    pub const DEFAULT_NAME: &str = "default_name";
     /// Conditional visibility rules: field → accepted values
     pub const VISIBLE_WHEN: &str = "visible_when";
     /// Compact rendering hint for UI consumers
@@ -69,6 +71,10 @@ pub struct UiFieldSchema {
 pub struct UiContainerSchema {
     /// Whether to hide the body editor for this element (metadata only)
     pub hide_body: Option<bool>,
+    /// Template for generating a default per-instance name in UI consumers.
+    /// Uses `{field_name}` tokens interpolated with live field values.
+    /// Example: `"{headingLeft} — {subheadingLeft}"`
+    pub default_name: Option<String>,
 }
 
 /// Schema definition for a card type (composable content blocks)
