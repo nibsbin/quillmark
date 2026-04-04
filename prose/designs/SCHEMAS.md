@@ -15,7 +15,7 @@ The `Backend` trait interface:
 
 Field properties:
 
-- `name` — key in TOML (e.g., `[fields.title]` → name `"title"`)
+- `name` — key in YAML (e.g., `fields.title` → name `"title"`)
 - `title` — short label (`title` in JSON Schema)
 - `description` — required; used as JSON Schema `description`
 - `type` — `"string"`, `"number"`, `"boolean"`, `"array"`, `"date"`, `"datetime"`, or `"markdown"`

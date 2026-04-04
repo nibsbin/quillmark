@@ -159,6 +159,7 @@ Supported UI properties:
 
 - `group` - Group name for organizing fields in the UI
 - `visible_when` - Conditionally show/hide based on sibling field values
+- `multiline` - Start markdown fields with a larger text box
 - `hide_body` - Disable the markdown body editor for the document (document-level `ui` only)
 
 #### Disabling the Body Editor

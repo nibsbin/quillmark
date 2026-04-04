@@ -1,6 +1,6 @@
 //! Schema validation and utilities for Quillmark.
 //!
-//! This module provides utilities for converting TOML field definitions to JSON Schema
+//! This module provides utilities for converting Quill field definitions to JSON Schema
 //! and validating ParsedDocument data against schemas.
 
 use crate::quill::{field_key, ui_key, CardSchema, FieldSchema, FieldType, QuillConfig};
@@ -118,7 +118,7 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
         property.insert(field_key::ENUM.to_string(), Value::Array(enum_array));
     }
 
-    // Add nested properties for dict types
+    // Add nested properties for object item schemas
     if let Some(ref properties) = field_schema.properties {
         let mut props_map = Map::new();
         let mut required_fields = Vec::new();
