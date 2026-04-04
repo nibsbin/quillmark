@@ -66,7 +66,7 @@ pub struct UiContainerSchema {
     pub hide_body: Option<bool>,
     /// Template for generating a default per-instance title in UI consumers.
     /// Uses `{field_name}` tokens interpolated with live field values.
-    /// Example: `"{headingLeft} — {subheadingLeft}"`
+    /// Example: `"{name}"`
     pub default_title: Option<String>,
 }
 

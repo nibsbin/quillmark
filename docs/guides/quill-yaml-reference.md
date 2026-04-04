@@ -284,20 +284,17 @@ A template string that UI consumers interpolate with field values to produce a h
 
 ```yaml
 cards:
-  experience_section:
-    title: Experience/Education Entry
+  entry:
+    title: Card Title
     ui:
-      default_title: "{headingLeft} — {subheadingLeft}"
+      default_title: "{name}"
     fields:
-      headingLeft:
+      name:
         type: string
-        title: Company / School
-      subheadingLeft:
-        type: string
-        title: Role / Degree
+        title: Name
 ```
 
-With the above, a UI rendering a list of `experience_section` cards can title each instance — e.g. `"Google — Software Engineer"` — instead of falling back to a generic `"Experience/Education Entry (2)"`.
+With the above, a UI rendering a list of `entry` cards can title each instance (e.g. `"Project Alpha"`) instead of falling back to a generic `"Card Title (2)"`.
 
 **Interpolation rules (for UI consumers):**
 - `{field_name}` is replaced with the current value of that field.
