@@ -1577,13 +1577,13 @@ main:
 }
 
 #[test]
-fn test_standalone_object_field_rejected_with_warning() {
+fn test_standalone_object_field_parses() {
     let yaml_content = r#"
 Quill:
   name: obj-test
   version: "1.0"
   backend: typst
-  description: Test standalone object rejection
+  description: Test standalone object field
 
 main:
   fields:
@@ -1592,26 +1592,60 @@ main:
       description: A normal field
     address:
       type: object
-      description: Standalone object — should be rejected
+      description: Structured address
       properties:
         street:
           type: string
+          description: Street line
 "#;
 
     let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();
 
-    // Standalone object field should be skipped
     assert!(config.main().fields.contains_key("valid_field"));
-    assert!(!config.main().fields.contains_key("address"));
+    let address = config.main().fields.get("address").unwrap();
+    assert_eq!(address.r#type, FieldType::Object);
+    assert!(address.properties.as_ref().unwrap().contains_key("street"));
+    assert!(warnings
+        .iter()
+        .all(|w| w.code.as_deref() != Some("quill::standalone_object_not_supported")));
+}
 
-    // A warning should be emitted
-    assert_eq!(warnings.len(), 1);
-    assert_eq!(warnings[0].severity, Severity::Warning);
-    assert_eq!(
-        warnings[0].code.as_deref(),
-        Some("quill::standalone_object_not_supported")
+#[test]
+fn test_standalone_object_recursive_coercion() {
+    let yaml_content = r#"
+Quill:
+  name: obj-test
+  version: "1.0"
+  backend: typst
+  description: Test object field coercion
+
+main:
+  fields:
+    metrics:
+      type: object
+      description: Named metrics
+      properties:
+        score:
+          type: number
+        ok:
+          type: boolean
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+
+    let mut fields = std::collections::HashMap::new();
+    fields.insert(
+        "metrics".to_string(),
+        crate::value::QuillValue::from_json(serde_json::json!({
+            "score": "42",
+            "ok": "true"
+        })),
     );
-    assert!(warnings[0].message.contains("address"));
+
+    let coerced = config.coerce_fields(&fields);
+    let metrics = coerced.get("metrics").unwrap().as_object().unwrap();
+    assert_eq!(metrics["score"], serde_json::json!(42));
+    assert_eq!(metrics["ok"], serde_json::json!(true));
 }
 
 #[test]

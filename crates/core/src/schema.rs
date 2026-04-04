@@ -943,6 +943,8 @@ pub fn coerce_document(
                 let coerced_value = coerce_value(field_value, expected_type);
                 let coerced_value = if expected_type == "array" {
                     coerce_array_item_properties(coerced_value, field_schema)
+                } else if expected_type == "object" {
+                    coerce_object_field_properties(coerced_value, field_schema)
                 } else {
                     coerced_value
                 };
@@ -1015,6 +1017,48 @@ fn coerce_array_item_properties(array_value: QuillValue, field_schema: &Value) -
         .collect();
 
     QuillValue::from_json(Value::Array(coerced_items))
+}
+
+/// Recursively coerce each property of an object field using `field_schema.properties`.
+///
+/// When a field declares `type: object` with `properties: {...}`, values arriving as strings
+/// (e.g. `"95"` for a number property) must be coerced to their declared types. Nested
+/// `object` and `array` (with item properties) are handled recursively.
+fn coerce_object_field_properties(obj_value: QuillValue, field_schema: &Value) -> QuillValue {
+    let props = match field_schema.get("properties").and_then(|p| p.as_object()) {
+        Some(p) if !p.is_empty() => p,
+        _ => return obj_value,
+    };
+
+    let obj = match obj_value.as_json().as_object() {
+        Some(o) => o,
+        None => return obj_value,
+    };
+
+    let mut coerced = Map::new();
+    for (k, v) in obj {
+        if let Some(prop_schema) = props.get(k) {
+            let expected_type = prop_schema.get("type").and_then(|t| t.as_str());
+            let qv = QuillValue::from_json(v.clone());
+            let coerced_v = if let Some(et) = expected_type {
+                let cv = coerce_value(&qv, et);
+                if et == "array" {
+                    coerce_array_item_properties(cv, prop_schema)
+                } else if et == "object" {
+                    coerce_object_field_properties(cv, prop_schema)
+                } else {
+                    cv
+                }
+            } else {
+                qv
+            };
+            coerced.insert(k.clone(), coerced_v.into_json());
+        } else {
+            coerced.insert(k.clone(), v.clone());
+        }
+    }
+
+    QuillValue::from_json(Value::Object(coerced))
 }
 
 /// Helper to recursively coerce an array of card objects
@@ -1796,6 +1840,37 @@ mod tests {
         let second = arr[1].as_object().unwrap();
         assert_eq!(second["value"], json!(88.5)); // coerced from "88.5"
         assert_eq!(second["active"], json!(false)); // coerced from "false"
+    }
+
+    #[test]
+    fn test_coerce_object_field_properties() {
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "object",
+                    "properties": {
+                        "zip": {"type": "string"},
+                        "count": {"type": "number"}
+                    }
+                }
+            }
+        });
+
+        let mut fields = HashMap::new();
+        fields.insert(
+            "address".to_string(),
+            QuillValue::from_json(json!({
+                "zip": "90210",
+                "count": "7"
+            })),
+        );
+
+        let coerced = coerce_document(&QuillValue::from_json(schema), &fields);
+        let addr = coerced.get("address").unwrap().as_object().unwrap();
+        assert_eq!(addr["zip"], json!("90210"));
+        assert_eq!(addr["count"], json!(7));
     }
 
     #[test]

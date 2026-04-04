@@ -277,7 +277,26 @@ impl QuillConfig {
                 }
                 value.clone()
             }
-            FieldType::Object => value.clone(),
+            FieldType::Object => {
+                if let Some(props) = &field_schema.properties {
+                    if let Some(obj) = json_value.as_object() {
+                        let mut coerced_obj = serde_json::Map::new();
+                        for (k, v) in obj {
+                            if let Some(prop_schema) = props.get(k) {
+                                let qv = QuillValue::from_json(v.clone());
+                                coerced_obj.insert(
+                                    k.clone(),
+                                    Self::coerce_value(&qv, prop_schema).into_json(),
+                                );
+                            } else {
+                                coerced_obj.insert(k.clone(), v.clone());
+                            }
+                        }
+                        return QuillValue::from_json(serde_json::Value::Object(coerced_obj));
+                    }
+                }
+                value.clone()
+            }
         }
     }
 
@@ -312,22 +331,6 @@ impl QuillConfig {
             let quill_value = QuillValue::from_json(field_value.clone());
             match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
                 Ok(mut schema) => {
-                    // Reject standalone object/dict fields — object is only valid inside array items.
-                    if schema.r#type == super::FieldType::Object {
-                        warnings.push(
-                            Diagnostic::new(
-                                Severity::Warning,
-                                format!(
-                                    "Field '{}' uses standalone type: object, which is not supported. \
-                                    Use separate fields with ui.group instead, or use type: array with items: {{type: object, properties: {{...}}}}.",
-                                    field_name
-                                ),
-                            )
-                            .with_code("quill::standalone_object_not_supported".to_string()),
-                        );
-                        continue;
-                    }
-
                     // Always set ui.order based on position
                     if schema.ui.is_none() {
                         schema.ui = Some(UiFieldSchema {
