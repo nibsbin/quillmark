@@ -333,7 +333,6 @@ impl QuillConfig {
                         schema.ui = Some(UiFieldSchema {
                             group: None,
                             order: Some(order),
-                            visible_when: None,
                             compact: None,
                             multiline: None,
                         });
