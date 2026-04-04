@@ -2752,10 +2752,7 @@ cards:
         let config = crate::quill::QuillConfig::from_yaml(yaml).unwrap();
         let card = config.card_definition("experience").unwrap();
         let ui = card.ui.as_ref().unwrap();
-        assert_eq!(
-            ui.default_name.as_deref(),
-            Some("{company} — {role}")
-        );
+        assert_eq!(ui.default_name.as_deref(), Some("{company} — {role}"));
 
         let schema = build_schema(config.main(), &config.card_definitions_map()).unwrap();
         let card_def = &schema.as_json()["$defs"]["experience_card"];
@@ -2794,6 +2791,9 @@ cards:
 
         // UI projection preserves x-ui with default_name
         let ui = project_schema(&schema, SchemaProjection::UI);
-        assert_eq!(ui.as_json()["$defs"]["item_card"]["x-ui"]["default_name"], "{name}");
+        assert_eq!(
+            ui.as_json()["$defs"]["item_card"]["x-ui"]["default_name"],
+            "{name}"
+        );
     }
 }
