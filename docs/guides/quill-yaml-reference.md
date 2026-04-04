@@ -206,40 +206,6 @@ main:
         order: 5
 ```
 
-### `visible_when`
-
-Conditionally shows or hides a field based on sibling field values. See the dedicated [Conditional Fields](conditional-fields.md) guide for full details.
-
-```yaml
-main:
-  fields:
-    format:
-      type: string
-      enum: [standard, informal, separate_page]
-      default: standard
-
-cards:
-  indorsement:
-    title: Routing indorsement
-    fields:
-      from:
-        type: string
-        ui:
-          group: Addressing
-          visible_when:
-            format: [standard, separate_page]
-```
-
-The `from` field is visible only when `format` is `"standard"` or `"separate_page"`. When `format` is `"informal"`, the field is hidden.
-
-**Rules:**
-
-- Keys are sibling field names
-- Values are arrays of accepted values
-- Multiple keys = AND (all must match)
-- Multiple values per key = OR (any can match)
-- Absent `visible_when` = always visible
-
 ### `multiline`
 
 Controls the initial size of the text input for `markdown` fields. When `true`, the UI starts with a larger text box instead of a single-line input:
@@ -277,8 +243,6 @@ cards:
         type: string
         ui:
           group: Addressing
-          visible_when:
-            format: [standard, separate_page]
       format:
         type: string
         enum: [standard, informal, separate_page]
@@ -407,7 +371,6 @@ Quillmark generates a JSON Schema from your `Quill.yaml`. This schema is used fo
 | `default: value` | `"default": value` |
 | `enum: [a, b]` | `"enum": ["a", "b"]` |
 | `ui: { group: X }` | `"x-ui": { "group": "X" }` |
-| `ui: { visible_when: ... }` | `"x-ui": { "visible_when": ... }` |
 | `ui: { multiline: true }` | `"x-ui": { "multiline": true }` |
 | `ui: { default_name: "{f}" }` | `"x-ui": { "default_name": "{f}" }` |
 | `cards: { name: ... }` | `"$defs": { "name_card": ... }` |
@@ -452,8 +415,6 @@ main:
       type: string
       ui:
         group: Header
-        visible_when:
-          status: [at_risk, blocked]
       description: Describe the risk or blocker. Only needed when status is not on_track.
 
     date:
@@ -496,7 +457,6 @@ cards:
 
 ## Next Steps
 
-- [Conditional Fields](conditional-fields.md) — deep dive on `visible_when`
 - [Creating Quills](creating-quills.md) — hands-on tutorial
 - [Quill Markdown](quill-markdown.md) — document authoring syntax
 - [Validation](validation.md) — validating documents against schemas

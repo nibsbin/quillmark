@@ -162,7 +162,6 @@ To hide the main body editor for metadata-only Quills, set `hide_body` on the `Q
 | Property | Purpose |
 |----------|---------|
 | `group` | Group related fields in the UI |
-| `visible_when` | Show the field only when sibling fields match (see [Conditional Visibility](#conditional-visibility)) |
 | `multiline` | Larger initial control for `markdown` fields ([Markdown fields](#markdown-fields)) |
 | `compact` | Prefer a compact control where the UI supports it |
 
@@ -194,28 +193,6 @@ Quill:
 ```
 
 The same flag exists on a **card** definition’s `ui` when a card has no body content. This does not remove `BODY` from the schema or block body content from reaching the backend.
-
-#### Conditional Visibility
-
-Use `visible_when` to show fields only when they're relevant:
-
-```yaml
-main:
-  fields:
-    format:
-      type: string
-      enum: [standard, informal]
-      default: standard
-
-    from:
-      type: string
-      ui:
-        group: Addressing
-        visible_when:
-          format: [standard]
-```
-
-The `from` field only appears when `format` is `"standard"`. See the [Conditional Fields](conditional-fields.md) guide for the full specification.
 
 For a complete reference of all YAML properties, see the [Quill.yaml Reference](quill-yaml-reference.md).
 
@@ -393,6 +370,5 @@ workflow = engine.workflow(quill)
 ## Next Steps
 
 - [Quill.yaml Reference](quill-yaml-reference.md) - Complete YAML property reference
-- [Conditional Fields](conditional-fields.md) - Show/hide fields with `visible_when`
 - [Learn about Quill Markdown syntax](quill-markdown.md)
 - [Explore the Typst backend](typst-backend.md)

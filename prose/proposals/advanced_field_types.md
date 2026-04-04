@@ -94,7 +94,6 @@ Markdown processing remains **backend-only**. The core parsing layer treats mark
 pub struct UiFieldSchema {
     pub group: Option<String>,
     pub order: Option<i32>,
-    pub visible_when: Option<HashMap<String, Vec<String>>>,
     pub compact: Option<bool>,
     pub multiline: Option<bool>,  // new
 }
