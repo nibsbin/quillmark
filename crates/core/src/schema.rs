@@ -169,10 +169,10 @@ fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
         if let Some(hide_body) = ui.hide_body {
             ui_obj.insert(ui_key::HIDE_BODY.to_string(), Value::Bool(hide_body));
         }
-        if let Some(ref default_name) = ui.default_name {
+        if let Some(ref default_title) = ui.default_title {
             ui_obj.insert(
-                ui_key::DEFAULT_NAME.to_string(),
-                Value::String(default_name.clone()),
+                ui_key::DEFAULT_TITLE.to_string(),
+                Value::String(default_title.clone()),
             );
         }
         if !ui_obj.is_empty() {
@@ -318,10 +318,10 @@ pub fn build_schema(
         if let Some(hide_body) = ui.hide_body {
             ui_obj.insert(ui_key::HIDE_BODY.to_string(), Value::Bool(hide_body));
         }
-        if let Some(ref default_name) = ui.default_name {
+        if let Some(ref default_title) = ui.default_title {
             ui_obj.insert(
-                ui_key::DEFAULT_NAME.to_string(),
-                Value::String(default_name.clone()),
+                ui_key::DEFAULT_TITLE.to_string(),
+                Value::String(default_title.clone()),
             );
         }
         if !ui_obj.is_empty() {
@@ -2441,7 +2441,7 @@ mod tests {
         // Test document level hide_body
         let ui_schema = UiContainerSchema {
             hide_body: Some(true),
-            default_name: None,
+            default_title: None,
         };
 
         // Test card level metadata_only
@@ -2461,7 +2461,7 @@ mod tests {
             fields: card_fields,
             ui: Some(UiContainerSchema {
                 hide_body: Some(true),
-                default_name: None,
+                default_title: None,
             }),
         };
 
@@ -2568,7 +2568,7 @@ main:
     }
 
     #[test]
-    fn test_default_name_schema() {
+    fn test_default_title_schema() {
         use crate::quill::{CardSchema, UiContainerSchema};
 
         let card = CardSchema {
@@ -2578,7 +2578,7 @@ main:
             fields: HashMap::new(),
             ui: Some(UiContainerSchema {
                 hide_body: None,
-                default_name: Some("{company} — {role}".to_string()),
+                default_title: Some("{company} — {role}".to_string()),
             }),
         };
 
@@ -2596,24 +2596,24 @@ main:
         let schema = build_schema(&document, &cards).unwrap();
         let card_def = &schema.as_json()["$defs"]["entry_card"];
 
-        assert_eq!(card_def["x-ui"]["default_name"], "{company} — {role}");
+        assert_eq!(card_def["x-ui"]["default_title"], "{company} — {role}");
     }
 
     #[test]
-    fn test_default_name_yaml_roundtrip() {
-        // Test that default_name survives YAML → QuillConfig → Schema
+    fn test_default_title_yaml_roundtrip() {
+        // Test that default_title survives YAML → QuillConfig → Schema
         let yaml = r#"
 Quill:
   name: test_quill
   version: "0.1"
   backend: typst
-  description: Test default_name
+  description: Test default_title
 
 cards:
   experience:
     title: Experience Entry
     ui:
-      default_name: "{company} — {role}"
+      default_title: "{company} — {role}"
     fields:
       company:
         type: string
@@ -2626,27 +2626,27 @@ cards:
         let config = crate::quill::QuillConfig::from_yaml(yaml).unwrap();
         let card = config.card_definition("experience").unwrap();
         let ui = card.ui.as_ref().unwrap();
-        assert_eq!(ui.default_name.as_deref(), Some("{company} — {role}"));
+        assert_eq!(ui.default_title.as_deref(), Some("{company} — {role}"));
 
         let schema = build_schema(config.main(), &config.card_definitions_map()).unwrap();
         let card_def = &schema.as_json()["$defs"]["experience_card"];
-        assert_eq!(card_def["x-ui"]["default_name"], "{company} — {role}");
+        assert_eq!(card_def["x-ui"]["default_title"], "{company} — {role}");
     }
 
     #[test]
-    fn test_default_name_stripped_by_ai_projection() {
+    fn test_default_title_stripped_by_ai_projection() {
         let yaml = r#"
 Quill:
   name: test_quill
   version: "0.1"
   backend: typst
-  description: Test default_name stripping
+  description: Test default_title stripping
 
 cards:
   item:
     title: Item
     ui:
-      default_name: "{name}"
+      default_title: "{name}"
     fields:
       name:
         type: string
@@ -2656,17 +2656,17 @@ cards:
         let config = crate::quill::QuillConfig::from_yaml(yaml).unwrap();
         let schema = build_schema(config.main(), &config.card_definitions_map()).unwrap();
 
-        // AI projection strips x-ui (including default_name)
+        // AI projection strips x-ui (including default_title)
         let ai = project_schema(&schema, SchemaProjection::AI);
         assert!(ai.as_json()["$defs"]["item_card"]
             .get("x-ui")
             .map(|v| v.is_null())
             .unwrap_or(true));
 
-        // UI projection preserves x-ui with default_name
+        // UI projection preserves x-ui with default_title
         let ui = project_schema(&schema, SchemaProjection::UI);
         assert_eq!(
-            ui.as_json()["$defs"]["item_card"]["x-ui"]["default_name"],
+            ui.as_json()["$defs"]["item_card"]["x-ui"]["default_title"],
             "{name}"
         );
     }
