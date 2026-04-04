@@ -6,7 +6,8 @@ Quill:
   example_file: example.md
   description: Minimal quill fixture for integration tests
 
-fields:
-  title:
-    title: Document Title
-    type: string
+main:
+  fields:
+    title:
+      title: Document Title
+      type: string
