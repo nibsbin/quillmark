@@ -1,6 +1,7 @@
 import { FileSystemSource } from './sources/file-system-source.js';
 import { QuillRegistry } from './registry.js';
 import type { QuillmarkEngine, QuillInfo } from './types.js';
+import { formatUnknownError } from './errors.js';
 
 /**
  * Engine interface for quill validation.
@@ -143,7 +144,7 @@ export async function validateQuills(
 				}
 			}
 		} catch (err) {
-			entry.error = err instanceof Error ? err.message : String(err);
+			entry.error = formatUnknownError(err);
 		}
 
 		results.push(entry);

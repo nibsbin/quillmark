@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RegistryError } from '../errors.js';
+import { RegistryError, formatUnknownError } from '../errors.js';
 import type { RegistryErrorCode } from '../errors.js';
 
 describe('RegistryError', () => {
@@ -41,5 +41,30 @@ describe('RegistryError', () => {
 			const err = new RegistryError(code, `Error: ${code}`);
 			expect(err.code).toBe(code);
 		}
+	});
+});
+
+describe('formatUnknownError', () => {
+	it('should preserve plain Error messages', () => {
+		expect(formatUnknownError(new Error('render failed'))).toBe('render failed');
+	});
+
+	it('should include chained causes', () => {
+		const err = new Error('render failed', {
+			cause: new Error('invalid template'),
+		});
+		expect(formatUnknownError(err)).toBe('render failed. Cause: invalid template');
+	});
+
+	it('should serialize Map payloads with entries', () => {
+		const payload = new Map([
+			['code', 'typst_error'],
+			['message', 'Unknown field "name"'],
+		]);
+		const formatted = formatUnknownError(payload);
+		expect(formatted).toContain('"type": "Map"');
+		expect(formatted).toContain('"entries"');
+		expect(formatted).toContain('typst_error');
+		expect(formatted).toContain('Unknown field \\"name\\"');
 	});
 });

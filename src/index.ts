@@ -11,6 +11,7 @@ export type {
 
 // Errors
 export { RegistryError } from './errors.js';
+export { formatUnknownError } from './errors.js';
 export type { RegistryErrorCode } from './errors.js';
 
 // Format utilities
