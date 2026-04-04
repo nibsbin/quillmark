@@ -402,8 +402,8 @@ where
                                 output.push(']');
                             }
                             None => {
-                                // Malformed: more end tags than start tags
-                                output.push(']');
+                                // Malformed: more end tags than start tags — skip
+                                // to avoid producing an unmatched ']'
                             }
                         }
                         end_newline = false;
@@ -796,7 +796,6 @@ where
             consumed += 2;
         }
         if remaining >= 1 && self.emph_depth > 0 {
-            remaining -= 1;
             consumed += 1;
         }
 
@@ -1076,9 +1075,64 @@ fn replace_intraword_marker_pairs(source: &str, marker: &str, open: &str, close:
     let mut i = 0;
 
     while i < chars.len() {
-        // Skip escaped markers
-        if i > 0 && chars[i - 1] == '\\' {
-            i += 1;
+        // Skip escaped characters
+        if chars[i] == '\\' && i + 1 < chars.len() {
+            i += 2;
+            continue;
+        }
+
+        // Skip code spans (backtick-delimited regions) to avoid transforming
+        // markers inside inline code or fenced code blocks
+        if chars[i] == '`' {
+            // Count opening backticks
+            let backtick_start = i;
+            let mut backtick_count = 0;
+            while i < chars.len() && chars[i] == '`' {
+                backtick_count += 1;
+                i += 1;
+            }
+            if backtick_count >= 3 {
+                // Fenced code block: skip until matching closing fence
+                while i < chars.len() {
+                    if chars[i] == '`' {
+                        let mut close_count = 0;
+                        let close_start = i;
+                        while i < chars.len() && chars[i] == '`' {
+                            close_count += 1;
+                            i += 1;
+                        }
+                        if close_count >= backtick_count {
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+            } else {
+                // Inline code span: skip until matching closing backtick(s)
+                let mut found_close = false;
+                while i < chars.len() {
+                    if chars[i] == '`' {
+                        let mut close_count = 0;
+                        while i < chars.len() && chars[i] == '`' {
+                            close_count += 1;
+                            i += 1;
+                        }
+                        if close_count == backtick_count {
+                            found_close = true;
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+                if !found_close {
+                    // No matching close: backticks are literal, rewind
+                    // and let the rest of the loop handle subsequent chars.
+                    // (i is already past the backticks)
+                    i = backtick_start + backtick_count;
+                }
+            }
             continue;
         }
 
@@ -3093,6 +3147,130 @@ More text with `inline code`."#;
                 "Should not error on {:?}: got {:?}",
                 input,
                 result
+            );
+        }
+    }
+
+    /// Helper: count unmatched brackets in Typst output (ignoring escaped ones)
+    fn count_unmatched_brackets(typst: &str) -> (usize, usize) {
+        let mut depth: i64 = 0;
+        let mut max_negative: i64 = 0;
+        let chars: Vec<char> = typst.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            if chars[i] == '\\' {
+                i += 2; // skip escaped char
+                continue;
+            }
+            // Skip string literals
+            if chars[i] == '"' {
+                i += 1;
+                while i < chars.len() && chars[i] != '"' {
+                    if chars[i] == '\\' { i += 1; }
+                    i += 1;
+                }
+                i += 1; // closing quote
+                continue;
+            }
+            // Skip code blocks (``` ... ```)
+            if i + 2 < chars.len() && chars[i] == '`' && chars[i+1] == '`' && chars[i+2] == '`' {
+                i += 3;
+                while i + 2 < chars.len() && !(chars[i] == '`' && chars[i+1] == '`' && chars[i+2] == '`') {
+                    i += 1;
+                }
+                i += 3;
+                continue;
+            }
+            match chars[i] {
+                '[' => depth += 1,
+                ']' => {
+                    depth -= 1;
+                    if depth < max_negative { max_negative = depth; }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        // Returns (unclosed opens, unmatched closes)
+        let unclosed = depth.max(0) as usize;
+        let unmatched_close = (-max_negative).max(0) as usize;
+        (unclosed, unmatched_close)
+    }
+
+    #[test]
+    fn test_intraword_markers_in_code_spans() {
+        // Intraword __ inside inline code should remain literal, not become #underline
+        let result = mark_to_typst("`not__under__lined`").unwrap();
+        assert!(
+            !result.contains("#underline"),
+            "__ in inline code should not become underline markup: got {:?}",
+            result
+        );
+
+        // Intraword ~~ inside inline code should remain literal, not become #strike
+        let result = mark_to_typst("`not~~strike~~through`").unwrap();
+        assert!(
+            !result.contains("#strike"),
+            "~~ in inline code should not become strike markup: got {:?}",
+            result
+        );
+
+        // Intraword ~~ inside fenced code should remain literal
+        let result = mark_to_typst("```\nnot~~strike~~through\n```").unwrap();
+        assert!(
+            !result.contains("#strike"),
+            "~~ in fenced code should not become strike markup: got {:?}",
+            result
+        );
+
+        // Mixed: markers outside code should still work
+        let result = mark_to_typst("word__under__lined and `code__literal__here`").unwrap();
+        assert!(
+            result.contains("#underline"),
+            "__ outside code should still produce underline: got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_bracket_balance_on_malformed_markdown() {
+        let cases = vec![
+            "Less formatting. More *lethality**.",
+            "*hello** world",
+            "Hello **world*",
+            "***triple* mismatch",
+            "text *one *two* three",
+            "**",
+            "*",
+            "***",
+            "text with __unclosed",
+            "hello __world",
+            "__underline without close",
+            "*a **b ***c",
+            "***triple then single*",
+            "mixed __under and *emph combo",
+            "a]b",        // literal bracket in text
+            "a[b",        // literal bracket in text
+            "pre***__content__***",
+            "text **bold **nested** end",
+            "__a__ and __b",
+            "~~strike~~ and ~~unclosed",
+        ];
+
+        for input in cases {
+            let result = mark_to_typst(input);
+            assert!(result.is_ok(), "Should not error on {:?}: {:?}", input, result);
+            let typst = result.unwrap();
+            let (unclosed, unmatched) = count_unmatched_brackets(&typst);
+            assert_eq!(
+                unclosed, 0,
+                "Unclosed '[' in output for {:?}: output={:?}",
+                input, typst
+            );
+            assert_eq!(
+                unmatched, 0,
+                "Unmatched ']' in output for {:?}: output={:?}",
+                input, typst
             );
         }
     }
