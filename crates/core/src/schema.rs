@@ -179,6 +179,12 @@ fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
         if let Some(hide_body) = ui.hide_body {
             ui_obj.insert(ui_key::HIDE_BODY.to_string(), Value::Bool(hide_body));
         }
+        if let Some(ref default_name) = ui.default_name {
+            ui_obj.insert(
+                ui_key::DEFAULT_NAME.to_string(),
+                Value::String(default_name.clone()),
+            );
+        }
         if !ui_obj.is_empty() {
             def.insert("x-ui".to_string(), Value::Object(ui_obj));
         }
@@ -321,6 +327,12 @@ pub fn build_schema(
         let mut ui_obj = Map::new();
         if let Some(hide_body) = ui.hide_body {
             ui_obj.insert(ui_key::HIDE_BODY.to_string(), Value::Bool(hide_body));
+        }
+        if let Some(ref default_name) = ui.default_name {
+            ui_obj.insert(
+                ui_key::DEFAULT_NAME.to_string(),
+                Value::String(default_name.clone()),
+            );
         }
         if !ui_obj.is_empty() {
             schema_map.insert("x-ui".to_string(), Value::Object(ui_obj));
@@ -1897,6 +1909,38 @@ mod tests {
     }
 
     #[test]
+    fn test_build_schema_string_with_multiline() {
+        use crate::quill::UiFieldSchema;
+
+        let mut fields = HashMap::new();
+        let mut schema = FieldSchema::new(
+            "address".to_string(),
+            FieldType::String,
+            Some("Mailing address".to_string()),
+        );
+        schema.ui = Some(UiFieldSchema {
+            group: None,
+            order: Some(0),
+            visible_when: None,
+            compact: None,
+            multiline: Some(true),
+        });
+        fields.insert("address".to_string(), schema);
+
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
+
+        // string type — no contentMediaType
+        assert_eq!(json_schema["properties"]["address"]["type"], "string");
+        assert!(json_schema["properties"]["address"]["contentMediaType"].is_null());
+
+        // multiline appears in x-ui
+        assert_eq!(
+            json_schema["properties"]["address"]["x-ui"]["multiline"],
+            json!(true)
+        );
+    }
+
+    #[test]
     fn test_schema_card_in_defs() {
         // Test that cards are generated in $defs with discriminator
         use crate::quill::CardSchema;
@@ -2486,6 +2530,7 @@ mod tests {
         // Test document level hide_body
         let ui_schema = UiContainerSchema {
             hide_body: Some(true),
+            default_name: None,
         };
 
         // Test card level metadata_only
@@ -2505,6 +2550,7 @@ mod tests {
             fields: card_fields,
             ui: Some(UiContainerSchema {
                 hide_body: Some(true),
+                default_name: None,
             }),
         };
 
@@ -2719,6 +2765,110 @@ cards:
         assert!(
             note_prop["x-ui"].get("visible_when").is_none()
                 || note_prop["x-ui"]["visible_when"].is_null()
+        );
+    }
+
+    #[test]
+    fn test_default_name_schema() {
+        use crate::quill::{CardSchema, UiContainerSchema};
+
+        let card = CardSchema {
+            name: "entry".to_string(),
+            title: Some("Entry".to_string()),
+            description: None,
+            fields: HashMap::new(),
+            ui: Some(UiContainerSchema {
+                hide_body: None,
+                default_name: Some("{company} — {role}".to_string()),
+            }),
+        };
+
+        let mut cards = HashMap::new();
+        cards.insert("entry".to_string(), card);
+
+        let document = CardSchema {
+            name: "root".to_string(),
+            title: None,
+            description: None,
+            fields: HashMap::new(),
+            ui: None,
+        };
+
+        let schema = build_schema(&document, &cards).unwrap();
+        let card_def = &schema.as_json()["$defs"]["entry_card"];
+
+        assert_eq!(card_def["x-ui"]["default_name"], "{company} — {role}");
+    }
+
+    #[test]
+    fn test_default_name_yaml_roundtrip() {
+        // Test that default_name survives YAML → QuillConfig → Schema
+        let yaml = r#"
+Quill:
+  name: test_quill
+  version: "0.1"
+  backend: typst
+  description: Test default_name
+
+cards:
+  experience:
+    title: Experience Entry
+    ui:
+      default_name: "{company} — {role}"
+    fields:
+      company:
+        type: string
+        title: Company
+      role:
+        type: string
+        title: Role
+"#;
+
+        let config = crate::quill::QuillConfig::from_yaml(yaml).unwrap();
+        let card = config.card_definition("experience").unwrap();
+        let ui = card.ui.as_ref().unwrap();
+        assert_eq!(ui.default_name.as_deref(), Some("{company} — {role}"));
+
+        let schema = build_schema(config.main(), &config.card_definitions_map()).unwrap();
+        let card_def = &schema.as_json()["$defs"]["experience_card"];
+        assert_eq!(card_def["x-ui"]["default_name"], "{company} — {role}");
+    }
+
+    #[test]
+    fn test_default_name_stripped_by_ai_projection() {
+        let yaml = r#"
+Quill:
+  name: test_quill
+  version: "0.1"
+  backend: typst
+  description: Test default_name stripping
+
+cards:
+  item:
+    title: Item
+    ui:
+      default_name: "{name}"
+    fields:
+      name:
+        type: string
+        title: Name
+"#;
+
+        let config = crate::quill::QuillConfig::from_yaml(yaml).unwrap();
+        let schema = build_schema(config.main(), &config.card_definitions_map()).unwrap();
+
+        // AI projection strips x-ui (including default_name)
+        let ai = project_schema(&schema, SchemaProjection::AI);
+        assert!(ai.as_json()["$defs"]["item_card"]
+            .get("x-ui")
+            .map(|v| v.is_null())
+            .unwrap_or(true));
+
+        // UI projection preserves x-ui with default_name
+        let ui = project_schema(&schema, SchemaProjection::UI);
+        assert_eq!(
+            ui.as_json()["$defs"]["item_card"]["x-ui"]["default_name"],
+            "{name}"
         );
     }
 }

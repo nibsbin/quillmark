@@ -1731,6 +1731,38 @@ main:
 }
 
 #[test]
+fn test_multiline_ui_field_on_string_type() {
+    let yaml_content = r#"
+Quill:
+  name: multiline-string-test
+  version: "1.0"
+  backend: typst
+  description: Test multiline ui hint on string field
+
+main:
+  fields:
+    address:
+      type: string
+      description: Mailing address
+      ui:
+        multiline: true
+    name:
+      type: string
+      description: Full name
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+
+    let address = config.main().fields.get("address").unwrap();
+    assert_eq!(address.r#type, FieldType::String);
+    assert_eq!(address.ui.as_ref().unwrap().multiline, Some(true));
+
+    let name = config.main().fields.get("name").unwrap();
+    assert_eq!(name.r#type, FieldType::String);
+    assert!(name.ui.as_ref().map_or(true, |ui| ui.multiline.is_none()));
+}
+
+#[test]
 fn test_quill_config_from_yaml_collects_non_fatal_field_warnings() {
     let yaml_content = r#"
 Quill:

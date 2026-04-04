@@ -33,6 +33,8 @@ cards:
   experience_section:
     title: Experience/Education Entry
     description: An entry with a heading, subheading, and bullet points.
+    ui:
+      default_name: "{headingLeft} — {subheadingLeft}"
     fields:
       title:
         title: Section Title
@@ -86,6 +88,8 @@ cards:
   projects_section:
     title: Project Entry
     description: A project entry with a name and optional URL.
+    ui:
+      default_name: "{name}"
     fields:
       title:
         title: Section Title
