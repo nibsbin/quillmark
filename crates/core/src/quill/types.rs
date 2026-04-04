@@ -1,4 +1,5 @@
 //! Quill schema and core type definitions.
+use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
