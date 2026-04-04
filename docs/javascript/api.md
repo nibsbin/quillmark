@@ -513,17 +513,19 @@ async function renderDocument() {
       "Quill.yaml": {
         contents: `Quill:
   name: simple-doc
+  version: "1.0"
   backend: typst
   description: Simple document template
   plate_file: plate.typ
 
-fields:
-  title:
-    description: Document title
-    type: string
-  author:
-    description: Author name
-    type: string
+main:
+  fields:
+    title:
+      description: Document title
+      type: string
+    author:
+      description: Author name
+      type: string
 `
       },
       "plate.typ": {

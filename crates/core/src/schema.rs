@@ -2602,13 +2602,14 @@ Quill:
   backend: typst
   description: Test visible_when
 
-fields:
-  format:
-    type: string
-    enum:
-      - standard
-      - informal
-    default: standard
+main:
+  fields:
+    format:
+      type: string
+      enum:
+        - standard
+        - informal
+      default: standard
 
 cards:
   endorsement:

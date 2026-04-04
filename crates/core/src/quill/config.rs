@@ -475,8 +475,11 @@ impl QuillConfig {
             }
         }
 
-        // Extract [main] section (preferred) with legacy fallback to root `fields`.
         let main_obj_opt = quill_yaml_val.get("main").and_then(|v| v.as_object());
+
+        if quill_yaml_val.get("fields").is_some() {
+            return Err("Root-level `fields` is not supported; use `main.fields` instead.".into());
+        }
 
         // Extract main.fields (optional)
         let fields = if let Some(main_obj) = main_obj_opt {
@@ -493,19 +496,6 @@ impl QuillConfig {
                 } else {
                     HashMap::new()
                 }
-            } else {
-                HashMap::new()
-            }
-        } else if let Some(fields_val) = quill_yaml_val.get("fields") {
-            if let Some(fields_map) = fields_val.as_object() {
-                // With preserve_order feature, keys iterator respects insertion order
-                let field_order: Vec<String> = fields_map.keys().cloned().collect();
-                Self::parse_fields_with_order(
-                    fields_map,
-                    &field_order,
-                    "field schema",
-                    &mut warnings,
-                )
             } else {
                 HashMap::new()
             }

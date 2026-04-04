@@ -14,11 +14,12 @@
 //!
 //! Quill templates can define default values for fields in Quill.yaml:
 //! ```yaml
-//! fields:
-//!   author:
-//!     type: "string"
-//!     description: "Document author"
-//!     default: "Anonymous"
+//! main:
+//!   fields:
+//!     author:
+//!       type: "string"
+//!       description: "Document author"
+//!       default: "Anonymous"
 //! ```
 //!
 //! When rendering, missing fields are populated with defaults before
@@ -64,18 +65,19 @@ fn test_default_values_applied_via_dry_run() {
   plate_file: "plate.typ"
   description: "Test quill with defaults"
 
-fields:
-  title:
-    type: "string"
-    description: "Document title"
-  status:
-    type: "string"
-    description: "Document status"
-    default: "draft"
-  version:
-    type: "number"
-    description: "Version number"
-    default: 1
+main:
+  fields:
+    title:
+      type: "string"
+      description: "Document title"
+    status:
+      type: "string"
+      description: "Document status"
+      default: "draft"
+    version:
+      type: "number"
+      description: "Version number"
+      default: 1
 "#,
     );
 
@@ -121,14 +123,15 @@ fn test_default_values_not_overriding_existing_fields() {
   plate_file: "plate.typ"
   description: "Test quill with defaults"
 
-fields:
-  title:
-    type: "string"
-    description: "Document title"
-  status:
-    type: "string"
-    description: "Document status"
-    default: "draft"
+main:
+  fields:
+    title:
+      type: "string"
+      description: "Document title"
+    status:
+      type: "string"
+      description: "Document status"
+      default: "draft"
 "#,
     );
 
@@ -174,15 +177,16 @@ fn test_validation_with_defaults() {
   plate_file: "plate.typ"
   description: "Test quill with optional fields"
 
-fields:
-  title:
-    type: "string"
-    description: "Document title"
-    default: "Untitled"
-  status:
-    type: "string"
-    description: "Document status"
-    default: "draft"
+main:
+  fields:
+    title:
+      type: "string"
+      description: "Document title"
+      default: "Untitled"
+    status:
+      type: "string"
+      description: "Document status"
+      default: "draft"
 "#,
     );
 
@@ -223,15 +227,16 @@ fn test_validation_fails_without_defaults() {
   plate_file: "plate.typ"
   description: "Test quill with required field"
 
-fields:
-  title:
-    type: "string"
-    description: "Document title"
-    required: true
-  status:
-    type: "string"
-    description: "Document status"
-    default: "draft"
+main:
+  fields:
+    title:
+      type: "string"
+      description: "Document title"
+      required: true
+    status:
+      type: "string"
+      description: "Document status"
+      default: "draft"
 "#,
     );
 
@@ -283,16 +288,17 @@ fn test_extract_defaults_from_quill() {
   backend: "typst"
   description: "Test"
 
-fields:
-  author:
-    type: "string"
-    default: "Anonymous"
-  priority:
-    type: "number"
-    default: 5
-  draft:
-    type: "boolean"
-    default: true
+main:
+  fields:
+    author:
+      type: "string"
+      default: "Anonymous"
+    priority:
+      type: "number"
+      default: 5
+    draft:
+      type: "boolean"
+      default: true
 "#,
     )
     .expect("Failed to write Quill.yaml");
