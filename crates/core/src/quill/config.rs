@@ -122,7 +122,7 @@ impl QuillConfig {
             if let Some(field_schema) = self.main().fields.get(field_name) {
                 coerced.insert(
                     field_name.clone(),
-                    Self::coerce_value(field_value, &field_schema.r#type),
+                    Self::coerce_value(field_value, field_schema),
                 );
             } else {
                 coerced.insert(field_name.clone(), field_value.clone());
@@ -156,7 +156,7 @@ impl QuillConfig {
                                 let qv = QuillValue::from_json(v.clone());
                                 coerced_card.insert(
                                     k.clone(),
-                                    Self::coerce_value(&qv, &field_schema.r#type).into_json(),
+                                    Self::coerce_value(&qv, field_schema).into_json(),
                                 );
                             } else {
                                 coerced_card.insert(k.clone(), v.clone());
@@ -173,16 +173,51 @@ impl QuillConfig {
         coerced_cards
     }
 
-    fn coerce_value(value: &QuillValue, expected_type: &super::FieldType) -> QuillValue {
+    fn coerce_value(value: &QuillValue, field_schema: &super::FieldSchema) -> QuillValue {
         use super::FieldType;
 
         let json_value = value.as_json();
-        match expected_type {
+        match field_schema.r#type {
             FieldType::Array => {
-                if json_value.is_array() {
-                    return value.clone();
-                }
-                QuillValue::from_json(serde_json::Value::Array(vec![json_value.clone()]))
+                // Ensure value is an array
+                let arr = if let Some(a) = json_value.as_array() {
+                    a.clone()
+                } else {
+                    vec![json_value.clone()]
+                };
+
+                // If items has properties, recursively coerce each element's properties
+                let coerced_arr = if let Some(items_schema) = &field_schema.items {
+                    if let Some(props) = &items_schema.properties {
+                        arr.into_iter()
+                            .map(|elem| {
+                                if let Some(obj) = elem.as_object() {
+                                    let mut coerced_elem = serde_json::Map::new();
+                                    for (k, v) in obj {
+                                        if let Some(prop_schema) = props.get(k) {
+                                            let qv = QuillValue::from_json(v.clone());
+                                            coerced_elem.insert(
+                                                k.clone(),
+                                                Self::coerce_value(&qv, prop_schema).into_json(),
+                                            );
+                                        } else {
+                                            coerced_elem.insert(k.clone(), v.clone());
+                                        }
+                                    }
+                                    serde_json::Value::Object(coerced_elem)
+                                } else {
+                                    elem
+                                }
+                            })
+                            .collect()
+                    } else {
+                        arr
+                    }
+                } else {
+                    arr
+                };
+
+                QuillValue::from_json(serde_json::Value::Array(coerced_arr))
             }
             FieldType::Boolean => {
                 if let Some(b) = json_value.as_bool() {
@@ -277,6 +312,22 @@ impl QuillConfig {
             let quill_value = QuillValue::from_json(field_value.clone());
             match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
                 Ok(mut schema) => {
+                    // Reject standalone object/dict fields — object is only valid inside array items.
+                    if schema.r#type == super::FieldType::Object {
+                        warnings.push(
+                            Diagnostic::new(
+                                Severity::Warning,
+                                format!(
+                                    "Field '{}' uses standalone type: object, which is not supported. \
+                                    Use separate fields with ui.group instead, or use type: array with items: {{type: object, properties: {{...}}}}.",
+                                    field_name
+                                ),
+                            )
+                            .with_code("quill::standalone_object_not_supported".to_string()),
+                        );
+                        continue;
+                    }
+
                     // Always set ui.order based on position
                     if schema.ui.is_none() {
                         schema.ui = Some(UiFieldSchema {
@@ -284,6 +335,7 @@ impl QuillConfig {
                             order: Some(order),
                             visible_when: None,
                             compact: None,
+                            multiline: None,
                         });
                     } else if let Some(ui) = &mut schema.ui {
                         // Only set if not already set
@@ -423,8 +475,11 @@ impl QuillConfig {
             }
         }
 
-        // Extract [main] section (preferred) with legacy fallback to root `fields`.
         let main_obj_opt = quill_yaml_val.get("main").and_then(|v| v.as_object());
+
+        if quill_yaml_val.get("fields").is_some() {
+            return Err("Root-level `fields` is not supported; use `main.fields` instead.".into());
+        }
 
         // Extract main.fields (optional)
         let fields = if let Some(main_obj) = main_obj_opt {
@@ -441,19 +496,6 @@ impl QuillConfig {
                 } else {
                     HashMap::new()
                 }
-            } else {
-                HashMap::new()
-            }
-        } else if let Some(fields_val) = quill_yaml_val.get("fields") {
-            if let Some(fields_map) = fields_val.as_object() {
-                // With preserve_order feature, keys iterator respects insertion order
-                let field_order: Vec<String> = fields_map.keys().cloned().collect();
-                Self::parse_fields_with_order(
-                    fields_map,
-                    &field_order,
-                    "field schema",
-                    &mut warnings,
-                )
             } else {
                 HashMap::new()
             }

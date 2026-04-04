@@ -36,24 +36,25 @@ typst:
   packages:
     - "@preview/appreciated-letter:0.1.0"
 
-# Field schemas for validation
-fields:
-  title:
-    description: Document title
-    type: string
-  author:
-    description: Author name
-    type: string
-    default: Anonymous
-  date:
-    description: Document date
-    type: string
+# Field schemas for validation (document main card)
+main:
+  fields:
+    title:
+      description: Document title
+      type: string
+    author:
+      description: Author name
+      type: string
+      default: Anonymous
+    date:
+      description: Document date
+      type: string
 ```
 
 ### Required Fields
 
 - `name` - Unique identifier for your Quill
-- `backend` - Backend to use (`"typst"` or `"acroform"`)
+- `backend` - Backend to use (e.g. `"typst"`)
 - `description` - Human-readable description
 - `version` - Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`)
 
@@ -62,24 +63,26 @@ fields:
 - `plate_file` - Path to plate template (defaults to auto-generated plate)
 - `example_file` - Path to example markdown file (defaults to `example.md` if present)
 - `author` - Creator of the Quill
+- `ui` - Document-level UI hints (e.g. `hide_body`; see [Disabling the Body Editor](#disabling-the-body-editor))
 
 ### Field Schemas
 
-Define expected frontmatter fields in the `fields` section:
+Define expected frontmatter fields under `main.fields` (the main document card):
 
 ```yaml
-fields:
-  title:
-    description: Document title
-    type: string
-  count:
-    description: Number of items
-    type: number
-    default: 10
-  enabled:
-    description: Enable feature
-    type: boolean
-    default: false
+main:
+  fields:
+    title:
+      description: Document title
+      type: string
+    count:
+      description: Number of items
+      type: number
+      default: 10
+    enabled:
+      description: Enable feature
+      type: boolean
+      default: false
 ```
 
 Each field can specify:
@@ -90,81 +93,97 @@ Each field can specify:
 - `examples` - Array of example values
 - `required` - Whether the field must be present
 - `enum` - Restrict string fields to specific values
-- `properties` - Nested field schemas (for `dict` type)
 - `items` - Item schema (for `array` type)
+- `properties` - Column schemas for `object` rows (only inside `array` `items`; see [Typed tables](#typed-tables))
 
-Supported `type` values:
-- `string` or `str`
-- `number`
-- `boolean`
-- `array`
-- `dict` (also accepted as `object`)
-- `date`
-- `datetime`
-- `markdown`
+### Field types
 
-### Nested Dict Fields
+| `type` in Quill.yaml | Role |
+|----------------------|------|
+| `string` or `str` | Plain text |
+| `number` | Numeric values |
+| `boolean` | `true` / `false` |
+| `array` | Lists; use `items` to describe each element |
+| `date` | `YYYY-MM-DD` (string with date format in JSON Schema) |
+| `datetime` | ISO 8601 date-time string |
+| `markdown` | Markdown source; see [Markdown fields](#markdown-fields) |
+| `object` or `dict` | **Only** as `items.type` for [typed tables](#typed-tables), not as a standalone field |
 
-Use `dict` with `properties` to define structured objects:
+### Typed tables
 
-```yaml
-fields:
-  address:
-    description: Mailing address
-    type: dict
-    properties:
-      street:
-        type: string
-        required: true
-      city:
-        type: string
-        required: true
-      zip:
-        type: string
-```
-
-### Arrays of Dicts
-
-Combine `array` with an `items` schema of type `dict` for lists of structured objects:
+A **typed table** is an `array` whose elements are objects with a fixed set of columns. Define it with `items: { type: object, properties: { ... } }` (you can write `type: dict` instead of `type: object` in `items`; both mean the same).
 
 ```yaml
-fields:
-  recipients:
-    description: List of recipients
-    type: array
-    items:
-      type: dict
-      properties:
-        name:
-          type: string
-          required: true
-        email:
-          type: string
+main:
+  fields:
+    recipients:
+      description: List of recipients
+      type: array
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+            required: true
+          email:
+            type: string
 ```
+
+Quillmark **coerces** each row’s properties to the declared types (e.g. `"95"` → `95` for a `number` column) during document coercion and when loading Quill config.
+
+Standalone top-level `type: object` / `type: dict` fields are skipped with a warning — use separate frontmatter keys with `ui: { group: ... }`, or a typed table `array` as above.
+
+### Markdown fields
+
+Use `type: markdown` for frontmatter fields whose value is Markdown. The generated JSON Schema uses `type: string` with `contentMediaType: "text/markdown"`. The Typst backend converts these fields with the same markdown pipeline as `BODY`.
+
+```yaml
+main:
+  fields:
+    summary:
+      description: Executive summary
+      type: markdown
+
+    notes:
+      description: Detailed notes
+      type: markdown
+      ui:
+        multiline: true   # optional: larger initial control in form UIs
+```
+
+Use `ui.multiline` when you want form builders to open a larger control by default; it is a UI hint only (serialized as `x-ui.multiline` in JSON Schema).
+
+To hide the main body editor for metadata-only Quills, set `hide_body` on the `Quill` section — see [Disabling the Body Editor](#disabling-the-body-editor).
 
 ### UI Configuration
 
-You can provide additional metadata for UI generators (like wizards or form builders) using the `ui` property within a field definition.
+**Field-level `ui`** (on each entry under `main.fields`) is for form builders and wizards:
+
+| Property | Purpose |
+|----------|---------|
+| `group` | Group related fields in the UI |
+| `visible_when` | Show the field only when sibling fields match (see [Conditional Visibility](#conditional-visibility)) |
+| `multiline` | Larger initial control for `markdown` fields ([Markdown fields](#markdown-fields)) |
+| `compact` | Prefer a compact control where the UI supports it |
+
+Field order in `Quill.yaml` sets `ui.order` automatically.
 
 ```yaml
-fields:
-  sender:
-    title: Sender Name
-    description: The full name of the person sending the letter, including any titles or suffixes.
-    type: string
-    ui:
-      group: Sender Information
+main:
+  fields:
+    sender:
+      title: Sender Name
+      description: The full name of the person sending the letter, including any titles or suffixes.
+      type: string
+      ui:
+        group: Sender Information
 ```
 
-Supported UI properties:
-
-- `group` - Group name for organizing fields in the UI
-- `visible_when` - Conditionally show/hide based on sibling field values
-- `hide_body` - Disable the markdown body editor for the document (document-level `ui` only)
+**Container `ui`** (`Quill.ui` or `cards.<name>.ui`) only supports `hide_body` — see below.
 
 #### Disabling the Body Editor
 
-Some Quills are purely metadata-driven and don't use a markdown body at all. Set `hide_body: true` in the document-level `ui` block to signal to consumers (form builders, UI wizards) that the body editor should not be shown:
+For metadata-only documents, set `hide_body: true` on the **`Quill`** section so consumers can hide the main body editor:
 
 ```yaml
 Quill:
@@ -174,25 +193,26 @@ Quill:
     hide_body: true
 ```
 
-This is a UI hint only — it does not remove the `BODY` field from the schema or prevent the backend from receiving body content.
+The same flag exists on a **card** definition’s `ui` when a card has no body content. This does not remove `BODY` from the schema or block body content from reaching the backend.
 
 #### Conditional Visibility
 
 Use `visible_when` to show fields only when they're relevant:
 
 ```yaml
-fields:
-  format:
-    type: string
-    enum: [standard, informal]
-    default: standard
+main:
+  fields:
+    format:
+      type: string
+      enum: [standard, informal]
+      default: standard
 
-  from:
-    type: string
-    ui:
-      group: Addressing
-      visible_when:
-        format: [standard]
+    from:
+      type: string
+      ui:
+        group: Addressing
+        visible_when:
+          format: [standard]
 ```
 
 The `from` field only appears when `format` is `"standard"`. See the [Conditional Fields](conditional-fields.md) guide for the full specification.
@@ -216,25 +236,25 @@ Plate templates are pure backend-specific code (e.g., Typst) that access documen
   subject: data.subject,
 )
 
-#eval-markup(data.at("body", default: ""))
+#eval-markup(data.at("BODY", default: ""))
 ```
 
 ### Data Access
 
-Quillmark injects your document's frontmatter as JSON data via the `@local/quillmark-helper` virtual package:
+Quillmark injects parsed document fields (frontmatter, `BODY`, `CARDS`, etc.) as JSON via the `@local/quillmark-helper` virtual package:
 
 ```typst
 #import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
 ```
 
 The helper provides:
-- `data` - Dictionary containing all frontmatter fields
-- `eval-markup(content)` - Render Markdown content as Typst markup
+- `data` - Dictionary of all fields passed to the backend
+- `eval-markup(content)` - Evaluate a string of Typst markup as content (markdown fields and `BODY` are converted to markup before injection)
 - `parse-date(str)` - Parse date strings into Typst datetime objects
 
-### Accessing Frontmatter
+### Accessing fields in Typst
 
-Access YAML frontmatter fields from the `data` dictionary:
+Read frontmatter keys and other fields from `data` (for example `data.title` or `data.at("BODY", default: "")`):
 
 ```yaml
 ---
@@ -259,7 +279,7 @@ Use `data.at()` for safe access with defaults:
 
 ### Rendering Body Content
 
-The document body is stored in `data.BODY` (also exposed as `body` in some bindings). For Typst, `transform_fields` converts markdown to Typst markup, so render with `eval-markup(data.BODY)`:
+In Typst plates, the document body is `data.BODY`. The backend converts markdown to Typst markup before building `data` (Python: `ParsedDocument.body()` is the same string). Render it with:
 
 ```typst
 #eval-markup(data.at("BODY", default: ""))
@@ -279,20 +299,7 @@ Check for optional fields using Typst's `in` operator:
 
 ### Typst Backend
 
-Configure Typst packages and settings in the `typst` section:
-
-```yaml
-typst:
-  packages:
-    - "@preview/appreciated-letter:0.1.0"
-    - "@preview/bubble:0.2.2"
-```
-
-See the [Typst Backend Guide](typst-backend.md) for more details.
-
-### AcroForm Backend
-
-> The AcroForm backend is experimental and currently not recommended for use.
+Add dependencies under `typst:` in `Quill.yaml` (see the example at the start of this page). For compiler settings, package pins, and plate patterns, see the [Typst Backend Guide](typst-backend.md).
 
 ## Assets and Resources
 
@@ -336,7 +343,7 @@ Provide an example markdown file to show users how to use your Quill:
 ---
 title: Example Document
 author: John Doe
-date: 2025-01-15
+date: 2026-01-15
 subject: Template Demonstration
 ---
 

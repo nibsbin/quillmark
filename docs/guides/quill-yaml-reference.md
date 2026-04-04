@@ -4,14 +4,16 @@ Complete reference for authoring `Quill.yaml` configuration files. For a hands-o
 
 ## File Structure
 
-A `Quill.yaml` has four top-level sections:
+A `Quill.yaml` has these top-level sections:
 
 ```yaml
 Quill:        # Required — template metadata
   ...
 
-fields:       # Optional — document-level field schemas
-  ...
+main:         # Optional — document main card: field schemas and optional ui
+  fields:
+    ...
+  ui:         # optional container hints (e.g. hide_body)
 
 cards:        # Optional — composable content block types
   ...
@@ -19,6 +21,8 @@ cards:        # Optional — composable content block types
 typst:        # Optional — backend-specific configuration
   ...
 ```
+
+Root-level `fields:` is not supported; define the main document’s field schemas under `main.fields`.
 
 ---
 
@@ -29,7 +33,7 @@ Every Quill.yaml must have a `Quill` section with template metadata.
 | Key              | Type   | Required | Description |
 |------------------|--------|----------|-------------|
 | `name`           | string | yes      | Unique identifier for the Quill |
-| `backend`        | string | yes      | Rendering backend (`typst` or `acroform`) |
+| `backend`        | string | yes      | Rendering backend (e.g. `typst`) |
 | `description`    | string | yes      | Human-readable description (non-empty) |
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
@@ -62,17 +66,20 @@ Quill:
 
 ---
 
-## `fields` Section
+## `main` Section
 
-Defines the document's frontmatter fields. Field order in the YAML determines display order in UIs — the first field gets `order: 0`, the second gets `order: 1`, and so on.
+The main document card holds **frontmatter field schemas** under `main.fields`. Optional `main.ui` sets container-level UI for that card (for example `hide_body`). `Quill.ui` is merged with `main.ui` when building the main card.
+
+Field order under `main.fields` determines display order in UIs — the first field gets `order: 0`, the second gets `order: 1`, and so on.
 
 ```yaml
-fields:
-  subject:          # Field name (used as the YAML frontmatter key)
-    title: Subject of the memo
-    type: string
-    required: true
-    description: Be brief and clear.
+main:
+  fields:
+    subject:          # Field name (used as the YAML frontmatter key)
+      title: Subject of the memo
+      type: string
+      required: true
+      description: Be brief and clear.
 ```
 
 ### Field Properties
@@ -87,8 +94,7 @@ fields:
 | `required`    | boolean           | no       | Whether the field must be present (default: `false`) |
 | `enum`        | array of strings  | no       | Restrict to specific values |
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
-| `properties`  | object            | no       | Nested field schemas (for `object` type) |
-| `items`       | object            | no       | Item schema (for `array` type) |
+| `items`       | object            | no       | Item schema (for `array` type; use `type: object` with `properties` for structured rows) |
 
 ### Field Types
 
@@ -98,43 +104,27 @@ fields:
 | `number`   | `"type": "number"` | |
 | `boolean`  | `"type": "boolean"` | |
 | `array`    | `"type": "array"` | Use `items` for element schema |
-| `object`   | `"type": "object"` | Use `properties` for nested fields |
 | `date`     | `"type": "string", "format": "date"` | YYYY-MM-DD |
 | `datetime`  | `"type": "string", "format": "date-time"` | ISO 8601 |
-| `markdown` | `"type": "string", "contentMediaType": "text/markdown"` | Rich text content |
+| `markdown` | `"type": "string", "contentMediaType": "text/markdown"` | Rich text; backends convert to target format |
+
+> **Note:** `type: object` is not a valid standalone field type. Use separate fields with `ui.group` to organize related metadata, or use `type: array` with `items: { type: object, properties: {...} }` for lists of structured records.
 
 ### Enum Constraints
 
 Restrict a string field to specific values:
 
 ```yaml
-format:
-  type: string
-  enum:
-    - standard
-    - informal
-    - separate_page
-  default: standard
-  description: "Format style for the endorsement."
-```
-
-### Nested Object Fields
-
-Define structured data with `properties`:
-
-```yaml
-address:
-  type: object
-  description: Mailing address
-  properties:
-    street:
+main:
+  fields:
+    format:
       type: string
-      required: true
-    city:
-      type: string
-      required: true
-    zip:
-      type: string
+      enum:
+        - standard
+        - informal
+        - separate_page
+      default: standard
+      description: "Format style for the endorsement."
 ```
 
 ### Typed Arrays
@@ -142,12 +132,31 @@ address:
 Define array element schemas with `items`:
 
 ```yaml
-recipients:
-  type: array
-  items:
-    type: string
-  examples:
-    - ["ORG1/SYMBOL", "ORG2/SYMBOL"]
+main:
+  fields:
+    recipients:
+      type: array
+      items:
+        type: string
+      examples:
+        - ["ORG1/SYMBOL", "ORG2/SYMBOL"]
+```
+
+Use `type: object` inside `items` to define structured rows. Coercion recurses into each element and converts property values to their declared types:
+
+```yaml
+main:
+  fields:
+    cells:
+      type: array
+      items:
+        type: object
+        properties:
+          category:
+            type: string
+            required: true
+          score:
+            type: number
 ```
 
 ---
@@ -161,21 +170,22 @@ The `ui` property on fields controls how form builders and wizards render the fi
 Organizes fields into visual sections:
 
 ```yaml
-fields:
-  memo_for:
-    type: array
-    ui:
-      group: Addressing
+main:
+  fields:
+    memo_for:
+      type: array
+      ui:
+        group: Addressing
 
-  memo_from:
-    type: array
-    ui:
-      group: Addressing
+    memo_from:
+      type: array
+      ui:
+        group: Addressing
 
-  letterhead_title:
-    type: string
-    ui:
-      group: Letterhead
+    letterhead_title:
+      type: string
+      ui:
+        group: Letterhead
 ```
 
 Fields with the same `group` value are rendered together. The group name becomes the section heading.
@@ -187,12 +197,13 @@ Auto-assigned based on field position in the YAML file. You rarely need to set t
 If you do need to override:
 
 ```yaml
-fields:
-  # Will get order: 0 from position, but we force it to 5
-  special_field:
-    type: string
-    ui:
-      order: 5
+main:
+  fields:
+    # Will get order: 0 from position, but we force it to 5
+    special_field:
+      type: string
+      ui:
+        order: 5
 ```
 
 ### `visible_when`
@@ -200,11 +211,12 @@ fields:
 Conditionally shows or hides a field based on sibling field values. See the dedicated [Conditional Fields](conditional-fields.md) guide for full details.
 
 ```yaml
-fields:
-  format:
-    type: string
-    enum: [standard, informal, separate_page]
-    default: standard
+main:
+  fields:
+    format:
+      type: string
+      enum: [standard, informal, separate_page]
+      default: standard
 
 cards:
   indorsement:
@@ -227,6 +239,27 @@ The `from` field is visible only when `format` is `"standard"` or `"separate_pag
 - Multiple keys = AND (all must match)
 - Multiple values per key = OR (any can match)
 - Absent `visible_when` = always visible
+
+### `multiline`
+
+Controls the initial size of the text input for `markdown` fields. When `true`, the UI starts with a larger text box instead of a single-line input:
+
+```yaml
+main:
+  fields:
+    summary:
+      type: markdown
+      description: Executive summary
+      ui:
+        multiline: true   # start as a larger text box
+
+    tagline:
+      type: markdown
+      description: One-sentence tagline
+      # no multiline — single-line input that expands on demand
+```
+
+`multiline` is a UI hint only — it has no effect on validation or backend processing. It is only meaningful on `markdown` fields and is ignored on other types.
 
 ---
 
@@ -263,6 +296,13 @@ cards:
 
 ### Card-level `ui`
 
+| Property       | Type   | Description |
+|----------------|--------|-------------|
+| `hide_body`    | bool   | Suppress the body/content editor for this card type |
+| `default_name` | string | Template for per-instance labels in UI consumers |
+
+#### `hide_body`
+
 ```yaml
 cards:
   metadata_block:
@@ -273,6 +313,34 @@ cards:
       category:
         type: string
 ```
+
+#### `default_name`
+
+A template string that UI consumers interpolate with field values to produce a human-readable label for each card instance. Uses `{field_name}` tokens referencing fields in the same card.
+
+```yaml
+cards:
+  experience_section:
+    title: Experience/Education Entry
+    ui:
+      default_name: "{headingLeft} — {subheadingLeft}"
+    fields:
+      headingLeft:
+        type: string
+        title: Company / School
+      subheadingLeft:
+        type: string
+        title: Role / Degree
+```
+
+With the above, a UI rendering a list of `experience_section` cards can label each instance — e.g. `"Google — Software Engineer"` — instead of falling back to a generic `"Experience/Education Entry (2)"`.
+
+**Interpolation rules (for UI consumers):**
+- `{field_name}` is replaced with the current value of that field.
+- If a field is absent or empty, the token resolves to an empty string.
+- UI consumers are responsible for trimming degenerate separators (e.g. `" — "` with one empty side).
+
+`default_name` is a UI hint only — it has no effect on validation or rendering.
 
 ### Using Cards in Markdown
 
@@ -334,11 +402,14 @@ Quillmark generates a JSON Schema from your `Quill.yaml`. This schema is used fo
 | Quill.yaml | JSON Schema |
 |------------|-------------|
 | `type: string` | `"type": "string"` |
+| `type: markdown` | `"type": "string", "contentMediaType": "text/markdown"` |
 | `required: true` | Field name in `"required"` array |
 | `default: value` | `"default": value` |
 | `enum: [a, b]` | `"enum": ["a", "b"]` |
 | `ui: { group: X }` | `"x-ui": { "group": "X" }` |
 | `ui: { visible_when: ... }` | `"x-ui": { "visible_when": ... }` |
+| `ui: { multiline: true }` | `"x-ui": { "multiline": true }` |
+| `ui: { default_name: "{f}" }` | `"x-ui": { "default_name": "{f}" }` |
 | `cards: { name: ... }` | `"$defs": { "name_card": ... }` |
 
 ### Stripped Schema
@@ -359,51 +430,52 @@ Quill:
   plate_file: plate.typ
   example_file: example.md
 
-fields:
-  project_name:
-    title: Project name
-    type: string
-    required: true
-    ui:
-      group: Header
-
-  status:
-    title: Overall status
-    type: string
-    required: true
-    enum: [on_track, at_risk, blocked]
-    ui:
-      group: Header
-
-  risk_description:
-    title: Risk description
-    type: string
-    ui:
-      group: Header
-      visible_when:
-        status: [at_risk, blocked]
-    description: Describe the risk or blocker. Only needed when status is not on_track.
-
-  date:
-    title: Report date
-    type: date
-    ui:
-      group: Header
-
-  team_members:
-    title: Team members
-    type: array
-    items:
+main:
+  fields:
+    project_name:
+      title: Project name
       type: string
-    ui:
-      group: Team
+      required: true
+      ui:
+        group: Header
 
-  budget:
-    title: Budget amount
-    type: number
-    default: 0
-    ui:
-      group: Financials
+    status:
+      title: Overall status
+      type: string
+      required: true
+      enum: [on_track, at_risk, blocked]
+      ui:
+        group: Header
+
+    risk_description:
+      title: Risk description
+      type: string
+      ui:
+        group: Header
+        visible_when:
+          status: [at_risk, blocked]
+      description: Describe the risk or blocker. Only needed when status is not on_track.
+
+    date:
+      title: Report date
+      type: date
+      ui:
+        group: Header
+
+    team_members:
+      title: Team members
+      type: array
+      items:
+        type: string
+      ui:
+        group: Team
+
+    budget:
+      title: Budget amount
+      type: number
+      default: 0
+      ui:
+        group: Financials
 
 cards:
   milestone:

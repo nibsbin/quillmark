@@ -24,10 +24,6 @@ High-level API: `Quillmark` (engine), `Workflow` (pipeline). Handles parse → c
 
 Implements `Backend` for PDF/SVG. Markdown→Typst via `transform_fields`. Injects JSON as `@local/quillmark-helper` package. Resolves fonts and assets. See [GLUE_METADATA.md](GLUE_METADATA.md).
 
-### `backends/quillmark-acroform`
-
-Implements `Backend` for PDF form filling. Reads `form.pdf` from quill. Templates field values with MiniJinja. See [ACROFORM.md](ACROFORM.md).
-
 ### `bindings/quillmark-python`
 
 PyO3 bindings published as `quillmark` on PyPI. See [PYTHON.md](PYTHON.md).
@@ -65,7 +61,7 @@ Backends receive:
 - `json_data` — JSON after coercion, defaults, normalization, and `transform_fields`
 - `quill` — bundle with assets, packages, and any dynamic assets/fonts injected
 
-See [GLUE_METADATA.md](GLUE_METADATA.md) for the Typst helper package and [ACROFORM.md](ACROFORM.md) for AcroForm.
+See [GLUE_METADATA.md](GLUE_METADATA.md) for the Typst helper package.
 
 ## Backend Implementation
 

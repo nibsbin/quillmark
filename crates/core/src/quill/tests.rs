@@ -737,16 +737,17 @@ fn test_field_schemas_parsing() {
   example_file: "taro.md"
   description: "Test template for field schemas"
 
-fields:
-  author:
-    type: "string"
-    description: "Author of document"
-  ice_cream:
-    type: "string"
-    description: "favorite ice cream flavor"
-  title:
-    type: "string"
-    description: "title of document"
+main:
+  fields:
+    author:
+      type: "string"
+      description: "Author of document"
+    ice_cream:
+      type: "string"
+      description: "favorite ice cream flavor"
+    title:
+      type: "string"
+      description: "title of document"
 "#;
     root_files.insert(
         "Quill.yaml".to_string(),
@@ -909,13 +910,14 @@ typst:
   packages: 
     - "@preview/bubble:0.2.2"
 
-fields:
-  title:
-    description: Document title
-    type: string
-  author:
-    type: string
-    description: Document author
+main:
+  fields:
+    title:
+      description: Document title
+      type: string
+    author:
+      type: string
+      description: Document author
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -1024,6 +1026,24 @@ fields:
 }
 
 #[test]
+fn test_quill_config_rejects_root_level_fields() {
+    let yaml = r#"
+Quill:
+  name: root-fields-test
+  version: "1.0"
+  backend: typst
+  description: Root fields must not be used
+
+fields:
+  title:
+    type: string
+"#;
+    let result = QuillConfig::from_yaml(yaml);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("main.fields"));
+}
+
+#[test]
 fn test_quill_from_config_metadata() {
     // Test that QuillConfig metadata flows through to Quill
     let mut root_files = HashMap::new();
@@ -1085,15 +1105,16 @@ typst:
   packages: 
     - "@preview/bubble:0.2.2"
 
-fields:
-  author:
-    type: string
-    default: Anonymous
-  status:
-    type: string
-    default: draft
-  title:
-    type: string
+main:
+  fields:
+    author:
+      type: string
+      default: Anonymous
+    status:
+      type: string
+      default: draft
+    title:
+      type: string
 "#;
     root_files.insert(
         "Quill.yaml".to_string(),
@@ -1128,21 +1149,22 @@ Quill:
   backend: typst
   description: Test field order
 
-fields:
-  first:
-    type: string
-    description: First field
-  second:
-    type: string
-    description: Second field
-  third:
-    type: string
-    description: Third field
-    ui:
-      group: Test Group
-  fourth:
-    type: string
-    description: Fourth field
+main:
+  fields:
+    first:
+      type: string
+      description: First field
+    second:
+      type: string
+      description: Second field
+    third:
+      type: string
+      description: Third field
+      ui:
+        group: Test Group
+    fourth:
+      type: string
+      description: Fourth field
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -1176,12 +1198,13 @@ Quill:
   backend: typst
   description: Test all UI properties
 
-fields:
-  author:
-    description: The full name of the document author
-    type: str
-    ui:
-      group: Author Info
+main:
+  fields:
+    author:
+      description: The full name of the document author
+      type: str
+      ui:
+        group: Author Info
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -1334,10 +1357,11 @@ Quill:
   backend: typst
   description: Test [cards] section
 
-fields:
-  regular:
-    description: Regular field
-    type: string
+main:
+  fields:
+    regular:
+      description: Regular field
+      type: string
 
 cards:
   indorsements:
@@ -1397,10 +1421,11 @@ Quill:
   backend: typst
   description: Test collision
 
-fields:
-  conflict:
-    description: Field
-    type: string
+main:
+  fields:
+    conflict:
+      description: Field
+      type: string
 
 cards:
   conflict:
@@ -1431,13 +1456,14 @@ Quill:
   backend: typst
   description: Test ordering
 
-fields:
-  first:
-    type: string
-    description: First
-  zero:
-    type: string
-    description: Zero
+main:
+  fields:
+    first:
+      type: string
+      description: First
+    zero:
+      type: string
+      description: Zero
 
 cards:
   second:
@@ -1516,26 +1542,20 @@ Quill:
   backend: typst
   description: Test nested elements
 
-fields:
-  my_list:
-    type: array
-    description: List of objects
-    items:
-      type: object
-      properties:
-        sub_a:
-          type: string
-          description: Subfield A
-        sub_b:
-          type: number
-          description: Subfield B
-  my_obj:
-    type: object
-    description: Single object
-    properties:
-      child:
-        type: boolean
-        description: Child field
+main:
+  fields:
+    my_list:
+      type: array
+      description: List of objects
+      items:
+        type: object
+        properties:
+          sub_a:
+            type: string
+            description: Subfield A
+          sub_b:
+            type: number
+            description: Subfield B
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -1554,15 +1574,158 @@ fields:
     assert!(props.contains_key("sub_b"));
     assert_eq!(props["sub_a"].r#type, FieldType::String);
     assert_eq!(props["sub_b"].r#type, FieldType::Number);
+}
 
-    // Check object with properties
-    let obj_field = config.main().fields.get("my_obj").unwrap();
-    assert_eq!(obj_field.r#type, FieldType::Object);
-    assert!(obj_field.properties.is_some());
+#[test]
+fn test_standalone_object_field_rejected_with_warning() {
+    let yaml_content = r#"
+Quill:
+  name: obj-test
+  version: "1.0"
+  backend: typst
+  description: Test standalone object rejection
 
-    let obj_props = obj_field.properties.as_ref().unwrap();
-    assert!(obj_props.contains_key("child"));
-    assert_eq!(obj_props["child"].r#type, FieldType::Boolean);
+main:
+  fields:
+    valid_field:
+      type: string
+      description: A normal field
+    address:
+      type: object
+      description: Standalone object — should be rejected
+      properties:
+        street:
+          type: string
+"#;
+
+    let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();
+
+    // Standalone object field should be skipped
+    assert!(config.main().fields.contains_key("valid_field"));
+    assert!(!config.main().fields.contains_key("address"));
+
+    // A warning should be emitted
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0].severity, Severity::Warning);
+    assert_eq!(
+        warnings[0].code.as_deref(),
+        Some("quill::standalone_object_not_supported")
+    );
+    assert!(warnings[0].message.contains("address"));
+}
+
+#[test]
+fn test_array_items_recursive_coercion() {
+    let yaml_content = r#"
+Quill:
+  name: coerce-test
+  version: "1.0"
+  backend: typst
+  description: Test recursive coercion for array items
+
+main:
+  fields:
+    scores:
+      type: array
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+          value:
+            type: number
+          active:
+            type: boolean
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+
+    // Simulate YAML parsing where numbers are represented as strings
+    let mut fields = std::collections::HashMap::new();
+    fields.insert(
+        "scores".to_string(),
+        crate::value::QuillValue::from_json(serde_json::json!([
+            {"name": "Math", "value": "95", "active": "true"},
+            {"name": "Science", "value": "88.5", "active": "false"}
+        ])),
+    );
+
+    let coerced = config.coerce_fields(&fields);
+    let scores = coerced.get("scores").unwrap();
+    let arr = scores.as_array().unwrap();
+
+    let first = arr[0].as_object().unwrap();
+    assert_eq!(first["name"], serde_json::json!("Math"));
+    assert_eq!(first["value"], serde_json::json!(95)); // coerced from "95"
+    assert_eq!(first["active"], serde_json::json!(true)); // coerced from "true"
+
+    let second = arr[1].as_object().unwrap();
+    assert_eq!(second["value"], serde_json::json!(88.5)); // coerced from "88.5"
+    assert_eq!(second["active"], serde_json::json!(false)); // coerced from "false"
+}
+
+#[test]
+fn test_multiline_ui_field_parses() {
+    let yaml_content = r#"
+Quill:
+  name: multiline-test
+  version: "1.0"
+  backend: typst
+  description: Test multiline ui hint
+
+main:
+  fields:
+    summary:
+      type: markdown
+      description: Document summary
+      ui:
+        multiline: true
+    notes:
+      type: markdown
+      description: Short notes
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+
+    let summary = config.main().fields.get("summary").unwrap();
+    assert_eq!(summary.r#type, FieldType::Markdown);
+    assert_eq!(summary.ui.as_ref().unwrap().multiline, Some(true));
+
+    let notes = config.main().fields.get("notes").unwrap();
+    assert_eq!(notes.r#type, FieldType::Markdown);
+    assert_eq!(notes.ui.as_ref().unwrap().multiline, None);
+}
+
+#[test]
+fn test_multiline_ui_field_on_string_type() {
+    let yaml_content = r#"
+Quill:
+  name: multiline-string-test
+  version: "1.0"
+  backend: typst
+  description: Test multiline ui hint on string field
+
+main:
+  fields:
+    address:
+      type: string
+      description: Mailing address
+      ui:
+        multiline: true
+    name:
+      type: string
+      description: Full name
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+
+    let address = config.main().fields.get("address").unwrap();
+    assert_eq!(address.r#type, FieldType::String);
+    assert_eq!(address.ui.as_ref().unwrap().multiline, Some(true));
+
+    let name = config.main().fields.get("name").unwrap();
+    assert_eq!(name.r#type, FieldType::String);
+    assert!(name.ui.as_ref().map_or(true, |ui| ui.multiline.is_none()));
 }
 
 #[test]
@@ -1574,12 +1737,13 @@ Quill:
   backend: typst
   description: Warning collection test
 
-fields:
-  valid_field:
-    type: string
-    description: Valid
-  broken_field:
-    description: Missing required type
+main:
+  fields:
+    valid_field:
+      type: string
+      description: Valid
+    broken_field:
+      description: Missing required type
 "#;
 
     let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();

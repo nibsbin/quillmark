@@ -10,21 +10,22 @@ Without conditional visibility, every field appears all the time. The UI is clut
 
 ## The Solution: `visible_when`
 
-Add `visible_when` to a field's `ui` block to declare when it should be shown:
+Add `visible_when` to a field's `ui` block to declare when it should be shown. In real `Quill.yaml` files, define these keys under `main.fields` (see [Quill.yaml Reference](quill-yaml-reference.md)).
 
 ```yaml
-fields:
-  format:
-    type: string
-    enum: [standard, informal, separate_page]
-    default: standard
+main:
+  fields:
+    format:
+      type: string
+      enum: [standard, informal, separate_page]
+      default: standard
 
-  from:
-    type: string
-    ui:
-      group: Addressing
-      visible_when:
-        format: [standard, separate_page]
+    from:
+      type: string
+      ui:
+        group: Addressing
+        visible_when:
+          format: [standard, separate_page]
 ```
 
 The `from` field appears when `format` is `"standard"` or `"separate_page"`, and disappears when `format` is `"informal"`.
@@ -51,15 +52,17 @@ The visibility rules:
 Show `risk_description` only when status is `at_risk` or `blocked`:
 
 ```yaml
-status:
-  type: string
-  enum: [on_track, at_risk, blocked]
+main:
+  fields:
+    status:
+      type: string
+      enum: [on_track, at_risk, blocked]
 
-risk_description:
-  type: string
-  ui:
-    visible_when:
-      status: [at_risk, blocked]
+    risk_description:
+      type: string
+      ui:
+        visible_when:
+          status: [at_risk, blocked]
 ```
 
 ### Multiple Conditions (AND)
@@ -67,20 +70,22 @@ risk_description:
 Show `classified_handling` only when the document is both classified AND formal:
 
 ```yaml
-classification:
-  type: string
-  enum: ["", secret, top_secret]
+main:
+  fields:
+    classification:
+      type: string
+      enum: ["", secret, top_secret]
 
-format:
-  type: string
-  enum: [formal, informal]
+    format:
+      type: string
+      enum: [formal, informal]
 
-classified_handling:
-  type: string
-  ui:
-    visible_when:
-      classification: [secret, top_secret]
-      format: [formal]
+    classified_handling:
+      type: string
+      ui:
+        visible_when:
+          classification: [secret, top_secret]
+          format: [formal]
 ```
 
 Both conditions must be true: classification must be `secret` or `top_secret`, **and** format must be `formal`.
@@ -259,4 +264,3 @@ When a user selects `informal` as the format, the `from` and `for` fields disapp
 
 - [Quill.yaml Reference](quill-yaml-reference.md) — complete YAML property reference
 - [Creating Quills](creating-quills.md) — hands-on tutorial
-- [USAF Memo](../quills/usaf-memo.md) — full quill documentation with endorsements

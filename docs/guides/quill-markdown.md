@@ -243,17 +243,18 @@ The document body (everything after frontmatter) is stored under the special fie
 Frontmatter can be validated against JSON schemas defined in your Quill's `Quill.yaml`:
 
 ```yaml
-fields:
-  title:
-    description: Document title
-    type: string
-  author:
-    description: Author name
-    type: string
-    default: Anonymous
-  date:
-    description: Publication date
-    type: string
+main:
+  fields:
+    title:
+      description: Document title
+      type: string
+    author:
+      description: Author name
+      type: string
+      default: Anonymous
+    date:
+      description: Publication date
+      type: string
 ```
 
 When validation is enabled, the parser will check that:

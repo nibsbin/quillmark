@@ -38,7 +38,6 @@ Focus on these crates:
 - crates/core/src/
 - crates/quillmark/src/
 - crates/backends/typst/src/
-- crates/backends/acroform/src/
 - crates/bindings/cli/src/
 - crates/bindings/python/src/
 - crates/bindings/wasm/src/

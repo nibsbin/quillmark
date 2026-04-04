@@ -112,10 +112,6 @@ Typst backend for PDF/SVG output:
 - Compilation environment with font & asset resolution (including dynamic assets/fonts)
 - Structured diagnostics with source locations
 
-#### `crates/backends/acroform`
-
-> Experimental; not recommended for production use and not documented.
-
 ### Language Bindings
 
 #### `crates/bindings/python`
@@ -255,10 +251,6 @@ Compilation environment (`QuillWorld`):
 - Implements Typst `World` trait
 - Virtual file system for packages and assets
 - Line/column mapping for error diagnostics
-
-### AcroForm Backend
-
-The AcroForm backend is experimental and currently not recommended for use. No further documentation is provided until it stabilizes.
 
 ## Package and Asset Management
 

@@ -16,7 +16,6 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
 - **YAML frontmatter support**: Extended YAML metadata with inline sections
 - **Multiple backends**: 
   - PDF and SVG output via Typst backend (JSON injection + helper package)
-  - PDF form filling via AcroForm backend (MiniJinja templating in fields/tooltips)
 - **Structured error handling**: Clear diagnostics with source locations
 - **Dynamic asset loading**: Fonts, images, and packages resolved at runtime
 

@@ -30,10 +30,6 @@ Helper contents (generated in `backends/typst/helper.rs`):
 - `eval-markup(s)`: evaluate pre-converted Typst markup strings
 - `parse-date(s)`: ISO 8601 date parsing helper
 
-## AcroForm Backend
-
-AcroForm ignores plates and uses MiniJinja to render PDF field values from the same JSON data. Tooltips (`description__{{template}}`) and existing field values can contain templates.
-
 ## Guarantees
 
 - No `__metadata__` shadow fields; JSON matches normalized document keys

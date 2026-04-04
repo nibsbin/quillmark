@@ -101,5 +101,4 @@ Indorsement body content.
 ## Backend Consumption
 
 - **Typst**: cards at `data.CARDS`; markdown fields pre-converted to Typst markup
-- **AcroForm**: `CARDS` available in MiniJinja context
 - **Bindings**: `Workflow::compile_data()` exposes the exact JSON

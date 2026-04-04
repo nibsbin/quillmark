@@ -43,7 +43,7 @@ doc.free();
 
 ### `quillmark-core`
 - New `CompiledDocument` struct — opaque wrapper (`Box<dyn Any + Send + Sync>`) with a `page_count: usize` field.
-- Two new default methods on the `Backend` trait: `compile_to_document()` and `render_pages()`. Default implementations return a "not supported" error, so existing backends (e.g. acroform) require no changes.
+- Two new default methods on the `Backend` trait: `compile_to_document()` and `render_pages()`. Default implementations return a "not supported" error, so existing backends require no changes.
 
 ### `quillmark-typst`
 - Implement `compile_to_document()`: runs `QuillWorld::new_with_data` + `typst::compile::<PagedDocument>()`, wraps the result in `CompiledDocument`.
@@ -64,4 +64,3 @@ doc.free();
 
 - `render()`, `render_with_options()`, `dryRun()`, `compileData()` — unchanged.
 - Python binding — uses the `render()` convenience path, no changes needed.
-- Acroform backend — no changes needed.

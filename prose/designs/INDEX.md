@@ -21,7 +21,6 @@
 
 ## Backends
 
-- **[ACROFORM.md](ACROFORM.md)** - AcroForm backend
 - Typst backend: see `crates/backends/typst/` rustdoc
 
 ## Bindings
