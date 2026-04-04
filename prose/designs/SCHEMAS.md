@@ -4,7 +4,7 @@
 
 The `Backend` trait interface:
 
-- `id() -> &str` — backend identifier (e.g., `"typst"`, `"acroform"`)
+- `id() -> &str` — backend identifier (e.g., `"typst"`)
 - `supported_formats() -> &[OutputFormat]` — output formats supported
 - `plate_extension_types() -> &[&str]` — accepted plate extensions (e.g., `[".typ"]`); empty slice means no plate required
 - `compile(plate, quill, opts, json_data)` — compile plate content + JSON document data into artifacts

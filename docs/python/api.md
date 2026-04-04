@@ -94,7 +94,7 @@ class Quillmark:
 engine = Quillmark()
 
 # Check available backends
-print(engine.registered_backends())  # ['typst', 'acroform']
+print(engine.registered_backends())  # ['typst']
 
 # Load and register quill
 quill = Quill.from_path("my-quill/")

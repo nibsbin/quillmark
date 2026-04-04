@@ -19,7 +19,6 @@ Maintained by [TTQ](https://tonguetoquill.com).
 - **YAML metadata**: Extended YAML support for inline metadata blocks
 - **Multiple backends**:
   - PDF and SVG output via Typst backend
-  - PDF form filling via AcroForm backend
 - **Structured error handling**: Clear diagnostics with source locations
 - **Dynamic asset loading**: Fonts, images, and packages resolved at runtime
 
@@ -94,7 +93,6 @@ Run the included examples:
 cargo run --example appreciated_letter
 cargo run --example usaf_memo
 cargo run --example taro
-cargo run --example usaf_form_8
 cargo run --example auto_plate
 cargo run --example test_defaults
 ```
@@ -113,7 +111,6 @@ This workspace contains:
 - **crates/core** - Core parsing, templating, and backend traits
 - **crates/quillmark** - High-level orchestration API
 - **crates/backends/typst** - Typst backend for PDF/SVG output
-- **crates/backends/acroform** - AcroForm backend for PDF form filling
 - **crates/bindings/python** - Python bindings (PyO3)
 - **crates/bindings/wasm** - WebAssembly bindings
 - **crates/bindings/cli** - Command-line interface

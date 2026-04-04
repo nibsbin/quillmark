@@ -57,7 +57,6 @@
 | quillmark | `anyhow`, `serde`, `serde-saphyr`, `thiserror` |
 | quillmark-core | `anyhow` |
 | quillmark-typst | `anyhow` |
-| quillmark-acroform | `thiserror` |
 | quillmark-wasm | `serde-saphyr`, `toml`, `web-sys` |
 | quillmark-cli | `anyhow` |
 | quillmark-python | `anyhow` |
@@ -226,7 +225,6 @@
 - crates/core (9 source files)
 - crates/quillmark (3 source files + 10 test files)
 - crates/backends/typst (6 source files)
-- crates/backends/acroform (1 source file)
 - crates/bindings/cli (6 source files)
 - crates/bindings/python (4 source files)
 - crates/bindings/wasm (4 source files)

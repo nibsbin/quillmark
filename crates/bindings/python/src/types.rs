@@ -319,7 +319,6 @@ impl PyQuill {
                 PyOutputFormat::SVG,
                 PyOutputFormat::PNG,
             ],
-            "acroform" => vec![PyOutputFormat::PDF],
             _ => vec![],
         };
 

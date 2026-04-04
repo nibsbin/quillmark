@@ -13,7 +13,6 @@ repository = "https://github.com/nibsbin/quillmark"
 [dependencies]
 quillmark-core = { workspace = true }
 quillmark-typst = { workspace = true, optional = true }
-quillmark-acroform = { workspace = true, optional = true }
 serde = { workspace = true }
 serde-saphyr = { workspace = true }
 serde_json = { workspace = true }
@@ -25,11 +24,9 @@ tempfile = { workspace = true }
 quillmark-typst = { workspace = true }
 quillmark-fixtures = { workspace = true }
 serde_json = { workspace = true }
-acroform = { workspace = true }
 # host cargo husky dev dep
 cargo-husky = { workspace = true }
 
 [features]
 default = ["typst"]
 typst = ["dep:quillmark-typst"]
-acroform = ["dep:quillmark-acroform"]

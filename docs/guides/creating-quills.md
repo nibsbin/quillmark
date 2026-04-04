@@ -54,7 +54,7 @@ main:
 ### Required Fields
 
 - `name` - Unique identifier for your Quill
-- `backend` - Backend to use (`"typst"` or `"acroform"`)
+- `backend` - Backend to use (e.g. `"typst"`)
 - `description` - Human-readable description
 - `version` - Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`)
 
@@ -300,10 +300,6 @@ Check for optional fields using Typst's `in` operator:
 ### Typst Backend
 
 Add dependencies under `typst:` in `Quill.yaml` (see the example at the start of this page). For compiler settings, package pins, and plate patterns, see the [Typst Backend Guide](typst-backend.md).
-
-### AcroForm Backend
-
-> The AcroForm backend is experimental and currently not recommended for use.
 
 ## Assets and Resources
 
