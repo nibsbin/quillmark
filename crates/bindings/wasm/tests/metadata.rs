@@ -7,7 +7,7 @@ use wasm_bindgen_test::*;
 
 const UI_QUILL_JSON: &str = r#"{
   "files": {
-    "Quill.yaml": { "contents": "Quill:\n  name: ui-test-quill\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for UI metadata\n\nfields:\n  my_field:\n    type: string\n    ui:\n      group: Personal Info\n" },
+    "Quill.yaml": { "contents": "Quill:\n  name: ui-test-quill\n  version: \"0.1\"\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for UI metadata\n\nmain:\n  fields:\n    my_field:\n      type: string\n      ui:\n        group: Personal Info\n" },
     "plate.typ": { "contents": "= Title" }
   }
 }"#;

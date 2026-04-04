@@ -116,11 +116,9 @@ main:
 
 ---
 
-## Compatibility note (transition only)
+## Parser behavior
 
-Current parser behavior still accepts legacy root-level `fields:` for backward compatibility, but that is a temporary transition aid. Treat it as deprecated and migrate immediately.
-
-If both are present, prefer using only `main.fields` to avoid ambiguity.
+Root-level `fields:` is **rejected**. Loading `Quill.yaml` fails with an error directing you to use `main.fields`.
 
 ---
 
