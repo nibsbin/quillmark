@@ -1605,11 +1605,9 @@ main:
     let address = config.main().fields.get("address").unwrap();
     assert_eq!(address.r#type, FieldType::Object);
     assert!(address.properties.as_ref().unwrap().contains_key("street"));
-    assert!(
-        warnings
-            .iter()
-            .all(|w| w.code.as_deref() != Some("quill::standalone_object_not_supported"))
-    );
+    assert!(warnings
+        .iter()
+        .all(|w| w.code.as_deref() != Some("quill::standalone_object_not_supported")));
 }
 
 #[test]

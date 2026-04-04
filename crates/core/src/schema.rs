@@ -1013,10 +1013,7 @@ fn coerce_array_item_properties(array_value: QuillValue, field_schema: &Value) -
 /// (e.g. `"95"` for a number property) must be coerced to their declared types. Nested
 /// `object` and `array` (with item properties) are handled recursively.
 fn coerce_object_field_properties(obj_value: QuillValue, field_schema: &Value) -> QuillValue {
-    let props = match field_schema
-        .get("properties")
-        .and_then(|p| p.as_object())
-    {
+    let props = match field_schema.get("properties").and_then(|p| p.as_object()) {
         Some(p) if !p.is_empty() => p,
         _ => return obj_value,
     };
