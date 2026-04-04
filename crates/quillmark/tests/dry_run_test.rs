@@ -13,15 +13,16 @@ fn create_test_quill(temp_dir: &TempDir, with_required_field: bool) -> Quill {
 
     let fields_section = if with_required_field {
         r#"
-fields:
-  title:
-    type: "string"
-    required: true
-    description: "Document title"
-  author:
-    type: "string"
-    required: false
-    description: "Document author"
+main:
+  fields:
+    title:
+      type: "string"
+      required: true
+      description: "Document title"
+    author:
+      type: "string"
+      required: false
+      description: "Document author"
 "#
     } else {
         ""
@@ -39,10 +40,7 @@ fields:
 
 {}
 "#,
-            fields_section
-                .replace("=", ":")
-                .replace("[fields.title]", "fields:\n  title:")
-                .replace("[fields.author]", "  author:")
+            fields_section.replace("=", ":"),
         ),
     )
     .expect("Failed to write Quill.yaml");

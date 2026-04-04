@@ -11,11 +11,11 @@ The `Backend` trait interface:
 - `transform_fields(fields, schema)` — optional backend-specific field shaping before JSON serialization
 - `default_quill() -> Option<Quill>` — optional embedded default quill for zero-config use
 
-## Quill Fields (`[fields]`)
+## Quill Fields (`main.fields`)
 
 Field properties:
 
-- `name` — key under `fields` in YAML (e.g., `fields: { title: ... }` → name `"title"`)
+- `name` — key under `main.fields` in YAML (e.g., `main.fields.title` → name `"title"`)
 - `title` — short label (`title` in JSON Schema)
 - `description` — required; used as JSON Schema `description`
 - `type` — `"string"`, `"number"`, `"boolean"`, `"array"`, `"date"`, `"datetime"`, or `"markdown"`

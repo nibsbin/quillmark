@@ -737,16 +737,17 @@ fn test_field_schemas_parsing() {
   example_file: "taro.md"
   description: "Test template for field schemas"
 
-fields:
-  author:
-    type: "string"
-    description: "Author of document"
-  ice_cream:
-    type: "string"
-    description: "favorite ice cream flavor"
-  title:
-    type: "string"
-    description: "title of document"
+main:
+  fields:
+    author:
+      type: "string"
+      description: "Author of document"
+    ice_cream:
+      type: "string"
+      description: "favorite ice cream flavor"
+    title:
+      type: "string"
+      description: "title of document"
 "#;
     root_files.insert(
         "Quill.yaml".to_string(),
@@ -909,13 +910,14 @@ typst:
   packages: 
     - "@preview/bubble:0.2.2"
 
-fields:
-  title:
-    description: Document title
-    type: string
-  author:
-    type: string
-    description: Document author
+main:
+  fields:
+    title:
+      description: Document title
+      type: string
+    author:
+      type: string
+      description: Document author
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -1024,6 +1026,24 @@ fields:
 }
 
 #[test]
+fn test_quill_config_rejects_root_level_fields() {
+    let yaml = r#"
+Quill:
+  name: root-fields-test
+  version: "1.0"
+  backend: typst
+  description: Root fields must not be used
+
+fields:
+  title:
+    type: string
+"#;
+    let result = QuillConfig::from_yaml(yaml);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("main.fields"));
+}
+
+#[test]
 fn test_quill_from_config_metadata() {
     // Test that QuillConfig metadata flows through to Quill
     let mut root_files = HashMap::new();
@@ -1085,15 +1105,16 @@ typst:
   packages: 
     - "@preview/bubble:0.2.2"
 
-fields:
-  author:
-    type: string
-    default: Anonymous
-  status:
-    type: string
-    default: draft
-  title:
-    type: string
+main:
+  fields:
+    author:
+      type: string
+      default: Anonymous
+    status:
+      type: string
+      default: draft
+    title:
+      type: string
 "#;
     root_files.insert(
         "Quill.yaml".to_string(),
@@ -1128,21 +1149,22 @@ Quill:
   backend: typst
   description: Test field order
 
-fields:
-  first:
-    type: string
-    description: First field
-  second:
-    type: string
-    description: Second field
-  third:
-    type: string
-    description: Third field
-    ui:
-      group: Test Group
-  fourth:
-    type: string
-    description: Fourth field
+main:
+  fields:
+    first:
+      type: string
+      description: First field
+    second:
+      type: string
+      description: Second field
+    third:
+      type: string
+      description: Third field
+      ui:
+        group: Test Group
+    fourth:
+      type: string
+      description: Fourth field
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -1176,12 +1198,13 @@ Quill:
   backend: typst
   description: Test all UI properties
 
-fields:
-  author:
-    description: The full name of the document author
-    type: str
-    ui:
-      group: Author Info
+main:
+  fields:
+    author:
+      description: The full name of the document author
+      type: str
+      ui:
+        group: Author Info
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -1334,10 +1357,11 @@ Quill:
   backend: typst
   description: Test [cards] section
 
-fields:
-  regular:
-    description: Regular field
-    type: string
+main:
+  fields:
+    regular:
+      description: Regular field
+      type: string
 
 cards:
   indorsements:
@@ -1397,10 +1421,11 @@ Quill:
   backend: typst
   description: Test collision
 
-fields:
-  conflict:
-    description: Field
-    type: string
+main:
+  fields:
+    conflict:
+      description: Field
+      type: string
 
 cards:
   conflict:
@@ -1431,13 +1456,14 @@ Quill:
   backend: typst
   description: Test ordering
 
-fields:
-  first:
-    type: string
-    description: First
-  zero:
-    type: string
-    description: Zero
+main:
+  fields:
+    first:
+      type: string
+      description: First
+    zero:
+      type: string
+      description: Zero
 
 cards:
   second:
@@ -1516,19 +1542,20 @@ Quill:
   backend: typst
   description: Test nested elements
 
-fields:
-  my_list:
-    type: array
-    description: List of objects
-    items:
-      type: object
-      properties:
-        sub_a:
-          type: string
-          description: Subfield A
-        sub_b:
-          type: number
-          description: Subfield B
+main:
+  fields:
+    my_list:
+      type: array
+      description: List of objects
+      items:
+        type: object
+        properties:
+          sub_a:
+            type: string
+            description: Subfield A
+          sub_b:
+            type: number
+            description: Subfield B
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -1558,16 +1585,17 @@ Quill:
   backend: typst
   description: Test standalone object rejection
 
-fields:
-  valid_field:
-    type: string
-    description: A normal field
-  address:
-    type: object
-    description: Standalone object — should be rejected
-    properties:
-      street:
-        type: string
+main:
+  fields:
+    valid_field:
+      type: string
+      description: A normal field
+    address:
+      type: object
+      description: Standalone object — should be rejected
+      properties:
+        street:
+          type: string
 "#;
 
     let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();
@@ -1595,18 +1623,19 @@ Quill:
   backend: typst
   description: Test recursive coercion for array items
 
-fields:
-  scores:
-    type: array
-    items:
-      type: object
-      properties:
-        name:
-          type: string
-        value:
-          type: number
-        active:
-          type: boolean
+main:
+  fields:
+    scores:
+      type: array
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+          value:
+            type: number
+          active:
+            type: boolean
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -1644,15 +1673,16 @@ Quill:
   backend: typst
   description: Test multiline ui hint
 
-fields:
-  summary:
-    type: markdown
-    description: Document summary
-    ui:
-      multiline: true
-  notes:
-    type: markdown
-    description: Short notes
+main:
+  fields:
+    summary:
+      type: markdown
+      description: Document summary
+      ui:
+        multiline: true
+    notes:
+      type: markdown
+      description: Short notes
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -1675,12 +1705,13 @@ Quill:
   backend: typst
   description: Warning collection test
 
-fields:
-  valid_field:
-    type: string
-    description: Valid
-  broken_field:
-    description: Missing required type
+main:
+  fields:
+    valid_field:
+      type: string
+      description: Valid
+    broken_field:
+      description: Missing required type
 "#;
 
     let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();

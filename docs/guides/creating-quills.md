@@ -36,18 +36,19 @@ typst:
   packages:
     - "@preview/appreciated-letter:0.1.0"
 
-# Field schemas for validation
-fields:
-  title:
-    description: Document title
-    type: string
-  author:
-    description: Author name
-    type: string
-    default: Anonymous
-  date:
-    description: Document date
-    type: string
+# Field schemas for validation (document main card)
+main:
+  fields:
+    title:
+      description: Document title
+      type: string
+    author:
+      description: Author name
+      type: string
+      default: Anonymous
+    date:
+      description: Document date
+      type: string
 ```
 
 ### Required Fields
@@ -66,21 +67,22 @@ fields:
 
 ### Field Schemas
 
-Define expected frontmatter fields in the `fields` section:
+Define expected frontmatter fields under `main.fields` (the main document card):
 
 ```yaml
-fields:
-  title:
-    description: Document title
-    type: string
-  count:
-    description: Number of items
-    type: number
-    default: 10
-  enabled:
-    description: Enable feature
-    type: boolean
-    default: false
+main:
+  fields:
+    title:
+      description: Document title
+      type: string
+    count:
+      description: Number of items
+      type: number
+      default: 10
+    enabled:
+      description: Enable feature
+      type: boolean
+      default: false
 ```
 
 Each field can specify:
@@ -112,18 +114,19 @@ Each field can specify:
 A **typed table** is an `array` whose elements are objects with a fixed set of columns. Define it with `items: { type: object, properties: { ... } }` (you can write `type: dict` instead of `type: object` in `items`; both mean the same).
 
 ```yaml
-fields:
-  recipients:
-    description: List of recipients
-    type: array
-    items:
-      type: object
-      properties:
-        name:
-          type: string
-          required: true
-        email:
-          type: string
+main:
+  fields:
+    recipients:
+      description: List of recipients
+      type: array
+      items:
+        type: object
+        properties:
+          name:
+            type: string
+            required: true
+          email:
+            type: string
 ```
 
 Quillmark **coerces** each row’s properties to the declared types (e.g. `"95"` → `95` for a `number` column) during document coercion and when loading Quill config.
@@ -135,16 +138,17 @@ Standalone top-level `type: object` / `type: dict` fields are skipped with a war
 Use `type: markdown` for frontmatter fields whose value is Markdown. The generated JSON Schema uses `type: string` with `contentMediaType: "text/markdown"`. The Typst backend converts these fields with the same markdown pipeline as `BODY`.
 
 ```yaml
-fields:
-  summary:
-    description: Executive summary
-    type: markdown
+main:
+  fields:
+    summary:
+      description: Executive summary
+      type: markdown
 
-  notes:
-    description: Detailed notes
-    type: markdown
-    ui:
-      multiline: true   # optional: larger initial control in form UIs
+    notes:
+      description: Detailed notes
+      type: markdown
+      ui:
+        multiline: true   # optional: larger initial control in form UIs
 ```
 
 Use `ui.multiline` when you want form builders to open a larger control by default; it is a UI hint only (serialized as `x-ui.multiline` in JSON Schema).
@@ -153,7 +157,7 @@ To hide the main body editor for metadata-only Quills, set `hide_body` on the `Q
 
 ### UI Configuration
 
-**Field-level `ui`** (on each entry under `fields:`) is for form builders and wizards:
+**Field-level `ui`** (on each entry under `main.fields`) is for form builders and wizards:
 
 | Property | Purpose |
 |----------|---------|
@@ -165,13 +169,14 @@ To hide the main body editor for metadata-only Quills, set `hide_body` on the `Q
 Field order in `Quill.yaml` sets `ui.order` automatically.
 
 ```yaml
-fields:
-  sender:
-    title: Sender Name
-    description: The full name of the person sending the letter, including any titles or suffixes.
-    type: string
-    ui:
-      group: Sender Information
+main:
+  fields:
+    sender:
+      title: Sender Name
+      description: The full name of the person sending the letter, including any titles or suffixes.
+      type: string
+      ui:
+        group: Sender Information
 ```
 
 **Container `ui`** (`Quill.ui` or `cards.<name>.ui`) only supports `hide_body` — see below.
@@ -195,18 +200,19 @@ The same flag exists on a **card** definition’s `ui` when a card has no body c
 Use `visible_when` to show fields only when they're relevant:
 
 ```yaml
-fields:
-  format:
-    type: string
-    enum: [standard, informal]
-    default: standard
+main:
+  fields:
+    format:
+      type: string
+      enum: [standard, informal]
+      default: standard
 
-  from:
-    type: string
-    ui:
-      group: Addressing
-      visible_when:
-        format: [standard]
+    from:
+      type: string
+      ui:
+        group: Addressing
+        visible_when:
+          format: [standard]
 ```
 
 The `from` field only appears when `format` is `"standard"`. See the [Conditional Fields](conditional-fields.md) guide for the full specification.
