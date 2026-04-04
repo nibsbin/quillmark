@@ -18,7 +18,7 @@ Field properties:
 - `name` — key under `main.fields` in YAML (e.g., `main.fields.title` → name `"title"`)
 - `title` — short label (`title` in JSON Schema)
 - `description` — required; used as JSON Schema `description`
-- `type` — `"string"`, `"number"`, `"boolean"`, `"array"`, `"date"`, `"datetime"`, or `"markdown"`
+- `type` — `"string"`, `"number"`, `"boolean"`, `"array"`, `"object"` (with `properties`), `"date"`, `"datetime"`, or `"markdown"`
 - `default` — default value
 - `required` — bool, default `false`
 - `examples` — array of example values
@@ -32,11 +32,12 @@ Field properties:
 | `"number"` | `"number"` |
 | `"boolean"` | `"boolean"` |
 | `"array"` | `"array"` |
+| `"object"` / `"dict"` | `"object"` + `properties` |
 | `"date"` | `"string"` + `format: "date"` |
 | `"datetime"` | `"string"` + `format: "date-time"` |
 | `"markdown"` | `"string"` + `contentMediaType: "text/markdown"` |
 
-> `type: object` is only valid inside `items` for typed array rows (e.g. `items: {type: object, properties: {...}}`). Standalone `type: object` fields are rejected at parse time with a warning.
+> `type: object` with `properties` is used for a single structured record, or inside `items` for typed array rows (e.g. `items: {type: object, properties: {...}}`). Coercion recurses into nested `properties` in both cases.
 
 `contentMediaType = "text/markdown"` marks fields the Typst backend converts to Typst markup via `transform_fields`.
 
