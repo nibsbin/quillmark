@@ -3166,16 +3166,21 @@ More text with `inline code`."#;
             if chars[i] == '"' {
                 i += 1;
                 while i < chars.len() && chars[i] != '"' {
-                    if chars[i] == '\\' { i += 1; }
+                    if chars[i] == '\\' {
+                        i += 1;
+                    }
                     i += 1;
                 }
                 i += 1; // closing quote
                 continue;
             }
             // Skip code blocks (``` ... ```)
-            if i + 2 < chars.len() && chars[i] == '`' && chars[i+1] == '`' && chars[i+2] == '`' {
+            if i + 2 < chars.len() && chars[i] == '`' && chars[i + 1] == '`' && chars[i + 2] == '`'
+            {
                 i += 3;
-                while i + 2 < chars.len() && !(chars[i] == '`' && chars[i+1] == '`' && chars[i+2] == '`') {
+                while i + 2 < chars.len()
+                    && !(chars[i] == '`' && chars[i + 1] == '`' && chars[i + 2] == '`')
+                {
                     i += 1;
                 }
                 i += 3;
@@ -3185,7 +3190,9 @@ More text with `inline code`."#;
                 '[' => depth += 1,
                 ']' => {
                     depth -= 1;
-                    if depth < max_negative { max_negative = depth; }
+                    if depth < max_negative {
+                        max_negative = depth;
+                    }
                 }
                 _ => {}
             }
@@ -3249,8 +3256,8 @@ More text with `inline code`."#;
             "*a **b ***c",
             "***triple then single*",
             "mixed __under and *emph combo",
-            "a]b",        // literal bracket in text
-            "a[b",        // literal bracket in text
+            "a]b", // literal bracket in text
+            "a[b", // literal bracket in text
             "pre***__content__***",
             "text **bold **nested** end",
             "__a__ and __b",
@@ -3259,7 +3266,12 @@ More text with `inline code`."#;
 
         for input in cases {
             let result = mark_to_typst(input);
-            assert!(result.is_ok(), "Should not error on {:?}: {:?}", input, result);
+            assert!(
+                result.is_ok(),
+                "Should not error on {:?}: {:?}",
+                input,
+                result
+            );
             let typst = result.unwrap();
             let (unclosed, unmatched) = count_unmatched_brackets(&typst);
             assert_eq!(
