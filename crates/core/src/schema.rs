@@ -1,6 +1,6 @@
 //! Schema validation and utilities for Quillmark.
 //!
-//! This module provides utilities for converting TOML field definitions to JSON Schema
+//! This module provides utilities for converting Quill field definitions to JSON Schema
 //! and validating ParsedDocument data against schemas.
 
 use crate::quill::{field_key, ui_key, CardSchema, FieldSchema, FieldType, QuillConfig};
@@ -83,6 +83,10 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
             ui_obj.insert(ui_key::COMPACT.to_string(), Value::Bool(compact));
         }
 
+        if let Some(multiline) = ui.multiline {
+            ui_obj.insert(ui_key::MULTILINE.to_string(), Value::Bool(multiline));
+        }
+
         if !ui_obj.is_empty() {
             property.insert("x-ui".to_string(), Value::Object(ui_obj));
         }
@@ -114,7 +118,7 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
         property.insert(field_key::ENUM.to_string(), Value::Array(enum_array));
     }
 
-    // Add nested properties for dict types
+    // Add nested properties for object item schemas
     if let Some(ref properties) = field_schema.properties {
         let mut props_map = Map::new();
         let mut required_fields = Vec::new();
@@ -923,8 +927,14 @@ pub fn coerce_document(
         if let Some(field_schema) = properties_obj.get(field_name) {
             // Get the expected type
             if let Some(expected_type) = field_schema.get("type").and_then(|t| t.as_str()) {
-                // Apply coercion
+                // Apply coercion, then recursively coerce array item properties if present
                 let coerced_value = coerce_value(field_value, expected_type);
+                let coerced_value = if expected_type == "array" {
+                    coerce_array_item_properties(coerced_value, field_schema)
+                } else {
+                    coerced_value
+                };
+
                 coerced_fields.insert(field_name.clone(), coerced_value);
                 continue;
             }
@@ -945,6 +955,54 @@ pub fn coerce_document(
     }
 
     coerced_fields
+}
+
+/// Recursively coerce each object element in an array using the field schema's `items.properties`.
+///
+/// When an array field declares `items: { type: object, properties: {...} }`, values arriving
+/// as strings (e.g. `"95"` for a number property) must be coerced to their declared types.
+/// This helper is only called for `"array"` fields and is a no-op when `items.properties` is
+/// absent.
+fn coerce_array_item_properties(array_value: QuillValue, field_schema: &Value) -> QuillValue {
+    let arr = match array_value.as_array() {
+        Some(a) => a,
+        None => return array_value,
+    };
+
+    let item_props = match field_schema
+        .get("items")
+        .and_then(|s| s.get("properties"))
+        .and_then(|p| p.as_object())
+    {
+        Some(p) => p,
+        None => return array_value,
+    };
+
+    let coerced_items: Vec<Value> = arr
+        .iter()
+        .map(|elem| {
+            if let Some(obj) = elem.as_object() {
+                let mut coerced_elem = Map::new();
+                for (k, v) in obj {
+                    if let Some(prop_type) = item_props
+                        .get(k)
+                        .and_then(|s| s.get("type"))
+                        .and_then(|t| t.as_str())
+                    {
+                        let qv = QuillValue::from_json(v.clone());
+                        coerced_elem.insert(k.clone(), coerce_value(&qv, prop_type).into_json());
+                    } else {
+                        coerced_elem.insert(k.clone(), v.clone());
+                    }
+                }
+                Value::Object(coerced_elem)
+            } else {
+                elem.clone()
+            }
+        })
+        .collect();
+
+    QuillValue::from_json(Value::Array(coerced_items))
 }
 
 /// Helper to recursively coerce an array of card objects
@@ -1684,6 +1742,86 @@ mod tests {
     }
 
     #[test]
+    fn test_coerce_array_items_with_properties() {
+        // Coercion should recurse into array items when items.properties is set
+        let schema = json!({
+            "$schema": "https://json-schema.org/draft/2019-09/schema",
+            "type": "object",
+            "properties": {
+                "scores": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "value": {"type": "number"},
+                            "active": {"type": "boolean"}
+                        }
+                    }
+                }
+            }
+        });
+
+        let mut fields = HashMap::new();
+        fields.insert(
+            "scores".to_string(),
+            QuillValue::from_json(json!([
+                {"name": "Math", "value": "95", "active": "true"},
+                {"name": "Science", "value": "88.5", "active": "false"}
+            ])),
+        );
+
+        let coerced = coerce_document(&QuillValue::from_json(schema), &fields);
+
+        let scores = coerced.get("scores").unwrap();
+        let arr = scores.as_array().unwrap();
+
+        let first = arr[0].as_object().unwrap();
+        assert_eq!(first["name"], json!("Math"));
+        assert_eq!(first["value"], json!(95)); // coerced from "95"
+        assert_eq!(first["active"], json!(true)); // coerced from "true"
+
+        let second = arr[1].as_object().unwrap();
+        assert_eq!(second["value"], json!(88.5)); // coerced from "88.5"
+        assert_eq!(second["active"], json!(false)); // coerced from "false"
+    }
+
+    #[test]
+    fn test_build_schema_markdown_with_multiline() {
+        use crate::quill::UiFieldSchema;
+
+        let mut fields = HashMap::new();
+        let mut schema = FieldSchema::new(
+            "summary".to_string(),
+            FieldType::Markdown,
+            Some("Document summary".to_string()),
+        );
+        schema.ui = Some(UiFieldSchema {
+            group: None,
+            order: Some(0),
+            visible_when: None,
+            compact: None,
+            multiline: Some(true),
+        });
+        fields.insert("summary".to_string(), schema);
+
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
+
+        // markdown → string + contentMediaType
+        assert_eq!(json_schema["properties"]["summary"]["type"], "string");
+        assert_eq!(
+            json_schema["properties"]["summary"]["contentMediaType"],
+            "text/markdown"
+        );
+
+        // multiline appears in x-ui
+        assert_eq!(
+            json_schema["properties"]["summary"]["x-ui"]["multiline"],
+            json!(true)
+        );
+    }
+
+    #[test]
     fn test_schema_card_in_defs() {
         // Test that cards are generated in $defs with discriminator
         use crate::quill::CardSchema;
@@ -2199,6 +2337,7 @@ mod tests {
             order: Some(0),
             visible_when: None,
             compact: None,
+            multiline: None,
         });
 
         let mut card_fields = HashMap::new();
@@ -2246,6 +2385,7 @@ mod tests {
             order: Some(0),
             visible_when: None,
             compact: Some(true),
+            multiline: None,
         });
 
         let mut fields = HashMap::new();
@@ -2337,6 +2477,7 @@ mod tests {
             order: Some(0),
             visible_when: Some(visible_when),
             compact: None,
+            multiline: None,
         });
 
         // Field without visible_when (always visible)
@@ -2355,6 +2496,7 @@ mod tests {
             order: Some(1),
             visible_when: None,
             compact: None,
+            multiline: None,
         });
 
         let mut card_fields = HashMap::new();
@@ -2418,6 +2560,7 @@ mod tests {
             order: Some(0),
             visible_when: Some(visible_when),
             compact: None,
+            multiline: None,
         });
 
         let mut fields = HashMap::new();

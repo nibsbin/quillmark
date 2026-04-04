@@ -87,8 +87,7 @@ fields:
 | `required`    | boolean           | no       | Whether the field must be present (default: `false`) |
 | `enum`        | array of strings  | no       | Restrict to specific values |
 | `ui`          | object            | no       | UI rendering hints (see [UI Properties](#ui-properties)) |
-| `properties`  | object            | no       | Nested field schemas (for `object` type) |
-| `items`       | object            | no       | Item schema (for `array` type) |
+| `items`       | object            | no       | Item schema (for `array` type; use `type: object` with `properties` for structured rows) |
 
 ### Field Types
 
@@ -98,10 +97,11 @@ fields:
 | `number`   | `"type": "number"` | |
 | `boolean`  | `"type": "boolean"` | |
 | `array`    | `"type": "array"` | Use `items` for element schema |
-| `object`   | `"type": "object"` | Use `properties` for nested fields |
 | `date`     | `"type": "string", "format": "date"` | YYYY-MM-DD |
 | `datetime`  | `"type": "string", "format": "date-time"` | ISO 8601 |
-| `markdown` | `"type": "string", "contentMediaType": "text/markdown"` | Rich text content |
+| `markdown` | `"type": "string", "contentMediaType": "text/markdown"` | Rich text; backends convert to target format |
+
+> **Note:** `type: object` is not a valid standalone field type. Use separate fields with `ui.group` to organize related metadata, or use `type: array` with `items: { type: object, properties: {...} }` for lists of structured records.
 
 ### Enum Constraints
 
@@ -118,25 +118,6 @@ format:
   description: "Format style for the endorsement."
 ```
 
-### Nested Object Fields
-
-Define structured data with `properties`:
-
-```yaml
-address:
-  type: object
-  description: Mailing address
-  properties:
-    street:
-      type: string
-      required: true
-    city:
-      type: string
-      required: true
-    zip:
-      type: string
-```
-
 ### Typed Arrays
 
 Define array element schemas with `items`:
@@ -148,6 +129,21 @@ recipients:
     type: string
   examples:
     - ["ORG1/SYMBOL", "ORG2/SYMBOL"]
+```
+
+Use `type: object` inside `items` to define structured rows. Coercion recurses into each element and converts property values to their declared types:
+
+```yaml
+cells:
+  type: array
+  items:
+    type: object
+    properties:
+      category:
+        type: string
+        required: true
+      score:
+        type: number
 ```
 
 ---
@@ -227,6 +223,26 @@ The `from` field is visible only when `format` is `"standard"` or `"separate_pag
 - Multiple keys = AND (all must match)
 - Multiple values per key = OR (any can match)
 - Absent `visible_when` = always visible
+
+### `multiline`
+
+Controls the initial size of the text input for `markdown` fields. When `true`, the UI starts with a larger text box instead of a single-line input:
+
+```yaml
+fields:
+  summary:
+    type: markdown
+    description: Executive summary
+    ui:
+      multiline: true   # start as a larger text box
+
+  tagline:
+    type: markdown
+    description: One-sentence tagline
+    # no multiline — single-line input that expands on demand
+```
+
+`multiline` is a UI hint only — it has no effect on validation or backend processing. It is only meaningful on `markdown` fields and is ignored on other types.
 
 ---
 
@@ -334,11 +350,13 @@ Quillmark generates a JSON Schema from your `Quill.yaml`. This schema is used fo
 | Quill.yaml | JSON Schema |
 |------------|-------------|
 | `type: string` | `"type": "string"` |
+| `type: markdown` | `"type": "string", "contentMediaType": "text/markdown"` |
 | `required: true` | Field name in `"required"` array |
 | `default: value` | `"default": value` |
 | `enum: [a, b]` | `"enum": ["a", "b"]` |
 | `ui: { group: X }` | `"x-ui": { "group": "X" }` |
 | `ui: { visible_when: ... }` | `"x-ui": { "visible_when": ... }` |
+| `ui: { multiline: true }` | `"x-ui": { "multiline": true }` |
 | `cards: { name: ... }` | `"$defs": { "name_card": ... }` |
 
 ### Stripped Schema
