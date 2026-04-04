@@ -260,6 +260,13 @@ cards:
 
 ### Card-level `ui`
 
+| Property       | Type   | Description |
+|----------------|--------|-------------|
+| `hide_body`    | bool   | Suppress the body/content editor for this card type |
+| `default_name` | string | Template for per-instance labels in UI consumers |
+
+#### `hide_body`
+
 ```yaml
 cards:
   metadata_block:
@@ -270,6 +277,34 @@ cards:
       category:
         type: string
 ```
+
+#### `default_name`
+
+A template string that UI consumers interpolate with field values to produce a human-readable label for each card instance. Uses `{field_name}` tokens referencing fields in the same card.
+
+```yaml
+cards:
+  experience_section:
+    title: Experience/Education Entry
+    ui:
+      default_name: "{headingLeft} — {subheadingLeft}"
+    fields:
+      headingLeft:
+        type: string
+        title: Company / School
+      subheadingLeft:
+        type: string
+        title: Role / Degree
+```
+
+With the above, a UI rendering a list of `experience_section` cards can label each instance — e.g. `"Google — Software Engineer"` — instead of falling back to a generic `"Experience/Education Entry (2)"`.
+
+**Interpolation rules (for UI consumers):**
+- `{field_name}` is replaced with the current value of that field.
+- If a field is absent or empty, the token resolves to an empty string.
+- UI consumers are responsible for trimming degenerate separators (e.g. `" — "` with one empty side).
+
+`default_name` is a UI hint only — it has no effect on validation or rendering.
 
 ### Using Cards in Markdown
 
@@ -337,6 +372,7 @@ Quillmark generates a JSON Schema from your `Quill.yaml`. This schema is used fo
 | `enum: [a, b]` | `"enum": ["a", "b"]` |
 | `ui: { group: X }` | `"x-ui": { "group": "X" }` |
 | `ui: { multiline: true }` | `"x-ui": { "multiline": true }` |
+| `ui: { default_name: "{f}" }` | `"x-ui": { "default_name": "{f}" }` |
 | `cards: { name: ... }` | `"$defs": { "name_card": ... }` |
 
 ### Stripped Schema
