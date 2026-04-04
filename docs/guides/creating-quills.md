@@ -90,7 +90,6 @@ Each field can specify:
 - `examples` - Array of example values
 - `required` - Whether the field must be present
 - `enum` - Restrict string fields to specific values
-- `properties` - Nested field schemas (for `dict` type)
 - `items` - Item schema (for `array` type)
 
 Supported `type` values:
@@ -98,34 +97,13 @@ Supported `type` values:
 - `number`
 - `boolean`
 - `array`
-- `dict` (also accepted as `object`)
 - `date`
 - `datetime`
 - `markdown`
 
-### Nested Dict Fields
+### Arrays of Structured Objects
 
-Use `dict` with `properties` to define structured objects:
-
-```yaml
-fields:
-  address:
-    description: Mailing address
-    type: dict
-    properties:
-      street:
-        type: string
-        required: true
-      city:
-        type: string
-        required: true
-      zip:
-        type: string
-```
-
-### Arrays of Dicts
-
-Combine `array` with an `items` schema of type `dict` for lists of structured objects:
+Combine `array` with an `items` schema of `type: object` for lists of structured records:
 
 ```yaml
 fields:
@@ -133,7 +111,7 @@ fields:
     description: List of recipients
     type: array
     items:
-      type: dict
+      type: object
       properties:
         name:
           type: string
@@ -141,6 +119,27 @@ fields:
         email:
           type: string
 ```
+
+The `type: object` keyword is only valid inside `items`. Standalone `type: object` fields are not supported — use separate fields with `ui: { group: ... }` instead.
+
+### Markdown Fields
+
+Use `type: markdown` for fields that contain rich text. Backends convert the markdown content (e.g., to Typst markup) before rendering:
+
+```yaml
+fields:
+  summary:
+    description: Executive summary
+    type: markdown
+
+  notes:
+    description: Detailed notes
+    type: markdown
+    ui:
+      multiline: true   # start as a larger text box
+```
+
+The `multiline: true` UI hint is for presentation only — it has no effect on validation or backend processing.
 
 ### UI Configuration
 

@@ -1529,13 +1529,6 @@ fields:
         sub_b:
           type: number
           description: Subfield B
-  my_obj:
-    type: object
-    description: Single object
-    properties:
-      child:
-        type: boolean
-        description: Child field
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
@@ -1554,15 +1547,126 @@ fields:
     assert!(props.contains_key("sub_b"));
     assert_eq!(props["sub_a"].r#type, FieldType::String);
     assert_eq!(props["sub_b"].r#type, FieldType::Number);
+}
 
-    // Check object with properties
-    let obj_field = config.main().fields.get("my_obj").unwrap();
-    assert_eq!(obj_field.r#type, FieldType::Object);
-    assert!(obj_field.properties.is_some());
+#[test]
+fn test_standalone_object_field_rejected_with_warning() {
+    let yaml_content = r#"
+Quill:
+  name: obj-test
+  version: "1.0"
+  backend: typst
+  description: Test standalone object rejection
 
-    let obj_props = obj_field.properties.as_ref().unwrap();
-    assert!(obj_props.contains_key("child"));
-    assert_eq!(obj_props["child"].r#type, FieldType::Boolean);
+fields:
+  valid_field:
+    type: string
+    description: A normal field
+  address:
+    type: object
+    description: Standalone object — should be rejected
+    properties:
+      street:
+        type: string
+"#;
+
+    let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();
+
+    // Standalone object field should be skipped
+    assert!(config.main().fields.contains_key("valid_field"));
+    assert!(!config.main().fields.contains_key("address"));
+
+    // A warning should be emitted
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0].severity, Severity::Warning);
+    assert_eq!(
+        warnings[0].code.as_deref(),
+        Some("quill::standalone_object_not_supported")
+    );
+    assert!(warnings[0].message.contains("address"));
+}
+
+#[test]
+fn test_array_items_recursive_coercion() {
+    let yaml_content = r#"
+Quill:
+  name: coerce-test
+  version: "1.0"
+  backend: typst
+  description: Test recursive coercion for array items
+
+fields:
+  scores:
+    type: array
+    items:
+      type: object
+      properties:
+        name:
+          type: string
+        value:
+          type: number
+        active:
+          type: boolean
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+
+    // Simulate YAML parsing where numbers are represented as strings
+    let mut fields = std::collections::HashMap::new();
+    fields.insert(
+        "scores".to_string(),
+        crate::value::QuillValue::from_json(serde_json::json!([
+            {"name": "Math", "value": "95", "active": "true"},
+            {"name": "Science", "value": "88.5", "active": "false"}
+        ])),
+    );
+
+    let coerced = config.coerce_fields(&fields);
+    let scores = coerced.get("scores").unwrap();
+    let arr = scores.as_array().unwrap();
+
+    let first = arr[0].as_object().unwrap();
+    assert_eq!(first["name"], serde_json::json!("Math"));
+    assert_eq!(first["value"], serde_json::json!(95)); // coerced from "95"
+    assert_eq!(first["active"], serde_json::json!(true)); // coerced from "true"
+
+    let second = arr[1].as_object().unwrap();
+    assert_eq!(second["value"], serde_json::json!(88.5)); // coerced from "88.5"
+    assert_eq!(second["active"], serde_json::json!(false)); // coerced from "false"
+}
+
+#[test]
+fn test_multiline_ui_field_parses() {
+    let yaml_content = r#"
+Quill:
+  name: multiline-test
+  version: "1.0"
+  backend: typst
+  description: Test multiline ui hint
+
+fields:
+  summary:
+    type: markdown
+    description: Document summary
+    ui:
+      multiline: true
+  notes:
+    type: markdown
+    description: Short notes
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+
+    let summary = config.main().fields.get("summary").unwrap();
+    assert_eq!(summary.r#type, FieldType::Markdown);
+    assert_eq!(
+        summary.ui.as_ref().unwrap().multiline,
+        Some(true)
+    );
+
+    let notes = config.main().fields.get("notes").unwrap();
+    assert_eq!(notes.r#type, FieldType::Markdown);
+    assert_eq!(notes.ui.as_ref().unwrap().multiline, None);
 }
 
 #[test]

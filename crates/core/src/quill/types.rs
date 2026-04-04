@@ -40,6 +40,8 @@ pub mod ui_key {
     pub const VISIBLE_WHEN: &str = "visible_when";
     /// Compact rendering hint for UI consumers
     pub const COMPACT: &str = "compact";
+    /// Multi-line text box hint for markdown fields
+    pub const MULTILINE: &str = "multiline";
 }
 
 /// UI-specific metadata for field rendering
@@ -57,6 +59,9 @@ pub struct UiFieldSchema {
     pub visible_when: Option<HashMap<String, Vec<String>>>,
     /// Compact rendering hint: when true, the UI should render this field in a compact style
     pub compact: Option<bool>,
+    /// Multi-line text box hint: when true, the UI should start with a larger text box.
+    /// Only meaningful on `markdown` fields; ignored on other types.
+    pub multiline: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
