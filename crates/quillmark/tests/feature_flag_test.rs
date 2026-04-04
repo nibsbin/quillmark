@@ -13,7 +13,6 @@
 //!
 //! Quillmark uses cargo features for optional backend inclusion:
 //! - `typst` (default) - Typst backend for PDF/SVG rendering
-//! - `acroform` - AcroForm backend for PDF form filling
 //!
 //! When `Quillmark::new()` is called, only backends with enabled features
 //! are registered automatically.

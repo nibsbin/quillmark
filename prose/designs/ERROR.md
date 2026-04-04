@@ -23,13 +23,6 @@ Python and WASM bindings delegate to core types:
 
 ## Backend Error Mapping
 
-### AcroForm (MiniJinja)
-
-Template failures → `RenderError::TemplateFailed` with:
-- Line/column extracted when available
-- Hints based on error kind (undefined variables, syntax errors)
-- Error codes: `"acroform::template"`
-
 ### Typst
 
 Typst diagnostics mapped via `map_typst_errors()`:

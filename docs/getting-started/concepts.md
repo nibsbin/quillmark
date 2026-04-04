@@ -48,7 +48,6 @@ This metadata is accessible in templates and can be validated against JSON schem
 Backends compile raw plate content with injected JSON data into final artifacts:
 
 - **Typst Backend** - Generates PDF and SVG files using the Typst typesetting system. It transforms markdown fields (annotated with `contentMediaType = "text/markdown"`) into Typst markup before serialization.
-- **AcroForm Backend** - Fills PDF forms using MiniJinja templates embedded in form fields/tooltips (plate-less).
 
 Each backend has its own compilation process and error mapping.
 

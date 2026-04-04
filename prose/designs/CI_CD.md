@@ -2,7 +2,7 @@
 
 **Status**: Implemented
 
-Published crates: `quillmark-core`, `backends/quillmark-typst`, `backends/quillmark-acroform`, `quillmark`.
+Published crates: `quillmark-core`, `backends/quillmark-typst`, `quillmark`.
 
 Not published: `quillmark-fixtures`, `quillmark-fuzz`, `bindings/quillmark-python`, `bindings/quillmark-wasm`.
 
@@ -32,7 +32,7 @@ Excluded: Clippy, multi-OS matrix, MSRV, security scanners, coverage, benchmarks
 **Trigger**: manual dispatch (`workflow_dispatch`) or pushed tag `vX.Y.Z`.
 **Auth**: `CARGO_REGISTRY_TOKEN` repository secret.
 
-Publish sequence (via `cargo publish`): `quillmark-core` → `backends/quillmark-typst` and `backends/quillmark-acroform` → `quillmark`.
+Publish sequence (via `cargo publish`): `quillmark-core` → `backends/quillmark-typst` → `quillmark`.
 
 ### Python Bindings
 
@@ -51,6 +51,6 @@ Publish sequence (via `cargo publish`): `quillmark-core` → `backends/quillmark
 ## 3) Versioning
 
 - SemVer across all workspace crates and bindings
-- Bump `quillmark-core`, `backends/quillmark-typst`, `backends/quillmark-acroform`, and `quillmark` together
+- Bump `quillmark-core`, `backends/quillmark-typst`, and `quillmark` together
 - Python and WASM bindings follow the same version as the Rust workspace
 - Tag `vX.Y.Z` required for publishing

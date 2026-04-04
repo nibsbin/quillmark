@@ -29,7 +29,7 @@ Every Quill.yaml must have a `Quill` section with template metadata.
 | Key              | Type   | Required | Description |
 |------------------|--------|----------|-------------|
 | `name`           | string | yes      | Unique identifier for the Quill |
-| `backend`        | string | yes      | Rendering backend (`typst` or `acroform`) |
+| `backend`        | string | yes      | Rendering backend (e.g. `typst`) |
 | `description`    | string | yes      | Human-readable description (non-empty) |
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
