@@ -507,6 +507,9 @@ struct MarkdownFixer<'a, I: Iterator<Item = (Event<'a>, Range<usize>)>> {
     /// Stack of pending intraword markers (marker type, text before marker, range)
     /// Marker type: "__" for underline, "~~" for strikethrough
     pending_markers: Vec<(&'static str, String, Range<usize>)>,
+    /// Track nesting depth of emphasis and strong tags for fixup validation
+    emph_depth: usize,
+    strong_depth: usize,
 }
 
 impl<'a, I> MarkdownFixer<'a, I>
@@ -520,6 +523,8 @@ where
             buffer: Vec::new(),
             in_setext_heading: false,
             pending_markers: Vec::new(),
+            emph_depth: 0,
+            strong_depth: 0,
         }
     }
 
@@ -778,11 +783,40 @@ where
         }
     }
 
+    /// Count how many unclosed emphasis/strong tags the trailing stars could close.
+    /// Returns the number of stars that can be consumed as closing events.
+    fn closable_star_count(&self, star_count: usize) -> usize {
+        let mut remaining = star_count;
+        let mut consumed = 0;
+
+        // 2 stars close a Strong, 1 star closes an Emphasis
+        // Match greedily: try Strong first (2 stars), then Emphasis (1 star)
+        if remaining >= 2 && self.strong_depth > 0 {
+            remaining -= 2;
+            consumed += 2;
+        }
+        if remaining >= 1 && self.emph_depth > 0 {
+            remaining -= 1;
+            consumed += 1;
+        }
+
+        consumed
+    }
+
     fn handle_candidate(
         &mut self,
         candidate: (Event<'a>, Range<usize>),
     ) -> Option<(Event<'a>, Range<usize>)> {
         let (event, range) = candidate;
+
+        // Track emphasis/strong nesting depth
+        match &event {
+            Event::Start(Tag::Emphasis) => self.emph_depth += 1,
+            Event::Start(Tag::Strong) => self.strong_depth += 1,
+            Event::End(TagEnd::Emphasis) => self.emph_depth = self.emph_depth.saturating_sub(1),
+            Event::End(TagEnd::Strong) => self.strong_depth = self.strong_depth.saturating_sub(1),
+            _ => {}
+        }
 
         match &event {
             Event::Text(cow_str) => {
@@ -834,6 +868,14 @@ where
                 // This happens when we have something like __Underlined__***
                 // The __ produces End(Strong), and following *** should be interpreted as closing.
 
+                // Only apply this fixup if there are still unclosed emphasis/strong tags
+                // that the trailing stars could close. Otherwise the stars are literal text
+                // (e.g., `*lethality**` where pulldown_cmark already handled the emphasis).
+                let has_open_tags = self.emph_depth > 0 || self.strong_depth > 0;
+                if !has_open_tags {
+                    return Some((event, range));
+                }
+
                 // Peek next event (from buffer or inner)
                 let next_is_star_text = if let Some((Event::Text(cow_str), _)) = self.buffer.last()
                 {
@@ -860,11 +902,14 @@ where
                         let s = cow_str.as_ref();
                         let star_count = s.chars().take_while(|c| *c == '*').count();
 
-                        if star_count > 0 && star_count <= 3 {
-                            // Perform fix: Close tags using stars
+                        // Only consume stars that correspond to actually open tags
+                        let consumable = self.closable_star_count(star_count);
+
+                        if consumable > 0 {
+                            // Perform fix: Close tags using the consumable stars
                             let star_events =
-                                Self::events_for_stars(star_count, false, text_range.start);
-                            let text_after = &s[star_count..];
+                                Self::events_for_stars(consumable, false, text_range.start);
+                            let text_after = &s[consumable..];
 
                             // We emit the `End(Strong)` event (which caused this check).
 
@@ -872,7 +917,7 @@ where
                             if !text_after.is_empty() {
                                 self.buffer.push((
                                     Event::Text(text_after.to_string().into()),
-                                    text_range.start + star_count..text_range.end,
+                                    text_range.start + consumable..text_range.end,
                                 ));
                             }
 
@@ -887,7 +932,7 @@ where
 
                             return Some((event, range));
                         } else {
-                            // Should not happen, put back
+                            // No open tags to close - put the text back as literal
                             self.buffer.push((Event::Text(cow_str), text_range));
                         }
                     }
@@ -3005,5 +3050,50 @@ More text with `inline code`."#;
         assert_eq!(longest_backtick_run("mixed ` and `` here"), 2);
         assert_eq!(longest_backtick_run("```"), 3);
         assert_eq!(longest_backtick_run(""), 0);
+    }
+
+    #[test]
+    fn test_mismatched_asterisks_graceful_degradation() {
+        // `*lethality**` has mismatched asterisks — pulldown_cmark parses `*lethality*`
+        // as emphasis and leaves the trailing `*` as literal text. Previously, the
+        // MarkdownFixer incorrectly consumed the trailing `*` as a closing event,
+        // producing an extra `]` bracket that caused a hard Typst compilation error.
+        let result = mark_to_typst("Less formatting. More *lethality**.").unwrap();
+        assert!(
+            !result.contains("]]"),
+            "Should not produce unmatched closing brackets: got {:?}",
+            result
+        );
+        assert!(
+            result.contains("#emph[lethality]"),
+            "Should produce valid emphasis markup: got {:?}",
+            result
+        );
+        // The trailing `*` should be escaped as literal text
+        assert!(
+            result.contains("\\*."),
+            "Trailing asterisk should be escaped: got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_mismatched_asterisks_variants() {
+        // Various mismatched asterisk patterns should not error
+        let cases = vec![
+            "Hello **world*",
+            "*hello** world",
+            "***triple* mismatch",
+            "text *one *two* three",
+        ];
+        for input in cases {
+            let result = mark_to_typst(input);
+            assert!(
+                result.is_ok(),
+                "Should not error on {:?}: got {:?}",
+                input,
+                result
+            );
+        }
     }
 }
