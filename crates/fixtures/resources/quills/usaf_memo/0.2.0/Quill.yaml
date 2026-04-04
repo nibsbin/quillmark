@@ -152,7 +152,7 @@ cards:
     title: Routing indorsement
     description: Chain of routing endorsements. Each endorsement block adds an official response or forwarding action to the original memo.
     ui:
-      default_name: "{from} → {for}"
+      default_title: "{from} → {for}"
     fields:
       from:
         title: From office/symbol
