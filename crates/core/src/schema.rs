@@ -1822,6 +1822,38 @@ mod tests {
     }
 
     #[test]
+    fn test_build_schema_string_with_multiline() {
+        use crate::quill::UiFieldSchema;
+
+        let mut fields = HashMap::new();
+        let mut schema = FieldSchema::new(
+            "address".to_string(),
+            FieldType::String,
+            Some("Mailing address".to_string()),
+        );
+        schema.ui = Some(UiFieldSchema {
+            group: None,
+            order: Some(0),
+            visible_when: None,
+            compact: None,
+            multiline: Some(true),
+        });
+        fields.insert("address".to_string(), schema);
+
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
+
+        // string type — no contentMediaType
+        assert_eq!(json_schema["properties"]["address"]["type"], "string");
+        assert!(json_schema["properties"]["address"]["contentMediaType"].is_null());
+
+        // multiline appears in x-ui
+        assert_eq!(
+            json_schema["properties"]["address"]["x-ui"]["multiline"],
+            json!(true)
+        );
+    }
+
+    #[test]
     fn test_schema_card_in_defs() {
         // Test that cards are generated in $defs with discriminator
         use crate::quill::CardSchema;

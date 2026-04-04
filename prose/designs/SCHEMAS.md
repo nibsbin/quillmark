@@ -45,7 +45,7 @@ Field properties:
 - `group` — UI group/section name ✅
 - `order` — display order index (auto-generated from YAML field position) ✅
 - `compact` — compact rendering hint for dense lists ✅
-- `multiline` — start as a larger text box (only meaningful on `markdown` fields) ✅
+- `multiline` — start as a larger text box (`string` and `markdown` fields) ✅
 
 Serialized into `x-ui` in generated JSON Schema. Validation ignores `x-ui`.
 
@@ -67,7 +67,7 @@ Serialized into `x-ui` in generated JSON Schema. Validation ignores `x-ui`.
 
 ### `multiline`
 
-For `markdown` fields, `multiline: true` signals the UI to present a larger initial text box. Serialized as `"x-ui": { "multiline": true }`. No effect on backend processing.
+For `string` and `markdown` fields, `multiline: true` signals the UI to present a larger initial text box. On `string` fields this means plain text with newlines preserved (e.g. mailing addresses, multi-line signatures). On `markdown` fields the content is additionally processed as Markdown by the backend. Serialized as `"x-ui": { "multiline": true }`. No effect on backend processing beyond what the field type already implies.
 
 ```json
 {
