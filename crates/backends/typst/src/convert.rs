@@ -402,8 +402,8 @@ where
                                 output.push(']');
                             }
                             None => {
-                                // Malformed: more end tags than start tags
-                                output.push(']');
+                                // Malformed: more end tags than start tags — skip
+                                // to avoid producing an unmatched ']'
                             }
                         }
                         end_newline = false;
@@ -507,6 +507,9 @@ struct MarkdownFixer<'a, I: Iterator<Item = (Event<'a>, Range<usize>)>> {
     /// Stack of pending intraword markers (marker type, text before marker, range)
     /// Marker type: "__" for underline, "~~" for strikethrough
     pending_markers: Vec<(&'static str, String, Range<usize>)>,
+    /// Track nesting depth of emphasis and strong tags for fixup validation
+    emph_depth: usize,
+    strong_depth: usize,
 }
 
 impl<'a, I> MarkdownFixer<'a, I>
@@ -520,6 +523,8 @@ where
             buffer: Vec::new(),
             in_setext_heading: false,
             pending_markers: Vec::new(),
+            emph_depth: 0,
+            strong_depth: 0,
         }
     }
 
@@ -778,11 +783,39 @@ where
         }
     }
 
+    /// Count how many unclosed emphasis/strong tags the trailing stars could close.
+    /// Returns the number of stars that can be consumed as closing events.
+    fn closable_star_count(&self, star_count: usize) -> usize {
+        let mut remaining = star_count;
+        let mut consumed = 0;
+
+        // 2 stars close a Strong, 1 star closes an Emphasis
+        // Match greedily: try Strong first (2 stars), then Emphasis (1 star)
+        if remaining >= 2 && self.strong_depth > 0 {
+            remaining -= 2;
+            consumed += 2;
+        }
+        if remaining >= 1 && self.emph_depth > 0 {
+            consumed += 1;
+        }
+
+        consumed
+    }
+
     fn handle_candidate(
         &mut self,
         candidate: (Event<'a>, Range<usize>),
     ) -> Option<(Event<'a>, Range<usize>)> {
         let (event, range) = candidate;
+
+        // Track emphasis/strong nesting depth
+        match &event {
+            Event::Start(Tag::Emphasis) => self.emph_depth += 1,
+            Event::Start(Tag::Strong) => self.strong_depth += 1,
+            Event::End(TagEnd::Emphasis) => self.emph_depth = self.emph_depth.saturating_sub(1),
+            Event::End(TagEnd::Strong) => self.strong_depth = self.strong_depth.saturating_sub(1),
+            _ => {}
+        }
 
         match &event {
             Event::Text(cow_str) => {
@@ -834,6 +867,14 @@ where
                 // This happens when we have something like __Underlined__***
                 // The __ produces End(Strong), and following *** should be interpreted as closing.
 
+                // Only apply this fixup if there are still unclosed emphasis/strong tags
+                // that the trailing stars could close. Otherwise the stars are literal text
+                // (e.g., `*lethality**` where pulldown_cmark already handled the emphasis).
+                let has_open_tags = self.emph_depth > 0 || self.strong_depth > 0;
+                if !has_open_tags {
+                    return Some((event, range));
+                }
+
                 // Peek next event (from buffer or inner)
                 let next_is_star_text = if let Some((Event::Text(cow_str), _)) = self.buffer.last()
                 {
@@ -860,11 +901,14 @@ where
                         let s = cow_str.as_ref();
                         let star_count = s.chars().take_while(|c| *c == '*').count();
 
-                        if star_count > 0 && star_count <= 3 {
-                            // Perform fix: Close tags using stars
+                        // Only consume stars that correspond to actually open tags
+                        let consumable = self.closable_star_count(star_count);
+
+                        if consumable > 0 {
+                            // Perform fix: Close tags using the consumable stars
                             let star_events =
-                                Self::events_for_stars(star_count, false, text_range.start);
-                            let text_after = &s[star_count..];
+                                Self::events_for_stars(consumable, false, text_range.start);
+                            let text_after = &s[consumable..];
 
                             // We emit the `End(Strong)` event (which caused this check).
 
@@ -872,7 +916,7 @@ where
                             if !text_after.is_empty() {
                                 self.buffer.push((
                                     Event::Text(text_after.to_string().into()),
-                                    text_range.start + star_count..text_range.end,
+                                    text_range.start + consumable..text_range.end,
                                 ));
                             }
 
@@ -887,7 +931,7 @@ where
 
                             return Some((event, range));
                         } else {
-                            // Should not happen, put back
+                            // No open tags to close - put the text back as literal
                             self.buffer.push((Event::Text(cow_str), text_range));
                         }
                     }
@@ -1031,9 +1075,64 @@ fn replace_intraword_marker_pairs(source: &str, marker: &str, open: &str, close:
     let mut i = 0;
 
     while i < chars.len() {
-        // Skip escaped markers
-        if i > 0 && chars[i - 1] == '\\' {
-            i += 1;
+        // Skip escaped characters
+        if chars[i] == '\\' && i + 1 < chars.len() {
+            i += 2;
+            continue;
+        }
+
+        // Skip code spans (backtick-delimited regions) to avoid transforming
+        // markers inside inline code or fenced code blocks
+        if chars[i] == '`' {
+            // Count opening backticks
+            let backtick_start = i;
+            let mut backtick_count = 0;
+            while i < chars.len() && chars[i] == '`' {
+                backtick_count += 1;
+                i += 1;
+            }
+            if backtick_count >= 3 {
+                // Fenced code block: skip until matching closing fence
+                while i < chars.len() {
+                    if chars[i] == '`' {
+                        let mut close_count = 0;
+                        let close_start = i;
+                        while i < chars.len() && chars[i] == '`' {
+                            close_count += 1;
+                            i += 1;
+                        }
+                        if close_count >= backtick_count {
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+            } else {
+                // Inline code span: skip until matching closing backtick(s)
+                let mut found_close = false;
+                while i < chars.len() {
+                    if chars[i] == '`' {
+                        let mut close_count = 0;
+                        while i < chars.len() && chars[i] == '`' {
+                            close_count += 1;
+                            i += 1;
+                        }
+                        if close_count == backtick_count {
+                            found_close = true;
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+                if !found_close {
+                    // No matching close: backticks are literal, rewind
+                    // and let the rest of the loop handle subsequent chars.
+                    // (i is already past the backticks)
+                    i = backtick_start + backtick_count;
+                }
+            }
             continue;
         }
 
@@ -3005,5 +3104,186 @@ More text with `inline code`."#;
         assert_eq!(longest_backtick_run("mixed ` and `` here"), 2);
         assert_eq!(longest_backtick_run("```"), 3);
         assert_eq!(longest_backtick_run(""), 0);
+    }
+
+    #[test]
+    fn test_mismatched_asterisks_graceful_degradation() {
+        // `*lethality**` has mismatched asterisks — pulldown_cmark parses `*lethality*`
+        // as emphasis and leaves the trailing `*` as literal text. Previously, the
+        // MarkdownFixer incorrectly consumed the trailing `*` as a closing event,
+        // producing an extra `]` bracket that caused a hard Typst compilation error.
+        let result = mark_to_typst("Less formatting. More *lethality**.").unwrap();
+        assert!(
+            !result.contains("]]"),
+            "Should not produce unmatched closing brackets: got {:?}",
+            result
+        );
+        assert!(
+            result.contains("#emph[lethality]"),
+            "Should produce valid emphasis markup: got {:?}",
+            result
+        );
+        // The trailing `*` should be escaped as literal text
+        assert!(
+            result.contains("\\*."),
+            "Trailing asterisk should be escaped: got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_mismatched_asterisks_variants() {
+        // Various mismatched asterisk patterns should not error
+        let cases = vec![
+            "Hello **world*",
+            "*hello** world",
+            "***triple* mismatch",
+            "text *one *two* three",
+        ];
+        for input in cases {
+            let result = mark_to_typst(input);
+            assert!(
+                result.is_ok(),
+                "Should not error on {:?}: got {:?}",
+                input,
+                result
+            );
+        }
+    }
+
+    /// Helper: count unmatched brackets in Typst output (ignoring escaped ones)
+    fn count_unmatched_brackets(typst: &str) -> (usize, usize) {
+        let mut depth: i64 = 0;
+        let mut max_negative: i64 = 0;
+        let chars: Vec<char> = typst.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            if chars[i] == '\\' {
+                i += 2; // skip escaped char
+                continue;
+            }
+            // Skip string literals
+            if chars[i] == '"' {
+                i += 1;
+                while i < chars.len() && chars[i] != '"' {
+                    if chars[i] == '\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                i += 1; // closing quote
+                continue;
+            }
+            // Skip code blocks (``` ... ```)
+            if i + 2 < chars.len() && chars[i] == '`' && chars[i + 1] == '`' && chars[i + 2] == '`'
+            {
+                i += 3;
+                while i + 2 < chars.len()
+                    && !(chars[i] == '`' && chars[i + 1] == '`' && chars[i + 2] == '`')
+                {
+                    i += 1;
+                }
+                i += 3;
+                continue;
+            }
+            match chars[i] {
+                '[' => depth += 1,
+                ']' => {
+                    depth -= 1;
+                    if depth < max_negative {
+                        max_negative = depth;
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        // Returns (unclosed opens, unmatched closes)
+        let unclosed = depth.max(0) as usize;
+        let unmatched_close = (-max_negative).max(0) as usize;
+        (unclosed, unmatched_close)
+    }
+
+    #[test]
+    fn test_intraword_markers_in_code_spans() {
+        // Intraword __ inside inline code should remain literal, not become #underline
+        let result = mark_to_typst("`not__under__lined`").unwrap();
+        assert!(
+            !result.contains("#underline"),
+            "__ in inline code should not become underline markup: got {:?}",
+            result
+        );
+
+        // Intraword ~~ inside inline code should remain literal, not become #strike
+        let result = mark_to_typst("`not~~strike~~through`").unwrap();
+        assert!(
+            !result.contains("#strike"),
+            "~~ in inline code should not become strike markup: got {:?}",
+            result
+        );
+
+        // Intraword ~~ inside fenced code should remain literal
+        let result = mark_to_typst("```\nnot~~strike~~through\n```").unwrap();
+        assert!(
+            !result.contains("#strike"),
+            "~~ in fenced code should not become strike markup: got {:?}",
+            result
+        );
+
+        // Mixed: markers outside code should still work
+        let result = mark_to_typst("word__under__lined and `code__literal__here`").unwrap();
+        assert!(
+            result.contains("#underline"),
+            "__ outside code should still produce underline: got {:?}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_bracket_balance_on_malformed_markdown() {
+        let cases = vec![
+            "Less formatting. More *lethality**.",
+            "*hello** world",
+            "Hello **world*",
+            "***triple* mismatch",
+            "text *one *two* three",
+            "**",
+            "*",
+            "***",
+            "text with __unclosed",
+            "hello __world",
+            "__underline without close",
+            "*a **b ***c",
+            "***triple then single*",
+            "mixed __under and *emph combo",
+            "a]b", // literal bracket in text
+            "a[b", // literal bracket in text
+            "pre***__content__***",
+            "text **bold **nested** end",
+            "__a__ and __b",
+            "~~strike~~ and ~~unclosed",
+        ];
+
+        for input in cases {
+            let result = mark_to_typst(input);
+            assert!(
+                result.is_ok(),
+                "Should not error on {:?}: {:?}",
+                input,
+                result
+            );
+            let typst = result.unwrap();
+            let (unclosed, unmatched) = count_unmatched_brackets(&typst);
+            assert_eq!(
+                unclosed, 0,
+                "Unclosed '[' in output for {:?}: output={:?}",
+                input, typst
+            );
+            assert_eq!(
+                unmatched, 0,
+                "Unmatched ']' in output for {:?}: output={:?}",
+                input, typst
+            );
+        }
     }
 }
