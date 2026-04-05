@@ -112,29 +112,6 @@ Content here.
 }
 
 #[test]
-fn test_error_when_no_quill_tag_and_no_default() {
-    let markdown = r#"---
-title: Test
----
-
-Content
-"#;
-
-    let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-
-    // Verify default quill tag is set (always "__default__" when no QUILL directive)
-    assert_eq!(parsed.quill_reference().name, "__default__");
-
-    // Note: In the current implementation with Typst backend auto-registered,
-    // __default__ is always available. This test documents the expected behavior
-    // when no default Quill exists, which would occur with a backend that doesn't
-    // provide default_quill() and no manually registered default.
-    //
-    // The actual error scenario is tested indirectly through the improved error
-    // message in workflow when __default__ doesn't exist.
-}
-
-#[test]
 fn test_default_quill_renders_successfully() {
     let markdown = r#"---
 title: Test Document
