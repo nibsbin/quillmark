@@ -1013,7 +1013,7 @@ fn coerce_array_item_properties(array_value: QuillValue, field_schema: &Value) -
 ///
 /// When a field declares `type: object` with `properties: {...}`, values arriving as strings
 /// (e.g. `"95"` for a number property) are coerced to their declared types.
-/// Nested `object` and `array` properties are passed through unchanged.
+/// Nested `object` and `array` properties are not coerced and retain their input types.
 fn coerce_object_field_properties(obj_value: QuillValue, field_schema: &Value) -> QuillValue {
     let props = match field_schema.get("properties").and_then(|p| p.as_object()) {
         Some(p) if !p.is_empty() => p,
