@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Diagnostic, Severity};
 use crate::value::QuillValue;
 
-use super::{CardSchema, FieldSchema, UiContainerSchema, UiFieldSchema};
+use super::{CardSchema, FieldSchema, FieldType, UiContainerSchema, UiFieldSchema};
 
 /// Top-level configuration for a Quillmark project
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -295,13 +295,12 @@ impl QuillConfig {
                     }
                 }
             }
-            return false;
         }
 
-        if schema.r#type == FieldType::Array
-            && let Some(items_schema) = &schema.items
-        {
-            return Self::has_disallowed_nested_object(items_schema, true);
+        if schema.r#type == FieldType::Array {
+            if let Some(items_schema) = &schema.items {
+                return Self::has_disallowed_nested_object(items_schema, true);
+            }
         }
 
         false
@@ -339,7 +338,7 @@ impl QuillConfig {
             match FieldSchema::from_quill_value(field_name.clone(), &quill_value) {
                 Ok(mut schema) => {
                     // Reject standalone object/dict fields — object is only valid inside array items.
-                    if schema.r#type == super::FieldType::Object {
+                    if schema.r#type == FieldType::Object {
                         warnings.push(
                             Diagnostic::new(
                                 Severity::Warning,
