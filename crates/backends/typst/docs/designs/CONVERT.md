@@ -575,7 +575,7 @@ Already handled correctly with special consideration for list item context.
 
 **Current Status:** ✅ Implemented
 
-- Hard breaks (two spaces + newline or backslash): `Event::HardBreak` → `\n`
+- Hard breaks (two spaces + newline or backslash): `Event::HardBreak` → `#linebreak()`
 - Soft breaks (single newline): `Event::SoftBreak` → ` `
 
 ### 2. Emphasis

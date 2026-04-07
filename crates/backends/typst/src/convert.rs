@@ -473,8 +473,8 @@ where
                 end_newline = false;
             }
             Event::HardBreak => {
-                output.push('\n');
-                end_newline = true;
+                output.push_str("#linebreak()");
+                end_newline = false;
             }
             Event::SoftBreak => {
                 output.push(' ');
@@ -1449,8 +1449,16 @@ mod tests {
     fn test_hard_break() {
         let markdown = "Line one  \nLine two";
         let typst = mark_to_typst(markdown).unwrap();
-        // Hard break (two spaces) becomes newline
-        assert_eq!(typst, "Line one\nLine two\n\n");
+        // Hard break (two spaces) becomes Typst hard line break
+        assert_eq!(typst, "Line one#linebreak()Line two\n\n");
+    }
+
+    #[test]
+    fn test_hard_break_backslash() {
+        let markdown = "Line one\\\nLine two";
+        let typst = mark_to_typst(markdown).unwrap();
+        // Backslash hard break becomes Typst hard line break
+        assert_eq!(typst, "Line one#linebreak()Line two\n\n");
     }
 
     #[test]
@@ -2328,7 +2336,7 @@ mod tests {
         let md = "| A |\n|---|\n| line1<br>line2 |";
         let out = mark_to_typst(md).unwrap();
         assert!(
-            out.contains("line1\nline2"),
+            out.contains("line1#linebreak()line2"),
             "<br> should produce line break in cell: {out}"
         );
     }
@@ -2339,14 +2347,14 @@ mod tests {
         let md_slash = "| A |\n|---|\n| a<br/>b |";
         let out_slash = mark_to_typst(md_slash).unwrap();
         assert!(
-            out_slash.contains("a\nb"),
+            out_slash.contains("a#linebreak()b"),
             "<br/> should produce line break: {out_slash}"
         );
 
         let md_space_slash = "| A |\n|---|\n| a<br />b |";
         let out_space_slash = mark_to_typst(md_space_slash).unwrap();
         assert!(
-            out_space_slash.contains("a\nb"),
+            out_space_slash.contains("a#linebreak()b"),
             "<br /> should produce line break: {out_space_slash}"
         );
     }
@@ -2846,7 +2854,7 @@ mod robustness_tests {
     #[test]
     fn test_multiple_hard_breaks() {
         let result = mark_to_typst("a  \nb  \nc").unwrap();
-        assert_eq!(result, "a\nb\nc\n\n");
+        assert_eq!(result, "a#linebreak()b#linebreak()c\n\n");
     }
 
     // Word boundary handling (no longer needed with function syntax)
