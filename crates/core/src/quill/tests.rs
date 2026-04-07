@@ -1615,6 +1615,43 @@ main:
 }
 
 #[test]
+fn test_nested_object_in_typed_table_rejected_with_warning() {
+    let yaml_content = r#"
+Quill:
+  name: nested-obj-test
+  version: "1.0"
+  backend: typst
+  description: Test nested object in typed table rejection
+
+main:
+  fields:
+    rows:
+      type: array
+      items:
+        type: object
+        properties:
+          score:
+            type: number
+          nested:
+            type: object
+            properties:
+              inner:
+                type: string
+"#;
+
+    let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();
+
+    assert!(!config.main().fields.contains_key("rows"));
+    assert_eq!(warnings.len(), 1);
+    assert_eq!(warnings[0].severity, Severity::Warning);
+    assert_eq!(
+        warnings[0].code.as_deref(),
+        Some("quill::nested_object_not_supported")
+    );
+    assert!(warnings[0].message.contains("rows"));
+}
+
+#[test]
 fn test_array_items_recursive_coercion() {
     let yaml_content = r#"
 Quill:
