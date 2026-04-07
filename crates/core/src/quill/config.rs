@@ -277,9 +277,7 @@ impl QuillConfig {
                 }
                 value.clone()
             }
-            FieldType::Object => {
-                value.clone()
-            }
+            FieldType::Object => value.clone(),
         }
     }
 
