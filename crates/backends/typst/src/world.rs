@@ -129,11 +129,7 @@ impl QuillWorld {
     }
 
     /// Inject the quillmark-helper package with JSON data.
-    fn inject_helper_package(
-        &mut self,
-        json_data: &str,
-        content_fields: &helper::ContentFields,
-    ) {
+    fn inject_helper_package(&mut self, json_data: &str, content_fields: &helper::ContentFields) {
         // Create the package spec
         let spec = PackageSpec {
             namespace: helper::HELPER_NAMESPACE.into(),

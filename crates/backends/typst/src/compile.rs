@@ -66,9 +66,8 @@ pub fn compile_to_document(
     json_data: &str,
     content_fields: &ContentFields,
 ) -> Result<PagedDocument, RenderError> {
-    let world =
-        QuillWorld::new_with_data(quill, plated_content, json_data, content_fields).map_err(|e| {
-        RenderError::EngineCreation {
+    let world = QuillWorld::new_with_data(quill, plated_content, json_data, content_fields)
+        .map_err(|e| RenderError::EngineCreation {
             diag: Box::new(
                 Diagnostic::new(
                     Severity::Error,
@@ -77,8 +76,7 @@ pub fn compile_to_document(
                 .with_code("typst::world_creation".to_string())
                 .with_source(e),
             ),
-        }
-    })?;
+        })?;
 
     compile_document(&world)
 }

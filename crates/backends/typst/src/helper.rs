@@ -105,7 +105,10 @@ pub fn generate_lib_typ(json_data: &str, content_fields: &ContentFields) -> Stri
         .replace("{version}", HELPER_VERSION)
         .replace("{escaped_json}", &escaped_json)
         .replace("{top_content_fields}", &content_fields.to_typst_top_level())
-        .replace("{card_content_fields}", &content_fields.to_typst_card_fields())
+        .replace(
+            "{card_content_fields}",
+            &content_fields.to_typst_card_fields(),
+        )
 }
 
 /// Generate the `typst.toml` content for the quillmark-helper package.
