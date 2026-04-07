@@ -94,7 +94,7 @@ Each field can specify:
 - `required` - Whether the field must be present
 - `enum` - Restrict string fields to specific values
 - `items` - Item schema (for `array` type)
-- `properties` - Nested field schemas for `type: object` fields, or for `object` rows inside `array` `items` (see [Typed tables](#typed-tables) and [Structured object fields](#structured-object-fields))
+- `properties` - Nested field schemas for `object` rows inside `array` `items` (see [Typed tables](#typed-tables))
 
 ### Field types
 
@@ -107,26 +107,7 @@ Each field can specify:
 | `date` | `YYYY-MM-DD` (string with date format in JSON Schema) |
 | `datetime` | ISO 8601 date-time string |
 | `markdown` | Markdown source; see [Markdown fields](#markdown-fields) |
-| `object` or `dict` | JSON object with fixed keys; use `properties` for the shape (see [Structured object fields](#structured-object-fields) and [Typed tables](#typed-tables)) |
-
-### Structured object fields
-
-A **structured object** is a single JSON object with a fixed set of keys. Define it with `type: object` (or `dict`) and `properties` — the same shape as one row of a [typed table](#typed-tables), but stored as one object instead of an array of rows.
-
-```yaml
-main:
-  fields:
-    address:
-      description: Mailing address
-      type: object
-      properties:
-        street:
-          type: string
-        city:
-          type: string
-```
-
-Coercion recurses into each property the same way as for typed table rows. For a flat grouping of unrelated scalars without nesting, separate fields with `ui: { group: ... }` can still be simpler for form UIs.
+| `object` or `dict` | Used for typed table rows under `array.items` with `properties` (see [Typed tables](#typed-tables)) |
 
 ### Typed tables
 

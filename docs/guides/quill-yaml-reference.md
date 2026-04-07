@@ -107,9 +107,9 @@ main:
 | `date`     | `"type": "string", "format": "date"` | YYYY-MM-DD |
 | `datetime`  | `"type": "string", "format": "date-time"` | ISO 8601 |
 | `markdown` | `"type": "string", "contentMediaType": "text/markdown"` | Rich text; backends convert to target format |
-| `object` or `dict` | `"type": "object"` with `properties` | Single structured record; coercion recurses into `properties` |
+| `object` or `dict` | `"type": "object"` with `properties` | Supported for typed table rows inside `array.items` |
 
-Use `type: array` with `items: { type: object, properties: {...} }` when you need a **list** of structured rows; use top-level `type: object` with `properties` for a **single** nested object. For flat metadata, separate fields with `ui.group` may be simpler for some UIs.
+Use `type: array` with `items: { type: object, properties: {...} }` when you need a **list** of structured rows. Top-level `type: object` fields are not supported.
 
 ### Enum Constraints
 
