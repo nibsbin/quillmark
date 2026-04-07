@@ -1611,7 +1611,7 @@ main:
 }
 
 #[test]
-fn test_standalone_object_recursive_coercion() {
+fn test_standalone_object_coercion() {
     let yaml_content = r#"
 Quill:
   name: obj-test
