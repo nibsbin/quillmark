@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
+#import "@local/quillmark-helper:0.1.0": data, parse-date
 #import "@local/ttq-classic-resume:0.1.0": *
 
 #show: resume
@@ -19,7 +19,7 @@
       heading-right: card.at("headingRight", default: ""),
       subheading-left: card.at("subheadingLeft", default: none),
       subheading-right: card.at("subheadingRight", default: none),
-      body: eval-markup(card.at("BODY", default: "")),
+      body: card.at("BODY", default: ""),
     )
   } else if card.CARD == "skills_section" {
     table(
@@ -33,7 +33,7 @@
     project-entry(
       name: card.name,
       url: card.at("url", default: none),
-      body: eval-markup(card.at("BODY", default: "")),
+      body: card.at("BODY", default: ""),
     )
   } else if card.CARD == "certifications_section" {
     table(

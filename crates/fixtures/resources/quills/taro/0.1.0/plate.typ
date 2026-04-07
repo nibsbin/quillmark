@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
+#import "@local/quillmark-helper:0.1.0": data, parse-date
 
 #set text(font: "Figtree")
 
@@ -15,12 +15,12 @@
 *Favorite Ice Cream: #data.ice_cream*__
 
 
-#eval-markup(data.BODY)
+#data.BODY
 
 // Present each sub-document programatically
 #for card in data.CARDS {
   if card.CARD == "quotes" [
-    *#card.author*: _#eval-markup(card.BODY)_
+    *#card.author*: _#card.BODY _
   ]
 }
 

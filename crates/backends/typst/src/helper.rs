@@ -6,17 +6,17 @@
 //! ## Package Contents
 //!
 //! The generated package exports:
-//! - `data` - A dictionary containing all document fields as JSON
-//! - `eval-markup(string)` - Evaluates pre-converted Typst markup strings
+//! - `data` - A dictionary containing all document fields, with markdown fields
+//!   automatically converted to Typst content objects
 //! - `parse-date(string)` - Parses ISO 8601 date strings to Typst datetime
 //!
 //! ## Usage in Plates
 //!
 //! ```typst
-//! #import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
+//! #import "@local/quillmark-helper:0.1.0": data, parse-date
 //!
 //! #data.title
-//! #eval-markup(data.BODY)
+//! #data.BODY
 //! #parse-date(data.date)
 //! ```
 
@@ -44,8 +44,8 @@ const LIB_TYP_TEMPLATE: &str = include_str!("lib.typ.template");
 /// Generate the `lib.typ` content for the quillmark-helper package.
 ///
 /// The generated file contains:
-/// - Embedded JSON data as `#let data = json(bytes("..."))`
-/// - `#let eval-markup(s) = eval(s, mode: "markup")` helper
+/// - Embedded JSON data (including `__meta__` injected by `transform_fields`)
+///   with markdown fields auto-evaluated into content
 /// - `#let parse-date(s) = { ... }` helper for ISO 8601 dates
 pub fn generate_lib_typ(json_data: &str) -> String {
     let escaped_json = escape_string(json_data);
@@ -76,17 +76,17 @@ mod tests {
 
     #[test]
     fn test_generate_lib_typ_basic() {
-        let json = r#"{"title": "Test", "BODY": "Hello"}"#;
+        let json = r#"{"title": "Test", "BODY": "Hello", "__meta__": {"content_fields": ["BODY"], "card_content_fields": {}}}"#;
         let lib = generate_lib_typ(json);
 
         // Should contain the version comment
         assert!(lib.contains("Version: 0.1.0"));
 
-        // Should contain the data binding
-        assert!(lib.contains("#let data = json(bytes("));
+        // Should contain the raw JSON data
+        assert!(lib.contains("json(bytes("));
 
-        // Should contain the eval-markup helper
-        assert!(lib.contains("#let eval-markup(s) = eval(s, mode: \"markup\")"));
+        // Should NOT contain eval-markup (auto-eval replaces it)
+        assert!(!lib.contains("eval-markup"));
 
         // Should contain the parse-date helper
         assert!(lib.contains("#let parse-date(s)"));

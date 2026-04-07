@@ -33,11 +33,11 @@ typst:
 Typst plate templates are pure Typst code that access document data via a helper package:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, eval-markup
+#import "@local/quillmark-helper:0.1.0": data
 
 #set document(title: data.at("title", default: "Untitled"))
 
-#eval-markup(data.at("body", default: ""))
+#data.at("body", default: "")
 ```
 
 ## Data Access
@@ -47,12 +47,11 @@ Quillmark injects your document's frontmatter as JSON data via the `@local/quill
 ### Importing the Helper
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
+#import "@local/quillmark-helper:0.1.0": data, parse-date
 ```
 
 The helper provides:
-- `data` - Dictionary containing all frontmatter fields
-- `eval-markup(content)` - Render Markdown content as Typst markup
+- `data` - Dictionary containing all frontmatter fields, with markdown fields automatically converted to Typst content objects
 - `parse-date(str)` - Parse date strings into Typst datetime objects
 
 ### Accessing Fields
@@ -91,10 +90,10 @@ Use Typst's `in` operator to check for optional fields:
 
 ### Rendering Body Content
 
-The document body (Markdown content after frontmatter) is stored in `data.BODY` (and accessible via `data.body`). Use `eval-markup()` to render Typst markup produced by `transform_fields`:
+The document body (Markdown content after frontmatter) is stored in `data.BODY` (and accessible via `data.body`). Markdown fields are automatically converted to Typst content objects by the helper package, so you can use them directly:
 
 ```typst
-#eval-markup(data.at("body", default: ""))
+#data.at("body", default: "")
 ```
 
 ### Parsing Dates
@@ -130,7 +129,7 @@ If your document uses the CARDS feature, access them via `data.CARDS`:
 ```typst
 #for card in data.at("CARDS", default: ()) {
   if card.CARD == "product" {
-    [Product: #card.name - #eval-markup(card.BODY)]
+    [Product: #card.name - #card.BODY]
   }
 }
 ```
@@ -150,7 +149,7 @@ typst:
 Then import and use them in your plate template:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, eval-markup
+#import "@local/quillmark-helper:0.1.0": data
 #import "@preview/appreciated-letter:0.1.0": letter
 #import "@preview/fontawesome:0.5.0": fa-icon
 
@@ -345,7 +344,7 @@ Errors include:
 ### Simple Letter
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
+#import "@local/quillmark-helper:0.1.0": data, parse-date
 
 #set page(margin: 1in)
 #set text(font: "Arial", size: 11pt)
@@ -356,7 +355,7 @@ Errors include:
 
 Dear #data.recipient,
 
-#eval-markup(data.at("body", default: ""))
+#data.at("body", default: "")
 
 Sincerely,
 
@@ -366,7 +365,7 @@ Sincerely,
 ### Academic Paper
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, eval-markup
+#import "@local/quillmark-helper:0.1.0": data
 
 #set page(paper: "a4", margin: 1in)
 #set text(font: "Linux Libertine", size: 12pt)
@@ -378,7 +377,7 @@ Sincerely,
   #text(size: 12pt)[#data.author]
 ]
 
-#eval-markup(data.at("body", default: ""))
+#data.at("body", default: "")
 ```
 
 ## Best Practices

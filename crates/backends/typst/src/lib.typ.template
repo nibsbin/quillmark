@@ -1,11 +1,47 @@
 // Auto-generated quillmark-helper package
 // Version: {version}
 
-/// Document data as a dictionary
-#let data = json(bytes("{escaped_json}"))
+/// Document data as a dictionary.
+/// Markdown fields are automatically converted to Typst content objects.
+/// The `__meta__` key (injected by the Rust backend) is consumed here and
+/// never exposed to plate authors.
+#let data = {
+  let d = json(bytes("{escaped_json}"))
 
-/// Evaluate a pre-converted Typst markup string as content
-#let eval-markup(s) = eval(s, mode: "markup")
+  // Read and consume __meta__ (injected by transform_fields)
+  let meta = d.remove("__meta__", default: (content_fields: (), card_content_fields: (:)))
+
+  // Auto-eval top-level content fields
+  for key in meta.content_fields {
+    if key in d {
+      let val = d.at(key)
+      if type(val) == str and val != "" {
+        d.insert(key, eval(val, mode: "markup"))
+      }
+    }
+  }
+
+  // Auto-eval content fields within each CARD
+  if "CARDS" in d {
+    let cards = ()
+    for card in d.at("CARDS") {
+      let card-type = card.at("CARD", default: none)
+      let fields = meta.card_content_fields.at(card-type, default: ())
+      for key in fields {
+        if key in card {
+          let val = card.at(key)
+          if type(val) == str and val != "" {
+            card.insert(key, eval(val, mode: "markup"))
+          }
+        }
+      }
+      cards.push(card)
+    }
+    d.insert("CARDS", cards)
+  }
+
+  d
+}
 
 /// Parse an ISO 8601 date string (YYYY-MM-DD) to a Typst datetime
 /// Handles both pure dates (2024-01-15) and datetime strings (2024-01-15T10:30:00)

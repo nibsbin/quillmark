@@ -247,35 +247,35 @@ fn is_markdown_field(field_schema: &serde_json::Value) -> bool {
 /// Identifies fields with `contentMediaType = "text/markdown"` and converts
 /// their content using `mark_to_typst()`. This includes recursive handling
 /// of CARDS arrays.
+///
+/// Also injects a `__meta__` key into the result containing the names of
+/// converted fields, which the quillmark-helper package uses to auto-evaluate
+/// markup strings into Typst content objects.
 fn transform_markdown_fields(
     fields: &HashMap<String, QuillValue>,
     schema: &QuillValue,
 ) -> HashMap<String, QuillValue> {
     let mut result = fields.clone();
+    let schema_json = schema.as_json();
 
     // Get the properties object from the schema
-    let properties = match schema.as_json().get("properties") {
-        Some(props) => props,
-        None => return result,
-    };
-
-    let properties_obj = match properties.as_object() {
+    let properties_obj = match schema_json.get("properties").and_then(|v| v.as_object()) {
         Some(obj) => obj,
         None => return result,
     };
 
-    // Transform each field based on schema
+    // Transform each field based on schema, collecting converted field names
+    let mut content_field_names: Vec<&str> = Vec::new();
     for (field_name, field_value) in fields {
         if let Some(field_schema) = properties_obj.get(field_name) {
-            // Check if this is a markdown field
             if is_markdown_field(field_schema) {
                 if let Some(content) = field_value.as_str() {
-                    // Convert markdown to Typst markup
                     if let Ok(typst_markup) = mark_to_typst(content) {
                         result.insert(
                             field_name.clone(),
                             QuillValue::from_json(serde_json::json!(typst_markup)),
                         );
+                        content_field_names.push(field_name);
                     }
                 }
             }
@@ -292,6 +292,46 @@ fn transform_markdown_fields(
             );
         }
     }
+
+    // Collect per-card-type content field names from schema $defs
+    let mut card_content_fields = serde_json::Map::new();
+    if let Some(defs) = schema_json.get("$defs").and_then(|v| v.as_object()) {
+        for (def_name, def_schema) in defs {
+            if let Some(card_type) = def_name.strip_suffix("_card") {
+                let card_fields: Vec<&str> = def_schema
+                    .get("properties")
+                    .and_then(|v| v.as_object())
+                    .map(|props| {
+                        props
+                            .iter()
+                            .filter(|(_, fs)| is_markdown_field(fs))
+                            .map(|(name, _)| name.as_str())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !card_fields.is_empty() {
+                    card_content_fields.insert(
+                        card_type.to_string(),
+                        serde_json::Value::Array(
+                            card_fields
+                                .into_iter()
+                                .map(|s| serde_json::Value::String(s.to_string()))
+                                .collect(),
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    // Inject __meta__ so the helper package can auto-eval content fields
+    result.insert(
+        "__meta__".to_string(),
+        QuillValue::from_json(serde_json::json!({
+            "content_fields": content_field_names,
+            "card_content_fields": card_content_fields,
+        })),
+    );
 
     result
 }

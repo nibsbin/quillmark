@@ -34,10 +34,10 @@ const quillJson = {
 `
     },
     "plate.typ": {
-      contents: `#import "@local/quillmark-helper:0.1.0": data, eval-markup
+      contents: `#import "@local/quillmark-helper:0.1.0": data
 #set document(title: data.at("title", default: "Untitled"))
 
-#eval-markup(data.at("body", default: ""))`
+#data.at("body", default: "")`
     }
   }
 };
@@ -140,8 +140,8 @@ const quill = {
 `
     },
     "plate.typ": {
-      contents: `#import "@local/quillmark-helper:0.1.0": data, eval-markup
-#eval-markup(data.at("body", default: ""))`
+      contents: `#import "@local/quillmark-helper:0.1.0": data
+#data.at("body", default: "")`
     }
   }
 };
@@ -465,10 +465,10 @@ const quillJson = {
 
     // Required: Plate template
     "plate.typ": {
-      contents: `#import "@local/quillmark-helper:0.1.0": data, eval-markup
+      contents: `#import "@local/quillmark-helper:0.1.0": data
 #set document(title: data.at("title", default: "Untitled"))
 
-#eval-markup(data.at("body", default: ""))`
+#data.at("body", default: "")`
     },
     
     // Optional: Assets directory
@@ -529,7 +529,7 @@ main:
 `
       },
       "plate.typ": {
-        contents: `#import "@local/quillmark-helper:0.1.0": data, eval-markup
+        contents: `#import "@local/quillmark-helper:0.1.0": data
 #set document(title: data.at("title", default: ""), author: data.at("author", default: ""))
 #set page(margin: 1in)
 #set text(font: "Arial", size: 11pt)
@@ -540,7 +540,7 @@ main:
   #text(size: 12pt)[#data.at("author", default: "")]
 ]
 
-#eval-markup(data.at("body", default: ""))
+#data.at("body", default: "")
 `
       }
     }

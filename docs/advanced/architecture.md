@@ -185,12 +185,11 @@ Backends receive **raw plate content** plus **JSON data** produced by `Workflow:
 Templates import the `@local/quillmark-helper` virtual package:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
+#import "@local/quillmark-helper:0.1.0": data, parse-date
 ```
 
 The helper provides:
-- **data** - Dictionary containing all frontmatter fields as JSON (including `BODY`/`CARDS`)
-- **eval-markup(content)** - Evaluate Typst markup strings (e.g., converted markdown)
+- **data** - Dictionary containing all frontmatter fields as JSON (including `BODY`/`CARDS`), with markdown fields automatically converted to Typst content objects
 - **parse-date(str)** - Parse ISO date strings into Typst datetime objects
 - **Safe access with defaults**: `data.at("title", default: "Untitled")`
 - **Body content**: `data.body` or `data.BODY`
@@ -239,7 +238,7 @@ Parses to: `{ title: "...", BODY: "...", CARDS: [{ CARD: "products", name: "..."
 Key features:
 
 - JSON data injection via `@local/quillmark-helper` virtual package
-- `eval-markup()` for Markdown→Typst conversion
+- Markdown fields automatically converted to Typst content objects
 - `parse-date()` for date string parsing
 - Dynamic package loading from `packages/` directory
 - Font and asset resolution from `assets/` directory

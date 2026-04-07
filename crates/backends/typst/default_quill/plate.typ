@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data, eval-markup
+#import "@local/quillmark-helper:0.1.0": data
 
 // Display document metadata
 #data
@@ -6,4 +6,4 @@
 #line(length: 100%)
 
 // Render body content
-#eval-markup(data.at("BODY", default: ""))
+#data.at("BODY", default: "")
