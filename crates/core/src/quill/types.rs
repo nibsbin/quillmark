@@ -36,10 +36,8 @@ pub mod ui_key {
     pub const ORDER: &str = "order";
     /// Whether the field or specific component is hide-body (no body editor)
     pub const HIDE_BODY: &str = "hide_body";
-    /// Default name template for card instances
-    pub const DEFAULT_NAME: &str = "default_name";
-    /// Conditional visibility rules: field → accepted values
-    pub const VISIBLE_WHEN: &str = "visible_when";
+    /// Default title template for card instances
+    pub const DEFAULT_TITLE: &str = "default_title";
     /// Compact rendering hint for UI consumers
     pub const COMPACT: &str = "compact";
     /// Multi-line text box hint for string and markdown fields
@@ -54,11 +52,6 @@ pub struct UiFieldSchema {
     pub group: Option<String>,
     /// Order of the field in the UI (automatically generated based on field position in Quill.yaml)
     pub order: Option<i32>,
-    /// Conditional visibility: map of sibling field name → accepted values.
-    /// The field is visible when ALL conditions match (AND across keys, OR within each key's values).
-    /// Example: `visible_when: { format: [standard, separate_page] }` means show this field
-    /// only when the sibling `format` field has value "standard" or "separate_page".
-    pub visible_when: Option<HashMap<String, Vec<String>>>,
     /// Compact rendering hint: when true, the UI should render this field in a compact style
     pub compact: Option<bool>,
     /// Multi-line text box hint: when true, the UI should start with a larger text box.
@@ -71,10 +64,10 @@ pub struct UiFieldSchema {
 pub struct UiContainerSchema {
     /// Whether to hide the body editor for this element (metadata only)
     pub hide_body: Option<bool>,
-    /// Template for generating a default per-instance name in UI consumers.
+    /// Template for generating a default per-instance title in UI consumers.
     /// Uses `{field_name}` tokens interpolated with live field values.
-    /// Example: `"{headingLeft} — {subheadingLeft}"`
-    pub default_name: Option<String>,
+    /// Example: `"{name}"`
+    pub default_title: Option<String>,
 }
 
 /// Schema definition for a card type (composable content blocks)

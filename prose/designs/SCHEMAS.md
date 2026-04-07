@@ -50,22 +50,6 @@ Field properties:
 
 Serialized into `x-ui` in generated JSON Schema. Validation ignores `x-ui`.
 
-### `visible_when`
-
-`visible_when` maps sibling field names to arrays of accepted values. AND across keys; OR within values. Absent means always visible. This is a UI hint only — not a validation constraint.
-
-```json
-{
-  "x-ui": {
-    "group": "Addressing",
-    "order": 0,
-    "visible_when": {
-      "format": ["standard", "separate_page"]
-    }
-  }
-}
-```
-
 ### `multiline`
 
 For `string` and `markdown` fields, `multiline: true` signals the UI to present a larger initial text box. On `string` fields this means plain text with newlines preserved (e.g. mailing addresses, multi-line signatures). On `markdown` fields the content is additionally processed as Markdown by the backend. Serialized as `"x-ui": { "multiline": true }`. No effect on backend processing beyond what the field type already implies.

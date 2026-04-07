@@ -69,16 +69,6 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
             ui_obj.insert(ui_key::ORDER.to_string(), json!(order));
         }
 
-        if let Some(ref visible_when) = ui.visible_when {
-            let mut vw_obj = Map::new();
-            for (field_name, values) in visible_when {
-                let values_array: Vec<Value> =
-                    values.iter().map(|v| Value::String(v.clone())).collect();
-                vw_obj.insert(field_name.clone(), Value::Array(values_array));
-            }
-            ui_obj.insert(ui_key::VISIBLE_WHEN.to_string(), Value::Object(vw_obj));
-        }
-
         if let Some(compact) = ui.compact {
             ui_obj.insert(ui_key::COMPACT.to_string(), Value::Bool(compact));
         }
@@ -179,10 +169,10 @@ fn build_card_def(name: &str, card: &CardSchema) -> Map<String, Value> {
         if let Some(hide_body) = ui.hide_body {
             ui_obj.insert(ui_key::HIDE_BODY.to_string(), Value::Bool(hide_body));
         }
-        if let Some(ref default_name) = ui.default_name {
+        if let Some(ref default_title) = ui.default_title {
             ui_obj.insert(
-                ui_key::DEFAULT_NAME.to_string(),
-                Value::String(default_name.clone()),
+                ui_key::DEFAULT_TITLE.to_string(),
+                Value::String(default_title.clone()),
             );
         }
         if !ui_obj.is_empty() {
@@ -328,10 +318,10 @@ pub fn build_schema(
         if let Some(hide_body) = ui.hide_body {
             ui_obj.insert(ui_key::HIDE_BODY.to_string(), Value::Bool(hide_body));
         }
-        if let Some(ref default_name) = ui.default_name {
+        if let Some(ref default_title) = ui.default_title {
             ui_obj.insert(
-                ui_key::DEFAULT_NAME.to_string(),
-                Value::String(default_name.clone()),
+                ui_key::DEFAULT_TITLE.to_string(),
+                Value::String(default_title.clone()),
             );
         }
         if !ui_obj.is_empty() {
@@ -1886,7 +1876,6 @@ mod tests {
         schema.ui = Some(UiFieldSchema {
             group: None,
             order: Some(0),
-            visible_when: None,
             compact: None,
             multiline: Some(true),
         });
@@ -1921,7 +1910,6 @@ mod tests {
         schema.ui = Some(UiFieldSchema {
             group: None,
             order: Some(0),
-            visible_when: None,
             compact: None,
             multiline: Some(true),
         });
@@ -2454,7 +2442,6 @@ mod tests {
         field_schema.ui = Some(UiFieldSchema {
             group: Some("Header".to_string()),
             order: Some(0),
-            visible_when: None,
             compact: None,
             multiline: None,
         });
@@ -2502,7 +2489,6 @@ mod tests {
         field_schema.ui = Some(UiFieldSchema {
             group: None,
             order: Some(0),
-            visible_when: None,
             compact: Some(true),
             multiline: None,
         });
@@ -2530,7 +2516,7 @@ mod tests {
         // Test document level hide_body
         let ui_schema = UiContainerSchema {
             hide_body: Some(true),
-            default_name: None,
+            default_title: None,
         };
 
         // Test card level metadata_only
@@ -2550,7 +2536,7 @@ mod tests {
             fields: card_fields,
             ui: Some(UiContainerSchema {
                 hide_body: Some(true),
-                default_name: None,
+                default_title: None,
             }),
         };
 
@@ -2579,107 +2565,18 @@ mod tests {
     }
 
     #[test]
-    fn test_visible_when_schema() {
-        use crate::quill::{CardSchema, UiFieldSchema};
-
-        // Field with visible_when condition
-        let mut field_with_condition = FieldSchema::new(
-            "from".to_string(),
-            FieldType::String,
-            Some("Sender".to_string()),
-        );
-        let mut visible_when = HashMap::new();
-        visible_when.insert(
-            "format".to_string(),
-            vec!["standard".to_string(), "separate_page".to_string()],
-        );
-        field_with_condition.ui = Some(UiFieldSchema {
-            group: Some("Addressing".to_string()),
-            order: Some(0),
-            visible_when: Some(visible_when),
-            compact: None,
-            multiline: None,
-        });
-
-        // Field without visible_when (always visible)
-        let mut format_field = FieldSchema::new(
-            "format".to_string(),
-            FieldType::String,
-            Some("Format".to_string()),
-        );
-        format_field.enum_values = Some(vec![
-            "standard".to_string(),
-            "informal".to_string(),
-            "separate_page".to_string(),
-        ]);
-        format_field.ui = Some(UiFieldSchema {
-            group: Some("Additional".to_string()),
-            order: Some(1),
-            visible_when: None,
-            compact: None,
-            multiline: None,
-        });
-
-        let mut card_fields = HashMap::new();
-        card_fields.insert("from".to_string(), field_with_condition);
-        card_fields.insert("format".to_string(), format_field);
-
-        let card = CardSchema {
-            name: "indorsement".to_string(),
-            title: Some("Indorsement".to_string()),
-            description: Some("An indorsement".to_string()),
-            fields: card_fields,
-            ui: None,
-        };
-
-        let mut cards = HashMap::new();
-        cards.insert("indorsement".to_string(), card);
-
-        let document = CardSchema {
-            name: "root".to_string(),
-            title: None,
-            description: None,
-            fields: HashMap::new(),
-            ui: None,
-        };
-
-        let schema = build_schema(&document, &cards).unwrap();
-        let card_def = &schema.as_json()["$defs"]["indorsement_card"];
-        let from_field = &card_def["properties"]["from"];
-        let format_field = &card_def["properties"]["format"];
-
-        // from field should have visible_when in x-ui
-        let vw = &from_field["x-ui"]["visible_when"];
-        assert!(vw.is_object(), "visible_when should be an object");
-        let format_values = vw["format"].as_array().unwrap();
-        assert_eq!(format_values.len(), 2);
-        assert!(format_values.contains(&json!("standard")));
-        assert!(format_values.contains(&json!("separate_page")));
-
-        // format field should NOT have visible_when
-        assert!(
-            format_field["x-ui"].get("visible_when").is_none()
-                || format_field["x-ui"]["visible_when"].is_null(),
-            "format field should not have visible_when"
-        );
-    }
-
-    #[test]
-    fn test_visible_when_stripped_via_projection() {
+    fn test_x_ui_stripped_via_projection() {
         use crate::quill::UiFieldSchema;
 
-        // Verify visible_when is removed by AI projection
+        // Verify x-ui is removed by AI projection
         let mut field = FieldSchema::new(
             "from".to_string(),
             FieldType::String,
             Some("Sender".to_string()),
         );
-        let mut visible_when = HashMap::new();
-        visible_when.insert("format".to_string(), vec!["standard".to_string()]);
         field.ui = Some(UiFieldSchema {
             group: Some("Addressing".to_string()),
             order: Some(0),
-            visible_when: Some(visible_when),
             compact: None,
             multiline: None,
         });
@@ -2714,62 +2611,39 @@ mod tests {
     }
 
     #[test]
-    fn test_visible_when_yaml_roundtrip() {
-        // Test that visible_when survives YAML → QuillConfig → Schema
+    fn test_ui_yaml_roundtrip() {
+        // Test that field ui survives YAML → QuillConfig → Schema
         let yaml = r#"
 Quill:
-  name: test_vw
+  name: test_ui
   version: "0.1"
   backend: typst
-  description: Test visible_when
+  description: Test ui
 
 main:
   fields:
-    format:
+    from:
       type: string
-      enum:
-        - standard
-        - informal
-      default: standard
-
-cards:
-  endorsement:
-    title: Endorsement
-    description: Test card
-    fields:
-      from:
-        type: string
-        ui:
-          group: Addressing
-          visible_when:
-            format: [standard]
-      note:
-        type: string
+      ui:
+        group: Addressing
+        compact: true
 "#;
 
         let config = crate::quill::QuillConfig::from_yaml(yaml).unwrap();
-        let card = config.card_definition("endorsement").unwrap();
-        let from_field = card.fields.get("from").unwrap();
+        let from_field = config.main().fields.get("from").unwrap();
         let ui = from_field.ui.as_ref().unwrap();
-        let vw = ui.visible_when.as_ref().unwrap();
-        assert_eq!(vw.get("format").unwrap(), &vec!["standard".to_string()]);
+        assert_eq!(ui.group.as_deref(), Some("Addressing"));
+        assert_eq!(ui.compact, Some(true));
 
         // Build schema and verify x-ui output
-        let schema = build_schema(config.main(), &config.card_definitions_map()).unwrap();
-        let card_def = &schema.as_json()["$defs"]["endorsement_card"];
-        let from_prop = &card_def["properties"]["from"];
-        assert_eq!(from_prop["x-ui"]["visible_when"]["format"][0], "standard");
-
-        // note field should not have visible_when
-        let note_prop = &card_def["properties"]["note"];
-        assert!(
-            note_prop["x-ui"].get("visible_when").is_none()
-                || note_prop["x-ui"]["visible_when"].is_null()
-        );
+        let schema = build_schema(config.main(), &HashMap::new()).unwrap();
+        let from_prop = &schema.as_json()["properties"]["from"];
+        assert_eq!(from_prop["x-ui"]["group"], "Addressing");
+        assert_eq!(from_prop["x-ui"]["compact"], true);
     }
 
     #[test]
-    fn test_default_name_schema() {
+    fn test_default_title_schema() {
         use crate::quill::{CardSchema, UiContainerSchema};
 
         let card = CardSchema {
@@ -2779,7 +2653,7 @@ cards:
             fields: HashMap::new(),
             ui: Some(UiContainerSchema {
                 hide_body: None,
-                default_name: Some("{company} — {role}".to_string()),
+                default_title: Some("{company} — {role}".to_string()),
             }),
         };
 
@@ -2797,24 +2671,24 @@ cards:
         let schema = build_schema(&document, &cards).unwrap();
         let card_def = &schema.as_json()["$defs"]["entry_card"];
 
-        assert_eq!(card_def["x-ui"]["default_name"], "{company} — {role}");
+        assert_eq!(card_def["x-ui"]["default_title"], "{company} — {role}");
     }
 
     #[test]
-    fn test_default_name_yaml_roundtrip() {
-        // Test that default_name survives YAML → QuillConfig → Schema
+    fn test_default_title_yaml_roundtrip() {
+        // Test that default_title survives YAML → QuillConfig → Schema
         let yaml = r#"
 Quill:
   name: test_quill
   version: "0.1"
   backend: typst
-  description: Test default_name
+  description: Test default_title
 
 cards:
   experience:
     title: Experience Entry
     ui:
-      default_name: "{company} — {role}"
+      default_title: "{company} — {role}"
     fields:
       company:
         type: string
@@ -2827,27 +2701,27 @@ cards:
         let config = crate::quill::QuillConfig::from_yaml(yaml).unwrap();
         let card = config.card_definition("experience").unwrap();
         let ui = card.ui.as_ref().unwrap();
-        assert_eq!(ui.default_name.as_deref(), Some("{company} — {role}"));
+        assert_eq!(ui.default_title.as_deref(), Some("{company} — {role}"));
 
         let schema = build_schema(config.main(), &config.card_definitions_map()).unwrap();
         let card_def = &schema.as_json()["$defs"]["experience_card"];
-        assert_eq!(card_def["x-ui"]["default_name"], "{company} — {role}");
+        assert_eq!(card_def["x-ui"]["default_title"], "{company} — {role}");
     }
 
     #[test]
-    fn test_default_name_stripped_by_ai_projection() {
+    fn test_default_title_stripped_by_ai_projection() {
         let yaml = r#"
 Quill:
   name: test_quill
   version: "0.1"
   backend: typst
-  description: Test default_name stripping
+  description: Test default_title stripping
 
 cards:
   item:
     title: Item
     ui:
-      default_name: "{name}"
+      default_title: "{name}"
     fields:
       name:
         type: string
@@ -2857,17 +2731,17 @@ cards:
         let config = crate::quill::QuillConfig::from_yaml(yaml).unwrap();
         let schema = build_schema(config.main(), &config.card_definitions_map()).unwrap();
 
-        // AI projection strips x-ui (including default_name)
+        // AI projection strips x-ui (including default_title)
         let ai = project_schema(&schema, SchemaProjection::AI);
         assert!(ai.as_json()["$defs"]["item_card"]
             .get("x-ui")
             .map(|v| v.is_null())
             .unwrap_or(true));
 
-        // UI projection preserves x-ui with default_name
+        // UI projection preserves x-ui with default_title
         let ui = project_schema(&schema, SchemaProjection::UI);
         assert_eq!(
-            ui.as_json()["$defs"]["item_card"]["x-ui"]["default_name"],
+            ui.as_json()["$defs"]["item_card"]["x-ui"]["default_title"],
             "{name}"
         );
     }

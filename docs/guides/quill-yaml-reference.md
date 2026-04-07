@@ -207,40 +207,6 @@ main:
         order: 5
 ```
 
-### `visible_when`
-
-Conditionally shows or hides a field based on sibling field values. See the dedicated [Conditional Fields](conditional-fields.md) guide for full details.
-
-```yaml
-main:
-  fields:
-    format:
-      type: string
-      enum: [standard, informal, separate_page]
-      default: standard
-
-cards:
-  indorsement:
-    title: Routing indorsement
-    fields:
-      from:
-        type: string
-        ui:
-          group: Addressing
-          visible_when:
-            format: [standard, separate_page]
-```
-
-The `from` field is visible only when `format` is `"standard"` or `"separate_page"`. When `format` is `"informal"`, the field is hidden.
-
-**Rules:**
-
-- Keys are sibling field names
-- Values are arrays of accepted values
-- Multiple keys = AND (all must match)
-- Multiple values per key = OR (any can match)
-- Absent `visible_when` = always visible
-
 ### `multiline`
 
 Controls the initial size of the text input for `markdown` fields. When `true`, the UI starts with a larger text box instead of a single-line input:
@@ -278,8 +244,6 @@ cards:
         type: string
         ui:
           group: Addressing
-          visible_when:
-            format: [standard, separate_page]
       format:
         type: string
         enum: [standard, informal, separate_page]
@@ -300,7 +264,7 @@ cards:
 | Property       | Type   | Description |
 |----------------|--------|-------------|
 | `hide_body`    | bool   | Suppress the body/content editor for this card type |
-| `default_name` | string | Template for per-instance labels in UI consumers |
+| `default_title` | string | Template for per-instance titles in UI consumers |
 
 #### `hide_body`
 
@@ -315,33 +279,30 @@ cards:
         type: string
 ```
 
-#### `default_name`
+#### `default_title`
 
-A template string that UI consumers interpolate with field values to produce a human-readable label for each card instance. Uses `{field_name}` tokens referencing fields in the same card.
+A template string that UI consumers interpolate with field values to produce a human-readable title for each card instance. Uses `{field_name}` tokens referencing fields in the same card.
 
 ```yaml
 cards:
-  experience_section:
-    title: Experience/Education Entry
+  entry:
+    title: Card Title
     ui:
-      default_name: "{headingLeft} — {subheadingLeft}"
+      default_title: "{name}"
     fields:
-      headingLeft:
+      name:
         type: string
-        title: Company / School
-      subheadingLeft:
-        type: string
-        title: Role / Degree
+        title: Name
 ```
 
-With the above, a UI rendering a list of `experience_section` cards can label each instance — e.g. `"Google — Software Engineer"` — instead of falling back to a generic `"Experience/Education Entry (2)"`.
+With the above, a UI rendering a list of `entry` cards can title each instance (e.g. `"Project Alpha"`) instead of falling back to a generic `"Card Title (2)"`.
 
 **Interpolation rules (for UI consumers):**
 - `{field_name}` is replaced with the current value of that field.
 - If a field is absent or empty, the token resolves to an empty string.
 - UI consumers are responsible for trimming degenerate separators (e.g. `" — "` with one empty side).
 
-`default_name` is a UI hint only — it has no effect on validation or rendering.
+`default_title` is a UI hint only — it has no effect on validation or rendering.
 
 ### Using Cards in Markdown
 
@@ -408,9 +369,8 @@ Quillmark generates a JSON Schema from your `Quill.yaml`. This schema is used fo
 | `default: value` | `"default": value` |
 | `enum: [a, b]` | `"enum": ["a", "b"]` |
 | `ui: { group: X }` | `"x-ui": { "group": "X" }` |
-| `ui: { visible_when: ... }` | `"x-ui": { "visible_when": ... }` |
 | `ui: { multiline: true }` | `"x-ui": { "multiline": true }` |
-| `ui: { default_name: "{f}" }` | `"x-ui": { "default_name": "{f}" }` |
+| `ui: { default_title: "{f}" }` | `"x-ui": { "default_title": "{f}" }` |
 | `cards: { name: ... }` | `"$defs": { "name_card": ... }` |
 
 ### Stripped Schema
@@ -453,8 +413,6 @@ main:
       type: string
       ui:
         group: Header
-        visible_when:
-          status: [at_risk, blocked]
       description: Describe the risk or blocker. Only needed when status is not on_track.
 
     date:
@@ -497,7 +455,6 @@ cards:
 
 ## Next Steps
 
-- [Conditional Fields](conditional-fields.md) — deep dive on `visible_when`
 - [Creating Quills](creating-quills.md) — hands-on tutorial
 - [Quill Markdown](quill-markdown.md) — document authoring syntax
 - [Validation](validation.md) — validating documents against schemas
