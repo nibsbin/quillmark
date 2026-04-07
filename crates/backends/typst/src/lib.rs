@@ -128,8 +128,7 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Svg))
             }
             OutputFormat::Png => {
-                let png_pages =
-                    compile::compile_to_png(quill, plate_content, &json_str, opts.ppi)?;
+                let png_pages = compile::compile_to_png(quill, plate_content, &json_str, opts.ppi)?;
                 let artifacts = png_pages
                     .into_iter()
                     .map(|bytes| Artifact {
@@ -260,10 +259,7 @@ fn transform_markdown_fields(
     let schema_json = schema.as_json();
 
     // Get the properties object from the schema
-    let properties_obj = match schema_json
-        .get("properties")
-        .and_then(|v| v.as_object())
-    {
+    let properties_obj = match schema_json.get("properties").and_then(|v| v.as_object()) {
         Some(obj) => obj,
         None => return result,
     };

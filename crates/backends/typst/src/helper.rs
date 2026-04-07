@@ -127,5 +127,4 @@ mod tests {
         assert_eq!(HELPER_NAMESPACE, "local");
         assert_eq!(HELPER_NAME, "quillmark-helper");
     }
-
 }
