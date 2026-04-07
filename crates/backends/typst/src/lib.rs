@@ -59,7 +59,6 @@ pub mod fuzz_utils {
 }
 
 use convert::mark_to_typst;
-use helper::ContentFields;
 use quillmark_core::{
     Artifact, Backend, CompiledDocument, Diagnostic, OutputFormat, Quill, QuillValue, RenderError,
     RenderOptions, RenderResult, Severity,
@@ -107,12 +106,10 @@ impl Backend for TypstBackend {
 
         // Serialize JSON value to string for injection into Typst
         let json_str = serde_json::to_string(json_data).unwrap_or_else(|_| "{}".to_string());
-        let content_fields = extract_content_fields(&quill.schema);
 
         match format {
             OutputFormat::Pdf => {
-                let bytes =
-                    compile::compile_to_pdf(quill, plate_content, &json_str, &content_fields)?;
+                let bytes = compile::compile_to_pdf(quill, plate_content, &json_str)?;
                 let artifacts = vec![Artifact {
                     bytes,
                     output_format: OutputFormat::Pdf,
@@ -120,8 +117,7 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
             }
             OutputFormat::Svg => {
-                let svg_pages =
-                    compile::compile_to_svg(quill, plate_content, &json_str, &content_fields)?;
+                let svg_pages = compile::compile_to_svg(quill, plate_content, &json_str)?;
                 let artifacts = svg_pages
                     .into_iter()
                     .map(|bytes| Artifact {
@@ -132,13 +128,8 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Svg))
             }
             OutputFormat::Png => {
-                let png_pages = compile::compile_to_png(
-                    quill,
-                    plate_content,
-                    &json_str,
-                    &content_fields,
-                    opts.ppi,
-                )?;
+                let png_pages =
+                    compile::compile_to_png(quill, plate_content, &json_str, opts.ppi)?;
                 let artifacts = png_pages
                     .into_iter()
                     .map(|bytes| Artifact {
@@ -168,9 +159,7 @@ impl Backend for TypstBackend {
         json_data: &serde_json::Value,
     ) -> Result<CompiledDocument, RenderError> {
         let json_str = serde_json::to_string(json_data).unwrap_or_else(|_| "{}".to_string());
-        let content_fields = extract_content_fields(&quill.schema);
-        let document =
-            compile::compile_to_document(quill, plate_content, &json_str, &content_fields)?;
+        let document = compile::compile_to_document(quill, plate_content, &json_str)?;
         let page_count = document.pages.len();
         Ok(CompiledDocument::new(Box::new(document), page_count))
     }
@@ -254,84 +243,43 @@ fn is_markdown_field(field_schema: &serde_json::Value) -> bool {
         .unwrap_or(false)
 }
 
-/// Extract content field names from a quill schema.
-///
-/// Returns a [`ContentFields`] describing which top-level fields and
-/// per-card-type fields contain markdown content and should be
-/// auto-evaluated into Typst content objects by the helper package.
-fn extract_content_fields(schema: &QuillValue) -> ContentFields {
-    let json = schema.as_json();
-    let mut top_level = Vec::new();
-    let mut card_types = HashMap::new();
-
-    // Top-level properties
-    if let Some(properties) = json.get("properties").and_then(|v| v.as_object()) {
-        for (name, field_schema) in properties {
-            if is_markdown_field(field_schema) {
-                top_level.push(name.clone());
-            }
-        }
-    }
-
-    // Card-type definitions in $defs
-    if let Some(defs) = json.get("$defs").and_then(|v| v.as_object()) {
-        for (def_name, def_schema) in defs {
-            if let Some(card_type) = def_name.strip_suffix("_card") {
-                let mut card_fields = Vec::new();
-                if let Some(props) = def_schema.get("properties").and_then(|v| v.as_object()) {
-                    for (name, field_schema) in props {
-                        if is_markdown_field(field_schema) {
-                            card_fields.push(name.clone());
-                        }
-                    }
-                }
-                if !card_fields.is_empty() {
-                    card_types.insert(card_type.to_string(), card_fields);
-                }
-            }
-        }
-    }
-
-    ContentFields {
-        top_level,
-        card_types,
-    }
-}
-
 /// Transform markdown fields to Typst markup based on schema.
 ///
 /// Identifies fields with `contentMediaType = "text/markdown"` and converts
 /// their content using `mark_to_typst()`. This includes recursive handling
 /// of CARDS arrays.
+///
+/// Also injects a `__meta__` key into the result containing the names of
+/// converted fields, which the quillmark-helper package uses to auto-evaluate
+/// markup strings into Typst content objects.
 fn transform_markdown_fields(
     fields: &HashMap<String, QuillValue>,
     schema: &QuillValue,
 ) -> HashMap<String, QuillValue> {
     let mut result = fields.clone();
+    let schema_json = schema.as_json();
 
     // Get the properties object from the schema
-    let properties = match schema.as_json().get("properties") {
-        Some(props) => props,
-        None => return result,
-    };
-
-    let properties_obj = match properties.as_object() {
+    let properties_obj = match schema_json
+        .get("properties")
+        .and_then(|v| v.as_object())
+    {
         Some(obj) => obj,
         None => return result,
     };
 
-    // Transform each field based on schema
+    // Transform each field based on schema, collecting converted field names
+    let mut content_field_names: Vec<&str> = Vec::new();
     for (field_name, field_value) in fields {
         if let Some(field_schema) = properties_obj.get(field_name) {
-            // Check if this is a markdown field
             if is_markdown_field(field_schema) {
                 if let Some(content) = field_value.as_str() {
-                    // Convert markdown to Typst markup
                     if let Ok(typst_markup) = mark_to_typst(content) {
                         result.insert(
                             field_name.clone(),
                             QuillValue::from_json(serde_json::json!(typst_markup)),
                         );
+                        content_field_names.push(field_name);
                     }
                 }
             }
@@ -348,6 +296,46 @@ fn transform_markdown_fields(
             );
         }
     }
+
+    // Collect per-card-type content field names from schema $defs
+    let mut card_content_fields = serde_json::Map::new();
+    if let Some(defs) = schema_json.get("$defs").and_then(|v| v.as_object()) {
+        for (def_name, def_schema) in defs {
+            if let Some(card_type) = def_name.strip_suffix("_card") {
+                let card_fields: Vec<&str> = def_schema
+                    .get("properties")
+                    .and_then(|v| v.as_object())
+                    .map(|props| {
+                        props
+                            .iter()
+                            .filter(|(_, fs)| is_markdown_field(fs))
+                            .map(|(name, _)| name.as_str())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !card_fields.is_empty() {
+                    card_content_fields.insert(
+                        card_type.to_string(),
+                        serde_json::Value::Array(
+                            card_fields
+                                .into_iter()
+                                .map(|s| serde_json::Value::String(s.to_string()))
+                                .collect(),
+                        ),
+                    );
+                }
+            }
+        }
+    }
+
+    // Inject __meta__ so the helper package can auto-eval content fields
+    result.insert(
+        "__meta__".to_string(),
+        QuillValue::from_json(serde_json::json!({
+            "content_fields": content_field_names,
+            "card_content_fields": card_content_fields,
+        })),
+    );
 
     result
 }

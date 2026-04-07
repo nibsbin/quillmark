@@ -113,23 +113,21 @@ impl QuillWorld {
     /// * `quill` - The quill template
     /// * `main` - The main Typst content to compile
     /// * `json_data` - JSON string containing document data
-    /// * `content_fields` - Which fields to auto-evaluate as content
     pub fn new_with_data(
         quill: &Quill,
         main: &str,
         json_data: &str,
-        content_fields: &helper::ContentFields,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut world = Self::new(quill, main)?;
 
         // Inject the quillmark-helper package
-        world.inject_helper_package(json_data, content_fields);
+        world.inject_helper_package(json_data);
 
         Ok(world)
     }
 
     /// Inject the quillmark-helper package with JSON data.
-    fn inject_helper_package(&mut self, json_data: &str, content_fields: &helper::ContentFields) {
+    fn inject_helper_package(&mut self, json_data: &str) {
         // Create the package spec
         let spec = PackageSpec {
             namespace: helper::HELPER_NAMESPACE.into(),
@@ -140,7 +138,7 @@ impl QuillWorld {
         };
 
         // Generate and inject lib.typ
-        let lib_content = helper::generate_lib_typ(json_data, content_fields);
+        let lib_content = helper::generate_lib_typ(json_data);
         let lib_path = VirtualPath::new("lib.typ");
         let lib_id = FileId::new(Some(spec.clone()), lib_path);
         self.sources

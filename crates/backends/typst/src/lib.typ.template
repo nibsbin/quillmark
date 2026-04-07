@@ -1,32 +1,24 @@
 // Auto-generated quillmark-helper package
 // Version: {version}
 
-/// Raw document data loaded from JSON
-#let _raw = json(bytes("{escaped_json}"))
-
-/// Content field specifications (auto-generated from schema)
-#let _top-content-fields = {top_content_fields}
-#let _card-content-fields = {card_content_fields}
-
-/// Evaluate a markup string field into content, if present and non-empty.
-#let _eval-field(d, key) = {
-  if key in d {
-    let val = d.at(key)
-    if type(val) == str and val != "" {
-      d.insert(key, eval(val, mode: "markup"))
-    }
-  }
-  d
-}
-
 /// Document data as a dictionary.
-/// Markdown fields are automatically converted to content objects.
+/// Markdown fields are automatically converted to Typst content objects.
+/// The `__meta__` key (injected by the Rust backend) is consumed here and
+/// never exposed to plate authors.
 #let data = {
-  let d = _raw
+  let d = json(bytes("{escaped_json}"))
+
+  // Read and consume __meta__ (injected by transform_fields)
+  let meta = d.remove("__meta__", default: (content_fields: (), card_content_fields: (:)))
 
   // Auto-eval top-level content fields
-  for key in _top-content-fields {
-    d = _eval-field(d, key)
+  for key in meta.content_fields {
+    if key in d {
+      let val = d.at(key)
+      if type(val) == str and val != "" {
+        d.insert(key, eval(val, mode: "markup"))
+      }
+    }
   }
 
   // Auto-eval content fields within each CARD
@@ -34,9 +26,14 @@
     let cards = ()
     for card in d.at("CARDS") {
       let card-type = card.at("CARD", default: none)
-      let fields = _card-content-fields.at(card-type, default: ())
+      let fields = meta.card_content_fields.at(card-type, default: ())
       for key in fields {
-        card = _eval-field(card, key)
+        if key in card {
+          let val = card.at(key)
+          if type(val) == str and val != "" {
+            card.insert(key, eval(val, mode: "markup"))
+          }
+        }
       }
       cards.push(card)
     }
