@@ -1454,7 +1454,7 @@ mod tests {
     }
 
     #[test]
-    fn test_hard_break_backslash() {
+    fn test_backslash_hard_break() {
         let markdown = "Line one\\\nLine two";
         let typst = mark_to_typst(markdown).unwrap();
         // Backslash hard break becomes Typst hard line break
