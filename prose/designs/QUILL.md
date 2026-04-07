@@ -32,7 +32,7 @@ Root object with a `files` key:
 {
   "files": {
     "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\n..." },
-    "plate.typ": { "contents": "#import \"@local/quillmark-helper:0.1.0\": data, eval-markup\n= Template\n\n#eval-markup(data.BODY)" },
+    "plate.typ": { "contents": "#import \"@local/quillmark-helper:0.1.0\": data\n= Template\n\n#data.BODY" },
     "assets": {
       "logo.png": { "contents": [137, 80, 78, 71, ...] }
     }

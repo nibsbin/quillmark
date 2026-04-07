@@ -123,7 +123,7 @@ Get started with Quillmark in your preferred language.
     const quill = {
       files: {
         "Quill.yaml": { contents: "Quill:\n  name: my-quill\n  backend: typst\n  description: Demo\n" },
-        "plate.typ": { contents: "#import \"@local/quillmark-helper:0.1.0\": data, eval-markup\n#eval-markup(data.BODY)\n" }
+        "plate.typ": { contents: "#import \"@local/quillmark-helper:0.1.0\": data\n#data.BODY\n" }
       }
     };
     engine.registerQuill(quill);

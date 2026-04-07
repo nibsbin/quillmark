@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
+#import "@local/quillmark-helper:0.1.0": data, parse-date
 #import "@local/tonguetoquill-usaf-memo:1.1.0": backmatter, frontmatter, indorsement, mainmatter
 
 // Frontmatter configuration
@@ -38,7 +38,7 @@
 
 // Mainmatter configuration
 #mainmatter[
-  #eval-markup(data.BODY)
+  #data.BODY
 ]
 
 // Backmatter
@@ -69,7 +69,7 @@
       ..if "date" in card { (date: card.date) },
       ..if "action" in card { (action: card.action) },
     )[
-      #eval-markup(card.BODY)
+      #card.BODY
     ]
   }
 }

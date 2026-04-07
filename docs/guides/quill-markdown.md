@@ -236,7 +236,7 @@ Supported version selectors:
 
 ## Body Content
 
-The document body (everything after frontmatter) is stored under the special field `BODY` and is injected into JSON for backends. For Typst, `transform_fields` converts markdown fields (including `BODY`) to Typst markup strings that you render with `eval-markup(data.BODY)`.
+The document body (everything after frontmatter) is stored under the special field `BODY` and is injected into JSON for backends. For Typst, markdown fields (including `BODY`) are automatically converted to Typst content objects by the helper package, so you can use them directly as `data.BODY`.
 
 ## Validation
 

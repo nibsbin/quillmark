@@ -17,7 +17,7 @@
 //! let quill = Quill::from_path("path/to/quill")?;
 //! let typst_content = "#set document(title: \"Test\")\n= Hello";
 //!
-//! let pdf_bytes = compile_to_pdf(&quill, typst_content, "{}")?;
+//! let pdf_bytes = compile_to_pdf(&quill, typst_content, "{}", &Default::default())?;
 //! std::fs::write("output.pdf", pdf_bytes)?;
 //! # Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
 //! ```
@@ -36,6 +36,7 @@ use typst::layout::PagedDocument;
 use typst_pdf::PdfOptions;
 
 use crate::error_mapping::map_typst_errors;
+use crate::helper::ContentFields;
 use crate::world::QuillWorld;
 use quillmark_core::{
     Artifact, Diagnostic, OutputFormat, Quill, RenderError, RenderResult, Severity,
@@ -63,8 +64,10 @@ pub fn compile_to_document(
     quill: &Quill,
     plated_content: &str,
     json_data: &str,
+    content_fields: &ContentFields,
 ) -> Result<PagedDocument, RenderError> {
-    let world = QuillWorld::new_with_data(quill, plated_content, json_data).map_err(|e| {
+    let world =
+        QuillWorld::new_with_data(quill, plated_content, json_data, content_fields).map_err(|e| {
         RenderError::EngineCreation {
             diag: Box::new(
                 Diagnostic::new(
@@ -88,8 +91,9 @@ pub fn compile_to_pdf(
     quill: &Quill,
     plated_content: &str,
     json_data: &str,
+    content_fields: &ContentFields,
 ) -> Result<Vec<u8>, RenderError> {
-    let document = compile_to_document(quill, plated_content, json_data)?;
+    let document = compile_to_document(quill, plated_content, json_data, content_fields)?;
 
     let pdf = typst_pdf::pdf(&document, &PdfOptions::default()).map_err(|e| {
         RenderError::CompilationFailed {
@@ -112,8 +116,9 @@ pub fn compile_to_svg(
     quill: &Quill,
     plated_content: &str,
     json_data: &str,
+    content_fields: &ContentFields,
 ) -> Result<Vec<Vec<u8>>, RenderError> {
-    let document = compile_to_document(quill, plated_content, json_data)?;
+    let document = compile_to_document(quill, plated_content, json_data, content_fields)?;
 
     let mut pages = Vec::new();
     for page in &document.pages {
@@ -141,9 +146,10 @@ pub fn compile_to_png(
     quill: &Quill,
     plated_content: &str,
     json_data: &str,
+    content_fields: &ContentFields,
     ppi: Option<f32>,
 ) -> Result<Vec<Vec<u8>>, RenderError> {
-    let document = compile_to_document(quill, plated_content, json_data)?;
+    let document = compile_to_document(quill, plated_content, json_data, content_fields)?;
 
     let ppi = ppi.unwrap_or(DEFAULT_PPI);
 

@@ -18,16 +18,15 @@ Quillmark no longer runs a template engine for plates. Instead, `Workflow::compi
 The Typst backend injects a virtual package `@local/quillmark-helper:<version>` that exposes the JSON to plates and provides helpers.
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
+#import "@local/quillmark-helper:0.1.0": data, parse-date
 
 #data.title          // plain field access
-#eval-markup(data.BODY) // BODY is pre-converted markdown
+#data.BODY           // BODY is automatically converted to content
 #parse-date(data.date)  // ISO 8601 → datetime
 ```
 
 Helper contents (generated in `backends/typst/helper.rs`):
-- `data`: parsed JSON dictionary of all fields
-- `eval-markup(s)`: evaluate pre-converted Typst markup strings
+- `data`: parsed JSON dictionary of all fields, with markdown fields automatically converted to Typst content objects
 - `parse-date(s)`: ISO 8601 date parsing helper
 
 ## Guarantees

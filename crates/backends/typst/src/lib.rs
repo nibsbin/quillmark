@@ -59,6 +59,7 @@ pub mod fuzz_utils {
 }
 
 use convert::mark_to_typst;
+use helper::ContentFields;
 use quillmark_core::{
     Artifact, Backend, CompiledDocument, Diagnostic, OutputFormat, Quill, QuillValue, RenderError,
     RenderOptions, RenderResult, Severity,
@@ -106,10 +107,12 @@ impl Backend for TypstBackend {
 
         // Serialize JSON value to string for injection into Typst
         let json_str = serde_json::to_string(json_data).unwrap_or_else(|_| "{}".to_string());
+        let content_fields = extract_content_fields(&quill.schema);
 
         match format {
             OutputFormat::Pdf => {
-                let bytes = compile::compile_to_pdf(quill, plate_content, &json_str)?;
+                let bytes =
+                    compile::compile_to_pdf(quill, plate_content, &json_str, &content_fields)?;
                 let artifacts = vec![Artifact {
                     bytes,
                     output_format: OutputFormat::Pdf,
@@ -117,7 +120,8 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
             }
             OutputFormat::Svg => {
-                let svg_pages = compile::compile_to_svg(quill, plate_content, &json_str)?;
+                let svg_pages =
+                    compile::compile_to_svg(quill, plate_content, &json_str, &content_fields)?;
                 let artifacts = svg_pages
                     .into_iter()
                     .map(|bytes| Artifact {
@@ -128,7 +132,13 @@ impl Backend for TypstBackend {
                 Ok(RenderResult::new(artifacts, OutputFormat::Svg))
             }
             OutputFormat::Png => {
-                let png_pages = compile::compile_to_png(quill, plate_content, &json_str, opts.ppi)?;
+                let png_pages = compile::compile_to_png(
+                    quill,
+                    plate_content,
+                    &json_str,
+                    &content_fields,
+                    opts.ppi,
+                )?;
                 let artifacts = png_pages
                     .into_iter()
                     .map(|bytes| Artifact {
@@ -158,7 +168,9 @@ impl Backend for TypstBackend {
         json_data: &serde_json::Value,
     ) -> Result<CompiledDocument, RenderError> {
         let json_str = serde_json::to_string(json_data).unwrap_or_else(|_| "{}".to_string());
-        let document = compile::compile_to_document(quill, plate_content, &json_str)?;
+        let content_fields = extract_content_fields(&quill.schema);
+        let document =
+            compile::compile_to_document(quill, plate_content, &json_str, &content_fields)?;
         let page_count = document.pages.len();
         Ok(CompiledDocument::new(Box::new(document), page_count))
     }
@@ -240,6 +252,50 @@ fn is_markdown_field(field_schema: &serde_json::Value) -> bool {
         .and_then(|v| v.as_str())
         .map(|s| s == "text/markdown")
         .unwrap_or(false)
+}
+
+/// Extract content field names from a quill schema.
+///
+/// Returns a [`ContentFields`] describing which top-level fields and
+/// per-card-type fields contain markdown content and should be
+/// auto-evaluated into Typst content objects by the helper package.
+fn extract_content_fields(schema: &QuillValue) -> ContentFields {
+    let json = schema.as_json();
+    let mut top_level = Vec::new();
+    let mut card_types = HashMap::new();
+
+    // Top-level properties
+    if let Some(properties) = json.get("properties").and_then(|v| v.as_object()) {
+        for (name, field_schema) in properties {
+            if is_markdown_field(field_schema) {
+                top_level.push(name.clone());
+            }
+        }
+    }
+
+    // Card-type definitions in $defs
+    if let Some(defs) = json.get("$defs").and_then(|v| v.as_object()) {
+        for (def_name, def_schema) in defs {
+            if let Some(card_type) = def_name.strip_suffix("_card") {
+                let mut card_fields = Vec::new();
+                if let Some(props) = def_schema.get("properties").and_then(|v| v.as_object()) {
+                    for (name, field_schema) in props {
+                        if is_markdown_field(field_schema) {
+                            card_fields.push(name.clone());
+                        }
+                    }
+                }
+                if !card_fields.is_empty() {
+                    card_types.insert(card_type.to_string(), card_fields);
+                }
+            }
+        }
+    }
+
+    ContentFields {
+        top_level,
+        card_types,
+    }
 }
 
 /// Transform markdown fields to Typst markup based on schema.

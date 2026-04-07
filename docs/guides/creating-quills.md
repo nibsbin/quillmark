@@ -203,7 +203,7 @@ Plate templates are pure backend-specific code (e.g., Typst) that access documen
 ### Basic Example (Typst)
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, eval-markup
+#import "@local/quillmark-helper:0.1.0": data
 #import "@preview/appreciated-letter:0.1.0": letter
 
 #show: letter.with(
@@ -213,7 +213,7 @@ Plate templates are pure backend-specific code (e.g., Typst) that access documen
   subject: data.subject,
 )
 
-#eval-markup(data.at("BODY", default: ""))
+#data.at("BODY", default: "")
 ```
 
 ### Data Access
@@ -221,12 +221,11 @@ Plate templates are pure backend-specific code (e.g., Typst) that access documen
 Quillmark injects parsed document fields (frontmatter, `BODY`, `CARDS`, etc.) as JSON via the `@local/quillmark-helper` virtual package:
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, eval-markup, parse-date
+#import "@local/quillmark-helper:0.1.0": data, parse-date
 ```
 
 The helper provides:
-- `data` - Dictionary of all fields passed to the backend
-- `eval-markup(content)` - Evaluate a string of Typst markup as content (markdown fields and `BODY` are converted to markup before injection)
+- `data` - Dictionary of all fields passed to the backend, with markdown fields automatically converted to Typst content objects
 - `parse-date(str)` - Parse date strings into Typst datetime objects
 
 ### Accessing fields in Typst
@@ -256,10 +255,10 @@ Use `data.at()` for safe access with defaults:
 
 ### Rendering Body Content
 
-In Typst plates, the document body is `data.BODY`. The backend converts markdown to Typst markup before building `data` (Python: `ParsedDocument.body()` is the same string). Render it with:
+In Typst plates, the document body is `data.BODY`. Markdown fields (including `BODY`) are automatically converted to Typst content objects by the helper package. Render it with:
 
 ```typst
-#eval-markup(data.at("BODY", default: ""))
+#data.at("BODY", default: "")
 ```
 
 ### Working with Optional Fields
