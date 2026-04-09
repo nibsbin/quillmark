@@ -5,18 +5,18 @@
 [![npm](https://img.shields.io/npm/v/@quillmark-test/wasm.svg?color=CB3837)](https://www.npmjs.com/package/@quillmark-test/wasm)
 [![Documentation](https://docs.rs/quillmark/badge.svg)](https://docs.rs/quillmark)
 
-A template-first Markdown rendering system that converts Markdown with YAML frontmatter into PDF, SVG, and other output formats. Maintained by [TongueToQuill](https://www.tonguetoquill.com).
+A format-first Markdown rendering system that converts Markdown with YAML frontmatter into PDF, SVG, and other output formats. Maintained by [TongueToQuill](https://www.tonguetoquill.com).
 
 !!! warning "Under Development"
     This project is under active development and APIs may change.
 
 ## Choose your path
 
-- **Writing documents?** You author Markdown content using existing templates.  
+- **Writing documents?** You author Markdown content using existing formats.  
   → [Markdown Syntax](authoring/markdown-syntax.md)
 
-- **Building templates?** You create Quill templates that control rendering.  
-  → [Creating Quills](template-designer/creating-quills.md)
+- **Building formats?** You create Quill formats that control rendering.  
+  → [Creating Quills](format-designer/creating-quills.md)
 
 - **Integrating into an app?** You use Quillmark via Python or JavaScript.  
   → [Integration Overview](integration/overview.md)

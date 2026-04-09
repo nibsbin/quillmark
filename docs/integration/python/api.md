@@ -51,7 +51,7 @@ class Quillmark:
         """Create engine with auto-registered backends."""
 
     def register_quill(self, quill: Quill) -> None:
-        """Register a quill template.
+        """Register a quill format.
 
         Raises:
             QuillmarkError: If validation fails
@@ -258,7 +258,7 @@ workflow.clear_assets()
 
 ### Quill
 
-Template bundle containing plate templates and assets.
+Format bundle containing plate files and assets.
 
 ```python
 class Quill:
@@ -286,7 +286,7 @@ class Quill:
 
     @property
     def plate(self) -> str | None:
-        """Plate template content."""
+        """Plate file content."""
 
     @property
     def example(self) -> str | None:
@@ -621,7 +621,7 @@ from quillmark import (
 )
 
 def render_document(quill_path: str, markdown: str, output_path: str):
-    """Render a markdown document using a quill template."""
+    """Render a markdown document using a quill format."""
     try:
         # Setup engine
         engine = Quillmark()
@@ -686,4 +686,4 @@ render_document(
 
 - [Integration Overview](../overview.md)
 - [Quickstart Guide](../../getting-started/quickstart.md)
-- [Creating Quills](../../template-designer/creating-quills.md)
+- [Creating Quills](../../format-designer/creating-quills.md)

@@ -7,7 +7,7 @@ Use this page to understand the shared Quillmark workflow before diving into the
 Most integrations follow the same three-step flow:
 
 1. **Parse** Markdown into a structured document.
-2. **Register** a Quill template with the engine.
+2. **Register** a Quill format with the engine.
 3. **Render** using a workflow and select an output format.
 
 === "Python"
@@ -57,7 +57,7 @@ Recommended pattern:
 
 ## Common Integration Patterns
 
-- **Template-driven rendering service**: keep Quills versioned and register at startup.
+- **Format-driven rendering service**: keep Quills versioned and register at startup.
 - **Authoring loop**: parse/validate on save, render only after validation passes.
 - **Batch rendering**: process many documents with one initialized engine.
 

@@ -30,7 +30,7 @@ const quillJson = {
       contents: `Quill:
   name: my-quill
   backend: typst
-  description: My template
+  description: My format
 `
     },
     "plate.typ": {
@@ -121,7 +121,7 @@ console.log(parsed.fields.body);   // "# Content"
 registerQuill(quillJson: string | object): QuillInfo
 ```
 
-Register a Quill template from JSON.
+Register a Quill format from JSON.
 
 **Parameters:**
 - `quillJson` - JSON string or object with Quill file structure
@@ -332,7 +332,7 @@ interface RenderOptions {
 ```javascript
 const result = engine.render(parsed, {
   format: 'pdf',
-  quillName: 'custom-template',
+  quillName: 'custom-format',
   assets: {
     'logo.png': logoBytes
   }
@@ -458,12 +458,12 @@ const quillJson = {
       contents: `Quill:
   name: my-quill
   backend: typst
-  description: My template
+  description: My format
   plate_file: plate.typ
 `
     },
 
-    // Required: Plate template
+    // Required: Plate file
     "plate.typ": {
       contents: `#import "@local/quillmark-helper:0.1.0": data
 #set document(title: data.at("title", default: "Untitled"))
@@ -515,7 +515,7 @@ async function renderDocument() {
   name: simple-doc
   version: "1.0"
   backend: typst
-  description: Simple document template
+  description: Simple document format
   plate_file: plate.typ
 
 main:
@@ -689,5 +689,5 @@ const result: RenderResult = engine.render(parsed, { format: 'pdf' });
 
 - [Integration Overview](../overview.md)
 - [Quickstart Guide](../../getting-started/quickstart.md)
-- [Creating Quills](../../template-designer/creating-quills.md)
+- [Creating Quills](../../format-designer/creating-quills.md)
 - [Python API Reference](../python/api.md)

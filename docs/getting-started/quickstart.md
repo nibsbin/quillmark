@@ -26,7 +26,7 @@ Get started with Quillmark in Python or JavaScript.
     # Create engine
     engine = Quillmark()
 
-    # Load a quill template
+    # Load a quill format
     quill = Quill.from_path("path/to/quill")
     engine.register_quill(quill)
 

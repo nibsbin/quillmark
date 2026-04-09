@@ -1,6 +1,6 @@
 # Quill Versioning
 
-Versioning helps template designers evolve Quills safely while keeping document rendering predictable.
+Versioning helps format designers evolve Quills safely while keeping document rendering predictable.
 
 ## Version Field in `Quill.yaml`
 
@@ -10,7 +10,7 @@ Each Quill should declare a semantic version:
 Quill:
   name: my-quill
   backend: typst
-  description: A professional document template
+  description: A professional document format
   version: "1.2.0"
 ```
 
@@ -43,8 +43,8 @@ Supported selectors:
 
 ## Practical Guidelines
 
-1. Start at `1.0.0` for your first stable internal template release.
-2. Increase versions on every template change, even if small.
+1. Start at `1.0.0` for your first stable internal format release.
+2. Increase versions on every format change, even if small.
 3. Treat field renames/removals as breaking (`MAJOR`) changes.
 4. Prefer additive changes (new optional fields/cards) to reduce migration work.
 5. Keep example documents updated for the latest major/minor versions.

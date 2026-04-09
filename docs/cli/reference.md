@@ -163,4 +163,4 @@ quillmark schema ./my-quill
 - When `--output` is omitted, the output filename is derived from the input filename (e.g., `input.md` → `input.pdf`)
 - Use `--stdout` to send output to stdout instead of a file
 - Use `--` to separate options from positional arguments if needed
-- Verbose mode shows template composition and compilation details
+- Verbose mode shows format composition and compilation details

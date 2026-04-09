@@ -1,6 +1,6 @@
 # Creating Quills
 
-A Quill is a template bundle that defines how your Markdown content should be rendered. This guide will walk you through creating your own Quill.
+A Quill is a format bundle that defines how your Markdown content should be rendered. This guide will walk you through creating your own Quill.
 
 ## Quick Tutorial
 
@@ -8,7 +8,7 @@ Build a minimal Quill in four steps:
 
 1. Create a new folder with `Quill.yaml` and `plate.typ`.
 2. Set required metadata (`name`, `backend`, `description`, `version`) in `Quill.yaml`.
-3. Define `main.fields` for the frontmatter your template expects.
+3. Define `main.fields` for the frontmatter your format expects.
 4. Add an `example.md` and render it with the CLI or API.
 
 Use the sections below as you complete each step.
@@ -20,7 +20,7 @@ A Quill is a directory containing:
 ```
 my-quill/
 ├── Quill.yaml          # Configuration and metadata
-├── plate.typ           # Plate template (backend-specific)
+├── plate.typ           # Plate file (backend-specific)
 ├── example.md          # Optional example document
 └── assets/             # Optional assets (fonts, images, etc.)
     ├── logo.png
@@ -36,7 +36,7 @@ The `Quill.yaml` file defines your Quill's metadata and configuration:
 Quill:
   name: my-quill
   backend: typst
-  description: A professional document template
+  description: A professional document format
   plate_file: plate.typ
   example_file: example.md
   version: "1.0.0"
@@ -71,7 +71,7 @@ main:
 
 ### Optional Fields
 
-- `plate_file` - Path to plate template (defaults to auto-generated plate)
+- `plate_file` - Path to plate file (defaults to auto-generated plate)
 - `example_file` - Path to example markdown file (defaults to `example.md` if present)
 - `author` - Creator of the Quill
 - `ui` - Document-level UI hints (e.g. `hide_body`; see [Disabling the Body Editor](#disabling-the-body-editor))
@@ -205,9 +205,9 @@ The same flag exists on a **card** definition’s `ui` when a card has no body c
 
 For a complete reference of all YAML properties, see the [Quill.yaml Reference](quill-yaml-reference.md).
 
-## Plate Templates
+## Plate Files
 
-Plate templates are pure backend-specific code (e.g., Typst) that access document data via a helper package.
+Plate files are pure backend-specific code (e.g., Typst) that access document data via a helper package.
 
 ### Basic Example (Typst)
 
@@ -329,12 +329,12 @@ Provide an example markdown file to show users how to use your Quill:
 title: Example Document
 author: John Doe
 date: 2026-01-15
-subject: Template Demonstration
+subject: Format Demonstration
 ---
 
 # Introduction
 
-This is an example document using the template.
+This is an example document using the format.
 
 ## Features
 
@@ -369,7 +369,7 @@ workflow = engine.workflow(quill)
 
 ## Best Practices
 
-1. **Keep it simple** - Start with basic templates and add complexity only when needed
+1. **Keep it simple** - Start with basic formats and add complexity only when needed
 2. **Use examples** - Provide clear example markdown files
 3. **Document fields** - Write good descriptions for all fields in `fields`
 4. **Test thoroughly** - Try various input combinations

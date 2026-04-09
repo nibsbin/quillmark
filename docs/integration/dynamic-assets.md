@@ -6,7 +6,7 @@ Add images, data files, and fonts to your workflow at runtime.
 
 Dynamic assets let you inject content that isn't bundled with your quill:
 
-- **Assets**: Images, data files, or any binary content referenced in templates
+- **Assets**: Images, data files, or any binary content referenced in formats
 - **Fonts**: Custom font files for typography
 
 This is useful for:
@@ -93,9 +93,9 @@ workflow.add_assets(assets)
     });
     ```
 
-## Using in Templates
+## Using in Formats
 
-### Typst Templates
+### Typst Formats
 
 Reference assets by name:
 
@@ -152,6 +152,6 @@ render_invoice("TechStart Inc", "techstart-logo.png")
 ## Notes
 
 - Assets must be added before calling `render()`
-- Asset names should match references in your template
+- Asset names should match references in your format
 - Fonts must be in TTF or OTF format
 - Dynamic assets don't persist between workflow instances

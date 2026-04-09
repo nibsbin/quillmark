@@ -7,7 +7,7 @@ Complete reference for authoring `Quill.yaml` configuration files. For a hands-o
 A `Quill.yaml` has these top-level sections:
 
 ```yaml
-Quill:        # Required — template metadata
+Quill:        # Required — format metadata
   ...
 
 main:         # Optional — document main card: field schemas and optional ui
@@ -28,7 +28,7 @@ Root-level `fields:` is not supported; define the main document’s field schema
 
 ## `Quill` Section
 
-Every Quill.yaml must have a `Quill` section with template metadata.
+Every Quill.yaml must have a `Quill` section with format metadata.
 
 | Key              | Type   | Required | Description |
 |------------------|--------|----------|-------------|
@@ -37,7 +37,7 @@ Every Quill.yaml must have a `Quill` section with template metadata.
 | `description`    | string | yes      | Human-readable description (non-empty) |
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
-| `plate_file`     | string | no       | Path to the plate template file |
+| `plate_file`     | string | no       | Path to the plate file |
 | `example_file`   | string | no       | Path to an example Markdown document |
 | `ui`             | object | no       | Document-level UI metadata |
 

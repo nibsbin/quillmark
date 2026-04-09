@@ -67,11 +67,11 @@ document:
 
 ## QUILL Key
 
-The `QUILL` key specifies which Quill template to use for rendering:
+The `QUILL` key specifies which Quill format to use for rendering:
 
 ```markdown
 ---
-QUILL: my-custom-template
+QUILL: my-custom-format
 title: Document Title
 author: Jane Doe
 ---
@@ -79,15 +79,15 @@ author: Jane Doe
 # Content
 ```
 
-If no `QUILL` key is specified, Quillmark uses the `__default__` template provided by the backend (if available).
+If no `QUILL` key is specified, Quillmark uses the `__default__` format provided by the backend (if available).
 
 ### Version Selectors
 
-You can pin a specific version of a Quill template using `@version` syntax:
+You can pin a specific version of a Quill format using `@version` syntax:
 
 ```markdown
 ---
-QUILL: my-template@2.1
+QUILL: my-format@2.1
 title: Document Title
 ---
 ```
@@ -96,11 +96,11 @@ Supported version selectors:
 
 | Syntax | Meaning |
 |--------|---------|
-| `template` | Latest version (default) |
-| `template@latest` | Latest version (explicit) |
-| `template@2` | Latest 2.x.x |
-| `template@2.1` | Latest 2.1.x |
-| `template@2.1.0` | Exact version 2.1.0 |
+| `format` | Latest version (default) |
+| `format@latest` | Latest version (explicit) |
+| `format@2` | Latest 2.x.x |
+| `format@2.1` | Latest 2.1.x |
+| `format@2.1.0` | Exact version 2.1.0 |
 
 ## Frontmatter Rules
 
