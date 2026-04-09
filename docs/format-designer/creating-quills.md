@@ -329,12 +329,12 @@ Provide an example markdown file to show users how to use your Quill:
 title: Example Document
 author: John Doe
 date: 2026-01-15
-subject: Format Demonstration
+subject: Format Walkthrough
 ---
 
 # Introduction
 
-This is an example document using the format.
+This is an example document using this format.
 
 ## Features
 

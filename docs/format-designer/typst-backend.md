@@ -371,7 +371,7 @@ Sincerely,
 
 ## Best Practices
 
-1. **Test incrementally** - Build your format step-by-step
+1. **Test incrementally** - Build your plate file and format step-by-step
 2. **Use packages** - Leverage existing Typst packages when possible
 3. **Separate concerns** - Keep complex logic in Typst, data in frontmatter
 4. **Validate inputs** - Define field schemas in `Quill.yaml`
