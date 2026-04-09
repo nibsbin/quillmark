@@ -10,38 +10,18 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
 !!! warning "Under Development"
     This project is under active development and APIs may change.
 
-## Features
+## Choose your path
 
-- **Template-first design**: Quill templates control structure and styling, Markdown provides content
-- **YAML frontmatter support**: Extended YAML metadata with inline sections
-- **Multiple backends**: 
-  - PDF and SVG output via Typst backend (JSON injection + helper package)
-- **Structured error handling**: Clear diagnostics with source locations
-- **Dynamic asset loading**: Fonts, images, and packages resolved at runtime
+- **Writing documents?** You author Markdown content using existing templates.  
+  → [Markdown Syntax](authoring/markdown-syntax.md)
 
-## Quick Links
+- **Building templates?** You create Quill templates that control rendering.  
+  → [Creating Quills](templates/creating-quills.md)
 
-- [Quickstart Guide](getting-started/quickstart.md) - Get up and running in minutes (Python, JavaScript)
-- [Concepts](getting-started/concepts.md) - Understand Quillmark's design and pipeline
-- [Quill.yaml Reference](templates/quill-yaml-reference.md) - Complete YAML authoring reference
-- [GitHub Repository](https://github.com/nibsbin/quillmark)
+- **Integrating into an app?** You use Quillmark via Python or JavaScript.  
+  → [Integration Overview](integration/overview.md)
 
-!!! info "Rust Developers"
-    Rust API documentation is available on [docs.rs](https://docs.rs/quillmark/latest/quillmark/).
+- **Using the CLI?** You render and validate from the command line.  
+  → [CLI Reference](cli/reference.md)
 
-## Project Structure
-
-Quillmark is organized as a workspace with multiple crates:
-
-- **crates/core** - Core parsing, templating, and backend traits
-- **crates/quillmark** - High-level orchestration API
-- **crates/backends/typst** - Typst backend for PDF/SVG output
-- **crates/bindings/python** - Python bindings (PyO3)
-- **crates/bindings/wasm** - WebAssembly bindings for JavaScript
-- **crates/bindings/cli** - Command-line interface
-- **crates/fixtures** - Test fixtures and utilities
-- **crates/fuzz** - Fuzz testing suite
-
-## License
-
-Licensed under the Apache License, Version 2.0. See [LICENSE](https://github.com/nibsbin/quillmark/blob/main/LICENSE) for details.
+- **Using Rust?** API documentation is on [docs.rs](https://docs.rs/quillmark).

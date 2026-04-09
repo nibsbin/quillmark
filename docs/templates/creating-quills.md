@@ -362,10 +362,11 @@ workflow = engine.workflow(quill)
 2. **Use examples** - Provide clear example markdown files
 3. **Document fields** - Write good descriptions for all fields in `fields`
 4. **Test thoroughly** - Try various input combinations
-5. **Version carefully** - Use semantic versioning for your Quills
+5. **Version carefully** - Use semantic versioning for your Quills (see [Quill Versioning](versioning.md))
 
 ## Next Steps
 
 - [Quill.yaml Reference](quill-yaml-reference.md) - Complete YAML property reference
+- [Quill Versioning](versioning.md) - Versioning and compatibility guidance
 - [Learn about Markdown syntax](../authoring/markdown-syntax.md)
 - [Explore the Typst backend](typst-backend.md)

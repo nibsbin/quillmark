@@ -43,7 +43,9 @@ nav:
       - Creating Quills: templates/creating-quills.md
       - Quill.yaml Reference: templates/quill-yaml-reference.md
       - Typst Backend: templates/typst-backend.md
+      - Versioning: templates/versioning.md
   - Integration:
+      - Overview: integration/overview.md
       - Dynamic Assets: integration/dynamic-assets.md
       - Validation: integration/validation.md
       - Python API: integration/python/api.md

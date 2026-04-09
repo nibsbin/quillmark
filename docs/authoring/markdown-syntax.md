@@ -52,9 +52,9 @@ Ordered lists:
 ## Code Blocks
 
 ````markdown
-```python
-def hello():
-    print("Hello, world!")
+```text
+Any code or plain text content
+can be placed inside fenced blocks.
 ```
 ````
 

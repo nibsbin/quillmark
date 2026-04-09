@@ -687,6 +687,7 @@ const result: RenderResult = engine.render(parsed, { format: 'pdf' });
 
 ## Next Steps
 
+- [Integration Overview](../overview.md)
 - [Quickstart Guide](../../getting-started/quickstart.md)
 - [Creating Quills](../../templates/creating-quills.md)
 - [Python API Reference](../python/api.md)
