@@ -140,43 +140,17 @@ quillmark info ./my-quill --json | jq '.name'
 - `0`: Success
 - `1`: Error (invalid arguments, file not found, parse error, compilation error, etc.)
 
-## Common Workflows
-
-### Batch Rendering
+## Minimal Usage Patterns
 
 ```bash
-#!/bin/bash
-# Render multiple documents
+# Validate a quill
+quillmark validate ./my-quill
 
-for file in inputs/*.md; do
-    output="outputs/$(basename "$file" .md).pdf"
-    quillmark render -q ./my-quill "$file" -o "$output"
-done
-```
+# Render one document to PDF
+quillmark render -q ./my-quill input.md -o output.pdf
 
-### Validation in CI
-
-```bash
-#!/bin/bash
-# Validate quills in CI pipeline
-
-set -e  # Exit on error
-
-quillmark validate ./quills/invoice
-quillmark validate ./quills/report
-quillmark validate ./quills/letter
-
-echo "✓ All quills valid"
-```
-
-### Format Conversion
-
-```bash
-# Generate multiple formats
-quillmark render -q ./my-quill input.md -f pdf -o output.pdf
-quillmark render -q ./my-quill input.md -f svg -o output.svg
-quillmark render -q ./my-quill input.md -f png -o output.png
-quillmark render -q ./my-quill input.md -f txt -o output.txt
+# Print schema to stdout
+quillmark schema ./my-quill
 ```
 
 ## Environment Variables

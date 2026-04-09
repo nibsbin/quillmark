@@ -2,6 +2,26 @@
 
 Quillmark supports standard CommonMark syntax for document content.
 
+## Your First Document
+
+Start with a simple, realistic document body:
+
+```markdown
+# Project Update
+
+## Wins this week
+
+- Shipped v0.51.1
+- Finalized onboarding copy
+
+## Next steps
+
+1. Prepare release notes
+2. Review customer feedback
+```
+
+Use this as a base, then layer in the syntax patterns below.
+
 ## Headings
 
 ```markdown

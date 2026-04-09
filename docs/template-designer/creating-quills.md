@@ -2,6 +2,17 @@
 
 A Quill is a template bundle that defines how your Markdown content should be rendered. This guide will walk you through creating your own Quill.
 
+## Quick Tutorial
+
+Build a minimal Quill in four steps:
+
+1. Create a new folder with `Quill.yaml` and `plate.typ`.
+2. Set required metadata (`name`, `backend`, `description`, `version`) in `Quill.yaml`.
+3. Define `main.fields` for the frontmatter your template expects.
+4. Add an `example.md` and render it with the CLI or API.
+
+Use the sections below as you complete each step.
+
 ## Quill Structure
 
 A Quill is a directory containing:

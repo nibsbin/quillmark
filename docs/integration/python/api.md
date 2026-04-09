@@ -686,4 +686,4 @@ render_document(
 
 - [Integration Overview](../overview.md)
 - [Quickstart Guide](../../getting-started/quickstart.md)
-- [Creating Quills](../../templates/creating-quills.md)
+- [Creating Quills](../../template-designer/creating-quills.md)

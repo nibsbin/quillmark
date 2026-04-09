@@ -53,7 +53,7 @@ Recommended pattern:
 
 1. Validate documents early in your pipeline.
 2. Surface parse/validation messages directly to the user or authoring UI.
-3. Fail fast on render errors in CI or batch jobs.
+3. Fail fast on render errors in automated or batch jobs.
 
 ## Common Integration Patterns
 

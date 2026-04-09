@@ -19,24 +19,40 @@ This is useful for:
 
 ### Single Asset
 
-```python
-from quillmark import Quillmark, Quill, ParsedDocument
+=== "Python"
 
-engine = Quillmark()
-quill = Quill.from_path("./my-quill")
-workflow = engine.workflow(quill)
+    ```python
+    from quillmark import Quillmark, Quill, ParsedDocument
 
-# Load image data
-with open("logo.png", "rb") as f:
-    logo_data = f.read()
+    engine = Quillmark()
+    quill = Quill.from_path("./my-quill")
+    workflow = engine.workflow(quill)
 
-# Add to workflow (stored as assets/DYNAMIC_ASSET__logo.png in the quill tree)
-workflow.add_asset("logo.png", logo_data)
+    with open("logo.png", "rb") as f:
+        workflow.add_asset("logo.png", f.read())
 
-# Render (template can now reference assets/DYNAMIC_ASSET__logo.png)
-parsed = ParsedDocument.from_markdown(markdown)
-result = workflow.render(parsed)
-```
+    parsed = ParsedDocument.from_markdown(markdown)
+    result = workflow.render(parsed)
+    ```
+
+=== "JavaScript"
+
+    ```javascript
+    import { Quillmark } from "@quillmark-test/wasm";
+
+    const engine = new Quillmark();
+    engine.registerQuill(quillBundle);
+
+    const logoBytes = await fetch("logo.png").then((r) => r.arrayBuffer());
+    const parsed = Quillmark.parseMarkdown(markdown);
+    const result = engine.render(parsed, {
+      format: "pdf",
+      quillName: "my-quill",
+      assets: {
+        "logo.png": new Uint8Array(logoBytes)
+      }
+    });
+    ```
 
 ### Multiple Assets
 
@@ -51,21 +67,31 @@ workflow.add_assets(assets)
 
 ## Adding Fonts
 
-```python
-# Load font file
-with open("CustomFont-Bold.ttf", "rb") as f:
-    font_data = f.read()
+=== "Python"
 
-# Add to workflow
-workflow.add_font("CustomFont-Bold.ttf", font_data)
+    ```python
+    with open("CustomFont-Bold.ttf", "rb") as f:
+        workflow.add_font("CustomFont-Bold.ttf", f.read())
 
-# Or add multiple fonts
-fonts = [
-    ("CustomFont-Regular.ttf", regular_data),
-    ("CustomFont-Bold.ttf", bold_data),
-]
-workflow.add_fonts(fonts)
-```
+    fonts = [
+        ("CustomFont-Regular.ttf", regular_data),
+        ("CustomFont-Bold.ttf", bold_data),
+    ]
+    workflow.add_fonts(fonts)
+    ```
+
+=== "JavaScript"
+
+    ```javascript
+    const result = engine.render(parsed, {
+      format: "pdf",
+      quillName: "my-quill",
+      fonts: {
+        "CustomFont-Regular.ttf": regularFontBytes,
+        "CustomFont-Bold.ttf": boldFontBytes
+      }
+    });
+    ```
 
 ## Using in Templates
 

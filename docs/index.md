@@ -16,7 +16,7 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
   → [Markdown Syntax](authoring/markdown-syntax.md)
 
 - **Building templates?** You create Quill templates that control rendering.  
-  → [Creating Quills](templates/creating-quills.md)
+  → [Creating Quills](template-designer/creating-quills.md)
 
 - **Integrating into an app?** You use Quillmark via Python or JavaScript.  
   → [Integration Overview](integration/overview.md)

@@ -4,35 +4,45 @@ Validate documents without full compilation for faster feedback.
 
 ## Overview
 
-Quillmark provides validation via the `dry_run()` method, which validates inputs without expensive backend compilation.
+Quillmark provides validation with language-appropriate APIs:
+
+- **Python**: `dry_run()` validates inputs without backend compilation.
+- **JavaScript**: use parse + render with error handling for validation feedback.
 
 ## Dry Run Validation
 
 Validate parsing and schema without backend compilation:
 
-```python
-from quillmark import Quillmark, Quill, ParsedDocument, QuillmarkError
+=== "Python"
 
-engine = Quillmark()
-quill = Quill.from_path("./my-quill")
-workflow = engine.workflow(quill)
+    ```python
+    from quillmark import Quillmark, Quill, ParsedDocument, QuillmarkError
 
-markdown = """---
-title: My Document
-author: Alice
----
-# Content
-"""
+    engine = Quillmark()
+    quill = Quill.from_path("./my-quill")
+    workflow = engine.workflow(quill)
 
-parsed = ParsedDocument.from_markdown(markdown)
+    parsed = ParsedDocument.from_markdown(markdown)
 
-# Validate without compilation
-try:
-    workflow.dry_run(parsed)
-    print("✓ Document valid")
-except QuillmarkError as e:
-    print(f"✗ Validation error: {e}")
-```
+    try:
+        workflow.dry_run(parsed)
+        print("✓ Document valid")
+    except QuillmarkError as e:
+        print(f"✗ Validation error: {e}")
+    ```
+
+=== "JavaScript"
+
+    ```javascript
+    import { Quillmark } from "@quillmark-test/wasm";
+
+    const engine = new Quillmark();
+    engine.registerQuill(quillBundle);
+    const parsed = Quillmark.parseMarkdown(markdown);
+
+    // Rendering performs parse/schema/backend validation in the JS API
+    const result = engine.render(parsed, { format: "pdf", quillName: "my-quill" });
+    ```
 
 **Use cases:**
 - Fast feedback in editors
@@ -43,35 +53,38 @@ except QuillmarkError as e:
 
 Use dry_run for efficient pipelines:
 
-```python
-from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat, QuillmarkError
+=== "Python"
 
-def validate_and_render(markdown: str, quill_path: str):
-    engine = Quillmark()
-    quill = Quill.from_path(quill_path)
-    workflow = engine.workflow(quill)
-    parsed = ParsedDocument.from_markdown(markdown)
+    ```python
+    from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat, QuillmarkError
 
-    # Stage 1: Dry run validation (fast)
-    try:
-        workflow.dry_run(parsed)
-    except QuillmarkError as e:
-        return {"error": f"Validation failed: {e}", "stage": "validation"}
+    def validate_and_render(markdown: str, quill_path: str):
+        engine = Quillmark()
+        quill = Quill.from_path(quill_path)
+        workflow = engine.workflow(quill)
+        parsed = ParsedDocument.from_markdown(markdown)
 
-    # Stage 2: Full render (slower)
-    try:
-        result = workflow.render(parsed, OutputFormat.PDF)
-        return {"success": True, "result": result}
-    except Exception as e:
-        return {"error": str(e), "stage": "compilation"}
+        try:
+            workflow.dry_run(parsed)
+        except QuillmarkError as e:
+            return {"error": f"Validation failed: {e}", "stage": "validation"}
 
-# Usage
-outcome = validate_and_render(markdown, "./invoice")
-if "error" in outcome:
-    print(f"Failed at {outcome['stage']}: {outcome['error']}")
-else:
-    outcome['result'].artifacts[0].save("output.pdf")
-```
+        try:
+            result = workflow.render(parsed, OutputFormat.PDF)
+            return {"success": True, "result": result}
+        except Exception as e:
+            return {"error": str(e), "stage": "compilation"}
+    ```
+
+=== "JavaScript"
+
+    ```javascript
+    function validateAndRender(engine, quillRef, markdown) {
+      const parsed = Quillmark.parseMarkdown(markdown);
+
+      return engine.render(parsed, { format: "pdf", quillName: quillRef });
+    }
+    ```
 
 ## Performance Comparison
 
