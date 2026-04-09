@@ -1,0 +1,93 @@
+# Creating Quills
+
+A Quill is a format bundle that defines how your Markdown content is rendered. This tutorial walks from an empty directory to a rendered PDF.
+
+## 1. Create the directory
+
+Start with this layout:
+
+```
+my-quill/
+├── Quill.yaml
+├── plate.typ
+└── example.md
+```
+
+## 2. Write `Quill.yaml`
+
+Create a minimal but complete config:
+
+```yaml
+Quill:
+  name: my-quill
+  backend: typst
+  description: A simple letter format
+  plate_file: plate.typ
+  example_file: example.md
+  version: "1.0.0"
+
+main:
+  fields:
+    sender:
+      type: string
+      description: Name of the sender
+    recipient:
+      type: string
+      description: Name of the recipient
+    date:
+      type: date
+      description: Letter date
+```
+
+Define your document's expected frontmatter fields under `main.fields`. Each field has a `type`, optional `default`, `description`, and validation constraints. For the full list of field types, UI hints, typed arrays, and enum constraints, see the [Quill.yaml Reference](quill-yaml-reference.md).
+
+## 3. Write `plate.typ`
+
+Your first plate template:
+
+```typst
+#import "@local/quillmark-helper:0.1.0": data
+
+#set page(margin: 1in)
+
+Dear #data.recipient,
+
+#data.at("BODY", default: "")
+
+Sincerely,
+
+#data.sender
+```
+
+For data access patterns, helper package details, optional fields, and CARDS iteration, see the [Typst Backend](typst-backend.md) guide.
+
+## 4. Add `example.md`
+
+Create a document that matches the fields you defined:
+
+```markdown
+---
+QUILL: my-quill
+sender: Jane Doe
+recipient: John Smith
+date: 2026-01-15
+---
+
+Thank you for your time.
+```
+
+## 5. Render it
+
+From the same directory, render the document:
+
+```bash
+quillmark render example.md
+```
+
+For command options and output controls, see the [CLI Reference](../cli/reference.md).
+
+## 6. Next steps
+
+- [Quill.yaml Reference](quill-yaml-reference.md)
+- [Typst Backend](typst-backend.md)
+- [Quill Versioning](versioning.md)

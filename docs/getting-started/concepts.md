@@ -6,24 +6,24 @@ Understanding the core concepts behind Quillmark will help you use it effectivel
 
 Markdown is a lightweight markup language that uses plain text formatting syntax. It's commonly used for documentation, README files, and content authoring. Quillmark extends standard Markdown with YAML frontmatter for structured metadata.
 
-## The Template-First Philosophy
+## The Format-First Philosophy
 
-Quillmark is built around a **template-first** design philosophy:
+Quillmark is built around a **format-first** design philosophy:
 
-- **Templates control structure and styling** - Quill templates define how documents are laid out and styled
-- **Markdown provides content** - Your markdown files contain the actual content that fills the templates
+- **Formats control structure and styling** - Quill formats define how documents are laid out and styled
+- **Markdown provides content** - Your markdown files contain the actual content that fills the format
 - **Separation of concerns** - Content authors can focus on writing without worrying about layout
 
 This approach differs from traditional Markdown renderers where styling is an afterthought.
 
 ## Core Components
 
-### Quill Templates
+### Quill Formats
 
-A **Quill** is a template bundle that defines how Markdown content should be rendered. It contains:
+A **Quill** is a format bundle that defines how Markdown content should be rendered. It contains:
 
 - **Metadata** (`Quill.yaml`) - Configuration including name, backend, and field schemas
-- **Plate template** - Backend-specific template that receives document data as JSON
+- **Plate file** - Backend-specific plate that receives document data as JSON
 - **Assets** - Fonts, images, and other resources needed for rendering
 - **Packages** - Backend-specific packages (e.g., Typst packages)
 
@@ -41,7 +41,7 @@ date: 2025-01-15
 # Content starts here
 ```
 
-This metadata is accessible in templates and can be validated against JSON schemas defined in the Quill.
+This metadata is accessible in formats and can be validated against JSON schemas defined in the Quill.
 
 ### Backends
 
@@ -53,7 +53,7 @@ Each backend has its own compilation process and error mapping.
 
 ### Default Quill System
 
-Quillmark includes a **default quill system** that allows rendering documents without explicitly specifying a Quill template. When no `QUILL` field is present in your frontmatter, Quillmark uses the `__default__` template provided by the backend (if available).
+Quillmark includes a **default quill system** that allows rendering documents without explicitly specifying a Quill format. When no `QUILL` field is present in your frontmatter, Quillmark uses the `__default__` format provided by the backend (if available).
 
 For example, the Typst backend provides a default Quill that renders simple documents with minimal styling. This means you can get started quickly:
 
@@ -68,10 +68,10 @@ author: Jane Doe
 Content here.
 ```
 
-This document will render using the default Typst quill without requiring you to create or register a custom Quill template. When you're ready for more customization, you can:
+This document will render using the default Typst quill without requiring you to create or register a custom Quill format. When you're ready for more customization, you can:
 
-1. Specify a custom Quill in frontmatter: `QUILL: my-custom-template`
-2. Create and register your own Quill templates
+1. Specify a custom Quill in frontmatter: `QUILL: my-custom-format`
+2. Create and register your own Quill formats
 
 ## The Rendering Pipeline
 
@@ -91,7 +91,7 @@ Markdown + YAML → Parse/Normalize → Transform Fields → Compile (Backend) �
 Think of Quillmark as a factory:
 
 - **Input**: Raw materials (Markdown content + metadata)
-- **Quill**: The mold/template that shapes the output
+- **Quill**: The format that shapes the output
 - **Backend**: The manufacturing process
 - **Output**: Finished products (PDF, SVG, filled forms)
 
@@ -107,6 +107,7 @@ Different Quills can produce completely different outputs from the same input, j
 
 ## Next Steps
 
-- [Create your first Quill](../guides/creating-quills.md)
-- [Learn about Quill Markdown syntax](../guides/quill-markdown.md)
-- [Explore the Typst backend](../guides/typst-backend.md)
+- [Create your first Quill](../format-designer/creating-quills.md)
+- [Learn Quill versioning](../format-designer/versioning.md)
+- [Learn about Markdown syntax](../authoring/markdown-syntax.md)
+- [Explore the Typst backend](../format-designer/typst-backend.md)

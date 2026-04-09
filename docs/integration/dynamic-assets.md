@@ -6,7 +6,7 @@ Add images, data files, and fonts to your workflow at runtime.
 
 Dynamic assets let you inject content that isn't bundled with your quill:
 
-- **Assets**: Images, data files, or any binary content referenced in templates
+- **Assets**: Images, data files, or any binary content referenced in formats
 - **Fonts**: Custom font files for typography
 
 This is useful for:
@@ -19,24 +19,40 @@ This is useful for:
 
 ### Single Asset
 
-```python
-from quillmark import Quillmark, Quill, ParsedDocument
+=== "Python"
 
-engine = Quillmark()
-quill = Quill.from_path("./my-quill")
-workflow = engine.workflow(quill)
+    ```python
+    from quillmark import Quillmark, Quill, ParsedDocument
 
-# Load image data
-with open("logo.png", "rb") as f:
-    logo_data = f.read()
+    engine = Quillmark()
+    quill = Quill.from_path("./my-quill")
+    workflow = engine.workflow(quill)
 
-# Add to workflow (stored as assets/DYNAMIC_ASSET__logo.png in the quill tree)
-workflow.add_asset("logo.png", logo_data)
+    with open("logo.png", "rb") as f:
+        workflow.add_asset("logo.png", f.read())
 
-# Render (template can now reference assets/DYNAMIC_ASSET__logo.png)
-parsed = ParsedDocument.from_markdown(markdown)
-result = workflow.render(parsed)
-```
+    parsed = ParsedDocument.from_markdown(markdown)
+    result = workflow.render(parsed)
+    ```
+
+=== "JavaScript"
+
+    ```javascript
+    import { Quillmark } from "@quillmark-test/wasm";
+
+    const engine = new Quillmark();
+    engine.registerQuill(quillBundle);
+
+    const logoBytes = await fetch("logo.png").then((r) => r.arrayBuffer());
+    const parsed = Quillmark.parseMarkdown(markdown);
+    const result = engine.render(parsed, {
+      format: "pdf",
+      quillName: "my-quill",
+      assets: {
+        "logo.png": new Uint8Array(logoBytes)
+      }
+    });
+    ```
 
 ### Multiple Assets
 
@@ -51,25 +67,35 @@ workflow.add_assets(assets)
 
 ## Adding Fonts
 
-```python
-# Load font file
-with open("CustomFont-Bold.ttf", "rb") as f:
-    font_data = f.read()
+=== "Python"
 
-# Add to workflow
-workflow.add_font("CustomFont-Bold.ttf", font_data)
+    ```python
+    with open("CustomFont-Bold.ttf", "rb") as f:
+        workflow.add_font("CustomFont-Bold.ttf", f.read())
 
-# Or add multiple fonts
-fonts = [
-    ("CustomFont-Regular.ttf", regular_data),
-    ("CustomFont-Bold.ttf", bold_data),
-]
-workflow.add_fonts(fonts)
-```
+    fonts = [
+        ("CustomFont-Regular.ttf", regular_data),
+        ("CustomFont-Bold.ttf", bold_data),
+    ]
+    workflow.add_fonts(fonts)
+    ```
 
-## Using in Templates
+=== "JavaScript"
 
-### Typst Templates
+    ```javascript
+    const result = engine.render(parsed, {
+      format: "pdf",
+      quillName: "my-quill",
+      fonts: {
+        "CustomFont-Regular.ttf": regularFontBytes,
+        "CustomFont-Bold.ttf": boldFontBytes
+      }
+    });
+    ```
+
+## Using in Formats
+
+### Typst Formats
 
 Reference assets by name:
 
@@ -126,6 +152,6 @@ render_invoice("TechStart Inc", "techstart-logo.png")
 ## Notes
 
 - Assets must be added before calling `render()`
-- Asset names should match references in your template
+- Asset names should match references in your format
 - Fonts must be in TTF or OTF format
 - Dynamic assets don't persist between workflow instances
