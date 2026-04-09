@@ -35,6 +35,35 @@ Most integrations follow the same three-step flow:
     const result = engine.render(parsed, { format: "pdf" });
     ```
 
+### Loading Quills
+
+=== "Python"
+
+    ```python
+    from quillmark import Quillmark, Quill
+
+    engine = Quillmark()
+    quill = Quill.from_path("path/to/my-quill")
+    engine.register_quill(quill)
+
+    # You can also pass a Quill object directly
+    workflow = engine.workflow(quill)
+    ```
+
+=== "JavaScript"
+
+    ```javascript
+    import { Quillmark } from "@quillmark-test/wasm";
+
+    const engine = new Quillmark();
+
+    // Register a quill bundle (JSON string or object)
+    engine.registerQuill(quillBundle);
+
+    const parsed = Quillmark.parseMarkdown(markdownText);
+    const result = engine.render(parsed, { format: "pdf", quillName: "my-quill" });
+    ```
+
 ## Output Formats
 
 Quillmark can produce one or more artifacts depending on the backend and format:
