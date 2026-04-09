@@ -107,6 +107,6 @@ Different Quills can produce completely different outputs from the same input, j
 
 ## Next Steps
 
-- [Create your first Quill](../guides/creating-quills.md)
-- [Learn about Quill Markdown syntax](../guides/quill-markdown.md)
-- [Explore the Typst backend](../guides/typst-backend.md)
+- [Create your first Quill](../templates/creating-quills.md)
+- [Learn about Markdown syntax](../authoring/markdown-syntax.md)
+- [Explore the Typst backend](../templates/typst-backend.md)

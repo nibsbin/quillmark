@@ -21,11 +21,13 @@ A template-first Markdown rendering system that converts Markdown with YAML fron
 
 ## Quick Links
 
-- [Quickstart Guide](getting-started/quickstart.md) - Get up and running in minutes (Python, Rust, JavaScript)
+- [Quickstart Guide](getting-started/quickstart.md) - Get up and running in minutes (Python, JavaScript)
 - [Concepts](getting-started/concepts.md) - Understand Quillmark's design and pipeline
-- [Quill.yaml Reference](guides/quill-yaml-reference.md) - Complete YAML authoring reference
-- [Rust API Documentation](https://docs.rs/quillmark/latest/quillmark/) - Complete Rust API reference
+- [Quill.yaml Reference](templates/quill-yaml-reference.md) - Complete YAML authoring reference
 - [GitHub Repository](https://github.com/nibsbin/quillmark)
+
+!!! info "Rust Developers"
+    Rust API documentation is available on [docs.rs](https://docs.rs/quillmark/latest/quillmark/).
 
 ## Project Structure
 

@@ -225,7 +225,7 @@ SVG output is useful for web applications and scalable graphics.
 
 PNG renders each page to a raster image. The resolution is controlled via the `ppi` (pixels per inch) option, which defaults to **144 PPI** (2× at 72pt/inch, suitable for retina screen previews). Use 300 PPI or higher for print-quality output.
 
-**Python** — use `render_with_options` from the Rust API or pass `ppi` through the workflow:
+**Python** — use `render_with_options` or pass `ppi` through the workflow:
 
 ```python
 from quillmark import OutputFormat
@@ -251,17 +251,6 @@ const printResult = engine.render(parsed, { format: 'png', ppi: 300 });
 for (const artifact of printResult.artifacts) {
   console.log(artifact.mimeType);  // 'image/png'
 }
-```
-
-**Rust:**
-
-```rust
-use quillmark_core::{OutputFormat, RenderOptions};
-
-let opts = RenderOptions {
-    output_format: Some(OutputFormat::Png),
-    ppi: Some(300.0),  // print quality; None defaults to 144.0
-};
 ```
 
 **PPI guidelines:**
@@ -398,4 +387,4 @@ Sincerely,
 ## Next Steps
 
 - [Create your own Typst Quill](creating-quills.md)
-- [Learn about Quill Markdown](quill-markdown.md)
+- [Learn about Markdown syntax](../authoring/markdown-syntax.md)

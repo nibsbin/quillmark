@@ -684,6 +684,5 @@ render_document(
 
 ## Next Steps
 
-- [Quickstart Guide](../getting-started/quickstart.md)
-- [Creating Quills](../guides/creating-quills.md)
-- [Rust API Documentation](https://docs.rs/quillmark/latest/quillmark/)
+- [Quickstart Guide](../../getting-started/quickstart.md)
+- [Creating Quills](../../templates/creating-quills.md)

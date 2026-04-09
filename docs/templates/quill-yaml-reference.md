@@ -456,5 +456,5 @@ cards:
 ## Next Steps
 
 - [Creating Quills](creating-quills.md) — hands-on tutorial
-- [Quill Markdown](quill-markdown.md) — document authoring syntax
-- [Validation](validation.md) — validating documents against schemas
+- [Markdown Syntax](../authoring/markdown-syntax.md) — document authoring syntax
+- [Validation](../integration/validation.md) — validating documents against schemas

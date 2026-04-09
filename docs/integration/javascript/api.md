@@ -687,7 +687,6 @@ const result: RenderResult = engine.render(parsed, { format: 'pdf' });
 
 ## Next Steps
 
-- [Quickstart Guide](../getting-started/quickstart.md)
-- [Creating Quills](../guides/creating-quills.md)
+- [Quickstart Guide](../../getting-started/quickstart.md)
+- [Creating Quills](../../templates/creating-quills.md)
 - [Python API Reference](../python/api.md)
-- [Rust API Documentation](https://docs.rs/quillmark/latest/quillmark/)

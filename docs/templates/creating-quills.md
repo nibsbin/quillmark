@@ -367,5 +367,5 @@ workflow = engine.workflow(quill)
 ## Next Steps
 
 - [Quill.yaml Reference](quill-yaml-reference.md) - Complete YAML property reference
-- [Learn about Quill Markdown syntax](quill-markdown.md)
+- [Learn about Markdown syntax](../authoring/markdown-syntax.md)
 - [Explore the Typst backend](typst-backend.md)
