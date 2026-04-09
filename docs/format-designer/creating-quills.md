@@ -329,7 +329,7 @@ Provide an example markdown file to show users how to use your Quill:
 title: Example Document
 author: John Doe
 date: 2026-01-15
-subject: Format Walkthrough
+subject: Example Document
 ---
 
 # Introduction
