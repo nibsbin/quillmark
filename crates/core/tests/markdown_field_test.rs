@@ -2,8 +2,8 @@ use quillmark_core::{
     normalize::normalize_document,
     quill::{CardSchema, FieldSchema, FieldType},
     schema::build_schema,
-    ParsedDocument, QuillValue,
     version::QuillReference,
+    ParsedDocument, QuillValue,
 };
 use serde_json::json;
 use std::collections::HashMap;

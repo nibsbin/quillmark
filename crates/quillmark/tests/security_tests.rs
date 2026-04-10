@@ -76,7 +76,10 @@ fn test_typst_injection_via_special_chars() {
 fn test_input_size_limit() {
     // Create input larger than MAX_INPUT_SIZE (10 MB)
     let large_content = "a".repeat(11 * 1024 * 1024); // 11 MB
-    let markdown = format!("---\nQUILL: test_quill\ntitle: Large\n---\n\n{}", large_content);
+    let markdown = format!(
+        "---\nQUILL: test_quill\ntitle: Large\n---\n\n{}",
+        large_content
+    );
     let result = ParsedDocument::from_markdown(&markdown);
 
     // Should fail with input size limit error
@@ -112,7 +115,10 @@ fn test_yaml_size_limit() {
 fn test_reserved_field_injection() {
     // Attempt to use reserved field names
     let reserved_tests = vec![
-        ("---\nQUILL: test_quill\nBODY: injected\n---\n\nBody", "BODY"),
+        (
+            "---\nQUILL: test_quill\nBODY: injected\n---\n\nBody",
+            "BODY",
+        ),
         ("---\nQUILL: test_quill\nCARDS: []\n---\n\nBody", "CARDS"),
     ];
 
@@ -138,9 +144,9 @@ fn test_card_name_validation() {
     // Invalid card names (must match [a-z_][a-z0-9_]*)
     let invalid_names = vec![
         "---\nQUILL: test_quill\n---\n\n---\nCARD: Invalid-Name\n---\n\n", // hyphen
-        "---\nQUILL: test_quill\n---\n\n---\nCARD: 123start\n---\n\n", // starts with number
-        "---\nQUILL: test_quill\n---\n\n---\nCARD: UPPERCASE\n---\n\n", // uppercase
-        "---\nQUILL: test_quill\n---\n\n---\nCARD: spaces here\n---\n\n", // spaces
+        "---\nQUILL: test_quill\n---\n\n---\nCARD: 123start\n---\n\n",     // starts with number
+        "---\nQUILL: test_quill\n---\n\n---\nCARD: UPPERCASE\n---\n\n",    // uppercase
+        "---\nQUILL: test_quill\n---\n\n---\nCARD: spaces here\n---\n\n",  // spaces
     ];
 
     for markdown in invalid_names {

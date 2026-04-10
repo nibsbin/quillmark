@@ -59,7 +59,7 @@ impl Quillmark {
     /// Parse markdown into a ParsedDocument
     ///
     /// This is the first step in the workflow. The returned ParsedDocument contains
-    /// the parsed YAML frontmatter fields and the quill_ref (from QUILL field or "__default__").
+    /// the parsed YAML frontmatter fields and the quill_ref from QUILL.
     #[wasm_bindgen(js_name = parseMarkdown)]
     pub fn parse_markdown(markdown: &str) -> Result<ParsedDocument, JsValue> {
         let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
@@ -216,7 +216,7 @@ impl Quillmark {
     /// surface input errors quickly. Returns successfully on valid input,
     /// or throws an error with diagnostic payload on failure.
     ///
-    /// The quill name is inferred from the markdown's QUILL tag (or defaults to "__default__").
+    /// The quill name is inferred from the markdown's QUILL tag.
     ///
     /// This is useful for fast feedback loops in LLM-driven document generation.
     #[wasm_bindgen(js_name = dryRun)]
@@ -274,19 +274,14 @@ impl Quillmark {
 
     /// Render a ParsedDocument to final artifacts (PDF, SVG, TXT)
     ///
-    /// Note that the quill reference is optional to specify and can be inferred from the markdown content's frontmatter.
-    /// Uses the Quill specified in options.quill_ref if provided,
-    /// otherwise infers it from the ParsedDocument's quill_ref field.
+    /// Uses the Quill specified in the ParsedDocument's quill_ref field.
     #[wasm_bindgen]
     pub fn render(
         &mut self,
         parsed: ParsedDocument,
         opts: RenderOptions,
     ) -> Result<RenderResult, JsValue> {
-        let quill_ref_to_use = opts
-            .quill_ref
-            .clone()
-            .unwrap_or_else(|| parsed.quill_ref.clone());
+        let quill_ref_to_use = parsed.quill_ref.clone();
         let parsed = Self::to_core_parsed(parsed)?;
 
         // Load the workflow
@@ -342,8 +337,8 @@ impl Quillmark {
         parsed: ParsedDocument,
         opts: Option<CompileOptions>,
     ) -> Result<CompiledDocument, JsValue> {
-        let opts = opts.unwrap_or_default();
-        let quill_ref_to_use = opts.quill_ref.unwrap_or_else(|| parsed.quill_ref.clone());
+        let _opts = opts.unwrap_or_default();
+        let quill_ref_to_use = parsed.quill_ref.clone();
         let parsed = Self::to_core_parsed(parsed)?;
 
         let workflow = self.inner.workflow(&quill_ref_to_use).map_err(|e| {
@@ -415,9 +410,7 @@ impl Quillmark {
                 ))
             })?;
 
-        Ok(quillmark_core::ParsedDocument::new(
-            fields, quill_ref,
-        ))
+        Ok(quillmark_core::ParsedDocument::new(fields, quill_ref))
     }
 }
 

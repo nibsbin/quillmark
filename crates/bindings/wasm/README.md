@@ -124,7 +124,6 @@ Additional methods for managing the engine and debugging:
 ```typescript
 type RenderOptions = {
   format?: 'pdf' | 'svg' | 'txt'
-  quillRef?: string  // Override quillRef from ParsedDocument
   assets?: Record<string, Uint8Array | number[]> 
 }
 ```
@@ -136,7 +135,7 @@ Returned by `parseMarkdown()`:
 ```typescript
 {
   fields: object,  // YAML frontmatter fields
-  quillRef: string  // Quill reference from QUILL field (or "__default__")
+  quillRef: string  // Quill reference from required QUILL field
 }
 ```
 

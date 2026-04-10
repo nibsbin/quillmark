@@ -75,13 +75,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             // Try to get QUILL field from frontmatter
             let quill_ref = parsed.quill_reference().to_string();
 
-            // Check if a QUILL field was specified (not the default "__default__")
-            if quill_ref == "__default__" {
-                return Err(CliError::InvalidArgument(
-                    "No QUILL field in frontmatter and --quill not specified".to_string(),
-                ));
-            }
-
             // If QUILL field is a path, use it directly
             let quill_candidate = PathBuf::from(&quill_ref);
             if quill_candidate.exists() && quill_candidate.is_dir() {

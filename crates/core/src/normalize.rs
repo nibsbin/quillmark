@@ -906,7 +906,10 @@ mod tests {
             crate::value::QuillValue::from_json(serde_json::json!("<<content>> \u{202D}**bold**")),
         );
 
-        let doc = ParsedDocument::new(fields, crate::version::QuillReference::latest("test".to_string()));
+        let doc = ParsedDocument::new(
+            fields,
+            crate::version::QuillReference::latest("test".to_string()),
+        );
         let normalized = super::normalize_document(doc).unwrap();
 
         // Title has chevrons preserved (only bidi stripped)

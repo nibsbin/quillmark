@@ -2047,7 +2047,10 @@ mod demo_file_test {
     fn test_input_within_size_limit() {
         // Create markdown just under the limit
         let size = 1000; // Much smaller than limit
-        let markdown = format!("---\nQUILL: test_quill\ntitle: Test\n---\n\n{}", "a".repeat(size));
+        let markdown = format!(
+            "---\nQUILL: test_quill\ntitle: Test\n---\n\n{}",
+            "a".repeat(size)
+        );
 
         let result = decompose(&markdown);
         assert!(result.is_ok());
@@ -2184,7 +2187,8 @@ Body."#;
 
     #[test]
     fn test_chevrons_preserved_in_code_blocks() {
-        let markdown = "---\nQUILL: test_quill\n---\n```\n<<in code block>>\n```\n\n<<outside code block>>";
+        let markdown =
+            "---\nQUILL: test_quill\n---\n```\n<<in code block>>\n```\n\n<<outside code block>>";
         let doc = decompose(markdown).unwrap();
 
         let body = doc.body().unwrap();
@@ -2195,7 +2199,8 @@ Body."#;
 
     #[test]
     fn test_chevrons_preserved_in_inline_code() {
-        let markdown = "---\nQUILL: test_quill\n---\n`<<in inline code>>` and <<outside inline code>>";
+        let markdown =
+            "---\nQUILL: test_quill\n---\n`<<in inline code>>` and <<outside inline code>>";
         let doc = decompose(markdown).unwrap();
 
         let body = doc.body().unwrap();
@@ -2495,7 +2500,8 @@ Body."#;
 
     #[test]
     fn test_yaml_special_characters_in_string() {
-        let markdown = "---\nQUILL: test_quill\nspecial: \"colon: here, and [brackets]\"\n---\n\nBody.";
+        let markdown =
+            "---\nQUILL: test_quill\nspecial: \"colon: here, and [brackets]\"\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
         assert_eq!(
             doc.get_field("special").unwrap().as_str().unwrap(),
@@ -2693,7 +2699,8 @@ Body content."#;
 
     #[test]
     fn test_body_with_leading_newlines() {
-        let markdown = "---\nQUILL: test_quill\ntitle: Test\n---\n\n\n\nBody with leading newlines.";
+        let markdown =
+            "---\nQUILL: test_quill\ntitle: Test\n---\n\n\n\nBody with leading newlines.";
         let doc = decompose(markdown).unwrap();
         // Body should preserve leading newlines after frontmatter
         assert!(doc.body().unwrap().starts_with('\n'));
