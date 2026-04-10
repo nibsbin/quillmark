@@ -460,6 +460,7 @@ pub fn normalize_field_name(name: &str) -> String {
 ///
 /// ```
 /// use quillmark_core::{ParsedDocument, QuillValue, normalize::normalize_document};
+/// use quillmark_core::version::QuillReference;
 /// use std::collections::HashMap;
 ///
 /// // Direct construction (e.g., from API or database)
@@ -467,7 +468,8 @@ pub fn normalize_field_name(name: &str) -> String {
 /// fields.insert("title".to_string(), QuillValue::from_json(serde_json::json!("Test")));
 /// fields.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("<<content>>")));
 ///
-/// let doc = ParsedDocument::new(fields);
+/// let quill_ref = QuillReference::latest("my_quill".to_string());
+/// let doc = ParsedDocument::new(fields, quill_ref);
 /// let normalized = normalize_document(doc).expect("Failed to normalize document");
 ///
 /// // Body has chevrons preserved
@@ -482,7 +484,7 @@ pub fn normalize_document(
     doc: crate::parse::ParsedDocument,
 ) -> Result<crate::parse::ParsedDocument, crate::error::ParseError> {
     let normalized_fields = normalize_fields(doc.fields().clone());
-    Ok(crate::parse::ParsedDocument::with_quill_ref(
+    Ok(crate::parse::ParsedDocument::new(
         normalized_fields,
         doc.quill_reference().clone(),
     ))
@@ -904,7 +906,7 @@ mod tests {
             crate::value::QuillValue::from_json(serde_json::json!("<<content>> \u{202D}**bold**")),
         );
 
-        let doc = ParsedDocument::new(fields);
+        let doc = ParsedDocument::new(fields, crate::version::QuillReference::latest("test".to_string()));
         let normalized = super::normalize_document(doc).unwrap();
 
         // Title has chevrons preserved (only bidi stripped)
@@ -925,7 +927,7 @@ mod tests {
 
         let fields = std::collections::HashMap::new();
         let quill_ref = QuillReference::from_str("custom_quill").unwrap();
-        let doc = ParsedDocument::with_quill_ref(fields, quill_ref);
+        let doc = ParsedDocument::new(fields, quill_ref);
         let normalized = super::normalize_document(doc).unwrap();
 
         assert_eq!(normalized.quill_reference().name, "custom_quill");

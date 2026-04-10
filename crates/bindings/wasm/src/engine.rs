@@ -415,7 +415,7 @@ impl Quillmark {
                 ))
             })?;
 
-        Ok(quillmark_core::ParsedDocument::with_quill_ref(
+        Ok(quillmark_core::ParsedDocument::new(
             fields, quill_ref,
         ))
     }

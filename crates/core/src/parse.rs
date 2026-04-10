@@ -64,16 +64,8 @@ pub struct ParsedDocument {
 }
 
 impl ParsedDocument {
-    /// Create a new ParsedDocument with the given fields
-    pub fn new(fields: HashMap<String, QuillValue>) -> Self {
-        Self {
-            fields,
-            quill_ref: QuillReference::latest("__default__".to_string()),
-        }
-    }
-
     /// Create a ParsedDocument from fields and quill reference
-    pub fn with_quill_ref(fields: HashMap<String, QuillValue>, quill_ref: QuillReference) -> Self {
+    pub fn new(fields: HashMap<String, QuillValue>, quill_ref: QuillReference) -> Self {
         Self { fields, quill_ref }
     }
 
@@ -521,12 +513,10 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
     let blocks = find_metadata_blocks(markdown)?;
 
     if blocks.is_empty() {
-        // No metadata blocks, entire content is body
-        fields.insert(
-            BODY_FIELD.to_string(),
-            QuillValue::from_json(serde_json::Value::String(markdown.to_string())),
-        );
-        return Ok(ParsedDocument::new(fields));
+        // No metadata blocks — entire content is body, but QUILL is required
+        return Err(crate::error::ParseError::InvalidStructure(
+            "Missing required QUILL field. Add `QUILL: <name>` to the frontmatter.".to_string(),
+        ));
     }
 
     // Collect all card items into unified CARDS array
@@ -725,11 +715,15 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
         });
     }
 
-    let quill_tag = quill_ref.unwrap_or_else(|| "__default__".to_string());
+    let quill_tag = quill_ref.ok_or_else(|| {
+        ParseError::InvalidStructure(
+            "Missing required QUILL field. Add `QUILL: <name>` to the frontmatter.".to_string(),
+        )
+    })?;
     let quill_ref = QuillReference::from_str(&quill_tag).map_err(|e| {
         ParseError::InvalidStructure(format!("Invalid QUILL tag '{}': {}", quill_tag, e))
     })?;
-    let parsed = ParsedDocument::with_quill_ref(fields, quill_ref);
+    let parsed = ParsedDocument::new(fields, quill_ref);
 
     Ok(parsed)
 }
@@ -741,17 +735,18 @@ mod tests {
     #[test]
     fn test_no_frontmatter() {
         let markdown = "# Hello World\n\nThis is a test.";
-        let doc = decompose(markdown).unwrap();
-
-        assert_eq!(doc.body(), Some(markdown));
-        assert_eq!(doc.fields().len(), 1);
-        // Verify default quill tag is set
-        assert_eq!(doc.quill_reference().name, "__default__");
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required QUILL field"));
     }
 
     #[test]
     fn test_with_frontmatter() {
         let markdown = r#"---
+QUILL: test_quill
 title: Test Document
 author: Test Author
 ---
@@ -772,27 +767,25 @@ This is the body."#;
             "Test Author"
         );
         assert_eq!(doc.fields().len(), 4); // title, author, body, CARDS
-                                           // Verify default quill tag is set when no QUILL directive
-        assert_eq!(doc.quill_reference().name, "__default__");
+        assert_eq!(doc.quill_reference().name, "test_quill");
     }
 
     #[test]
     fn test_whitespace_frontmatter() {
-        // Frontmatter with only whitespace should be treated as empty/valid
-        // and not error out or be treated as null YAML
+        // Frontmatter with only whitespace has no QUILL → error
         let markdown = "---\n   \n---\n\n# Hello";
-        let doc = decompose(markdown).unwrap();
-
-        assert_eq!(doc.body(), Some("\n# Hello"));
-        // Should have default fields (BODY + CARDS) but no others
-        // (unless defaults are applied later, but decompose returns basics)
-        assert!(doc.get_field("title").is_none());
-        assert_eq!(doc.fields().len(), 2); // BODY, CARDS
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required QUILL field"));
     }
 
     #[test]
     fn test_complex_yaml_frontmatter() {
         let markdown = r#"---
+QUILL: test_quill
 title: Complex Document
 tags:
   - test
@@ -834,7 +827,7 @@ Content here."#;
         );
 
         // Create an empty parsed document
-        let doc = ParsedDocument::new(HashMap::new());
+        let doc = ParsedDocument::new(HashMap::new(), QuillReference::latest("test".to_string()));
         let doc_with_defaults = doc.with_defaults(&defaults);
 
         // Check that defaults were applied
@@ -874,7 +867,7 @@ Content here."#;
             "status".to_string(),
             QuillValue::from_json(serde_json::json!("published")),
         );
-        let doc = ParsedDocument::new(fields);
+        let doc = ParsedDocument::new(fields, QuillReference::latest("test".to_string()));
 
         let doc_with_defaults = doc.with_defaults(&defaults);
 
@@ -909,7 +902,7 @@ Content here."#;
             "status".to_string(),
             QuillValue::from_json(serde_json::json!("published")),
         );
-        let doc = ParsedDocument::new(fields);
+        let doc = ParsedDocument::new(fields, QuillReference::latest("test".to_string()));
 
         let doc_with_defaults = doc.with_defaults(&defaults);
 
@@ -940,7 +933,7 @@ Content here."#;
 
         let defaults = HashMap::new(); // Empty defaults map
 
-        let doc = ParsedDocument::new(HashMap::new());
+        let doc = ParsedDocument::new(HashMap::new(), QuillReference::latest("test".to_string()));
         let doc_with_defaults = doc.with_defaults(&defaults);
 
         // No defaults should be applied
@@ -957,7 +950,7 @@ Content here."#;
             QuillValue::from_json(serde_json::json!(["default", "tag"])),
         );
 
-        let doc = ParsedDocument::new(HashMap::new());
+        let doc = ParsedDocument::new(HashMap::new(), QuillReference::latest("test".to_string()));
         let doc_with_defaults = doc.with_defaults(&defaults);
 
         // Complex default value should be applied
@@ -988,12 +981,7 @@ Content here."#;
             "tags".to_string(),
             QuillValue::from_json(serde_json::json!("single-tag")),
         );
-        let doc = ParsedDocument::new(fields);
-
-        let coerced_doc = doc.with_coercion(&schema);
-
-        let tags = coerced_doc.get_field("tags").unwrap();
-        assert!(tags.as_array().is_some());
+        let doc = ParsedDocument::new(fields, QuillReference::latest("test".to_string()));
         let tags_array = tags.as_array().unwrap();
         assert_eq!(tags_array.len(), 1);
         assert_eq!(tags_array[0].as_str().unwrap(), "single-tag");
@@ -1016,7 +1004,7 @@ Content here."#;
             "active".to_string(),
             QuillValue::from_json(serde_json::json!("true")),
         );
-        let doc = ParsedDocument::new(fields);
+        let doc = ParsedDocument::new(fields, QuillReference::latest("test".to_string()));
 
         let coerced_doc = doc.with_coercion(&schema);
 
@@ -1040,7 +1028,7 @@ Content here."#;
             "count".to_string(),
             QuillValue::from_json(serde_json::json!("42")),
         );
-        let doc = ParsedDocument::new(fields);
+        let doc = ParsedDocument::new(fields, QuillReference::latest("test".to_string()));
 
         let coerced_doc = doc.with_coercion(&schema);
 
@@ -1083,6 +1071,7 @@ Content without closing ---"#;
     #[test]
     fn test_basic_tagged_block() {
         let markdown = r#"---
+QUILL: test_quill
 title: Main Document
 ---
 
@@ -1119,6 +1108,10 @@ Body of item 1."#;
     #[test]
     fn test_multiple_tagged_blocks() {
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: items
 name: Item 1
 tags: [a, b]
@@ -1152,6 +1145,7 @@ Second item body."#;
     #[test]
     fn test_mixed_global_and_tagged() {
         let markdown = r#"---
+QUILL: test_quill
 title: Global
 author: John Doe
 ---
@@ -1195,6 +1189,10 @@ Section 2 content."#;
     #[test]
     fn test_empty_tagged_metadata() {
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: items
 ---
 
@@ -1216,6 +1214,10 @@ Body without metadata."#;
     #[test]
     fn test_tagged_block_without_body() {
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: items
 name: Item
 ---"#;
@@ -1233,6 +1235,7 @@ name: Item
     #[test]
     fn test_name_collision_global_and_tagged() {
         let markdown = r#"---
+QUILL: test_quill
 items: "global value"
 ---
 
@@ -1253,6 +1256,7 @@ Item body"#;
     fn test_card_name_collision_with_array_field() {
         // CARD type names CAN now conflict with frontmatter field names
         let markdown = r#"---
+QUILL: test_quill
 items:
   - name: Global Item 1
     value: 100
@@ -1278,6 +1282,7 @@ Scope item 1 body"#;
     fn test_empty_global_array_with_card() {
         // CARD type names CAN now conflict with frontmatter field names
         let markdown = r#"---
+QUILL: test_quill
 items: []
 ---
 
@@ -1330,6 +1335,7 @@ CARDS: []
     #[test]
     fn test_delimiter_inside_fenced_code_block_backticks() {
         let markdown = r#"---
+QUILL: test_quill
 title: Test
 ---
 Here is some code:
@@ -1354,6 +1360,7 @@ More content.
         // Per EXTENDED_MARKDOWN.md: tildes (~~~) are NOT treated as fences
         // So --- inside ~~~ WILL be parsed as a metadata block
         let markdown = r#"---
+QUILL: test_quill
 title: Test
 ---
 Here is some code:
@@ -1383,6 +1390,7 @@ More content.
         // Per EXTENDED_MARKDOWN.md: only exactly 3 backticks are valid fences
         // 4+ backticks are NOT treated as fences
         let markdown = r#"---
+QUILL: test_quill
 title: Test
 ---
 Here is some code:
@@ -1526,6 +1534,7 @@ Third"#;
     #[test]
     fn test_product_catalog_integration() {
         let markdown = r#"---
+QUILL: test_quill
 title: Product Catalog
 author: John Doe
 date: 2024-01-01
@@ -1765,6 +1774,7 @@ CARD: items
     fn test_blank_lines_in_frontmatter() {
         // New parsing standard: blank lines are allowed within YAML blocks
         let markdown = r#"---
+QUILL: test_quill
 title: Test Document
 author: Test Author
 
@@ -1802,6 +1812,10 @@ This is the body."#;
     fn test_blank_lines_in_scope_blocks() {
         // Blank lines should be allowed in CARD blocks too
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: items
 name: Item 1
 
@@ -1833,6 +1847,7 @@ Body of item 1."#;
     fn test_horizontal_rule_with_blank_lines_above_and_below() {
         // Horizontal rule: blank lines both above AND below the ---
         let markdown = r#"---
+QUILL: test_quill
 title: Test
 ---
 
@@ -1858,6 +1873,7 @@ Second paragraph."#;
         // --- not preceded by blank line but followed by blank line is NOT a horizontal rule
         // It's also NOT a valid metadata block opening (since it's followed by blank)
         let markdown = r#"---
+QUILL: test_quill
 title: Test
 ---
 
@@ -1877,6 +1893,7 @@ Second paragraph."#;
     fn test_multiple_blank_lines_in_yaml() {
         // Multiple blank lines should also be allowed
         let markdown = r#"---
+QUILL: test_quill
 title: Test
 
 
@@ -1904,6 +1921,7 @@ Body content."#;
 ---> the rest of the page content
 
 ---
+QUILL: test_quill
 key: value
 ---
 "#;
@@ -2018,7 +2036,7 @@ mod demo_file_test {
     fn test_input_within_size_limit() {
         // Create markdown just under the limit
         let size = 1000; // Much smaller than limit
-        let markdown = format!("---\ntitle: Test\n---\n\n{}", "a".repeat(size));
+        let markdown = format!("---\nQUILL: test_quill\ntitle: Test\n---\n\n{}", "a".repeat(size));
 
         let result = decompose(&markdown);
         assert!(result.is_ok());
@@ -2027,7 +2045,7 @@ mod demo_file_test {
     #[test]
     fn test_yaml_within_size_limit() {
         // Create YAML block well within the limit
-        let markdown = "---\ntitle: Test\nauthor: John Doe\n---\n\nBody content";
+        let markdown = "---\nQUILL: test_quill\ntitle: Test\nauthor: John Doe\n---\n\nBody content";
 
         let result = decompose(markdown);
         assert!(result.is_ok());
@@ -2062,6 +2080,7 @@ mod demo_file_test {
     fn test_yaml_depth_within_limit() {
         // Create reasonably nested YAML (should succeed)
         let markdown = r#"---
+QUILL: test_quill
 level1:
   level2:
     level3:
@@ -2079,7 +2098,7 @@ Body content"#;
     // Guillemet conversion now happens in process_plate, not during parsing
     #[test]
     fn test_chevrons_preserved_in_body_no_frontmatter() {
-        let markdown = "Use <<raw content>> here.";
+        let markdown = "---\nQUILL: test_quill\n---\nUse <<raw content>> here.";
         let doc = decompose(markdown).unwrap();
 
         // Body should preserve chevrons (conversion happens later in process_plate)
@@ -2089,6 +2108,7 @@ Body content"#;
     #[test]
     fn test_chevrons_preserved_in_body_with_frontmatter() {
         let markdown = r#"---
+QUILL: test_quill
 title: Test
 ---
 
@@ -2102,6 +2122,7 @@ Use <<raw content>> here."#;
     #[test]
     fn test_chevrons_preserved_in_yaml_string() {
         let markdown = r#"---
+QUILL: test_quill
 title: Test <<with chevrons>>
 ---
 
@@ -2118,6 +2139,7 @@ Body content."#;
     #[test]
     fn test_chevrons_preserved_in_yaml_array() {
         let markdown = r#"---
+QUILL: test_quill
 items:
   - "<<first>>"
   - "<<second>>"
@@ -2134,6 +2156,7 @@ Body."#;
     #[test]
     fn test_chevrons_preserved_in_yaml_nested() {
         let markdown = r#"---
+QUILL: test_quill
 metadata:
   description: "<<nested value>>"
 ---
@@ -2150,11 +2173,7 @@ Body."#;
 
     #[test]
     fn test_chevrons_preserved_in_code_blocks() {
-        let markdown = r#"```
-<<in code block>>
-```
-
-<<outside code block>>"#;
+        let markdown = "---\nQUILL: test_quill\n---\n```\n<<in code block>>\n```\n\n<<outside code block>>";
         let doc = decompose(markdown).unwrap();
 
         let body = doc.body().unwrap();
@@ -2165,7 +2184,7 @@ Body."#;
 
     #[test]
     fn test_chevrons_preserved_in_inline_code() {
-        let markdown = "`<<in inline code>>` and <<outside inline code>>";
+        let markdown = "---\nQUILL: test_quill\n---\n`<<in inline code>>` and <<outside inline code>>";
         let doc = decompose(markdown).unwrap();
 
         let body = doc.body().unwrap();
@@ -2177,6 +2196,7 @@ Body."#;
     #[test]
     fn test_chevrons_preserved_in_tagged_block_body() {
         let markdown = r#"---
+QUILL: test_quill
 title: Main
 ---
 
@@ -2201,6 +2221,7 @@ Use <<raw>> here."#;
     #[test]
     fn test_chevrons_preserved_in_tagged_block_yaml() {
         let markdown = r#"---
+QUILL: test_quill
 title: Main
 ---
 
@@ -2228,6 +2249,7 @@ Item body."#;
     fn test_yaml_numbers_not_affected() {
         // Numbers should not be affected
         let markdown = r#"---
+QUILL: test_quill
 count: 42
 ---
 
@@ -2240,6 +2262,7 @@ Body."#;
     fn test_yaml_booleans_not_affected() {
         // Booleans should not be affected
         let markdown = r#"---
+QUILL: test_quill
 active: true
 ---
 
@@ -2251,7 +2274,7 @@ Body."#;
     #[test]
     fn test_multiline_chevrons_preserved() {
         // Multiline chevrons should be preserved as-is
-        let markdown = "<<text\nacross lines>>";
+        let markdown = "---\nQUILL: test_quill\n---\n<<text\nacross lines>>";
         let doc = decompose(markdown).unwrap();
 
         let body = doc.body().unwrap();
@@ -2262,7 +2285,7 @@ Body."#;
 
     #[test]
     fn test_unmatched_chevrons_preserved() {
-        let markdown = "<<unmatched";
+        let markdown = "---\nQUILL: test_quill\n---\n<<unmatched";
         let doc = decompose(markdown).unwrap();
 
         let body = doc.body().unwrap();
@@ -2280,48 +2303,58 @@ mod robustness_tests {
 
     #[test]
     fn test_empty_document() {
-        let doc = decompose("").unwrap();
-        assert_eq!(doc.body(), Some(""));
-        assert_eq!(doc.quill_reference().name, "__default__");
+        let result = decompose("");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required QUILL field"));
     }
 
     #[test]
     fn test_only_whitespace() {
-        let doc = decompose("   \n\n   \t").unwrap();
-        assert_eq!(doc.body(), Some("   \n\n   \t"));
+        let result = decompose("   \n\n   \t");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required QUILL field"));
     }
 
     #[test]
     fn test_only_dashes() {
-        // Just "---" at document start without newline is not treated as frontmatter opener
-        // (requires "---\n" to start a frontmatter block)
+        // "---" without newline is not a frontmatter delimiter → no blocks → QUILL error
         let result = decompose("---");
-        // This is NOT an error - "---" alone without newline is just body content
-        assert!(result.is_ok());
-        assert_eq!(result.unwrap().body(), Some("---"));
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required QUILL field"));
     }
 
     #[test]
     fn test_dashes_in_middle_of_line() {
         // --- not at start of line should not be treated as delimiter
-        let markdown = "some text --- more text";
+        let markdown = "---\nQUILL: test_quill\n---\nsome text --- more text";
         let doc = decompose(markdown).unwrap();
         assert_eq!(doc.body(), Some("some text --- more text"));
     }
 
     #[test]
     fn test_four_dashes() {
-        // ---- is not a valid delimiter
-        let markdown = "----\ntitle: Test\n----\n\nBody";
-        let doc = decompose(markdown).unwrap();
-        // Should treat entire content as body
-        assert!(doc.body().unwrap().contains("----"));
+        // ---- is not a valid delimiter — QUILL required
+        let result = decompose("----\ntitle: Test\n----\n\nBody");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required QUILL field"));
     }
 
     #[test]
     fn test_crlf_line_endings() {
         // Windows-style line endings
-        let markdown = "---\r\ntitle: Test\r\n---\r\n\r\nBody content.";
+        let markdown = "---\r\nQUILL: test_quill\r\ntitle: Test\r\n---\r\n\r\nBody content.";
         let doc = decompose(markdown).unwrap();
         assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
         assert!(doc.body().unwrap().contains("Body content."));
@@ -2330,7 +2363,7 @@ mod robustness_tests {
     #[test]
     fn test_mixed_line_endings() {
         // Mix of \n and \r\n
-        let markdown = "---\ntitle: Test\r\n---\n\nBody.";
+        let markdown = "---\nQUILL: test_quill\r\ntitle: Test\r\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
         assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
     }
@@ -2338,7 +2371,7 @@ mod robustness_tests {
     #[test]
     fn test_frontmatter_at_eof_no_trailing_newline() {
         // Frontmatter closed at EOF without trailing newline
-        let markdown = "---\ntitle: Test\n---";
+        let markdown = "---\nQUILL: test_quill\ntitle: Test\n---";
         let doc = decompose(markdown).unwrap();
         assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
         assert_eq!(doc.body(), Some(""));
@@ -2346,30 +2379,33 @@ mod robustness_tests {
 
     #[test]
     fn test_empty_frontmatter() {
-        // Empty frontmatter block - requires content between delimiters
-        // "---\n---" is not valid because --- followed by --- (blank line then ---)
-        // is treated as horizontal rule logic, not empty frontmatter
-        // A valid empty frontmatter would be "---\n \n---" (with whitespace content)
+        // Empty/whitespace-only frontmatter has no QUILL → error
         let markdown = "---\n \n---\n\nBody content.";
-        let doc = decompose(markdown).unwrap();
-        assert!(doc.body().unwrap().contains("Body content."));
-        // Should have body and CARDS fields
-        assert_eq!(doc.fields().len(), 2);
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required QUILL field"));
     }
 
     #[test]
     fn test_whitespace_only_frontmatter() {
-        // Frontmatter with only whitespace
+        // Frontmatter with only whitespace → no QUILL → error
         let markdown = "---\n   \n\n   \n---\n\nBody.";
-        let doc = decompose(markdown).unwrap();
-        assert!(doc.body().unwrap().contains("Body."));
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required QUILL field"));
     }
 
     // Unicode handling
 
     #[test]
     fn test_unicode_in_yaml_keys() {
-        let markdown = "---\ntitre: Bonjour\nタイトル: こんにちは\n---\n\nBody.";
+        let markdown = "---\nQUILL: test_quill\ntitre: Bonjour\nタイトル: こんにちは\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
         assert_eq!(doc.get_field("titre").unwrap().as_str().unwrap(), "Bonjour");
         assert_eq!(
@@ -2380,7 +2416,7 @@ mod robustness_tests {
 
     #[test]
     fn test_unicode_in_yaml_values() {
-        let markdown = "---\ntitle: 你好世界 🎉\n---\n\nBody.";
+        let markdown = "---\nQUILL: test_quill\ntitle: 你好世界 🎉\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
         assert_eq!(
             doc.get_field("title").unwrap().as_str().unwrap(),
@@ -2390,7 +2426,7 @@ mod robustness_tests {
 
     #[test]
     fn test_unicode_in_body() {
-        let markdown = "---\ntitle: Test\n---\n\n日本語テキスト with emoji 🚀";
+        let markdown = "---\nQUILL: test_quill\ntitle: Test\n---\n\n日本語テキスト with emoji 🚀";
         let doc = decompose(markdown).unwrap();
         assert!(doc.body().unwrap().contains("日本語テキスト"));
         assert!(doc.body().unwrap().contains("🚀"));
@@ -2401,6 +2437,7 @@ mod robustness_tests {
     #[test]
     fn test_yaml_multiline_string() {
         let markdown = r#"---
+QUILL: test_quill
 description: |
   This is a
   multiline string
@@ -2417,6 +2454,7 @@ Body."#;
     #[test]
     fn test_yaml_folded_string() {
         let markdown = r#"---
+QUILL: test_quill
 description: >
   This is a folded
   string that becomes
@@ -2432,21 +2470,21 @@ Body."#;
 
     #[test]
     fn test_yaml_null_value() {
-        let markdown = "---\noptional: null\n---\n\nBody.";
+        let markdown = "---\nQUILL: test_quill\noptional: null\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
         assert!(doc.get_field("optional").unwrap().is_null());
     }
 
     #[test]
     fn test_yaml_empty_string_value() {
-        let markdown = "---\nempty: \"\"\n---\n\nBody.";
+        let markdown = "---\nQUILL: test_quill\nempty: \"\"\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
         assert_eq!(doc.get_field("empty").unwrap().as_str().unwrap(), "");
     }
 
     #[test]
     fn test_yaml_special_characters_in_string() {
-        let markdown = "---\nspecial: \"colon: here, and [brackets]\"\n---\n\nBody.";
+        let markdown = "---\nQUILL: test_quill\nspecial: \"colon: here, and [brackets]\"\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
         assert_eq!(
             doc.get_field("special").unwrap().as_str().unwrap(),
@@ -2457,6 +2495,7 @@ Body."#;
     #[test]
     fn test_yaml_nested_objects() {
         let markdown = r#"---
+QUILL: test_quill
 config:
   database:
     host: localhost
@@ -2478,6 +2517,10 @@ Body."#;
     #[test]
     fn test_card_with_empty_body() {
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: items
 name: Item
 ---"#;
@@ -2492,6 +2535,10 @@ name: Item
     #[test]
     fn test_card_consecutive_blocks() {
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: a
 id: 1
 ---
@@ -2527,6 +2574,10 @@ id: 2
     #[test]
     fn test_card_with_body_containing_dashes() {
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: items
 name: Item
 ---
@@ -2631,7 +2682,7 @@ Body content."#;
 
     #[test]
     fn test_body_with_leading_newlines() {
-        let markdown = "---\ntitle: Test\n---\n\n\n\nBody with leading newlines.";
+        let markdown = "---\nQUILL: test_quill\ntitle: Test\n---\n\n\n\nBody with leading newlines.";
         let doc = decompose(markdown).unwrap();
         // Body should preserve leading newlines after frontmatter
         assert!(doc.body().unwrap().starts_with('\n'));
@@ -2639,7 +2690,7 @@ Body content."#;
 
     #[test]
     fn test_body_with_trailing_newlines() {
-        let markdown = "---\ntitle: Test\n---\n\nBody.\n\n\n";
+        let markdown = "---\nQUILL: test_quill\ntitle: Test\n---\n\nBody.\n\n\n";
         let doc = decompose(markdown).unwrap();
         // Body should preserve trailing newlines
         assert!(doc.body().unwrap().ends_with('\n'));
@@ -2647,7 +2698,7 @@ Body content."#;
 
     #[test]
     fn test_no_body_after_frontmatter() {
-        let markdown = "---\ntitle: Test\n---";
+        let markdown = "---\nQUILL: test_quill\ntitle: Test\n---";
         let doc = decompose(markdown).unwrap();
         assert_eq!(doc.body(), Some(""));
     }
@@ -2698,6 +2749,7 @@ Body content."#;
     #[test]
     fn test_guillemet_in_yaml_preserves_non_strings() {
         let markdown = r#"---
+QUILL: test_quill
 count: 42
 price: 19.99
 active: true
@@ -2717,7 +2769,7 @@ Body."#;
     #[test]
     fn test_guillemet_double_conversion_prevention() {
         // Ensure «» in input doesn't get double-processed
-        let markdown = "---\ntitle: Already «converted»\n---\n\nBody.";
+        let markdown = "---\nQUILL: test_quill\ntitle: Already «converted»\n---\n\nBody.";
         let doc = decompose(markdown).unwrap();
         // Should remain as-is (not double-escaped)
         assert_eq!(
@@ -2729,6 +2781,7 @@ Body."#;
     #[test]
     fn test_allowed_card_field_collision() {
         let markdown = r#"---
+QUILL: test_quill
 my_card: "some global value"
 ---
 
@@ -2761,6 +2814,7 @@ Body
     fn test_yaml_custom_tags_in_frontmatter() {
         // User-defined YAML tags like !fill should be accepted and ignored
         let markdown = r#"---
+QUILL: test_quill
 memo_from: !fill 2d lt example
 regular_field: normal value
 ---
@@ -2849,5 +2903,16 @@ Conclusion content.
             card2.get("BODY").unwrap().as_str().unwrap(),
             "Conclusion content.\n"
         );
+    }
+
+    #[test]
+    fn test_missing_quill_field_errors() {
+        let markdown = "---\ntitle: No quill here\n---\n# Body";
+        let result = decompose(markdown);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Missing required QUILL field"));
     }
 }
