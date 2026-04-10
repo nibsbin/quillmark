@@ -1044,6 +1044,51 @@ fields:
 }
 
 #[test]
+fn test_quill_config_rejects_non_snake_case_main_field_keys() {
+    let yaml = r#"
+Quill:
+  name: bad-field-key
+  version: "1.0"
+  backend: typst
+  description: Bad main field key
+
+main:
+  fields:
+    BadField:
+      type: string
+"#;
+
+    let result = QuillConfig::from_yaml(yaml);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("BadField"));
+    assert!(err.contains("snake_case"));
+}
+
+#[test]
+fn test_quill_config_rejects_non_snake_case_card_field_keys() {
+    let yaml = r#"
+Quill:
+  name: bad-card-field-key
+  version: "1.0"
+  backend: typst
+  description: Bad card field key
+
+cards:
+  profile:
+    fields:
+      DisplayName:
+        type: string
+"#;
+
+    let result = QuillConfig::from_yaml(yaml);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("DisplayName"));
+    assert!(err.contains("snake_case"));
+}
+
+#[test]
 fn test_quill_from_config_metadata() {
     // Test that QuillConfig metadata flows through to Quill
     let mut root_files = HashMap::new();
