@@ -72,6 +72,8 @@ The main document card holds **frontmatter field schemas** under `main.fields`. 
 
 Field order under `main.fields` determines display order in UIs — the first field gets `order: 0`, the second gets `order: 1`, and so on.
 
+Field keys must be `snake_case` (`^[a-z][a-z0-9_]*$`). Capitalized field keys are reserved.
+
 ```yaml
 main:
   fields:
