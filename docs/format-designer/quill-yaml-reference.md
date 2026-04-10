@@ -30,6 +30,8 @@ Root-level `fields:` is not supported; define the main document’s field schema
 
 Every Quill.yaml must have a `Quill` section with format metadata.
 
+`Quill.name` must be `snake_case` (`^[a-z][a-z0-9_]*$`).
+
 | Key              | Type   | Required | Description |
 |------------------|--------|----------|-------------|
 | `name`           | string | yes      | Unique identifier for the Quill |
@@ -71,6 +73,8 @@ Quill:
 The main document card holds **frontmatter field schemas** under `main.fields`. Optional `main.ui` sets container-level UI for that card (for example `hide_body`). `Quill.ui` is merged with `main.ui` when building the main card.
 
 Field order under `main.fields` determines display order in UIs — the first field gets `order: 0`, the second gets `order: 1`, and so on.
+
+Field keys must be `snake_case` (`^[a-z][a-z0-9_]*$`). Capitalized field keys are reserved.
 
 ```yaml
 main:
@@ -233,6 +237,8 @@ main:
 ## `cards` Section
 
 Cards define composable, repeatable content blocks. A document can have zero or more instances of each card type, interleaved with body content.
+
+Card type names (the keys under `cards`) must be `snake_case` (`^[a-z][a-z0-9_]*$`).
 
 ```yaml
 cards:

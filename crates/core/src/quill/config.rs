@@ -318,11 +318,19 @@ impl QuillConfig {
         key_order: &[String],
         context: &str,
         warnings: &mut Vec<Diagnostic>,
-    ) -> HashMap<String, FieldSchema> {
+    ) -> Result<HashMap<String, FieldSchema>, Box<dyn StdError + Send + Sync>> {
         let mut fields = HashMap::new();
         let mut fallback_counter = 0;
 
         for (field_name, field_value) in fields_map {
+            if !Self::is_snake_case_identifier(field_name) {
+                return Err(format!(
+                    "Invalid {} '{}': field keys must be snake_case (lowercase letters, digits, and underscores only), and capitalized field keys are reserved.",
+                    context, field_name
+                )
+                .into());
+            }
+
             // Determine order from key_order, or use fallback counter
             let order = if let Some(idx) = key_order.iter().position(|k| k == field_name) {
                 idx as i32
@@ -395,7 +403,21 @@ impl QuillConfig {
             }
         }
 
-        fields
+        Ok(fields)
+    }
+
+    fn is_snake_case_identifier(name: &str) -> bool {
+        let mut chars = name.chars();
+        match chars.next() {
+            Some(c) if c.is_ascii_lowercase() => {}
+            _ => return false,
+        }
+
+        chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    }
+
+    fn is_valid_quill_name(name: &str) -> bool {
+        name == "__default__" || Self::is_snake_case_identifier(name)
     }
 
     /// Parse QuillConfig from YAML content
@@ -426,6 +448,13 @@ impl QuillConfig {
             .and_then(|v| v.as_str())
             .ok_or("Missing required 'name' field in 'Quill' section")?
             .to_string();
+        if !Self::is_valid_quill_name(&name) {
+            return Err(format!(
+                "Invalid Quill name '{}': Quill.name must be snake_case (lowercase letters, digits, and underscores only).",
+                name
+            )
+            .into());
+        }
 
         let backend = quill_section
             .get("backend")
@@ -529,7 +558,7 @@ impl QuillConfig {
                         &field_order,
                         "field schema",
                         &mut warnings,
-                    )
+                    )?
                 } else {
                     HashMap::new()
                 }
@@ -562,6 +591,14 @@ impl QuillConfig {
                 .ok_or("'cards' section must be an object")?;
 
             for (card_name, card_value) in cards_table {
+                if !Self::is_snake_case_identifier(card_name) {
+                    return Err(format!(
+                        "Invalid card name '{}': card names must be snake_case (lowercase letters, digits, and underscores only).",
+                        card_name
+                    )
+                    .into());
+                }
+
                 // Parse card basic info using serde
                 let card_def: CardSchemaDef = serde_json::from_value(card_value.clone())
                     .map_err(|e| format!("Failed to parse card '{}': {}", card_name, e))?;
@@ -577,7 +614,7 @@ impl QuillConfig {
                         &card_field_order,
                         &format!("card '{}' field", card_name),
                         &mut warnings,
-                    )
+                    )?
                 } else if let Some(_toml_fields) = &card_def.fields {
                     HashMap::new()
                 } else {

@@ -573,7 +573,7 @@ mod tests {
         );
 
         let quill_info = QuillInfo {
-            name: "test-quill".to_string(),
+            name: "test_quill".to_string(),
             backend: "typst".to_string(),
             metadata: serde_json::Value::Object(metadata_obj),
             example: None,
@@ -588,7 +588,7 @@ mod tests {
         assert!(json.is_object());
 
         let obj = json.as_object().unwrap();
-        assert_eq!(obj.get("name").unwrap().as_str().unwrap(), "test-quill");
+        assert_eq!(obj.get("name").unwrap().as_str().unwrap(), "test_quill");
         assert_eq!(obj.get("backend").unwrap().as_str().unwrap(), "typst");
 
         // Verify metadata is an object (not a Map)
@@ -633,7 +633,7 @@ mod tests {
 
         let parsed_doc = ParsedDocument {
             fields: serde_json::Value::Object(fields_obj),
-            quill_ref: "test-quill".to_string(),
+            quill_ref: "test_quill".to_string(),
         };
 
         // Serialize and verify structure
@@ -641,7 +641,7 @@ mod tests {
         assert!(json.is_object());
 
         let obj = json.as_object().unwrap();
-        assert_eq!(obj.get("quillRef").unwrap().as_str().unwrap(), "test-quill");
+        assert_eq!(obj.get("quillRef").unwrap().as_str().unwrap(), "test_quill");
 
         // Verify fields is an object (not a Map)
         let fields = obj.get("fields").unwrap();
