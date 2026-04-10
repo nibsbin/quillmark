@@ -8,13 +8,13 @@ use std::path::PathBuf;
 
 #[derive(Parser)]
 pub struct RenderArgs {
+    /// Path to quill directory
+    #[arg(value_name = "QUILL_PATH")]
+    quill: PathBuf,
+
     /// Path to markdown file with YAML frontmatter
     #[arg(value_name = "MARKDOWN_FILE")]
     markdown_file: Option<PathBuf>,
-
-    /// Path to quill directory (overrides QUILL frontmatter field)
-    #[arg(short, long, value_name = "PATH")]
-    quill: Option<PathBuf>,
 
     /// Output file path (default: derived from input filename)
     #[arg(short, long, value_name = "FILE")]
@@ -42,10 +42,27 @@ pub struct RenderArgs {
 }
 
 pub fn execute(args: RenderArgs) -> Result<()> {
+    // Validate quill path exists
+    if !args.quill.exists() {
+        return Err(CliError::InvalidArgument(format!(
+            "Quill directory not found: {}",
+            args.quill.display()
+        )));
+    }
+
+    if args.verbose {
+        println!("Loading quill from: {}", args.quill.display());
+    }
+
+    // Load quill
+    let quill = Quill::from_path(args.quill.clone())?;
+
+    if args.verbose {
+        println!("Quill loaded: {}", quill.name);
+    }
+
     // Determine if we have a markdown file or need to use example content
-    let (parsed, quill, markdown_path_for_output) = if let Some(ref markdown_path) =
-        args.markdown_file
-    {
+    let (parsed, markdown_path_for_output) = if let Some(ref markdown_path) = args.markdown_file {
         // Validate markdown file exists
         if !markdown_path.exists() {
             return Err(CliError::InvalidArgument(format!(
@@ -67,72 +84,8 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         if args.verbose {
             println!("Markdown parsed successfully");
         }
-
-        // Determine quill path
-        let quill_path = if let Some(ref path) = args.quill {
-            path.clone()
-        } else {
-            // Try to get QUILL field from frontmatter
-            let quill_ref = parsed.quill_reference().to_string();
-
-            // If QUILL field is a path, use it directly
-            let quill_candidate = PathBuf::from(&quill_ref);
-            if quill_candidate.exists() && quill_candidate.is_dir() {
-                quill_candidate
-            } else {
-                // Otherwise, try to find it relative to markdown file
-                let markdown_dir = markdown_path
-                    .parent()
-                    .unwrap_or_else(|| std::path::Path::new("."));
-                markdown_dir.join(&quill_ref)
-            }
-        };
-
-        // Validate quill path exists
-        if !quill_path.exists() {
-            return Err(CliError::InvalidArgument(format!(
-                "Quill directory not found: {}",
-                quill_path.display()
-            )));
-        }
-
-        if args.verbose {
-            println!("Loading quill from: {}", quill_path.display());
-        }
-
-        // Load quill
-        let quill = Quill::from_path(quill_path.clone())?;
-
-        if args.verbose {
-            println!("Quill loaded: {}", quill.name);
-        }
-
-        (parsed, quill, Some(markdown_path.clone()))
+        (parsed, Some(markdown_path.clone()))
     } else {
-        // No markdown file provided, must have --quill
-        let quill_path = args.quill.clone().ok_or_else(|| {
-            CliError::InvalidArgument("Must provide either a markdown file or --quill".to_string())
-        })?;
-
-        // Validate quill path exists
-        if !quill_path.exists() {
-            return Err(CliError::InvalidArgument(format!(
-                "Quill directory not found: {}",
-                quill_path.display()
-            )));
-        }
-
-        if args.verbose {
-            println!("Loading quill from: {}", quill_path.display());
-        }
-
-        // Load quill
-        let quill = Quill::from_path(quill_path.clone())?;
-
-        if args.verbose {
-            println!("Quill loaded: {}", quill.name);
-        }
-
         // Get example content
         let markdown = quill.example.clone().ok_or_else(|| {
             CliError::InvalidArgument(format!(
@@ -152,7 +105,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             println!("Example markdown parsed successfully");
         }
 
-        (parsed, quill, None)
+        (parsed, None)
     };
 
     // Create engine and workflow
