@@ -59,7 +59,7 @@ class Quillmark:
         """Register a quill template with the engine."""
     
     def workflow(self, quill_ref: str | Quill | ParsedDocument) -> Workflow:
-        """Load a workflow from a quill reference. Note that the quill reference is optional to specify and can be inferred from the markdown content's frontmatter when passing a ParsedDocument.
+        """Load a workflow from a quill reference.
 
         Accepts:
             - str: Quill name (must be registered)
@@ -234,9 +234,11 @@ class ParsedDocument:
     @staticmethod
     def from_markdown(markdown: str) -> ParsedDocument:
         """Parse markdown with YAML frontmatter.
+
+        The frontmatter must include a QUILL field specifying the quill name.
         
         Raises:
-            ParseError: If YAML frontmatter is invalid
+            ParseError: If YAML frontmatter is invalid or QUILL is missing
         """
     
     def body(self) -> str | None:

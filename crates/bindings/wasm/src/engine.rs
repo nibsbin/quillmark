@@ -216,7 +216,7 @@ impl Quillmark {
     /// surface input errors quickly. Returns successfully on valid input,
     /// or throws an error with diagnostic payload on failure.
     ///
-    /// The quill name is inferred from the markdown's QUILL tag.
+    /// The quill name is read from the markdown's required QUILL tag.
     ///
     /// This is useful for fast feedback loops in LLM-driven document generation.
     #[wasm_bindgen(js_name = dryRun)]
@@ -226,7 +226,7 @@ impl Quillmark {
             .map_err(WasmError::from)
             .map_err(|e| e.to_js_value())?;
 
-        // Infer quill reference from parsed document
+        // Read quill reference from parsed document
         let quill_ref = parsed.quill_reference().to_string();
 
         let workflow = self.inner.workflow(quill_ref.as_str()).map_err(|e| {
@@ -249,7 +249,7 @@ impl Quillmark {
             .map_err(WasmError::from)
             .map_err(|e| e.to_js_value())?;
 
-        // Infer quill reference from parsed document
+        // Read quill reference from parsed document
         let quill_ref = parsed.quill_reference().to_string();
 
         let workflow = self.inner.workflow(quill_ref.as_str()).map_err(|e| {
