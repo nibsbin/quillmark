@@ -144,7 +144,7 @@ describe('quillmark-wasm smoke tests', () => {
     const engine = new Quillmark()
     engine.registerQuill(TEST_QUILL)
 
-    const compiled = engine.compile(parsed, { quillRef: 'test_quill' })
+    const compiled = engine.compile(parsed)
     expect(typeof compiled.pageCount).toBe('number')
     expect(compiled.pageCount).toBeGreaterThan(0)
 
@@ -162,7 +162,7 @@ describe('quillmark-wasm smoke tests', () => {
     const engine = new Quillmark()
     engine.registerQuill(TEST_QUILL)
 
-    const compiled = engine.compile(parsed, { quillRef: 'test_quill' })
+    const compiled = engine.compile(parsed)
     const oob = compiled.pageCount + 10
 
     const result = compiled.renderPages([0, oob], { format: 'png', ppi: 80 })
@@ -176,7 +176,7 @@ describe('quillmark-wasm smoke tests', () => {
     const engine = new Quillmark()
     engine.registerQuill(TEST_QUILL)
 
-    const compiled = engine.compile(parsed, { quillRef: 'test_quill' })
+    const compiled = engine.compile(parsed)
 
     expect(() => {
       compiled.renderPages([0], { format: 'pdf' })
@@ -292,7 +292,7 @@ this is not valid yaml
     expect(typeof result.renderTimeMs).toBe('number')
   })
 
-  it('should use __default__ quill when QUILL tag is not specified', () => {
+  it('should throw when QUILL tag is not specified', () => {
     // Markdown without QUILL: tag
     const markdownWithoutQuill = `---
 title: Default Test
@@ -303,17 +303,8 @@ author: Test Author
 
 This document has no QUILL tag.`
 
-    // Parse should set quillTag to __default__
-    const parsed = Quillmark.parseMarkdown(markdownWithoutQuill)
-    expect(parsed.quillRef).toBe("__default__")
-    expect(parsed.fields.title).toBe('Default Test')
-
-    // The engine auto-registers a __default__ quill from the Typst backend
-    // We can render with it directly without registering our own
-    const engine = new Quillmark()
-    const result = engine.render(parsed, { format: 'pdf' })
-
-    expect(result).toBeDefined()
-    expect(result.artifacts).toBeDefined()
+    expect(() => {
+      Quillmark.parseMarkdown(markdownWithoutQuill)
+    }).toThrow()
   })
 })

@@ -8,7 +8,7 @@ This test ensures that:
 """
 
 import pytest
-from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat
+from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat, ParseError
 from conftest import QUILLS_PATH, _latest_version
 
 
@@ -30,8 +30,8 @@ title: Test
 
 # Content
 """
-    parsed2 = ParsedDocument.from_markdown(markdown_without_quill)
-    assert parsed2.quill_ref() == "__default__"
+    with pytest.raises(ParseError):
+        ParsedDocument.from_markdown(markdown_without_quill)
 
 
 def test_quill_properties(taro_quill_dir):
@@ -162,13 +162,13 @@ This is a test document.
     assert isinstance(result.warnings, list)
 
 
-def test_render_without_quill_tag(taro_quill_dir, taro_md):
-    """Test that render works without QUILL tag when quill is specified explicitly."""
+def test_render_with_explicit_workflow_name(taro_quill_dir, taro_md):
+    """Test that explicit workflow selection can render a parsed document."""
     engine = Quillmark()
     quill = Quill.from_path(str(taro_quill_dir))
     engine.register_quill(quill)
     
-    # Parse markdown without QUILL tag
+    # Parse markdown that already includes QUILL
     parsed = ParsedDocument.from_markdown(taro_md)
     
     # Create workflow explicitly by name

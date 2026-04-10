@@ -488,7 +488,7 @@ fn test_backward_compatibility_unversioned_quill() {
         .workflow("legacy_quill")
         .expect("Failed to load legacy quill");
 
-    let markdown = "# Test Content";
+    let markdown = "---\nQUILL: legacy_quill\n---\n\n# Test Content";
     let _parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse");
     // Don't actually render since we don't have fonts - just verify workflow creation works
 

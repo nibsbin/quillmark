@@ -44,13 +44,6 @@ mod error_mapping;
 pub mod helper;
 mod world;
 
-/// Embedded default Quill files
-mod embedded {
-    pub const QUILL_YAML: &str = include_str!("../default_quill/Quill.yaml");
-    pub const PLATE_TYP: &str = include_str!("../default_quill/plate.typ");
-    pub const EXAMPLE_MD: &str = include_str!("../default_quill/example.md");
-}
-
 /// Utilities exposed for fuzzing tests.
 /// Not intended for general use.
 #[doc(hidden)]
@@ -190,36 +183,6 @@ impl Backend for TypstBackend {
         schema: &QuillValue,
     ) -> HashMap<String, QuillValue> {
         transform_markdown_fields(fields, schema)
-    }
-
-    fn default_quill(&self) -> Option<Quill> {
-        use quillmark_core::FileTreeNode;
-
-        // Build file tree from embedded files
-        let mut files = HashMap::new();
-        files.insert(
-            "Quill.yaml".to_string(),
-            FileTreeNode::File {
-                contents: embedded::QUILL_YAML.as_bytes().to_vec(),
-            },
-        );
-        files.insert(
-            "plate.typ".to_string(),
-            FileTreeNode::File {
-                contents: embedded::PLATE_TYP.as_bytes().to_vec(),
-            },
-        );
-        files.insert(
-            "example.md".to_string(),
-            FileTreeNode::File {
-                contents: embedded::EXAMPLE_MD.as_bytes().to_vec(),
-            },
-        );
-
-        let root = FileTreeNode::Directory { files };
-
-        // Try to create Quill from tree, return None if it fails
-        Quill::from_tree(root).ok()
     }
 }
 
@@ -495,26 +458,5 @@ mod tests {
 
         let body = result.get("BODY").unwrap().as_str().unwrap();
         assert!(body.contains("#emph[italic]"));
-    }
-
-    #[test]
-    fn test_default_quill_schema_has_body() {
-        let backend = TypstBackend;
-        let quill = backend
-            .default_quill()
-            .expect("Failed to load default quill");
-
-        // Inspect the schema derived from Quill.yaml
-        let schema_json = quill.schema.as_json();
-        let properties = schema_json
-            .get("properties")
-            .expect("Schema missing properties");
-        let body_schema = properties.get("BODY").expect("Schema missing BODY field");
-
-        assert_eq!(
-            body_schema.get("contentMediaType").and_then(|v| v.as_str()),
-            Some("text/markdown"),
-            "BODY field should be marked as text/markdown"
-        );
     }
 }

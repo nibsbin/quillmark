@@ -25,7 +25,7 @@
 //! third-party backends can integrate cleanly with the engine.
 
 use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark, RenderError};
-use quillmark_core::{Artifact, Backend, FileTreeNode, QuillValue, RenderOptions, RenderResult};
+use quillmark_core::{Artifact, Backend, RenderOptions, RenderResult};
 use std::fs;
 use tempfile::TempDir;
 
@@ -60,74 +60,6 @@ impl Backend for MockBackend {
             output_format: OutputFormat::Txt,
         }];
         Ok(RenderResult::new(artifacts, OutputFormat::Txt))
-    }
-}
-
-struct InvalidDefaultQuillBackend;
-
-impl Backend for InvalidDefaultQuillBackend {
-    fn id(&self) -> &'static str {
-        "invalid-default"
-    }
-
-    fn supported_formats(&self) -> &'static [OutputFormat] {
-        &[OutputFormat::Txt]
-    }
-
-    fn plate_extension_types(&self) -> &'static [&'static str] {
-        &[".txt"]
-    }
-
-    fn compile(
-        &self,
-        plated: &str,
-        _quill: &Quill,
-        _opts: &RenderOptions,
-        _json_data: &serde_json::Value,
-    ) -> Result<RenderResult, RenderError> {
-        Ok(RenderResult::new(
-            vec![Artifact {
-                bytes: plated.as_bytes().to_vec(),
-                output_format: OutputFormat::Txt,
-            }],
-            OutputFormat::Txt,
-        ))
-    }
-
-    fn default_quill(&self) -> Option<Quill> {
-        Some(Quill {
-            name: "__default__".to_string(),
-            backend: self.id().to_string(),
-            plate: Some("hello".to_string()),
-            example: None,
-            metadata: std::collections::HashMap::new(), // missing required version
-            config: quillmark_core::quill::QuillConfig {
-                name: "__default__".to_string(),
-                cards: vec![quillmark_core::quill::CardSchema {
-                    name: "main".to_string(),
-                    title: Some("main".to_string()),
-                    description: None,
-                    fields: std::collections::HashMap::new(),
-                    ui: None,
-                }],
-                backend: self.id().to_string(),
-                version: "0.1".to_string(),
-                author: "test".to_string(),
-                example_file: None,
-                plate_file: None,
-                metadata: std::collections::HashMap::new(),
-                typst_config: std::collections::HashMap::new(),
-            },
-            schema: QuillValue::from_json(serde_json::json!({
-                "type": "object",
-                "properties": {}
-            })),
-            files: FileTreeNode::Directory {
-                files: std::collections::HashMap::new(),
-            },
-            defaults: std::collections::HashMap::new(),
-            examples: std::collections::HashMap::new(),
-        })
     }
 }
 
@@ -221,6 +153,7 @@ fn test_workflow_with_custom_backend() {
 
     // Test rendering with the custom backend
     let markdown = r#"---
+QUILL: custom_backend_quill
 title: Hello Custom Backend
 ---
 
@@ -251,22 +184,9 @@ fn test_register_backend_after_new() {
 }
 
 #[test]
-fn test_register_backend_collects_default_quill_warning() {
+fn test_register_backend_emits_no_warnings() {
     let mut engine = Quillmark::new();
-    engine.unregister_quill("__default__");
-    engine.register_backend(Box::new(InvalidDefaultQuillBackend));
-
-    let warnings = engine.warnings();
-    assert_eq!(warnings.len(), 1);
-    assert_eq!(
-        warnings[0].code.as_deref(),
-        Some("engine::default_quill_registration_failed")
-    );
-    assert!(warnings[0]
-        .message
-        .contains("Failed to register default Quill from backend 'invalid-default'"));
-
-    let drained = engine.take_warnings();
-    assert_eq!(drained.len(), 1);
+    engine.register_backend(Box::new(MockBackend { id: "no-warning" }));
     assert!(engine.warnings().is_empty());
+    assert!(engine.take_warnings().is_empty());
 }

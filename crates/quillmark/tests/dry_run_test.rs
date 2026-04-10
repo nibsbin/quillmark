@@ -66,6 +66,7 @@ fn test_dry_run_success() {
         .expect("Failed to load workflow");
 
     let markdown = r#"---
+QUILL: test_quill
 title: My Document
 author: Test Author
 ---
@@ -98,6 +99,7 @@ fn test_dry_run_missing_required_field() {
 
     // Missing required 'title' field
     let markdown = r#"---
+QUILL: test_quill
 author: Test Author
 ---
 
@@ -138,6 +140,7 @@ fn test_dry_run_no_schema() {
 
     // Any fields should work when there's no schema
     let markdown = r#"---
+QUILL: test_quill
 random_field: anything
 ---
 

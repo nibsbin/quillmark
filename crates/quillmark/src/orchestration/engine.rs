@@ -95,9 +95,6 @@ impl Quillmark {
     /// This method allows registering custom backends or explicitly registering
     /// feature-integrated backends. The backend is registered by its ID.
     ///
-    /// If the backend provides a default Quill and no Quill named `__default__`
-    /// is already registered, the default Quill will be automatically registered.
-    ///
     /// # Example
     ///
     /// ```no_run
@@ -119,30 +116,7 @@ impl Quillmark {
     /// ```
     pub fn register_backend(&mut self, backend: Box<dyn Backend>) {
         let id = backend.id().to_string();
-
-        // Get default Quill before moving backend
-        let default_quill = backend.default_quill();
-
-        // Register backend first so it's available when registering default Quill
         self.backends.insert(id.clone(), Arc::from(backend));
-
-        // Register default Quill if available and not already registered
-        if !self.quills.contains_key("__default__") {
-            if let Some(default_quill) = default_quill {
-                if let Err(e) = self.register_quill(default_quill) {
-                    self.warnings.push(
-                        Diagnostic::new(
-                            Severity::Warning,
-                            format!(
-                                "Failed to register default Quill from backend '{}': {}",
-                                id, e
-                            ),
-                        )
-                        .with_code("engine::default_quill_registration_failed".to_string()),
-                    );
-                }
-            }
-        }
     }
 
     /// Returns all currently accumulated non-fatal engine warnings.
