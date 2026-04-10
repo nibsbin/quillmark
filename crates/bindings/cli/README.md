@@ -44,7 +44,7 @@ cargo build --release -p quillmark-cli
 Render a markdown file using a quill template:
 
 ```bash
-quillmark render document.md --quill path/to/quill
+quillmark render path/to/quill document.md
 ```
 
 The output will be saved as `document.pdf` by default.
@@ -55,43 +55,34 @@ The output will be saved as `document.pdf` by default.
 
 ```bash
 # Render to PDF (default format)
-quillmark render memo.md --quill ./quills/usaf_memo
+quillmark render ./quills/usaf_memo memo.md
 
 # Specify output file
-quillmark render memo.md --quill ./quills/usaf_memo -o output/final.pdf
+quillmark render ./quills/usaf_memo memo.md -o output/final.pdf
 
 # Render to different format
-quillmark render memo.md --quill ./quills/usaf_memo --format svg
+quillmark render ./quills/usaf_memo memo.md --format svg
 ```
 
-### Using QUILL Field in Frontmatter
+### Using quill example content
 
-If your markdown file has a `QUILL` field in the frontmatter, you can omit the `--quill` flag:
-
-```markdown
----
-QUILL: usaf_memo
-title: My Memo
----
-
-Content here...
-```
+If you omit `MARKDOWN_FILE`, the quill's bundled example content is rendered:
 
 ```bash
-quillmark render memo.md
+quillmark render ./quills/usaf_memo
 ```
 
 ### Advanced Options
 
 ```bash
 # Output to stdout (useful for piping)
-quillmark render memo.md --quill ./quills/usaf_memo --stdout > output.pdf
+quillmark render ./quills/usaf_memo memo.md --stdout > output.pdf
 
 # Verbose output
-quillmark render memo.md --quill ./quills/usaf_memo --verbose
+quillmark render ./quills/usaf_memo memo.md --verbose
 
 # Quiet mode (suppress all non-error output)
-quillmark render memo.md --quill ./quills/usaf_memo --quiet
+quillmark render ./quills/usaf_memo memo.md --quiet
 ```
 
 ## Command Reference
@@ -102,14 +93,14 @@ Render a markdown file to the specified output format.
 
 **Usage:**
 ```
-quillmark render [OPTIONS] <MARKDOWN_FILE>
+quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 ```
 
 **Arguments:**
-- `<MARKDOWN_FILE>` - Path to markdown file with YAML frontmatter
+- `<QUILL_PATH>` - Path to quill directory
+- `[MARKDOWN_FILE]` - Path to markdown file with YAML frontmatter (optional; when omitted, quill example content is used)
 
 **Options:**
-- `-q, --quill <PATH>` - Path to quill directory (overrides QUILL frontmatter field)
 - `-o, --output <FILE>` - Output file path (default: derived from input filename)
 - `-f, --format <FORMAT>` - Output format: pdf, svg, txt (default: pdf)
 - `--stdout` - Write output to stdout instead of file
@@ -122,16 +113,16 @@ quillmark render [OPTIONS] <MARKDOWN_FILE>
 
 ```bash
 quillmark render \
+  crates/fixtures/resources/quills/usaf_memo/0.1.0 \
   crates/fixtures/resources/quills/usaf_memo/0.1.0/example.md \
-  --quill crates/fixtures/resources/quills/usaf_memo/0.1.0 \
   -o usaf_memo_output.pdf
 ```
 
 ### Example: Generate SVG
 
 ```bash
-quillmark render document.md \
-  --quill ./quills/my_template \
+quillmark render ./quills/my_template \
+  document.md \
   --format svg \
   -o output.svg
 ```
@@ -140,10 +131,10 @@ quillmark render document.md \
 
 ```bash
 # Render and immediately view with a PDF viewer
-quillmark render memo.md --quill ./quills/usaf_memo --stdout | evince -
+quillmark render ./quills/usaf_memo memo.md --stdout | evince -
 
 # Render to stdout and pipe to another tool
-quillmark render memo.md --quill ./quills/usaf_memo --stdout > final.pdf
+quillmark render ./quills/usaf_memo memo.md --stdout > final.pdf
 ```
 
 ## Error Handling
@@ -152,7 +143,6 @@ The CLI provides clear error messages for common issues:
 
 - **Missing markdown file**: `Markdown file not found: path/to/file.md`
 - **Missing quill**: `Quill directory not found: path/to/quill`
-- **No QUILL field**: `No QUILL field in frontmatter and --quill not specified`
 - **Parse errors**: Line numbers and context for YAML or markdown issues
 - **Template errors**: Compilation diagnostics from the rendering backend
 
@@ -178,7 +168,7 @@ cargo test
 ### Running Locally
 
 ```bash
-cargo run -- render example.md --quill path/to/quill
+cargo run -- render path/to/quill example.md
 ```
 
 ## Design Documentation

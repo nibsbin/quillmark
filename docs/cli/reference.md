@@ -15,16 +15,16 @@ cargo install quillmark-cli
 Render markdown documents to PDF, SVG, PNG, or text. Optionally emit compiled JSON data.
 
 ```bash
-quillmark render [OPTIONS] [MARKDOWN_FILE]
+quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 ```
 
 **Arguments:**
 
-- `[MARKDOWN_FILE]`: Path to markdown file with YAML frontmatter (optional — when omitted, the quill's example content is used, which requires `--quill`)
+- `<QUILL_PATH>`: Path to quill directory
+- `[MARKDOWN_FILE]`: Path to markdown file with YAML frontmatter (optional — when omitted, the quill's example content is used)
 
 **Options:**
 
-- `-q <PATH>` / `--quill <PATH>`: Path to quill directory (optional if the markdown frontmatter contains a `QUILL` field)
 - `-o <PATH>` / `--output <PATH>`: Output file path (default: derived from input filename, e.g. `input.pdf`)
 - `-f <FORMAT>` / `--format <FORMAT>`: Output format: `pdf`, `svg`, `png`, `txt` (default: `pdf`)
 - `--output-data <DATA_FILE>`: Write compiled JSON data (after coercion/defaults/transform_fields) to a file
@@ -36,19 +36,19 @@ quillmark render [OPTIONS] [MARKDOWN_FILE]
 
 ```bash
 # Render to PDF
-quillmark render -q ./invoice-quill input.md -o output.pdf
+quillmark render ./invoice-quill input.md -o output.pdf
 
 # Render to SVG
-quillmark render -q ./my-quill input.md -f svg -o output.svg
+quillmark render ./my-quill input.md -f svg -o output.svg
 
 # Emit compiled data for inspection
-quillmark render -q ./my-quill input.md --output-data data.json
+quillmark render ./my-quill input.md --output-data data.json
 
 # Output to stdout
-quillmark render -q ./my-quill input.md --stdout > output.pdf
+quillmark render ./my-quill input.md --stdout > output.pdf
 
 # Render the quill's built-in example
-quillmark render -q ./my-quill
+quillmark render ./my-quill
 ```
 
 ### schema
@@ -147,7 +147,7 @@ quillmark info ./my-quill --json | jq '.name'
 quillmark validate ./my-quill
 
 # Render one document to PDF
-quillmark render -q ./my-quill input.md -o output.pdf
+quillmark render ./my-quill input.md -o output.pdf
 
 # Print schema to stdout
 quillmark schema ./my-quill
