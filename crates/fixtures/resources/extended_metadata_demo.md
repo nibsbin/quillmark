@@ -1,4 +1,5 @@
 ---
+QUILL: test_quill
 title: Extended Metadata Demo
 author: Quillmark Team
 version: 1.0

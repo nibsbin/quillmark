@@ -106,7 +106,7 @@ The main workflow for rendering documents:
 
 - `static parseMarkdown(markdown)` - Parse markdown into a ParsedDocument (Step 1)
 - `registerQuill(quillJson)` - Register a Quill template bundle from JSON (Step 2)
-- `render(parsedDoc, options)` - Render a ParsedDocument to final artifacts. Note that the quill reference in `options` is optional to specify and can be inferred from the markdown content's frontmatter (Step 4)
+- `render(parsedDoc, options)` - Render a ParsedDocument to final artifacts using the required `QUILL` reference parsed from the document (Step 4)
 
 ### Utility Methods
 
@@ -124,7 +124,6 @@ Additional methods for managing the engine and debugging:
 ```typescript
 type RenderOptions = {
   format?: 'pdf' | 'svg' | 'txt'
-  quillRef?: string  // Override quillRef from ParsedDocument
   assets?: Record<string, Uint8Array | number[]> 
 }
 ```
@@ -136,7 +135,7 @@ Returned by `parseMarkdown()`:
 ```typescript
 {
   fields: object,  // YAML frontmatter fields
-  quillRef: string  // Quill reference from QUILL field (or "__default__")
+  quillRef: string  // Quill reference from required QUILL field
 }
 ```
 

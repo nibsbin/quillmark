@@ -163,38 +163,6 @@ pub trait Backend: Send + Sync {
         })
     }
 
-    /// Provide an embedded default Quill for this backend.
-    ///
-    /// Returns `None` if the backend does not provide a default Quill.
-    /// The returned Quill will be registered with the name `__default__`
-    /// during backend registration if no default Quill already exists.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// # use quillmark_core::{Backend, Quill, FileTreeNode};
-    /// # use std::collections::HashMap;
-    /// # struct MyBackend;
-    /// # impl Backend for MyBackend {
-    /// #     fn id(&self) -> &'static str { "my" }
-    /// #     fn supported_formats(&self) -> &'static [quillmark_core::OutputFormat] { &[] }
-    /// #     fn plate_extension_types(&self) -> &'static [&'static str] { &[] }
-    /// #     fn compile(&self, _: &str, _: &Quill, _: &quillmark_core::RenderOptions, _: &serde_json::Value) -> Result<quillmark_core::RenderResult, quillmark_core::RenderError> { todo!() }
-    /// fn default_quill(&self) -> Option<Quill> {
-    ///     // Build embedded default Quill from files
-    ///     let mut files = HashMap::new();
-    ///     files.insert("Quill.yaml".to_string(), FileTreeNode::File {
-    ///         contents: b"Quill:\n  name: __default__\n  backend: my\n".to_vec(),
-    ///     });
-    ///     let root = FileTreeNode::Directory { files };
-    ///     Quill::from_tree(root).ok()
-    /// }
-    /// # }
-    /// ```
-    fn default_quill(&self) -> Option<Quill> {
-        None
-    }
-
     /// Transform field values according to backend-specific rules.
     ///
     /// This method is called before JSON serialization to allow backends

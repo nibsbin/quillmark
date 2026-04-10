@@ -1,3 +1,5 @@
+> Superseded. QUILL: is now required. See REQUIRE_QUILL_REF.md.
+
 # Default Quill System
 
 > **Status**: Implemented

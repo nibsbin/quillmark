@@ -213,7 +213,7 @@ impl IntoWasmAbi for QuillInfo {
 /// Parsed markdown document
 ///
 /// Returned by `Quillmark.parseMarkdown()`. Contains the parsed YAML frontmatter
-/// fields and the quill reference (from QUILL field or "__default__" if not specified).
+/// fields and the quill reference from the required QUILL field.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
@@ -221,7 +221,7 @@ pub struct ParsedDocument {
     /// YAML frontmatter fields
     #[tsify(type = "Record<string, any>")]
     pub fields: serde_json::Value,
-    /// The quill reference (from QUILL field or "__default__")
+    /// The quill reference from the QUILL field
     pub quill_ref: String,
 }
 
@@ -246,9 +246,6 @@ pub struct RenderOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[tsify(type = "Record<string, Uint8Array | number[]>")]
     pub assets: Option<serde_json::Value>,
-    /// Optional quill name that overrides or fills in for the markdown's QUILL frontmatter field
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub quill_ref: Option<String>,
     /// Pixels per inch for raster output formats (PNG).
     /// Ignored for vector/document formats (PDF, SVG, TXT).
     /// Defaults to 144.0 (2x at 72pt/inch) when omitted.
@@ -260,11 +257,7 @@ pub struct RenderOptions {
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify, Default)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub struct CompileOptions {
-    /// Optional quill reference that overrides the parsed document's `quillRef`.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub quill_ref: Option<String>,
-}
+pub struct CompileOptions {}
 
 /// Options for rendering pages from a previously compiled document.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
@@ -282,7 +275,6 @@ impl Default for RenderOptions {
         RenderOptions {
             format: Some(OutputFormat::Pdf),
             assets: None,
-            quill_ref: None,
             ppi: None,
         }
     }
@@ -404,7 +396,6 @@ mod tests {
         let options = RenderOptions {
             format: Some(OutputFormat::Pdf),
             assets: None,
-            quill_ref: None,
             ppi: None,
         };
         let json = serde_json::to_string(&options).unwrap();
@@ -413,24 +404,6 @@ mod tests {
         // Test deserialization
         let options_from_json: RenderOptions = serde_json::from_str(r#"{"format":"svg"}"#).unwrap();
         assert_eq!(options_from_json.format, Some(OutputFormat::Svg));
-
-        // Test with quill_ref
-        let options_with_quill = RenderOptions {
-            format: Some(OutputFormat::Pdf),
-            assets: None,
-            quill_ref: Some("test_quill".to_string()),
-            ppi: None,
-        };
-        let json_with_quill = serde_json::to_string(&options_with_quill).unwrap();
-        assert!(json_with_quill.contains("\"quillRef\":\"test_quill\""));
-
-        // Test deserialization with quill_ref
-        let options_from_json_with_quill: RenderOptions =
-            serde_json::from_str(r#"{"format":"pdf","quillRef":"my_quill"}"#).unwrap();
-        assert_eq!(
-            options_from_json_with_quill.quill_ref,
-            Some("my_quill".to_string())
-        );
     }
 
     #[test]

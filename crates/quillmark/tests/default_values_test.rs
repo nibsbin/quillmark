@@ -93,6 +93,7 @@ main:
 
     // Create document with only title (missing status and version)
     let markdown = r#"---
+QUILL: test_quill
 title: My Document
 ---
 
@@ -147,6 +148,7 @@ main:
 
     // Create document with explicit status value
     let markdown = r#"---
+QUILL: test_quill
 title: My Document
 status: published
 ---
@@ -202,7 +204,11 @@ main:
 
     // Create document with no fields - should validate because none are required
     // and defaults will be applied
-    let markdown = r#"# Content"#;
+    let markdown = r#"---
+QUILL: test_quill
+---
+
+# Content"#;
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
@@ -252,6 +258,7 @@ main:
 
     // Create document missing required title field
     let markdown = r#"---
+QUILL: test_quill
 status: published
 ---
 

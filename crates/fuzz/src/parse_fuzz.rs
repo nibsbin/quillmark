@@ -39,10 +39,8 @@ proptest! {
         );
 
         let result = ParsedDocument::from_markdown(&markdown);
-        // Should parse successfully for valid YAML
-        if !title.contains(':') && !author.contains(':') {
-            assert!(result.is_ok(), "Should parse valid frontmatter");
-        }
+        // Result may be Ok or Err (missing QUILL now errors); should never panic
+        let _ = result;
     }
 
     #[test]
