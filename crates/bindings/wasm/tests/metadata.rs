@@ -7,7 +7,7 @@ use wasm_bindgen_test::*;
 
 const UI_QUILL_JSON: &str = r#"{
   "files": {
-    "Quill.yaml": { "contents": "Quill:\n  name: ui-test-quill\n  version: \"0.1\"\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for UI metadata\n\nmain:\n  fields:\n    my_field:\n      type: string\n      ui:\n        group: Personal Info\n" },
+    "Quill.yaml": { "contents": "Quill:\n  name: ui_test_quill\n  version: \"0.1\"\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for UI metadata\n\nmain:\n  fields:\n    my_field:\n      type: string\n      ui:\n        group: Personal Info\n" },
     "plate.typ": { "contents": "= Title" }
   }
 }"#;
@@ -24,7 +24,7 @@ fn test_metadata_retrieval() {
         .unwrap();
 
     let info = engine
-        .get_quill_info("ui-test-quill")
+        .get_quill_info("ui-test_quill")
         .expect("getQuillInfo failed");
 
     // Navigate to schema.properties.my_field.x-ui
@@ -50,7 +50,7 @@ fn test_metadata_stripping() {
 
     // Get full info
     let info = engine
-        .get_quill_info("ui-test-quill")
+        .get_quill_info("ui-test_quill")
         .expect("getQuillInfo failed");
 
     // Get stripped schema using the helper method

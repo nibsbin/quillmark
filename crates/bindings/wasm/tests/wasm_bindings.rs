@@ -8,7 +8,7 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 // A minimal JSON fixture that represents a very small quill
 const SMALL_QUILL_JSON: &str = r#"{
   "files": {
-    "Quill.yaml": { "contents": "Quill:\n  name: test-quill\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for WASM bindings\n" },
+    "Quill.yaml": { "contents": "Quill:\n  name: test_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for WASM bindings\n" },
     "plate.typ": { "contents": "= Title\n\nThis is a test." },
     "content.md": { "contents": "---\ntitle: Test\n---\n\n# Hello" }
   }
@@ -20,7 +20,7 @@ fn test_parse_markdown() {
     let markdown = r#"---
 title: Test Document
 author: Alice
-QUILL: test-quill
+QUILL: test_quill
 ---
 
 # Hello World
@@ -31,7 +31,7 @@ This is a test document.
     let parsed = Quillmark::parse_markdown(markdown).expect("parse_markdown failed");
 
     // Verify it returns a ParsedDocument
-    assert_eq!(parsed.quill_ref, "test-quill");
+    assert_eq!(parsed.quill_ref, "test_quill");
     assert!(parsed.fields.is_object());
 }
 
@@ -47,11 +47,11 @@ fn test_register_and_get_quill_info() {
 
     // Get quill info
     let info = engine
-        .get_quill_info("test-quill")
+        .get_quill_info("test_quill")
         .expect("getQuillInfo failed");
 
     // Verify it returns a QuillInfo
-    assert_eq!(info.name, "test-quill");
+    assert_eq!(info.name, "test_quill");
     assert_eq!(info.backend, "typst");
 }
 
@@ -61,7 +61,7 @@ fn test_workflow_parse_register_get_info_render() {
     let markdown = r#"---
 title: Test Document
 author: Alice
-QUILL: test-quill
+QUILL: test_quill
 ---
 
 # Hello World
@@ -79,9 +79,9 @@ This is a test.
 
     // Step 3: Get quill info
     let info = engine
-        .get_quill_info("test-quill")
+        .get_quill_info("test_quill")
         .expect("getQuillInfo failed");
-    assert_eq!(info.name, "test-quill");
+    assert_eq!(info.name, "test_quill");
 
     // Step 4: Render (this may fail in test environment without full WASM setup)
     // We'll just verify the API is callable

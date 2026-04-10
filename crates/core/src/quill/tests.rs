@@ -158,7 +158,7 @@ fn test_new_standardized_yaml_format() {
     // Create test files using new standardized format
     let yaml_content = r#"
 Quill:
-  name: my-custom-quill
+  name: my_custom_quill
   version: "1.0"
   backend: typst
   plate_file: custom_plate.typ
@@ -176,7 +176,7 @@ Quill:
     let quill = Quill::from_path(quill_dir).unwrap();
 
     // Test that name comes from YAML, not directory
-    assert_eq!(quill.name, "my-custom-quill");
+    assert_eq!(quill.name, "my_custom_quill");
 
     // Test that backend is in metadata
     assert!(quill.metadata.contains_key("backend"));
@@ -209,7 +209,7 @@ fn test_typst_packages_parsing() {
 
     let yaml_content = r#"
 Quill:
-  name: "test-quill"
+  name: "test_quill"
   version: "1.0"
   backend: "typst"
   plate_file: "plate.typ"
@@ -239,7 +239,7 @@ fn test_template_loading() {
 
     // Create test files with example specified
     let yaml_content = r#"Quill:
-  name: "test-with-template"
+  name: "test_with_template"
   version: "1.0"
   backend: "typst"
   plate_file: "plate.typ"
@@ -274,7 +274,7 @@ fn test_template_smart_default() {
 
     // Create test files without example specified
     let yaml_content = r#"Quill:
-  name: "test-smart-default"
+  name: "test_smart_default"
   version: "1.0"
   backend: "typst"
   plate_file: "plate.typ"
@@ -306,7 +306,7 @@ fn test_template_optional() {
 
     // Create test files without example specified
     let yaml_content = r#"Quill:
-  name: "test-without-template"
+  name: "test_without_template"
   version: "1.0"
   backend: "typst"
   plate_file: "plate.typ"
@@ -332,7 +332,7 @@ fn test_from_tree() {
 
     // Add Quill.yaml
     let quill_yaml = r#"Quill:
-  name: "test-from-tree"
+  name: "test_from_tree"
   version: "1.0"
   backend: "typst"
   plate_file: "plate.typ"
@@ -360,7 +360,7 @@ fn test_from_tree() {
     let quill = Quill::from_tree(root).unwrap();
 
     // Validate the quill
-    assert_eq!(quill.name, "test-from-tree");
+    assert_eq!(quill.name, "test_from_tree");
     assert_eq!(quill.plate.unwrap(), plate_content);
     assert!(quill.metadata.contains_key("backend"));
     assert!(quill.metadata.contains_key("description"));
@@ -374,7 +374,7 @@ fn test_from_tree_with_template() {
     // Add Quill.yaml with example specified
     let quill_yaml = r#"
 Quill:
-  name: test-tree-template
+  name: test_tree_template
   version: "1.0"
   backend: typst
   plate_file: plate.typ
@@ -871,7 +871,7 @@ fn test_quill_without_plate_file() {
 
     // Add Quill.yaml without plate field
     let quill_yaml = r#"Quill:
-  name: "test-no-plate"
+  name: "test_no_plate"
   version: "1.0"
   backend: "typst"
   description: "Test quill without plate file"
@@ -890,7 +890,7 @@ fn test_quill_without_plate_file() {
 
     // Validate that plate is null (will use auto plate)
     assert!(quill.plate.clone().is_none());
-    assert_eq!(quill.name, "test-no-plate");
+    assert_eq!(quill.name, "test_no_plate");
 }
 
 #[test]
@@ -1029,7 +1029,7 @@ fields:
 fn test_quill_config_rejects_root_level_fields() {
     let yaml = r#"
 Quill:
-  name: root-fields-test
+  name: root_fields_test
   version: "1.0"
   backend: typst
   description: Root fields must not be used
@@ -1044,10 +1044,50 @@ fields:
 }
 
 #[test]
+fn test_quill_config_rejects_non_snake_case_quill_name() {
+    let yaml = r#"
+Quill:
+  name: BadQuill
+  version: "1.0"
+  backend: typst
+  description: Bad quill name
+"#;
+
+    let result = QuillConfig::from_yaml(yaml);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("BadQuill"));
+    assert!(err.contains("snake_case"));
+}
+
+#[test]
+fn test_quill_config_rejects_non_snake_case_card_name() {
+    let yaml = r#"
+Quill:
+  name: good_quill
+  version: "1.0"
+  backend: typst
+  description: Bad card name
+
+cards:
+  BadCard:
+    fields:
+      title:
+        type: string
+"#;
+
+    let result = QuillConfig::from_yaml(yaml);
+    assert!(result.is_err());
+    let err = result.unwrap_err().to_string();
+    assert!(err.contains("BadCard"));
+    assert!(err.contains("snake_case"));
+}
+
+#[test]
 fn test_quill_config_rejects_non_snake_case_main_field_keys() {
     let yaml = r#"
 Quill:
-  name: bad-field-key
+  name: bad_field_key
   version: "1.0"
   backend: typst
   description: Bad main field key
@@ -1069,7 +1109,7 @@ main:
 fn test_quill_config_rejects_non_snake_case_card_field_keys() {
     let yaml = r#"
 Quill:
-  name: bad-card-field-key
+  name: bad_card_field_key
   version: "1.0"
   backend: typst
   description: Bad card field key
@@ -1095,7 +1135,7 @@ fn test_quill_from_config_metadata() {
 
     let quill_yaml = r#"
 Quill:
-  name: metadata-test
+  name: metadata_test
   version: "1.0"
   backend: typst
   description: Test metadata flow
@@ -1139,7 +1179,7 @@ fn test_extract_defaults_method() {
 
     let quill_yaml = r#"
 Quill:
-  name: metadata-test-yaml
+  name: metadata_test_yaml
   version: "1.0"
   backend: typst
   description: Test metadata flow
@@ -1189,7 +1229,7 @@ main:
 fn test_field_order_preservation() {
     let yaml_content = r#"
 Quill:
-  name: order-test
+  name: order_test
   version: "1.0"
   backend: typst
   description: Test field order
@@ -1238,7 +1278,7 @@ main:
 fn test_quill_with_all_ui_properties() {
     let yaml_content = r#"
 Quill:
-  name: full-ui-test
+  name: full_ui_test
   version: "1.0"
   backend: typst
   description: Test all UI properties
@@ -1319,7 +1359,7 @@ fn test_parse_card_with_fields_in_yaml() {
     // Test parsing [cards] section with [cards.X.fields.Y] syntax
     let yaml_content = r#"
 Quill:
-  name: cards-fields-test
+  name: cards_fields_test
   version: "1.0"
   backend: typst
   description: Test [cards.X.fields.Y] syntax
@@ -1397,7 +1437,7 @@ invalid_key:
 fn test_quill_config_with_cards_section() {
     let yaml_content = r#"
 Quill:
-  name: cards-test
+  name: cards_test
   version: "1.0"
   backend: typst
   description: Test [cards] section
@@ -1439,7 +1479,7 @@ fn test_quill_config_cards_empty_fields() {
     // Test that cards with no fields section are valid
     let yaml_content = r#"
 Quill:
-  name: cards-empty-fields-test
+  name: cards_empty_fields_test
   version: "1.0"
   backend: typst
   description: Test cards without fields
@@ -1461,7 +1501,7 @@ fn test_quill_config_allows_card_collision() {
     // Test that scope name colliding with field name is ALLOWED
     let yaml_content = r#"
 Quill:
-  name: collision-test
+  name: collision_test
   version: "1.0"
   backend: typst
   description: Test collision
@@ -1496,7 +1536,7 @@ fn test_quill_config_ordering_with_cards() {
     // Test that fields have proper UI ordering (cards no longer have card-level ordering)
     let yaml_content = r#"
 Quill:
-  name: ordering-test
+  name: ordering_test
   version: "1.0"
   backend: typst
   description: Test ordering
@@ -1546,7 +1586,7 @@ fn test_card_field_order_preservation() {
     // alphabetical: a_second, then z_first
     let yaml_content = r#"
 Quill:
-  name: card-order-test
+  name: card_order_test
   version: "1.0"
   backend: typst
   description: Test card field order
@@ -1582,7 +1622,7 @@ cards:
 fn test_nested_schema_parsing() {
     let yaml_content = r#"
 Quill:
-  name: nested-test
+  name: nested_test
   version: "1.0"
   backend: typst
   description: Test nested elements
@@ -1625,7 +1665,7 @@ main:
 fn test_standalone_object_field_rejected_with_warning() {
     let yaml_content = r#"
 Quill:
-  name: obj-test
+  name: obj_test
   version: "1.0"
   backend: typst
   description: Test standalone object rejection
@@ -1663,7 +1703,7 @@ main:
 fn test_nested_object_in_typed_table_rejected_with_warning() {
     let yaml_content = r#"
 Quill:
-  name: nested-obj-test
+  name: nested_obj_test
   version: "1.0"
   backend: typst
   description: Test nested object in typed table rejection
@@ -1700,7 +1740,7 @@ main:
 fn test_array_items_recursive_coercion() {
     let yaml_content = r#"
 Quill:
-  name: coerce-test
+  name: coerce_test
   version: "1.0"
   backend: typst
   description: Test recursive coercion for array items
@@ -1750,7 +1790,7 @@ main:
 fn test_multiline_ui_field_parses() {
     let yaml_content = r#"
 Quill:
-  name: multiline-test
+  name: multiline_test
   version: "1.0"
   backend: typst
   description: Test multiline ui hint
@@ -1782,7 +1822,7 @@ main:
 fn test_multiline_ui_field_on_string_type() {
     let yaml_content = r#"
 Quill:
-  name: multiline-string-test
+  name: multiline_string_test
   version: "1.0"
   backend: typst
   description: Test multiline ui hint on string field
@@ -1814,7 +1854,7 @@ main:
 fn test_quill_config_from_yaml_collects_non_fatal_field_warnings() {
     let yaml_content = r#"
 Quill:
-  name: warning-config
+  name: warning_config
   version: "1.0"
   backend: typst
   description: Warning collection test
