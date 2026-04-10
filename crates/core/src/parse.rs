@@ -19,6 +19,7 @@
 //! use quillmark_core::ParsedDocument;
 //!
 //! let markdown = r#"---
+//! QUILL: my_quill
 //! title: My Document
 //! author: John Doe
 //! ---
@@ -982,6 +983,8 @@ Content here."#;
             QuillValue::from_json(serde_json::json!("single-tag")),
         );
         let doc = ParsedDocument::new(fields, QuillReference::latest("test".to_string()));
+        let coerced_doc = doc.with_coercion(&schema);
+        let tags = coerced_doc.get_field("tags").unwrap();
         let tags_array = tags.as_array().unwrap();
         assert_eq!(tags_array.len(), 1);
         assert_eq!(tags_array[0].as_str().unwrap(), "single-tag");
@@ -1465,6 +1468,10 @@ More body"#;
     #[test]
     fn test_adjacent_blocks_different_tags() {
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: items
 name: Item 1
 ---
@@ -1498,6 +1505,10 @@ Section 1 body"#;
     #[test]
     fn test_order_preservation() {
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: items
 id: 1
 ---

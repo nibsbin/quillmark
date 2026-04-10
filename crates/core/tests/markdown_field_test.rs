@@ -3,6 +3,7 @@ use quillmark_core::{
     quill::{CardSchema, FieldSchema, FieldType},
     schema::build_schema,
     ParsedDocument, QuillValue,
+    version::QuillReference,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -115,7 +116,7 @@ fn test_markdown_field_normalization() {
         QuillValue::from_json(json!("This has <<stripped>>")),
     );
 
-    let doc = ParsedDocument::new(doc_fields);
+    let doc = ParsedDocument::new(doc_fields, QuillReference::latest("test".to_string()));
 
     // 3. Normalize (schema no longer affects normalization)
     let _ = schema; // Schema is built for the first test but not needed here

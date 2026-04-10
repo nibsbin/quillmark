@@ -184,6 +184,7 @@ impl Backend for TypstBackend {
     ) -> HashMap<String, QuillValue> {
         transform_markdown_fields(fields, schema)
     }
+}
 
 impl Default for TypstBackend {
     /// Creates a new [`TypstBackend`] instance.

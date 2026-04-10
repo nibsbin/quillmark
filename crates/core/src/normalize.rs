@@ -943,7 +943,10 @@ mod tests {
             crate::value::QuillValue::from_json(serde_json::json!("<<content>>")),
         );
 
-        let doc = ParsedDocument::new(fields);
+        let doc = ParsedDocument::new(
+            fields,
+            crate::version::QuillReference::latest("test".to_string()),
+        );
         let normalized_once = super::normalize_document(doc).unwrap();
         let normalized_twice = super::normalize_document(normalized_once.clone()).unwrap();
 

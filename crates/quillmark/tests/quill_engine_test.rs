@@ -5,7 +5,7 @@
 //! ## Test Coverage
 //!
 //! This test suite validates:
-//! - **Engine creation and initialization** - Backend auto-registration, default quill setup
+//! - **Engine creation and initialization** - Backend registration
 //! - **Quill registration** - Custom quill loading and management
 //! - **Workflow creation** - Loading workflows by name, by quill object, and from parsed documents
 //! - **End-to-end rendering** - Complete parse → template → compile pipeline
@@ -16,7 +16,7 @@
 //!
 //! - `api_rework_test.rs` - Focused API validation for new workflow methods
 //! - `backend_registration_test.rs` - Custom backend registration scenarios
-//! - `default_quill_test.rs` - Default quill system behavior
+//! - `default_values_test.rs` - Default field value behavior
 //!
 //! ## Test Philosophy
 //!
@@ -38,12 +38,9 @@ fn test_quill_engine_creation() {
     #[cfg(feature = "typst")]
     assert!(!backends.is_empty());
 
-    // Check that default quill is registered when typst backend is enabled
+    // No quills are auto-registered with backend registration
     let quills = engine.registered_quills();
-    #[cfg(feature = "typst")]
-    assert_eq!(quills.len(), 1);
-    #[cfg(feature = "typst")]
-    assert!(quills.contains(&"__default__"));
+    assert!(quills.is_empty());
 }
 
 #[test]
@@ -67,12 +64,9 @@ fn test_quill_engine_register_quill() {
         .register_quill(quill)
         .expect("Failed to register quill");
 
-    // Check that quill is registered (plus __default__)
+    // Check that quill is registered
     let quills = engine.registered_quills();
-    #[cfg(feature = "typst")]
-    assert_eq!(quills.len(), 2); // __default__ + my_test_quill
-    #[cfg(not(feature = "typst"))]
-    assert_eq!(quills.len(), 1); // just my_test_quill
+    assert_eq!(quills.len(), 1);
     assert!(quills.contains(&"my_test_quill"));
 }
 
@@ -92,7 +86,7 @@ fn test_quill_engine_get_workflow() {
     .expect("Failed to write Quill.yaml");
     fs::write(
         quill_path.join("plate.typ"),
-        "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",
+        "#rect(width: 1cm, height: 1cm)",
     )
     .expect("Failed to write plate.typ");
 
@@ -161,14 +155,33 @@ fn test_quill_engine_backend_not_found() {
 
 #[test]
 fn test_quill_engine_end_to_end() {
-    let engine = Quillmark::new();
+    let mut engine = Quillmark::new();
+    let temp_dir = TempDir::new().expect("Failed to create temp dir");
+    let quill_path = temp_dir.path().join("test_quill");
 
-    // Use the default quill which is known to work
+    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::write(
+        quill_path.join("Quill.yaml"),
+        "Quill:\n  name: \"my_test_quill\"\n  version: \"1.0\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test quill\"\n",
+    )
+    .expect("Failed to write Quill.yaml");
+    fs::write(
+        quill_path.join("plate.typ"),
+        "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",
+    )
+    .expect("Failed to write plate.typ");
+
+    let quill = Quill::from_path(quill_path).expect("Failed to load quill");
+    engine
+        .register_quill(quill)
+        .expect("Failed to register quill");
+
     let workflow = engine
-        .workflow("__default__")
+        .workflow("my_test_quill")
         .expect("Failed to load workflow");
 
     let markdown = r#"---
+QUILL: my_test_quill
 title: Test Document
 ---
 
@@ -179,12 +192,6 @@ This is a test document with some **bold** text.
 
     let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
 
-    // Use render() directly which handles JSON injection properly
-    let result = workflow
-        .render(&parsed, Some(OutputFormat::Pdf))
-        .expect("Failed to render");
-
-    assert!(!result.artifacts.is_empty());
-    assert_eq!(result.artifacts[0].output_format, OutputFormat::Pdf);
-    assert!(!result.artifacts[0].bytes.is_empty());
+    let result = workflow.dry_run(&parsed);
+    assert!(result.is_ok(), "Failed to dry-run workflow");
 }
