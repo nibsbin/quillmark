@@ -91,6 +91,11 @@ fn build_field_property(field_schema: &FieldSchema) -> Map<String, Value> {
                     Value::Array(examples_array.clone()),
                 );
             }
+        } else if !examples.is_null() {
+            property.insert(
+                field_key::EXAMPLES.to_string(),
+                Value::Array(vec![examples.as_json().clone()]),
+            );
         }
     }
 
@@ -1237,6 +1242,51 @@ mod tests {
 
         let example_value = &json_schema["properties"]["memo_for"]["examples"][0];
         assert_eq!(example_value, &json!(["ORG1/SYMBOL", "ORG2/SYMBOL"]));
+    }
+
+    #[test]
+    fn test_build_schema_with_scalar_example_wraps_as_array() {
+        let mut fields = HashMap::new();
+        let mut schema = FieldSchema::new(
+            "effective_date".to_string(),
+            FieldType::Date,
+            Some("Effective date".to_string()),
+        );
+        schema.examples = Some(QuillValue::from_json(json!("2024-01-15")));
+        fields.insert("effective_date".to_string(), schema);
+
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
+        assert_eq!(
+            json_schema["properties"]["effective_date"]["examples"],
+            json!(["2024-01-15"])
+        );
+    }
+
+    #[test]
+    fn test_build_schema_omits_examples_for_null_or_empty_array() {
+        let mut fields = HashMap::new();
+
+        let mut null_examples_schema =
+            FieldSchema::new("null_examples".to_string(), FieldType::String, None);
+        null_examples_schema.examples = Some(QuillValue::from_json(Value::Null));
+        fields.insert("null_examples".to_string(), null_examples_schema);
+
+        let mut empty_examples_schema =
+            FieldSchema::new("empty_examples".to_string(), FieldType::String, None);
+        empty_examples_schema.examples = Some(QuillValue::from_json(json!([])));
+        fields.insert("empty_examples".to_string(), empty_examples_schema);
+
+        let json_schema = build_schema_from_fields(&fields).unwrap().as_json().clone();
+        let properties = json_schema["properties"].as_object().unwrap();
+
+        assert!(!properties["null_examples"]
+            .as_object()
+            .unwrap()
+            .contains_key("examples"));
+        assert!(!properties["empty_examples"]
+            .as_object()
+            .unwrap()
+            .contains_key("examples"));
     }
 
     #[test]

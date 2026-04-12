@@ -206,6 +206,20 @@ impl FieldSchema {
     pub fn from_quill_value(key: String, value: &QuillValue) -> Result<Self, String> {
         let def: FieldSchemaDef = serde_json::from_value(value.clone().into_json())
             .map_err(|e| format!("Failed to parse field schema: {}", e))?;
+        let examples = match def.examples {
+            Some(examples) => {
+                if examples.is_null() {
+                    None
+                } else if examples.as_array().is_some() {
+                    Some(examples)
+                } else {
+                    Some(QuillValue::from_json(serde_json::Value::Array(vec![
+                        examples.into_json(),
+                    ])))
+                }
+            }
+            None => None,
+        };
 
         Ok(Self {
             name: key,
@@ -213,7 +227,7 @@ impl FieldSchema {
             r#type: def.r#type,
             description: def.description,
             default: def.default,
-            examples: def.examples,
+            examples,
             ui: def.ui,
             required: def.required,
             enum_values: def.enum_values,
