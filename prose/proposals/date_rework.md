@@ -1,16 +1,41 @@
----
+# Proposal: Typst Date Field Auto-Conversion Rework
 
-**Feature: Auto-convert `date` fields to Typst `datetime` in quillmark-helper**
+## Problem
 
-**Goal:** `date` fields arrive in `data` as Typst `datetime` objects. Plate authors use `data.date` directly — no helper function to import or call. Mirror exactly how markdown fields are auto-evaluated via `__meta__`.
+Typst plates currently parse date values manually:
 
----
+```typst
+#import "@local/quillmark-helper:0.1.0": data, parse-date
+#parse-date(data.date)
+```
 
-### 1. Annotate date fields in `__meta__` — `crates/backends/typst/src/lib.rs`
+This is inconsistent with markdown field handling, where conversion is automatic via `__meta__` and plate authors just use `data.<field>`.
 
-In `transform_markdown_fields`, after collecting `content_field_names`, walk schema properties and collect fields where `"format" == "date"` into a `date_fields` vec. Do the same for card fields via `$defs`, producing `card_date_fields: { "<card_type>": [...] }` — same shape as `card_content_fields`.
+Current drawbacks:
 
-Inject into `__meta__`:
+- Boilerplate in every plate that uses date fields
+- Public helper API surface (`parse-date`) that can be avoided
+- Uneven data model (`data.BODY` is ready-to-use content, but `data.date` is still a raw string)
+
+## Decisions
+
+### 1. Date conversion becomes automatic inside `data`
+
+For Typst backend output, fields declared as JSON Schema `"format": "date"` are converted to Typst `datetime` values in `quillmark-helper` during `data` construction.
+
+- Plate authors use `data.date` directly
+- Raw JSON payload remains unchanged (ISO string); conversion stays in Typst helper layer
+- `format: "date-time"` remains out of scope for this change
+
+### 2. Extend `__meta__` with date field annotations
+
+In `crates/backends/typst/src/lib.rs` (`transform_markdown_fields`), collect date fields from:
+
+- top-level schema `properties`
+- card schemas under `$defs` (`*_card`)
+
+Inject alongside existing markdown metadata:
+
 ```json
 {
   "content_fields": [...],
@@ -20,57 +45,56 @@ Inject into `__meta__`:
 }
 ```
 
-Date values remain ISO strings in JSON. No Rust-side parsing.
+### 3. Keep date parser internal to helper package
 
----
+In `crates/backends/typst/src/lib.typ.template`:
 
-### 2. Rework `lib.typ.template` — `crates/backends/typst/src/lib.typ.template`
+- keep a private date parser helper (for internal conversion)
+- auto-convert `meta.date_fields` on top-level `d`
+- auto-convert `meta.card_date_fields` for each `CARDS` item
+- stop exporting `parse-date` as a public symbol
 
-**Make `parse-date` private** (remove from exports, keep as internal `let`):
-```typst
-// internal — not exported
-#let _parse-date(s) = {
-  if s == none { return none }
-  let parts = str(s).split("T").at(0).split("-")
-  if parts.len() < 3 { return none }
-  datetime(year: int(parts.at(0)), month: int(parts.at(1)), day: int(parts.at(2).slice(0, 2)))
-}
-```
+End state: only `data` is exported for normal plate usage.
 
-**Add auto-conversion in the `data` block**, after the existing content-field eval loop:
-```typst
-for key in meta.date_fields {
-  if key in d and d.at(key) != none { d.insert(key, _parse-date(str(d.at(key)))) }
-}
-```
+### 4. Update first-party plates and docs
 
-**In the CARDS loop**, after the existing card content-field eval:
-```typst
-let date-fields = meta.card_date_fields.at(card-type, default: ())
-for key in date-fields { 
-  if key in card and card.at(key) != none { card.insert(key, _parse-date(str(card.at(key)))) }
-}
-```
+Update fixture plates and docs that currently import/call `parse-date`:
 
-**Update the export line** — `parse-date` is no longer public:
-```typst
-// Only `data` is exported. Date fields are already datetime objects inside data.
-```
+- remove `parse-date` from imports
+- replace `parse-date(data.date)` with direct `data.date` usage
+- keep existing card wiring unchanged (date fields remain available on card objects)
 
----
+## Scope
 
-### 3. Update fixture plates
+### In scope
 
-In all plates (`usaf_memo`, `cmu_letter`, etc.):
-- Remove `parse-date` from the import line
-- Remove `parse-date(...)` call sites — `data.date` is already a `datetime`
-- Card date spreads (`..if "date" in card { (date: card.date) }`) work unchanged
+- Typst backend metadata enrichment for date fields
+- Typst helper template auto-conversion for date fields
+- Removal of public `parse-date` export from helper package
+- Fixture plate updates to new usage
+- Documentation updates that currently recommend `parse-date`
+- Tests covering new metadata and helper behavior
 
----
+### Out of scope
 
-### 4. Tests
+- New coercion/validation semantics in core field parsing
+- Automatic conversion for `format: "date-time"`
+- Changes to non-Typst backends
 
-- **Unit — `lib.rs`:** schema with `format: "date"` fields (top-level and in card `$defs`) produces correct `date_fields` / `card_date_fields` in `__meta__`
-- **Unit — `lib.rs`:** `format: "date-time"` fields are **not** included (explicitly out of scope)
-- **Integration:** existing render fixture output is byte-identical after rework — the auto-converted `datetime` formats the same way as the old manual `parse-date` result
-- **Compile error:** confirm a plate importing `parse-date` fails — validates the symbol is no longer exported
+## Test plan
+
+- **Unit (`lib.rs`)**: top-level `format: "date"` populates `date_fields`
+- **Unit (`lib.rs`)**: card `$defs` `format: "date"` populates `card_date_fields`
+- **Unit (`lib.rs`)**: `format: "date-time"` is excluded
+- **Template/helper tests**: generated helper no longer exports `parse-date` and still renders valid data conversion logic
+- **Integration/fixtures**: rendered output from updated plates remains semantically equivalent for date display
+
+## Files affected
+
+| File | Change |
+|------|--------|
+| `crates/backends/typst/src/lib.rs` | collect/inject `date_fields` + `card_date_fields` in `__meta__` |
+| `crates/backends/typst/src/lib.typ.template` | auto-convert date fields in `data`, keep parser internal |
+| `crates/backends/typst/src/helper.rs` | update helper docs/tests to match exported API |
+| `crates/fixtures/resources/quills/**/plate.typ` | remove `parse-date` imports/call sites |
+| `docs/format-designer/typst-backend.md` | update user guidance to direct date field usage |
