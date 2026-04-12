@@ -279,3 +279,51 @@ pub fn render_document_pages(
         }),
     }
 }
+
+#[cfg(all(test, feature = "embed-default-font"))]
+mod compile_helper_tests {
+    use std::collections::HashMap;
+
+    use super::compile_to_document;
+    use quillmark_core::{FileTreeNode, Quill};
+
+    /// Ensures generated `lib.typ` (date conversion, etc.) typechecks when evaluated.
+    /// String-only helper tests do not run the Typst compiler.
+    #[test]
+    fn generated_helper_compiles_with_date_meta() {
+        let mut root_files = HashMap::new();
+        root_files.insert(
+            "Quill.yaml".to_string(),
+            FileTreeNode::File {
+                contents: br#"Quill:
+  name: "test_helper_compile"
+  version: "1.0"
+  backend: "typst"
+  plate_file: "plate.typ"
+  description: "Test"
+"#
+                .to_vec(),
+            },
+        );
+        root_files.insert(
+            "plate.typ".to_string(),
+            FileTreeNode::File {
+                contents: b"x".to_vec(),
+            },
+        );
+        let root = FileTreeNode::Directory { files: root_files };
+        let quill = Quill::from_tree(root).expect("quill");
+
+        let json = r#"{"title":"Test","BODY":"Hello","date":"2025-01-15","__meta__":{"content_fields":["BODY"],"card_content_fields":{},"date_fields":["date"],"card_date_fields":{}}}"#;
+        let plate = r#"#import "@local/quillmark-helper:0.1.0": data
+#set page(height: auto, width: auto)
+#data.title"#;
+
+        let result = compile_to_document(&quill, plate, json);
+        assert!(
+            result.is_ok(),
+            "generated helper should compile: {:?}",
+            result.err()
+        );
+    }
+}
