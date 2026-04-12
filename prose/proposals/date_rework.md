@@ -89,6 +89,57 @@ Update fixture plates and docs that currently import/call `parse-date`:
 - **Template/helper tests**: generated helper no longer exports `parse-date` and still renders valid data conversion logic
 - **Integration/fixtures**: rendered output from updated plates remains semantically equivalent for date display
 
+## Implementation plan
+
+### Phase 1: Typst backend metadata (`lib.rs`)
+
+1. Extend `transform_markdown_fields` to collect top-level date fields from schema `properties` where:
+   - `type == "string"`
+   - `format == "date"`
+2. Extend card metadata extraction from `$defs` (`*_card`) to collect per-card date fields with the same rule.
+3. Inject `date_fields` and `card_date_fields` into `__meta__` alongside existing markdown metadata.
+4. Keep behavior strict to `format: "date"` only (exclude `date-time`).
+
+### Phase 2: Helper template conversion (`lib.typ.template`)
+
+1. Keep date parser helper internal/private (`_parse-date` style naming).
+2. In `data` construction:
+   - convert `meta.date_fields` on top-level `d`
+   - convert `meta.card_date_fields` in each card object
+3. Preserve null/invalid tolerance (non-parseable values map to `none`, matching current helper behavior expectations).
+4. Remove public export of `parse-date`; keep only `data` as plate-facing API.
+
+### Phase 3: Fixtures and docs
+
+1. Update first-party plates to remove `parse-date` imports.
+2. Replace direct parse calls (`parse-date(data.date)`) with direct value usage (`data.date`).
+3. Update Typst backend docs to describe date auto-conversion as part of helper `data` normalization.
+
+### Phase 4: Tests
+
+1. Add/update backend unit tests for:
+   - top-level `date_fields`
+   - card `card_date_fields`
+   - `date-time` exclusion
+2. Add/update helper/template tests for:
+   - private parser symbol (not exported)
+   - generated conversion loops for top-level and card date fields
+3. Update fixture/integration tests to ensure rendered date output remains stable.
+
+### Phase 5: Verification and cleanup
+
+1. Run targeted backend + fixture tests.
+2. Run workspace tests before merge.
+3. Remove stale docs/examples still referencing `parse-date`.
+
+## Acceptance criteria
+
+- Plate authors can render date fields with `data.<field>` directly without importing/calling `parse-date`.
+- `__meta__` contains deterministic date metadata for both top-level and card fields.
+- `format: "date-time"` behavior is unchanged and not auto-converted.
+- Existing fixtures continue producing expected date output.
+- Public Typst helper API surface does not expose `parse-date`.
+
 ## Files affected
 
 | File | Change |
