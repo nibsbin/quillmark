@@ -47,12 +47,12 @@ Quillmark injects your document's frontmatter as JSON data via the `@local/quill
 ### Importing the Helper
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, parse-date
+#import "@local/quillmark-helper:0.1.0": data
 ```
 
 The helper provides:
 - `data` - Dictionary containing all frontmatter fields, with markdown fields automatically converted to Typst content objects
-- `parse-date(str)` - Parse date strings into Typst datetime objects
+- Date fields declared with `format: date` are automatically converted to Typst `datetime` values
 
 ### Accessing Fields
 
@@ -96,13 +96,13 @@ The document body (Markdown content after frontmatter) is stored in `data.BODY` 
 #data.at("body", default: "")
 ```
 
-### Parsing Dates
+### Date Fields
 
-Use `parse-date()` to convert date strings to Typst datetime objects:
+Date fields are auto-converted to Typst `datetime` values by the helper package:
 
 ```typst
 // Input: date: "2025-01-15" in frontmatter
-#parse-date(data.date)  // Returns datetime(year: 2025, month: 1, day: 15)
+#data.date  // datetime(year: 2025, month: 1, day: 15)
 ```
 
 ### Working with Arrays
@@ -333,12 +333,12 @@ Errors include:
 ### Simple Letter
 
 ```typst
-#import "@local/quillmark-helper:0.1.0": data, parse-date
+#import "@local/quillmark-helper:0.1.0": data
 
 #set page(margin: 1in)
 #set text(font: "Arial", size: 11pt)
 
-#parse-date(data.date).display("[month repr:long] [day], [year]")
+#data.date.display("[month repr:long] [day], [year]")
 
 #data.recipient
 

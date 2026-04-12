@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data, parse-date
+#import "@local/quillmark-helper:0.1.0": data
 #import "@local/tonguetoquill-usaf-memo:1.1.0": backmatter, frontmatter, indorsement, mainmatter
 
 // Frontmatter configuration
@@ -9,7 +9,7 @@
   letterhead_seal: image("assets/dow_seal.jpg"),
 
   // Date
-  date: parse-date(data.date),
+  date: data.date,
 
   // Receiver information
   memo_for: data.memo_for,

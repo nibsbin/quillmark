@@ -205,6 +205,27 @@ fn is_markdown_field(field_schema: &serde_json::Value) -> bool {
         .unwrap_or(false)
 }
 
+/// Check if a field schema indicates a date field.
+///
+/// A field is considered a date if it has:
+/// - `type = "string"`
+/// - `format = "date"`
+fn is_date_field(field_schema: &serde_json::Value) -> bool {
+    let is_string = field_schema
+        .get("type")
+        .and_then(|v| v.as_str())
+        .map(|s| s == "string")
+        .unwrap_or(false);
+
+    let is_date_format = field_schema
+        .get("format")
+        .and_then(|v| v.as_str())
+        .map(|s| s == "date")
+        .unwrap_or(false);
+
+    is_string && is_date_format
+}
+
 /// Transform markdown fields to Typst markup based on schema.
 ///
 /// Identifies fields with `contentMediaType = "text/markdown"` and converts
@@ -245,6 +266,12 @@ fn transform_markdown_fields(
         }
     }
 
+    let date_fields: Vec<&str> = properties_obj
+        .iter()
+        .filter(|(_, fs)| is_date_field(fs))
+        .map(|(name, _)| name.as_str())
+        .collect();
+
     // Handle CARDS array recursively
     if let Some(cards_value) = result.get("CARDS") {
         if let Some(cards_array) = cards_value.as_array() {
@@ -258,6 +285,7 @@ fn transform_markdown_fields(
 
     // Collect per-card-type content field names from schema $defs
     let mut card_content_fields = serde_json::Map::new();
+    let mut card_date_fields = serde_json::Map::new();
     if let Some(defs) = schema_json.get("$defs").and_then(|v| v.as_object()) {
         for (def_name, def_schema) in defs {
             if let Some(card_type) = def_name.strip_suffix("_card") {
@@ -283,6 +311,29 @@ fn transform_markdown_fields(
                         ),
                     );
                 }
+
+                let date_fields: Vec<&str> = def_schema
+                    .get("properties")
+                    .and_then(|v| v.as_object())
+                    .map(|props| {
+                        props
+                            .iter()
+                            .filter(|(_, fs)| is_date_field(fs))
+                            .map(|(name, _)| name.as_str())
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if !date_fields.is_empty() {
+                    card_date_fields.insert(
+                        card_type.to_string(),
+                        serde_json::Value::Array(
+                            date_fields
+                                .into_iter()
+                                .map(|s| serde_json::Value::String(s.to_string()))
+                                .collect(),
+                        ),
+                    );
+                }
             }
         }
     }
@@ -293,6 +344,8 @@ fn transform_markdown_fields(
         QuillValue::from_json(serde_json::json!({
             "content_fields": content_field_names,
             "card_content_fields": card_content_fields,
+            "date_fields": date_fields,
+            "card_date_fields": card_date_fields,
         })),
     );
 
@@ -385,6 +438,27 @@ mod tests {
     }
 
     #[test]
+    fn test_is_date_field() {
+        let date_schema = json!({
+            "type": "string",
+            "format": "date"
+        });
+        assert!(is_date_field(&date_schema));
+
+        let date_time_schema = json!({
+            "type": "string",
+            "format": "date-time"
+        });
+        assert!(!is_date_field(&date_time_schema));
+
+        let non_string_date_schema = json!({
+            "type": "number",
+            "format": "date"
+        });
+        assert!(!is_date_field(&non_string_date_schema));
+    }
+
+    #[test]
     fn test_transform_markdown_fields_basic() {
         let schema = QuillValue::from_json(json!({
             "type": "object",
@@ -458,5 +532,52 @@ mod tests {
 
         let body = result.get("BODY").unwrap().as_str().unwrap();
         assert!(body.contains("#emph[italic]"));
+    }
+
+    #[test]
+    fn test_transform_markdown_fields_collects_top_level_date_metadata() {
+        let schema = QuillValue::from_json(json!({
+            "type": "object",
+            "properties": {
+                "title": { "type": "string" },
+                "date": { "type": "string", "format": "date" },
+                "timestamp": { "type": "string", "format": "date-time" }
+            }
+        }));
+
+        let mut fields = HashMap::new();
+        fields.insert(
+            "title".to_string(),
+            QuillValue::from_json(json!("My Title")),
+        );
+
+        let result = transform_markdown_fields(&fields, &schema);
+        let meta = result.get("__meta__").expect("missing __meta__").as_json();
+
+        assert_eq!(meta["date_fields"], json!(["date"]));
+    }
+
+    #[test]
+    fn test_transform_markdown_fields_collects_card_date_metadata() {
+        let schema = QuillValue::from_json(json!({
+            "type": "object",
+            "properties": {},
+            "$defs": {
+                "indorsement_card": {
+                    "type": "object",
+                    "properties": {
+                        "date": { "type": "string", "format": "date" },
+                        "created_at": { "type": "string", "format": "date-time" },
+                        "BODY": { "type": "string", "contentMediaType": "text/markdown" }
+                    }
+                }
+            }
+        }));
+
+        let fields = HashMap::new();
+        let result = transform_markdown_fields(&fields, &schema);
+        let meta = result.get("__meta__").expect("missing __meta__").as_json();
+
+        assert_eq!(meta["card_date_fields"]["indorsement"], json!(["date"]));
     }
 }
