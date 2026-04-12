@@ -9,7 +9,12 @@
   let d = json(bytes("{escaped_json}"))
 
   // Read and consume __meta__ (injected by transform_fields)
-  let meta = d.remove("__meta__", default: (content_fields: (), card_content_fields: (:)))
+  let meta = d.remove("__meta__", default: (
+    content_fields: (),
+    card_content_fields: (:),
+    date_fields: (),
+    card_date_fields: (:),
+  ))
 
   // Auto-eval top-level content fields
   for key in meta.content_fields {
@@ -17,6 +22,16 @@
       let val = d.at(key)
       if type(val) == str and val != "" {
         d.insert(key, eval(val, mode: "markup"))
+      }
+    }
+  }
+
+  // Auto-convert top-level date fields to datetime
+  for key in meta.date_fields {
+    if key in d {
+      let val = d.at(key)
+      if val != none {
+        d.insert(key, _parse-date(val))
       }
     }
   }
@@ -35,6 +50,18 @@
           }
         }
       }
+
+      // Auto-convert date fields for this card type
+      let date-fields = meta.card_date_fields.at(card-type, default: ())
+      for key in date-fields {
+        if key in card {
+          let val = card.at(key)
+          if val != none {
+            card.insert(key, _parse-date(val))
+          }
+        }
+      }
+
       cards.push(card)
     }
     d.insert("CARDS", cards)
@@ -45,7 +72,7 @@
 
 /// Parse an ISO 8601 date string (YYYY-MM-DD) to a Typst datetime
 /// Handles both pure dates (2024-01-15) and datetime strings (2024-01-15T10:30:00)
-#let parse-date(s) = {
+#let _parse-date(s) = {
   if s == none { return none }
   let date-str = str(s)
   // Handle datetime strings by extracting just the date part

@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data, parse-date
+#import "@local/quillmark-helper:0.1.0": data
 
 #set text(font: "Figtree")
 

@@ -1,4 +1,4 @@
-#import "@local/quillmark-helper:0.1.0": data, parse-date
+#import "@local/quillmark-helper:0.1.0": data
 #import "@local/ttq-classic-resume:0.1.0": *
 
 #show: resume
