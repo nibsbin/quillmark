@@ -852,6 +852,27 @@ default: "Default value"
 }
 
 #[test]
+fn test_field_schema_scalar_examples_coerced_to_array() {
+    let yaml_str = r#"
+description: "Field schema with scalar example"
+type: "date"
+examples: "2024-01-15"
+"#;
+    let quill_value = QuillValue::from_yaml_str(yaml_str).unwrap();
+    let schema = FieldSchema::from_quill_value("effective_date".to_string(), &quill_value).unwrap();
+
+    assert_eq!(
+        schema
+            .examples
+            .as_ref()
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|v| v.as_str()),
+        Some("2024-01-15")
+    );
+}
+
+#[test]
 fn test_field_schema_ui_compact() {
     let yaml_str = r#"
 type: "string"
