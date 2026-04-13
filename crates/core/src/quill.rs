@@ -35,7 +35,7 @@ pub struct Quill {
     pub example: Option<String>,
     /// Parsed configuration — the authoritative schema model.
     pub config: QuillConfig,
-    /// JSON Schema (serialized from config, used for validation only)
+    /// Legacy JSON-schema-shaped payload retained for compatibility with older consumers.
     pub schema: QuillValue,
     /// Cached default values extracted from config (for performance)
     pub defaults: HashMap<String, QuillValue>,

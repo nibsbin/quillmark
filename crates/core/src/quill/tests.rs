@@ -783,36 +783,26 @@ main:
     // Create Quill from tree
     let quill = Quill::from_tree(root).unwrap();
 
-    // Validate field schemas were parsed (author, ice_cream, title, BODY)
-    assert_eq!(quill.schema["properties"].as_object().unwrap().len(), 4);
-    assert!(quill.schema["properties"]
-        .as_object()
-        .unwrap()
-        .contains_key("author"));
-    assert!(quill.schema["properties"]
-        .as_object()
-        .unwrap()
-        .contains_key("ice_cream"));
-    assert!(quill.schema["properties"]
-        .as_object()
-        .unwrap()
-        .contains_key("title"));
-    assert!(quill.schema["properties"]
-        .as_object()
-        .unwrap()
-        .contains_key("BODY"));
+    // Validate field schemas were parsed from QuillConfig
+    assert_eq!(quill.config.main().fields.len(), 3);
+    assert!(quill.config.main().fields.contains_key("author"));
+    assert!(quill.config.main().fields.contains_key("ice_cream"));
+    assert!(quill.config.main().fields.contains_key("title"));
 
     // Verify author field schema
-    let author_schema = quill.schema["properties"]["author"].as_object().unwrap();
-    assert_eq!(author_schema["description"], "Author of document");
+    let author_schema = quill.config.main().fields.get("author").unwrap();
+    assert_eq!(author_schema.description.as_deref(), Some("Author of document"));
 
     // Verify ice_cream field schema (no required field, should default to false)
-    let ice_cream_schema = quill.schema["properties"]["ice_cream"].as_object().unwrap();
-    assert_eq!(ice_cream_schema["description"], "favorite ice cream flavor");
+    let ice_cream_schema = quill.config.main().fields.get("ice_cream").unwrap();
+    assert_eq!(
+        ice_cream_schema.description.as_deref(),
+        Some("favorite ice cream flavor")
+    );
 
     // Verify title field schema
-    let title_schema = quill.schema["properties"]["title"].as_object().unwrap();
-    assert_eq!(title_schema["description"], "title of document");
+    let title_schema = quill.config.main().fields.get("title").unwrap();
+    assert_eq!(title_schema.description.as_deref(), Some("title of document"));
 }
 
 #[test]

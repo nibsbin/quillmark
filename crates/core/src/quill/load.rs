@@ -87,7 +87,6 @@ impl Quill {
     /// Returns an error if:
     /// - The plate file specified in config is not found or not valid UTF-8
     /// - The example file specified in config is not found or not valid UTF-8
-    /// - Schema generation fails
     fn from_config(
         mut config: QuillConfig,
         root: FileTreeNode,
@@ -125,9 +124,9 @@ impl Quill {
             metadata.insert(format!("typst_{}", key), value.clone());
         }
 
-        // Build JSON schema from config (pure serialization for validation)
-        let schema = crate::schema::build_schema_from_config(&config)
-            .map_err(|e| format!("Failed to build JSON schema from config: {}", e))?;
+        // Phase 4 cutover keeps this field for compatibility, but validation/coercion
+        // now runs directly from QuillConfig-native APIs.
+        let schema = QuillValue::from_json(serde_json::Value::Null);
 
         // Read the plate content from plate file (if specified)
         let plate_content: Option<String> = if let Some(ref plate_file_name) = config.plate_file {
@@ -189,8 +188,8 @@ impl Quill {
         config.example_markdown = example_content.clone();
 
         // Extract and cache defaults and examples from config directly
-        let defaults = config.extract_defaults();
-        let examples = config.extract_examples();
+        let defaults = config.defaults();
+        let examples = config.examples();
 
         let quill = Quill {
             metadata,

@@ -1,5 +1,6 @@
 // Clean, non-duplicated imports
 use pyo3::conversion::IntoPyObjectExt;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*; // PyResult, Python, etc.
 use pyo3::pycell::PyRef; // PyRef
 use pyo3::types::PyDict; // PyDict
@@ -271,16 +272,20 @@ impl PyQuill {
 
     #[getter]
     fn schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
-        // Convert serde_json::Value to Python object
-        json_to_py(py, &self.inner.schema)
+        let yaml = self
+            .inner
+            .config
+            .public_schema_yaml()
+            .map_err(|e| PyValueError::new_err(format!("schema: {}", e)))?;
+        Ok(yaml.into_pyobject(py)?.into_any())
     }
 
     #[getter]
     fn defaults<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         // Convert cached defaults HashMap to Python dict
         let dict = PyDict::new(py);
-        for (key, value) in self.inner.extract_defaults() {
-            dict.set_item(key, quillvalue_to_py(py, value)?)?;
+        for (key, value) in self.inner.config.defaults() {
+            dict.set_item(key, quillvalue_to_py(py, &value)?)?;
         }
         Ok(dict)
     }
@@ -289,10 +294,10 @@ impl PyQuill {
     fn examples<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         // Convert cached examples HashMap to Python dict of lists
         let dict = PyDict::new(py);
-        for (key, values) in self.inner.extract_examples() {
+        for (key, values) in self.inner.config.examples() {
             let py_list = pyo3::types::PyList::empty(py);
             for value in values {
-                py_list.append(quillvalue_to_py(py, value)?)?;
+                py_list.append(quillvalue_to_py(py, &value)?)?;
             }
             dict.set_item(key, py_list)?;
         }

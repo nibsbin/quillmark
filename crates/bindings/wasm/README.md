@@ -84,7 +84,7 @@ engine.registerQuill(quillJson);
 // Step 3: Get Quill info (optional)
 const info = engine.getQuillInfo('my-quill');
 console.log('Supported formats:', info.supportedFormats);
-console.log('Field schemas:', info.fieldSchemas);
+console.log('Schema YAML:', info.schema);
 
 // Step 4: Render
 const result = engine.render(parsed, { format: 'pdf' });
@@ -149,7 +149,7 @@ Returned by `getQuillInfo()`:
   backend: string,  // e.g., "typst"
   metadata: object,  // Quill metadata from Quill.yaml
   example?: string,  // Example markdown (if available)
-  fieldSchemas: object,  // Field schema definitions
+  schema: string,  // Public schema YAML text
   supportedFormats: Array<'pdf' | 'svg' | 'txt'>  // Formats this backend supports
 }
 ```

@@ -219,6 +219,14 @@ impl QuillConfig {
         Ok(coerced)
     }
 
+    /// Validate document fields against this configuration.
+    pub fn validate(
+        &self,
+        fields: &HashMap<String, QuillValue>,
+    ) -> Result<(), Vec<super::validation::ValidationError>> {
+        super::validation::validate_document(self, fields)
+    }
+
     fn coerce_fields_lossy(
         &self,
         fields: &HashMap<String, QuillValue>,
