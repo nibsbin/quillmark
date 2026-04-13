@@ -173,8 +173,7 @@ impl QuillConfig {
         &self,
         fields: &HashMap<String, QuillValue>,
     ) -> HashMap<String, QuillValue> {
-        self.coerce(fields)
-            .unwrap_or_else(|_| self.coerce_fields_lossy(fields))
+        self.coerce_fields_lossy(fields)
     }
 
     /// Coerce document fields to match expected schema types.
