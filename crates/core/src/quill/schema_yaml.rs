@@ -242,7 +242,7 @@ cards:
         assert!(yaml.contains("ui:"));
         assert!(yaml.contains("cards:"));
         assert!(yaml.contains("indorsement:"));
-        assert!(!yaml.contains("x-ui"));
+        assert!(!yaml.contains("x-"));
         assert!(!yaml.contains("CARDS:"));
     }
 

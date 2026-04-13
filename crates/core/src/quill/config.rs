@@ -9,6 +9,7 @@ use time::{Date, OffsetDateTime};
 use crate::error::{Diagnostic, Severity};
 use crate::value::QuillValue;
 
+use super::formats::DATE_FORMAT;
 use super::{CardSchema, FieldSchema, FieldType, UiContainerSchema, UiFieldSchema};
 
 /// Top-level configuration for a Quillmark project
@@ -84,15 +85,6 @@ impl QuillConfig {
             .find(|card| card.name == name)
     }
 
-    /// Extract default values from the main card's field schemas.
-    ///
-    /// Returns a HashMap of field names to their default QuillValues,
-    /// reading directly from `FieldSchema.default` without round-tripping
-    /// through JSON Schema.
-    pub fn extract_defaults(&self) -> HashMap<String, QuillValue> {
-        self.defaults()
-    }
-
     /// Extract default values from the main field schemas.
     pub fn defaults(&self) -> HashMap<String, QuillValue> {
         let mut defaults = HashMap::new();
@@ -102,15 +94,6 @@ impl QuillConfig {
             }
         }
         defaults
-    }
-
-    /// Extract example values from the main card's field schemas.
-    ///
-    /// Returns a HashMap of field names to their example values,
-    /// reading directly from `FieldSchema.examples` without round-tripping
-    /// through JSON Schema.
-    pub fn extract_examples(&self) -> HashMap<String, Vec<QuillValue>> {
-        self.examples()
     }
 
     /// Extract example values from the main field schemas.
@@ -166,18 +149,6 @@ impl QuillConfig {
         })
     }
 
-    /// Coerce document fields to match expected schema types, reading types
-    /// directly from `FieldSchema` without round-tripping through JSON Schema.
-    ///
-    /// Handles both main card fields (top-level) and card instances in the
-    /// `CARDS` array.
-    pub fn coerce_fields(
-        &self,
-        fields: &HashMap<String, QuillValue>,
-    ) -> HashMap<String, QuillValue> {
-        self.coerce_fields_lossy(fields)
-    }
-
     /// Coerce document fields to match expected schema types.
     ///
     /// Returns an error when a value cannot be coerced to the declared type.
@@ -225,37 +196,6 @@ impl QuillConfig {
         fields: &HashMap<String, QuillValue>,
     ) -> Result<(), Vec<super::validation::ValidationError>> {
         super::validation::validate_document(self, fields)
-    }
-
-    fn coerce_fields_lossy(
-        &self,
-        fields: &HashMap<String, QuillValue>,
-    ) -> HashMap<String, QuillValue> {
-        let mut coerced = HashMap::new();
-
-        for (field_name, field_value) in fields {
-            if let Some(field_schema) = self.main().fields.get(field_name) {
-                coerced.insert(
-                    field_name.clone(),
-                    Self::coerce_value(field_value, field_schema),
-                );
-            } else {
-                coerced.insert(field_name.clone(), field_value.clone());
-            }
-        }
-
-        // Coerce card instances in CARDS array
-        if let Some(cards_value) = coerced.get("CARDS") {
-            if let Some(cards_array) = cards_value.as_array() {
-                let coerced_cards = self.coerce_cards_array(cards_array);
-                coerced.insert(
-                    "CARDS".to_string(),
-                    QuillValue::from_json(serde_json::Value::Array(coerced_cards)),
-                );
-            }
-        }
-
-        coerced
     }
 
     fn coerce_cards_array_strict(
@@ -438,9 +378,7 @@ impl QuillConfig {
                 };
 
                 let valid = if field_schema.r#type == FieldType::Date {
-                    let date_format = time::format_description::parse("[year]-[month]-[day]")
-                        .expect("valid date format");
-                    Date::parse(&text, &date_format).is_ok()
+                    Date::parse(&text, &DATE_FORMAT).is_ok()
                 } else {
                     OffsetDateTime::parse(&text, &Rfc3339).is_ok()
                 };
@@ -486,144 +424,6 @@ impl QuillConfig {
                     Ok(value.clone())
                 }
             }
-        }
-    }
-
-    fn coerce_cards_array(&self, cards_array: &[serde_json::Value]) -> Vec<serde_json::Value> {
-        let mut coerced_cards = Vec::new();
-
-        for card in cards_array {
-            if let Some(card_obj) = card.as_object() {
-                if let Some(card_type) = card_obj.get("CARD").and_then(|v| v.as_str()) {
-                    if let Some(card_schema) = self.card_definition(card_type) {
-                        let mut coerced_card = serde_json::Map::new();
-                        for (k, v) in card_obj {
-                            if let Some(field_schema) = card_schema.fields.get(k) {
-                                let qv = QuillValue::from_json(v.clone());
-                                coerced_card.insert(
-                                    k.clone(),
-                                    Self::coerce_value(&qv, field_schema).into_json(),
-                                );
-                            } else {
-                                coerced_card.insert(k.clone(), v.clone());
-                            }
-                        }
-                        coerced_cards.push(serde_json::Value::Object(coerced_card));
-                        continue;
-                    }
-                }
-            }
-            coerced_cards.push(card.clone());
-        }
-
-        coerced_cards
-    }
-
-    fn coerce_value(value: &QuillValue, field_schema: &super::FieldSchema) -> QuillValue {
-        use super::FieldType;
-
-        let json_value = value.as_json();
-        match field_schema.r#type {
-            FieldType::Array => {
-                // Ensure value is an array
-                let arr = if let Some(a) = json_value.as_array() {
-                    a.clone()
-                } else {
-                    vec![json_value.clone()]
-                };
-
-                // If items has properties, recursively coerce each element's properties
-                let coerced_arr = if let Some(items_schema) = &field_schema.items {
-                    if let Some(props) = &items_schema.properties {
-                        arr.into_iter()
-                            .map(|elem| {
-                                if let Some(obj) = elem.as_object() {
-                                    let mut coerced_elem = serde_json::Map::new();
-                                    for (k, v) in obj {
-                                        if let Some(prop_schema) = props.get(k) {
-                                            let qv = QuillValue::from_json(v.clone());
-                                            coerced_elem.insert(
-                                                k.clone(),
-                                                Self::coerce_value(&qv, prop_schema).into_json(),
-                                            );
-                                        } else {
-                                            coerced_elem.insert(k.clone(), v.clone());
-                                        }
-                                    }
-                                    serde_json::Value::Object(coerced_elem)
-                                } else {
-                                    elem
-                                }
-                            })
-                            .collect()
-                    } else {
-                        arr
-                    }
-                } else {
-                    arr
-                };
-
-                QuillValue::from_json(serde_json::Value::Array(coerced_arr))
-            }
-            FieldType::Boolean => {
-                if let Some(b) = json_value.as_bool() {
-                    return QuillValue::from_json(serde_json::Value::Bool(b));
-                }
-                if let Some(s) = json_value.as_str() {
-                    let lower = s.to_lowercase();
-                    if lower == "true" {
-                        return QuillValue::from_json(serde_json::Value::Bool(true));
-                    } else if lower == "false" {
-                        return QuillValue::from_json(serde_json::Value::Bool(false));
-                    }
-                }
-                if let Some(n) = json_value.as_i64() {
-                    return QuillValue::from_json(serde_json::Value::Bool(n != 0));
-                }
-                if let Some(n) = json_value.as_f64() {
-                    if n.is_nan() {
-                        return QuillValue::from_json(serde_json::Value::Bool(false));
-                    }
-                    return QuillValue::from_json(serde_json::Value::Bool(n.abs() > f64::EPSILON));
-                }
-                value.clone()
-            }
-            FieldType::Number => {
-                if json_value.is_number() {
-                    return value.clone();
-                }
-                if let Some(s) = json_value.as_str() {
-                    if let Ok(i) = s.parse::<i64>() {
-                        return QuillValue::from_json(serde_json::Number::from(i).into());
-                    }
-                    if let Ok(f) = s.parse::<f64>() {
-                        if let Some(num) = serde_json::Number::from_f64(f) {
-                            return QuillValue::from_json(num.into());
-                        }
-                    }
-                }
-                if let Some(b) = json_value.as_bool() {
-                    let n = if b { 1 } else { 0 };
-                    return QuillValue::from_json(serde_json::Value::Number(
-                        serde_json::Number::from(n),
-                    ));
-                }
-                value.clone()
-            }
-            FieldType::String | FieldType::Date | FieldType::DateTime | FieldType::Markdown => {
-                if json_value.is_string() {
-                    return value.clone();
-                }
-                if let Some(arr) = json_value.as_array() {
-                    if arr.len() == 1 {
-                        if let Some(s) = arr[0].as_str() {
-                            return QuillValue::from_json(serde_json::Value::String(s.to_string()));
-                        }
-                    }
-                }
-                value.clone()
-            }
-            FieldType::Object => value.clone(),
         }
     }
 

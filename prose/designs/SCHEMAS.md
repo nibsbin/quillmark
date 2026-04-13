@@ -1,70 +1,46 @@
-# Schema and Validation
+# Schema Model (`QuillConfig`)
 
-## Backend Trait
+## TL;DR
 
-The `Backend` trait interface:
+`QuillConfig` is the only schema model in quillmark. Validation, coercion, defaults/examples extraction, and public schema emission all read directly from it.
 
-- `id() -> &str` — backend identifier (e.g., `"typst"`)
-- `supported_formats() -> &[OutputFormat]` — output formats supported
-- `plate_extension_types() -> &[&str]` — accepted plate extensions (e.g., `[".typ"]`); empty slice means no plate required
-- `compile(plate, quill, opts, json_data)` — compile plate content + JSON document data into artifacts
-- `transform_fields(fields, schema)` — optional backend-specific field shaping before JSON serialization
-- `default_quill() -> Option<Quill>` — optional embedded default quill for zero-config use
+## Quill.yaml DSL
 
-## Quill Fields (`main.fields`)
+Schema authoring lives in `Quill.yaml` under:
 
-Field properties:
+- `main.fields`
+- `cards.<card_name>.fields`
+- optional `ui` hints on fields/cards/main
 
-- `name` — key under `main.fields` in YAML (e.g., `main.fields.title` → name `"title"`)
-- `title` — short label (`title` in JSON Schema)
-- `description` — required; used as JSON Schema `description`
-- `type` — `"string"`, `"number"`, `"boolean"`, `"array"`, `"object"` (for typed table rows under `items`), `"date"`, `"datetime"`, or `"markdown"`
-- `default` — default value
-- `required` — bool, default `false`
-- `examples` — array of example values
-- `ui` — UI metadata table (see below)
+Supported field types:
 
-**Type mapping (YAML → JSON Schema):**
+| Quill.yaml Type | Meaning |
+|---|---|
+| `string` | UTF-8 text |
+| `number` | Numeric value |
+| `boolean` | `true` / `false` |
+| `array` | Ordered list; use `items:` |
+| `object` | Structured map; use `properties:` |
+| `date` | `YYYY-MM-DD` |
+| `datetime` | ISO 8601 |
+| `markdown` | Rich text; backends handle conversion |
 
-| YAML | JSON Schema |
-|------|-------------|
-| `"string"` | `"string"` |
-| `"number"` | `"number"` |
-| `"boolean"` | `"boolean"` |
-| `"array"` | `"array"` |
-| `"object"` / `"dict"` | `"object"` + `properties` |
-| `"date"` | `"string"` + `format: "date"` |
-| `"datetime"` | `"string"` + `format: "date-time"` |
-| `"markdown"` | `"string"` + `contentMediaType: "text/markdown"` |
+## Native validation
 
-> `type: object` with `properties` is supported inside `items` for typed array rows (e.g. `items: {type: object, properties: {...}}`). Top-level object fields and nested object properties are not supported.
+Validation is implemented by a native walker over `QuillConfig` in `quill/validation.rs`.
 
-`contentMediaType = "text/markdown"` marks fields the Typst backend converts to Typst markup via `transform_fields`.
+- Entry point: `QuillConfig::validate(&HashMap<String, QuillValue>)`
+- Returns `Result<(), Vec<ValidationError>>`
+- Collects all errors (does not short-circuit)
+- Emits path-aware errors for top-level fields and card fields
 
-## UI Configuration (`[ui]`)
+## Public schema emission
 
-- `group` — UI group/section name ✅
-- `order` — display order index (auto-generated from YAML field position) ✅
-- `compact` — compact rendering hint for dense lists ✅
-- `multiline` — start as a larger text box (`string` and `markdown` fields) ✅
+External schema contract is emitted by `QuillConfig::public_schema_yaml()`.
 
-Serialized into `x-ui` in generated JSON Schema. Validation ignores `x-ui`.
+- Output is YAML text
+- Shape is a subset projection of `Quill.yaml`
+- Includes `name`, `description`, optional `example`, `fields`, and `cards`
+- Preserves `ui` hints as `ui:` (no renaming)
 
-### `multiline`
-
-For `string` and `markdown` fields, `multiline: true` signals the UI to present a larger initial text box. On `string` fields this means plain text with newlines preserved (e.g. mailing addresses, multi-line signatures). On `markdown` fields the content is additionally processed as Markdown by the backend. Serialized as `"x-ui": { "multiline": true }`. No effect on backend processing beyond what the field type already implies.
-
-```json
-{
-  "x-ui": {
-    "multiline": true
-  }
-}
-```
-
-## Quill Registration Constraints
-
-- `name` must not already be registered
-- `backend` must already be registered
-- `description` cannot be empty
-- `plate_file` extension must be in the backend's `plate_extension_types` if provided
+See `PUBLIC_SCHEMA.md` for the output contract.

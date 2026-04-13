@@ -1,6 +1,7 @@
 //! Quill template bundle types and implementations.
 
 mod config;
+mod formats;
 mod ignore;
 mod load;
 mod query;
@@ -35,8 +36,6 @@ pub struct Quill {
     pub example: Option<String>,
     /// Parsed configuration — the authoritative schema model.
     pub config: QuillConfig,
-    /// Legacy JSON-schema-shaped payload retained for compatibility with older consumers.
-    pub schema: QuillValue,
     /// Cached default values extracted from config (for performance)
     pub defaults: HashMap<String, QuillValue>,
     /// Cached example values extracted from config (for performance)

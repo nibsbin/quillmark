@@ -39,9 +39,6 @@ anyhow = "~1.0"
 # File globbing
 glob = "0.3.3"
 
-# Validation
-jsonschema = { version = "0.37", default-features = false }
-
 # Unicode normalization
 unicode-normalization = "0.1"
 

@@ -791,7 +791,10 @@ main:
 
     // Verify author field schema
     let author_schema = quill.config.main().fields.get("author").unwrap();
-    assert_eq!(author_schema.description.as_deref(), Some("Author of document"));
+    assert_eq!(
+        author_schema.description.as_deref(),
+        Some("Author of document")
+    );
 
     // Verify ice_cream field schema (no required field, should default to false)
     let ice_cream_schema = quill.config.main().fields.get("ice_cream").unwrap();
@@ -802,7 +805,10 @@ main:
 
     // Verify title field schema
     let title_schema = quill.config.main().fields.get("title").unwrap();
-    assert_eq!(title_schema.description.as_deref(), Some("title of document"));
+    assert_eq!(
+        title_schema.description.as_deref(),
+        Some("title of document")
+    );
 }
 
 #[test]
@@ -1927,7 +1933,7 @@ main:
         ])),
     );
 
-    let coerced = config.coerce_fields(&fields);
+    let coerced = config.coerce(&fields).unwrap();
     let scores = coerced.get("scores").unwrap();
     let arr = scores.as_array().unwrap();
 

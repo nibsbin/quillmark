@@ -60,8 +60,6 @@ pub use quill::{FileTreeNode, Quill, QuillIgnore};
 pub mod value;
 pub use value::QuillValue;
 
-pub mod schema;
-
 pub mod normalize;
 pub use normalize::{
     normalize_document, normalize_fields, normalize_markdown, strip_bidi_formatting,

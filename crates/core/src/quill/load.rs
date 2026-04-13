@@ -124,10 +124,6 @@ impl Quill {
             metadata.insert(format!("typst_{}", key), value.clone());
         }
 
-        // Phase 4 cutover keeps this field for compatibility, but validation/coercion
-        // now runs directly from QuillConfig-native APIs.
-        let schema = QuillValue::from_json(serde_json::Value::Null);
-
         // Read the plate content from plate file (if specified)
         let plate_content: Option<String> = if let Some(ref plate_file_name) = config.plate_file {
             let plate_bytes = root.get_file(plate_file_name).ok_or_else(|| {
@@ -198,7 +194,6 @@ impl Quill {
             plate: plate_content,
             example: example_content,
             config,
-            schema,
             defaults,
             examples,
             files: root,

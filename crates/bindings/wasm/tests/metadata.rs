@@ -64,5 +64,5 @@ fn test_metadata_stripping() {
         .and_then(|v| v.get("ui"))
         .is_some());
     assert!(schema.get("CARDS").is_none());
-    assert!(schema_yaml.find("x-ui").is_none());
+    assert!(!schema_yaml.contains("x-"));
 }

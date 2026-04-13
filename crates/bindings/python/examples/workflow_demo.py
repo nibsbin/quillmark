@@ -82,7 +82,7 @@ The secret of getting ahead is getting started... with taro ice cream.
     print(f"  • Name: {quill.name}")
     print(f"  • Backend: {quill.backend}")
     print(f"  • Has example content: {quill.example is not None}")
-    print(f"  • Field schemas: {quill.schema}")
+    print(f"  • Schema YAML: {quill.schema}")
     
     
     # Step 4: Create workflow and configure render options

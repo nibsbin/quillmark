@@ -40,7 +40,8 @@ Every Quill.yaml must have a `Quill` section with format metadata.
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
 | `plate_file`     | string | no       | Path to the plate file |
-| `example_file`   | string | no       | Path to an example Markdown document |
+| `example`        | string | no       | Path to an example Markdown document |
+| `example_file`   | string | no       | Alias for `example` |
 | `ui`             | object | no       | Document-level UI metadata |
 
 ```yaml
@@ -51,7 +52,7 @@ Quill:
   description: Typesetted USAF Official Memorandum
   author: TongueToQuill
   plate_file: plate.typ
-  example_file: example.md
+  example: example.md
 ```
 
 ### Document-level `ui`
@@ -102,16 +103,16 @@ main:
 
 ### Field Types
 
-| Type       | JSON Schema Output | Notes |
-|------------|-------------------|-------|
-| `string`   | `"type": "string"` | Also accepts `str` as alias |
-| `number`   | `"type": "number"` | |
-| `boolean`  | `"type": "boolean"` | |
-| `array`    | `"type": "array"` | Use `items` for element schema |
-| `date`     | `"type": "string", "format": "date"` | YYYY-MM-DD |
-| `datetime`  | `"type": "string", "format": "date-time"` | ISO 8601 |
-| `markdown` | `"type": "string", "contentMediaType": "text/markdown"` | Rich text; backends convert to target format |
-| `object` or `dict` | `"type": "object"` with `properties` | Supported for typed table rows inside `array.items` |
+| Type       | Notes |
+|------------|-------|
+| `string`   | Also accepts `str` as alias |
+| `number`   | Numeric scalar |
+| `boolean`  | `true` or `false` |
+| `array`    | Use `items` for element schema |
+| `date`     | YYYY-MM-DD |
+| `datetime`  | ISO 8601 |
+| `markdown` | Rich text; backends convert to target format |
+| `object` or `dict` | Supported for typed table rows inside `array.items` |
 
 Use `type: array` with `items: { type: object, properties: {...} }` when you need a **list** of structured rows. Top-level `type: object` fields are not supported.
 
@@ -168,7 +169,7 @@ main:
 
 ## UI Properties
 
-The `ui` property on fields controls how form builders and wizards render the field. These are emitted as `x-ui` in the generated JSON Schema — they are hints for UI consumers, not validation constraints.
+The `ui` property on fields controls how form builders and wizards render the field. These are UI hints, not validation constraints.
 
 ### `group`
 
@@ -361,27 +362,9 @@ See the [Typst Backend Guide](typst-backend.md) for details.
 
 ---
 
-## Generated JSON Schema
+## Public Schema YAML
 
-Quillmark generates a JSON Schema from your `Quill.yaml`. This schema is used for validation and consumed by UIs.
-
-### How YAML maps to JSON Schema
-
-| Quill.yaml | JSON Schema |
-|------------|-------------|
-| `type: string` | `"type": "string"` |
-| `type: markdown` | `"type": "string", "contentMediaType": "text/markdown"` |
-| `required: true` | Field name in `"required"` array |
-| `default: value` | `"default": value` |
-| `enum: [a, b]` | `"enum": ["a", "b"]` |
-| `ui: { group: X }` | `"x-ui": { "group": "X" }` |
-| `ui: { multiline: true }` | `"x-ui": { "multiline": true }` |
-| `ui: { default_title: "{f}" }` | `"x-ui": { "default_title": "{f}" }` |
-| `cards: { name: ... }` | `"$defs": { "name_card": ... }` |
-
-### Stripped Schema
-
-The `getStrippedSchema()` API returns the schema with `x-ui` removed — useful for LLM prompts and external validators that don't need UI hints.
+Quillmark emits a public schema YAML contract from `QuillConfig`. The output keeps `ui:` hints as `ui:` and is exposed directly in bindings (`quill.schema` in Python and `quillInfo.schema` in WASM).
 
 ---
 
@@ -395,7 +378,7 @@ Quill:
   description: Monthly project status report
   author: Engineering Team
   plate_file: plate.typ
-  example_file: example.md
+  example: example.md
 
 main:
   fields:

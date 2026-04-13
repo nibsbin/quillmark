@@ -1,17 +1,11 @@
-#![cfg_attr(not(test), allow(dead_code))]
-
 use std::collections::HashMap;
-use std::sync::LazyLock;
 
-use time::format_description::{self, well_known::Rfc3339, FormatItem};
+use time::format_description::well_known::Rfc3339;
 use time::{Date, OffsetDateTime};
 
+use crate::quill::formats::DATE_FORMAT;
 use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
 use crate::value::QuillValue;
-
-static DATE_FORMAT: LazyLock<Vec<FormatItem<'static>>> = LazyLock::new(|| {
-    format_description::parse("[year]-[month]-[day]").expect("valid date format description")
-});
 
 /// Validation error with a structured field path.
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]

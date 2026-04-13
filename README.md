@@ -12,6 +12,10 @@ Maintained by [TTQ](https://tonguetoquill.com).
 
 **UNDER DEVELOPMENT**
 
+Schema note: public schema APIs now return YAML text (not JSON Schema objects).
+`quill.schema` in Python and `quillInfo.schema` / `getQuillSchema()` in WASM
+expose the YAML contract emitted from `QuillConfig`.
+
 ## Features
 
 - **Template-first design**: Quill templates control structure and styling, Markdown provides content
