@@ -1096,7 +1096,6 @@ fn replace_intraword_marker_pairs(source: &str, marker: &str, open: &str, close:
                 while i < chars.len() {
                     if chars[i] == '`' {
                         let mut close_count = 0;
-                        let close_start = i;
                         while i < chars.len() && chars[i] == '`' {
                             close_count += 1;
                             i += 1;
