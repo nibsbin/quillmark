@@ -149,7 +149,41 @@ entirely by making the public contract a YAML subset of Quill.yaml directly.
 - Add link to new `PUBLIC_SCHEMA.md`
 - Update `SCHEMAS.md` summary to reflect rewrite
 
-### Part I: Clean up stale references
+### Part I: Collapse Phase 2 transitional duplication
+
+Phase 2 added new `QuillConfig` methods alongside legacy ones to keep the
+loader and existing call sites untouched. With phase 4 cutover complete,
+the duplication can go.
+
+**File:** `crates/core/src/quill/config.rs`
+
+- Delete the `extract_defaults` and `extract_examples` aliases. Callers
+  should use `defaults()` / `examples()` directly. Audit `crates/core/src/quill/load.rs`
+  (currently calls `config.extract_defaults()` / `config.extract_examples()`
+  at lines ~178-179) and update to the canonical names.
+- Collapse the `coerce_fields` / `coerce_fields_lossy` / `coerce` triplet
+  into a single fallible `coerce()` API (~200 lines of strict/lossy
+  duplication). Any remaining call site that needed non-fallible behavior
+  in phase 2 should now propagate `CoercionError` properly — phase 4
+  validation runs first, so reaching `coerce()` with uncoercible values
+  is a real error.
+
+**File:** `crates/core/src/quill/validation.rs` and `crates/core/src/quill/config.rs`
+
+- Share the `YYYY-MM-DD` `time::format_description` descriptor. Currently
+  `validation.rs` holds it in a `LazyLock` and `config.rs` parses inline
+  in coercion. Lift to a shared `pub(crate) static` (likely in a new
+  `crates/core/src/quill/formats.rs` or co-located with the date type
+  helpers) and reuse from both.
+
+**File:** `crates/core/src/lib.rs`
+
+- Remove `#![cfg_attr(not(test), allow(dead_code))]` from
+  `crates/core/src/quill/validation.rs` once it's wired into bindings/CLI
+  in phase 4. Any remaining dead-code warnings indicate Phase 4 missed
+  a hook-up point.
+
+### Part J: Clean up stale references
 
 Grep the entire workspace (source + docs + prose) for:
 
@@ -168,6 +202,13 @@ Grep the entire workspace (source + docs + prose) for:
   check each hit)
 
 Any hit means something was missed. Fix or delete.
+
+Additional sweep for Part I dedup:
+
+- `extract_defaults` / `extract_examples` (as `QuillConfig` methods, not
+  `Quill::extract_defaults` which is a separate API)
+- `coerce_fields` and `coerce_fields_lossy`
+- duplicate `time::format_description::parse("[year]-[month]-[day]")` calls
 
 ## Non-goals
 
@@ -190,6 +231,14 @@ Any hit means something was missed. Fix or delete.
 - [ ] Workspace-wide grep for `SchemaProjection`, `build_schema` (as
       standalone identifier, not substring), `getStrippedSchema` returns
       zero hits
+- [ ] `QuillConfig::extract_defaults` and `QuillConfig::extract_examples`
+      aliases removed; loader uses `defaults()` / `examples()`
+- [ ] `QuillConfig::coerce_fields` and `coerce_fields_lossy` removed;
+      single fallible `coerce()` is the only API
+- [ ] `time` date format descriptor defined in exactly one place and
+      reused by validator and coercer
+- [ ] `#![cfg_attr(not(test), allow(dead_code))]` removed from
+      `crates/core/src/quill/validation.rs`
 - [ ] `prose/designs/SCHEMAS.md` rewritten
 - [ ] `prose/designs/PUBLIC_SCHEMA.md` exists
 - [ ] `prose/designs/INDEX.md` updated
@@ -208,9 +257,12 @@ Any hit means something was missed. Fix or delete.
    was missed and needs investigation)
 3. Delete `schema.rs` file entirely
 4. Drop `jsonschema` from `Cargo.toml`
-5. `cargo build --workspace` — should succeed
-6. Grep for the purge list above
-7. Rewrite/update docs (this part has no compilation check, so slow down
+5. Collapse Phase 2 transitional duplication (Part I): aliases, coerce
+   triplet, date format descriptor. Run `cargo test --workspace` after
+   each removal.
+6. `cargo build --workspace` — should succeed with no warnings
+7. Grep for the purge list above
+8. Rewrite/update docs (this part has no compilation check, so slow down
    and review each doc manually)
 
 ### Review hint
