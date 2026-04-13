@@ -6,6 +6,7 @@ mod load;
 mod query;
 mod tree;
 mod types;
+pub(crate) mod validation;
 
 pub use config::QuillConfig;
 pub use ignore::QuillIgnore;
