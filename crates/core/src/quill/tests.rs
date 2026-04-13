@@ -1247,6 +1247,86 @@ main:
 }
 
 #[test]
+fn test_config_defaults_and_examples_methods() {
+    let yaml_content = r#"
+Quill:
+  name: defaults_examples_test
+  version: "1.0"
+  backend: typst
+  description: Defaults and examples
+
+main:
+  fields:
+    author:
+      type: string
+      default: Anonymous
+      examples:
+        - Alice
+        - Bob
+    status:
+      type: string
+      default: draft
+    title:
+      type: string
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+    let defaults = config.defaults();
+    let examples = config.examples();
+
+    assert_eq!(defaults.len(), 2);
+    assert_eq!(defaults.get("author").unwrap().as_str(), Some("Anonymous"));
+    assert_eq!(defaults.get("status").unwrap().as_str(), Some("draft"));
+    assert!(!defaults.contains_key("title"));
+
+    assert_eq!(examples.len(), 1);
+    let author_examples = examples.get("author").unwrap();
+    assert_eq!(author_examples.len(), 2);
+    assert_eq!(author_examples[0].as_str(), Some("Alice"));
+    assert_eq!(author_examples[1].as_str(), Some("Bob"));
+}
+
+#[test]
+fn test_card_defaults_and_examples_methods() {
+    let yaml_content = r#"
+Quill:
+  name: card_defaults_examples_test
+  version: "1.0"
+  backend: typst
+  description: Card defaults and examples
+
+cards:
+  indorsement:
+    fields:
+      signature_block:
+        type: string
+        default: Commander
+        examples:
+          - Col Smith
+      office:
+        type: string
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+
+    let card_defaults = config.card_defaults("indorsement").unwrap();
+    assert_eq!(card_defaults.len(), 1);
+    assert_eq!(
+        card_defaults.get("signature_block").unwrap().as_str(),
+        Some("Commander")
+    );
+
+    let card_examples = config.card_examples("indorsement").unwrap();
+    assert_eq!(card_examples.len(), 1);
+    let signature_examples = card_examples.get("signature_block").unwrap();
+    assert_eq!(signature_examples.len(), 1);
+    assert_eq!(signature_examples[0].as_str(), Some("Col Smith"));
+
+    assert!(config.card_defaults("unknown").is_none());
+    assert!(config.card_examples("unknown").is_none());
+}
+
+#[test]
 fn test_field_order_preservation() {
     let yaml_content = r#"
 Quill:
@@ -1805,6 +1885,195 @@ main:
     let second = arr[1].as_object().unwrap();
     assert_eq!(second["value"], serde_json::json!(88.5)); // coerced from "88.5"
     assert_eq!(second["active"], serde_json::json!(false)); // coerced from "false"
+}
+
+#[test]
+fn test_config_coerce_number_boolean_date_datetime_success() {
+    let yaml_content = r#"
+Quill:
+  name: coerce_success_test
+  version: "1.0"
+  backend: typst
+  description: Coerce success
+
+main:
+  fields:
+    count:
+      type: number
+    active:
+      type: boolean
+    signed_on:
+      type: date
+    created_at:
+      type: datetime
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+    let mut fields = HashMap::new();
+    fields.insert(
+        "count".to_string(),
+        QuillValue::from_json(serde_json::json!("42")),
+    );
+    fields.insert(
+        "active".to_string(),
+        QuillValue::from_json(serde_json::json!("true")),
+    );
+    fields.insert(
+        "signed_on".to_string(),
+        QuillValue::from_json(serde_json::json!("2026-04-13")),
+    );
+    fields.insert(
+        "created_at".to_string(),
+        QuillValue::from_json(serde_json::json!("2026-04-13T20:00:00Z")),
+    );
+
+    let coerced = config.coerce(&fields).unwrap();
+    assert_eq!(coerced.get("count").unwrap().as_i64(), Some(42));
+    assert_eq!(coerced.get("active").unwrap().as_bool(), Some(true));
+    assert_eq!(
+        coerced.get("signed_on").unwrap().as_str(),
+        Some("2026-04-13")
+    );
+    assert_eq!(
+        coerced.get("created_at").unwrap().as_str(),
+        Some("2026-04-13T20:00:00Z")
+    );
+}
+
+#[test]
+fn test_config_coerce_array_item_wise() {
+    let yaml_content = r#"
+Quill:
+  name: coerce_array_items_test
+  version: "1.0"
+  backend: typst
+  description: Coerce arrays
+
+main:
+  fields:
+    items:
+      type: array
+      items:
+        type: object
+        properties:
+          score:
+            type: number
+          active:
+            type: boolean
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+    let mut fields = HashMap::new();
+    fields.insert(
+        "items".to_string(),
+        QuillValue::from_json(serde_json::json!([
+            {"score": "90", "active": "true"},
+            {"score": "87.5", "active": "false"}
+        ])),
+    );
+
+    let coerced = config.coerce(&fields).unwrap();
+    let items = coerced.get("items").unwrap().as_array().unwrap();
+    let first = items[0].as_object().unwrap();
+    let second = items[1].as_object().unwrap();
+    assert_eq!(first["score"], serde_json::json!(90));
+    assert_eq!(first["active"], serde_json::json!(true));
+    assert_eq!(second["score"], serde_json::json!(87.5));
+    assert_eq!(second["active"], serde_json::json!(false));
+}
+
+#[test]
+fn test_config_coerce_cards_item_wise() {
+    let yaml_content = r#"
+Quill:
+  name: coerce_cards_items_test
+  version: "1.0"
+  backend: typst
+  description: Coerce cards
+
+cards:
+  indorsement:
+    fields:
+      score:
+        type: number
+      active:
+        type: boolean
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+    let mut fields = HashMap::new();
+    fields.insert(
+        "CARDS".to_string(),
+        QuillValue::from_json(serde_json::json!([
+            {"CARD": "indorsement", "score": "100", "active": "false"}
+        ])),
+    );
+
+    let coerced = config.coerce(&fields).unwrap();
+    let cards = coerced.get("CARDS").unwrap().as_array().unwrap();
+    let card = cards[0].as_object().unwrap();
+    assert_eq!(card["score"], serde_json::json!(100));
+    assert_eq!(card["active"], serde_json::json!(false));
+}
+
+#[test]
+fn test_config_coerce_error_unparseable_date() {
+    let yaml_content = r#"
+Quill:
+  name: coerce_date_error_test
+  version: "1.0"
+  backend: typst
+  description: Coerce date errors
+
+main:
+  fields:
+    signed_on:
+      type: date
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+    let mut fields = HashMap::new();
+    fields.insert(
+        "signed_on".to_string(),
+        QuillValue::from_json(serde_json::json!("13-04-2026")),
+    );
+
+    let error = config.coerce(&fields).unwrap_err();
+    assert!(matches!(
+        error,
+        super::CoercionError::Uncoercible { ref path, ref target, .. }
+        if path == "signed_on" && target == "date"
+    ));
+}
+
+#[test]
+fn test_config_coerce_error_unparseable_number() {
+    let yaml_content = r#"
+Quill:
+  name: coerce_number_error_test
+  version: "1.0"
+  backend: typst
+  description: Coerce number errors
+
+main:
+  fields:
+    count:
+      type: number
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+    let mut fields = HashMap::new();
+    fields.insert(
+        "count".to_string(),
+        QuillValue::from_json(serde_json::json!("forty-two")),
+    );
+
+    let error = config.coerce(&fields).unwrap_err();
+    assert!(matches!(
+        error,
+        super::CoercionError::Uncoercible { ref path, ref target, .. }
+        if path == "count" && target == "number"
+    ));
 }
 
 #[test]

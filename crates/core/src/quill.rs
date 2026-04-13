@@ -8,7 +8,7 @@ mod tree;
 mod types;
 pub(crate) mod validation;
 
-pub use config::QuillConfig;
+pub use config::{CoercionError, QuillConfig};
 pub use ignore::QuillIgnore;
 pub use tree::FileTreeNode;
 pub use types::{

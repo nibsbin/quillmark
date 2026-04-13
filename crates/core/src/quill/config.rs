@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 
 use serde::{Deserialize, Serialize};
+use time::format_description::well_known::Rfc3339;
+use time::{Date, OffsetDateTime};
 
 use crate::error::{Diagnostic, Severity};
 use crate::value::QuillValue;
@@ -43,6 +45,17 @@ struct CardSchemaDef {
     pub ui: Option<UiContainerSchema>,
 }
 
+#[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
+pub enum CoercionError {
+    #[error("cannot coerce `{value}` to type `{target}` at `{path}`: {reason}")]
+    Uncoercible {
+        path: String,
+        value: String,
+        target: String,
+        reason: String,
+    },
+}
+
 impl QuillConfig {
     /// Returns the main document card schema (`cards[0]`).
     pub fn main(&self) -> &CardSchema {
@@ -75,6 +88,11 @@ impl QuillConfig {
     /// reading directly from `FieldSchema.default` without round-tripping
     /// through JSON Schema.
     pub fn extract_defaults(&self) -> HashMap<String, QuillValue> {
+        self.defaults()
+    }
+
+    /// Extract default values from the main field schemas.
+    pub fn defaults(&self) -> HashMap<String, QuillValue> {
         let mut defaults = HashMap::new();
         for (field_name, field_schema) in &self.main().fields {
             if let Some(ref default_value) = field_schema.default {
@@ -90,6 +108,11 @@ impl QuillConfig {
     /// reading directly from `FieldSchema.examples` without round-tripping
     /// through JSON Schema.
     pub fn extract_examples(&self) -> HashMap<String, Vec<QuillValue>> {
+        self.examples()
+    }
+
+    /// Extract example values from the main field schemas.
+    pub fn examples(&self) -> HashMap<String, Vec<QuillValue>> {
         let mut examples = HashMap::new();
         for (field_name, field_schema) in &self.main().fields {
             if let Some(ref examples_value) = field_schema.examples {
@@ -107,12 +130,95 @@ impl QuillConfig {
         examples
     }
 
+    /// Extract default values for a specific card definition.
+    pub fn card_defaults(&self, card_name: &str) -> Option<HashMap<String, QuillValue>> {
+        self.card_definition(card_name).map(|card| {
+            let mut defaults = HashMap::new();
+            for (field_name, field_schema) in &card.fields {
+                if let Some(default) = &field_schema.default {
+                    defaults.insert(field_name.clone(), default.clone());
+                }
+            }
+            defaults
+        })
+    }
+
+    /// Extract example values for a specific card definition.
+    pub fn card_examples(&self, card_name: &str) -> Option<HashMap<String, Vec<QuillValue>>> {
+        self.card_definition(card_name).map(|card| {
+            let mut examples = HashMap::new();
+            for (field_name, field_schema) in &card.fields {
+                if let Some(examples_value) = &field_schema.examples {
+                    if let Some(examples_array) = examples_value.as_array() {
+                        let examples_vec: Vec<QuillValue> = examples_array
+                            .iter()
+                            .map(|v| QuillValue::from_json(v.clone()))
+                            .collect();
+                        if !examples_vec.is_empty() {
+                            examples.insert(field_name.clone(), examples_vec);
+                        }
+                    }
+                }
+            }
+            examples
+        })
+    }
+
     /// Coerce document fields to match expected schema types, reading types
     /// directly from `FieldSchema` without round-tripping through JSON Schema.
     ///
     /// Handles both main card fields (top-level) and card instances in the
     /// `CARDS` array.
     pub fn coerce_fields(
+        &self,
+        fields: &HashMap<String, QuillValue>,
+    ) -> HashMap<String, QuillValue> {
+        self.coerce(fields)
+            .unwrap_or_else(|_| self.coerce_fields_lossy(fields))
+    }
+
+    /// Coerce document fields to match expected schema types.
+    ///
+    /// Returns an error when a value cannot be coerced to the declared type.
+    pub fn coerce(
+        &self,
+        fields: &HashMap<String, QuillValue>,
+    ) -> Result<HashMap<String, QuillValue>, CoercionError> {
+        let mut coerced = HashMap::new();
+
+        for (field_name, field_value) in fields {
+            if let Some(field_schema) = self.main().fields.get(field_name) {
+                let path = field_name.as_str();
+                coerced.insert(
+                    field_name.clone(),
+                    Self::coerce_value_strict(field_value, field_schema, path)?,
+                );
+            } else {
+                coerced.insert(field_name.clone(), field_value.clone());
+            }
+        }
+
+        if let Some(cards_value) = coerced.get("CARDS") {
+            if let Some(cards_array) = cards_value.as_array() {
+                let coerced_cards = self.coerce_cards_array_strict(cards_array)?;
+                coerced.insert(
+                    "CARDS".to_string(),
+                    QuillValue::from_json(serde_json::Value::Array(coerced_cards)),
+                );
+            } else {
+                return Err(CoercionError::Uncoercible {
+                    path: "CARDS".to_string(),
+                    value: cards_value.as_json().to_string(),
+                    target: "array".to_string(),
+                    reason: "CARDS must be an array".to_string(),
+                });
+            }
+        }
+
+        Ok(coerced)
+    }
+
+    fn coerce_fields_lossy(
         &self,
         fields: &HashMap<String, QuillValue>,
     ) -> HashMap<String, QuillValue> {
@@ -141,6 +247,237 @@ impl QuillConfig {
         }
 
         coerced
+    }
+
+    fn coerce_cards_array_strict(
+        &self,
+        cards_array: &[serde_json::Value],
+    ) -> Result<Vec<serde_json::Value>, CoercionError> {
+        let mut coerced_cards = Vec::new();
+
+        for (index, card) in cards_array.iter().enumerate() {
+            if let Some(card_obj) = card.as_object() {
+                if let Some(card_type) = card_obj.get("CARD").and_then(|v| v.as_str()) {
+                    if let Some(card_schema) = self.card_definition(card_type) {
+                        let mut coerced_card = serde_json::Map::new();
+                        for (k, v) in card_obj {
+                            if let Some(field_schema) = card_schema.fields.get(k) {
+                                let qv = QuillValue::from_json(v.clone());
+                                let path = format!("cards.{card_type}[{index}].{k}");
+                                coerced_card.insert(
+                                    k.clone(),
+                                    Self::coerce_value_strict(&qv, field_schema, &path)?
+                                        .into_json(),
+                                );
+                            } else {
+                                coerced_card.insert(k.clone(), v.clone());
+                            }
+                        }
+                        coerced_cards.push(serde_json::Value::Object(coerced_card));
+                        continue;
+                    }
+                }
+            }
+            coerced_cards.push(card.clone());
+        }
+
+        Ok(coerced_cards)
+    }
+
+    fn coerce_value_strict(
+        value: &QuillValue,
+        field_schema: &super::FieldSchema,
+        path: &str,
+    ) -> Result<QuillValue, CoercionError> {
+        use super::FieldType;
+
+        let json_value = value.as_json();
+        match field_schema.r#type {
+            FieldType::Array => {
+                let arr = if let Some(a) = json_value.as_array() {
+                    a.clone()
+                } else {
+                    vec![json_value.clone()]
+                };
+
+                if let Some(items_schema) = &field_schema.items {
+                    let mut out = Vec::with_capacity(arr.len());
+                    for (idx, elem) in arr.iter().enumerate() {
+                        let item_path = format!("{path}[{idx}]");
+                        let coerced = Self::coerce_value_strict(
+                            &QuillValue::from_json(elem.clone()),
+                            items_schema,
+                            &item_path,
+                        )?;
+                        out.push(coerced.into_json());
+                    }
+                    Ok(QuillValue::from_json(serde_json::Value::Array(out)))
+                } else {
+                    Ok(QuillValue::from_json(serde_json::Value::Array(arr)))
+                }
+            }
+            FieldType::Boolean => {
+                if let Some(b) = json_value.as_bool() {
+                    return Ok(QuillValue::from_json(serde_json::Value::Bool(b)));
+                }
+                if let Some(s) = json_value.as_str() {
+                    let lower = s.to_lowercase();
+                    if lower == "true" {
+                        return Ok(QuillValue::from_json(serde_json::Value::Bool(true)));
+                    } else if lower == "false" {
+                        return Ok(QuillValue::from_json(serde_json::Value::Bool(false)));
+                    }
+                }
+                if let Some(n) = json_value.as_i64() {
+                    return Ok(QuillValue::from_json(serde_json::Value::Bool(n != 0)));
+                }
+                if let Some(n) = json_value.as_f64() {
+                    if n.is_nan() {
+                        return Ok(QuillValue::from_json(serde_json::Value::Bool(false)));
+                    }
+                    return Ok(QuillValue::from_json(serde_json::Value::Bool(
+                        n.abs() > f64::EPSILON,
+                    )));
+                }
+
+                Err(CoercionError::Uncoercible {
+                    path: path.to_string(),
+                    value: json_value.to_string(),
+                    target: "boolean".to_string(),
+                    reason: "value is not coercible to boolean".to_string(),
+                })
+            }
+            FieldType::Number => {
+                if json_value.is_number() {
+                    return Ok(value.clone());
+                }
+                if let Some(s) = json_value.as_str() {
+                    if let Ok(i) = s.parse::<i64>() {
+                        return Ok(QuillValue::from_json(serde_json::Number::from(i).into()));
+                    }
+                    if let Ok(f) = s.parse::<f64>() {
+                        if let Some(num) = serde_json::Number::from_f64(f) {
+                            return Ok(QuillValue::from_json(num.into()));
+                        }
+                    }
+                    return Err(CoercionError::Uncoercible {
+                        path: path.to_string(),
+                        value: s.to_string(),
+                        target: "number".to_string(),
+                        reason: "string is not a valid number".to_string(),
+                    });
+                }
+                if let Some(b) = json_value.as_bool() {
+                    let n = if b { 1 } else { 0 };
+                    return Ok(QuillValue::from_json(serde_json::Value::Number(
+                        serde_json::Number::from(n),
+                    )));
+                }
+
+                Err(CoercionError::Uncoercible {
+                    path: path.to_string(),
+                    value: json_value.to_string(),
+                    target: "number".to_string(),
+                    reason: "value is not coercible to number".to_string(),
+                })
+            }
+            FieldType::String | FieldType::Markdown => {
+                if json_value.is_string() {
+                    return Ok(value.clone());
+                }
+                if let Some(arr) = json_value.as_array() {
+                    if arr.len() == 1 {
+                        if let Some(s) = arr[0].as_str() {
+                            return Ok(QuillValue::from_json(serde_json::Value::String(
+                                s.to_string(),
+                            )));
+                        }
+                    }
+                }
+                Ok(value.clone())
+            }
+            FieldType::Date | FieldType::DateTime => {
+                let text = if let Some(s) = json_value.as_str() {
+                    s.to_string()
+                } else if let Some(arr) = json_value.as_array() {
+                    if arr.len() == 1 {
+                        if let Some(s) = arr[0].as_str() {
+                            s.to_string()
+                        } else {
+                            return Err(CoercionError::Uncoercible {
+                                path: path.to_string(),
+                                value: json_value.to_string(),
+                                target: field_schema.r#type.as_str().to_string(),
+                                reason: "value must be a string".to_string(),
+                            });
+                        }
+                    } else {
+                        return Err(CoercionError::Uncoercible {
+                            path: path.to_string(),
+                            value: json_value.to_string(),
+                            target: field_schema.r#type.as_str().to_string(),
+                            reason: "value must be a single string".to_string(),
+                        });
+                    }
+                } else {
+                    return Err(CoercionError::Uncoercible {
+                        path: path.to_string(),
+                        value: json_value.to_string(),
+                        target: field_schema.r#type.as_str().to_string(),
+                        reason: "value must be a string".to_string(),
+                    });
+                };
+
+                let valid = if field_schema.r#type == FieldType::Date {
+                    let date_format = time::format_description::parse("[year]-[month]-[day]")
+                        .expect("valid date format");
+                    Date::parse(&text, &date_format).is_ok()
+                } else {
+                    OffsetDateTime::parse(&text, &Rfc3339).is_ok()
+                };
+
+                if valid {
+                    Ok(QuillValue::from_json(serde_json::Value::String(text)))
+                } else {
+                    Err(CoercionError::Uncoercible {
+                        path: path.to_string(),
+                        value: text,
+                        target: field_schema.r#type.as_str().to_string(),
+                        reason: "invalid date/datetime format".to_string(),
+                    })
+                }
+            }
+            FieldType::Object => {
+                if let Some(obj) = json_value.as_object() {
+                    if let Some(props) = &field_schema.properties {
+                        let mut coerced_obj = serde_json::Map::new();
+                        for (k, v) in obj {
+                            if let Some(prop_schema) = props.get(k) {
+                                let child_path = format!("{path}.{k}");
+                                coerced_obj.insert(
+                                    k.clone(),
+                                    Self::coerce_value_strict(
+                                        &QuillValue::from_json(v.clone()),
+                                        prop_schema,
+                                        &child_path,
+                                    )?
+                                    .into_json(),
+                                );
+                            } else {
+                                coerced_obj.insert(k.clone(), v.clone());
+                            }
+                        }
+                        Ok(QuillValue::from_json(serde_json::Value::Object(
+                            coerced_obj,
+                        )))
+                    } else {
+                        Ok(value.clone())
+                    }
+                } else {
+                    Ok(value.clone())
+                }
+            }
+        }
     }
 
     fn coerce_cards_array(&self, cards_array: &[serde_json::Value]) -> Vec<serde_json::Value> {

@@ -95,7 +95,11 @@ pub fn validate_document(
                     }
 
                     let card_path = format!("cards.{card_name}[{index}]");
-                    errors.extend(validate_fields_for_card(card_schema, &card_fields, &card_path));
+                    errors.extend(validate_fields_for_card(
+                        card_schema,
+                        &card_fields,
+                        &card_path,
+                    ));
                 }
             }
             None => errors.push(ValidationError::TypeMismatch {
@@ -222,10 +226,8 @@ pub(crate) fn validate_field(
 
     // A Date/DateTime with a string value already emitted a FormatViolation;
     // skip the redundant TypeMismatch in that case.
-    let format_error_already_reported = matches!(
-        field.r#type,
-        FieldType::Date | FieldType::DateTime
-    ) && value.as_str().is_some();
+    let format_error_already_reported =
+        matches!(field.r#type, FieldType::Date | FieldType::DateTime) && value.as_str().is_some();
 
     if !type_valid && !format_error_already_reported {
         errors.push(ValidationError::TypeMismatch {
@@ -260,9 +262,7 @@ fn is_valid_datetime(value: &str) -> bool {
 
 fn expected_type_name(field_type: &FieldType) -> &'static str {
     match field_type {
-        FieldType::String | FieldType::Markdown | FieldType::Date | FieldType::DateTime => {
-            "string"
-        }
+        FieldType::String | FieldType::Markdown | FieldType::Date | FieldType::DateTime => "string",
         FieldType::Number => "number",
         FieldType::Boolean => "boolean",
         FieldType::Array => "array",
@@ -339,10 +339,7 @@ main:
 
     #[test]
     fn validates_simple_string_field() {
-        let config = config_with(
-            "    title:\n      type: string\n      required: true",
-            "",
-        );
+        let config = config_with("    title:\n      type: string\n      required: true", "");
         let doc = fields(&[("title", json!("Memo"))]);
         assert!(validate_document(&config, &doc).is_ok());
     }

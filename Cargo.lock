@@ -2344,6 +2344,7 @@ version = "0.53.1"
 dependencies = [
  "glob",
  "jsonschema",
+ "quillmark-fixtures",
  "serde",
  "serde-saphyr",
  "serde_json",
