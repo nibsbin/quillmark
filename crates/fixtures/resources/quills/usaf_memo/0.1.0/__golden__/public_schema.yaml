@@ -1,0 +1,211 @@
+name: usaf_memo
+description: Typesetted USAF Official Memorandum
+example: "---\n# Essential \n#===========\nQUILL: usaf_memo@0.1\nletterhead_title: DEPARTMENT OF THE AIR FORCE\nletterhead_caption:\n  - HEADQUARTERS YOUR UNIT NAME\ndate: 2504-10-05\nmemo_for:\n  - ORG/SYMBOL  # Organization/office symbol in UPPERCASE\n  # - DISTRIBUTION  # For numerous recipients, use 'DISTRIBUTION' and list them below\nmemo_from:\n  - ORG/SYMBOL\n  - Organization Name \n  - 123 Street Ave \n  - City ST 12345-6789\nsubject: Subject of the Memorandum \n\n# Optional\n#===========\nreferences:\n  - AFM 33-326, 31 July 2019, Preparing Official Communications\ncc:\n  - ORG/SYMBOL\ndistribution:\n  - 1st ORG/SYMBOL\nattachments:\n  - Attachment description, YYYY MMM DD\nsignature_block:\n  - FIRST M. LAST, Rank, USAF\n  - Duty Title\ntag_line: Aim High\nclassification: SECRET//FICTIONAL \n---\n\nThe `usaf_memo` Quill package takes care of all 33-337 formatting details. Focus on the content.\n\n**Numbering** Top-level paragraphs like this one are automatically numbered. NEVER manually number your paragraphs.\n\n- Use bullets for hierarchical paragraph nesting. These are automatically numbered or lettered as well.\n  - Up to five levels of paragraphs are supported\n\nDo not include a complimentary close (e.g. \"Respectfully,\") in official memorandums.\n\n---\nCARD: indorsement\nfor: ORG/SYMBOL\nformat: standard\nfrom: ORG/SYMBOL\nsignature_block:\n  - FIRST M. LAST, Rank, USAF\n  - Duty Title\n---\n\nThis body and the metdata above are an indorsement card. Multiple or no indorsements cards can be used."
+fields:
+  attachments:
+    type: array
+    title: List of attachments
+    description: List attachments in the order they are mentioned in the memo. Briefly describe each; do not use 'as stated' or abbreviations.
+    default: []
+    examples:
+    - - Attachment description, YYYY MMM DD
+    ui:
+      group: Additional
+      order: 11
+  cc:
+    type: array
+    title: Carbon copy recipients
+    description: List office symbols of recipients to receive copies.
+    default: []
+    examples:
+    - - Rank and Name, ORG/SYMBOL
+    ui:
+      group: Additional
+      order: 9
+  classification:
+    type: string
+    title: Classification level of the memo that displays in the banner
+    description: Follow AFI 31-401 and applicable DoD guidance for classification markings. Leave blank for unclassified.
+    default: ''
+    examples:
+    - CONFIDENTIAL
+    ui:
+      group: Additional
+      order: 12
+  date:
+    type: string
+    title: Date of memo (YYYY-MM-DD); defaults to today
+    description: YYYY-MM-DD. Leave blank to use today's date.
+    default: ''
+    ui:
+      group: Additional
+      order: 7
+  distribution:
+    type: array
+    title: Distribution list. Used when "SEE DISTRIBUTION" is specified in `memo_for`.
+    description: Complete list of recipients if 'SEE DISTRIBUTION' is used in the 'Memo For' field.
+    default: []
+    examples:
+    - - ORG1/SYMBOL
+      - ORG2/SYMBOL
+    ui:
+      group: Additional
+      order: 10
+  font_size:
+    type: number
+    title: Font size for the memo text (int pt)
+    description: Font size for the memo text (pt).
+    default: 11
+    examples:
+    - 11
+    ui:
+      group: Additional
+      order: 13
+  letterhead_caption:
+    type: array
+    title: Letterhead caption line(s)
+    description: The full organization name of your unit.
+    default:
+    - HEADQUARTERS [UNIT NAME]
+    ui:
+      group: Letterhead
+      order: 5
+  letterhead_title:
+    type: string
+    title: Title in letterhead
+    description: Standard title. Only change for Joint Commands or DoW Agencies.
+    default: DEPARTMENT OF THE AIR FORCE
+    ui:
+      group: Letterhead
+      order: 4
+  memo_for:
+    type: array
+    title: List of recipient organization(s)
+    description: Organization/office symbol in UPPERCASE. To address a specific person, add their rank and name in parentheses (e.g., 'ORG/SYMBOL (LT COL JANE DOE)'). For numerous recipients, use 'DISTRIBUTION'.
+    required: true
+    examples:
+    - - ORG1/SYMBOL
+      - ORG2/SYMBOL
+    ui:
+      group: Addressing
+      order: 0
+  memo_from:
+    type: array
+    title: 'Sender information as array: [ORG/SYMBOL, ''Organization Name'', ''Street Address'', ''City State ZIP'']'
+    description: If recipients are on the same installation, use only the office symbol. For recipients on other installations, include the full mailing address to enable return correspondence.
+    required: true
+    examples:
+    - - ORG/SYMBOL
+      - Organization Name
+      - 123 Street Ave
+      - City ST 12345-6789
+    ui:
+      group: Addressing
+      order: 1
+  references:
+    type: array
+    title: References for the memo
+    description: Cite by organization, type, date, and title.
+    default: []
+    examples:
+    - - AFM 33-326, 31 July 2019, Preparing Official Communications
+    ui:
+      group: Additional
+      order: 8
+  signature_block:
+    type: array
+    title: Signature block lines
+    description: 'Line 1: Name in UPPERCASE as signed, grade, and service. Line 2: Duty title. Spell out ''Colonel'' and general officer ranks.'
+    required: true
+    examples:
+    - - FIRST M. LAST, Rank, USSF
+      - Duty Title
+    ui:
+      group: Addressing
+      order: 3
+  subject:
+    type: string
+    title: Subject of the memo
+    description: Be brief and clear. Capitalize the first letter of each word except articles, prepositions, and conjunctions. Include suspense dates in parentheses if applicable.
+    required: true
+    examples:
+    - Subject of the Memorandum
+    ui:
+      group: Addressing
+      order: 2
+  tag_line:
+    type: string
+    title: Tag line at bottom of memo
+    description: Organizational motto at the bottom of the page.
+    default: ''
+    ui:
+      group: Letterhead
+      order: 6
+cards:
+  indorsement:
+    title: Routing indorsement
+    description: Chain of routing endorsements. Each endorsement block adds an official response or forwarding action to the original memo.
+    fields:
+      attachments:
+        type: array
+        title: Attachments for this endorsement
+        description: List of attachments specific to this endorsement.
+        ui:
+          group: Additional
+          order: 4
+      cc:
+        type: array
+        title: Carbon copy recipients
+        description: List of office symbols to receive copies of this endorsement.
+        ui:
+          group: Additional
+          order: 5
+      date:
+        type: string
+        title: Date of endorsement (YYYY-MM-DD)
+        description: Date of the endorsement. Leave blank to omit.
+        ui:
+          group: Additional
+          order: 6
+      for:
+        type: string
+        title: To office/symbol
+        description: Office symbol or organization receiving the endorsed memo.
+        default: ORG/SYMBOL
+        ui:
+          group: Addressing
+          order: 1
+      format:
+        type: string
+        title: Indorsement format
+        description: 'Format style: ''standard'' (formal on same page), ''informal'' (less formal routing), or ''separate_page'' (starts on new page).'
+        default: standard
+        enum:
+        - standard
+        - informal
+        - separate_page
+        ui:
+          group: Additional
+          order: 3
+      from:
+        type: string
+        title: From office/symbol
+        description: Office symbol or Rank Name of the endorsing official (e.g., 'ORG/SYMBOL').
+        default: ORG/SYMBOL
+        ui:
+          group: Addressing
+          order: 0
+      signature_block:
+        type: array
+        title: Signature block lines
+        description: 'Line 1: Name in UPPERCASE as signed, grade, and service. Line 2: Duty title.'
+        required: true
+        default:
+        - FIRST M. LAST, Rank, USAF
+        - Duty Title
+        examples:
+        - - FIRST M. LAST, Rank, USAF
+          - Duty Title
+        ui:
+          group: Addressing
+          order: 2

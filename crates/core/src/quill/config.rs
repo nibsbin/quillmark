@@ -26,6 +26,8 @@ pub struct QuillConfig {
     pub author: String,
     /// Example data file for preview
     pub example_file: Option<String>,
+    /// Loaded markdown example content from `Quill.example`/`Quill.example_file`
+    pub example_markdown: Option<String>,
     /// Plate file (template)
     pub plate_file: Option<String>,
     /// Additional unstructured metadata
@@ -834,9 +836,15 @@ impl QuillConfig {
             .unwrap_or_else(|| "Unknown".to_string()); // Default author
 
         let example_file = quill_section
-            .get("example_file")
+            .get("example")
             .and_then(|v| v.as_str())
-            .map(|s| s.to_string());
+            .map(|s| s.to_string())
+            .or_else(|| {
+                quill_section
+                    .get("example_file")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            });
 
         let plate_file = quill_section
             .get("plate_file")
@@ -858,6 +866,7 @@ impl QuillConfig {
                     && key != "description"
                     && key != "version"
                     && key != "author"
+                    && key != "example"
                     && key != "example_file"
                     && key != "plate_file"
                     && key != "ui"
@@ -977,6 +986,7 @@ impl QuillConfig {
                 version,
                 author,
                 example_file,
+                example_markdown: None,
                 plate_file,
                 metadata,
                 typst_config,

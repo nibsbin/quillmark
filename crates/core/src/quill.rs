@@ -4,6 +4,7 @@ mod config;
 mod ignore;
 mod load;
 mod query;
+mod schema_yaml;
 mod tree;
 mod types;
 pub(crate) mod validation;

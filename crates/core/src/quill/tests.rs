@@ -262,6 +262,11 @@ fn test_template_loading() {
     let example = quill.example.unwrap();
     assert!(example.contains("title: Test"));
     assert!(example.contains("This is a test template"));
+    assert!(quill
+        .config
+        .example_markdown
+        .as_ref()
+        .is_some_and(|value| value.contains("title: Test")));
 
     // Test that plate template is still loaded
     assert_eq!(quill.plate.unwrap(), "plate content");
@@ -969,6 +974,65 @@ main:
     let title_field = &config.main().fields["title"];
     assert_eq!(title_field.description, Some("Document title".to_string()));
     assert_eq!(title_field.r#type, FieldType::String);
+}
+
+#[test]
+fn test_quill_config_parses_example_alias() {
+    let yaml_content = r#"
+Quill:
+  name: test_example_alias
+  version: "1.0"
+  backend: typst
+  description: Test example alias parsing
+  example: examples/basic.md
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+    assert_eq!(config.example_file, Some("examples/basic.md".to_string()));
+}
+
+#[test]
+fn test_quill_from_path_rejects_example_traversal() {
+    let temp_dir = TempDir::new().unwrap();
+    let quill_dir = temp_dir.path();
+
+    let yaml_content = r#"Quill:
+  name: traversal_test
+  version: "1.0"
+  backend: typst
+  description: Traversal test
+  example: ../outside.md
+"#;
+    fs::write(quill_dir.join("Quill.yaml"), yaml_content).unwrap();
+
+    let result = Quill::from_path(quill_dir);
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("outside the quill directory"));
+}
+
+#[test]
+fn test_quill_from_path_errors_when_explicit_example_missing() {
+    let temp_dir = TempDir::new().unwrap();
+    let quill_dir = temp_dir.path();
+
+    let yaml_content = r#"Quill:
+  name: missing_example_test
+  version: "1.0"
+  backend: typst
+  description: Missing explicit example test
+  example: examples/missing.md
+"#;
+    fs::write(quill_dir.join("Quill.yaml"), yaml_content).unwrap();
+
+    let result = Quill::from_path(quill_dir);
+    assert!(result.is_err());
+    assert!(result
+        .unwrap_err()
+        .to_string()
+        .contains("referenced in Quill.yaml not found"));
 }
 
 #[test]

@@ -137,6 +137,14 @@ impl FieldType {
             FieldType::Markdown => "markdown",
         }
     }
+
+    /// Get the YAML public-schema representation for this type.
+    pub fn as_yaml_str(&self) -> &'static str {
+        match self {
+            FieldType::Object => "object",
+            _ => self.as_str(),
+        }
+    }
 }
 
 /// Schema definition for a template field
