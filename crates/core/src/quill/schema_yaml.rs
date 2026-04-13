@@ -212,6 +212,17 @@ main:
 
     #[test]
     fn includes_cards_ui_and_enum() {
+        fn has_internal_key(value: &serde_yaml::Value) -> bool {
+            match value {
+                serde_yaml::Value::Mapping(map) => map.iter().any(|(k, v)| {
+                    let is_internal = k.as_str().is_some_and(|s| s.starts_with("x-"));
+                    is_internal || has_internal_key(v)
+                }),
+                serde_yaml::Value::Sequence(seq) => seq.iter().any(has_internal_key),
+                _ => false,
+            }
+        }
+
         let config = config_from_yaml(
             r#"
 Quill:
@@ -242,7 +253,8 @@ cards:
         assert!(yaml.contains("ui:"));
         assert!(yaml.contains("cards:"));
         assert!(yaml.contains("indorsement:"));
-        assert!(!yaml.contains("x-"));
+        let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).expect("valid yaml");
+        assert!(!has_internal_key(&parsed));
         assert!(!yaml.contains("CARDS:"));
     }
 

@@ -43,6 +43,17 @@ fn test_metadata_retrieval() {
 
 #[wasm_bindgen_test]
 fn test_metadata_stripping() {
+    fn has_internal_key(value: &serde_yaml::Value) -> bool {
+        match value {
+            serde_yaml::Value::Mapping(map) => map.iter().any(|(k, v)| {
+                let is_internal = k.as_str().is_some_and(|s| s.starts_with("x-"));
+                is_internal || has_internal_key(v)
+            }),
+            serde_yaml::Value::Sequence(seq) => seq.iter().any(has_internal_key),
+            _ => false,
+        }
+    }
+
     let mut engine = Quillmark::new();
     engine
         .register_quill(JsValue::from_str(UI_QUILL_JSON))
@@ -64,5 +75,5 @@ fn test_metadata_stripping() {
         .and_then(|v| v.get("ui"))
         .is_some());
     assert!(schema.get("CARDS").is_none());
-    assert!(!schema_yaml.contains("x-"));
+    assert!(!has_internal_key(&schema));
 }
