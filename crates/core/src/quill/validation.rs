@@ -220,20 +220,19 @@ pub(crate) fn validate_field(
         },
     };
 
-    if !type_valid && !matches!(field.r#type, FieldType::Date | FieldType::DateTime) {
+    // A Date/DateTime with a string value already emitted a FormatViolation;
+    // skip the redundant TypeMismatch in that case.
+    let format_error_already_reported = matches!(
+        field.r#type,
+        FieldType::Date | FieldType::DateTime
+    ) && value.as_str().is_some();
+
+    if !type_valid && !format_error_already_reported {
         errors.push(ValidationError::TypeMismatch {
             path: path.to_string(),
             expected: expected_type_name(&field.r#type).to_string(),
             actual: json_type_name(value.as_json()).to_string(),
         });
-    } else if !type_valid {
-        if value.as_str().is_none() {
-            errors.push(ValidationError::TypeMismatch {
-                path: path.to_string(),
-                expected: expected_type_name(&field.r#type).to_string(),
-                actual: json_type_name(value.as_json()).to_string(),
-            });
-        }
     }
 
     if type_valid {
@@ -313,7 +312,15 @@ main:
 {cards}
 "#
         );
-        QuillConfig::from_yaml(&yaml).unwrap()
+        // Use _with_warnings so silently-dropped fields (e.g. unsupported
+        // standalone `type: object`) fail loudly instead of passing vacuously.
+        let (config, warnings) = QuillConfig::from_yaml_with_warnings(&yaml).unwrap();
+        assert!(
+            warnings.is_empty(),
+            "config_with produced warnings (test schema is unsupported): {:?}",
+            warnings
+        );
+        config
     }
 
     fn fields(entries: &[(&str, serde_json::Value)]) -> HashMap<String, QuillValue> {
@@ -493,15 +500,11 @@ main:
         }));
     }
 
-    #[test]
-    fn validates_object_with_properties() {
-        let config = config_with(
-            "    contact:\n      type: object\n      properties:\n        name:\n          type: string\n          required: true\n        office:\n          type: string",
-            "",
-        );
-        let doc = fields(&[("contact", json!({ "name": "Alex", "office": "HQ" }))]);
-        assert!(validate_document(&config, &doc).is_ok());
-    }
+    // NOTE: top-level `type: object` fields are explicitly unsupported by
+    // the config parser (see `config::parse_fields_with_order`). Object
+    // schemas only appear inside `array.items`; coverage for that shape lives
+    // in `validates_array_of_objects` and
+    // `reports_missing_required_field_in_array_object`.
 
     #[test]
     fn reports_type_mismatch_for_cards_when_not_array() {
