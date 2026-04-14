@@ -1,13 +1,16 @@
 //! Quill template bundle types and implementations.
 
 mod config;
+mod formats;
 mod ignore;
 mod load;
 mod query;
+mod schema_yaml;
 mod tree;
 mod types;
+pub(crate) mod validation;
 
-pub use config::QuillConfig;
+pub use config::{CoercionError, QuillConfig};
 pub use ignore::QuillIgnore;
 pub use tree::FileTreeNode;
 pub use types::{
@@ -33,8 +36,6 @@ pub struct Quill {
     pub example: Option<String>,
     /// Parsed configuration — the authoritative schema model.
     pub config: QuillConfig,
-    /// JSON Schema (serialized from config, used for validation only)
-    pub schema: QuillValue,
     /// Cached default values extracted from config (for performance)
     pub defaults: HashMap<String, QuillValue>,
     /// Cached example values extracted from config (for performance)

@@ -27,18 +27,33 @@ fn test_metadata_retrieval() {
         .get_quill_info("ui-test_quill")
         .expect("getQuillInfo failed");
 
-    // Navigate to schema.properties.my_field.x-ui
-    let x_ui = info
-        .schema
-        .pointer("/properties/my_field/x-ui")
-        .expect("x-ui not found");
+    let schema: serde_yaml::Value = serde_yaml::from_str(&info.schema).expect("schema yaml");
+    let ui = schema
+        .get("fields")
+        .and_then(|v| v.get("my_field"))
+        .and_then(|v| v.get("ui"))
+        .expect("ui not found");
 
-    assert_eq!(x_ui["group"], "Personal Info");
-    assert_eq!(x_ui["order"], 0);
+    assert_eq!(
+        ui.get("group").and_then(|v| v.as_str()),
+        Some("Personal Info")
+    );
+    assert_eq!(ui.get("order").and_then(|v| v.as_i64()), Some(0));
 }
 
 #[wasm_bindgen_test]
 fn test_metadata_stripping() {
+    fn has_internal_key(value: &serde_yaml::Value) -> bool {
+        match value {
+            serde_yaml::Value::Mapping(map) => map.iter().any(|(k, v)| {
+                let is_internal = k.as_str().is_some_and(|s| s.starts_with("x-"));
+                is_internal || has_internal_key(v)
+            }),
+            serde_yaml::Value::Sequence(seq) => seq.iter().any(has_internal_key),
+            _ => false,
+        }
+    }
+
     let mut engine = Quillmark::new();
     engine
         .register_quill(JsValue::from_str(UI_QUILL_JSON))
@@ -48,28 +63,17 @@ fn test_metadata_stripping() {
         })
         .unwrap();
 
-    // Get full info
-    let info = engine
-        .get_quill_info("ui-test_quill")
-        .expect("getQuillInfo failed");
+    let schema_yaml = engine
+        .get_quill_schema("ui-test_quill")
+        .expect("getQuillSchema failed");
+    let schema: serde_yaml::Value = serde_yaml::from_str(&schema_yaml).expect("schema yaml");
 
-    // Get stripped schema using the helper method
-    let stripped_schema = info.get_stripped_schema();
-
-    // Verify x-ui is GONE in stripped schema
-    let x_ui = stripped_schema.pointer("/properties/my_field/x-ui");
-    assert!(x_ui.is_none(), "x-ui should be stripped");
-
-    // Verify other fields remain in stripped schema
-    let field_type = stripped_schema
-        .pointer("/properties/my_field/type")
-        .expect("type should exist");
-    assert_eq!(field_type, "string");
-
-    // Verify original info still has x-ui
-    let x_ui_original = info.schema.pointer("/properties/my_field/x-ui");
-    assert!(
-        x_ui_original.is_some(),
-        "original schema should still have x-ui"
-    );
+    // Verify native `ui` is present and old JSON-schema-specific keys are absent.
+    assert!(schema
+        .get("fields")
+        .and_then(|v| v.get("my_field"))
+        .and_then(|v| v.get("ui"))
+        .is_some());
+    assert!(schema.get("CARDS").is_none());
+    assert!(!has_internal_key(&schema));
 }

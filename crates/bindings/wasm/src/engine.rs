@@ -155,59 +155,46 @@ impl Quillmark {
 
         // Convert defaults to serde_json::Value (plain JavaScript object)
         let mut defaults_obj = serde_json::Map::new();
-        for (key, value) in quill.extract_defaults() {
+        for (key, value) in quill.config.defaults() {
             defaults_obj.insert(key.clone(), value.as_json().clone());
         }
         let defaults_json = serde_json::Value::Object(defaults_obj);
 
         // Convert examples to serde_json::Value (plain JavaScript object with arrays)
         let mut examples_obj = serde_json::Map::new();
-        for (key, values) in quill.extract_examples() {
+        for (key, values) in quill.config.examples() {
             let examples_array: Vec<serde_json::Value> =
                 values.iter().map(|v| v.as_json().clone()).collect();
             examples_obj.insert(key.clone(), serde_json::Value::Array(examples_array));
         }
         let examples_json = serde_json::Value::Object(examples_obj);
 
-        // Prepare schema (always return full schema)
-        let schema_json = quill.schema.clone().as_json().clone();
+        let schema_yaml = quill.config.public_schema_yaml().map_err(|e| {
+            WasmError::from(format!("Failed to serialize schema: {}", e)).to_js_value()
+        })?;
 
         Ok(QuillInfo {
             name: quill.name.clone(),
             backend: backend_id.clone(),
             metadata: metadata_json,
             example: quill.example.clone(),
-            schema: schema_json,
+            schema: schema_yaml,
             defaults: defaults_json,
             examples: examples_json,
             supported_formats,
         })
     }
 
-    /// Get the AI-projected JSON schema of a Quill (strips UI metadata and CARDS)
-    ///
-    /// This returns the schema in a format suitable for feeding to LLMs or
-    /// other consumers that don't need the UI configuration "x-ui" fields
-    /// or the internal CARDS array structure.
-    #[wasm_bindgen(js_name = getStrippedSchema)]
-    pub fn get_stripped_schema(&self, name: &str) -> Result<JsValue, JsValue> {
+    /// Get the public YAML schema contract for a registered quill.
+    #[wasm_bindgen(js_name = getQuillSchema)]
+    pub fn get_quill_schema(&self, name: &str) -> Result<String, JsValue> {
         let quill = self.inner.get_quill(name).ok_or_else(|| {
             WasmError::from(format!("Quill '{}' not registered", name)).to_js_value()
         })?;
-
-        let projected = quillmark_core::schema::project_schema(
-            &quill.schema,
-            quillmark_core::schema::SchemaProjection::AI,
-        );
-
-        // Convert serde_json::Value to JsValue via JSON string to ensure clean object conversion
-        let json_str = serde_json::to_string(projected.as_json()).map_err(|e| {
-            WasmError::from(format!("Failed to serialize schema: {}", e)).to_js_value()
-        })?;
-
-        js_sys::JSON::parse(&json_str).map_err(|e| {
-            WasmError::from(format!("Failed to parse JSON schema: {:?}", e)).to_js_value()
-        })
+        quill
+            .config
+            .public_schema_yaml()
+            .map_err(|e| WasmError::from(format!("schema serialization: {}", e)).to_js_value())
     }
 
     /// Perform a dry run validation without backend compilation.

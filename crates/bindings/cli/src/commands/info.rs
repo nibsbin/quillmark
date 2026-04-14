@@ -65,9 +65,9 @@ fn print_json(quill: &Quill) -> Result<()> {
     // Add counts
     info.insert(
         "field_count".to_string(),
-        serde_json::Value::Number(count_schema_fields(&quill.schema).into()),
+        serde_json::Value::Number(quill.config.main().fields.len().into()),
     );
-    let card_count = count_schema_cards(&quill.schema);
+    let card_count = quill.config.card_definitions().len();
     if card_count > 0 {
         info.insert(
             "card_count".to_string(),
@@ -130,22 +130,22 @@ fn print_human_readable(quill: &Quill) {
     println!("  Backend:     {}", quill.backend);
 
     // Field count from schema properties
-    let field_count = count_schema_fields(&quill.schema);
+    let field_count = quill.config.main().fields.len();
     println!("  Fields:      {}", field_count);
 
     // Card count from schema $defs
-    let card_count = count_schema_cards(&quill.schema);
+    let card_count = quill.config.card_definitions().len();
     if card_count > 0 {
         println!("  Cards:       {}", card_count);
     }
 
     // Defaults and examples
-    let defaults_count = quill.extract_defaults().len();
+    let defaults_count = quill.config.defaults().len();
     if defaults_count > 0 {
         println!("  Defaults:    {}", defaults_count);
     }
 
-    let examples_count = quill.extract_examples().len();
+    let examples_count = quill.config.examples().len();
     if examples_count > 0 {
         println!("  Examples:    {}", examples_count);
     }
@@ -174,31 +174,6 @@ fn print_human_readable(quill: &Quill) {
             }
         }
     }
-}
-
-/// Count top-level fields from schema properties (excluding BODY)
-fn count_schema_fields(schema: &quillmark_core::QuillValue) -> usize {
-    schema
-        .as_json()
-        .get("properties")
-        .and_then(|p| p.as_object())
-        .map(|props| {
-            props
-                .keys()
-                .filter(|k| *k != "BODY" && *k != "CARDS")
-                .count()
-        })
-        .unwrap_or(0)
-}
-
-/// Count card types from schema $defs
-fn count_schema_cards(schema: &quillmark_core::QuillValue) -> usize {
-    schema
-        .as_json()
-        .get("$defs")
-        .and_then(|d| d.as_object())
-        .map(|defs| defs.len())
-        .unwrap_or(0)
 }
 
 fn format_metadata_value(value: &quillmark_core::QuillValue) -> String {

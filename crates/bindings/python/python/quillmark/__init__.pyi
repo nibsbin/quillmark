@@ -210,8 +210,8 @@ class Quill:
         """Quill metadata from Quill.yaml"""
 
     @property
-    def schema(self) -> Any:
-        """Field schema definitions declared by the quill (from Quill.yaml)."""
+    def schema(self) -> str:
+        """Public quill schema as YAML text."""
 
     @property
     def defaults(self) -> dict[str, Any]:

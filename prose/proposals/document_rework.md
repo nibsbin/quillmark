@@ -1,5 +1,9 @@
 # Proposal: Unify Main Document as First Card
 
+**Superseded in part by `prose/schema-rework/`.** This proposal introduced
+schema projections (AI/UI). The schema rework removed projection-based schema
+APIs and made the public contract a direct YAML subset of `Quill.yaml`.
+
 ## Problem
 
 `QuillConfig` has two separate fields for what is structurally the same thing:

@@ -85,10 +85,10 @@ describe('quillmark-wasm smoke tests', () => {
     expect(info.backend).toBe('typst')
     expect(info.supportedFormats).toContain('pdf')
 
-    // metadata and fieldSchemas should be plain objects, not Maps
+    // metadata should be a plain object and schema should be YAML text
     expect(info.metadata instanceof Map).toBe(false)
     expect(info.metadata instanceof Object).toBe(true)
-    expect(info.schema instanceof Object).toBe(true)
+    expect(typeof info.schema).toBe('string')
   })
 
 
@@ -268,7 +268,7 @@ this is not valid yaml
     expect(parsed.fields.title).toBe('Test Document')
     expect(parsed.fields.author).toBe('Test Author')
 
-    // Step 2: Register and get quill info - metadata and fieldSchemas should be plain objects
+    // Step 2: Register and get quill info - metadata is object, schema is YAML text
     const engine = new Quillmark()
     engine.registerQuill(TEST_QUILL)
     const info = engine.getQuillInfo('test_quill')
@@ -276,7 +276,7 @@ this is not valid yaml
     expect(info.metadata instanceof Map).toBe(false)
     expect(info.metadata instanceof Object).toBe(true)
     expect(info.metadata.backend).toBe('typst')
-    expect(info.schema instanceof Object).toBe(true)
+    expect(typeof info.schema).toBe('string')
 
     // Step 3: Render with assets as plain object
     const result = engine.render(parsed, {

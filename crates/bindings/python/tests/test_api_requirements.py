@@ -50,9 +50,10 @@ def test_quill_properties(taro_quill_dir):
     assert isinstance(metadata, dict)
     assert metadata.get("backend") == "typst"
 
-    # Check schema is accessible
+    # Check schema is accessible (YAML string)
     schema = quill.schema
-    assert isinstance(schema, dict)
+    assert isinstance(schema, str)
+    assert "fields:" in schema
 
     # Check example content
     example = quill.example
@@ -128,7 +129,7 @@ This is a test document.
     assert quill.name == "taro"
     assert quill.backend == "typst"
     assert quill.example is not None
-    assert quill.schema is not None
+    assert isinstance(quill.schema, str)
     assert quill.metadata is not None
     
     # Get supported formats from quill

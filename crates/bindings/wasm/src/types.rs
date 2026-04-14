@@ -171,9 +171,8 @@ pub struct QuillInfo {
     /// Loaded example markdown (if available)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub example: Option<String>,
-    /// Field schemas (plain JavaScript object)
-    #[tsify(type = "Record<string, any>")]
-    pub schema: serde_json::Value,
+    /// Public schema contract (YAML string)
+    pub schema: String,
     /// Default values for fields (plain JavaScript object)
     #[tsify(type = "Record<string, any>")]
     pub defaults: serde_json::Value,
@@ -182,21 +181,6 @@ pub struct QuillInfo {
     pub examples: serde_json::Value,
     /// Supported output formats for this quill's backend
     pub supported_formats: Vec<OutputFormat>,
-}
-
-impl QuillInfo {
-    /// Get an AI-projected version of the schema without UI metadata or CARDS
-    ///
-    /// Returns the schema stripped of "x-ui" metadata and the CARDS array property.
-    /// This is useful when exposing the schema to LLMs or other external consumers.
-    pub fn get_stripped_schema(&self) -> serde_json::Value {
-        let schema_value = quillmark_core::QuillValue::from_json(self.schema.clone());
-        let projected = quillmark_core::schema::project_schema(
-            &schema_value,
-            quillmark_core::schema::SchemaProjection::AI,
-        );
-        projected.into_json()
-    }
 }
 
 impl IntoWasmAbi for QuillInfo {
@@ -548,20 +532,10 @@ mod tests {
 
     #[test]
     fn test_quill_info_plain_objects() {
-        // Test that QuillInfo metadata and field_schemas are serde_json::Value objects
+        // Test that QuillInfo metadata/defaults/examples serialize as plain objects.
         let mut metadata_obj = serde_json::Map::new();
         metadata_obj.insert("key1".to_string(), serde_json::json!("value1"));
         metadata_obj.insert("key2".to_string(), serde_json::json!(42));
-
-        let mut schema_obj = serde_json::Map::new();
-        schema_obj.insert(
-            "title".to_string(),
-            serde_json::json!({
-                "type": "string",
-                "required": true,
-                "description": "Document title"
-            }),
-        );
 
         let mut defaults_obj = serde_json::Map::new();
         defaults_obj.insert("author".to_string(), serde_json::json!("Anonymous"));
@@ -577,7 +551,7 @@ mod tests {
             backend: "typst".to_string(),
             metadata: serde_json::Value::Object(metadata_obj),
             example: None,
-            schema: serde_json::Value::Object(schema_obj),
+            schema: "name: test_quill\nfields: {}\n".to_string(),
             defaults: serde_json::Value::Object(defaults_obj),
             examples: serde_json::Value::Object(examples_obj),
             supported_formats: vec![OutputFormat::Pdf, OutputFormat::Svg],
@@ -601,9 +575,9 @@ mod tests {
         );
         assert_eq!(metadata_obj.get("key2").unwrap().as_u64().unwrap(), 42);
 
-        // Verify schema is an object
+        // Verify schema is a string
         let schema = obj.get("schema").unwrap();
-        assert!(schema.is_object());
+        assert!(schema.is_string());
 
         // Verify defaults is an object
         let defaults = obj.get("defaults").unwrap();

@@ -1,7 +1,7 @@
 //! Quill loading and construction routines.
 use std::collections::HashMap;
 use std::error::Error as StdError;
-use std::path::Path;
+use std::path::{Component, Path};
 
 use crate::value::QuillValue;
 
@@ -79,6 +79,7 @@ impl Quill {
     /// # Arguments
     ///
     /// * `config` - The parsed QuillConfig
+    ///   (mutable because resolved `example_markdown` content is attached during load)
     /// * `root` - The root node of the file tree
     ///
     /// # Errors
@@ -86,9 +87,8 @@ impl Quill {
     /// Returns an error if:
     /// - The plate file specified in config is not found or not valid UTF-8
     /// - The example file specified in config is not found or not valid UTF-8
-    /// - Schema generation fails
     fn from_config(
-        config: QuillConfig,
+        mut config: QuillConfig,
         root: FileTreeNode,
     ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         // Build metadata from config
@@ -124,10 +124,6 @@ impl Quill {
             metadata.insert(format!("typst_{}", key), value.clone());
         }
 
-        // Build JSON schema from config (pure serialization for validation)
-        let schema = crate::schema::build_schema_from_config(&config)
-            .map_err(|e| format!("Failed to build JSON schema from config: {}", e))?;
-
         // Read the plate content from plate file (if specified)
         let plate_content: Option<String> = if let Some(ref plate_file_name) = config.plate_file {
             let plate_bytes = root.get_file(plate_file_name).ok_or_else(|| {
@@ -143,40 +139,53 @@ impl Quill {
             None
         };
 
-        // Read the markdown example content if specified
         // Read the markdown example content if specified, or check for default "example.md"
         let example_content = if let Some(ref example_file_name) = config.example_file {
-            root.get_file(example_file_name).and_then(|bytes| {
-                String::from_utf8(bytes.to_vec())
-                    .map_err(|e| {
-                        eprintln!(
-                            "Warning: Example file '{}' is not valid UTF-8: {}",
-                            example_file_name, e
-                        );
-                        e
-                    })
-                    .ok()
-            })
+            let example_path = Path::new(example_file_name);
+            if example_path.is_absolute()
+                || example_path
+                    .components()
+                    .any(|c| matches!(c, Component::ParentDir | Component::Prefix(_)))
+            {
+                return Err(format!(
+                    "Example file '{}' is outside the quill directory",
+                    example_file_name
+                )
+                .into());
+            }
+
+            let bytes = root.get_file(example_file_name).ok_or_else(|| {
+                format!(
+                    "Example file '{}' referenced in Quill.yaml not found",
+                    example_file_name
+                )
+            })?;
+            Some(String::from_utf8(bytes.to_vec()).map_err(|e| {
+                format!(
+                    "Example file '{}' is not valid UTF-8: {}",
+                    example_file_name, e
+                )
+            })?)
         } else if root.file_exists("example.md") {
             // Smart default: use example.md if it exists
-            root.get_file("example.md").and_then(|bytes| {
-                String::from_utf8(bytes.to_vec())
-                    .map_err(|e| {
-                        eprintln!(
-                            "Warning: Default example file 'example.md' is not valid UTF-8: {}",
-                            e
-                        );
-                        e
-                    })
-                    .ok()
-            })
+            let bytes = root
+                .get_file("example.md")
+                .expect("invariant violation: file_exists(example.md) but get_file returned None");
+            Some(String::from_utf8(bytes.to_vec()).map_err(|e| {
+                format!(
+                    "Default example file 'example.md' is not valid UTF-8: {}",
+                    e
+                )
+            })?)
         } else {
             None
         };
 
+        config.example_markdown = example_content.clone();
+
         // Extract and cache defaults and examples from config directly
-        let defaults = config.extract_defaults();
-        let examples = config.extract_examples();
+        let defaults = config.defaults();
+        let examples = config.examples();
 
         let quill = Quill {
             metadata,
@@ -185,7 +194,6 @@ impl Quill {
             plate: plate_content,
             example: example_content,
             config,
-            schema,
             defaults,
             examples,
             files: root,

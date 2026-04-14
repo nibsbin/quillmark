@@ -12,7 +12,8 @@
 - **[QUILL.md](QUILL.md)** - Quill bundle structure, file tree API, and JSON contract
 - **[QUILL_VALUE.md](QUILL_VALUE.md)** - Unified value type for TOML/YAML/JSON conversions
 - **[VERSIONING.md](VERSIONING.md)** - Quill version resolution
-- **[SCHEMAS.md](SCHEMAS.md)** - Field schema and validation
+- **[SCHEMAS.md](SCHEMAS.md)** - `QuillConfig` schema model, native validation, and emission overview
+- **[PUBLIC_SCHEMA.md](PUBLIC_SCHEMA.md)** - External YAML schema contract consumed by bindings/integrations
 - **[CARDS.md](CARDS.md)** - Composable cards with unified CARDS array
 - ~~**[SCOPES.md](SCOPES.md)**~~ - *Superseded by CARDS.md*
 - **[TEMPLATE_DRY_RUN.md](TEMPLATE_DRY_RUN.md)** - Dry run validation

@@ -1,6 +1,7 @@
 use quillmark_core::{
-    normalize::normalize_document, Backend, CompiledDocument, Diagnostic, OutputFormat,
-    ParsedDocument, Quill, RenderError, RenderOptions, RenderResult, Severity,
+    normalize::normalize_document, quill::FieldSchema, quill::FieldType, Backend, CompiledDocument,
+    Diagnostic, OutputFormat, ParsedDocument, Quill, QuillValue, RenderError, RenderOptions,
+    RenderResult, Severity,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -34,8 +35,20 @@ impl Workflow {
     /// Render Markdown with YAML frontmatter to output artifacts. See [module docs](super) for examples.
     /// Compile the document to JSON data suitable for the backend
     pub fn compile_data(&self, parsed: &ParsedDocument) -> Result<serde_json::Value, RenderError> {
-        // Apply coercion from QuillConfig directly
-        let coerced_fields = self.quill.config.coerce_fields(parsed.fields());
+        let coerced_fields = self
+            .quill
+            .config
+            .coerce(parsed.fields())
+            .map_err(|e| RenderError::ValidationFailed {
+                diag: Box::new(
+                    Diagnostic::new(Severity::Error, e.to_string())
+                        .with_code("validation::coercion_failed".to_string())
+                        .with_hint(
+                            "Ensure all fields and card values can be coerced to their declared types"
+                                .to_string(),
+                        ),
+                ),
+            })?;
         let parsed_coerced = ParsedDocument::new(coerced_fields, parsed.quill_reference().clone());
         self.validate_document(&parsed_coerced)?;
 
@@ -45,7 +58,7 @@ impl Workflow {
         // Transform fields for JSON injection (backend-specific transformations)
         let transformed_fields = self
             .backend
-            .transform_fields(normalized.fields(), &self.quill.schema);
+            .transform_fields(normalized.fields(), &self.transform_schema());
 
         // Apply schema defaults to fill in missing fields
         let fields_with_defaults = self.apply_schema_defaults(&transformed_fields);
@@ -156,9 +169,9 @@ impl Workflow {
     ) -> HashMap<String, quillmark_core::QuillValue> {
         let mut result = fields.clone();
 
-        for (field_name, default_value) in &self.quill.defaults {
-            if !result.contains_key(field_name) {
-                result.insert(field_name.clone(), default_value.clone());
+        for (field_name, default_value) in self.quill.config.defaults() {
+            if !result.contains_key(&field_name) {
+                result.insert(field_name, default_value);
             }
         }
 
@@ -172,6 +185,116 @@ impl Workflow {
             json_map.insert(key.clone(), value.as_json().clone());
         }
         serde_json::Value::Object(json_map)
+    }
+
+    fn transform_schema(&self) -> QuillValue {
+        fn field_to_schema(field: &FieldSchema) -> serde_json::Value {
+            let mut schema = serde_json::Map::new();
+            match field.r#type {
+                FieldType::String => {
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("string".to_string()),
+                    );
+                }
+                FieldType::Markdown => {
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("string".to_string()),
+                    );
+                    schema.insert(
+                        "contentMediaType".to_string(),
+                        serde_json::Value::String("text/markdown".to_string()),
+                    );
+                }
+                FieldType::Number => {
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("number".to_string()),
+                    );
+                }
+                FieldType::Boolean => {
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("boolean".to_string()),
+                    );
+                }
+                FieldType::Array => {
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("array".to_string()),
+                    );
+                    if let Some(items) = &field.items {
+                        schema.insert("items".to_string(), field_to_schema(items));
+                    }
+                }
+                FieldType::Object => {
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("object".to_string()),
+                    );
+                    if let Some(properties) = &field.properties {
+                        let mut props: serde_json::Map<String, serde_json::Value> =
+                            serde_json::Map::new();
+                        for (name, prop) in properties {
+                            props.insert(name.clone(), field_to_schema(prop));
+                        }
+                        schema.insert("properties".to_string(), serde_json::Value::Object(props));
+                    }
+                }
+                FieldType::Date => {
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("string".to_string()),
+                    );
+                    schema.insert(
+                        "format".to_string(),
+                        serde_json::Value::String("date".to_string()),
+                    );
+                }
+                FieldType::DateTime => {
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("string".to_string()),
+                    );
+                    schema.insert(
+                        "format".to_string(),
+                        serde_json::Value::String("date-time".to_string()),
+                    );
+                }
+            }
+            serde_json::Value::Object(schema)
+        }
+
+        let mut properties = serde_json::Map::new();
+        for (name, field) in &self.quill.config.main().fields {
+            properties.insert(name.clone(), field_to_schema(field));
+        }
+        properties.insert(
+            "BODY".to_string(),
+            serde_json::json!({ "type": "string", "contentMediaType": "text/markdown" }),
+        );
+
+        let mut defs = serde_json::Map::new();
+        for card in self.quill.config.card_definitions() {
+            let mut card_properties = serde_json::Map::new();
+            for (name, field) in &card.fields {
+                card_properties.insert(name.clone(), field_to_schema(field));
+            }
+            defs.insert(
+                format!("{}_card", card.name),
+                serde_json::json!({
+                    "type": "object",
+                    "properties": card_properties,
+                }),
+            );
+        }
+
+        QuillValue::from_json(serde_json::json!({
+            "type": "object",
+            "properties": properties,
+            "$defs": defs,
+        }))
     }
 
     /// Get the plate content directly from the quill
@@ -194,7 +317,20 @@ impl Workflow {
     /// This is useful for fast feedback loops in LLM-driven document generation,
     /// where you want to validate inputs before incurring compilation costs.
     pub fn dry_run(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
-        let coerced_fields = self.quill.config.coerce_fields(parsed.fields());
+        let coerced_fields = self
+            .quill
+            .config
+            .coerce(parsed.fields())
+            .map_err(|e| RenderError::ValidationFailed {
+                diag: Box::new(
+                    Diagnostic::new(Severity::Error, e.to_string())
+                        .with_code("validation::coercion_failed".to_string())
+                        .with_hint(
+                            "Ensure all fields and card values can be coerced to their declared types"
+                                .to_string(),
+                        ),
+                ),
+            })?;
         let parsed_coerced = ParsedDocument::new(coerced_fields, parsed.quill_reference().clone());
         self.validate_document(&parsed_coerced)?;
         Ok(())
@@ -212,20 +348,14 @@ impl Workflow {
 
     /// Internal validation method
     fn validate_document(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
-        use quillmark_core::schema;
-
-        // Build or load JSON Schema
-
-        if self.quill.schema.is_null() {
-            // No schema defined, skip validation
-            return Ok(());
-        };
-
-        // Validate document
-        match schema::validate_document(&self.quill.schema, parsed.fields()) {
+        match self.quill.config.validate(parsed.fields()) {
             Ok(_) => Ok(()),
             Err(errors) => {
-                let error_message = errors.join("\n");
+                let error_message = errors
+                    .into_iter()
+                    .map(|e| format!("- {}", e))
+                    .collect::<Vec<_>>()
+                    .join("\n");
                 Err(RenderError::ValidationFailed {
                     diag: Box::new(
                         Diagnostic::new(Severity::Error, error_message)

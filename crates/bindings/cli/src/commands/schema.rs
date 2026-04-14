@@ -27,15 +27,17 @@ pub fn execute(args: SchemaArgs) -> Result<()> {
     // Load Quill
     let quill = Quill::from_path(&args.quill_path)?;
 
-    // Serialize schema to JSON
-    let schema_json = serde_json::to_string_pretty(&quill.schema)
+    // Emit public schema contract as YAML
+    let schema_yaml = quill
+        .config
+        .public_schema_yaml()
         .map_err(|e| CliError::InvalidArgument(format!("Failed to serialize schema: {}", e)))?;
 
     // Output
     if let Some(output_path) = args.output {
-        fs::write(&output_path, schema_json).map_err(CliError::Io)?;
+        fs::write(&output_path, schema_yaml).map_err(CliError::Io)?;
     } else {
-        println!("{}", schema_json);
+        println!("{}", schema_yaml);
     }
 
     Ok(())

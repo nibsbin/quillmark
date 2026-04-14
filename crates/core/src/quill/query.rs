@@ -20,10 +20,10 @@ impl Quill {
             .unwrap_or_default()
     }
 
-    /// Get default values from the cached schema defaults
+    /// Get default values from cached config-derived defaults
     ///
     /// Returns a reference to the pre-computed defaults HashMap that was extracted
-    /// during Quill construction. This is more efficient than re-parsing the schema.
+    /// during Quill construction.
     ///
     /// This is used by `ParsedDocument::with_defaults()` to apply default values
     /// to missing fields.
@@ -31,10 +31,10 @@ impl Quill {
         &self.defaults
     }
 
-    /// Get example values from the cached schema examples
+    /// Get example values from cached config-derived examples
     ///
     /// Returns a reference to the pre-computed examples HashMap that was extracted
-    /// during Quill construction. This is more efficient than re-parsing the schema.
+    /// during Quill construction.
     pub fn extract_examples(&self) -> &HashMap<String, Vec<QuillValue>> {
         &self.examples
     }

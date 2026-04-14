@@ -47,7 +47,7 @@
 //! // Step 3: Get Quill info to inspect available options
 //! const info = engine.getQuillInfo('letter-quill');
 //! console.log('Supported formats:', info.supportedFormats);
-//! console.log('Field schemas:', info.fieldSchemas);
+//! console.log('Schema YAML:', info.schema);
 //!
 //! // Step 4: Render
 //! const result = engine.render(parsed, { format: 'pdf' });
