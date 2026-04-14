@@ -6,7 +6,7 @@
 
 | Package           | Version   | Role                                                                                                                                                                                           |
 | ----------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@quillmark/wasm` | `>=0.39.0` | Peer dependency. Consumer provides an engine instance satisfying the `QuillmarkEngine` interface. The registry calls `registerQuill()`, `resolveQuill()`, and `listQuills()` on it.             |
+| `@quillmark/wasm` | `>=0.54.0` | Peer dependency. Consumer provides an engine instance satisfying the `QuillmarkEngine` interface. The registry calls `registerQuill()`, `resolveQuill()`, and `listQuills()` on it.             |
 | `jszip`           | `^3.10.1` | `HttpSource`: unzips fetched quill archives. `FileSystemSource.packageForHttp()`: zips quill directories for static hosting.                                                                   |
 
 `@quillmark/wasm` is a **peer dependency** — the consumer provides the engine instance. The registry never imports or instantiates `Quillmark` itself; it only calls methods on the instance it receives.
@@ -104,7 +104,7 @@ interface QuillInfo {
 	backend: string; // Rendering backend (for example, "typst")
 	metadata: Record<string, unknown>; // Engine-provided metadata; includes version
 	example?: string;
-	schema: Record<string, unknown>;
+	schema: string; // YAML schema text
 	defaults: Record<string, unknown>;
 	examples: Record<string, unknown[]>;
 	supportedFormats: string[];
@@ -153,7 +153,7 @@ interface QuillmarkEngine {
 }
 ```
 
-The full `Quillmark` class from `@quillmark/wasm` satisfies this interface and exposes additional methods (`unregisterQuill`, `getQuillInfo`, `getStrippedSchema`, `parseMarkdown`, `render`, etc.) that the registry does not depend on. App code calls those methods directly on the engine instance.
+The full `Quillmark` class from `@quillmark/wasm` satisfies this interface and exposes additional methods (`unregisterQuill`, `getQuillInfo`, `getQuillSchema`, `parseMarkdown`, `render`, etc.) that the registry does not depend on. App code calls those methods directly on the engine instance.
 
 The registry calls `engine.registerQuill()` as part of `resolve()`, and uses `engine.resolveQuill()` to check whether a quill is already loaded before fetching from a source. App code calls `engine.getQuillInfo()` and `engine.render()` as before.
 

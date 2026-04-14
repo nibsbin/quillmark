@@ -43,7 +43,7 @@ export interface QuillInfo {
 	backend: string;
 	metadata: Record<string, unknown>;
 	example?: string;
-	schema: Record<string, unknown>;
+	schema: string;
 	defaults: Record<string, unknown>;
 	examples: Record<string, unknown[]>;
 	supportedFormats: string[];
@@ -61,4 +61,3 @@ export interface QuillmarkEngine {
 	resolveQuill(quill_ref: string): QuillInfo | null;
 	listQuills(): string[];
 }
-
