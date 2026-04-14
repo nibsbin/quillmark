@@ -146,34 +146,48 @@ pub(crate) fn validate_field(
         FieldType::String | FieldType::Markdown => value.as_str().is_some(),
         FieldType::Number => value.as_json().is_number(),
         FieldType::Boolean => value.as_bool().is_some(),
-        FieldType::Date => match value.as_str() {
-            Some(text) => {
-                if is_valid_date(text) {
-                    true
-                } else {
-                    errors.push(ValidationError::FormatViolation {
-                        path: path.to_string(),
-                        format: "date".to_string(),
-                    });
-                    false
+        FieldType::Date => {
+            if value.as_json().is_null() {
+                true
+            } else {
+                match value.as_str() {
+                    Some(text) if text.is_empty() => true,
+                    Some(text) => {
+                        if is_valid_date(text) {
+                            true
+                        } else {
+                            errors.push(ValidationError::FormatViolation {
+                                path: path.to_string(),
+                                format: "date".to_string(),
+                            });
+                            false
+                        }
+                    }
+                    None => false,
                 }
             }
-            None => false,
-        },
-        FieldType::DateTime => match value.as_str() {
-            Some(text) => {
-                if is_valid_datetime(text) {
-                    true
-                } else {
-                    errors.push(ValidationError::FormatViolation {
-                        path: path.to_string(),
-                        format: "date-time".to_string(),
-                    });
-                    false
+        }
+        FieldType::DateTime => {
+            if value.as_json().is_null() {
+                true
+            } else {
+                match value.as_str() {
+                    Some(text) if text.is_empty() => true,
+                    Some(text) => {
+                        if is_valid_datetime(text) {
+                            true
+                        } else {
+                            errors.push(ValidationError::FormatViolation {
+                                path: path.to_string(),
+                                format: "date-time".to_string(),
+                            });
+                            false
+                        }
+                    }
+                    None => false,
                 }
             }
-            None => false,
-        },
+        }
         FieldType::Array => match value.as_array() {
             Some(items) => {
                 if let Some(item_schema) = &field.items {
