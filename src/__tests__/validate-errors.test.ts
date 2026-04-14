@@ -15,7 +15,7 @@ class ThrowingRenderEngine implements QuillValidationEngine {
 			backend: 'typst',
 			metadata: { version: '0.1.0' },
 			example: '# Example\n\nQUILL: sample:0.1.0',
-			schema: {},
+			schema: '',
 			defaults: {},
 			examples: {},
 			supportedFormats: ['pdf'],

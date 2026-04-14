@@ -8,7 +8,7 @@ Unified API for discovering, loading, and registering Quills with the Quillmark 
 npm install @quillmark/registry
 ```
 
-**Peer dependency:** Requires `@quillmark/wasm@>=0.39.0` — you provide the engine instance.
+**Peer dependency:** Requires `@quillmark/wasm@>=0.54.0` — you provide the engine instance.
 
 ## Quick Start
 
