@@ -346,7 +346,13 @@ impl QuillConfig {
                 Ok(value.clone())
             }
             FieldType::Date | FieldType::DateTime => {
+                if json_value.is_null() {
+                    return Ok(QuillValue::from_json(serde_json::Value::Null));
+                }
                 let text = if let Some(s) = json_value.as_str() {
+                    if s.is_empty() {
+                        return Ok(QuillValue::from_json(serde_json::Value::Null));
+                    }
                     s.to_string()
                 } else if let Some(arr) = json_value.as_array() {
                     if arr.len() == 1 {
