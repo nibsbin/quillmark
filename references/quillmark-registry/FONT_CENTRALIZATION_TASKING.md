@@ -17,9 +17,10 @@ lives in the font pipeline.
 
 ### Identity and storage
 
-- **SHA-256 of the raw font bytes is the font's identity.** The hash is the
-  source of truth at runtime.
-- The store is **content-addressed**: `store/<sha256>` serves raw font bytes.
+- **MD5 of the raw font bytes is the font's identity.** The hash is the
+  source of truth at runtime. MD5 is sufficient — this is dedup, not
+  integrity.
+- The store is **content-addressed**: `store/<md5-hex>` serves raw font bytes.
 - The store is **persisted** (append-only in practice) and **write-open**
   (any publisher can upload any hash; authors carry their own license
   exposure).
@@ -34,12 +35,14 @@ The URL shape is a cross-layer contract between the publisher
 (`FileSystemSource.packageForHttp`) and the reader (`HttpSource`) and must
 be fixed, not deferred.
 
-- **Sharded**: `<baseUrl>/store/<first-2-hex>/<remaining-62-hex>`
+- **Flat MD5**: `<baseUrl>/store/<md5-hex>`
 - **No extension** on stored files. Format is identifiable from font magic
   bytes; consumers do not need filename-derived MIME.
 - **Lowercase hex** for the hash in both URLs and manifest entries.
-- Publisher filesystem layout mirrors the URL exactly
-  (`store/<ab>/<cdef...>`).
+- Publisher filesystem layout mirrors the URL exactly (`store/<md5-hex>`).
+
+MD5 is sufficient — dedup not integrity. Accidental collisions across font
+files are not a realistic concern.
 
 ### Publish-time behavior
 
@@ -76,7 +79,7 @@ Added to `Quill.yaml`:
 
 ```yaml
 fonts:
-  - sha256: <hex>
+  - md5: <hex>
     family: "Inter"
     style: "Regular"
     weight: 400
@@ -117,7 +120,7 @@ detection and author-facing errors are a later task.
 - Add `FontManifest` to `quillmark-core` parsing the `fonts:` section of
   `Quill.yaml`.
 - Add a `FontProvider` trait in `quillmark-core`:
-  `fetch(sha256) -> Bytes` (sync/async variants as appropriate). Concrete
+  `fetch(md5) -> Bytes` (sync/async variants as appropriate). Concrete
   impls: native HTTP, filesystem cache, WASM JS-callback shim (mirror the
   existing pattern used for ZIP fetching).
 - Extend the Quill loader so that given a `Quill` and a `FontProvider` it
@@ -151,7 +154,7 @@ complexity.
 
 ```rust
 trait FontProvider {
-    fn fetch(&self, sha256: &str) -> Option<Bytes>;
+    fn fetch(&self, md5: &str) -> Option<Bytes>;
 }
 ```
 
