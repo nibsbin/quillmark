@@ -2,279 +2,137 @@
 
 ## Goal
 
-Eliminate font duplication in published Quill bundles by moving font bytes out
-of individual Quills and into a shared, content-addressed store.
-
-Fonts currently dominate bundle size (examples: `classic_resume@0.1.0` is
-2.1 MB total, 2.1 MB of which are fonts; `usaf_memo@0.1.0` and `0.2.0` ship
-byte-identical 551 KB font sets). Most Quills should shrink by >90% after
-this change.
-
-Fonts are first-class across all backends. No backend-specific machinery
-lives in the font pipeline.
+Move font bytes out of published Quill bundles into a shared,
+content-addressed store. Fonts are 60–95% of every Quill today
+(`classic_resume@0.1.0` is 2.1 MB of which 2.1 MB is fonts;
+`usaf_memo@0.1.0` and `0.2.0` ship byte-identical 551 KB font sets).
 
 ## Scope
 
-**In scope: fonts only.**
+**Fonts only.** Images/SVGs stay inline (templates reference them by path,
+making substitution awkward). Typst packages stay as-is (Typst's own
+registry `@preview/...` already solves cross-Quill package sharing).
 
-- Images, SVGs, logos, and other binary assets are **not** centralized.
-  Non-font assets are referenced by path in templates (`#image("assets/...")`),
-  which makes content-addressed substitution awkward, and they typically
-  contribute a small fraction of bundle size compared to fonts.
-- Typst packages are **not** centralized. Typst already provides a package
-  registry (`@preview/...`) and a resolver wired in at
-  `crates/backends/typst/src/world.rs:231-283`. Authors who want to share
-  a Typst package across Quills should publish it there rather than bundle
-  it under local `packages/`.
-- The store URL shape (`/store/<hash>`) is kept file-type-agnostic so later
-  asset classes could be added without structural change, but no other
-  asset type is in scope for this task.
+## Core decisions
 
-Known follow-ups out of scope here:
+- **Identity = MD5 of raw font bytes.** Dedup, not integrity.
+- **Store is flat and content-addressed.** URL shape: `<base>/store/<md5-hex>`.
+  Raw bytes, lowercase hex, no extension. Publisher filesystem layout
+  mirrors the URL.
+- **Persisted, write-open, idempotent uploads.** No garbage collection in v1.
+- **Raw bytes only.** No zipping, no format conversion (Typst does not
+  support WOFF2). Transport compression is the CDN's job.
+- **Strip at publish, everywhere.** `*.ttf`, `*.otf`, `*.woff`, `*.woff2`
+  are stripped from the published ZIP wherever they appear in the source
+  tree, including under `packages/**`. Local dev rendering is unaffected —
+  the strip happens only at publish.
+- **Transparent to authors.** `Quill.yaml` is never modified by the publish
+  tool. The source tree stays clean.
+- **Manifest is a sidecar in the published ZIP.** File named `fonts.json`
+  at the ZIP root. Generated at publish, lives inside the bundle, never in
+  source control.
 
-- Registering fonts bundled inside downloaded `@preview/...` packages.
-  These are not registered today (`load_fonts_from_quill` only walks the
-  in-memory Quill tree) and this task does not change that. If authors
-  extract a shared package to `@preview/`, they may need to declare its
-  fonts in the Quill's `fonts:` manifest independently until this gap is
-  closed.
+### Manifest: `fonts.json`
 
-## Design decisions
-
-### Identity and storage
-
-- **MD5 of the raw font bytes is the font's identity.** The hash is the
-  source of truth at runtime. MD5 is sufficient — this is dedup, not
-  integrity.
-- The store is **content-addressed**: `store/<md5-hex>` serves raw font bytes.
-- The store is **persisted** (append-only in practice) and **write-open**
-  (any publisher can upload any hash; authors carry their own license
-  exposure).
-- **Bytes are served as-is.** No zipping, no format conversion (Typst does
-  not support WOFF2). Transport compression is the CDN's responsibility.
-- Idempotent upload: writing the same hash twice is a no-op.
-- **No garbage collection** in v1. Orphaned bytes persist.
-
-#### Store URL contract
-
-The URL shape is a cross-layer contract between the publisher
-(`FileSystemSource.packageForHttp`) and the reader (`HttpSource`) and must
-be fixed, not deferred.
-
-- **Flat MD5**: `<baseUrl>/store/<md5-hex>`
-- **No extension** on stored files. Format is identifiable from font magic
-  bytes; consumers do not need filename-derived MIME.
-- **Lowercase hex** for the hash in both URLs and manifest entries.
-- Publisher filesystem layout mirrors the URL exactly (`store/<md5-hex>`).
-
-MD5 is sufficient — dedup not integrity. Accidental collisions across font
-files are not a realistic concern.
-
-### Publish-time behavior
-
-- Files matching `*.ttf`, `*.otf`, `*.woff`, `*.woff2` anywhere in a Quill
-- Files matching `*.ttf`, `*.otf`, `*.woff`, `*.woff2` **anywhere in the
-  Quill source tree — including `packages/**/fonts/` — are automatically
-  stripped** from the published ZIP. No exclusions.
-- This is intentional: fonts bundled inside local Typst packages are the
-  largest source of duplication in existing fixtures (`classic_resume`,
-  `cmu_letter`, `usaf_memo@0.1.0` and `0.2.0` all hold their fonts under
-  `packages/<pkg>/fonts/`). Excluding `packages/**` would neuter the
-  feature.
-- For each stripped font, the publisher:
-  1. Hashes the bytes.
-  2. Sniffs family/style/weight from the font's `name` and `OS/2` tables.
-  3. Uploads bytes to the store (idempotent by hash).
-  4. Writes an entry into that Quill's `Quill.yaml` `fonts:` section.
-- The generated `Quill.yaml` manifest is **committed** — consistent with how
-  Markdown templates are already handled.
-- The strip list is **separate from `.quillignore`**. `.quillignore` remains
-  a load-time mechanism in Rust. The publish-time strip list lives in the
-  Node registry tooling.
-
-### Load-time / runtime behavior
-
-- `.quillignore` and the in-memory `FileTreeNode` model are unchanged.
-- Local dev rendering ignores the central store. Authors can drop `.ttf`
-  files into `assets/` *or* into `packages/<pkg>/fonts/` and they load as
-  today via the existing file-scan at
-  `crates/backends/typst/src/world.rs:156-207`. Strip-on-publish is the
-  only place fonts are touched automatically.
-- At runtime with a published Quill, the `fonts:` manifest drives
-  resolution via the `FontProvider` (see below). The file-scan path still
-  runs but, post-strip, finds nothing — no conflict, no duplicate
-  registration.
-- **External `@preview/...` packages**: bundled fonts inside these
-  downloaded packages are **not registered today** (the file-scan only
-  walks the Quill's in-memory tree, not the on-disk package cache). This
-  feature does not change that. Out of scope for v1; packages are expected
-  to declare font families that are made available through the manifest.
-
-### Manifest schema
-
-Added to `Quill.yaml`:
-
-```yaml
-fonts:
-  - md5: <hex>
-    family: "Inter"
-    style: "Regular"
-    weight: 400
+```json
+{
+  "version": 1,
+  "fonts": [
+    {
+      "md5": "3f2a8c1d9e4b5a7f0c8d6e3a1b4f9c2d",
+      "family": "Inter",
+      "style": "normal",
+      "weight": 400
+    },
+    {
+      "md5": "a7e3b2d5f0c8e1a4b7d2f5c9e0a3b6d1",
+      "family": "Inter",
+      "style": "italic",
+      "weight": 400
+    }
+  ]
+}
 ```
 
-Annotations (`family`, `style`, `weight`) exist for **human-readable diffs
-and publish output only**. Runtime ignores them and reads metadata from the
-font bytes directly. On any mismatch, **hash wins**.
+- `style` is strictly `"normal" | "italic" | "oblique"` — the italic axis.
+- `weight` is numeric 100–900 — the weight axis.
+- Both match Typst's `FontInfo` model directly.
+- Annotations are for human-readable diffs and publish output. **Runtime
+  uses the hash as the source of truth.** On mismatch, hash wins.
+- No store URL pinned; consumers prepend their configured base URL, so
+  bundles stay portable across registry mirrors.
 
-### Publish-time output
+## Responsibility split
 
-Dedup signal is the payoff message — show it clearly. Counts are a local
-walk of the source tree being published; no store query required.
+**Rust (`quillmark` crates) — render-time only.**
 
-Suggested shape:
+- `FontProvider` trait in `quillmark-core`:
+  `fn fetch(&self, md5: &str) -> Option<Bytes>`. Sync, to match Typst's
+  sync font loading and avoid async-in-WASM.
+- Quill loader reads `fonts.json` from the published bundle, resolves each
+  hash via the provider, attaches resolved bytes to the `Quill` before
+  backend construction.
+- Typst backend registers resolved fonts in `FontBook` alongside the
+  existing file-scan output at
+  `crates/backends/typst/src/world.rs:156-207`. Embedded fallback fonts
+  stay as last-resort.
+- **Rust never hashes, strips, or generates manifests.**
+
+**Node (`quillmark-registry`) — publish and transport.**
+
+- Walks source trees; hashes fonts; sniffs family/style/weight from font
+  `name` / `OS/2` tables (fontkit or opentype.js; publish-only dep).
+- Enforces the strip list and writes `fonts.json` into the ZIP.
+- Manages the store: writes `store/<md5-hex>`, serves as static files.
+- Runtime path: fetches ZIPs, fetches font bytes by hash, hands bytes into
+  Rust via the `FontProvider` callback.
+
+## Injection across the language boundary
+
+**WASM / Node:** Node fetches every declared hash up front, builds
+`Map<string, Uint8Array>`, passes it alongside the Quill JSON through the
+WASM boundary: `Quill.fromJson(quillJson, fontMap)`. Rust wraps the map as
+a `MapProvider`. All fonts are eager from Rust's POV.
+
+**Native:** Consumer supplies a concrete `FontProvider` impl (HTTP against
+the registry, local directory, in-memory map, etc.). The trait does not
+dictate eager vs. lazy.
+
+**No shared process-wide store in v1.** Providers are per-load. Consumers
+wanting cross-Quill caching implement it inside their own `FontProvider`.
+
+## Publish output
+
+Show dedup stats. Counts are a local walk of the source tree — no store
+query.
 
 ```
 fonts:
-  Inter Regular      abc123...  used by 14 quills
-  Inter Bold         def456...  used by 12 quills
-  EB Garamond        789abc...  used by 1 quill
+  Inter Regular   abc123...  used by 14 quills
+  Inter Bold      def456...  used by 12 quills
+  EB Garamond     789abc...  used by 1 quill
 
 bundle: stripped 47 MB across 22 quills
 ```
 
-### Same-family conflicts (deferred)
+## Deferred
 
-If two files in one Quill both resolve to the same family/style (e.g. one in
-`assets/`, one in `packages/<pkg>/fonts/`), v1 does not error. Font
-insertion order into `FontBook` must be **deterministic** (sort discovered
-paths) so whichever wins is reproducible across runs. Real conflict
-detection and author-facing errors are a later task.
+- **Same-family conflicts** (two files both "Inter Regular"). v1 sorts
+  font discovery paths deterministically so whichever wins is
+  reproducible. Real conflict detection is a later task.
+- **Fonts inside downloaded `@preview/...` packages** — not registered
+  today (file-scan only walks the in-memory Quill tree); this task does
+  not change that.
+- **License metadata, garbage collection, HTML/LaTeX backends.**
 
-## Responsibility split
+## Key existing code
 
-**Rust (`quillmark` workspace) — render-time only**
-
-- Add `FontManifest` to `quillmark-core` parsing the `fonts:` section of
-  `Quill.yaml`.
-- Add a `FontProvider` trait in `quillmark-core`:
-  `fetch(md5) -> Bytes` (sync/async variants as appropriate). Concrete
-  impls: native HTTP, filesystem cache, WASM JS-callback shim (mirror the
-  existing pattern used for ZIP fetching).
-- Extend the Quill loader so that given a `Quill` and a `FontProvider` it
-  resolves declared fonts before backend construction.
-- Wire the Typst backend to register resolved fonts in `FontBook` alongside
-  its existing file-scan output. Embedded fallback fonts at
-  `crates/backends/typst/src/world.rs:43-64` stay as last-resort.
-- **Rust never hashes fonts for publish, never generates manifests, never
-  strips files.**
-
-**Node (`quillmark-registry`) — publish-time and transport**
-
-- Walk source trees; hash fonts; sniff family/style/weight via fontkit or
-  opentype.js (publish-only dep).
-- Write the `fonts:` section back into each source-tree `Quill.yaml`.
-- Enforce the implicit strip list when packaging ZIPs.
-- Manage the content-addressed store: write `store/<hash>`; serve as
-  static files.
-- Runtime path: fetch ZIPs, fetch font bytes by hash, hand bytes into Rust
-  via the `FontProvider` callback.
-
-Schema is the only cross-language contract. It is small and stable:
-hash + family + style + weight.
-
-## Font injection across the language boundary
-
-Rust exposes a sync `FontProvider` trait in `quillmark-core`; hosts supply
-a concrete impl and hand it to Rust at Quill construction. The trait is
-sync to match Typst's own sync font loading and avoid async-in-WASM
-complexity.
-
-```rust
-trait FontProvider {
-    fn fetch(&self, md5: &str) -> Option<Bytes>;
-}
-```
-
-**Injection API (Rust):**
-
-```rust
-Quill::from_json_with_fonts(json, provider)
-Quill::from_path_with_fonts(path, provider)
-```
-
-The loader reads the `fonts:` manifest, pulls bytes via the provider, and
-attaches them to the `Quill`. From the Typst backend's perspective,
-resolved fonts look like any other font bytes — it does not need to know a
-provider was involved.
-
-**Node / WASM flow:**
-
-1. Fetch the Quill ZIP; unpack; read `Quill.yaml` `fonts:` section.
-2. Fetch each hash from `store/<hash>` (honoring HTTP cache).
-3. Build a `Map<string, Uint8Array>` of hash → bytes.
-4. Pass it through the WASM boundary alongside the Quill JSON:
-   `Quill.fromJson(quillJson, fontMap)`.
-5. Rust wraps the map in a `MapProvider` impl of `FontProvider`.
-
-All font bytes are eager from Rust's perspective — pre-resolved before
-`QuillWorld::new` runs. This matches today's semantics (where ZIP-inlined
-font bytes are also all-in-memory by the time the backend sees them).
-
-**Native flow:**
-
-Host supplies whichever concrete impl fits:
-
-- `HttpFontProvider { base_url, cache }` — blocking HTTP against the
-  registry with local disk cache.
-- `DirFontProvider { path }` — reads `store/<hash>` from a local
-  directory.
-- `MapProvider` — in-memory, useful for tests.
-
-Native consumers may pre-fetch eagerly or lazy-fetch at render time; the
-trait does not dictate.
-
-**No shared process-wide store in v1.** Providers are per-load. Consumers
-that want cross-Quill font caching (long-running servers) can implement a
-`FontProvider` that delegates to a shared cache internally — that is a
-consumer concern, not a core API concern.
-
-## Loose ends (implementer's discretion)
-
-- **Node font parser**: fontkit, opentype.js, and fonteditor-core are all
-  acceptable if they read family/style/weight reliably.
-- **`FontProvider` caching strategy**: per-process vs. per-request depends
-  on consumer context. The trait should accommodate both; pick sensible
-  defaults.
-- **Fixture migration**: writing a one-time `fonts import` command to
-  populate manifests for the existing four fixture Quills is reasonable but
-  optional — manual migration is fine if faster.
-
-## Non-goals
-
-- Changing the rendering API beyond wiring in the provider.
-- Replacing `.quillignore` or altering load-time file-tree behavior.
-- Named font packs, semver-versioned fonts, a curated registry, or license
-  enforcement.
-- Transport-layer optimization (compression, HTTP/2, etc.) — CDN territory.
-- HTML / LaTeX / other backends. The `FontProvider` + manifest is
-  deliberately backend-agnostic, but only the Typst consumption path is
-  landed here.
-
-## Relevant existing code
-
-- Font loading today:
-  `crates/backends/typst/src/world.rs:156-207` (extension-based scan across
-  `assets/fonts/*`, `assets/*`, `packages/**`).
-- `QuillWorld` construction:
+- Font loading today: `crates/backends/typst/src/world.rs:156-207`.
+- `QuillWorld` construction + embedded fallbacks:
   `crates/backends/typst/src/world.rs:18-103`.
-- Embedded fallback fonts:
-  `crates/backends/typst/src/world.rs:43-64`.
-- Quill config schema:
-  `crates/core/src/quill/config.rs:16-40`.
+- Quill config schema: `crates/core/src/quill/config.rs:16-40`.
 - In-memory file tree + `.quillignore`:
   `crates/core/src/quill/tree.rs:7-18`,
   `crates/core/src/quill/load.rs:11-41`.
 - Registry ZIP packager:
   `references/quillmark-registry/src/sources/file-system-source.ts:206-233`.
-- Registry bundle format:
-  `references/quillmark-registry/src/bundle.ts:23-31`.
