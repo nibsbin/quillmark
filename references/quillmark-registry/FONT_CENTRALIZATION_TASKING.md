@@ -47,7 +47,14 @@ files are not a realistic concern.
 ### Publish-time behavior
 
 - Files matching `*.ttf`, `*.otf`, `*.woff`, `*.woff2` anywhere in a Quill
-  source tree are **automatically stripped** from the published ZIP.
+- Files matching `*.ttf`, `*.otf`, `*.woff`, `*.woff2` **anywhere in the
+  Quill source tree — including `packages/**/fonts/` — are automatically
+  stripped** from the published ZIP. No exclusions.
+- This is intentional: fonts bundled inside local Typst packages are the
+  largest source of duplication in existing fixtures (`classic_resume`,
+  `cmu_letter`, `usaf_memo@0.1.0` and `0.2.0` all hold their fonts under
+  `packages/<pkg>/fonts/`). Excluding `packages/**` would neuter the
+  feature.
 - For each stripped font, the publisher:
   1. Hashes the bytes.
   2. Sniffs family/style/weight from the font's `name` and `OS/2` tables.
@@ -63,15 +70,19 @@ files are not a realistic concern.
 
 - `.quillignore` and the in-memory `FileTreeNode` model are unchanged.
 - Local dev rendering ignores the central store. Authors can drop `.ttf`
-  files into `assets/` and they load as today. Strip-on-publish is the only
-  place fonts are touched automatically.
-- At runtime with a published Quill, the engine reads `fonts:` from
-  `Quill.yaml`, fetches each hash via a `FontProvider`, and registers the
-  resolved fonts in the backend.
-- The Typst backend's existing font-scan path at
-  `crates/backends/typst/src/world.rs:156-207` continues to handle any font
-  bytes still present in the Quill — notably fonts bundled inside
-  third-party `@preview/...` packages, which cannot be stripped at publish.
+  files into `assets/` *or* into `packages/<pkg>/fonts/` and they load as
+  today via the existing file-scan at
+  `crates/backends/typst/src/world.rs:156-207`. Strip-on-publish is the
+  only place fonts are touched automatically.
+- At runtime with a published Quill, the `fonts:` manifest drives
+  resolution via the `FontProvider` (see below). The file-scan path still
+  runs but, post-strip, finds nothing — no conflict, no duplicate
+  registration.
+- **External `@preview/...` packages**: bundled fonts inside these
+  downloaded packages are **not registered today** (the file-scan only
+  walks the Quill's in-memory tree, not the on-disk package cache). This
+  feature does not change that. Out of scope for v1; packages are expected
+  to declare font families that are made available through the manifest.
 
 ### Manifest schema
 
