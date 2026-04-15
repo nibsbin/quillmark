@@ -28,6 +28,19 @@ lives in the font pipeline.
 - Idempotent upload: writing the same hash twice is a no-op.
 - **No garbage collection** in v1. Orphaned bytes persist.
 
+#### Store URL contract
+
+The URL shape is a cross-layer contract between the publisher
+(`FileSystemSource.packageForHttp`) and the reader (`HttpSource`) and must
+be fixed, not deferred.
+
+- **Sharded**: `<baseUrl>/store/<first-2-hex>/<remaining-62-hex>`
+- **No extension** on stored files. Format is identifiable from font magic
+  bytes; consumers do not need filename-derived MIME.
+- **Lowercase hex** for the hash in both URLs and manifest entries.
+- Publisher filesystem layout mirrors the URL exactly
+  (`store/<ab>/<cdef...>`).
+
 ### Publish-time behavior
 
 - Files matching `*.ttf`, `*.otf`, `*.woff`, `*.woff2` anywhere in a Quill
@@ -189,11 +202,6 @@ consumer concern, not a core API concern.
 
 - **Node font parser**: fontkit, opentype.js, and fonteditor-core are all
   acceptable if they read family/style/weight reliably.
-- **Store file layout**: flat `store/<hash>` or sharded `store/<ab>/<cdef...>`
-  — implementer's call.
-- **URL / filename extension** in the store: not required for correctness
-  (font magic bytes identify format); include or omit based on CDN
-  needs.
 - **`FontProvider` caching strategy**: per-process vs. per-request depends
   on consumer context. The trait should accommodate both; pick sensible
   defaults.
