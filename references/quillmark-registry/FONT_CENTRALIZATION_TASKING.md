@@ -13,6 +13,32 @@ this change.
 Fonts are first-class across all backends. No backend-specific machinery
 lives in the font pipeline.
 
+## Scope
+
+**In scope: fonts only.**
+
+- Images, SVGs, logos, and other binary assets are **not** centralized.
+  Non-font assets are referenced by path in templates (`#image("assets/...")`),
+  which makes content-addressed substitution awkward, and they typically
+  contribute a small fraction of bundle size compared to fonts.
+- Typst packages are **not** centralized. Typst already provides a package
+  registry (`@preview/...`) and a resolver wired in at
+  `crates/backends/typst/src/world.rs:231-283`. Authors who want to share
+  a Typst package across Quills should publish it there rather than bundle
+  it under local `packages/`.
+- The store URL shape (`/store/<hash>`) is kept file-type-agnostic so later
+  asset classes could be added without structural change, but no other
+  asset type is in scope for this task.
+
+Known follow-ups out of scope here:
+
+- Registering fonts bundled inside downloaded `@preview/...` packages.
+  These are not registered today (`load_fonts_from_quill` only walks the
+  in-memory Quill tree) and this task does not change that. If authors
+  extract a shared package to `@preview/`, they may need to declare its
+  fonts in the Quill's `fonts:` manifest independently until this gap is
+  closed.
+
 ## Design decisions
 
 ### Identity and storage
