@@ -129,6 +129,62 @@ detection and author-facing errors are a later task.
 Schema is the only cross-language contract. It is small and stable:
 hash + family + style + weight.
 
+## Font injection across the language boundary
+
+Rust exposes a sync `FontProvider` trait in `quillmark-core`; hosts supply
+a concrete impl and hand it to Rust at Quill construction. The trait is
+sync to match Typst's own sync font loading and avoid async-in-WASM
+complexity.
+
+```rust
+trait FontProvider {
+    fn fetch(&self, sha256: &str) -> Option<Bytes>;
+}
+```
+
+**Injection API (Rust):**
+
+```rust
+Quill::from_json_with_fonts(json, provider)
+Quill::from_path_with_fonts(path, provider)
+```
+
+The loader reads the `fonts:` manifest, pulls bytes via the provider, and
+attaches them to the `Quill`. From the Typst backend's perspective,
+resolved fonts look like any other font bytes — it does not need to know a
+provider was involved.
+
+**Node / WASM flow:**
+
+1. Fetch the Quill ZIP; unpack; read `Quill.yaml` `fonts:` section.
+2. Fetch each hash from `store/<hash>` (honoring HTTP cache).
+3. Build a `Map<string, Uint8Array>` of hash → bytes.
+4. Pass it through the WASM boundary alongside the Quill JSON:
+   `Quill.fromJson(quillJson, fontMap)`.
+5. Rust wraps the map in a `MapProvider` impl of `FontProvider`.
+
+All font bytes are eager from Rust's perspective — pre-resolved before
+`QuillWorld::new` runs. This matches today's semantics (where ZIP-inlined
+font bytes are also all-in-memory by the time the backend sees them).
+
+**Native flow:**
+
+Host supplies whichever concrete impl fits:
+
+- `HttpFontProvider { base_url, cache }` — blocking HTTP against the
+  registry with local disk cache.
+- `DirFontProvider { path }` — reads `store/<hash>` from a local
+  directory.
+- `MapProvider` — in-memory, useful for tests.
+
+Native consumers may pre-fetch eagerly or lazy-fetch at render time; the
+trait does not dictate.
+
+**No shared process-wide store in v1.** Providers are per-load. Consumers
+that want cross-Quill font caching (long-running servers) can implement a
+`FontProvider` that delegates to a shared cache internally — that is a
+consumer concern, not a core API concern.
+
 ## Loose ends (implementer's discretion)
 
 - **Node font parser**: fontkit, opentype.js, and fonteditor-core are all
