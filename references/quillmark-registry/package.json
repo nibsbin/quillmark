@@ -1,0 +1,65 @@
+{
+  "name": "@quillmark/registry",
+  "version": "0.13.0",
+  "description": "Unified API for discovering, loading, packaging, and registering Quills with the WASM engine",
+  "main": "./dist/index.js",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "tsc --noEmit",
+    "preversion": "npm test",
+    "postversion": "git push --follow-tags",
+    "release:patch": "npm version patch",
+    "release:minor": "npm version minor",
+    "release:major": "npm version major"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nibsbin/quillmark-registry.git"
+  },
+  "keywords": [
+    "quillmark",
+    "wasm",
+    "typst",
+    "template",
+    "registry"
+  ],
+  "author": "Quillmark",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/nibsbin/quillmark-registry/issues"
+  },
+  "homepage": "https://github.com/nibsbin/quillmark-registry#readme",
+  "devDependencies": {
+    "@quillmark/wasm": "^0.54.0",
+    "@types/node": "^25.3.3",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "peerDependencies": {
+    "@quillmark/wasm": ">=0.54.0"
+  },
+  "peerDependenciesMeta": {
+    "@quillmark/wasm": {
+      "optional": false
+    }
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  }
+}

@@ -1,0 +1,13 @@
+Quill:
+  name: minimal_quill
+  version: 0.1.0
+  backend: typst
+  plate_file: plate.typ
+  example_file: example.md
+  description: Minimal quill fixture for integration tests
+
+main:
+  fields:
+    title:
+      title: Document Title
+      type: string
