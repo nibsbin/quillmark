@@ -90,15 +90,16 @@ Drift protection:
 1. Walk source tree. For each file matching the strip extensions, hash
    the bytes.
 2. Upload each unique hash to the store (idempotent).
-3. Build `files` map; write `fonts.json` into the ZIP.
-4. Strip the matched files from the ZIP.
+3. Build `files` map.
+4. Build the ZIP — include `fonts.json`, exclude the matched font files.
 
 ## Rehydration flow (Rust)
 
 1. Unpack ZIP into `FileTreeNode` (fonts missing).
-2. Read `fonts.json`.
+2. Read `fonts.json` from the tree.
 3. Collect the unique set of hashes from `files` values.
-4. `FontProvider::fetch(md5)` once per unique hash.
+4. `FontProvider::fetch(md5)` once per unique hash. **Fail the load if
+   any hash cannot be resolved.**
 5. Write bytes into `FileTreeNode` at every path whose value is that
    hash.
 6. Hand the rehydrated `Quill` to the backend.
