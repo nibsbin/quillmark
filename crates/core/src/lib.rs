@@ -57,6 +57,9 @@ pub use types::{Artifact, CompiledDocument, OutputFormat, RenderOptions};
 pub mod quill;
 pub use quill::{FileTreeNode, Quill, QuillIgnore};
 
+pub mod fonts;
+pub use fonts::{FontManifest, FontProvider, MapProvider};
+
 pub mod value;
 pub use value::QuillValue;
 

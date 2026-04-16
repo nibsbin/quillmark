@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FontManifest",
+  "description": "Dehydration record written to `fonts.json` at the ZIP root by the publisher.\n\nMaps every stripped font path to the MD5 hex of its bytes.  Multiple paths may share the same hash when byte-identical fonts are embedded more than once (e.g. under both `assets/fonts/` and `packages/*/fonts/`).\n\nRust is the canonical schema owner.  The JSON Schema at `crates/core/schemas/fonts-manifest.schema.json` is derived from this type via `schemars` and committed to the repository; CI fails on drift.",
+  "type": "object",
+  "required": [
+    "files",
+    "version"
+  ],
+  "properties": {
+    "files": {
+      "description": "Map from file path (relative to ZIP root) to lowercase MD5 hex.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "version": {
+      "description": "Schema version.  Must be `1`.",
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0.0
+    }
+  }
+}

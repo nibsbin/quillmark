@@ -83,13 +83,46 @@ impl Quillmark {
     ///
     /// Accepts either a JSON string or a JsValue object representing the Quill file tree.
     /// Validation happens automatically on registration.
+    ///
+    /// `font_map` is an optional `Map<string, Uint8Array>` (or plain JS object)
+    /// mapping MD5 hex strings to font bytes.  Pass it when registering a
+    /// dehydrated (published) bundle — Node fetches the bytes from the store and
+    /// hands them here so Rust can rehydrate the file tree before loading.
+    /// If the bundle is not dehydrated (no `fonts.json`) the argument is ignored.
     #[wasm_bindgen(js_name = registerQuill)]
-    pub fn register_quill(&mut self, quill_json: JsValue) -> Result<QuillInfo, JsValue> {
-        // Convert JsValue to JSON string
-        let json_str = if quill_json.is_string() {
-            quill_json.as_string().ok_or_else(|| {
-                WasmError::from("Failed to convert JsValue to string").to_js_value()
-            })?
+    pub fn register_quill(
+        &mut self,
+        quill_json: JsValue,
+        font_map: Option<JsValue>,
+    ) -> Result<QuillInfo, JsValue> {
+        let json_str = Self::quill_json_to_str(quill_json)?;
+
+        let quill = match font_map {
+            Some(map) if !map.is_null() && !map.is_undefined() => {
+                let provider = js_font_map_to_provider(map)?;
+                quillmark_core::Quill::from_json_with_fonts(&json_str, &provider)
+                    .map_err(|e| WasmError::from(format!("Failed to parse Quill: {}", e)).to_js_value())?
+            }
+            _ => {
+                quillmark_core::Quill::from_json(&json_str)
+                    .map_err(|e| WasmError::from(format!("Failed to parse Quill: {}", e)).to_js_value())?
+            }
+        };
+
+        let name = quill.name.clone();
+        self.inner
+            .register_quill(quill)
+            .map_err(|e| WasmError::from(e).to_js_value())?;
+
+        self.get_quill_info(&name)
+    }
+
+    /// Shared helper: coerce the quill_json JsValue to a JSON string.
+    fn quill_json_to_str(quill_json: JsValue) -> Result<String, JsValue> {
+        if quill_json.is_string() {
+            quill_json
+                .as_string()
+                .ok_or_else(|| WasmError::from("Failed to convert JsValue to string").to_js_value())
         } else {
             js_sys::JSON::stringify(&quill_json)
                 .map_err(|e| {
@@ -97,21 +130,8 @@ impl Quillmark {
                         .to_js_value()
                 })?
                 .as_string()
-                .ok_or_else(|| WasmError::from("Failed to convert JSON to string").to_js_value())?
-        };
-
-        // Parse and validate Quill
-        let quill = quillmark_core::Quill::from_json(&json_str)
-            .map_err(|e| WasmError::from(format!("Failed to parse Quill: {}", e)).to_js_value())?;
-        let name = quill.name.clone();
-
-        // Register with backend validation
-        self.inner
-            .register_quill(quill)
-            .map_err(|e| WasmError::from(e).to_js_value())?;
-
-        // Return full quill info
-        self.get_quill_info(&name)
+                .ok_or_else(|| WasmError::from("Failed to convert JSON to string").to_js_value())
+        }
     }
 
     /// Get shallow information about a registered Quill
@@ -380,7 +400,9 @@ impl Quillmark {
         self.inner.unregister_quill(name_or_ref)
     }
 
-    fn to_core_parsed(parsed: ParsedDocument) -> Result<quillmark_core::ParsedDocument, JsValue> {
+    fn to_core_parsed(
+        parsed: ParsedDocument,
+    ) -> Result<quillmark_core::ParsedDocument, JsValue> {
         let mut fields = std::collections::HashMap::new();
 
         if let serde_json::Value::Object(obj) = parsed.fields {
@@ -436,4 +458,50 @@ impl CompiledDocument {
             render_time_ms: now_ms() - start,
         })
     }
+}
+
+// ── font-map helper ───────────────────────────────────────────────────────────
+
+/// Convert a JS `Map<string, Uint8Array>` or plain object into a [`MapProvider`].
+///
+/// Both a JS `Map` and a plain JS object are accepted.  Values must be
+/// `Uint8Array` instances; the bytes are copied into Rust-owned `Vec<u8>`.
+fn js_font_map_to_provider(
+    font_map: JsValue,
+) -> Result<quillmark_core::MapProvider, JsValue> {
+    let mut map: std::collections::HashMap<String, Vec<u8>> = std::collections::HashMap::new();
+
+    if js_sys::Map::<JsValue, JsValue>::instanceof(&font_map) {
+        // JS Map — iterate with .entries()
+        let js_map = js_sys::Map::from(font_map);
+        let iter = js_map.entries();
+        loop {
+            let next = iter.next().map_err(|e| {
+                WasmError::from(format!("Failed to iterate font map: {:?}", e)).to_js_value()
+            })?;
+            if next.done() {
+                break;
+            }
+            let pair = js_sys::Array::from(&next.value());
+            let key = pair.get(0).as_string().ok_or_else(|| {
+                WasmError::from("Font map key must be a string").to_js_value()
+            })?;
+            let bytes = js_sys::Uint8Array::new(&pair.get(1)).to_vec();
+            map.insert(key, bytes);
+        }
+    } else {
+        // Plain JS object — iterate with Object.entries()
+        let obj = js_sys::Object::from(font_map);
+        let entries = js_sys::Object::entries(&obj);
+        for entry in entries.iter() {
+            let pair = js_sys::Array::from(&entry);
+            let key = pair.get(0).as_string().ok_or_else(|| {
+                WasmError::from("Font map key must be a string").to_js_value()
+            })?;
+            let bytes = js_sys::Uint8Array::new(&pair.get(1)).to_vec();
+            map.insert(key, bytes);
+        }
+    }
+
+    Ok(quillmark_core::MapProvider::new(map))
 }

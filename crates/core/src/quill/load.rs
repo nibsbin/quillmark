@@ -71,6 +71,21 @@ impl Quill {
         Self::from_config(config, root)
     }
 
+    /// Create a Quill from a tree, rehydrating fonts via `provider`.
+    ///
+    /// If `fonts.json` is present at the root of `root`, the provider is called
+    /// for each unique hash listed in the manifest and the bytes are written back
+    /// to their original paths before loading proceeds.  If `fonts.json` is
+    /// absent (local dev trees, pre-centralization bundles) the provider is
+    /// never called and this method is identical to [`from_tree`].
+    pub fn from_tree_with_fonts(
+        mut root: FileTreeNode,
+        provider: &dyn crate::fonts::FontProvider,
+    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        crate::fonts::rehydrate_tree(&mut root, provider)?;
+        Self::from_tree(root)
+    }
+
     /// Create a Quill from a QuillConfig and file tree
     ///
     /// This method constructs a Quill from a parsed QuillConfig and validates
@@ -209,6 +224,29 @@ impl Quill {
     /// The JSON format MUST have a root object with a `files` key. The optional
     /// `metadata` key provides additional metadata that overrides defaults.
     pub fn from_json(json_str: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        let root = Self::parse_json_to_tree(json_str)?;
+        Self::from_tree(root)
+    }
+
+    /// Create a Quill from a JSON representation, rehydrating fonts via `provider`.
+    ///
+    /// Identical to [`from_json`] except that if `fonts.json` is present in the
+    /// tree (i.e. the bundle was published in dehydrated form), font bytes are
+    /// fetched from `provider` and written back to their original paths before
+    /// loading proceeds.
+    ///
+    /// This is the entry point used by the WASM binding when Node supplies a
+    /// pre-fetched `Map<string, Uint8Array>` alongside the Quill JSON.
+    pub fn from_json_with_fonts(
+        json_str: &str,
+        provider: &dyn crate::fonts::FontProvider,
+    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+        let root = Self::parse_json_to_tree(json_str)?;
+        Self::from_tree_with_fonts(root, provider)
+    }
+
+    /// Shared JSON-to-tree parsing used by both `from_json` variants.
+    fn parse_json_to_tree(json_str: &str) -> Result<FileTreeNode, Box<dyn StdError + Send + Sync>> {
         use serde_json::Value as JsonValue;
 
         let json: JsonValue =
@@ -228,10 +266,7 @@ impl Quill {
             root_files.insert(key.clone(), FileTreeNode::from_json_value(value)?);
         }
 
-        let root = FileTreeNode::Directory { files: root_files };
-
-        // Create Quill from tree
-        Self::from_tree(root)
+        Ok(FileTreeNode::Directory { files: root_files })
     }
 
     /// Recursively load all files from a directory into a tree structure
