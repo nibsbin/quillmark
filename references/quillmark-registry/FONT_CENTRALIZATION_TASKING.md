@@ -43,10 +43,13 @@ of the new machinery is a load-time transformation.
 - **`Quill.yaml` is never modified.** Author source stays clean.
 - **Manifest is a sidecar inside the ZIP** — `fonts.json` at the ZIP
   root.
+- **No font metadata sniffing.** The publisher only hashes bytes and
+  records paths. No font-parsing dependency required.
 
 ## Manifest: `fonts.json`
 
-Two maps, modeling two distinct relationships:
+A dehydration record — nothing more. Maps each stripped path to its
+content hash:
 
 ```json
 {
@@ -55,33 +58,13 @@ Two maps, modeling two distinct relationships:
     "assets/fonts/Inter-Regular.ttf": "3f2a8c1d9e4b5a7f0c8d6e3a1b4f9c2d",
     "packages/ttq-classic-resume/fonts/Inter-Regular.ttf": "3f2a8c1d9e4b5a7f0c8d6e3a1b4f9c2d",
     "assets/fonts/Inter-Bold.ttf": "a7e3b2d5f0c8e1a4b7d2f5c9e0a3b6d1"
-  },
-  "fonts": {
-    "3f2a8c1d9e4b5a7f0c8d6e3a1b4f9c2d": {
-      "family": "Inter",
-      "style": "normal",
-      "weight": 400
-    },
-    "a7e3b2d5f0c8e1a4b7d2f5c9e0a3b6d1": {
-      "family": "Inter",
-      "style": "normal",
-      "weight": 700
-    }
   }
 }
 ```
 
-- **`files`**: path → md5. The dehydration record, per-Quill. One entry
-  per stripped file. Identical bytes at multiple source paths produce
-  multiple entries with the same hash; rehydration faithfully reproduces
-  the tree.
-- **`fonts`**: md5 → metadata. Deduped by hash. One entry per unique
-  font.
-- `style` is strictly `"normal" | "italic" | "oblique"`.
-- `weight` is numeric 100–900.
-- Both axes match Typst's `FontInfo` model directly.
-- Annotations are advisory (human diffs, publish output). **Runtime
-  trusts the hash.** On mismatch with bytes, hash wins.
+- **`files`**: path → md5. One entry per stripped file. Identical bytes
+  at multiple source paths produce multiple entries with the same hash;
+  rehydration faithfully reproduces the tree.
 - No store URL pinned; consumers prepend their configured base URL so
   bundles remain portable across mirrors.
 
@@ -89,31 +72,26 @@ Two maps, modeling two distinct relationships:
 
 **Rust is canonical.** `quillmark-core` owns the `FontManifest` type
 (serde + `schemars` derives). This matches the existing pattern —
-`QuillConfig` already lives there. Rust is also the consumer, so its
+`QuillConfig` already lives there. Rust is the consumer, so its
 acceptance criteria is the true contract.
 
-Drift protection has two layers:
+Drift protection:
 
-- **Generated JSON Schema as wire artifact.** A build/CI step emits
-  `crates/core/schemas/fonts-manifest.schema.json` from the Rust types.
-  Node imports it and validates with ajv (or equivalent) before writing
-  `fonts.json`. CI fails if the committed schema does not match what the
-  Rust types currently produce.
-- **Shared test fixtures.** A handful of hand-authored example
-  `fonts.json` files under `crates/core/tests/fixtures/fonts-manifest/`
-  (empty, single-font, multi-font, duplicate-hash, multi-path). Rust CI
-  parses them into `FontManifest`; Node CI validates them against the
-  JSON Schema. Both sides regress against the same concrete inputs.
+- **Generated JSON Schema** at
+  `crates/core/schemas/fonts-manifest.schema.json`. Node validates with
+  ajv (or equivalent) before writing `fonts.json`. CI fails if the
+  committed schema diverges from the Rust types.
+- **Shared test fixtures** under
+  `crates/core/tests/fixtures/fonts-manifest/`. Rust CI parses them;
+  Node CI validates them. Both sides regress against the same inputs.
 
 ## Publish flow (Node)
 
 1. Walk source tree. For each file matching the strip extensions, hash
    the bytes.
-2. Sniff `family` / `style` / `weight` from `name` / `OS/2` tables
-   (fontkit or opentype.js — publish-only dep).
-3. Upload each unique hash to the store (idempotent).
-4. Build `files` and `fonts` maps; write `fonts.json` into the ZIP.
-5. Strip the matched files from the ZIP.
+2. Upload each unique hash to the store (idempotent).
+3. Build `files` map; write `fonts.json` into the ZIP.
+4. Strip the matched files from the ZIP.
 
 ## Rehydration flow (Rust)
 
@@ -144,8 +122,8 @@ expects.
 
 **Node (`quillmark-registry`) — publish + transport.**
 
-- Walks source trees, hashes fonts, sniffs metadata, uploads bytes,
-  writes `fonts.json`, strips files, produces ZIPs.
+- Walks source trees, hashes fonts, uploads bytes, writes `fonts.json`,
+  strips files, produces ZIPs.
 - Manages the store as static files (`/store/<md5-hex>`).
 - Runtime path: fetches ZIPs, fetches font bytes by hash, hands bytes to
   Rust via the `FontProvider` callback.
@@ -158,26 +136,25 @@ it alongside the Quill JSON: `Quill.fromJson(quillJson, fontMap)`. Rust
 wraps the map as a `MapProvider`. Fonts are eager from Rust's POV.
 
 **Native.** Consumer supplies a concrete impl (HTTP against the registry,
-local directory, in-memory map). Trait does not dictate eager vs. lazy —
-but rehydration will call `fetch` for every unique hash at load time, so
-lazy providers effectively pre-fetch then too.
+local directory, in-memory map). Rehydration calls `fetch` for every
+unique hash at load time.
 
 **No shared process-wide store in v1.** Providers are per-load. Consumers
 wanting cross-Quill caching implement it inside their `FontProvider`.
 
 ## Publish output
 
+Show dedup signal using filenames. Counts are a local walk of the source
+tree — no store query.
+
 ```
 fonts:
-  Inter Regular   abc123...  used by 14 quills
-  Inter Bold      def456...  used by 12 quills
-  EB Garamond     789abc...  used by 1 quill
+  Inter-Regular.ttf   abc123...  used by 14 quills
+  Inter-Bold.ttf      def456...  used by 12 quills
+  EBGaramond.ttf      789abc...  used by 1 quill
 
 bundle: stripped 47 MB across 22 quills
 ```
-
-Counts are a local walk of the source tree being published — no store
-query.
 
 ## Deferred
 
@@ -190,7 +167,7 @@ query.
 
 ## Key existing code
 
-- Font loading today: `crates/backends/typst/src/world.rs:156-207`.
+- Font loading: `crates/backends/typst/src/world.rs:156-207`.
 - `QuillWorld` construction + embedded fallbacks:
   `crates/backends/typst/src/world.rs:18-103`.
 - Quill config schema: `crates/core/src/quill/config.rs:16-40`.
