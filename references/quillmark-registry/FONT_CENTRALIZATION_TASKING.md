@@ -11,8 +11,9 @@ and `0.2.0` ship byte-identical 551 KB font sets).
 
 **Fonts only.** Non-font assets stay inline (templates reference them by
 path, making content-addressed substitution awkward). Typst packages stay
-as-is (Typst's `@preview/...` registry already solves cross-Quill package
-sharing).
+inline — after font stripping, their remaining source (`.typ` files +
+`typst.toml`) is negligible in size. The store URL shape is
+file-type-agnostic if this changes later.
 
 ## Model: dehydrate at publish, rehydrate at load
 
