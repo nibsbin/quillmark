@@ -84,6 +84,26 @@ Two maps, modeling two distinct relationships:
 - No store URL pinned; consumers prepend their configured base URL so
   bundles remain portable across mirrors.
 
+## Schema ownership
+
+**Rust is canonical.** `quillmark-core` owns the `FontManifest` type
+(serde + `schemars` derives). This matches the existing pattern —
+`QuillConfig` already lives there. Rust is also the consumer, so its
+acceptance criteria is the true contract.
+
+Drift protection has two layers:
+
+- **Generated JSON Schema as wire artifact.** A build/CI step emits
+  `crates/core/schemas/fonts-manifest.schema.json` from the Rust types.
+  Node imports it and validates with ajv (or equivalent) before writing
+  `fonts.json`. CI fails if the committed schema does not match what the
+  Rust types currently produce.
+- **Shared test fixtures.** A handful of hand-authored example
+  `fonts.json` files under `crates/core/tests/fixtures/fonts-manifest/`
+  (empty, single-font, multi-font, duplicate-hash, multi-path). Rust CI
+  parses them into `FontManifest`; Node CI validates them against the
+  JSON Schema. Both sides regress against the same concrete inputs.
+
 ## Publish flow (Node)
 
 1. Walk source tree. For each file matching the strip extensions, hash
