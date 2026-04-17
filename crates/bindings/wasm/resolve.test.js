@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { Quillmark } from '@quillmark-wasm'
+import { Quill, Quillmark } from '@quillmark-wasm'
 
 describe('resolveQuill bug', () => {
   it('should resolve correct version', () => {
@@ -20,7 +20,7 @@ describe('resolveQuill bug', () => {
         'plate.typ': { contents: 'hello 1' }
       }
     }
-    engine.registerQuill(quill1)
+    engine.registerQuill(Quill.fromJson(quill1))
 
     // Register 0.2.0
     const quill2 = {
@@ -37,7 +37,7 @@ describe('resolveQuill bug', () => {
         'plate.typ': { contents: 'hello 2' }
       }
     }
-    engine.registerQuill(quill2)
+    engine.registerQuill(Quill.fromJson(quill2))
 
     // Verify resolveQuill returns the correct info
     const info2 = engine.resolveQuill("usaf_memo@0.2.0")

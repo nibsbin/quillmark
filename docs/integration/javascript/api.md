@@ -9,10 +9,10 @@ npm install @quillmark-test/wasm
 ## Core flow
 
 ```javascript
-import { Quillmark } from "@quillmark-test/wasm";
+import { Quill, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
-engine.registerQuill(quillBundle);
+engine.registerQuill(Quill.fromJson(quillBundle));
 
 const parsed = Quillmark.parseMarkdown(markdown); // requires QUILL in frontmatter
 const result = engine.render(parsed, { format: "pdf" });
@@ -31,9 +31,17 @@ type ParsedDocument = {
 };
 ```
 
-### `engine.registerQuill(quillJson)`
+### `Quill.fromJson(source)`
 
-Registers a quill bundle and returns `QuillInfo`.
+Builds a `Quill` handle from a JSON string or plain object.
+
+### `Quill.fromTree(tree)`
+
+Builds a `Quill` handle from a flat `Map<string, Uint8Array>` (or plain object record) of relative paths to bytes.
+
+### `engine.registerQuill(quill)`
+
+Registers a pre-built `Quill` handle and returns `QuillInfo`.
 
 ### `engine.getQuillInfo(name)`
 

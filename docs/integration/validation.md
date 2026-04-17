@@ -31,10 +31,10 @@ except QuillmarkError as e:
 ## JavaScript/WASM
 
 ```javascript
-import { Quillmark } from "@quillmark-test/wasm";
+import { Quill, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
-engine.registerQuill(quillBundle);
+engine.registerQuill(Quill.fromJson(quillBundle));
 const parsed = Quillmark.parseMarkdown(markdown);
 
 // dryRun uses QUILL from parsed frontmatter

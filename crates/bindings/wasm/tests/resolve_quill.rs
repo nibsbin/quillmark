@@ -1,4 +1,4 @@
-use quillmark_wasm::Quillmark;
+use quillmark_wasm::{Quill, Quillmark};
 use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -9,26 +9,26 @@ fn test_resolve_quill_version() {
 
     // Register 0.1.0
     let q1 = serde_json::json!({
-        "name": "usaf_memo",
-        "backend": "typst",
-        "metadata": { "version": "0.1.0" },
-        "schema": {},
-        "plate": "hello 1"
+      "files": {
+        "Quill.yaml": { "contents": "Quill:\n  name: usaf_memo\n  version: \"0.1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Version 0.1.0\n" },
+        "plate.typ": { "contents": "hello 1" }
+      }
     });
+    let q1 = Quill::from_json(wasm_bindgen::JsValue::from_str(&q1.to_string())).unwrap();
     engine
-        .register_quill(wasm_bindgen::JsValue::from_str(&q1.to_string()))
+        .register_quill(&q1)
         .unwrap();
 
     // Register 0.2.0
     let q2 = serde_json::json!({
-        "name": "usaf_memo",
-        "backend": "typst",
-        "metadata": { "version": "0.2.0" },
-        "schema": {},
-        "plate": "hello 2"
+      "files": {
+        "Quill.yaml": { "contents": "Quill:\n  name: usaf_memo\n  version: \"0.2.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Version 0.2.0\n" },
+        "plate.typ": { "contents": "hello 2" }
+      }
     });
+    let q2 = Quill::from_json(wasm_bindgen::JsValue::from_str(&q2.to_string())).unwrap();
     engine
-        .register_quill(wasm_bindgen::JsValue::from_str(&q2.to_string()))
+        .register_quill(&q2)
         .unwrap();
 
     // Resolve 0.2.0

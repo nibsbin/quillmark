@@ -1,4 +1,4 @@
-use quillmark_wasm::Quillmark;
+use quillmark_wasm::{Quill, Quillmark};
 use serde_json::Value;
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
@@ -15,8 +15,9 @@ const UI_QUILL_JSON: &str = r#"{
 #[wasm_bindgen_test]
 fn test_metadata_retrieval() {
     let mut engine = Quillmark::new();
+    let quill = Quill::from_json(JsValue::from_str(UI_QUILL_JSON)).expect("fromJson failed");
     engine
-        .register_quill(JsValue::from_str(UI_QUILL_JSON))
+        .register_quill(&quill)
         .map_err(|e| {
             let error_obj: Value = serde_wasm_bindgen::from_value(e).unwrap();
             panic!("register failed: {:#?}", error_obj);
@@ -55,8 +56,9 @@ fn test_metadata_stripping() {
     }
 
     let mut engine = Quillmark::new();
+    let quill = Quill::from_json(JsValue::from_str(UI_QUILL_JSON)).expect("fromJson failed");
     engine
-        .register_quill(JsValue::from_str(UI_QUILL_JSON))
+        .register_quill(&quill)
         .map_err(|e| {
             let error_obj: Value = serde_wasm_bindgen::from_value(e).unwrap();
             panic!("register failed: {:#?}", error_obj);
