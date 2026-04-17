@@ -9,8 +9,8 @@ use js_sys::{Array, Object, Uint8Array};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
-use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 
 // Cross-platform helper to get current time in milliseconds as f64.
 fn now_ms() -> f64 {
@@ -396,9 +396,9 @@ impl Quill {
     #[wasm_bindgen(js_name = fromJson)]
     pub fn from_json(source: JsValue) -> Result<Quill, JsValue> {
         let json_str = if source.is_string() {
-            source
-                .as_string()
-                .ok_or_else(|| WasmError::from("Failed to convert source to string").to_js_value())?
+            source.as_string().ok_or_else(|| {
+                WasmError::from("Failed to convert source to string").to_js_value()
+            })?
         } else {
             js_sys::JSON::stringify(&source)
                 .map_err(|e| {
@@ -438,10 +438,13 @@ fn file_tree_from_js_tree(tree: &JsValue) -> Result<quillmark_core::FileTreeNode
 
     for (path, value) in entries {
         let bytes = js_bytes_for_tree_entry(&path, value)?;
-        root.insert(path.as_str(), quillmark_core::FileTreeNode::File { contents: bytes })
-            .map_err(|e| {
-                WasmError::from(format!("Invalid tree path '{}': {}", path, e)).to_js_value()
-            })?;
+        root.insert(
+            path.as_str(),
+            quillmark_core::FileTreeNode::File { contents: bytes },
+        )
+        .map_err(|e| {
+            WasmError::from(format!("Invalid tree path '{}': {}", path, e)).to_js_value()
+        })?;
     }
 
     Ok(root)
@@ -467,10 +470,9 @@ fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
                 WasmError::from(format!("Failed to read Map entry: {:?}", e)).to_js_value()
             })?;
             let pair = Array::from(&pair);
-            let path = pair
-                .get(0)
-                .as_string()
-                .ok_or_else(|| WasmError::from("fromTree Map key must be a string").to_js_value())?;
+            let path = pair.get(0).as_string().ok_or_else(|| {
+                WasmError::from("fromTree Map key must be a string").to_js_value()
+            })?;
             let value = pair.get(1);
             entries.push((path, value));
         }
@@ -481,10 +483,9 @@ fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
         let obj = tree.clone().unchecked_into::<Object>();
         for pair in Object::entries(&obj).iter() {
             let pair = Array::from(&pair);
-            let path = pair
-                .get(0)
-                .as_string()
-                .ok_or_else(|| WasmError::from("fromTree object key must be a string").to_js_value())?;
+            let path = pair.get(0).as_string().ok_or_else(|| {
+                WasmError::from("fromTree object key must be a string").to_js_value()
+            })?;
             let value = pair.get(1);
             entries.push((path, value));
         }

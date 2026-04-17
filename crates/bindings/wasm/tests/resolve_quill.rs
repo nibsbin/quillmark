@@ -16,9 +16,7 @@ fn test_resolve_quill_version() {
       }
     });
     let q1 = Quill::from_json(wasm_bindgen::JsValue::from_str(&q1.to_string())).unwrap();
-    engine
-        .register_quill(&q1)
-        .unwrap();
+    engine.register_quill(&q1).unwrap();
 
     // Register 0.2.0
     let q2 = serde_json::json!({
@@ -28,9 +26,7 @@ fn test_resolve_quill_version() {
       }
     });
     let q2 = Quill::from_json(wasm_bindgen::JsValue::from_str(&q2.to_string())).unwrap();
-    engine
-        .register_quill(&q2)
-        .unwrap();
+    engine.register_quill(&q2).unwrap();
 
     // Resolve 0.2.0
     let js_val = engine.resolve_quill("usaf_memo@0.2.0");

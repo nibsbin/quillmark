@@ -42,9 +42,7 @@ fn test_register_and_get_quill_info() {
 
     // Register quill
     let quill = Quill::from_json(JsValue::from_str(SMALL_QUILL_JSON)).expect("fromJson failed");
-    engine
-        .register_quill(&quill)
-        .expect("register failed");
+    engine.register_quill(&quill).expect("register failed");
 
     // Get quill info
     let info = engine
@@ -75,9 +73,7 @@ This is a test.
     // Step 2: Create engine and register quill
     let mut engine = Quillmark::new();
     let quill = Quill::from_json(JsValue::from_str(SMALL_QUILL_JSON)).expect("fromJson failed");
-    engine
-        .register_quill(&quill)
-        .expect("register failed");
+    engine.register_quill(&quill).expect("register failed");
 
     // Step 3: Get quill info
     let info = engine
