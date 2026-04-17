@@ -1,4 +1,5 @@
 use quillmark_wasm::{Quill, Quillmark};
+use serde_json::Value;
 use wasm_bindgen_test::*;
 
 wasm_bindgen_test_configure!(run_in_browser);
@@ -32,7 +33,13 @@ fn test_resolve_quill_version() {
         .unwrap();
 
     // Resolve 0.2.0
-    let _js_val = engine.resolve_quill("usaf_memo@0.2.0");
-    // Verify it picked 0.2.0
-    // But how to parse JsValue back?
+    let js_val = engine.resolve_quill("usaf_memo@0.2.0");
+    let info: Value = serde_wasm_bindgen::from_value(js_val).expect("resolveQuill json");
+    assert_eq!(info.get("name").and_then(Value::as_str), Some("usaf_memo"));
+    assert_eq!(
+        info.get("metadata")
+            .and_then(|m| m.get("version"))
+            .and_then(Value::as_str),
+        Some("0.2.0")
+    );
 }
