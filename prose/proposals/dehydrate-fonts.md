@@ -1,13 +1,5 @@
 # Font Dehydration — `@quillmark/registry` Tasking
 
-## Supersedes
-
-`prose/proposals/centralize_fonts.md`. The goal and store model are
-unchanged. This document revises the responsibility split: rehydration
-moves entirely into the `@quillmark/registry` Node layer so that
-`quillmark` (Rust/WASM) receives only complete, hydrated bundles and
-requires no API changes.
-
 ## Goal
 
 Move font bytes out of published Quill bundles into a shared,
@@ -19,9 +11,16 @@ is fetched and cached once regardless of how many quills embed it.
 
 ## Scope
 
-**Fonts only.** Non-font assets stay inline. Typst packages stay inline —
-after font stripping, remaining source (`.typ` files + `typst.toml`) is
-negligible. The store URL shape is file-type-agnostic if this changes later.
+**Fonts only.** Non-font assets stay inline (templates reference them by
+path, making content-addressed substitution awkward). Typst packages stay
+inline — after font stripping, remaining source (`.typ` files +
+`typst.toml`) is negligible. The store URL shape is file-type-agnostic if
+this changes later.
+
+**The registry owns the full lifecycle.** `@quillmark/registry` dehydrates
+at publish, serves the store, and rehydrates at load before handing a
+complete bundle to Quillmark. Quillmark's rendering path sees no
+centralization.
 
 ## Model: dehydrate at publish, rehydrate at load
 
@@ -29,11 +28,12 @@ A published Quill is a **dehydration** of its source tree: font files are
 stripped, their bytes moved to the content-addressed store, and a sidecar
 manifest records what was removed and where.
 
-Loading a published Quill **rehydrates** the tree: the registry client reads
-the manifest, fetches missing bytes from the store (parallel, cache-first),
-reconstructs a complete in-memory file tree, and passes it to
-`registerQuill`. Quillmark receives a hydrated bundle identical to the
-pre-strip source. The Typst backend never sees centralization.
+Loading a published Quill **rehydrates** the tree: the registry client
+reads the manifest, fetches missing bytes from the store (parallel,
+cache-first), reconstructs a complete in-memory file tree, and passes it
+to Quillmark for compilation. The rehydrated bundle is indistinguishable
+from the pre-strip source — the Typst backend sees a normal file tree and
+requires no changes.
 
 ## Core decisions
 
@@ -51,8 +51,13 @@ pre-strip source. The Typst backend never sees centralization.
 - **Manifest is a sidecar inside the ZIP** — `fonts.json` at the ZIP root.
 - **No font metadata sniffing.** Hash bytes, record paths. No font-parsing
   dependency required.
+- **No store URL pinned in the manifest.** Consumers prepend their
+  configured base URL so bundles remain portable across mirrors.
 
 ## Manifest: `fonts.json`
+
+A dehydration record — nothing more. Maps each stripped path to its
+content hash:
 
 ```json
 {
@@ -68,21 +73,21 @@ pre-strip source. The Typst backend never sees centralization.
 - **`files`**: path → md5-hex. One entry per stripped file. Identical bytes
   at multiple source paths produce multiple entries with the same hash;
   rehydration faithfully reproduces the tree.
-- No store URL pinned in the manifest; consumers prepend their configured
-  base URL so bundles remain portable across mirrors.
 
-## Schema ownership
+## Schema
 
-**Rust is canonical.** `quillmark-core` owns the `FontManifest` type (serde
-+ `schemars` derives). This is already shipped:
+The `FontManifest` type is defined in Rust and is the canonical contract.
+The registry validates `fonts.json` against the generated JSON Schema both
+when writing it at publish time and when reading it at load time — drift
+in either direction fails CI.
 
-- Type: `crates/core/src/fonts.rs`
-- Generated JSON Schema: `crates/core/schemas/fonts-manifest.schema.json`
-- Shared fixtures: `crates/core/tests/fixtures/fonts-manifest/`
+- **Type definition**: `crates/core/src/fonts.rs` (`quillmark-core`)
+- **JSON Schema**: `crates/core/schemas/fonts-manifest.schema.json`
+- **Shared test fixtures**: `crates/core/tests/fixtures/fonts-manifest/`
 
-**Node validates against the committed schema** (ajv or equivalent) before
-writing `fonts.json` at publish time and before reading it at load time. CI
-fails on schema drift in either direction.
+Node validates with `ajv` (or equivalent). The fixtures are parsed by
+Rust CI and validated by Node CI against the schema; both sides regress
+against the same inputs.
 
 ## Publish flow
 
@@ -94,7 +99,8 @@ Triggered when a Quill source tree is packaged for the registry.
    `<store-base>/store/<md5-hex>` (PUT, idempotent — skip if already
    present).
 3. Build the `files` map: `{ [path]: md5-hex }` for every matched file.
-4. Build the ZIP — include `fonts.json` at the root, exclude every matched
+4. Validate the manifest against `fonts-manifest.schema.json`.
+5. Build the ZIP — include `fonts.json` at the root, exclude every matched
    font file.
 
 Print a dedup summary after publish (counts are a local walk — no store
@@ -112,58 +118,60 @@ bundle: stripped 47 MB across 22 quills
 ## Load flow
 
 Triggered when the registry client fetches a Quill bundle to hand to
-`quillmark-wasm`.
+Quillmark.
 
 1. Fetch and unpack the Quill ZIP in memory.
 2. Check for `fonts.json` at the ZIP root.
-   - **Absent** (non-dehydrated bundle or pre-centralization): proceed
-     directly to step 6.
-3. Validate `fonts.json` against `fonts-manifest.schema.json`.
+   - **Absent** (non-dehydrated bundle): skip to step 6.
+3. Parse `fonts.json` and validate against `fonts-manifest.schema.json`.
 4. Collect the unique set of MD5 hashes from `files` values.
 5. Fetch each hash from `<store-base>/store/<md5-hex>` in **parallel**.
-   Cache fetched bytes for the duration of the session (cross-quill dedup).
+   Cache fetched bytes in a session-level `Map<md5, Uint8Array>` so the
+   same bytes aren't re-fetched when loading additional quills.
    **Fail the load if any hash cannot be resolved.**
-6. Reconstruct the complete file tree: for every `[path, md5]` entry in
-   `files`, write the resolved bytes at `path`.
-7. Serialize the hydrated tree as Quill JSON and call
-   `engine.registerQuill(quillJson)` — unchanged API, no font map argument.
+6. Reconstruct the complete in-memory file tree: for every `[path, md5]`
+   entry in `files`, insert the resolved bytes at `path`.
+7. Hand the hydrated tree to Quillmark via the registration API. The
+   bundle is a complete Quill — no font manifest, no missing files.
+
+## Cross-quill caching
+
+The session-level `Map<md5, Uint8Array>` is the main performance payoff.
+Without it, each quill load re-fetches every font; with it, Inter-Regular
+is fetched exactly once per session regardless of how many quills use it.
+Keep the cache keyed by raw md5 hex and scoped to a single registry client
+instance. Eviction policy: none in v1 (processes are short-lived in
+practice).
 
 ## Responsibility split
 
 **`@quillmark/registry` owns everything.**
 
-- Publish: walk, hash, upload, strip, emit `fonts.json`, build ZIP.
+- Publish: walk, hash, upload, strip, emit `fonts.json`, validate, build ZIP.
 - Store: serve font bytes as static files at `/store/<md5-hex>`.
 - Load: fetch ZIP, validate manifest, fetch font bytes in parallel,
-  rehydrate file tree, hand hydrated JSON to `quillmark-wasm`.
-- Cross-quill font cache: in-process `Map<md5, Uint8Array>` for the
-  duration of a registry session (prevents re-fetching the same bytes when
-  loading multiple quills).
+  rehydrate file tree, hand hydrated bundle to Quillmark.
+- Caching: session-level cross-quill font cache.
 
-**`quillmark` (Rust/WASM) — no changes required.**
+**Quillmark receives complete, hydrated bundles.** The rendering path is
+unchanged. Dehydration is invisible to Quillmark consumers (WASM or
+native).
 
-The `FontManifest` type and JSON Schema are already shipped in
-`quillmark-core` for schema validation use by Node. The `registerQuill` API
-is unchanged. The Rust `FontProvider` / `rehydrate_tree` machinery from the
-initial implementation (`crates/core/src/fonts.rs`) can be removed in a
-follow-up — it is no longer part of the load path.
+## Key references
 
-## Key existing code
-
+- Canonical schema: `crates/core/schemas/fonts-manifest.schema.json`
+- Shared test fixtures: `crates/core/tests/fixtures/fonts-manifest/`
 - ZIP packager:
   `references/quillmark-registry/src/sources/file-system-source.ts:206-233`
-- Schema to validate against:
-  `crates/core/schemas/fonts-manifest.schema.json`
-- Shared test fixtures:
-  `crates/core/tests/fixtures/fonts-manifest/`
 
 ## Deferred
 
-- Same-family conflicts within one Quill: v1 sorts discovery paths
-  deterministically. Real conflict detection is later.
-- Fonts inside downloaded `@preview/…` packages are not registered today
-  (file-scan only walks the Quill tree). Unchanged.
-- GC, license metadata, HTML/LaTeX backends.
-- Generic dehydration (non-font large assets): not in scope. If added, the
-  store URL shape and manifest structure extend naturally; fonts remain the
-  only dehydrated type until a second use case is validated.
+- **Same-family conflicts** within one Quill: v1 sorts discovery paths
+  deterministically so whichever wins is reproducible. Real conflict
+  detection is later.
+- **Fonts inside downloaded `@preview/...` packages** are not registered
+  today (file-scan only walks the Quill tree). Unchanged.
+- License metadata, garbage collection, HTML/LaTeX backends.
+- Generic dehydration (non-font large assets). The store URL shape and
+  manifest structure extend naturally if a second use case is validated,
+  but fonts remain the only dehydrated type in v1.
