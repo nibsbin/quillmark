@@ -32,7 +32,7 @@ fn test_resolve_quill_version() {
         .unwrap();
 
     // Resolve 0.2.0
-    let js_val = engine.resolve_quill("usaf_memo@0.2.0");
+    let _js_val = engine.resolve_quill("usaf_memo@0.2.0");
     // Verify it picked 0.2.0
     // But how to parse JsValue back?
 }
