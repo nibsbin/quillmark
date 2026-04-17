@@ -48,6 +48,90 @@ QUILL: test_quill
 
 This is a test document.`
 
+// Helpers for fromTree tests
+function textBytes(str) {
+  return new TextEncoder().encode(str)
+}
+
+function makeTreeQuill(name = 'tree_quill', version = '1.0.0') {
+  return new Map([
+    ['Quill.yaml', textBytes(`Quill:
+  name: ${name}
+  version: "${version}"
+  backend: typst
+  plate_file: plate.typ
+  description: Tree quill for smoke tests
+`)],
+    ['plate.typ', textBytes('#import "@local/quillmark-helper:0.1.0": data\n= Test')],
+  ])
+}
+
+describe('Quill.fromTree', () => {
+  it('should build a Quill from a Map<string, Uint8Array>', () => {
+    const quill = Quill.fromTree(makeTreeQuill())
+    expect(quill).toBeDefined()
+  })
+
+  it('should build a Quill from a plain Record<string, Uint8Array>', () => {
+    const tree = {}
+    for (const [k, v] of makeTreeQuill()) tree[k] = v
+    const quill = Quill.fromTree(tree)
+    expect(quill).toBeDefined()
+  })
+
+  it('should infer subdirectory hierarchy from path separators', () => {
+    const tree = new Map([
+      ['Quill.yaml', textBytes(`Quill:
+  name: nested_quill
+  version: "1.0.0"
+  backend: typst
+  plate_file: plate.typ
+  description: Nested tree quill
+`)],
+      ['plate.typ', textBytes('#import "@local/quillmark-helper:0.1.0": data\n= Nested')],
+      ['assets/fonts/Inter-Regular.ttf', new Uint8Array([0, 1, 2, 3])],
+    ])
+    const quill = Quill.fromTree(tree)
+    expect(quill).toBeDefined()
+  })
+
+  it('should register a fromTree Quill with the engine', () => {
+    const engine = new Quillmark()
+    const quill = Quill.fromTree(makeTreeQuill('tree_quill', '2.0.0'))
+    engine.registerQuill(quill)
+    expect(engine.listQuills()).toContain('tree_quill@2.0.0')
+  })
+
+  it('should allow the same Quill handle to register with multiple engines', () => {
+    const quill = Quill.fromTree(makeTreeQuill('shared_quill', '1.0.0'))
+    const engine1 = new Quillmark()
+    const engine2 = new Quillmark()
+    engine1.registerQuill(quill)
+    engine2.registerQuill(quill)
+    expect(engine1.listQuills()).toContain('shared_quill@1.0.0')
+    expect(engine2.listQuills()).toContain('shared_quill@1.0.0')
+  })
+
+  it('should throw on null/undefined input', () => {
+    expect(() => Quill.fromTree(null)).toThrow()
+    expect(() => Quill.fromTree(undefined)).toThrow()
+  })
+
+  it('should throw when a value is not Uint8Array', () => {
+    const bad = new Map([
+      ['Quill.yaml', 'this is a string, not Uint8Array'],
+    ])
+    expect(() => Quill.fromTree(bad)).toThrow()
+  })
+
+  it('should throw on missing Quill.yaml', () => {
+    const tree = new Map([
+      ['plate.typ', textBytes('hello')],
+    ])
+    expect(() => Quill.fromTree(tree)).toThrow()
+  })
+})
+
 describe('quillmark-wasm smoke tests', () => {
   it('should parse markdown with YAML frontmatter', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)

@@ -27,6 +27,11 @@ class Quillmark {
 }
 ```
 
+## Implementation notes
+
+- `Quill.fromTree` accepts `Map<string, Uint8Array>` or a plain `Record<string, Uint8Array>`. Directory hierarchy is inferred from `/` path separators in keys (e.g. `"assets/fonts/Inter.ttf"` inserts into `assets/fonts/`). Values must be `Uint8Array`; passing a string throws.
+- The WASM `Quill` struct holds `Arc<quillmark_core::Quill>`. The JS handle is not consumed on registration, and `registerQuill` may be called on multiple engines with the same handle. Internally, each registration deep-clones the underlying `Quill` because the core `Quillmark::register_quill` takes ownership by value — Arc sharing across engines is not achieved at the data level, only at the JS API level.
+
 ## Key contracts
 
 - `ParsedDocument.quillRef` is required and is sourced from `QUILL` frontmatter.
