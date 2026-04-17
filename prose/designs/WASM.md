@@ -7,10 +7,15 @@
 ## API (current)
 
 ```typescript
+class Quill {
+  static fromJson(source: string | object): Quill;
+  static fromTree(tree: Map<string, Uint8Array> | Record<string, Uint8Array>): Quill;
+}
+
 class Quillmark {
   constructor();
   static parseMarkdown(markdown: string): ParsedDocument;
-  registerQuill(quillJson: string | object): QuillInfo;
+  registerQuill(quill: Quill): QuillInfo;
   getQuillInfo(name: string): QuillInfo;
   getQuillSchema(name: string): string; // YAML
   compileData(markdown: string): object;

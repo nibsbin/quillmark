@@ -62,7 +62,7 @@ Get started with Quillmark in Python or JavaScript.
     ## Basic Usage
 
     ```javascript
-    import { Quillmark } from "@quillmark-test/wasm";
+    import { Quill, Quillmark } from "@quillmark-test/wasm";
 
     const engine = new Quillmark();
 
@@ -73,7 +73,7 @@ Get started with Quillmark in Python or JavaScript.
         "plate.typ": { contents: "#import \"@local/quillmark-helper:0.1.0\": data\n#data.BODY\n" }
       }
     };
-    engine.registerQuill(quill);
+    engine.registerQuill(Quill.fromJson(quill));
 
     const markdown = `---
     title: Example Document

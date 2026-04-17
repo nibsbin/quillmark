@@ -5,9 +5,12 @@ use crate::types::{
     CompileOptions, OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderPagesOptions,
     RenderResult,
 };
+use js_sys::{Array, Object, Uint8Array};
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
+use wasm_bindgen::JsCast;
 
 // Cross-platform helper to get current time in milliseconds as f64.
 fn now_ms() -> f64 {
@@ -32,6 +35,12 @@ fn now_ms() -> f64 {
 #[wasm_bindgen]
 pub struct Quillmark {
     inner: quillmark::Quillmark,
+}
+
+/// Opaque, shareable Quill handle.
+#[wasm_bindgen]
+pub struct Quill {
+    inner: Arc<quillmark_core::Quill>,
 }
 
 #[wasm_bindgen]
@@ -79,30 +88,10 @@ impl Quillmark {
         Ok(ParsedDocument { fields, quill_ref })
     }
 
-    /// Register a Quill template bundle
-    ///
-    /// Accepts either a JSON string or a JsValue object representing the Quill file tree.
-    /// Validation happens automatically on registration.
+    /// Register a pre-constructed Quill handle.
     #[wasm_bindgen(js_name = registerQuill)]
-    pub fn register_quill(&mut self, quill_json: JsValue) -> Result<QuillInfo, JsValue> {
-        // Convert JsValue to JSON string
-        let json_str = if quill_json.is_string() {
-            quill_json.as_string().ok_or_else(|| {
-                WasmError::from("Failed to convert JsValue to string").to_js_value()
-            })?
-        } else {
-            js_sys::JSON::stringify(&quill_json)
-                .map_err(|e| {
-                    WasmError::from(format!("Failed to serialize Quill JSON: {:?}", e))
-                        .to_js_value()
-                })?
-                .as_string()
-                .ok_or_else(|| WasmError::from("Failed to convert JSON to string").to_js_value())?
-        };
-
-        // Parse and validate Quill
-        let quill = quillmark_core::Quill::from_json(&json_str)
-            .map_err(|e| WasmError::from(format!("Failed to parse Quill: {}", e)).to_js_value())?;
+    pub fn register_quill(&mut self, quill: &Quill) -> Result<QuillInfo, JsValue> {
+        let quill = quill.inner.as_ref().clone();
         let name = quill.name.clone();
 
         // Register with backend validation
@@ -399,6 +388,124 @@ impl Quillmark {
 
         Ok(quillmark_core::ParsedDocument::new(fields, quill_ref))
     }
+}
+
+#[wasm_bindgen]
+impl Quill {
+    /// Parse and validate a Quill from JSON string or object.
+    #[wasm_bindgen(js_name = fromJson)]
+    pub fn from_json(source: JsValue) -> Result<Quill, JsValue> {
+        let json_str = if source.is_string() {
+            source.as_string().ok_or_else(|| {
+                WasmError::from("Failed to convert source to string").to_js_value()
+            })?
+        } else {
+            js_sys::JSON::stringify(&source)
+                .map_err(|e| {
+                    WasmError::from(format!("Failed to serialize Quill JSON: {:?}", e))
+                        .to_js_value()
+                })?
+                .as_string()
+                .ok_or_else(|| WasmError::from("Failed to convert JSON to string").to_js_value())?
+        };
+
+        let quill = quillmark_core::Quill::from_json(&json_str)
+            .map_err(|e| WasmError::from(format!("Failed to parse Quill: {}", e)).to_js_value())?;
+
+        Ok(Quill {
+            inner: Arc::new(quill),
+        })
+    }
+
+    /// Build and validate a Quill from a flat path -> bytes tree.
+    #[wasm_bindgen(js_name = fromTree)]
+    pub fn from_tree(tree: JsValue) -> Result<Quill, JsValue> {
+        let root = file_tree_from_js_tree(&tree)?;
+        let quill = quillmark_core::Quill::from_tree(root)
+            .map_err(|e| WasmError::from(format!("Failed to parse Quill: {}", e)).to_js_value())?;
+
+        Ok(Quill {
+            inner: Arc::new(quill),
+        })
+    }
+}
+
+fn file_tree_from_js_tree(tree: &JsValue) -> Result<quillmark_core::FileTreeNode, JsValue> {
+    let entries = js_tree_entries(tree)?;
+    let mut root = quillmark_core::FileTreeNode::Directory {
+        files: HashMap::new(),
+    };
+
+    for (path, value) in entries {
+        let bytes = js_bytes_for_tree_entry(&path, value)?;
+        root.insert(
+            path.as_str(),
+            quillmark_core::FileTreeNode::File { contents: bytes },
+        )
+        .map_err(|e| {
+            WasmError::from(format!("Invalid tree path '{}': {}", path, e)).to_js_value()
+        })?;
+    }
+
+    Ok(root)
+}
+
+fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
+    if tree.is_null() || tree.is_undefined() {
+        return Err(WasmError::from("fromTree requires a Map or plain object").to_js_value());
+    }
+
+    let mut entries: Vec<(String, JsValue)> = Vec::new();
+
+    if tree.is_instance_of::<js_sys::Map>() {
+        let map = tree.clone().unchecked_into::<js_sys::Map>();
+        let iter = js_sys::try_iter(&map.entries())
+            .map_err(|e| {
+                WasmError::from(format!("Failed to iterate Map entries: {:?}", e)).to_js_value()
+            })?
+            .ok_or_else(|| WasmError::from("Map entries are not iterable").to_js_value())?;
+
+        for entry in iter {
+            let pair = entry.map_err(|e| {
+                WasmError::from(format!("Failed to read Map entry: {:?}", e)).to_js_value()
+            })?;
+            let pair = Array::from(&pair);
+            let path = pair.get(0).as_string().ok_or_else(|| {
+                WasmError::from("fromTree Map key must be a string").to_js_value()
+            })?;
+            let value = pair.get(1);
+            entries.push((path, value));
+        }
+        return Ok(entries);
+    }
+
+    if tree.is_object() {
+        let obj = tree.clone().unchecked_into::<Object>();
+        for pair in Object::entries(&obj).iter() {
+            let pair = Array::from(&pair);
+            let path = pair.get(0).as_string().ok_or_else(|| {
+                WasmError::from("fromTree object key must be a string").to_js_value()
+            })?;
+            let value = pair.get(1);
+            entries.push((path, value));
+        }
+        return Ok(entries);
+    }
+
+    Err(WasmError::from("fromTree requires a Map or plain object").to_js_value())
+}
+
+fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValue> {
+    if !value.is_instance_of::<Uint8Array>() {
+        return Err(WasmError::from(format!(
+            "Invalid tree entry '{}': expected Uint8Array value",
+            path
+        ))
+        .to_js_value());
+    }
+
+    let bytes = value.unchecked_into::<Uint8Array>();
+    Ok(bytes.to_vec())
 }
 
 #[wasm_bindgen]

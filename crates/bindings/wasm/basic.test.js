@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { Quillmark } from '@quillmark-wasm'
+import { Quill, Quillmark } from '@quillmark-wasm'
 
 // Minimal inline Quill for testing
 const TEST_QUILL = {
@@ -67,7 +67,7 @@ describe('quillmark-wasm smoke tests', () => {
     const engine = new Quillmark()
 
     expect(() => {
-      engine.registerQuill(TEST_QUILL)
+      engine.registerQuill(Quill.fromJson(TEST_QUILL))
     }).not.toThrow()
 
     const quills = engine.listQuills()
@@ -76,7 +76,7 @@ describe('quillmark-wasm smoke tests', () => {
 
   it('should get quill info after registration', () => {
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const info = engine.getQuillInfo('test_quill')
 
@@ -100,7 +100,7 @@ describe('quillmark-wasm smoke tests', () => {
   it('should compile data to JSON', () => {
     // Verify that we can extract the intermediate JSON data
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const jsonData = engine.compileData(TEST_MARKDOWN)
 
@@ -116,7 +116,7 @@ describe('quillmark-wasm smoke tests', () => {
 
     // Step 2: Create engine and register quill
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     // Step 3: Get quill info
     const info = engine.getQuillInfo('test_quill')
@@ -142,7 +142,7 @@ describe('quillmark-wasm smoke tests', () => {
   it('should support compile + renderPages with pageCount', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const compiled = engine.compile(parsed)
     expect(typeof compiled.pageCount).toBe('number')
@@ -160,7 +160,7 @@ describe('quillmark-wasm smoke tests', () => {
   it('should warn and skip out-of-bounds page indices', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const compiled = engine.compile(parsed)
     const oob = compiled.pageCount + 10
@@ -174,7 +174,7 @@ describe('quillmark-wasm smoke tests', () => {
   it('should error when requesting page selection with PDF', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const compiled = engine.compile(parsed)
 
@@ -218,7 +218,7 @@ this is not valid yaml
   it('should render to SVG format', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const result = engine.render(parsed, { format: 'svg' })
 
@@ -230,7 +230,7 @@ this is not valid yaml
 
   it('should unregister quill', () => {
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     expect(engine.listQuills()).toContain('test_quill@1.0.0')
 
@@ -242,7 +242,7 @@ this is not valid yaml
   it('should accept assets as plain JavaScript objects', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     // Assets should be passed as plain JavaScript objects with byte arrays
     const assets = {
@@ -270,7 +270,7 @@ this is not valid yaml
 
     // Step 2: Register and get quill info - metadata is object, schema is YAML text
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
     const info = engine.getQuillInfo('test_quill')
 
     expect(info.metadata instanceof Map).toBe(false)

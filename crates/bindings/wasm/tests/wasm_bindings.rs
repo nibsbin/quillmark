@@ -1,7 +1,7 @@
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
-use quillmark_wasm::Quillmark;
+use quillmark_wasm::{Quill, Quillmark};
 
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
@@ -41,9 +41,8 @@ fn test_register_and_get_quill_info() {
     let mut engine = Quillmark::new();
 
     // Register quill
-    engine
-        .register_quill(JsValue::from_str(SMALL_QUILL_JSON))
-        .expect("register failed");
+    let quill = Quill::from_json(JsValue::from_str(SMALL_QUILL_JSON)).expect("fromJson failed");
+    engine.register_quill(&quill).expect("register failed");
 
     // Get quill info
     let info = engine
@@ -73,9 +72,8 @@ This is a test.
 
     // Step 2: Create engine and register quill
     let mut engine = Quillmark::new();
-    engine
-        .register_quill(JsValue::from_str(SMALL_QUILL_JSON))
-        .expect("register failed");
+    let quill = Quill::from_json(JsValue::from_str(SMALL_QUILL_JSON)).expect("fromJson failed");
+    engine.register_quill(&quill).expect("register failed");
 
     // Step 3: Get quill info
     let info = engine
