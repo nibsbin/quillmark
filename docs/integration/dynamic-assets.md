@@ -41,7 +41,8 @@ This is useful for:
     import { Quill, Quillmark } from "@quillmark-test/wasm";
 
     const engine = new Quillmark();
-    engine.registerQuill(Quill.fromJson(quillBundle));
+    const quill = Quill.fromJson(quillBundle);
+    engine.registerQuill(quill);
 
     const logoBytes = await fetch("logo.png").then((r) => r.arrayBuffer());
     const parsed = Quillmark.parseMarkdown(markdown);

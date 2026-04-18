@@ -12,7 +12,8 @@ npm install @quillmark-test/wasm
 import { Quill, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
-engine.registerQuill(Quill.fromJson(quillBundle));
+const quill = Quill.fromJson(quillBundle);
+engine.registerQuill(quill);
 
 const parsed = Quillmark.parseMarkdown(markdown); // requires QUILL in frontmatter
 const result = engine.render(parsed, { format: "pdf" });
@@ -41,7 +42,8 @@ Builds a `Quill` handle from a flat `Map<string, Uint8Array>` (or plain object r
 
 ### `engine.registerQuill(quill)`
 
-Registers a pre-built `Quill` handle and returns `QuillInfo`.
+Registers a pre-built `Quill` handle and returns `QuillInfo`.  
+`registerQuill` is handle-only: pass a `Quill` from `Quill.fromJson(...)` or `Quill.fromTree(...)`.
 
 ### `engine.getQuillInfo(name)`
 
@@ -77,3 +79,4 @@ Renders artifacts from a parsed document. Quill resolution always comes from `pa
 - `schema` is YAML text (not a JSON object).
 - There is no stripped-schema API.
 - `render`/`compile` do not accept quill override options; use `QUILL` in frontmatter.
+- `registerQuill` does not accept raw JSON/tree payloads directly.

@@ -66,16 +66,18 @@ Get started with Quillmark in Python or JavaScript.
 
     const engine = new Quillmark();
 
-    // Register a quill (JSON)
+    // Build a Quill handle from JSON, then register it
     const quill = {
       files: {
-        "Quill.yaml": { contents: "Quill:\n  name: my-quill\n  backend: typst\n  description: Demo\n" },
+        "Quill.yaml": { contents: "Quill:\n  name: my_quill\n  backend: typst\n  description: Demo\n" },
         "plate.typ": { contents: "#import \"@local/quillmark-helper:0.1.0\": data\n#data.BODY\n" }
       }
     };
-    engine.registerQuill(Quill.fromJson(quill));
+    const quillHandle = Quill.fromJson(quill);
+    engine.registerQuill(quillHandle);
 
     const markdown = `---
+    QUILL: my_quill
     title: Example Document
     ---
 

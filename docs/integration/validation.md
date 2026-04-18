@@ -34,7 +34,8 @@ except QuillmarkError as e:
 import { Quill, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
-engine.registerQuill(Quill.fromJson(quillBundle));
+const quill = Quill.fromJson(quillBundle);
+engine.registerQuill(quill);
 const parsed = Quillmark.parseMarkdown(markdown);
 
 // dryRun uses QUILL from parsed frontmatter
