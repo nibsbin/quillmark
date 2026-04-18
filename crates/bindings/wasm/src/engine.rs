@@ -121,7 +121,8 @@ impl Quillmark {
         let metadata_json = quill_map_to_json(&quill.metadata);
         let defaults_json = quill_map_to_json(&quill.config.defaults());
         let examples_json = serde_json::Value::Object(
-            quill.config
+            quill
+                .config
                 .examples()
                 .into_iter()
                 .map(|(k, vs)| {
@@ -492,13 +493,11 @@ fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
         );
     }
     if tree.is_instance_of::<Uint8Array>() {
-        return Err(
-            WasmError::from(
-                "fromTree requires a Map or plain object, not a Uint8Array; \
+        return Err(WasmError::from(
+            "fromTree requires a Map or plain object, not a Uint8Array; \
                  did you mean to pass a Map<string, Uint8Array>?",
-            )
-            .to_js_value(),
-        );
+        )
+        .to_js_value());
     }
 
     if tree.is_object() {
