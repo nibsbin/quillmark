@@ -213,6 +213,12 @@ impl Workflow {
                         serde_json::Value::String("number".to_string()),
                     );
                 }
+                FieldType::Integer => {
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("integer".to_string()),
+                    );
+                }
                 FieldType::Boolean => {
                     schema.insert(
                         "type".to_string(),

@@ -92,8 +92,10 @@ pub enum FieldType {
     /// String type
     #[serde(alias = "str")]
     String,
-    /// Numeric type
+    /// Numeric type (integers and decimals)
     Number,
+    /// Integer type
+    Integer,
     /// Boolean type
     Boolean,
     /// Array type
@@ -114,6 +116,7 @@ impl FieldType {
         match s {
             "string" | "str" => Some(FieldType::String),
             "number" => Some(FieldType::Number),
+            "integer" => Some(FieldType::Integer),
             "boolean" => Some(FieldType::Boolean),
             "array" => Some(FieldType::Array),
             "object" | "dict" => Some(FieldType::Object),
@@ -129,6 +132,7 @@ impl FieldType {
         match self {
             FieldType::String => "string",
             FieldType::Number => "number",
+            FieldType::Integer => "integer",
             FieldType::Boolean => "boolean",
             FieldType::Array => "array",
             FieldType::Object => "dict",

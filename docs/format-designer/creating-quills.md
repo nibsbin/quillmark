@@ -39,7 +39,7 @@ main:
       description: Letter date
 ```
 
-Define your document's expected frontmatter fields under `main.fields`. Each field has a `type`, optional `default`, `description`, and validation constraints. For the full list of field types, UI hints, typed arrays, and enum constraints, see the [Quill.yaml Reference](quill-yaml-reference.md).
+Define your document's expected frontmatter fields under `main.fields`. Each field has a `type`, optional `default`, `description`, and validation constraints. Use `integer` for whole numbers only and `number` for values that may include decimals. For the full list of field types, UI hints, typed arrays, and enum constraints, see the [Quill.yaml Reference](quill-yaml-reference.md).
 
 ## 3. Write `plate.typ`
 

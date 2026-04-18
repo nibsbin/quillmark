@@ -144,6 +144,10 @@ pub(crate) fn validate_field(
 
     let type_valid = match field.r#type {
         FieldType::String | FieldType::Markdown => value.as_str().is_some(),
+        FieldType::Integer => {
+            let json = value.as_json();
+            json.is_i64() || json.is_u64()
+        }
         FieldType::Number => value.as_json().is_number(),
         FieldType::Boolean => value.as_bool().is_some(),
         FieldType::Date => {
@@ -271,6 +275,7 @@ fn is_valid_datetime(value: &str) -> bool {
 fn expected_type_name(field_type: &FieldType) -> &'static str {
     match field_type {
         FieldType::String | FieldType::Markdown | FieldType::Date | FieldType::DateTime => "string",
+        FieldType::Integer => "integer",
         FieldType::Number => "number",
         FieldType::Boolean => "boolean",
         FieldType::Array => "array",
@@ -361,6 +366,25 @@ main:
             e,
             ValidationError::TypeMismatch { path, expected, actual }
             if path == "title" && expected == "string" && actual == "number"
+        )));
+    }
+
+    #[test]
+    fn validates_integer_field_with_integer_value() {
+        let config = config_with("    count:\n      type: integer", "");
+        let doc = fields(&[("count", json!(9))]);
+        assert!(validate_document(&config, &doc).is_ok());
+    }
+
+    #[test]
+    fn rejects_integer_field_with_decimal_value() {
+        let config = config_with("    count:\n      type: integer", "");
+        let doc = fields(&[("count", json!(9.5))]);
+        let errors = validate_document(&config, &doc).unwrap_err();
+        assert!(has_error(&errors, |e| matches!(
+            e,
+            ValidationError::TypeMismatch { path, expected, actual }
+            if path == "count" && expected == "integer" && actual == "number"
         )));
     }
 
