@@ -2001,6 +2001,62 @@ main:
 }
 
 #[test]
+fn test_config_coerce_integer_success() {
+    let yaml_content = r#"
+Quill:
+  name: coerce_integer_success_test
+  version: "1.0"
+  backend: typst
+  description: Coerce integer success
+
+main:
+  fields:
+    count:
+      type: integer
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+    let mut fields = HashMap::new();
+    fields.insert(
+        "count".to_string(),
+        QuillValue::from_json(serde_json::json!("42")),
+    );
+
+    let coerced = config.coerce(&fields).unwrap();
+    assert_eq!(coerced.get("count").unwrap().as_i64(), Some(42));
+}
+
+#[test]
+fn test_config_coerce_integer_rejects_decimal() {
+    let yaml_content = r#"
+Quill:
+  name: coerce_integer_error_test
+  version: "1.0"
+  backend: typst
+  description: Coerce integer errors
+
+main:
+  fields:
+    count:
+      type: integer
+"#;
+
+    let config = QuillConfig::from_yaml(yaml_content).unwrap();
+    let mut fields = HashMap::new();
+    fields.insert(
+        "count".to_string(),
+        QuillValue::from_json(serde_json::json!("42.5")),
+    );
+
+    let error = config.coerce(&fields).unwrap_err();
+    assert!(matches!(
+        error,
+        super::CoercionError::Uncoercible { ref path, ref target, .. }
+        if path == "count" && target == "integer"
+    ));
+}
+
+#[test]
 fn test_config_coerce_array_item_wise() {
     let yaml_content = r#"
 Quill:

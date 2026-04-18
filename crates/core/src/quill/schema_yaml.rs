@@ -211,6 +211,28 @@ main:
     }
 
     #[test]
+    fn emits_integer_field_type() {
+        let config = config_from_yaml(
+            r#"
+Quill:
+  name: integer_schema
+  version: "1.0"
+  backend: typst
+  description: Integer schema
+
+main:
+  fields:
+    page_count:
+      type: integer
+"#,
+        );
+
+        let yaml = config.public_schema_yaml().unwrap();
+        assert!(yaml.contains("page_count:"));
+        assert!(yaml.contains("type: integer"));
+    }
+
+    #[test]
     fn includes_cards_ui_and_enum() {
         fn has_internal_key(value: &serde_json::Value) -> bool {
             match value {

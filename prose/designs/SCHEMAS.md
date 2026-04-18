@@ -17,7 +17,8 @@ Supported field types:
 | Quill.yaml Type | Meaning |
 |---|---|
 | `string` | UTF-8 text |
-| `number` | Numeric value |
+| `number` | Numeric value (integers and decimals) |
+| `integer` | Integer-only numeric value |
 | `boolean` | `true` / `false` |
 | `array` | Ordered list; use `items:` |
 | `object` | Structured map; use `properties:` |
