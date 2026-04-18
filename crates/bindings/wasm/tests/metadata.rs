@@ -28,7 +28,7 @@ fn test_metadata_retrieval() {
         .get_quill_info("ui-test_quill")
         .expect("getQuillInfo failed");
 
-    let schema: serde_yaml::Value = serde_yaml::from_str(&info.schema).expect("schema yaml");
+    let schema: serde_json::Value = serde_saphyr::from_str(&info.schema).expect("schema yaml");
     let ui = schema
         .get("fields")
         .and_then(|v| v.get("my_field"))
@@ -44,13 +44,13 @@ fn test_metadata_retrieval() {
 
 #[wasm_bindgen_test]
 fn test_metadata_stripping() {
-    fn has_internal_key(value: &serde_yaml::Value) -> bool {
+    fn has_internal_key(value: &serde_json::Value) -> bool {
         match value {
-            serde_yaml::Value::Mapping(map) => map.iter().any(|(k, v)| {
-                let is_internal = k.as_str().is_some_and(|s| s.starts_with("x-"));
+            serde_json::Value::Object(map) => map.iter().any(|(k, v)| {
+                let is_internal = k.starts_with("x-");
                 is_internal || has_internal_key(v)
             }),
-            serde_yaml::Value::Sequence(seq) => seq.iter().any(has_internal_key),
+            serde_json::Value::Array(seq) => seq.iter().any(has_internal_key),
             _ => false,
         }
     }
@@ -68,7 +68,7 @@ fn test_metadata_stripping() {
     let schema_yaml = engine
         .get_quill_schema("ui-test_quill")
         .expect("getQuillSchema failed");
-    let schema: serde_yaml::Value = serde_yaml::from_str(&schema_yaml).expect("schema yaml");
+    let schema: serde_json::Value = serde_saphyr::from_str(&schema_yaml).expect("schema yaml");
 
     // Verify native `ui` is present and old JSON-schema-specific keys are absent.
     assert!(schema

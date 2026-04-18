@@ -330,6 +330,46 @@ impl QuillConfig {
                     reason: "value is not coercible to number".to_string(),
                 })
             }
+            FieldType::Integer => {
+                if let Some(i) = json_value.as_i64() {
+                    return Ok(QuillValue::from_json(serde_json::Number::from(i).into()));
+                }
+                if let Some(u) = json_value.as_u64() {
+                    if let Ok(i) = i64::try_from(u) {
+                        return Ok(QuillValue::from_json(serde_json::Number::from(i).into()));
+                    }
+                    return Err(CoercionError::Uncoercible {
+                        path: path.to_string(),
+                        value: json_value.to_string(),
+                        target: "integer".to_string(),
+                        reason: "integer value exceeds i64 range".to_string(),
+                    });
+                }
+                if let Some(s) = json_value.as_str() {
+                    if let Ok(i) = s.parse::<i64>() {
+                        return Ok(QuillValue::from_json(serde_json::Number::from(i).into()));
+                    }
+                    return Err(CoercionError::Uncoercible {
+                        path: path.to_string(),
+                        value: s.to_string(),
+                        target: "integer".to_string(),
+                        reason: "string is not a valid integer".to_string(),
+                    });
+                }
+                if let Some(b) = json_value.as_bool() {
+                    let n = if b { 1 } else { 0 };
+                    return Ok(QuillValue::from_json(serde_json::Value::Number(
+                        serde_json::Number::from(n),
+                    )));
+                }
+
+                Err(CoercionError::Uncoercible {
+                    path: path.to_string(),
+                    value: json_value.to_string(),
+                    target: "integer".to_string(),
+                    reason: "value is not coercible to integer".to_string(),
+                })
+            }
             FieldType::String | FieldType::Markdown => {
                 if json_value.is_string() {
                     return Ok(value.clone());

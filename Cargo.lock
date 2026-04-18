@@ -2162,7 +2162,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark"
-version = "0.54.1"
+version = "0.55.0"
 dependencies = [
  "anyhow",
  "cargo-husky",
@@ -2170,7 +2170,6 @@ dependencies = [
  "quillmark-fixtures",
  "quillmark-typst",
  "serde",
- "serde-saphyr",
  "serde_json",
  "tempfile",
  "thiserror",
@@ -2178,7 +2177,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-cli"
-version = "0.54.1"
+version = "0.55.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -2190,14 +2189,13 @@ dependencies = [
 
 [[package]]
 name = "quillmark-core"
-version = "0.54.1"
+version = "0.55.0"
 dependencies = [
  "glob",
  "quillmark-fixtures",
  "serde",
  "serde-saphyr",
  "serde_json",
- "serde_yaml",
  "tempfile",
  "thiserror",
  "time",
@@ -2206,7 +2204,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fixtures"
-version = "0.54.1"
+version = "0.55.0"
 dependencies = [
  "quillmark",
  "quillmark-typst",
@@ -2214,7 +2212,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fuzz"
-version = "0.54.1"
+version = "0.55.0"
 dependencies = [
  "proptest",
  "quillmark-core",
@@ -2223,7 +2221,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-python"
-version = "0.54.1"
+version = "0.55.0"
 dependencies = [
  "anyhow",
  "pyo3",
@@ -2235,7 +2233,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-typst"
-version = "0.54.1"
+version = "0.55.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -2257,7 +2255,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-wasm"
-version = "0.54.1"
+version = "0.55.0"
 dependencies = [
  "console_error_panic_hook",
  "getrandom 0.3.4",
@@ -2269,7 +2267,6 @@ dependencies = [
  "serde-saphyr",
  "serde-wasm-bindgen 0.6.5",
  "serde_json",
- "serde_yaml",
  "tsify",
  "wasm-bindgen",
  "wasm-bindgen-test",

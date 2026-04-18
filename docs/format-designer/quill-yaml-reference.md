@@ -106,7 +106,8 @@ main:
 | Type       | Notes |
 |------------|-------|
 | `string`   | Also accepts `str` as alias |
-| `number`   | Numeric scalar |
+| `number`   | Numeric scalar (integers and decimals) |
+| `integer`  | Integer-only numeric scalar |
 | `boolean`  | `true` or `false` |
 | `array`    | Use `items` for element schema |
 | `date`     | YYYY-MM-DD |
