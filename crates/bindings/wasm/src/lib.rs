@@ -17,7 +17,7 @@
 //! The typical workflow consists of five steps:
 //!
 //! 1. **Parse Markdown** - Use `Quillmark.parseMarkdown()` to parse markdown with YAML frontmatter
-//! 2. **Build Quill** - Use `Quill.fromJson()` or `Quill.fromTree()` to parse and validate a quill
+//! 2. **Build Quill** - Use `Quill.fromTree()` to parse and validate a quill
 //! 3. **Register Quill** - Use `registerQuill()` with a `Quill` handle
 //! 4. **Get Quill Info** - Use `getQuillInfo()` to retrieve metadata and configuration options
 //! 5. **Render** - Use `render()` with the ParsedDocument and render options
@@ -41,10 +41,13 @@
 //!
 //! const parsed = Quillmark.parseMarkdown(markdown);
 //!
-//! // Step 2: Load and register Quill (from JSON)
+//! // Step 2: Load and register Quill
 //! const engine = new Quillmark();
-//! const quillJson = { /* Quill file tree in JSON format */ };
-//! const quill = Quill.fromJson(quillJson);
+//! const enc = new TextEncoder();
+//! const quill = Quill.fromTree(new Map([
+//!   ["Quill.yaml", enc.encode("Quill:\n  name: letter_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Demo quill\n")],
+//!   ["plate.typ", enc.encode("= #data.title")],
+//! ]));
 //! engine.registerQuill(quill);
 //!
 //! // Step 3: Get Quill info to inspect available options

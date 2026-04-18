@@ -68,18 +68,11 @@ const parsed = Quillmark.parseMarkdown(markdown);
 // Step 2: Create engine and build/register Quill
 const engine = new Quillmark();
 
-const quillJson = {
-  files: {
-    'Quill.yaml': {
-      contents: 'Quill:\n  name: my_quill\n  version: "1.0"\n  backend: typst\n  plate_file: plate.typ\n  description: My template\n'
-    },
-    'plate.typ': { 
-      contents: '= {{ title }}\n\n{{ body | Content }}' 
-    }
-  }
-};
-
-const quill = Quill.fromJson(quillJson);
+const enc = new TextEncoder();
+const quill = Quill.fromTree(new Map([
+  ['Quill.yaml', enc.encode('Quill:\n  name: my_quill\n  version: "1.0"\n  backend: typst\n  plate_file: plate.typ\n  description: My template\n')],
+  ['plate.typ', enc.encode('= {{ title }}\n\n{{ body | Content }}')],
+]));
 engine.registerQuill(quill);
 
 // Step 3: Get Quill info (optional)
@@ -106,7 +99,6 @@ The `Quillmark` class provides the following methods:
 The main workflow for rendering documents:
 
 - `static parseMarkdown(markdown)` - Parse markdown into a ParsedDocument (Step 1)
-- `Quill.fromJson(source)` - Build a Quill from JSON string/object (Step 2)
 - `Quill.fromTree(tree)` - Build a Quill from `Map<string, Uint8Array>` or plain object tree (Step 2)
 - `registerQuill(quill)` - Register a pre-built Quill handle (Step 3)
 - `render(parsedDoc, options)` - Render a ParsedDocument to final artifacts using the required `QUILL` reference parsed from the document (Step 4)
@@ -127,19 +119,16 @@ Additional methods for managing the engine and debugging:
 
 ### Quill handle lifetime
 
-`Quill.fromJson` and `Quill.fromTree` return a handle backed by an `Arc`. The same handle can be registered with multiple engines. Once all `registerQuill` calls are done you may call `quill.free()` to release the WASM-side reference; do not use the handle again after calling `free()`.
+`Quill.fromTree` returns a handle backed by an `Arc`. The same handle can be registered with multiple engines. Once all `registerQuill` calls are done you may call `quill.free()` to release the WASM-side reference; do not use the handle again after calling `free()`.
 
 ### Factory types
 
 ```typescript
-// fromJson — source must have a `files` key mapping paths to { contents: string }
-Quill.fromJson(source: string | object): Quill
-
 // fromTree — flat path → bytes map; paths must be relative with no .. or .
 Quill.fromTree(tree: Map<string, Uint8Array> | Record<string, Uint8Array>): Quill
 ```
 
-Both factories throw a `WasmError` with `code: "quill::invalid_bundle"` on invalid input.
+The factory throws a `WasmError` with `code: "quill::invalid_bundle"` on invalid input.
 
 ### Render Options
 

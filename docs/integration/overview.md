@@ -29,7 +29,11 @@ Most integrations follow the same three-step flow:
     import { Quill, Quillmark } from "@quillmark-test/wasm";
 
     const engine = new Quillmark();
-    const quill = Quill.fromJson(quillBundle);
+    const enc = new TextEncoder();
+    const quill = Quill.fromTree(new Map([
+      ["Quill.yaml", enc.encode(quillYamlString)],
+      ["plate.typ", enc.encode(plateTypString)],
+    ]));
     engine.registerQuill(quill);
 
     // markdownText frontmatter must include: QUILL: my_quill
@@ -59,8 +63,12 @@ Most integrations follow the same three-step flow:
 
     const engine = new Quillmark();
 
-    // Build a Quill handle from JSON and register the handle
-    const quill = Quill.fromJson(quillBundle);
+    // Build a Quill handle from path→bytes and register the handle
+    const enc = new TextEncoder();
+    const quill = Quill.fromTree(new Map([
+      ["Quill.yaml", enc.encode(quillYamlString)],
+      ["plate.typ", enc.encode(plateTypString)],
+    ]));
     engine.registerQuill(quill);
 
     const parsed = Quillmark.parseMarkdown(markdownText);

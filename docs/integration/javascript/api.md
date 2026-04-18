@@ -12,7 +12,11 @@ npm install @quillmark-test/wasm
 import { Quill, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
-const quill = Quill.fromJson(quillBundle);
+const enc = new TextEncoder();
+const quill = Quill.fromTree(new Map([
+  ["Quill.yaml", enc.encode(quillYamlString)],
+  ["plate.typ", enc.encode(plateTypString)],
+]));
 engine.registerQuill(quill);
 
 const parsed = Quillmark.parseMarkdown(markdown); // requires QUILL in frontmatter
@@ -32,18 +36,15 @@ type ParsedDocument = {
 };
 ```
 
-### `Quill.fromJson(source)`
-
-Builds a `Quill` handle from a JSON string or plain object.
-
 ### `Quill.fromTree(tree)`
 
 Builds a `Quill` handle from a flat `Map<string, Uint8Array>` (or plain object record) of relative paths to bytes.
+Use `TextEncoder` for text files before passing them to `fromTree`.
 
 ### `engine.registerQuill(quill)`
 
 Registers a pre-built `Quill` handle and returns `QuillInfo`.  
-`registerQuill` is handle-only: pass a `Quill` from `Quill.fromJson(...)` or `Quill.fromTree(...)`.
+`registerQuill` is handle-only: pass a `Quill` from `Quill.fromTree(...)`.
 
 ### `engine.getQuillInfo(name)`
 
@@ -80,3 +81,4 @@ Renders artifacts from a parsed document. Quill resolution always comes from `pa
 - There is no stripped-schema API.
 - `render`/`compile` do not accept quill override options; use `QUILL` in frontmatter.
 - `registerQuill` does not accept raw JSON/tree payloads directly.
+- `Quill.fromJson` is no longer part of the API surface; use `Quill.fromTree`.

@@ -202,38 +202,6 @@ impl Quill {
         Ok(quill)
     }
 
-    /// Create a Quill from a JSON representation
-    ///
-    /// Parses a JSON string into an in-memory file tree and validates it. The
-    /// precise JSON contract is documented in `designs/QUILL.md`.
-    /// The JSON format MUST have a root object with a `files` key. The optional
-    /// `metadata` key provides additional metadata that overrides defaults.
-    pub fn from_json(json_str: &str) -> Result<Self, Box<dyn StdError + Send + Sync>> {
-        use serde_json::Value as JsonValue;
-
-        let json: JsonValue =
-            serde_json::from_str(json_str).map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-        let obj = json.as_object().ok_or("Root must be an object")?;
-
-        // Extract files (required)
-        let files_obj = obj
-            .get("files")
-            .and_then(|v| v.as_object())
-            .ok_or("Missing or invalid 'files' key")?;
-
-        // Parse file tree
-        let mut root_files = HashMap::new();
-        for (key, value) in files_obj {
-            root_files.insert(key.clone(), FileTreeNode::from_json_value(value)?);
-        }
-
-        let root = FileTreeNode::Directory { files: root_files };
-
-        // Create Quill from tree
-        Self::from_tree(root)
-    }
-
     /// Recursively load all files from a directory into a tree structure
     fn load_directory_as_tree(
         current_dir: &Path,

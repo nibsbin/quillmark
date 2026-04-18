@@ -348,19 +348,11 @@ fn quill_map_to_json(
 }
 
 // Namespace merges with the wasm-bindgen-generated `Quill` class declaration,
-// adding the two factory methods with precise types in place of the `any`-typed
+// adding the factory methods with precise types in place of the `any`-typed
 // signatures that wasm-bindgen would otherwise emit (suppressed via skip_typescript).
 #[wasm_bindgen(typescript_custom_section)]
 const QUILL_FACTORY_TS: &str = r#"
 export namespace Quill {
-  /**
-   * Parse and validate a Quill from a JSON string or plain object.
-   * The root object must have a `files` key mapping paths to
-   * `{ contents: string }` objects.
-   * Throws a structured `WasmError` (code `"quill::invalid_bundle"`) on failure.
-   */
-  export function fromJson(source: string | object): Quill;
-
   /**
    * Build and validate a Quill from a flat path-to-bytes tree.
    * Paths may include `/`-separated subdirectory components.
@@ -376,42 +368,6 @@ export namespace Quill {
 
 #[wasm_bindgen]
 impl Quill {
-    /// Parse and validate a Quill from a JSON string or plain object.
-    ///
-    /// The source must be a JSON string or a plain object with a `files` key mapping
-    /// file paths to `{ contents: string }` objects. Example:
-    /// ```js
-    /// const quill = Quill.fromJson({
-    ///   files: {
-    ///     "Quill.yaml": { contents: "Quill:\n  name: my-quill\n  ..." },
-    ///     "plate.typ": { contents: "#rect(...)" }
-    ///   }
-    /// });
-    /// ```
-    #[wasm_bindgen(js_name = fromJson, skip_typescript)]
-    pub fn from_json(source: JsValue) -> Result<Quill, JsValue> {
-        let json_str = if source.is_string() {
-            source.as_string().ok_or_else(|| {
-                WasmError::from("Failed to convert source to string").to_js_value()
-            })?
-        } else {
-            js_sys::JSON::stringify(&source)
-                .map_err(|e| {
-                    WasmError::from(format!("Failed to serialize Quill JSON: {:?}", e))
-                        .to_js_value()
-                })?
-                .as_string()
-                .ok_or_else(|| WasmError::from("Failed to convert JSON to string").to_js_value())?
-        };
-
-        let quill = quillmark_core::Quill::from_json(&json_str)
-            .map_err(|e| WasmError::with_code("quill::invalid_bundle", e).to_js_value())?;
-
-        Ok(Quill {
-            inner: Arc::new(quill),
-        })
-    }
-
     /// Build and validate a Quill from a flat path-to-bytes tree.
     ///
     /// Accepts a `Map<string, Uint8Array>` or a plain `Record<string, Uint8Array>`.

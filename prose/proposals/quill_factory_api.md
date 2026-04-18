@@ -1,5 +1,7 @@
 # Quill Factory API — `quillmark-wasm` Tasking
 
+> **Partially superseded.** `fromJson` was removed; only `fromTree` remains. See `prose/taskings/REMOVE_FROM_JSON.md`.
+
 ## Goal
 
 Split `engine.registerQuill(json)` into two explicit steps:

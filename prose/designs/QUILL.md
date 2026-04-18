@@ -24,65 +24,52 @@ pub struct Quill {
 }
 ```
 
-## JSON Contract
+## In-memory Tree Contract (`Quill::from_tree`)
 
-Root object with a `files` key:
+`Quill::from_tree` is the only in-memory constructor. Input is a `FileTreeNode`
+directory tree with UTF-8 and binary file contents represented as bytes.
 
-```json
-{
-  "files": {
-    "Quill.toml": { "contents": "[Quill]\nname = \"my-quill\"\n..." },
-    "plate.typ": { "contents": "#import \"@local/quillmark-helper:0.1.0\": data\n= Template\n\n#data.BODY" },
-    "assets": {
-      "logo.png": { "contents": [137, 80, 78, 71, ...] }
-    }
-  }
-}
-```
-
-Node types:
-- **File (UTF-8)**: `"file.txt": { "contents": "Hello, world!" }`
-- **File (binary)**: `"image.png": { "contents": [137, 80, 78, 71, ...] }`
-- **Directory**: `"assets": { "logo.png": {...}, "icon.svg": {...} }`
-- **Empty directory**: `"empty_dir": {}`
+For JS/WASM consumers this is exposed as `Quill.fromTree(...)` with a flat
+`Map<string, Uint8Array>` (or plain object) path→bytes shape.
 
 Validation rules:
-1. Root MUST be an object with a `files` key
-2. File nodes MUST have a `contents` key (string or byte array)
-3. Directory nodes are objects without a `contents` key
-4. `Quill.toml` MUST exist and be valid
-5. The plate file referenced in `Quill.toml` MUST exist
+1. Root MUST be a directory node
+2. `Quill.yaml` MUST exist and be valid
+3. The `plate_file` referenced in `Quill.yaml` MUST exist
+4. File paths use `/` separators and are resolved relative to root
 
-## Quill.toml Structure
+## `Quill.yaml` Structure
 
-```toml
-[Quill]
-name = "my-quill"
-backend = "typst"
-description = "A beautiful template"  # required
-plate_file = "plate.typ"  # optional
-example_file = "example.md"  # optional
-version = "1.0.0"  # optional
-author = "Template Author"  # optional
+```yaml
+Quill:
+  name: my_quill
+  backend: typst
+  version: "1.0.0"
+  description: A beautiful format
+  plate_file: plate.typ
+  example_file: example.md
 
-[typst]
-packages = ["@preview/bubble:0.2.2"]
-
-[fields]
-author = { description = "Author of document", type = "str", default = "Anonymous" }
-title = { description = "Document title", type = "str" }
+main:
+  fields:
+    author:
+      type: string
+      description: Author of document
+    title:
+      type: string
+      description: Document title
 ```
 
 Metadata resolution:
-- `name` always read from `Quill.toml` `[Quill].name` (required)
-- `metadata` HashMap includes `backend`, `description`, `author`, and custom `[Quill]` fields; Typst config fields are prefixed `typst_`
+- `name` always read from `Quill.yaml` `Quill.name` (required)
+- `metadata` includes `backend`, `description`, `version`, and other Quill-level keys
 
 ## API
 
 Construction:
 - `Quill::from_path(path)` — load from filesystem directory
 - `Quill::from_tree(root)` — load from in-memory file tree
-- `Quill::from_json(json_str)` — load from JSON string
+
+Note: `Quill::from_json` is removed from the public API.
 
 File access:
 - `file_exists(path)` / `get_file(path)` — check/read file
