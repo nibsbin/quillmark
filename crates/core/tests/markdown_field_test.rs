@@ -24,7 +24,7 @@ main:
     .unwrap();
 
     let yaml = config.public_schema_yaml().unwrap();
-    let value: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+    let value: serde_json::Value = serde_saphyr::from_str(&yaml).unwrap();
 
     assert_eq!(
         value

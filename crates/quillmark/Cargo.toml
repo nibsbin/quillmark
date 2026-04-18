@@ -14,7 +14,6 @@ repository = "https://github.com/nibsbin/quillmark"
 quillmark-core = { workspace = true }
 quillmark-typst = { workspace = true, optional = true }
 serde = { workspace = true }
-serde-saphyr = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
