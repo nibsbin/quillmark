@@ -27,8 +27,7 @@ fn test_metadata_retrieval() {
         .get_quill_info("ui-test_quill")
         .expect("getQuillInfo failed");
 
-    let schema: serde_json::Value =
-        serde_saphyr::from_str(&info.schema).expect("schema yaml");
+    let schema: serde_json::Value = serde_saphyr::from_str(&info.schema).expect("schema yaml");
     let ui = schema
         .get("fields")
         .and_then(|v| v.get("my_field"))
@@ -67,8 +66,7 @@ fn test_metadata_stripping() {
     let schema_yaml = engine
         .get_quill_schema("ui-test_quill")
         .expect("getQuillSchema failed");
-    let schema: serde_json::Value =
-        serde_saphyr::from_str(&schema_yaml).expect("schema yaml");
+    let schema: serde_json::Value = serde_saphyr::from_str(&schema_yaml).expect("schema yaml");
 
     // Verify native `ui` is present and old JSON-schema-specific keys are absent.
     assert!(schema
