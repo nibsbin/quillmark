@@ -61,7 +61,7 @@ fn test_quill_engine_register_quill() {
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     // Check that quill is registered
@@ -92,7 +92,7 @@ fn test_quill_engine_get_workflow() {
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     // Load workflow by quill name using new load() method
@@ -141,7 +141,7 @@ fn test_quill_engine_backend_not_found() {
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
 
     // Try to register quill with non-existent backend - should fail now
-    let result = engine.register_quill(quill);
+    let result = engine.register_quill(&quill);
 
     assert!(result.is_err());
     match result {
@@ -173,7 +173,7 @@ fn test_quill_engine_end_to_end() {
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let workflow = engine

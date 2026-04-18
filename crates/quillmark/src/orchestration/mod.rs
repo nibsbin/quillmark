@@ -38,7 +38,7 @@
 //!
 //! // Step 2: Create and register quills
 //! let quill = Quill::from_path("path/to/quill").unwrap();
-//! engine.register_quill(quill);
+//! engine.register_quill(&quill);
 //!
 //! // Step 3: Parse markdown
 //! let markdown = "# Hello";
@@ -55,7 +55,7 @@
 //! # use quillmark::{Quillmark, Quill, ParsedDocument};
 //! # let mut engine = Quillmark::new();
 //! let quill = Quill::from_path("path/to/quill").unwrap();
-//! engine.register_quill(quill.clone());
+//! engine.register_quill(&quill);
 //!
 //! // Load by name
 //! let workflow1 = engine.workflow("my-quill").unwrap();
@@ -101,7 +101,7 @@
 //! # use quillmark::{Quillmark, OutputFormat, ParsedDocument};
 //! # let mut engine = Quillmark::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
-//! # engine.register_quill(quill);
+//! # engine.register_quill(&quill);
 //! let workflow = engine.workflow("my-quill").unwrap();
 //!
 //! let markdown = r#"---
@@ -124,7 +124,7 @@
 //! # use quillmark::{Quillmark, OutputFormat, ParsedDocument};
 //! # let mut engine = Quillmark::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
-//! # engine.register_quill(quill);
+//! # engine.register_quill(&quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
 //! let mut workflow = engine.workflow("my-quill").unwrap();
@@ -140,7 +140,7 @@
 //! # use quillmark::{Quillmark, OutputFormat, ParsedDocument};
 //! # let mut engine = Quillmark::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
-//! # engine.register_quill(quill);
+//! # engine.register_quill(&quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
 //! let mut workflow = engine.workflow("my-quill").unwrap();
@@ -156,7 +156,7 @@
 //! # use quillmark::Quillmark;
 //! # let mut engine = Quillmark::new();
 //! # let quill = quillmark::Quill::from_path("path/to/quill").unwrap();
-//! # engine.register_quill(quill);
+//! # engine.register_quill(&quill);
 //! let workflow = engine.workflow("my-quill").unwrap();
 //!
 //! println!("Backend: {}", workflow.backend_id());

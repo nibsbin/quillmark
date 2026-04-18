@@ -91,15 +91,12 @@ impl Quillmark {
     /// Register a pre-constructed Quill handle.
     #[wasm_bindgen(js_name = registerQuill)]
     pub fn register_quill(&mut self, quill: &Quill) -> Result<QuillInfo, JsValue> {
-        let quill = quill.inner.as_ref().clone();
-        let name = quill.name.clone();
+        let name = quill.inner.name.clone();
 
-        // Register with backend validation
         self.inner
-            .register_quill(quill)
+            .register_quill(quill.inner.as_ref())
             .map_err(|e| WasmError::from(e).to_js_value())?;
 
-        // Return full quill info
         self.get_quill_info(&name)
     }
 
@@ -392,7 +389,18 @@ impl Quillmark {
 
 #[wasm_bindgen]
 impl Quill {
-    /// Parse and validate a Quill from JSON string or object.
+    /// Parse and validate a Quill from a JSON string or plain object.
+    ///
+    /// The source must be a JSON string or a plain object with a `files` key mapping
+    /// file paths to `{ contents: string }` objects. Example:
+    /// ```js
+    /// const quill = Quill.fromJson({
+    ///   files: {
+    ///     "Quill.yaml": { contents: "Quill:\n  name: my-quill\n  ..." },
+    ///     "plate.typ": { contents: "#rect(...)" }
+    ///   }
+    /// });
+    /// ```
     #[wasm_bindgen(js_name = fromJson)]
     pub fn from_json(source: JsValue) -> Result<Quill, JsValue> {
         let json_str = if source.is_string() {
@@ -410,19 +418,29 @@ impl Quill {
         };
 
         let quill = quillmark_core::Quill::from_json(&json_str)
-            .map_err(|e| WasmError::from(format!("Failed to parse Quill: {}", e)).to_js_value())?;
+            .map_err(|e| WasmError::from(e.to_string()).to_js_value())?;
 
         Ok(Quill {
             inner: Arc::new(quill),
         })
     }
 
-    /// Build and validate a Quill from a flat path -> bytes tree.
+    /// Build and validate a Quill from a flat path-to-bytes tree.
+    ///
+    /// Accepts a `Map<string, Uint8Array>` or a plain `Record<string, Uint8Array>`.
+    /// Directory structure is inferred from `/` separators in paths. Example:
+    /// ```js
+    /// const quill = Quill.fromTree(new Map([
+    ///   ["Quill.yaml", yamlBytes],
+    ///   ["plate.typ", plateBytes],
+    ///   ["assets/font.ttf", fontBytes],
+    /// ]));
+    /// ```
     #[wasm_bindgen(js_name = fromTree)]
     pub fn from_tree(tree: JsValue) -> Result<Quill, JsValue> {
         let root = file_tree_from_js_tree(&tree)?;
         let quill = quillmark_core::Quill::from_tree(root)
-            .map_err(|e| WasmError::from(format!("Failed to parse Quill: {}", e)).to_js_value())?;
+            .map_err(|e| WasmError::from(e.to_string()).to_js_value())?;
 
         Ok(Quill {
             inner: Arc::new(quill),

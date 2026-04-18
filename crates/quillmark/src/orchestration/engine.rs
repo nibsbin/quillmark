@@ -138,7 +138,7 @@ impl Quillmark {
     /// - Version is valid semver format (MAJOR.MINOR.PATCH or MAJOR.MINOR)
     ///
     /// Multiple versions of the same quill can be registered.
-    pub fn register_quill(&mut self, quill: Quill) -> Result<(), RenderError> {
+    pub fn register_quill(&mut self, quill: &Quill) -> Result<(), RenderError> {
         let name = quill.name.clone();
 
         // Extract and validate version from quill metadata
@@ -246,7 +246,7 @@ impl Quillmark {
         self.quills
             .entry(name.clone())
             .or_insert_with(VersionedQuillSet::new)
-            .insert(version, quill);
+            .insert(version, quill.clone());
 
         Ok(())
     }

@@ -33,7 +33,7 @@ fn test_with_asset_basic() {
     let quill = Quill::from_path(quills_path("taro")).unwrap();
     let taro_picture = std::fs::read(resource_path("taro.png")).unwrap();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let mut workflow = engine.workflow("taro").unwrap();
@@ -49,7 +49,7 @@ fn test_with_asset_collision() {
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let mut workflow = engine.workflow("taro").unwrap();
@@ -70,7 +70,7 @@ fn test_with_assets_multiple() {
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let assets = vec![
@@ -92,7 +92,7 @@ fn test_clear_assets() {
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let mut workflow = engine.workflow("taro").unwrap();

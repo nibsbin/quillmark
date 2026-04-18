@@ -39,7 +39,7 @@ fn test_with_font_basic() {
     // Create some dummy font data
     let font_data = vec![1, 2, 3, 4, 5];
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let mut workflow = engine.workflow("taro").unwrap();
@@ -55,7 +55,7 @@ fn test_with_font_collision() {
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let mut workflow = engine.workflow("taro").unwrap();
@@ -76,7 +76,7 @@ fn test_with_fonts_multiple() {
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let fonts = vec![
@@ -98,7 +98,7 @@ fn test_clear_fonts() {
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let mut workflow = engine.workflow("taro").unwrap();
@@ -126,7 +126,7 @@ fn test_with_font_and_asset_together() {
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let mut workflow = engine.workflow("taro").unwrap();
@@ -145,7 +145,7 @@ fn test_dynamic_font_names() {
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quills_path("taro")).unwrap();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let mut workflow = engine.workflow("taro").unwrap();
