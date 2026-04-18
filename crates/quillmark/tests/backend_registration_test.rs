@@ -138,7 +138,7 @@ fn test_workflow_with_custom_backend() {
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     // Load workflow using the custom backend

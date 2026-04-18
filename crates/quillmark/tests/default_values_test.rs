@@ -84,7 +84,7 @@ main:
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let workflow = engine
@@ -139,7 +139,7 @@ main:
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let workflow = engine
@@ -195,7 +195,7 @@ main:
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let workflow = engine
@@ -249,7 +249,7 @@ main:
     let mut engine = Quillmark::new();
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let workflow = engine
