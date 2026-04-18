@@ -387,6 +387,33 @@ impl Quillmark {
     }
 }
 
+// Namespace merges with the wasm-bindgen-generated `Quill` class declaration,
+// adding the two factory methods with precise types in place of the `any`-typed
+// signatures that wasm-bindgen would otherwise emit (suppressed via skip_typescript).
+#[wasm_bindgen(typescript_custom_section)]
+const QUILL_FACTORY_TS: &str = r#"
+export namespace Quill {
+  /**
+   * Parse and validate a Quill from a JSON string or plain object.
+   * The root object must have a `files` key mapping paths to
+   * `{ contents: string }` objects.
+   * Throws a structured `WasmError` (code `"quill::invalid_bundle"`) on failure.
+   */
+  export function fromJson(source: string | object): Quill;
+
+  /**
+   * Build and validate a Quill from a flat path-to-bytes tree.
+   * Paths may include `/`-separated subdirectory components.
+   * Only relative paths with normal components are accepted —
+   * `..`, `.`, and absolute paths are rejected with an error.
+   * Throws a structured `WasmError` (code `"quill::invalid_bundle"`) on failure.
+   */
+  export function fromTree(
+    tree: Map<string, Uint8Array> | Record<string, Uint8Array>
+  ): Quill;
+}
+"#;
+
 #[wasm_bindgen]
 impl Quill {
     /// Parse and validate a Quill from a JSON string or plain object.
@@ -401,7 +428,7 @@ impl Quill {
     ///   }
     /// });
     /// ```
-    #[wasm_bindgen(js_name = fromJson)]
+    #[wasm_bindgen(js_name = fromJson, skip_typescript)]
     pub fn from_json(source: JsValue) -> Result<Quill, JsValue> {
         let json_str = if source.is_string() {
             source.as_string().ok_or_else(|| {
@@ -418,7 +445,7 @@ impl Quill {
         };
 
         let quill = quillmark_core::Quill::from_json(&json_str)
-            .map_err(|e| WasmError::from(e.to_string()).to_js_value())?;
+            .map_err(|e| WasmError::with_code("quill::invalid_bundle", e).to_js_value())?;
 
         Ok(Quill {
             inner: Arc::new(quill),
@@ -436,11 +463,11 @@ impl Quill {
     ///   ["assets/font.ttf", fontBytes],
     /// ]));
     /// ```
-    #[wasm_bindgen(js_name = fromTree)]
+    #[wasm_bindgen(js_name = fromTree, skip_typescript)]
     pub fn from_tree(tree: JsValue) -> Result<Quill, JsValue> {
         let root = file_tree_from_js_tree(&tree)?;
         let quill = quillmark_core::Quill::from_tree(root)
-            .map_err(|e| WasmError::from(e.to_string()).to_js_value())?;
+            .map_err(|e| WasmError::with_code("quill::invalid_bundle", e).to_js_value())?;
 
         Ok(Quill {
             inner: Arc::new(quill),
@@ -495,6 +522,24 @@ fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
             entries.push((path, value));
         }
         return Ok(entries);
+    }
+
+    // Reject Array and typed arrays before the generic is_object() check.
+    // Arrays are objects in JS, so without this they'd silently produce
+    // numeric-string paths ("0", "1", ...) and give a misleading error later.
+    if tree.is_instance_of::<js_sys::Array>() {
+        return Err(
+            WasmError::from("fromTree requires a Map or plain object, not an Array").to_js_value(),
+        );
+    }
+    if tree.is_instance_of::<Uint8Array>() {
+        return Err(
+            WasmError::from(
+                "fromTree requires a Map or plain object, not a Uint8Array; \
+                 did you mean to pass a Map<string, Uint8Array>?",
+            )
+            .to_js_value(),
+        );
     }
 
     if tree.is_object() {

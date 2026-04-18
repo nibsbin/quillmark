@@ -27,6 +27,22 @@ impl WasmError {
         serde_wasm_bindgen::to_value(self)
             .unwrap_or_else(|_| JsValue::from_str(&format!("{:?}", self)))
     }
+
+    /// Build a Diagnostic with an explicit error code.
+    /// Use this instead of `WasmError::from(string)` when the call site knows
+    /// a stable code that JS callers can branch on.
+    pub fn with_code(code: &str, message: impl std::fmt::Display) -> Self {
+        WasmError::Diagnostic {
+            diagnostic: SerializableDiagnostic {
+                severity: quillmark_core::Severity::Error,
+                code: Some(code.to_string()),
+                message: message.to_string(),
+                primary: None,
+                hint: None,
+                source_chain: vec![],
+            },
+        }
+    }
 }
 
 impl From<ParseError> for WasmError {
