@@ -134,7 +134,7 @@ fn map_card(card: &CardSchema) -> PublicCard {
 
 impl QuillConfig {
     /// Emit the public schema contract as a YAML string.
-    pub fn public_schema_yaml(&self) -> Result<String, serde_yaml::Error> {
+    pub fn public_schema_yaml(&self) -> Result<String, serde_saphyr::ser::Error> {
         let schema = PublicSchema {
             name: self.name.clone(),
             description: self.main().description.clone(),
@@ -152,7 +152,7 @@ impl QuillConfig {
                 .collect(),
         };
 
-        serde_yaml::to_string(&schema)
+        serde_saphyr::to_string(&schema)
     }
 }
 
@@ -234,13 +234,13 @@ main:
 
     #[test]
     fn includes_cards_ui_and_enum() {
-        fn has_internal_key(value: &serde_yaml::Value) -> bool {
+        fn has_internal_key(value: &serde_json::Value) -> bool {
             match value {
-                serde_yaml::Value::Mapping(map) => map.iter().any(|(k, v)| {
-                    let is_internal = k.as_str().is_some_and(|s| s.starts_with("x-"));
+                serde_json::Value::Object(map) => map.iter().any(|(k, v)| {
+                    let is_internal = k.starts_with("x-");
                     is_internal || has_internal_key(v)
                 }),
-                serde_yaml::Value::Sequence(seq) => seq.iter().any(has_internal_key),
+                serde_json::Value::Array(seq) => seq.iter().any(has_internal_key),
                 _ => false,
             }
         }
@@ -275,7 +275,7 @@ cards:
         assert!(yaml.contains("ui:"));
         assert!(yaml.contains("cards:"));
         assert!(yaml.contains("indorsement:"));
-        let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).expect("valid yaml");
+        let parsed: serde_json::Value = serde_saphyr::from_str(&yaml).expect("valid yaml");
         assert!(!has_internal_key(&parsed));
         assert!(!yaml.contains("CARDS:"));
     }
@@ -304,7 +304,7 @@ main:
     }
 
     #[test]
-    fn round_trips_with_serde_yaml_value() {
+    fn round_trips_as_json_value() {
         let config = config_from_yaml(
             r#"
 Quill:
@@ -327,7 +327,7 @@ main:
         );
 
         let yaml = config.public_schema_yaml().unwrap();
-        let parsed: serde_yaml::Value = serde_yaml::from_str(&yaml).unwrap();
+        let parsed: serde_json::Value = serde_saphyr::from_str(&yaml).unwrap();
         assert_eq!(
             parsed.get("name").and_then(|v| v.as_str()),
             Some("round_trip")
