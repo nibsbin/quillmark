@@ -1,27 +1,21 @@
 import { describe, it, expect } from 'vitest'
 import { Quill, Quillmark } from '@quillmark-wasm'
-
-const enc = new TextEncoder()
-
-function makeVersionedQuill(version) {
-  return Quill.fromTree(new Map([
-    ['Quill.yaml', enc.encode(`Quill:
-  name: usaf_memo
-  version: "${version}"
-  backend: typst
-  plate_file: plate.typ
-  description: Version ${version}
-`)],
-    ['plate.typ', enc.encode(`hello ${version}`)],
-  ]))
-}
+import { makeQuill } from './test-helpers.js'
 
 describe('resolveQuill bug', () => {
   it('should resolve correct version', () => {
     const engine = new Quillmark()
 
-    engine.registerQuill(makeVersionedQuill('0.1.0'))
-    engine.registerQuill(makeVersionedQuill('0.2.0'))
+    engine.registerQuill(Quill.fromTree(makeQuill({
+      name: 'usaf_memo',
+      version: '0.1.0',
+      plate: 'hello 0.1.0',
+    })))
+    engine.registerQuill(Quill.fromTree(makeQuill({
+      name: 'usaf_memo',
+      version: '0.2.0',
+      plate: 'hello 0.2.0',
+    })))
 
     // Verify resolveQuill returns the correct info
     const info2 = engine.resolveQuill("usaf_memo@0.2.0")
