@@ -1,4 +1,4 @@
-# Proposal: Add `float` Field Type Distinct from `number`
+# Proposal: Add `integer` Field Type Distinct from `number`
 
 ## Problem
 
@@ -10,81 +10,76 @@ Typst plates, in particular, distinguish `int` and `float` at the type system le
 
 ## Decisions
 
-### 1. Add `FieldType::Float` as a distinct variant
+### 1. Add `FieldType::Integer` as a distinct variant
 
 Not an alias of `Number`. Two separate types with different semantics:
 
-| Quill.yaml  | Accepts                          | Coerces to        | JSON Schema emit                  |
-|-------------|----------------------------------|-------------------|-----------------------------------|
-| `number`    | integers only                    | `i64`             | `"type": "integer"`               |
-| `float`     | integers and decimals            | `f64`             | `"type": "number"`                |
+| Quill.yaml  | Accepts                       | Coerces to | JSON Schema emit      |
+|-------------|-------------------------------|------------|-----------------------|
+| `number`    | integers and decimals         | `f64`      | `"type": "number"`    |
+| `integer`   | integers only                 | `i64`      | `"type": "integer"`   |
 
-`number` tightens to integer-only. `float` is the new "any numeric including decimal" type. A `float` field accepts integer input and promotes it to `f64`; a `number` field rejects decimal input with a coercion error.
+`number` is unchanged in behavior — it remains the "any numeric" type. `integer` is the new strict type that rejects decimal values. This matches the JSON Schema / OpenAPI convention exactly.
 
-### 2. Tightened coercion for `number`
+### 2. `number` coercion unchanged
 
-`FieldType::Number` coercion (`config.rs:299`):
-- Integer JSON value → pass through
-- Decimal JSON value → **reject** with `Uncoercible { target: "number" }` (today: accepted)
+`FieldType::Number` (`config.rs:299`) keeps its current behavior:
+- Any JSON numeric → pass through
 - String `"5"` → `i64(5)`
-- String `"5.0"` → **reject** (today: accepted as `f64`)
-- Bool → `0` / `1` (unchanged)
+- String `"5.0"` → `f64(5.0)`
+- Bool → `0` / `1`
 
-### 3. New coercion for `float`
+### 3. New coercion for `integer`
 
-`FieldType::Float`:
-- Any JSON numeric → `f64`
-- String parseable as `f64` → `f64`
-- Bool → `0.0` / `1.0`
+`FieldType::Integer`:
+- Integer JSON value → `i64`
+- Decimal JSON value → **reject** with `Uncoercible { target: "integer" }`
+- String `"5"` → `i64(5)`
+- String `"5.0"` → **reject**
+- Bool → `0` / `1`
 
 ### 4. Schema emit maps to JSON Schema conventions
 
-`number` emits `"type": "integer"` (JSON Schema's integer type).
-`float` emits `"type": "number"` (JSON Schema's any-numeric type).
+`number` continues to emit `"type": "number"`.
+`integer` emits `"type": "integer"`.
 
-This aligns the public schema with JSON Schema / OpenAPI conventions without exposing a `float` keyword that isn't in those standards — the distinction is visible to consumers via `integer` vs. `number`.
+Both are standard JSON Schema / OpenAPI type keywords — no custom extensions needed.
 
 ### 5. No alias
 
-`"float"` in `Quill.yaml` is a first-class type name. No `float` → `number` alias. `FieldType::from_str` gets a new arm, not an alias entry.
+`"integer"` in `Quill.yaml` is a first-class type name. No alias for `int` or similar. `FieldType::from_str` gets a new arm.
 
 ## Scope
 
 ### In scope
-- Add `FieldType::Float` variant in `types.rs`
-- `FieldType::from_str`: add `"float" => Float` arm
-- `FieldType::as_str`: add `Float => "float"` arm
-- Validation in `validation.rs:147`: `Number` requires `is_i64() || is_u64()`; `Float` requires `is_number()`
-- Coercion in `config.rs:299`: split `Number` and `Float` branches per rules above
-- Schema emit in `schema_yaml.rs` / `schema.rs`: `Number` → `integer`, `Float` → `number`
-- Tests: add float coercion tests, tighten number coercion tests, schema emit tests
+- Add `FieldType::Integer` variant in `types.rs`
+- `FieldType::from_str`: add `"integer" => Integer` arm
+- `FieldType::as_str`: add `Integer => "integer"` arm
+- Validation in `validation.rs`: `Integer` requires `is_i64() || is_u64()`; `Number` unchanged
+- Coercion in `config.rs`: add `Integer` branch per rules above; `Number` branch unchanged
+- Schema emit in `schema_yaml.rs` / `schema.rs`: `Integer` → `"integer"`
+- Tests: integer coercion tests (accept int, reject decimal), schema emit test
 - Update docs: `creating-quills.md`, `quill-yaml-reference.md`, `SCHEMAS.md`
-- Audit and migrate existing quills/fixtures that used `number` for decimal values
 
 ### Out of scope
-- `integer` as an alias for `number` — deferred; consumers get the signal via schema emit
+- Any changes to existing `number` behavior — non-breaking
 - Numeric bounds (`minimum`, `maximum`, `multipleOf`) — separate proposal
 - Unsigned integer type — deferred until proven need
 
 ## Migration
 
-Breaking change for any quill that used `number` with decimal values. Migration is mechanical:
-
-1. Scan fixtures and example data for decimal values under `number` fields.
-2. For each, either change the field type to `float` or round the example to an integer, depending on author intent.
-3. Coercion errors surface at quill-load time with field path, making migration failures loud.
+Non-breaking for existing quills. `number` behavior is unchanged. Authors opt in to `integer` for fields where decimal values should be rejected.
 
 ## Files affected
 
 | File                                      | Change                                                        |
 |-------------------------------------------|---------------------------------------------------------------|
-| `crates/core/src/quill/types.rs`          | Add `Float` variant, update `from_str`/`as_str`               |
-| `crates/core/src/quill/validation.rs`     | Split `Number`/`Float` validation, update type-name mapping   |
-| `crates/core/src/quill/config.rs`         | Split `Number`/`Float` coercion branches                      |
-| `crates/core/src/quill/schema_yaml.rs`    | `Number` → `integer`, `Float` → `number` in emitted schema    |
-| `crates/core/src/schema.rs`               | Same mapping in JSON Schema builder; coercion recursion       |
-| `crates/core/src/quill/tests.rs`          | New float tests; update number tests for tightened semantics  |
-| `docs/guides/creating-quills.md`          | Document `float`; clarify `number` = integer                  |
-| `docs/guides/quill-yaml-reference.md`     | Add `float` row to type table                                 |
+| `crates/core/src/quill/types.rs`          | Add `Integer` variant, update `from_str`/`as_str`             |
+| `crates/core/src/quill/validation.rs`     | Add `Integer` validation, update type-name mapping            |
+| `crates/core/src/quill/config.rs`         | Add `Integer` coercion branch                                 |
+| `crates/core/src/quill/schema_yaml.rs`    | `Integer` → `"integer"` in emitted schema                     |
+| `crates/core/src/schema.rs`               | Same mapping in JSON Schema builder                           |
+| `crates/core/src/quill/tests.rs`          | New integer coercion and schema emit tests                    |
+| `docs/guides/creating-quills.md`          | Document `integer`; clarify `number` = any numeric            |
+| `docs/guides/quill-yaml-reference.md`     | Add `integer` row to type table                               |
 | `prose/designs/SCHEMAS.md`                | Update type mapping table                                     |
-| Example quills / fixtures                 | Migrate decimal-valued `number` fields to `float`             |
