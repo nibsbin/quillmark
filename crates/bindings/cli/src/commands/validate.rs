@@ -299,6 +299,16 @@ fn check_type_mismatch(field_type: &FieldType, value: &QuillValue) -> Option<Str
                 None
             }
         }
+        FieldType::Integer => {
+            if json_value.is_i64() || json_value.is_u64() {
+                None
+            } else {
+                Some(format!(
+                    "is {} (not an integer)",
+                    describe_json_type(json_value)
+                ))
+            }
+        }
         FieldType::Boolean => {
             if !json_value.is_boolean() {
                 Some(format!(
