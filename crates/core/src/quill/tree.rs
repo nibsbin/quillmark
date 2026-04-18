@@ -119,17 +119,29 @@ impl FileTreeNode {
     ) -> Result<(), Box<dyn StdError + Send + Sync>> {
         let path = path.as_ref();
 
-        // Split path into components
-        let components: Vec<_> = path
-            .components()
-            .filter_map(|c| {
-                if let std::path::Component::Normal(s) = c {
-                    s.to_str().map(|s| s.to_string())
-                } else {
-                    None
+        // Validate and collect path components, rejecting any non-Normal component
+        // so that `..`, `.`, and absolute roots are errors rather than silent no-ops.
+        let mut components: Vec<String> = Vec::new();
+        for c in path.components() {
+            match c {
+                std::path::Component::Normal(s) => {
+                    components.push(
+                        s.to_str()
+                            .ok_or("Path component is not valid UTF-8")?
+                            .to_string(),
+                    );
                 }
-            })
-            .collect();
+                std::path::Component::ParentDir => {
+                    return Err("Path traversal ('..') is not allowed".into());
+                }
+                std::path::Component::CurDir => {
+                    return Err("Current-directory ('.') components are not allowed".into());
+                }
+                std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                    return Err("Absolute paths are not allowed; use a relative path".into());
+                }
+            }
+        }
 
         if components.is_empty() {
             return Err("Cannot insert at root path".into());
