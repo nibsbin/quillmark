@@ -21,9 +21,9 @@ class Quillmark {
   compileData(markdown: string): object;
   dryRun(markdown: string): void;
   render(parsed: ParsedDocument, options?: RenderOptions): RenderResult;
-  compile(parsed: ParsedDocument, options?: CompileOptions): CompiledDocument;
+  compile(parsed: ParsedDocument): CompiledDocument;
   listQuills(): string[];
-  unregisterQuill(name: string): void;
+  unregisterQuill(name: string): boolean;
 }
 ```
 
