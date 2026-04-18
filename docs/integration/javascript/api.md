@@ -39,6 +39,7 @@ type ParsedDocument = {
 ### `Quill.fromTree(tree)`
 
 Builds a `Quill` handle from a flat `Map<string, Uint8Array>` (or plain object record) of relative paths to bytes.
+Use `TextEncoder` for text files before passing them to `fromTree`.
 
 ### `engine.registerQuill(quill)`
 
@@ -80,3 +81,4 @@ Renders artifacts from a parsed document. Quill resolution always comes from `pa
 - There is no stripped-schema API.
 - `render`/`compile` do not accept quill override options; use `QUILL` in frontmatter.
 - `registerQuill` does not accept raw JSON/tree payloads directly.
+- `Quill.fromJson` is no longer part of the API surface; use `Quill.fromTree`.
