@@ -49,7 +49,7 @@ The test suite includes:
 ## Usage
 
 ```typescript
-import { Quillmark } from '@quillmark-test/wasm';
+import { Quill, Quillmark } from '@quillmark-test/wasm';
 
 // Step 1: Parse markdown
 const markdown = `---
@@ -65,7 +65,7 @@ This is my document.
 
 const parsed = Quillmark.parseMarkdown(markdown);
 
-// Step 2: Create engine and register Quill
+// Step 2: Create engine and build/register Quill
 const engine = new Quillmark();
 
 const quillJson = {
@@ -79,7 +79,8 @@ const quillJson = {
   }
 };
 
-engine.registerQuill(quillJson);
+const quill = Quill.fromJson(quillJson);
+engine.registerQuill(quill);
 
 // Step 3: Get Quill info (optional)
 const info = engine.getQuillInfo('my-quill');
@@ -105,7 +106,9 @@ The `Quillmark` class provides the following methods:
 The main workflow for rendering documents:
 
 - `static parseMarkdown(markdown)` - Parse markdown into a ParsedDocument (Step 1)
-- `registerQuill(quillJson)` - Register a Quill template bundle from JSON (Step 2)
+- `Quill.fromJson(source)` - Build a Quill from JSON string/object (Step 2)
+- `Quill.fromTree(tree)` - Build a Quill from `Map<string, Uint8Array>` or plain object tree (Step 2)
+- `registerQuill(quill)` - Register a pre-built Quill handle (Step 3)
 - `render(parsedDoc, options)` - Render a ParsedDocument to final artifacts using the required `QUILL` reference parsed from the document (Step 4)
 
 ### Utility Methods

@@ -38,16 +38,16 @@ This is useful for:
 === "JavaScript"
 
     ```javascript
-    import { Quillmark } from "@quillmark-test/wasm";
+    import { Quill, Quillmark } from "@quillmark-test/wasm";
 
     const engine = new Quillmark();
-    engine.registerQuill(quillBundle);
+    const quill = Quill.fromJson(quillBundle);
+    engine.registerQuill(quill);
 
     const logoBytes = await fetch("logo.png").then((r) => r.arrayBuffer());
     const parsed = Quillmark.parseMarkdown(markdown);
     const result = engine.render(parsed, {
       format: "pdf",
-      quillName: "my-quill",
       assets: {
         "logo.png": new Uint8Array(logoBytes)
       }
@@ -85,7 +85,6 @@ workflow.add_assets(assets)
     ```javascript
     const result = engine.render(parsed, {
       format: "pdf",
-      quillName: "my-quill",
       fonts: {
         "CustomFont-Regular.ttf": regularFontBytes,
         "CustomFont-Bold.ttf": boldFontBytes

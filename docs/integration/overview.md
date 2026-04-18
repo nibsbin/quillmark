@@ -26,11 +26,13 @@ Most integrations follow the same three-step flow:
 === "JavaScript"
 
     ```javascript
-    import { Quillmark } from "@quillmark-test/wasm";
+    import { Quill, Quillmark } from "@quillmark-test/wasm";
 
     const engine = new Quillmark();
-    engine.registerQuill(quillBundle);
+    const quill = Quill.fromJson(quillBundle);
+    engine.registerQuill(quill);
 
+    // markdownText frontmatter must include: QUILL: my_quill
     const parsed = Quillmark.parseMarkdown(markdownText);
     const result = engine.render(parsed, { format: "pdf" });
     ```
@@ -53,15 +55,16 @@ Most integrations follow the same three-step flow:
 === "JavaScript"
 
     ```javascript
-    import { Quillmark } from "@quillmark-test/wasm";
+    import { Quill, Quillmark } from "@quillmark-test/wasm";
 
     const engine = new Quillmark();
 
-    // Register a quill bundle (JSON string or object)
-    engine.registerQuill(quillBundle);
+    // Build a Quill handle from JSON and register the handle
+    const quill = Quill.fromJson(quillBundle);
+    engine.registerQuill(quill);
 
     const parsed = Quillmark.parseMarkdown(markdownText);
-    const result = engine.render(parsed, { format: "pdf", quillName: "my-quill" });
+    const result = engine.render(parsed, { format: "pdf" });
     ```
 
 ## Output Formats

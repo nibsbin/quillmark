@@ -54,13 +54,13 @@ fn test_register_multiple_versions_same_quill() {
     let quill_2_0 = create_test_quill(&temp_dir, "resume_template", "2.0");
 
     engine
-        .register_quill(quill_1_0)
+        .register_quill(&quill_1_0)
         .expect("Failed to register v1.0");
     engine
-        .register_quill(quill_1_1)
+        .register_quill(&quill_1_1)
         .expect("Failed to register v1.1");
     engine
-        .register_quill(quill_2_0)
+        .register_quill(&quill_2_0)
         .expect("Failed to register v2.0");
 
     // Verify quill is registered (only one name, multiple versions)
@@ -97,16 +97,16 @@ fn test_resolve_major_version_selector() {
     let quill_3_0 = create_test_quill(&temp_dir, "resume_template", "3.0");
 
     engine
-        .register_quill(quill_2_0)
+        .register_quill(&quill_2_0)
         .expect("Failed to register");
     engine
-        .register_quill(quill_2_1)
+        .register_quill(&quill_2_1)
         .expect("Failed to register");
     engine
-        .register_quill(quill_2_2)
+        .register_quill(&quill_2_2)
         .expect("Failed to register");
     engine
-        .register_quill(quill_3_0)
+        .register_quill(&quill_3_0)
         .expect("Failed to register");
 
     // Resolve @2 -> should get latest 2.x.x (2.2.0 equivalent)
@@ -137,13 +137,13 @@ fn test_resolve_exact_version_selector() {
     let quill_2_2 = create_test_quill(&temp_dir, "resume_template", "2.2.0");
 
     engine
-        .register_quill(quill_2_0)
+        .register_quill(&quill_2_0)
         .expect("Failed to register");
     engine
-        .register_quill(quill_2_1)
+        .register_quill(&quill_2_1)
         .expect("Failed to register");
     engine
-        .register_quill(quill_2_2)
+        .register_quill(&quill_2_2)
         .expect("Failed to register");
 
     // Resolve @2.1.0 -> should get exactly 2.1.0
@@ -272,13 +272,13 @@ fn test_workflow_from_versioned_document() {
     let quill_2_1 = create_test_quill(&temp_dir, "resume_template", "2.1");
 
     engine
-        .register_quill(quill_1_0)
+        .register_quill(&quill_1_0)
         .expect("Failed to register");
     engine
-        .register_quill(quill_2_0)
+        .register_quill(&quill_2_0)
         .expect("Failed to register");
     engine
-        .register_quill(quill_2_1)
+        .register_quill(&quill_2_1)
         .expect("Failed to register");
 
     // Create document with version tag
@@ -311,12 +311,12 @@ fn test_version_collision_error() {
     // Register version 1.0
     let quill_1_0 = create_test_quill(&temp_dir, "resume_template", "1.0");
     engine
-        .register_quill(quill_1_0)
+        .register_quill(&quill_1_0)
         .expect("Failed to register first v1.0");
 
     // Try to register same name+version again
     let quill_1_0_duplicate = create_test_quill(&temp_dir, "resume_template", "1.0");
-    let result = engine.register_quill(quill_1_0_duplicate);
+    let result = engine.register_quill(&quill_1_0_duplicate);
 
     // Should fail with version collision error
     assert!(result.is_err());
@@ -341,13 +341,13 @@ fn test_version_not_found_error_message() {
     let quill_3_0 = create_test_quill(&temp_dir, "resume_template", "3.0");
 
     engine
-        .register_quill(quill_1_0)
+        .register_quill(&quill_1_0)
         .expect("Failed to register");
     engine
-        .register_quill(quill_2_0)
+        .register_quill(&quill_2_0)
         .expect("Failed to register");
     engine
-        .register_quill(quill_3_0)
+        .register_quill(&quill_3_0)
         .expect("Failed to register");
 
     // Request nonexistent version
@@ -401,13 +401,13 @@ fn test_latest_selector_with_multiple_versions() {
     let quill_3_0 = create_test_quill(&temp_dir, "resume_template", "3.0");
 
     engine
-        .register_quill(quill_1_0)
+        .register_quill(&quill_1_0)
         .expect("Failed to register");
     engine
-        .register_quill(quill_2_0)
+        .register_quill(&quill_2_0)
         .expect("Failed to register");
     engine
-        .register_quill(quill_3_0)
+        .register_quill(&quill_3_0)
         .expect("Failed to register");
 
     // Resolve with no selector (implicit latest)
@@ -437,10 +437,10 @@ fn test_version_selector_with_unversioned_document() {
     let quill_2_0 = create_test_quill(&temp_dir, "resume_template", "2.0");
 
     engine
-        .register_quill(quill_1_0)
+        .register_quill(&quill_1_0)
         .expect("Failed to register");
     engine
-        .register_quill(quill_2_0)
+        .register_quill(&quill_2_0)
         .expect("Failed to register");
 
     // Document without version in QUILL tag
@@ -481,7 +481,7 @@ fn test_backward_compatibility_unversioned_quill() {
     .expect("Failed to write plate.typ");
 
     let quill = Quill::from_path(quill_path).expect("Failed to load quill");
-    engine.register_quill(quill).expect("Failed to register");
+    engine.register_quill(&quill).expect("Failed to register");
 
     // Should be accessible without version (implicit latest)
     let workflow = engine
@@ -506,10 +506,10 @@ fn test_resolve_version_with_colon_syntax() {
     let quill_2_0 = create_test_quill(&temp_dir, "usaf_memo", "2.0");
 
     engine
-        .register_quill(quill_1_0)
+        .register_quill(&quill_1_0)
         .expect("Failed to register");
     engine
-        .register_quill(quill_2_0)
+        .register_quill(&quill_2_0)
         .expect("Failed to register");
 
     // Resolve with colon syntax

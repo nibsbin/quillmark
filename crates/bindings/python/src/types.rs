@@ -31,7 +31,7 @@ impl PyQuillmark {
 
     fn register_quill(&mut self, quill: PyRef<PyQuill>) -> PyResult<()> {
         self.inner
-            .register_quill(quill.inner.clone())
+            .register_quill(&quill.inner)
             .map_err(convert_render_error)?;
         Ok(())
     }

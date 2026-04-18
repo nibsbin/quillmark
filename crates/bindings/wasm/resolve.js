@@ -1,4 +1,4 @@
-import { Quillmark } from './pkg/quillmark_wasm.js'
+import { Quill, Quillmark } from './pkg/quillmark_wasm.js'
 
 const engine = new Quillmark()
 
@@ -9,7 +9,7 @@ const quill1 = {
   schema: {},
   plate: "hello 1"
 }
-engine.registerQuill(quill1)
+engine.registerQuill(Quill.fromJson(quill1))
 
 const quill2 = {
   name: "usaf_memo",
@@ -18,7 +18,7 @@ const quill2 = {
   schema: {},
   plate: "hello 2"
 }
-engine.registerQuill(quill2)
+engine.registerQuill(Quill.fromJson(quill2))
 
 const resolved = engine.resolveQuill("usaf_memo@0.2.0")
 console.log("Resolved version:", resolved.metadata.version)

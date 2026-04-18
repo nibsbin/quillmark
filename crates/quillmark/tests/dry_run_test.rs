@@ -58,7 +58,7 @@ fn test_dry_run_success() {
 
     let mut engine = Quillmark::new();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let workflow = engine
@@ -90,7 +90,7 @@ fn test_dry_run_missing_required_field() {
 
     let mut engine = Quillmark::new();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let workflow = engine
@@ -131,7 +131,7 @@ fn test_dry_run_no_schema() {
 
     let mut engine = Quillmark::new();
     engine
-        .register_quill(quill)
+        .register_quill(&quill)
         .expect("Failed to register quill");
 
     let workflow = engine

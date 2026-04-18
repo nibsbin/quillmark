@@ -29,7 +29,7 @@
 //!
 //! // Load and register a quill template
 //! let quill = Quill::from_path("path/to/quill").unwrap();
-//! engine.register_quill(quill);
+//! engine.register_quill(&quill);
 //!
 //! // Parse markdown
 //! let markdown = "---\ntitle: Hello\n---\n# Hello World";
@@ -53,7 +53,7 @@
 //! # use quillmark::{Quillmark, Quill, OutputFormat, ParsedDocument};
 //! # let mut engine = Quillmark::new();
 //! # let quill = Quill::from_path("path/to/quill").unwrap();
-//! # engine.register_quill(quill);
+//! # engine.register_quill(&quill);
 //! # let markdown = "# Report";
 //! # let parsed = ParsedDocument::from_markdown(markdown).unwrap();
 //! let mut workflow = engine.workflow("my-quill").unwrap();

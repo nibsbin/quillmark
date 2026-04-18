@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest'
-import { Quillmark } from '@quillmark-wasm'
+import { Quill, Quillmark } from '@quillmark-wasm'
 
 // Minimal inline Quill for testing
 const TEST_QUILL = {
@@ -48,6 +48,90 @@ QUILL: test_quill
 
 This is a test document.`
 
+// Helpers for fromTree tests
+function textBytes(str) {
+  return new TextEncoder().encode(str)
+}
+
+function makeTreeQuill(name = 'tree_quill', version = '1.0.0') {
+  return new Map([
+    ['Quill.yaml', textBytes(`Quill:
+  name: ${name}
+  version: "${version}"
+  backend: typst
+  plate_file: plate.typ
+  description: Tree quill for smoke tests
+`)],
+    ['plate.typ', textBytes('#import "@local/quillmark-helper:0.1.0": data\n= Test')],
+  ])
+}
+
+describe('Quill.fromTree', () => {
+  it('should build a Quill from a Map<string, Uint8Array>', () => {
+    const quill = Quill.fromTree(makeTreeQuill())
+    expect(quill).toBeDefined()
+  })
+
+  it('should build a Quill from a plain Record<string, Uint8Array>', () => {
+    const tree = {}
+    for (const [k, v] of makeTreeQuill()) tree[k] = v
+    const quill = Quill.fromTree(tree)
+    expect(quill).toBeDefined()
+  })
+
+  it('should infer subdirectory hierarchy from path separators', () => {
+    const tree = new Map([
+      ['Quill.yaml', textBytes(`Quill:
+  name: nested_quill
+  version: "1.0.0"
+  backend: typst
+  plate_file: plate.typ
+  description: Nested tree quill
+`)],
+      ['plate.typ', textBytes('#import "@local/quillmark-helper:0.1.0": data\n= Nested')],
+      ['assets/fonts/Inter-Regular.ttf', new Uint8Array([0, 1, 2, 3])],
+    ])
+    const quill = Quill.fromTree(tree)
+    expect(quill).toBeDefined()
+  })
+
+  it('should register a fromTree Quill with the engine', () => {
+    const engine = new Quillmark()
+    const quill = Quill.fromTree(makeTreeQuill('tree_quill', '2.0.0'))
+    engine.registerQuill(quill)
+    expect(engine.listQuills()).toContain('tree_quill@2.0.0')
+  })
+
+  it('should allow the same Quill handle to register with multiple engines', () => {
+    const quill = Quill.fromTree(makeTreeQuill('shared_quill', '1.0.0'))
+    const engine1 = new Quillmark()
+    const engine2 = new Quillmark()
+    engine1.registerQuill(quill)
+    engine2.registerQuill(quill)
+    expect(engine1.listQuills()).toContain('shared_quill@1.0.0')
+    expect(engine2.listQuills()).toContain('shared_quill@1.0.0')
+  })
+
+  it('should throw on null/undefined input', () => {
+    expect(() => Quill.fromTree(null)).toThrow()
+    expect(() => Quill.fromTree(undefined)).toThrow()
+  })
+
+  it('should throw when a value is not Uint8Array', () => {
+    const bad = new Map([
+      ['Quill.yaml', 'this is a string, not Uint8Array'],
+    ])
+    expect(() => Quill.fromTree(bad)).toThrow()
+  })
+
+  it('should throw on missing Quill.yaml', () => {
+    const tree = new Map([
+      ['plate.typ', textBytes('hello')],
+    ])
+    expect(() => Quill.fromTree(tree)).toThrow()
+  })
+})
+
 describe('quillmark-wasm smoke tests', () => {
   it('should parse markdown with YAML frontmatter', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
@@ -67,7 +151,7 @@ describe('quillmark-wasm smoke tests', () => {
     const engine = new Quillmark()
 
     expect(() => {
-      engine.registerQuill(TEST_QUILL)
+      engine.registerQuill(Quill.fromJson(TEST_QUILL))
     }).not.toThrow()
 
     const quills = engine.listQuills()
@@ -76,7 +160,7 @@ describe('quillmark-wasm smoke tests', () => {
 
   it('should get quill info after registration', () => {
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const info = engine.getQuillInfo('test_quill')
 
@@ -100,7 +184,7 @@ describe('quillmark-wasm smoke tests', () => {
   it('should compile data to JSON', () => {
     // Verify that we can extract the intermediate JSON data
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const jsonData = engine.compileData(TEST_MARKDOWN)
 
@@ -116,7 +200,7 @@ describe('quillmark-wasm smoke tests', () => {
 
     // Step 2: Create engine and register quill
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     // Step 3: Get quill info
     const info = engine.getQuillInfo('test_quill')
@@ -142,7 +226,7 @@ describe('quillmark-wasm smoke tests', () => {
   it('should support compile + renderPages with pageCount', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const compiled = engine.compile(parsed)
     expect(typeof compiled.pageCount).toBe('number')
@@ -160,7 +244,7 @@ describe('quillmark-wasm smoke tests', () => {
   it('should warn and skip out-of-bounds page indices', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const compiled = engine.compile(parsed)
     const oob = compiled.pageCount + 10
@@ -174,7 +258,7 @@ describe('quillmark-wasm smoke tests', () => {
   it('should error when requesting page selection with PDF', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const compiled = engine.compile(parsed)
 
@@ -218,7 +302,7 @@ this is not valid yaml
   it('should render to SVG format', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     const result = engine.render(parsed, { format: 'svg' })
 
@@ -230,7 +314,7 @@ this is not valid yaml
 
   it('should unregister quill', () => {
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     expect(engine.listQuills()).toContain('test_quill@1.0.0')
 
@@ -242,7 +326,7 @@ this is not valid yaml
   it('should accept assets as plain JavaScript objects', () => {
     const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
 
     // Assets should be passed as plain JavaScript objects with byte arrays
     const assets = {
@@ -270,7 +354,7 @@ this is not valid yaml
 
     // Step 2: Register and get quill info - metadata is object, schema is YAML text
     const engine = new Quillmark()
-    engine.registerQuill(TEST_QUILL)
+    engine.registerQuill(Quill.fromJson(TEST_QUILL))
     const info = engine.getQuillInfo('test_quill')
 
     expect(info.metadata instanceof Map).toBe(false)
