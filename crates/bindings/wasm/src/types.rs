@@ -237,12 +237,6 @@ pub struct RenderOptions {
     pub ppi: Option<f32>,
 }
 
-/// Options for compile() phase in the split compile/render pipeline.
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify, Default)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct CompileOptions {}
-
 /// Options for rendering pages from a previously compiled document.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]

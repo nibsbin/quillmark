@@ -116,18 +116,38 @@ The main workflow for rendering documents:
 Additional methods for managing the engine and debugging:
 
 - `new Quillmark()` - Create a new engine instance
-- `renderQuill(RenderOptions, markdown)` - Load markdown and map it onto an internally fetched Quill, resolving to `RenderResult` including output format, the artifact byte slice buffer, and time to render
-- `processPlate(quillRef, markdown)` - Debug helper that processes markdown through the template engine and returns the intermediate template source code (e.g., Typst, LaTeX) without compiling to final artifacts. Useful for inspecting template output during development.
-- `fetchQuillInfo(quillRef)` - Fetches metadata and schema about an available Quill from the configured registry without loading the full filesystem or rendering context.
-- `listQuills()` - List all registered Quill names
-- `unregisterQuill(name)` - Unregister a Quill to free memory
+- `getQuillInfo(name)` - Get metadata, schema, and supported formats for a registered Quill
+- `getQuillSchema(name)` - Get the public YAML schema for a registered Quill
+- `resolveQuill(ref)` - Return `QuillInfo` if the ref is already registered, or `null`
+- `listQuills()` - List all registered Quills as `"name@version"` strings
+- `unregisterQuill(name)` - Unregister a Quill by name or `"name@version"`
+- `dryRun(markdown)` - Validate without backend compilation (fast feedback)
+- `compile(parsed, opts?)` - Compile to an opaque `CompiledDocument` handle
+- `compileData(markdown)` - Return the intermediate JSON data structure for debugging
+
+### Quill handle lifetime
+
+`Quill.fromJson` and `Quill.fromTree` return a handle backed by an `Arc`. The same handle can be registered with multiple engines. Once all `registerQuill` calls are done you may call `quill.free()` to release the WASM-side reference; do not use the handle again after calling `free()`.
+
+### Factory types
+
+```typescript
+// fromJson — source must have a `files` key mapping paths to { contents: string }
+Quill.fromJson(source: string | object): Quill
+
+// fromTree — flat path → bytes map; paths must be relative with no .. or .
+Quill.fromTree(tree: Map<string, Uint8Array> | Record<string, Uint8Array>): Quill
+```
+
+Both factories throw a `WasmError` with `code: "quill::invalid_bundle"` on invalid input.
 
 ### Render Options
 
 ```typescript
 type RenderOptions = {
   format?: 'pdf' | 'svg' | 'txt'
-  assets?: Record<string, Uint8Array | number[]> 
+  // Assets are plain arrays of byte values, not Uint8Array
+  assets?: Record<string, number[]>
 }
 ```
 
@@ -165,7 +185,7 @@ Data crossing the JavaScript ↔ WebAssembly boundary:
 - **Binary data**: `Vec<u8>` maps to `Uint8Array`
 - **Collections**: `Vec<T>` maps to JS arrays; object types use plain JS objects `{}`
 - **Option**: `Option<T>` maps to `T | null`
-- **Errors**: Thrown as exceptions using `SerializableDiagnostic` from core, containing structured diagnostic information (severity, message, location, hint, source chain)
+- **Errors**: Thrown as `WasmError` objects with `type`, `severity`, `message`, and (where available) `code` fields. Factory errors use `code: "quill::invalid_bundle"`; registration and render errors carry codes from core diagnostics
 
 ## Design Principles
 
