@@ -82,7 +82,6 @@ Metadata resolution:
 Construction:
 - `Quill::from_path(path)` — load from filesystem directory
 - `Quill::from_tree(root)` — load from in-memory file tree
-- `Quill::from_json(json_str)` — load from JSON string
 
 File access:
 - `file_exists(path)` / `get_file(path)` — check/read file

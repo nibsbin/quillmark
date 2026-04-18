@@ -34,7 +34,11 @@ except QuillmarkError as e:
 import { Quill, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
-const quill = Quill.fromJson(quillBundle);
+const enc = new TextEncoder();
+const quill = Quill.fromTree(new Map([
+  ["Quill.yaml", enc.encode(quillYamlString)],
+  ["plate.typ", enc.encode(plateTypString)],
+]));
 engine.registerQuill(quill);
 const parsed = Quillmark.parseMarkdown(markdown);
 

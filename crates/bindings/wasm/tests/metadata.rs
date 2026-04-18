@@ -1,21 +1,25 @@
 use quillmark_wasm::{Quill, Quillmark};
 use serde_json::Value;
-use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
 // wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
-const UI_QUILL_JSON: &str = r#"{
-  "files": {
-    "Quill.yaml": { "contents": "Quill:\n  name: ui_test_quill\n  version: \"0.1\"\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for UI metadata\n\nmain:\n  fields:\n    my_field:\n      type: string\n      ui:\n        group: Personal Info\n" },
-    "plate.typ": { "contents": "= Title" }
-  }
-}"#;
+mod common;
+
+fn ui_quill_tree() -> wasm_bindgen::JsValue {
+    common::tree(&[
+        (
+            "Quill.yaml",
+            b"Quill:\n  name: ui_test_quill\n  version: \"0.1\"\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for UI metadata\n\nmain:\n  fields:\n    my_field:\n      type: string\n      ui:\n        group: Personal Info\n",
+        ),
+        ("plate.typ", b"= Title"),
+    ])
+}
 
 #[wasm_bindgen_test]
 fn test_metadata_retrieval() {
     let mut engine = Quillmark::new();
-    let quill = Quill::from_json(JsValue::from_str(UI_QUILL_JSON)).expect("fromJson failed");
+    let quill = Quill::from_tree(ui_quill_tree()).expect("fromTree failed");
     engine
         .register_quill(&quill)
         .map_err(|e| {
@@ -56,7 +60,7 @@ fn test_metadata_stripping() {
     }
 
     let mut engine = Quillmark::new();
-    let quill = Quill::from_json(JsValue::from_str(UI_QUILL_JSON)).expect("fromJson failed");
+    let quill = Quill::from_tree(ui_quill_tree()).expect("fromTree failed");
     engine
         .register_quill(&quill)
         .map_err(|e| {

@@ -176,35 +176,6 @@ impl FileTreeNode {
         }
     }
 
-    /// Parse a tree structure from JSON value
-    pub(crate) fn from_json_value(
-        value: &serde_json::Value,
-    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
-        if let Some(contents_str) = value.get("contents").and_then(|v| v.as_str()) {
-            // It's a file with string contents
-            Ok(FileTreeNode::File {
-                contents: contents_str.as_bytes().to_vec(),
-            })
-        } else if let Some(bytes_array) = value.get("contents").and_then(|v| v.as_array()) {
-            // It's a file with byte array contents
-            let contents: Vec<u8> = bytes_array
-                .iter()
-                .filter_map(|v| v.as_u64().and_then(|n| u8::try_from(n).ok()))
-                .collect();
-            Ok(FileTreeNode::File { contents })
-        } else if let Some(obj) = value.as_object() {
-            // It's a directory (either empty or with nested files)
-            let mut files = HashMap::new();
-            for (name, child_value) in obj {
-                files.insert(name.clone(), Self::from_json_value(child_value)?);
-            }
-            // Empty directories are valid
-            Ok(FileTreeNode::Directory { files })
-        } else {
-            Err(format!("Invalid file tree node: {:?}", value).into())
-        }
-    }
-
     pub fn print_tree(&self) -> String {
         self.print_tree_recursive("", "", true)
     }

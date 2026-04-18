@@ -1,18 +1,21 @@
-use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
 use quillmark_wasm::{Quill, Quillmark};
 
+mod common;
+
 wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
-// A minimal JSON fixture that represents a very small quill
-const SMALL_QUILL_JSON: &str = r#"{
-  "files": {
-    "Quill.yaml": { "contents": "Quill:\n  name: test_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for WASM bindings\n" },
-    "plate.typ": { "contents": "= Title\n\nThis is a test." },
-    "content.md": { "contents": "---\ntitle: Test\n---\n\n# Hello" }
-  }
-}"#;
+fn small_quill_tree() -> wasm_bindgen::JsValue {
+    common::tree(&[
+        (
+            "Quill.yaml",
+            b"Quill:\n  name: test_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for WASM bindings\n",
+        ),
+        ("plate.typ", b"= Title\n\nThis is a test."),
+        ("content.md", b"---\ntitle: Test\n---\n\n# Hello"),
+    ])
+}
 
 #[wasm_bindgen_test]
 fn test_parse_markdown() {
@@ -41,7 +44,7 @@ fn test_register_and_get_quill_info() {
     let mut engine = Quillmark::new();
 
     // Register quill
-    let quill = Quill::from_json(JsValue::from_str(SMALL_QUILL_JSON)).expect("fromJson failed");
+    let quill = Quill::from_tree(small_quill_tree()).expect("fromTree failed");
     engine.register_quill(&quill).expect("register failed");
 
     // Get quill info
@@ -72,7 +75,7 @@ This is a test.
 
     // Step 2: Create engine and register quill
     let mut engine = Quillmark::new();
-    let quill = Quill::from_json(JsValue::from_str(SMALL_QUILL_JSON)).expect("fromJson failed");
+    let quill = Quill::from_tree(small_quill_tree()).expect("fromTree failed");
     engine.register_quill(&quill).expect("register failed");
 
     // Step 3: Get quill info
