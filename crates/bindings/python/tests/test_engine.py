@@ -4,10 +4,9 @@ from quillmark import Quill, Quillmark
 
 
 def test_workflow_from_quill(taro_quill_dir):
-    """Test Python binding accepts an unregistered Quill object in workflow()."""
+    """Test engine creates workflow from Quill object."""
     engine = Quillmark()
-    quill = Quill.from_path(str(taro_quill_dir))
-    assert quill.name not in engine.registered_quills()
+    quill = engine.quill_from_path(str(taro_quill_dir))
 
     workflow = engine.workflow(quill)
     assert quill.name in workflow.quill_ref

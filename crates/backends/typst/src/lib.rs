@@ -59,6 +59,7 @@ use quillmark_core::{
 use std::collections::HashMap;
 
 /// Typst backend implementation for Quillmark.
+#[derive(Debug)]
 pub struct TypstBackend;
 
 impl Backend for TypstBackend {

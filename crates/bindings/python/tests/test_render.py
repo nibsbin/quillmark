@@ -8,15 +8,14 @@ from quillmark import OutputFormat, ParsedDocument, Quill, Quillmark
 def test_save_artifact(taro_quill_dir, taro_md, tmp_path):
     """Test saving an artifact to file."""
     engine = Quillmark()
-    quill = Quill.from_path(str(taro_quill_dir))
-    engine.register_quill(quill)
-    
+    quill = engine.quill_from_path(str(taro_quill_dir))
     workflow = engine.workflow(quill)
+
     parsed = ParsedDocument.from_markdown(taro_md)
     result = workflow.render(parsed, OutputFormat.PDF)
-    
+
     output_path = tmp_path / "output.pdf"
     result.artifacts[0].save(str(output_path))
-    
+
     assert output_path.exists()
     assert output_path.stat().st_size > 0

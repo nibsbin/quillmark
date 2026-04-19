@@ -2,16 +2,14 @@
 
 use crate::error::WasmError;
 use crate::types::{
-    OutputFormat, ParsedDocument, QuillInfo, RenderOptions, RenderPagesOptions, RenderResult,
+    ParsedDocument, RenderOptions, RenderPagesOptions, RenderResult,
 };
 use js_sys::{Array, Object, Uint8Array};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
-use wasm_bindgen::JsCast;
 
-// Cross-platform helper to get current time in milliseconds as f64.
 fn now_ms() -> f64 {
     #[cfg(target_arch = "wasm32")]
     {
@@ -29,8 +27,6 @@ fn now_ms() -> f64 {
 }
 
 /// Quillmark WASM Engine
-///
-/// Create once, register Quills, render markdown. That's it.
 #[wasm_bindgen]
 pub struct Quillmark {
     inner: quillmark::Quillmark,
@@ -64,306 +60,76 @@ impl Quillmark {
         }
     }
 
-    /// Parse markdown into a ParsedDocument
+    /// Parse markdown into a ParsedDocument.
     ///
-    /// This is the first step in the workflow. The returned ParsedDocument contains
-    /// the parsed YAML frontmatter fields and the quill_ref from QUILL.
+    /// @deprecated Use `ParsedDocument.fromMarkdown()` instead.
     #[wasm_bindgen(js_name = parseMarkdown)]
     pub fn parse_markdown(markdown: &str) -> Result<ParsedDocument, JsValue> {
-        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
-            .map_err(WasmError::from)
-            .map_err(|e| e.to_js_value())?;
+        parse_markdown_impl(markdown)
+    }
 
-        let quill_ref = parsed.quill_reference().to_string();
-
-        let mut fields_obj = serde_json::Map::new();
-        for (key, value) in parsed.fields() {
-            fields_obj.insert(key.clone(), value.as_json().clone());
-        }
-
-        Ok(ParsedDocument {
-            fields: serde_json::Value::Object(fields_obj),
-            quill_ref,
+    /// Load a quill from a file tree and attach the appropriate backend.
+    ///
+    /// The tree must be a `Map<string, Uint8Array>` or `Record<string, Uint8Array>`.
+    #[wasm_bindgen(js_name = quillFromTree)]
+    pub fn quill_from_tree(&self, tree: JsValue) -> Result<Quill, JsValue> {
+        let root = file_tree_from_js_tree(&tree)?;
+        let quill = self
+            .inner
+            .load_quill(root)
+            .map_err(|e| WasmError::from(e).to_js_value())?;
+        Ok(Quill {
+            inner: Arc::new(quill),
         })
     }
+}
 
-    /// Register a pre-constructed Quill handle.
-    #[wasm_bindgen(js_name = registerQuill)]
-    pub fn register_quill(&mut self, quill: &Quill) -> Result<QuillInfo, JsValue> {
-        let name = quill.inner.name.clone();
-        self.inner
-            .register_quill(quill.inner.as_ref())
-            .map_err(|e| WasmError::from(e).to_js_value())?;
-        self.get_quill_info(&name)
+fn parse_markdown_impl(markdown: &str) -> Result<ParsedDocument, JsValue> {
+    let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
+        .map_err(WasmError::from)
+        .map_err(|e| e.to_js_value())?;
+
+    let quill_ref = parsed.quill_reference().to_string();
+
+    let mut fields_obj = serde_json::Map::new();
+    for (key, value) in parsed.fields() {
+        fields_obj.insert(key.clone(), value.as_json().clone());
     }
 
-    /// Get metadata, backend info, field schemas, and supported formats for a registered Quill.
-    #[wasm_bindgen(js_name = getQuillInfo)]
-    pub fn get_quill_info(&self, name: &str) -> Result<QuillInfo, JsValue> {
-        let quill = self.inner.get_quill(name).ok_or_else(|| {
-            WasmError::from(format!("Quill '{}' not registered", name)).to_js_value()
-        })?;
+    Ok(ParsedDocument {
+        fields: serde_json::Value::Object(fields_obj),
+        quill_ref,
+    })
+}
 
-        let workflow = self.inner.workflow(name).map_err(|e| {
-            WasmError::from(format!(
-                "Failed to create workflow for quill '{}': {}",
-                name, e
+fn to_core_parsed(parsed: ParsedDocument) -> Result<quillmark_core::ParsedDocument, JsValue> {
+    let mut fields = std::collections::HashMap::new();
+
+    if let serde_json::Value::Object(obj) = parsed.fields {
+        for (key, value) in obj {
+            fields.insert(key, quillmark_core::value::QuillValue::from_json(value));
+        }
+    }
+
+    let quill_ref =
+        quillmark_core::version::QuillReference::from_str(&parsed.quill_ref).map_err(|e| {
+            JsValue::from_str(&format!(
+                "Invalid QUILL reference '{}': {}",
+                parsed.quill_ref, e
             ))
-            .to_js_value()
         })?;
 
-        let supported_formats: Vec<OutputFormat> = workflow
-            .supported_formats()
-            .iter()
-            .map(|&f| f.into())
-            .collect();
-
-        let metadata_json = quill_map_to_json(&quill.metadata);
-        let defaults_json = quill_map_to_json(&quill.config.defaults());
-        let examples_json = serde_json::Value::Object(
-            quill
-                .config
-                .examples()
-                .into_iter()
-                .map(|(k, vs)| {
-                    let arr = vs.into_iter().map(|v| v.as_json().clone()).collect();
-                    (k, serde_json::Value::Array(arr))
-                })
-                .collect(),
-        );
-
-        let schema_yaml = quill.config.public_schema_yaml().map_err(|e| {
-            WasmError::from(format!("Failed to serialize schema: {}", e)).to_js_value()
-        })?;
-
-        Ok(QuillInfo {
-            name: quill.name.clone(),
-            backend: quill.backend.clone(),
-            metadata: metadata_json,
-            example: quill.example.clone(),
-            schema: schema_yaml,
-            defaults: defaults_json,
-            examples: examples_json,
-            supported_formats,
-        })
-    }
-
-    /// Get the public YAML schema contract for a registered quill.
-    #[wasm_bindgen(js_name = getQuillSchema)]
-    pub fn get_quill_schema(&self, name: &str) -> Result<String, JsValue> {
-        let quill = self.inner.get_quill(name).ok_or_else(|| {
-            WasmError::from(format!("Quill '{}' not registered", name)).to_js_value()
-        })?;
-        quill
-            .config
-            .public_schema_yaml()
-            .map_err(|e| WasmError::from(format!("schema serialization: {}", e)).to_js_value())
-    }
-
-    /// Perform a dry run validation without backend compilation.
-    ///
-    /// Executes parsing, schema validation, and template composition to
-    /// surface input errors quickly. Returns successfully on valid input,
-    /// or throws an error with diagnostic payload on failure.
-    ///
-    /// The quill name is read from the markdown's required QUILL tag.
-    ///
-    /// This is useful for fast feedback loops in LLM-driven document generation.
-    #[wasm_bindgen(js_name = dryRun)]
-    pub fn dry_run(&mut self, markdown: &str) -> Result<(), JsValue> {
-        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
-            .map_err(WasmError::from)
-            .map_err(|e| e.to_js_value())?;
-
-        let quill_ref = parsed.quill_reference().to_string();
-
-        let workflow = self.inner.workflow(quill_ref.as_str()).map_err(|e| {
-            WasmError::from(format!("Quill '{}' not found: {}", quill_ref, e)).to_js_value()
-        })?;
-
-        workflow
-            .dry_run(&parsed)
-            .map_err(|e| WasmError::from(e).to_js_value())
-    }
-
-    /// Compile markdown to JSON data without rendering artifacts.
-    ///
-    /// This exposes the intermediate data structure that would be passed to the backend.
-    /// Useful for debugging and validation.
-    #[wasm_bindgen(js_name = compileData)]
-    pub fn compile_data(&mut self, markdown: &str) -> Result<JsValue, JsValue> {
-        let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
-            .map_err(WasmError::from)
-            .map_err(|e| e.to_js_value())?;
-
-        let quill_ref = parsed.quill_reference().to_string();
-
-        let workflow = self.inner.workflow(quill_ref.as_str()).map_err(|e| {
-            WasmError::from(format!("Quill '{}' not found: {}", quill_ref, e)).to_js_value()
-        })?;
-
-        let json_data = workflow
-            .compile_data(&parsed)
-            .map_err(|e| WasmError::from(e).to_js_value())?;
-
-        serde_wasm_bindgen::to_value(&json_data)
-            .map_err(|e| WasmError::from(format!("Failed to serialize data: {}", e)).to_js_value())
-    }
-
-    /// Render a ParsedDocument to final artifacts (PDF, SVG, PNG, TXT)
-    ///
-    /// Uses the Quill specified in the ParsedDocument's quill_ref field.
-    #[wasm_bindgen]
-    pub fn render(
-        &mut self,
-        parsed: ParsedDocument,
-        opts: RenderOptions,
-    ) -> Result<RenderResult, JsValue> {
-        let quill_ref_to_use = parsed.quill_ref.clone();
-        let parsed = Self::to_core_parsed(parsed)?;
-
-        let mut workflow = self.inner.workflow(&quill_ref_to_use).map_err(|e| {
-            WasmError::from(format!("Quill '{}' not found: {}", quill_ref_to_use, e)).to_js_value()
-        })?;
-
-        if let Some(serde_json::Value::Object(assets_map)) = opts.assets {
-            for (filename, value) in assets_map {
-                let bytes = if let Some(arr) = value.as_array() {
-                    arr.iter()
-                        .filter_map(|v| v.as_u64().map(|n| n as u8))
-                        .collect::<Vec<u8>>()
-                } else {
-                    return Err(WasmError::from(format!(
-                        "Invalid asset format for '{}': expected byte array",
-                        filename
-                    ))
-                    .to_js_value());
-                };
-                workflow.add_asset(filename, bytes).map_err(|e| {
-                    WasmError::from(format!("Failed to add asset: {}", e)).to_js_value()
-                })?;
-            }
-        }
-
-        let start = now_ms();
-        let output_format = opts.format.map(|f| f.into());
-        let result = workflow
-            .render_with_options(&parsed, output_format, opts.ppi)
-            .map_err(|e| WasmError::from(e).to_js_value())?;
-
-        Ok(RenderResult {
-            artifacts: result.artifacts.into_iter().map(Into::into).collect(),
-            warnings: result.warnings.into_iter().map(Into::into).collect(),
-            output_format: result.output_format.into(),
-            render_time_ms: now_ms() - start,
-        })
-    }
-
-    /// Compile a parsed document into an opaque compiled document handle.
-    #[wasm_bindgen]
-    pub fn compile(&mut self, parsed: ParsedDocument) -> Result<CompiledDocument, JsValue> {
-        let quill_ref_to_use = parsed.quill_ref.clone();
-        let parsed = Self::to_core_parsed(parsed)?;
-
-        let workflow = self.inner.workflow(&quill_ref_to_use).map_err(|e| {
-            WasmError::from(format!("Quill '{}' not found: {}", quill_ref_to_use, e)).to_js_value()
-        })?;
-
-        let backend = workflow.backend();
-        let compiled = workflow
-            .compile(&parsed)
-            .map_err(|e| WasmError::from(e).to_js_value())?;
-
-        Ok(CompiledDocument {
-            backend,
-            inner: compiled,
-        })
-    }
-
-    /// Resolve a Quill reference to a registered Quill, or null if not available.
-    ///
-    /// Accepts a quill reference string like "resume-template", "resume-template@2",
-    /// or "resume-template@2.1.0". Returns QuillInfo if the engine can resolve it
-    /// locally, or null if an external fetch is needed.
-    #[wasm_bindgen(js_name = resolveQuill)]
-    pub fn resolve_quill(&self, quill_ref: &str) -> JsValue {
-        use serde::Serialize;
-        self.get_quill_info(quill_ref)
-            .ok()
-            .and_then(|info| {
-                let serializer =
-                    serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-                info.serialize(&serializer).ok()
-            })
-            .unwrap_or(JsValue::NULL)
-    }
-
-    /// List registered Quills with their exact versions
-    ///
-    /// Returns strings in the format "name@version" (e.g. "resume-template@2.1.0")
-    #[wasm_bindgen(js_name = listQuills)]
-    pub fn list_quills(&self) -> Vec<String> {
-        self.inner.registered_quill_versions()
-    }
-
-    /// Returns true if the exact canonical ref (`name@x.y.z`) is registered.
-    #[wasm_bindgen(js_name = hasQuill)]
-    pub fn has_quill(&self, canonical_ref: &str) -> bool {
-        self.inner.has_quill(canonical_ref)
-    }
-
-    /// Unregister a Quill by name or specific version.
-    ///
-    /// If a base name is provided (e.g., "my-quill"), all versions of that quill are freed.
-    /// If a versioned name is provided (e.g., "my-quill@2.1.0"), only that specific version is freed.
-    /// Returns true if something was unregistered, false if not found.
-    #[wasm_bindgen(js_name = unregisterQuill)]
-    pub fn unregister_quill(&mut self, name_or_ref: &str) -> bool {
-        self.inner.unregister_quill(name_or_ref)
-    }
-
-    fn to_core_parsed(parsed: ParsedDocument) -> Result<quillmark_core::ParsedDocument, JsValue> {
-        let mut fields = std::collections::HashMap::new();
-
-        if let serde_json::Value::Object(obj) = parsed.fields {
-            for (key, value) in obj {
-                fields.insert(key, quillmark_core::value::QuillValue::from_json(value));
-            }
-        }
-
-        let quill_ref = quillmark_core::version::QuillReference::from_str(&parsed.quill_ref)
-            .map_err(|e| {
-                JsValue::from_str(&format!(
-                    "Invalid QUILL reference '{}': {}",
-                    parsed.quill_ref, e
-                ))
-            })?;
-
-        Ok(quillmark_core::ParsedDocument::new(fields, quill_ref))
-    }
+    Ok(quillmark_core::ParsedDocument::new(fields, quill_ref))
 }
 
-fn quill_map_to_json(
-    map: &std::collections::HashMap<String, quillmark_core::value::QuillValue>,
-) -> serde_json::Value {
-    serde_json::Value::Object(
-        map.iter()
-            .map(|(k, v)| (k.clone(), v.as_json().clone()))
-            .collect(),
-    )
-}
-
-// Namespace merges with the wasm-bindgen-generated `Quill` class declaration,
-// adding the factory methods with precise types in place of the `any`-typed
-// signatures that wasm-bindgen would otherwise emit (suppressed via skip_typescript).
+// Namespace merges with the wasm-bindgen-generated `Quill` class declaration.
 #[wasm_bindgen(typescript_custom_section)]
 const QUILL_FACTORY_TS: &str = r#"
 export namespace Quill {
   /**
-   * Build and validate a Quill from a flat path-to-bytes tree.
+   * Build and validate a Quill from a flat path-to-bytes tree (no backend attached).
    * Paths may include `/`-separated subdirectory components.
-   * Only relative paths with normal components are accepted —
-   * `..`, `.`, and absolute paths are rejected with an error.
+   * Only relative paths with normal components are accepted.
    * Throws a structured `WasmError` (code `"quill::invalid_bundle"`) on failure.
    */
   export function fromTree(
@@ -374,17 +140,9 @@ export namespace Quill {
 
 #[wasm_bindgen]
 impl Quill {
-    /// Build and validate a Quill from a flat path-to-bytes tree.
+    /// Build and validate a Quill from a flat path-to-bytes tree (no backend attached).
     ///
-    /// Accepts a `Map<string, Uint8Array>` or a plain `Record<string, Uint8Array>`.
-    /// Directory structure is inferred from `/` separators in paths. Example:
-    /// ```js
-    /// const quill = Quill.fromTree(new Map([
-    ///   ["Quill.yaml", yamlBytes],
-    ///   ["plate.typ", plateBytes],
-    ///   ["assets/font.ttf", fontBytes],
-    /// ]));
-    /// ```
+    /// For rendering, use `Quillmark.quillFromTree()` instead, which attaches a backend.
     #[wasm_bindgen(js_name = fromTree, skip_typescript)]
     pub fn from_tree(tree: JsValue) -> Result<Quill, JsValue> {
         let root = file_tree_from_js_tree(&tree)?;
@@ -395,6 +153,67 @@ impl Quill {
             inner: Arc::new(quill),
         })
     }
+
+    /// Render a document to final artifacts.
+    ///
+    /// Input may be a markdown string or a `ParsedDocument` object.
+    #[wasm_bindgen(js_name = render)]
+    pub fn render(&self, input: JsValue, opts: RenderOptions) -> Result<RenderResult, JsValue> {
+        let start = now_ms();
+        let core_input = js_value_to_quill_input(input)?;
+        let rust_opts = quillmark_core::RenderOptions {
+            output_format: opts.format.map(|f| f.into()),
+            ppi: opts.ppi,
+        };
+        let result = self
+            .inner
+            .render(core_input, &rust_opts)
+            .map_err(|e| WasmError::from(e).to_js_value())?;
+        Ok(RenderResult {
+            artifacts: result.artifacts.into_iter().map(Into::into).collect(),
+            warnings: result.warnings.into_iter().map(Into::into).collect(),
+            output_format: result.output_format.into(),
+            render_time_ms: now_ms() - start,
+        })
+    }
+
+    /// Compile a document to an opaque compiled document handle for page-selective rendering.
+    #[wasm_bindgen(js_name = compile)]
+    pub fn compile(&self, input: JsValue) -> Result<CompiledDocument, JsValue> {
+        let core_input = js_value_to_quill_input(input)?;
+        let backend = self.inner.backend().ok_or_else(|| {
+            WasmError::from(
+                "Quill has no backend; use engine.quillFromTree() instead of Quill.fromTree()",
+            )
+            .to_js_value()
+        })?;
+        let compiled = self
+            .inner
+            .compile(core_input)
+            .map_err(|e| WasmError::from(e).to_js_value())?;
+        Ok(CompiledDocument {
+            backend: Arc::clone(backend),
+            inner: compiled,
+        })
+    }
+}
+
+fn js_value_to_quill_input(input: JsValue) -> Result<quillmark_core::QuillInput, JsValue> {
+    if let Some(s) = input.as_string() {
+        return Ok(quillmark_core::QuillInput::Markdown(s));
+    }
+    // Try to deserialize as ParsedDocument (plain JS object)
+    let parsed: ParsedDocument = serde_wasm_bindgen::from_value(input).map_err(|e| {
+        WasmError::from(format!(
+            "render: input must be a string (markdown) or ParsedDocument: {}",
+            e
+        ))
+        .to_js_value()
+    })?;
+    let core_parsed = to_core_parsed(parsed).map_err(|e| {
+        WasmError::from(format!("render: invalid ParsedDocument: {:?}", e)).to_js_value()
+    })?;
+    Ok(quillmark_core::QuillInput::Parsed(core_parsed))
 }
 
 fn file_tree_from_js_tree(tree: &JsValue) -> Result<quillmark_core::FileTreeNode, JsValue> {
@@ -446,9 +265,6 @@ fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
         return Ok(entries);
     }
 
-    // Reject Array and typed arrays before the generic is_object() check.
-    // Arrays are objects in JS, so without this they'd silently produce
-    // numeric-string paths ("0", "1", ...) and give a misleading error later.
     if tree.is_instance_of::<js_sys::Array>() {
         return Err(
             WasmError::from("fromTree requires a Map or plain object, not an Array").to_js_value(),
@@ -489,6 +305,15 @@ fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValu
 
     let bytes = value.unchecked_into::<Uint8Array>();
     Ok(bytes.to_vec())
+}
+
+#[wasm_bindgen]
+impl ParsedDocument {
+    /// Parse markdown into a ParsedDocument.
+    #[wasm_bindgen(js_name = fromMarkdown)]
+    pub fn from_markdown(markdown: &str) -> Result<ParsedDocument, JsValue> {
+        parse_markdown_impl(markdown)
+    }
 }
 
 #[wasm_bindgen]
