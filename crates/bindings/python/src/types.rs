@@ -6,8 +6,8 @@ use pyo3::types::PyDict; // PyDict
 use pyo3::Bound; // Bound
 
 use quillmark::{
-    Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderResult, SerializableDiagnostic,
-    Workflow,
+    Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderError, RenderOptions,
+    RenderResult, SerializableDiagnostic, Workflow,
 };
 use std::path::PathBuf;
 
@@ -264,6 +264,32 @@ impl PyQuill {
             _ => vec![],
         };
         Ok(formats)
+    }
+
+    #[pyo3(signature = (input, format=None))]
+    fn render(
+        &self,
+        input: &Bound<'_, pyo3::PyAny>,
+        format: Option<PyOutputFormat>,
+    ) -> PyResult<PyRenderResult> {
+        let rust_format = format.map(OutputFormat::from);
+        let opts = RenderOptions {
+            output_format: rust_format,
+            ppi: None,
+        };
+
+        let result: Result<RenderResult, RenderError> = if let Ok(md) = input.extract::<String>() {
+            self.inner.render(md, &opts)
+        } else if let Ok(parsed) = input.extract::<PyRef<PyParsedDocument>>() {
+            self.inner.render(parsed.inner.clone(), &opts)
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "render() input must be a str (markdown) or ParsedDocument",
+            ));
+        };
+
+        let render_result = result.map_err(convert_render_error)?;
+        Ok(PyRenderResult { inner: render_result })
     }
 }
 

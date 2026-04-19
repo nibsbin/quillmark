@@ -177,6 +177,24 @@ class Quill:
     def supported_formats(self) -> list[OutputFormat]:
         """Get supported output formats for this quill's backend."""
 
+    def render(
+        self,
+        input: str | ParsedDocument,
+        format: OutputFormat | None = None,
+    ) -> RenderResult:
+        """Render a document using this quill.
+
+        For dynamic asset or font injection, use engine.workflow(quill) instead.
+
+        Args:
+            input: Markdown string or pre-parsed ParsedDocument
+            format: Output format (defaults to first supported format)
+
+        Raises:
+            QuillmarkError: If this quill was not loaded via engine.quill_from_path()
+            TypeError: If input is not str or ParsedDocument
+        """
+
 class ParsedDocument:
     """Parsed markdown document with frontmatter."""
     
