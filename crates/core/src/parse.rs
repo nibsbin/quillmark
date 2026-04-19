@@ -156,44 +156,96 @@ fn is_valid_tag_name(name: &str) -> bool {
     true
 }
 
-/// Check if a position is inside a fenced code block
+/// Check if a position is inside a fenced code block.
 ///
-/// This uses strict fence detection per EXTENDED_MARKDOWN.md specification:
-/// - Only exactly 3 backticks (```) are valid fences
-/// - Tildes (~~~) are NOT treated as fences
-/// - 4+ backticks are NOT treated as fences
+/// Uses CommonMark-style fenced block detection:
+/// - Backticks (```) and tildes (~~~) are supported
+/// - Opening fences are 3+ matching fence characters
+/// - Closing fences use the same fence character and length >= opening fence
 fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
     let before = &markdown[..pos];
-    let mut in_fence = false;
+    let mut open_fence: Option<(u8, usize)> = None; // (fence char, opening run length)
 
-    // Check if document starts with exactly ```
-    if is_exact_fence_at(before, 0) {
-        in_fence = !in_fence;
-    }
-
-    // Scan for fence toggles after newlines
-    for (i, _) in before.match_indices('\n') {
-        if is_exact_fence_at(before, i + 1) {
-            in_fence = !in_fence;
+    // Check if document starts with a fence
+    if let Some((fence_char, fence_len, is_closing)) = fence_marker_at(before, 0, open_fence) {
+        if is_closing {
+            open_fence = None;
+        } else {
+            open_fence = Some((fence_char, fence_len));
         }
     }
 
-    in_fence
+    // Scan line starts after newlines
+    for (i, _) in before.match_indices('\n') {
+        if let Some((fence_char, fence_len, is_closing)) =
+            fence_marker_at(before, i + 1, open_fence)
+        {
+            if is_closing {
+                open_fence = None;
+            } else {
+                open_fence = Some((fence_char, fence_len));
+            }
+        }
+    }
+
+    open_fence.is_some()
 }
 
-/// Check if position starts exactly 3 backticks (not 2, not 4+)
+/// Detects a CommonMark fence marker at a given line start position.
 ///
-/// Strict specification: only exactly ``` is a valid fence marker.
-fn is_exact_fence_at(text: &str, pos: usize) -> bool {
+/// Returns (fence_char, fence_len, is_closing).
+fn fence_marker_at(
+    text: &str,
+    pos: usize,
+    open_fence: Option<(u8, usize)>,
+) -> Option<(u8, usize, bool)> {
     if pos >= text.len() {
-        return false;
+        return None;
     }
-    let remaining = &text[pos..];
-    if !remaining.starts_with("```") {
-        return false;
+
+    // Extract line [pos, end)
+    let line_end = text[pos..]
+        .find('\n')
+        .map(|offset| pos + offset)
+        .unwrap_or(text.len());
+    let line = &text[pos..line_end];
+
+    // Optional indentation is up to 3 spaces (CommonMark fence rule)
+    let indent = line.as_bytes().iter().take_while(|&&b| b == b' ').count();
+    if indent > 3 {
+        return None;
     }
-    // Ensure it's exactly 3 backticks (4th char is not a backtick)
-    remaining.len() == 3 || remaining.as_bytes().get(3) != Some(&b'`')
+
+    let trimmed = &line[indent..];
+    let bytes = trimmed.as_bytes();
+    let Some(&first) = bytes.first() else {
+        return None;
+    };
+    if first != b'`' && first != b'~' {
+        return None;
+    }
+
+    let run_len = bytes.iter().take_while(|&&b| b == first).count();
+    if run_len < 3 {
+        return None;
+    }
+
+    let rest = &trimmed[run_len..];
+
+    match open_fence {
+        Some((open_char, open_len)) => {
+            if first != open_char || run_len < open_len {
+                return None;
+            }
+            // Closing fence line may only contain trailing spaces/tabs
+            if rest.chars().all(|c| c == ' ' || c == '\t') {
+                Some((first, run_len, true))
+            } else {
+                None
+            }
+        }
+        None => Some((first, run_len, false)),
+    }
 }
 
 /// Creates serde_saphyr Options with security budgets configured.
@@ -1255,9 +1307,9 @@ More content.
     }
 
     #[test]
-    fn test_tildes_are_not_fences() {
-        // Per EXTENDED_MARKDOWN.md: tildes (~~~) are NOT treated as fences
-        // So --- inside ~~~ WILL be parsed as a metadata block
+    fn test_tildes_are_fences() {
+        // Per CommonMark: tildes (~~~) are valid fenced code block delimiters.
+        // So --- inside ~~~ should NOT be parsed as a metadata block.
         let markdown = r#"---
 QUILL: test_quill
 title: Test
@@ -1275,19 +1327,14 @@ More content.
 "#;
 
         let doc = decompose(markdown).unwrap();
-        // The --- should be parsed as a CARD block since tildes aren't fences
-        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
-        assert_eq!(cards.len(), 1);
-        assert_eq!(
-            cards[0].get("fake").unwrap().as_str().unwrap(),
-            "frontmatter"
-        );
+        assert!(doc.body().unwrap().contains("fake: frontmatter"));
+        assert!(doc.get_field("fake").is_none());
     }
 
     #[test]
-    fn test_four_backticks_are_not_fences() {
-        // Per EXTENDED_MARKDOWN.md: only exactly 3 backticks are valid fences
-        // 4+ backticks are NOT treated as fences
+    fn test_four_backticks_are_fences() {
+        // Per CommonMark: 4+ backticks are valid fenced code block delimiters.
+        // So --- inside ```` should NOT be parsed as a metadata block.
         let markdown = r#"---
 QUILL: test_quill
 title: Test
@@ -1305,13 +1352,8 @@ More content.
 "#;
 
         let doc = decompose(markdown).unwrap();
-        // The --- should be parsed as a CARD block since 4 backticks aren't a fence
-        let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
-        assert_eq!(cards.len(), 1);
-        assert_eq!(
-            cards[0].get("fake").unwrap().as_str().unwrap(),
-            "frontmatter"
-        );
+        assert!(doc.body().unwrap().contains("fake: frontmatter"));
+        assert!(doc.get_field("fake").is_none());
     }
 
     #[test]
