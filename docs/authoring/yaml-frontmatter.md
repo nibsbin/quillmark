@@ -66,7 +66,7 @@ document:
 ```
 
 > [!WARNING]
-> YAML objects and nested structures are syntactically valid in frontmatter. However, when using schema-driven fields from `Quill.yaml`, Quill currently only supports `type: object` inside `array.items` (typed array rows). Top-level fields declared as `type: object` are not supported. See [Quill.yaml Reference: Field Types](../format-designer/quill-yaml-reference.md#field-types).
+> YAML objects and nested structures are syntactically valid in frontmatter. However, Quill’s schema system does not yet provide a general-purpose deep-nesting field type. As a current product-scoping decision, `type: object` is only supported for structured rows inside `array.items` (not as standalone top-level fields). See [Quill.yaml Reference: Field Types](../format-designer/quill-yaml-reference.md#field-types).
 
 ## QUILL Key
 
