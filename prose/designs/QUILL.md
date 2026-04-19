@@ -17,7 +17,7 @@ pub struct Quill {
     pub backend: String,
     pub plate: Option<String>,
     pub example: Option<String>,
-    pub schema: QuillValue,
+    pub config: QuillConfig,
     pub defaults: HashMap<String, QuillValue>,
     pub examples: HashMap<String, Vec<QuillValue>>,
     pub files: FileTreeNode,

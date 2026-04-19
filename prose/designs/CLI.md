@@ -9,13 +9,14 @@
 ### `render`
 
 ```
-quillmark render [OPTIONS] <MARKDOWN_FILE>
+quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 ```
 
+`QUILL_PATH` provides the local quill bundle used for rendering. `MARKDOWN_FILE` frontmatter still requires top-level `QUILL` because parsing enforces it.
+
 Options:
-- `-q, --quill <PATH>` — quill directory (overrides QUILL frontmatter field)
 - `-o, --output <FILE>` — output file path (default: derived from input filename)
-- `-f, --format <FORMAT>` — `pdf`, `svg`, or `txt` (default: `pdf`)
+- `-f, --format <FORMAT>` — `pdf`, `svg`, `png`, or `txt` (default: `pdf`)
 - `--stdout` — write output to stdout
 - `--output-data <FILE>` — write compiled JSON data to file
 - `--verbose` — detailed processing output
@@ -27,7 +28,7 @@ Options:
 quillmark schema <QUILL_PATH> [-o <FILE>]
 ```
 
-Outputs the Quill's field schema as JSON to stdout or file.
+Outputs the Quill's public schema contract as YAML to stdout or file.
 
 ### `validate`
 

@@ -41,7 +41,7 @@ date: 2025-01-15
 # Content starts here
 ```
 
-This metadata is accessible in formats and can be validated against JSON schemas defined in the Quill.
+This metadata is accessible in formats and is validated against native schema rules defined in the Quill.
 
 ### Backends
 
@@ -51,27 +51,19 @@ Backends compile raw plate content with injected JSON data into final artifacts:
 
 Each backend has its own compilation process and error mapping.
 
-### Default Quill System
+### Required `QUILL` Reference
 
-Quillmark includes a **default quill system** that allows rendering documents without explicitly specifying a Quill format. When no `QUILL` field is present in your frontmatter, Quillmark uses the `__default__` format provided by the backend (if available).
-
-For example, the Typst backend provides a default Quill that renders simple documents with minimal styling. This means you can get started quickly:
+Each document must declare its target format in top-level frontmatter using `QUILL`.
 
 ```markdown
 ---
+QUILL: my-custom-format
 title: My First Document
 author: Jane Doe
 ---
-
-# Introduction
-
-Content here.
 ```
 
-This document will render using the default Typst quill without requiring you to create or register a custom Quill format. When you're ready for more customization, you can:
-
-1. Specify a custom Quill in frontmatter: `QUILL: my-custom-format`
-2. Create and register your own Quill formats
+If `QUILL` is missing, parsing fails with `ParseError::InvalidStructure`.
 
 ## The Rendering Pipeline
 
@@ -99,7 +91,7 @@ Different Quills can produce completely different outputs from the same input, j
 
 ## Key Design Principles
 
-1. **Zero-Config Defaults** - Basic projects work without configuration files
+1. **Explicit Format Selection** - Documents declare their format with required `QUILL`
 2. **Dynamic Resource Loading** - Assets, fonts, and packages are discovered at runtime
 3. **Structured Error Handling** - Clear diagnostics with source locations
 4. **Thread-Safe** - Backends are thread-safe with no global state

@@ -16,11 +16,11 @@ Semantic versioning: `MAJOR.MINOR.PATCH` (two-segment `MAJOR.MINOR` also accepte
 ## Document Syntax
 
 ```yaml
-QUILL: "template@2.1.0"    # exact version
-QUILL: "template@2.1"      # latest 2.1.x
-QUILL: "template@2"        # latest 2.x.x
-QUILL: "template@latest"   # latest overall (explicit)
-QUILL: "template"          # latest overall (default)
+QUILL: "my_format@2.1.0"    # exact version
+QUILL: "my_format@2.1"      # latest 2.1.x
+QUILL: "my_format@2"        # latest 2.x.x
+QUILL: "my_format@latest"   # latest overall (explicit)
+QUILL: "my_format"          # latest overall (default)
 ```
 
 ## Resolution
@@ -42,7 +42,7 @@ Given versions `[1.0.0, 1.0.1, 1.1.0, 2.0.0, 2.1.0, 2.1.1, 3.0.0]`:
 
 ```yaml
 Quill:
-  name: my_template
+  name: my_format
   version: "2.1.0"
   backend: typst
   description: "..."
@@ -52,7 +52,7 @@ Quill:
 
 ```
 Error: Version not found
-  Template: resume_template
+  Quill: resume_format
   Requested: @2.3
   Available: 3.0.0, 2.2.0, 2.1.0, 2.0.0, 1.0.0
 
