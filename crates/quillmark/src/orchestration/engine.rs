@@ -174,19 +174,11 @@ impl Quillmark {
             ),
         })?;
 
-        // Check if this exact version is already registered
+        // Idempotent re-registration: if this exact canonical ref is already
+        // registered, treat it as a no-op.
         if let Some(version_set) = self.quills.get(&name) {
             if version_set.versions.contains_key(&version) {
-                return Err(RenderError::QuillConfig {
-                    diag: Box::new(
-                        Diagnostic::new(
-                            Severity::Error,
-                            format!("Quill '{}' version {} is already registered", name, version),
-                        )
-                        .with_code("quill::version_collision".to_string())
-                        .with_hint("Each version of a quill must be unique".to_string()),
-                    ),
-                });
+                return Ok(());
             }
         }
 
@@ -446,6 +438,22 @@ impl Quillmark {
             }
         }
         result
+    }
+
+    /// Returns true if an exact canonical quill reference (`name@x.y.z`) is
+    /// already registered.
+    pub fn has_quill(&self, canonical_ref: &str) -> bool {
+        let Ok(quill_ref) = QuillReference::from_str(canonical_ref) else {
+            return false;
+        };
+
+        let VersionSelector::Exact(version) = quill_ref.selector else {
+            return false;
+        };
+
+        self.quills
+            .get(&quill_ref.name)
+            .is_some_and(|version_set| version_set.versions.contains_key(&version))
     }
 
     /// Get a reference to a registered quill by name (returns latest version).
