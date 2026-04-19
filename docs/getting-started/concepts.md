@@ -63,7 +63,7 @@ author: Jane Doe
 ---
 ```
 
-If `QUILL` is missing, parsing fails.
+If `QUILL` is missing, parsing fails with `ParseError::InvalidStructure`.
 
 ## The Rendering Pipeline
 

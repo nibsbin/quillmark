@@ -12,6 +12,8 @@
 quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 ```
 
+`QUILL_PATH` provides the local quill bundle used for rendering. `MARKDOWN_FILE` frontmatter still requires top-level `QUILL` because parsing enforces it.
+
 Options:
 - `-o, --output <FILE>` — output file path (default: derived from input filename)
 - `-f, --format <FORMAT>` — `pdf`, `svg`, `png`, or `txt` (default: `pdf`)

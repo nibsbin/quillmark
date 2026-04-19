@@ -23,6 +23,8 @@ quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 - `<QUILL_PATH>`: Path to quill directory
 - `[MARKDOWN_FILE]`: Path to markdown file with YAML frontmatter (optional — when omitted, the quill's example content is used)
 
+`<QUILL_PATH>` selects the local quill bundle used for rendering. `MARKDOWN_FILE` frontmatter still requires top-level `QUILL` during parsing.
+
 **Options:**
 
 - `-o <PATH>` / `--output <PATH>`: Output file path (default: derived from input filename, e.g. `input.pdf`)
