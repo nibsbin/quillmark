@@ -78,13 +78,13 @@ impl Quill {
                 Diagnostic::new(
                     Severity::Error,
                     format!(
-                        "Quill '{}' has no backend attached; use engine.load_quill() instead of Quill::from_path()",
+                        "Quill '{}' has no backend attached; use engine.quill() or engine.quill_from_path() instead",
                         self.name
                     ),
                 )
                 .with_code("quill::no_backend".to_string())
                 .with_hint(
-                    "Create render-ready quills via engine.load_quill(tree) or engine.quill_from_path(path)".to_string(),
+                    "Create render-ready quills via engine.quill(tree) or engine.quill_from_path(path)".to_string(),
                 ),
             ),
         })

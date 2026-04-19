@@ -1,6 +1,6 @@
 //! # Default Values Tests
 
-use quillmark::{ParsedDocument, Quill, Quillmark};
+use quillmark::{ParsedDocument, Quillmark};
 use std::fs;
 use tempfile::TempDir;
 
@@ -208,7 +208,10 @@ main:
     )
     .unwrap();
 
-    let quill = Quill::from_path(quill_path).expect("from_path failed");
+    let engine = Quillmark::new();
+    let quill = engine
+        .quill_from_path(quill_path)
+        .expect("quill_from_path failed");
     let defaults = quill.extract_defaults();
 
     assert!(defaults.contains_key("author"));

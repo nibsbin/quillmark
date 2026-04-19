@@ -186,8 +186,10 @@ pub struct PyQuill {
 impl PyQuill {
     #[staticmethod]
     fn from_path(path: PathBuf) -> PyResult<Self> {
-        let quill = Quill::from_path(path)
-            .map_err(|e| PyErr::new::<crate::errors::QuillmarkError, _>(e.to_string()))?;
+        let engine = Quillmark::new();
+        let quill = engine
+            .quill_from_path(path)
+            .map_err(convert_render_error)?;
         Ok(PyQuill { inner: quill })
     }
 

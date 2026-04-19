@@ -8,30 +8,18 @@
 
 ```typescript
 class Quill {
-  static fromTree(tree: Map<string, Uint8Array> | Record<string, Uint8Array>): Quill;
 }
 
 class Quillmark {
   constructor();
   static parseMarkdown(markdown: string): ParsedDocument;
-  registerQuill(quill: Quill): QuillInfo;
-  getQuillInfo(name: string): QuillInfo;
-  getQuillSchema(name: string): string; // YAML
-  compileData(markdown: string): object;
-  dryRun(markdown: string): void;
-  render(parsed: ParsedDocument, options?: RenderOptions): RenderResult;
-  compile(parsed: ParsedDocument): CompiledDocument;
-  listQuills(): string[];
-  unregisterQuill(name: string): boolean;
+  quill(tree: Map<string, Uint8Array> | Record<string, Uint8Array>): Quill;
 }
 ```
 
 ## Implementation notes
 
-- `Quill.fromTree` accepts `Map<string, Uint8Array>` or a plain `Record<string, Uint8Array>`. Directory hierarchy is inferred from `/` path separators in keys (e.g. `"assets/fonts/Inter.ttf"` inserts into `assets/fonts/`). Values must be `Uint8Array`; passing a string throws.
-- `registerQuill` accepts only `Quill` handles. Callers must create handles with `Quill.fromTree(...)` before registration.
-- There is no `Quill.fromJson` factory; JS callers convert text with `TextEncoder` and pass bytes to `fromTree`.
-- The WASM `Quill` struct holds `Arc<quillmark_core::Quill>`. The JS handle is not consumed on registration, and `registerQuill` may be called on multiple engines with the same handle. Each registration clones the underlying `Quill` once at storage time (the core engine stores its own copy), so the JS-level `Arc` prevents handle invalidation but does not eliminate the per-engine copy.
+- `engine.quill(...)` accepts `Map<string, Uint8Array>` or a plain `Record<string, Uint8Array>`. Directory hierarchy is inferred from `/` path separators in keys (e.g. `"assets/fonts/Inter.ttf"` inserts into `assets/fonts/`). Values must be `Uint8Array`; passing a string throws.
 
 ## Key contracts
 

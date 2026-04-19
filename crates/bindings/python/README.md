@@ -45,12 +45,10 @@ workflow = engine.workflow(quill) # for dynamic assets/fonts
 ### `Quill`
 
 ```python
-Quill.from_path("path")           # load-only (no backend)
+Quill.from_path("path")           # convenience constructor
 quill = engine.quill_from_path("path")
 result = quill.render(markdown_or_parsed, OutputFormat.PDF)
 ```
-
-`quill.render(...)` requires a backend-attached quill (`engine.quill_from_path`).
 
 ### `Workflow`
 

@@ -3,7 +3,7 @@
 use std::fs;
 use tempfile::TempDir;
 
-use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark};
+use quillmark::{OutputFormat, ParsedDocument, Quillmark};
 
 fn make_quill_dir(temp_dir: &TempDir, name: &str, backend: &str) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join(name);
@@ -91,22 +91,22 @@ fn test_quill_engine_end_to_end() {
 }
 
 #[test]
-fn test_no_backend_error_from_from_path() {
+#[cfg(feature = "typst")]
+fn test_quill_render_succeeds_with_engine_loaded_quill() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = make_quill_dir(&temp_dir, "my_quill", "typst");
 
-    let quill = Quill::from_path(quill_path).expect("from_path failed");
+    let engine = Quillmark::new();
+    let quill = engine
+        .quill_from_path(quill_path)
+        .expect("quill_from_path failed");
     let result = quill.render(
         "---\nQUILL: my_quill\n---\n",
         &quillmark_core::RenderOptions {
-            output_format: None,
+            output_format: Some(OutputFormat::Pdf),
             ppi: None,
         },
     );
 
-    assert!(result.is_err());
-    match result {
-        Err(quillmark::RenderError::NoBackend { .. }) => {}
-        other => panic!("Expected NoBackend error, got: {:?}", other),
-    }
+    assert!(result.is_ok(), "render should succeed for engine-loaded quill");
 }

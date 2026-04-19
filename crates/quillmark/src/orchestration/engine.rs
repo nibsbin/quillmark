@@ -42,8 +42,8 @@ impl Quillmark {
         std::mem::take(&mut self.warnings)
     }
 
-    /// Load a quill from a file tree and attach the appropriate backend.
-    pub fn load_quill(&self, tree: quillmark_core::FileTreeNode) -> Result<Quill, RenderError> {
+    /// Build and return a render-ready quill from an in-memory file tree.
+    pub fn quill(&self, tree: quillmark_core::FileTreeNode) -> Result<Quill, RenderError> {
         let quill = Quill::from_tree(tree).map_err(|e| RenderError::QuillConfig {
             diag: Box::new(
                 Diagnostic::new(
@@ -94,7 +94,7 @@ impl Quillmark {
     /// Create a workflow for rendering with the given quill.
     ///
     /// The quill's `backend_id` is looked up in the engine's registered backends.
-    /// Use `load_quill()` or `quill_from_path()` to get a quill with backend attached,
+    /// Use `quill()` or `quill_from_path()` to get a quill with backend attached,
     /// or pass a quill loaded directly if its backend is registered.
     pub fn workflow(&self, quill: &Quill) -> Result<Workflow, RenderError> {
         let backend_id = quill.backend_id.as_str();

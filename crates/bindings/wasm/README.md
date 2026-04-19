@@ -29,7 +29,7 @@ npm test
 import { ParsedDocument, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
-const quill = engine.quillFromTree(tree);
+const quill = engine.quill(tree);
 
 const markdown = `---
 QUILL: my_quill
@@ -47,7 +47,7 @@ const result = quill.render(parsed, { format: "pdf" });
 ### `new Quillmark()`
 Create engine.
 
-### `engine.quillFromTree(tree)`
+### `engine.quill(tree)`
 Build + validate + attach backend. Returns a render-ready `Quill`.
 
 ### `ParsedDocument.fromMarkdown(markdown)`
@@ -61,9 +61,6 @@ Render with markdown string or `ParsedDocument`.
 
 ### `quill.compile(input)` + `compiled.renderPages(...)`
 Compile once, render selected pages.
-
-### `Quill.fromTree(tree)`
-Build-only quill (no backend attached). Useful for inspection/tests. Rendering this handle returns a no-backend error.
 
 ## Notes
 

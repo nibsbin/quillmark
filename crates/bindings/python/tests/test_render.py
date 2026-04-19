@@ -1,8 +1,6 @@
 """Tests for rendering workflow."""
 
-import pytest
-
-from quillmark import OutputFormat, ParsedDocument, Quill, Quillmark, QuillmarkError
+from quillmark import OutputFormat, ParsedDocument, Quill, Quillmark
 
 
 def test_save_artifact(taro_quill_dir, taro_md, tmp_path):
@@ -77,12 +75,11 @@ def test_quill_render_ref_mismatch_warning(taro_quill_dir):
     assert len(result.artifacts) > 0, "artifact must still be produced"
 
 
-def test_quill_render_no_backend_raises(taro_quill_dir, taro_md):
-    """Quill.from_path() has no backend; calling render() on it must raise."""
+def test_quill_render_from_quill_classmethod(taro_quill_dir, taro_md):
+    """Quill.from_path() constructs a render-ready quill."""
     quill = Quill.from_path(str(taro_quill_dir))
-
-    with pytest.raises(QuillmarkError):
-        quill.render(taro_md)
+    result = quill.render(taro_md)
+    assert len(result.artifacts) > 0
 
 
 def test_engine_workflow_still_works(taro_quill_dir, taro_md):

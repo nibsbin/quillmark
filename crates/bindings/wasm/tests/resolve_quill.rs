@@ -9,7 +9,7 @@ wasm_bindgen_test_configure!(run_in_browser);
 fn test_quill_from_tree_versioned() {
     let engine = Quillmark::new();
 
-    let q1 = engine.quill_from_tree(common::tree(&[
+    let q1 = engine.quill(common::tree(&[
         (
             "Quill.yaml",
             b"Quill:\n  name: usaf_memo\n  version: \"0.1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Version 0.1.0\n",
@@ -17,7 +17,7 @@ fn test_quill_from_tree_versioned() {
         ("plate.typ", b"hello 1"),
     ])).unwrap();
 
-    let q2 = engine.quill_from_tree(common::tree(&[
+    let q2 = engine.quill(common::tree(&[
         (
             "Quill.yaml",
             b"Quill:\n  name: usaf_memo\n  version: \"0.2.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Version 0.2.0\n",

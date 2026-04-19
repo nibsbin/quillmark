@@ -10,7 +10,7 @@
 //!
 //! ## Workflow
 //!
-//! 1. Build a render-ready quill with `engine.quillFromTree(...)`
+//! 1. Build a render-ready quill with `engine.quill(...)`
 //! 2. Parse markdown via `ParsedDocument.fromMarkdown(...)` (or pass markdown directly)
 //! 3. Render with `quill.render(...)`
 //!
@@ -20,7 +20,7 @@
 //! import { ParsedDocument, Quillmark } from '@quillmark-test/wasm';
 //!
 //! const engine = new Quillmark();
-//! const quill = engine.quillFromTree(tree);
+//! const quill = engine.quill(tree);
 //!
 //! const parsed = ParsedDocument.fromMarkdown(markdown);
 //! const result = quill.render(parsed, { format: 'pdf' });
