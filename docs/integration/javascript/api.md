@@ -6,26 +6,31 @@
 npm install @quillmark-test/wasm
 ```
 
-## Core flow
+## Core Flow
 
 ```javascript
-import { Quill, Quillmark } from "@quillmark-test/wasm";
+import { ParsedDocument, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
-const enc = new TextEncoder();
-const quill = Quill.fromTree(new Map([
-  ["Quill.yaml", enc.encode(quillYamlString)],
-  ["plate.typ", enc.encode(plateTypString)],
-]));
-engine.registerQuill(quill);
+const quill = engine.quillFromTree(treeMapOrRecord);
 
-const parsed = Quillmark.parseMarkdown(markdown); // requires QUILL in frontmatter
-const result = engine.render(parsed, { format: "pdf" });
+const parsed = ParsedDocument.fromMarkdown(markdown); // requires QUILL in frontmatter
+const result = quill.render(parsed, { format: "pdf" });
 ```
 
 ## Main APIs
 
-### `Quillmark.parseMarkdown(markdown)`
+### `new Quillmark()`
+
+Creates an engine with built-in backend registrations.
+
+### `engine.quillFromTree(tree)`
+
+Builds and validates a quill from `Map<string, Uint8Array>` or `Record<string, Uint8Array>`, then attaches the declared backend.
+
+This is the canonical WASM path for a render-ready quill.
+
+### `ParsedDocument.fromMarkdown(markdown)`
 
 Parses markdown + YAML frontmatter into:
 
@@ -36,49 +41,36 @@ type ParsedDocument = {
 };
 ```
 
-### `Quill.fromTree(tree)`
+### `Quillmark.parseMarkdown(markdown)`
 
-Builds a `Quill` handle from a flat `Map<string, Uint8Array>` (or plain object record) of relative paths to bytes.
-Use `TextEncoder` for text files before passing them to `fromTree`.
+Deprecated wrapper around `ParsedDocument.fromMarkdown(markdown)`.
 
-### `engine.registerQuill(quill)`
+### `quill.render(input, options?)`
 
-Registers a pre-built `Quill` handle and returns `QuillInfo`.  
-`registerQuill` is handle-only: pass a `Quill` from `Quill.fromTree(...)`.
+Renders artifacts. `input` may be:
 
-### `engine.getQuillInfo(name)`
+- `string` markdown
+- `ParsedDocument`
 
-Returns:
+`options`:
 
 ```ts
-type QuillInfo = {
-  name: string;
-  backend: string;
-  metadata: Record<string, any>;
-  example?: string;
-  schema: string; // YAML schema text
-  defaults: Record<string, any>;
-  examples: Record<string, any[]>;
-  supportedFormats: Array<"pdf" | "svg" | "txt" | "png">;
+type RenderOptions = {
+  format?: "pdf" | "svg" | "txt" | "png";
+  ppi?: number;
 };
 ```
 
-### `engine.getQuillSchema(name)`
+### `quill.compile(input)`
 
-Returns the public schema contract as YAML text.
+Compiles into an opaque `CompiledDocument` handle for page-selective rendering.
 
-### `engine.dryRun(markdown)`
+### `compiled.renderPages(pages?, opts)`
 
-Validates parse + schema/coercion without full rendering.
-
-### `engine.render(parsed, options)`
-
-Renders artifacts from a parsed document. Quill resolution always comes from `parsed.quillRef`.
+Renders selected pages from a compiled document.
 
 ## Notes
 
-- `schema` is YAML text (not a JSON object).
-- There is no stripped-schema API.
-- `render`/`compile` do not accept quill override options; use `QUILL` in frontmatter.
-- `registerQuill` does not accept raw JSON/tree payloads directly.
-- `Quill.fromJson` is no longer part of the API surface; use `Quill.fromTree`.
+- `QUILL` in frontmatter is required when parsing markdown.
+- `quill.render(parsed)` emits a warning (not error) if `parsed.quillRef` does not match the quill name.
+- `Quill.fromTree(tree)` still exists, but it creates a quill **without** a backend. Calling `render`/`compile` on that handle returns a no-backend error. Use `engine.quillFromTree(tree)` for render-ready quills.

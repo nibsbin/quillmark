@@ -72,25 +72,22 @@ impl Quillmark {
 
     fn attach_backend(&self, quill: Quill) -> Result<Quill, RenderError> {
         let backend_id = quill.backend_id.as_str();
-        let backend = self.backends.get(backend_id).ok_or_else(|| {
-            RenderError::UnsupportedBackend {
-                diag: Box::new(
-                    Diagnostic::new(
-                        Severity::Error,
-                        format!("Backend '{}' not registered or not enabled", backend_id),
-                    )
-                    .with_code("engine::backend_not_found".to_string())
-                    .with_hint(format!(
-                        "Available backends: {}",
-                        self.backends
-                            .keys()
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )),
-                ),
-            }
-        })?;
+        let backend =
+            self.backends
+                .get(backend_id)
+                .ok_or_else(|| RenderError::UnsupportedBackend {
+                    diag: Box::new(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!("Backend '{}' not registered or not enabled", backend_id),
+                        )
+                        .with_code("engine::backend_not_found".to_string())
+                        .with_hint(format!(
+                            "Available backends: {}",
+                            self.backends.keys().cloned().collect::<Vec<_>>().join(", ")
+                        )),
+                    ),
+                })?;
         Ok(quill.with_backend(Arc::clone(backend)))
     }
 
@@ -101,25 +98,22 @@ impl Quillmark {
     /// or pass a quill loaded directly if its backend is registered.
     pub fn workflow(&self, quill: &Quill) -> Result<Workflow, RenderError> {
         let backend_id = quill.backend_id.as_str();
-        let backend = self.backends.get(backend_id).ok_or_else(|| {
-            RenderError::UnsupportedBackend {
-                diag: Box::new(
-                    Diagnostic::new(
-                        Severity::Error,
-                        format!("Backend '{}' not registered or not enabled", backend_id),
-                    )
-                    .with_code("engine::backend_not_found".to_string())
-                    .with_hint(format!(
-                        "Available backends: {}",
-                        self.backends
-                            .keys()
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    )),
-                ),
-            }
-        })?;
+        let backend =
+            self.backends
+                .get(backend_id)
+                .ok_or_else(|| RenderError::UnsupportedBackend {
+                    diag: Box::new(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!("Backend '{}' not registered or not enabled", backend_id),
+                        )
+                        .with_code("engine::backend_not_found".to_string())
+                        .with_hint(format!(
+                            "Available backends: {}",
+                            self.backends.keys().cloned().collect::<Vec<_>>().join(", ")
+                        )),
+                    ),
+                })?;
         Workflow::new(Arc::clone(backend), quill.clone())
     }
 

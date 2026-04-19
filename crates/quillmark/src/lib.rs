@@ -1,6 +1,6 @@
 //! # Quillmark
 //!
-//! Quillmark is a flexible, template-first Markdown rendering system that converts Markdown
+//! Quillmark is a flexible, format-first Markdown rendering system that converts Markdown
 //! with YAML frontmatter into various output artifacts (PDF, SVG, TXT, etc.).
 //!
 //! ## Quick Start

@@ -1,6 +1,6 @@
-# Quillmark — Python bindings for Quillmark
+# Quillmark — Python bindings
 
-Python bindings for the Quillmark template-first Markdown rendering engine.
+Python bindings for Quillmark's format-first Markdown rendering engine.
 
 Maintained by [TTQ](https://tonguetoquill.com).
 
@@ -13,180 +13,62 @@ pip install quillmark
 ## Quick Start
 
 ```python
-from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat
+from quillmark import Quillmark, ParsedDocument, OutputFormat
 
-# Create engine
 engine = Quillmark()
+quill = engine.quill_from_path("path/to/quill")
 
-# Load and register a quill
-quill = Quill.from_path("path/to/quill")
-engine.register_quill(quill)
-
-# Parse markdown
 markdown = """---
 QUILL: my_quill
 title: Hello World
 ---
 
 # Hello
-
-This is a test document.
 """
+
 parsed = ParsedDocument.from_markdown(markdown)
-
-# Create workflow and render
-workflow = engine.workflow(parsed)  # Infers quill from QUILL tag
-result = workflow.render(parsed, OutputFormat.PDF)
-
-# Save output
+result = quill.render(parsed, OutputFormat.PDF)
 result.artifacts[0].save("output.pdf")
 ```
 
 ## API Overview
 
-The Python API provides opinionated visibility over the rendering workflow:
-
-1. **Load Quill** - Load template bundles from the filesystem
-2. **Parse Markdown** - Parse Markdown with YAML frontmatter into `ParsedDocument`
-3. **Inspect Quill** - Retrieve quill properties (metadata, YAML schema, supported formats)
-4. **Create Workflow** - Build a rendering pipeline from a quill reference, quill object, or parsed document.
-5. **Render** - Generate output artifacts with configurable options
-
-### Core Classes
-
-#### `Quillmark` - Engine
-
-Manages backends and quills.
+### `Quillmark`
 
 ```python
 engine = Quillmark()
-engine.register_quill(quill)
-engine.registered_backends()  # ['typst']
-engine.registered_quills()    # ['my_quill']
-
-# Create workflows
-workflow = engine.workflow(parsed)          # Infer from QUILL tag
-workflow = engine.workflow("name")          # By name (latest version)
-workflow = engine.workflow("name@1.0")      # By reference (specific version)
-workflow = engine.workflow(quill)           # By object
-
-# Retrieve registered quills
-quill = engine.get_quill("name")            # Get latest version
-quill = engine.get_quill("name@1.0")        # Get specific version
+engine.registered_backends()      # ['typst']
+quill = engine.quill_from_path("path/to/quill")
+workflow = engine.workflow(quill) # for dynamic assets/fonts
 ```
 
-#### `Quill` - Template Bundle
-
-Represents a quill loaded from the filesystem.
+### `Quill`
 
 ```python
-quill = Quill.from_path("path/to/quill")
-
-# Properties
-quill.name              # Quill name
-quill.backend           # Backend identifier (e.g., "typst")
-quill.plate             # Template content (optional)
-quill.example           # Example markdown content (optional)
-quill.metadata          # Quill metadata dict
-quill.schema            # Public schema YAML text
-quill.defaults          # Default field values from schema
-quill.examples          # Example field values from schema
-quill.supported_formats()  # [OutputFormat.PDF, OutputFormat.SVG]
+Quill.from_path("path")           # load-only (no backend)
+quill = engine.quill_from_path("path")
+result = quill.render(markdown_or_parsed, OutputFormat.PDF)
 ```
 
-#### `ParsedDocument` - Parsed Markdown
+`quill.render(...)` requires a backend-attached quill (`engine.quill_from_path`).
 
-Represents parsed Markdown with frontmatter.
+### `Workflow`
 
-```python
-parsed = ParsedDocument.from_markdown(markdown)
-
-parsed.body()           # Document body (str | None)
-parsed.quill_ref()      # Quill reference string (str)
-parsed.get_field(key)   # Get specific field (Any | None)
-parsed.fields           # All frontmatter fields (dict)
-```
-
-#### `Workflow` - Rendering Pipeline
-
-Sealed workflow for rendering.
+Use workflow when adding dynamic assets/fonts:
 
 ```python
-workflow = engine.workflow("my_quill")
-
-# Render
+workflow = engine.workflow(quill)
+workflow.add_asset("logo.png", logo_bytes)
+workflow.add_font("Custom.ttf", font_bytes)
 result = workflow.render(parsed, OutputFormat.PDF)
-
-# Query properties
-workflow.quill_ref            # "my_quill@1.0"
-workflow.backend_id           # "typst"
-workflow.supported_formats    # [OutputFormat.PDF, OutputFormat.SVG]
 ```
-
-**Note**: Dynamic asset and font injection is not currently supported in Python bindings. Assets must be included in the quill bundle.
-
-#### `RenderResult` - Output Container
-
-Contains rendered artifacts and diagnostics.
-
-```python
-result = workflow.render(parsed, OutputFormat.PDF)
-
-for artifact in result.artifacts:
-    print(f"Format: {artifact.output_format}")
-    print(f"Size: {len(artifact.bytes)} bytes")
-    artifact.save("output.pdf")
-
-for warning in result.warnings:
-    print(f"{warning.severity}: {warning.message}")
-```
-
-## Examples
-
-See the [examples/](examples/) directory for complete examples:
-
-- [`workflow_demo.py`](examples/workflow_demo.py) - Full workflow demonstration
-- [`basic.py`](examples/basic.py) - Basic rendering example
-- [`batch.py`](examples/batch.py) - Batch processing example
 
 ## Development
 
-This repository uses `uv` for local development (https://astral.sh/uv).
-
-Install uv (one-time):
-
-```zsh
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Canonical development flow:
-
-```zsh
-# Create virtual environment
-uv venv
-
-# Install developer extras (includes maturin, pytest, mypy, ruff)
-uv pip install -e ".[dev]"
-
-# Run tests
-uv run pytest
-```
-
-### Alternative: Without uv
-
 ```bash
-# Create venv
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install maturin pytest
-
-# Build and install
-maturin develop
-
-# Run tests
-pytest
+uv venv
+uv pip install -e ".[dev]"
+uv run pytest
 ```
 
 ## License

@@ -43,7 +43,9 @@ fn test_parse_markdown_static() {
 #[wasm_bindgen_test]
 fn test_quill_from_tree() {
     let engine = Quillmark::new();
-    let quill = engine.quill_from_tree(small_quill_tree()).expect("quillFromTree failed");
+    let quill = engine
+        .quill_from_tree(small_quill_tree())
+        .expect("quillFromTree failed");
     let _ = quill;
 }
 
@@ -66,7 +68,9 @@ fn test_render_no_backend_errors() {
 #[wasm_bindgen_test]
 fn test_render_ref_mismatch_warning() {
     let engine = Quillmark::new();
-    let quill = engine.quill_from_tree(small_quill_tree()).expect("quillFromTree failed");
+    let quill = engine
+        .quill_from_tree(small_quill_tree())
+        .expect("quillFromTree failed");
 
     // Document declares a different quill name than the loaded quill ("test_quill")
     let mismatch_md = "---\nQUILL: other_quill\ntitle: Mismatch\n---\n\n# Content\n";
@@ -87,29 +91,44 @@ fn test_render_ref_mismatch_warning() {
 #[wasm_bindgen_test]
 fn test_render_from_string() {
     let engine = Quillmark::new();
-    let quill = engine.quill_from_tree(small_quill_tree()).expect("quillFromTree failed");
+    let quill = engine
+        .quill_from_tree(small_quill_tree())
+        .expect("quillFromTree failed");
 
     let result = quill
         .render(JsValue::from_str(SIMPLE_MARKDOWN), RenderOptions::default())
         .expect("render from string failed");
 
-    assert!(!result.artifacts.is_empty(), "should produce at least one artifact");
-    assert_eq!(result.warnings.len(), 0, "no warnings expected for matching quill_ref");
+    assert!(
+        !result.artifacts.is_empty(),
+        "should produce at least one artifact"
+    );
+    assert_eq!(
+        result.warnings.len(),
+        0,
+        "no warnings expected for matching quill_ref"
+    );
 }
 
 /// `quill.render(ParsedDocument, opts)` — render via pre-parsed document.
 #[wasm_bindgen_test]
 fn test_render_from_parsed_document() {
     let engine = Quillmark::new();
-    let quill = engine.quill_from_tree(small_quill_tree()).expect("quillFromTree failed");
+    let quill = engine
+        .quill_from_tree(small_quill_tree())
+        .expect("quillFromTree failed");
 
     let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     // Convert to JsValue so the engine's input-type dispatch treats it as ParsedDocument
-    let parsed_js = serde_wasm_bindgen::to_value(&parsed).expect("ParsedDocument serialization failed");
+    let parsed_js =
+        serde_wasm_bindgen::to_value(&parsed).expect("ParsedDocument serialization failed");
 
     let result = quill
         .render(parsed_js, RenderOptions::default())
         .expect("render from ParsedDocument failed");
 
-    assert!(!result.artifacts.is_empty(), "should produce at least one artifact");
+    assert!(
+        !result.artifacts.is_empty(),
+        "should produce at least one artifact"
+    );
 }

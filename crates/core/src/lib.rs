@@ -1,13 +1,13 @@
 //! # Quillmark Core Overview
 //!
-//! Core types and functionality for the Quillmark template-first Markdown rendering system.
+//! Core types and functionality for the Quillmark format-first Markdown rendering system.
 //!
 //! ## Features
 //!
 //! This crate provides the foundational types and traits for Quillmark:
 //!
 //! - **Parsing**: YAML frontmatter extraction with Extended YAML Metadata Standard support
-//! - **Template model**: [`Quill`] type for managing template bundles with in-memory file system
+//! - **Format model**: [`Quill`] type for managing format bundles with in-memory file system
 //! - **Backend trait**: Extensible interface for implementing output format backends
 //! - **Error handling**: Structured diagnostics with source location tracking
 //! - **Utilities**: TOML⇄YAML conversion helpers
@@ -33,7 +33,7 @@
 //! - [`backend`]: Backend trait for output format implementations
 //! - [`error`]: Structured error handling and diagnostics
 //! - [`types`]: Core rendering types (OutputFormat, Artifact, RenderOptions)
-//! - [`quill`]: Quill template bundle and related types
+//! - [`quill`]: Quill format bundle and related types
 //!
 //! ## Further Reading
 //!

@@ -11,14 +11,17 @@ fn create_test_quill(temp_dir: &TempDir, quill_yaml: &str) -> std::path::PathBuf
     fs::write(
         quill_path.join("plate.typ"),
         "#import \"@local/quillmark-helper:0.1.0\": data\n= Document\n#data",
-    ).unwrap();
+    )
+    .unwrap();
     quill_path
 }
 
 #[test]
 fn test_default_values_applied_via_dry_run() {
     let temp_dir = TempDir::new().unwrap();
-    let quill_path = create_test_quill(&temp_dir, r#"Quill:
+    let quill_path = create_test_quill(
+        &temp_dir,
+        r#"Quill:
   name: "test_quill"
   version: "1.0"
   backend: "typst"
@@ -35,23 +38,31 @@ main:
     version:
       type: "number"
       default: 1
-"#);
+"#,
+    );
 
     let engine = Quillmark::new();
-    let quill = engine.quill_from_path(&quill_path).expect("quill_from_path failed");
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\ntitle: My Document\n---\n\n# Content\n";
     let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
 
     let result = workflow.dry_run(&parsed);
-    assert!(result.is_ok(), "Dry run should succeed - optional fields have defaults");
+    assert!(
+        result.is_ok(),
+        "Dry run should succeed - optional fields have defaults"
+    );
 }
 
 #[test]
 fn test_default_values_not_overriding_existing_fields() {
     let temp_dir = TempDir::new().unwrap();
-    let quill_path = create_test_quill(&temp_dir, r#"Quill:
+    let quill_path = create_test_quill(
+        &temp_dir,
+        r#"Quill:
   name: "test_quill"
   version: "1.0"
   backend: "typst"
@@ -65,23 +76,32 @@ main:
     status:
       type: "string"
       default: "draft"
-"#);
+"#,
+    );
 
     let engine = Quillmark::new();
-    let quill = engine.quill_from_path(&quill_path).expect("quill_from_path failed");
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
-    let markdown = "---\nQUILL: test_quill\ntitle: My Document\nstatus: published\n---\n\n# Content\n";
+    let markdown =
+        "---\nQUILL: test_quill\ntitle: My Document\nstatus: published\n---\n\n# Content\n";
     let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
 
     let result = workflow.dry_run(&parsed);
-    assert!(result.is_ok(), "Dry run should succeed with explicit values");
+    assert!(
+        result.is_ok(),
+        "Dry run should succeed with explicit values"
+    );
 }
 
 #[test]
 fn test_validation_with_defaults() {
     let temp_dir = TempDir::new().unwrap();
-    let quill_path = create_test_quill(&temp_dir, r#"Quill:
+    let quill_path = create_test_quill(
+        &temp_dir,
+        r#"Quill:
   name: "test_quill"
   version: "1.0"
   backend: "typst"
@@ -96,23 +116,31 @@ main:
     status:
       type: "string"
       default: "draft"
-"#);
+"#,
+    );
 
     let engine = Quillmark::new();
-    let quill = engine.quill_from_path(&quill_path).expect("quill_from_path failed");
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\n---\n\n# Content";
     let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
 
     let dry_run_result = workflow.dry_run(&parsed);
-    assert!(dry_run_result.is_ok(), "Dry run should pass - fields have defaults");
+    assert!(
+        dry_run_result.is_ok(),
+        "Dry run should pass - fields have defaults"
+    );
 }
 
 #[test]
 fn test_validation_fails_without_defaults() {
     let temp_dir = TempDir::new().unwrap();
-    let quill_path = create_test_quill(&temp_dir, r#"Quill:
+    let quill_path = create_test_quill(
+        &temp_dir,
+        r#"Quill:
   name: "test_quill"
   version: "1.0"
   backend: "typst"
@@ -127,17 +155,23 @@ main:
     status:
       type: "string"
       default: "draft"
-"#);
+"#,
+    );
 
     let engine = Quillmark::new();
-    let quill = engine.quill_from_path(&quill_path).expect("quill_from_path failed");
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\nstatus: published\n---\n\n# Content\n";
     let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
 
     let result = workflow.dry_run(&parsed);
-    assert!(result.is_err(), "Should fail validation - title is required");
+    assert!(
+        result.is_err(),
+        "Should fail validation - title is required"
+    );
 
     let err = result.unwrap_err();
     assert!(
@@ -151,7 +185,9 @@ fn test_extract_defaults_from_quill() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = temp_dir.path().join("test_quill");
     fs::create_dir_all(&quill_path).unwrap();
-    fs::write(quill_path.join("Quill.yaml"), r#"Quill:
+    fs::write(
+        quill_path.join("Quill.yaml"),
+        r#"Quill:
   name: "test_quill"
   version: "1.0"
   backend: "typst"
@@ -168,7 +204,9 @@ main:
     draft:
       type: "boolean"
       default: true
-"#).unwrap();
+"#,
+    )
+    .unwrap();
 
     let quill = Quill::from_path(quill_path).expect("from_path failed");
     let defaults = quill.extract_defaults();

@@ -225,7 +225,7 @@ SVG output is useful for web applications and scalable graphics.
 
 PNG renders each page to a raster image. The resolution is controlled via the `ppi` (pixels per inch) option, which defaults to **144 PPI** (2× at 72pt/inch, suitable for retina screen previews). Use 300 PPI or higher for print-quality output.
 
-**Python** — use `render_with_options` or pass `ppi` through the workflow:
+**Python**:
 
 ```python
 from quillmark import OutputFormat
@@ -242,10 +242,10 @@ for i, artifact in enumerate(result.artifacts):
 
 ```javascript
 // Default PPI (144 — retina screen preview)
-const result = engine.render(parsed, { format: 'png' });
+const result = quill.render(parsed, { format: 'png' });
 
 // Print quality at 300 PPI
-const printResult = engine.render(parsed, { format: 'png', ppi: 300 });
+const printResult = quill.render(parsed, { format: 'png', ppi: 300 });
 
 // One artifact per page
 for (const artifact of printResult.artifacts) {

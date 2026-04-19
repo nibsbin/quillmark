@@ -36,7 +36,9 @@ fn test_quill_from_path_and_workflow() {
     let quill_path = make_quill_dir(&temp_dir, "my_test_quill", "typst");
 
     let engine = Quillmark::new();
-    let quill = engine.quill_from_path(quill_path).expect("quill_from_path failed");
+    let quill = engine
+        .quill_from_path(quill_path)
+        .expect("quill_from_path failed");
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     assert!(workflow.quill_ref().starts_with("my_test_quill@"));
@@ -72,10 +74,13 @@ fn test_quill_engine_end_to_end() {
     fs::write(
         quill_path.join("plate.typ"),
         "= {{ title | String(default=\"Test\") }}\n\n{{ body | Content }}",
-    ).unwrap();
+    )
+    .unwrap();
 
     let engine = Quillmark::new();
-    let quill = engine.quill_from_path(&quill_path).expect("quill_from_path failed");
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: my_test_quill\ntitle: Test Document\n---\n\n# Introduction\n";
@@ -91,7 +96,13 @@ fn test_no_backend_error_from_from_path() {
     let quill_path = make_quill_dir(&temp_dir, "my_quill", "typst");
 
     let quill = Quill::from_path(quill_path).expect("from_path failed");
-    let result = quill.render("---\nQUILL: my_quill\n---\n", &quillmark_core::RenderOptions { output_format: None, ppi: None });
+    let result = quill.render(
+        "---\nQUILL: my_quill\n---\n",
+        &quillmark_core::RenderOptions {
+            output_format: None,
+            ppi: None,
+        },
+    );
 
     assert!(result.is_err());
     match result {

@@ -4,8 +4,8 @@ use std::sync::Arc;
 use crate::{
     normalize::normalize_document,
     quill::{FieldSchema, FieldType},
-    Backend, CompiledDocument, Diagnostic, ParsedDocument, Quill, QuillValue,
-    RenderError, RenderOptions, RenderResult, Severity,
+    Backend, CompiledDocument, Diagnostic, ParsedDocument, Quill, QuillValue, RenderError,
+    RenderOptions, RenderResult, Severity,
 };
 
 /// Input to a render or compile operation — either raw Markdown or a pre-parsed document.
@@ -64,10 +64,7 @@ impl Quill {
     }
 
     /// Compile a document to a backend-specific compiled handle for page-selective rendering.
-    pub fn compile(
-        &self,
-        input: impl Into<QuillInput>,
-    ) -> Result<CompiledDocument, RenderError> {
+    pub fn compile(&self, input: impl Into<QuillInput>) -> Result<CompiledDocument, RenderError> {
         let backend = self.require_backend()?;
         let (parsed, _) = self.resolve_input(input.into())?;
         let json_data = self.compile_data_internal(&parsed, backend)?;
@@ -211,29 +208,53 @@ impl Quill {
             let mut schema = serde_json::Map::new();
             match field.r#type {
                 FieldType::String => {
-                    schema.insert("type".to_string(), serde_json::Value::String("string".to_string()));
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("string".to_string()),
+                    );
                 }
                 FieldType::Markdown => {
-                    schema.insert("type".to_string(), serde_json::Value::String("string".to_string()));
-                    schema.insert("contentMediaType".to_string(), serde_json::Value::String("text/markdown".to_string()));
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("string".to_string()),
+                    );
+                    schema.insert(
+                        "contentMediaType".to_string(),
+                        serde_json::Value::String("text/markdown".to_string()),
+                    );
                 }
                 FieldType::Number => {
-                    schema.insert("type".to_string(), serde_json::Value::String("number".to_string()));
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("number".to_string()),
+                    );
                 }
                 FieldType::Integer => {
-                    schema.insert("type".to_string(), serde_json::Value::String("integer".to_string()));
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("integer".to_string()),
+                    );
                 }
                 FieldType::Boolean => {
-                    schema.insert("type".to_string(), serde_json::Value::String("boolean".to_string()));
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("boolean".to_string()),
+                    );
                 }
                 FieldType::Array => {
-                    schema.insert("type".to_string(), serde_json::Value::String("array".to_string()));
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("array".to_string()),
+                    );
                     if let Some(items) = &field.items {
                         schema.insert("items".to_string(), field_to_schema(items));
                     }
                 }
                 FieldType::Object => {
-                    schema.insert("type".to_string(), serde_json::Value::String("object".to_string()));
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("object".to_string()),
+                    );
                     if let Some(properties) = &field.properties {
                         let mut props = serde_json::Map::new();
                         for (name, prop) in properties {
@@ -243,12 +264,24 @@ impl Quill {
                     }
                 }
                 FieldType::Date => {
-                    schema.insert("type".to_string(), serde_json::Value::String("string".to_string()));
-                    schema.insert("format".to_string(), serde_json::Value::String("date".to_string()));
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("string".to_string()),
+                    );
+                    schema.insert(
+                        "format".to_string(),
+                        serde_json::Value::String("date".to_string()),
+                    );
                 }
                 FieldType::DateTime => {
-                    schema.insert("type".to_string(), serde_json::Value::String("string".to_string()));
-                    schema.insert("format".to_string(), serde_json::Value::String("date-time".to_string()));
+                    schema.insert(
+                        "type".to_string(),
+                        serde_json::Value::String("string".to_string()),
+                    );
+                    schema.insert(
+                        "format".to_string(),
+                        serde_json::Value::String("date-time".to_string()),
+                    );
                 }
             }
             serde_json::Value::Object(schema)
@@ -292,6 +325,12 @@ impl Quill {
     ) -> Result<RenderResult, RenderError> {
         let backend = self.require_backend()?;
         let output_format = backend.supported_formats().first().copied();
-        self.render(input, &RenderOptions { output_format, ppi: None })
+        self.render(
+            input,
+            &RenderOptions {
+                output_format,
+                ppi: None,
+            },
+        )
     }
 }

@@ -8,7 +8,9 @@ fn test_with_font_basic() {
     let engine = Quillmark::new();
     let quill = engine.quill_from_path(quills_path("taro")).unwrap();
     let mut workflow = engine.workflow(&quill).unwrap();
-    workflow.add_font("custom.ttf", vec![1, 2, 3, 4, 5]).expect("Should add font");
+    workflow
+        .add_font("custom.ttf", vec![1, 2, 3, 4, 5])
+        .expect("Should add font");
     assert!(workflow.quill_ref().starts_with("taro@"));
 }
 
@@ -17,9 +19,14 @@ fn test_with_font_collision() {
     let engine = Quillmark::new();
     let quill = engine.quill_from_path(quills_path("taro")).unwrap();
     let mut workflow = engine.workflow(&quill).unwrap();
-    workflow.add_font("custom.ttf", vec![1, 2, 3]).expect("Should add first font");
+    workflow
+        .add_font("custom.ttf", vec![1, 2, 3])
+        .expect("Should add first font");
     let result = workflow.add_font("custom.ttf", vec![4, 5, 6]);
-    assert!(matches!(result, Err(RenderError::DynamicFontCollision { .. })));
+    assert!(matches!(
+        result,
+        Err(RenderError::DynamicFontCollision { .. })
+    ));
 }
 
 #[test]
@@ -32,7 +39,9 @@ fn test_with_fonts_multiple() {
         ("font3.woff".to_string(), vec![7, 8, 9]),
     ];
     let mut workflow = engine.workflow(&quill).unwrap();
-    workflow.add_fonts(fonts).expect("Should add multiple fonts");
+    workflow
+        .add_fonts(fonts)
+        .expect("Should add multiple fonts");
     assert!(workflow.quill_ref().starts_with("taro@"));
 }
 
@@ -44,8 +53,12 @@ fn test_clear_fonts() {
     workflow.add_font("font1.ttf", vec![1, 2, 3]).unwrap();
     workflow.add_font("font2.ttf", vec![4, 5, 6]).unwrap();
     workflow.clear_fonts();
-    workflow.add_font("font1.ttf", vec![7, 8, 9]).expect("Should add again after clearing");
-    workflow.add_font("font2.ttf", vec![10, 11, 12]).expect("Should add again after clearing");
+    workflow
+        .add_font("font1.ttf", vec![7, 8, 9])
+        .expect("Should add again after clearing");
+    workflow
+        .add_font("font2.ttf", vec![10, 11, 12])
+        .expect("Should add again after clearing");
     assert!(workflow.quill_ref().starts_with("taro@"));
 }
 
@@ -54,8 +67,12 @@ fn test_with_font_and_asset_together() {
     let engine = Quillmark::new();
     let quill = engine.quill_from_path(quills_path("taro")).unwrap();
     let mut workflow = engine.workflow(&quill).unwrap();
-    workflow.add_asset("chart.png", vec![1, 2, 3]).expect("Should add asset");
-    workflow.add_font("custom.ttf", vec![4, 5, 6]).expect("Should add font");
+    workflow
+        .add_asset("chart.png", vec![1, 2, 3])
+        .expect("Should add asset");
+    workflow
+        .add_font("custom.ttf", vec![4, 5, 6])
+        .expect("Should add font");
     assert!(workflow.quill_ref().starts_with("taro@"));
 }
 

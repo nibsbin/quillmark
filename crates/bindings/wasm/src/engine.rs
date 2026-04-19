@@ -1,9 +1,7 @@
 //! Quillmark WASM Engine - Simplified API
 
 use crate::error::WasmError;
-use crate::types::{
-    ParsedDocument, RenderOptions, RenderPagesOptions, RenderResult,
-};
+use crate::types::{ParsedDocument, RenderOptions, RenderPagesOptions, RenderResult};
 use js_sys::{Array, Object, Uint8Array};
 use std::collections::HashMap;
 use std::str::FromStr;

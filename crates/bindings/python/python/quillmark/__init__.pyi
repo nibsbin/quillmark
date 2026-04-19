@@ -128,7 +128,7 @@ class Workflow:
         """Get list of dynamic font filenames currently in the workflow."""
 
 class Quill:
-    """Template bundle containing plate templates and assets."""
+    """Format bundle containing plate content and assets."""
     
     @staticmethod
     def from_path(path: str | Path) -> Quill:

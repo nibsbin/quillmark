@@ -31,7 +31,9 @@ fn test_dry_run_success() {
     let quill_path = make_test_quill_path(&temp_dir, true);
 
     let engine = Quillmark::new();
-    let quill = engine.quill_from_path(&quill_path).expect("quill_from_path failed");
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\ntitle: My Document\nauthor: Test\n---\n\n# Content\n";
@@ -47,14 +49,19 @@ fn test_dry_run_missing_required_field() {
     let quill_path = make_test_quill_path(&temp_dir, true);
 
     let engine = Quillmark::new();
-    let quill = engine.quill_from_path(&quill_path).expect("quill_from_path failed");
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\nauthor: Test\n---\n\n# Content\n";
     let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
 
     let result = workflow.dry_run(&parsed);
-    assert!(result.is_err(), "dry_run should fail for missing required field");
+    assert!(
+        result.is_err(),
+        "dry_run should fail for missing required field"
+    );
 
     let err = result.unwrap_err();
     let err_str = format!("{:?}", err);
@@ -71,7 +78,9 @@ fn test_dry_run_no_schema() {
     let quill_path = make_test_quill_path(&temp_dir, false);
 
     let engine = Quillmark::new();
-    let quill = engine.quill_from_path(&quill_path).expect("quill_from_path failed");
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\nrandom_field: anything\n---\n\n# Content\n";

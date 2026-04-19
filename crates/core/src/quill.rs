@@ -1,4 +1,4 @@
-//! Quill template bundle types and implementations.
+//! Quill format bundle types and implementations.
 
 mod config;
 mod formats;
@@ -24,7 +24,7 @@ use std::sync::Arc;
 
 use crate::value::QuillValue;
 
-/// A quill template bundle.
+/// A quill format bundle.
 #[derive(Clone)]
 pub struct Quill {
     /// Quill-specific metadata
@@ -54,8 +54,14 @@ impl std::fmt::Debug for Quill {
         f.debug_struct("Quill")
             .field("name", &self.name)
             .field("backend_id", &self.backend_id)
-            .field("resolved_backend", &self.resolved_backend.as_ref().map(|b| b.id()))
-            .field("plate", &self.plate.as_ref().map(|s| format!("<{} bytes>", s.len())))
+            .field(
+                "resolved_backend",
+                &self.resolved_backend.as_ref().map(|b| b.id()),
+            )
+            .field(
+                "plate",
+                &self.plate.as_ref().map(|s| format!("<{} bytes>", s.len())),
+            )
             .field("example", &self.example.is_some())
             .field("files", &"<FileTreeNode>")
             .finish()

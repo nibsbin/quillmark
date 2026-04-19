@@ -79,7 +79,9 @@ fn test_workflow_with_custom_backend() {
     ).unwrap();
     fs::write(quill_path.join("plate.txt"), "Test template: {{ title }}").unwrap();
 
-    let quill = engine.quill_from_path(&quill_path).expect("quill_from_path failed");
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     assert_eq!(workflow.backend_id(), "mock-txt");
@@ -88,7 +90,9 @@ fn test_workflow_with_custom_backend() {
 
     let markdown = "---\nQUILL: custom_backend_quill\ntitle: Hello Custom Backend\n---\n\n# Test\n";
     let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
-    let result = workflow.render(&parsed, Some(OutputFormat::Txt)).expect("render failed");
+    let result = workflow
+        .render(&parsed, Some(OutputFormat::Txt))
+        .expect("render failed");
 
     assert!(!result.artifacts.is_empty());
     assert_eq!(result.artifacts[0].output_format, OutputFormat::Txt);

@@ -30,12 +30,18 @@ impl PyQuillmark {
     }
 
     fn quill_from_path(&self, path: PathBuf) -> PyResult<PyQuill> {
-        let quill = self.inner.quill_from_path(&path).map_err(convert_render_error)?;
+        let quill = self
+            .inner
+            .quill_from_path(&path)
+            .map_err(convert_render_error)?;
         Ok(PyQuill { inner: quill })
     }
 
     fn workflow(&self, quill: PyRef<PyQuill>) -> PyResult<PyWorkflow> {
-        let workflow = self.inner.workflow(&quill.inner).map_err(convert_render_error)?;
+        let workflow = self
+            .inner
+            .workflow(&quill.inner)
+            .map_err(convert_render_error)?;
         Ok(PyWorkflow { inner: workflow })
     }
 
@@ -289,7 +295,9 @@ impl PyQuill {
         };
 
         let render_result = result.map_err(convert_render_error)?;
-        Ok(PyRenderResult { inner: render_result })
+        Ok(PyRenderResult {
+            inner: render_result,
+        })
     }
 }
 
