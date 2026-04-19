@@ -115,7 +115,7 @@ main:
 | `markdown` | Rich text; backends convert to target format |
 | `object` or `dict` | Supported for typed table rows inside `array.items` |
 
-Use `type: array` with `items: { type: object, properties: {...} }` when you need a **list** of structured rows. Top-level `type: object` fields are not supported.
+Use `type: array` with `items: { type: object, properties: {...} }` when you need a **list** of structured rows. Quill does not yet provide a general-purpose deep-nesting field type, so `type: object` is currently scoped to `array.items` rather than standalone top-level fields.
 
 ### Enum Constraints
 
