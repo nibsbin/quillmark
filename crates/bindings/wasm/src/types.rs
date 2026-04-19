@@ -153,47 +153,6 @@ pub struct RenderResult {
     pub render_time_ms: f64,
 }
 
-/// Shallow information about a registered Quill
-///
-/// This provides consumers with the necessary information to configure render options
-/// without exposing the entire Quill file tree.
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct QuillInfo {
-    /// Quill name
-    pub name: String,
-    /// Backend ID (e.g., "typst")
-    pub backend: String,
-    /// Quill metadata (plain JavaScript object)
-    #[tsify(type = "Record<string, any>")]
-    pub metadata: serde_json::Value,
-    /// Loaded example markdown (if available)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub example: Option<String>,
-    /// Public schema contract (YAML string)
-    pub schema: String,
-    /// Default values for fields (plain JavaScript object)
-    #[tsify(type = "Record<string, any>")]
-    pub defaults: serde_json::Value,
-    /// Example values for fields (plain JavaScript object with arrays)
-    #[tsify(type = "Record<string, any[]>")]
-    pub examples: serde_json::Value,
-    /// Supported output formats for this quill's backend
-    pub supported_formats: Vec<OutputFormat>,
-}
-
-impl IntoWasmAbi for QuillInfo {
-    type Abi = <JsValue as IntoWasmAbi>::Abi;
-
-    fn into_abi(self) -> Self::Abi {
-        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-        self.serialize(&serializer)
-            .unwrap_or(JsValue::UNDEFINED)
-            .into_abi()
-    }
-}
-
 /// Parsed markdown document
 ///
 /// Returned by `Quillmark.parseMarkdown()`. Contains the parsed YAML frontmatter
@@ -522,74 +481,6 @@ mod tests {
         // Verify it's not undefined or null
         assert!(!js_value.is_undefined());
         assert!(!js_value.is_null());
-    }
-
-    #[test]
-    fn test_quill_info_plain_objects() {
-        // Test that QuillInfo metadata/defaults/examples serialize as plain objects.
-        let mut metadata_obj = serde_json::Map::new();
-        metadata_obj.insert("key1".to_string(), serde_json::json!("value1"));
-        metadata_obj.insert("key2".to_string(), serde_json::json!(42));
-
-        let mut defaults_obj = serde_json::Map::new();
-        defaults_obj.insert("author".to_string(), serde_json::json!("Anonymous"));
-
-        let mut examples_obj = serde_json::Map::new();
-        examples_obj.insert(
-            "title".to_string(),
-            serde_json::json!(["Example Title 1", "Example Title 2"]),
-        );
-
-        let quill_info = QuillInfo {
-            name: "test_quill".to_string(),
-            backend: "typst".to_string(),
-            metadata: serde_json::Value::Object(metadata_obj),
-            example: None,
-            schema: "name: test_quill\nfields: {}\n".to_string(),
-            defaults: serde_json::Value::Object(defaults_obj),
-            examples: serde_json::Value::Object(examples_obj),
-            supported_formats: vec![OutputFormat::Pdf, OutputFormat::Svg],
-        };
-
-        // Serialize to JSON and verify structure
-        let json = serde_json::to_value(&quill_info).unwrap();
-        assert!(json.is_object());
-
-        let obj = json.as_object().unwrap();
-        assert_eq!(obj.get("name").unwrap().as_str().unwrap(), "test_quill");
-        assert_eq!(obj.get("backend").unwrap().as_str().unwrap(), "typst");
-
-        // Verify metadata is an object (not a Map)
-        let metadata = obj.get("metadata").unwrap();
-        assert!(metadata.is_object());
-        let metadata_obj = metadata.as_object().unwrap();
-        assert_eq!(
-            metadata_obj.get("key1").unwrap().as_str().unwrap(),
-            "value1"
-        );
-        assert_eq!(metadata_obj.get("key2").unwrap().as_u64().unwrap(), 42);
-
-        // Verify schema is a string
-        let schema = obj.get("schema").unwrap();
-        assert!(schema.is_string());
-
-        // Verify defaults is an object
-        let defaults = obj.get("defaults").unwrap();
-        assert!(defaults.is_object());
-        let defaults_obj = defaults.as_object().unwrap();
-        assert_eq!(
-            defaults_obj.get("author").unwrap().as_str().unwrap(),
-            "Anonymous"
-        );
-
-        // Verify examples is an object with arrays
-        let examples = obj.get("examples").unwrap();
-        assert!(examples.is_object());
-        let examples_obj = examples.as_object().unwrap();
-        let title_examples = examples_obj.get("title").unwrap().as_array().unwrap();
-        assert_eq!(title_examples.len(), 2);
-        assert_eq!(title_examples[0].as_str().unwrap(), "Example Title 1");
-        assert_eq!(title_examples[1].as_str().unwrap(), "Example Title 2");
     }
 
     #[test]

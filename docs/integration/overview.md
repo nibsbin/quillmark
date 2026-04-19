@@ -1,105 +1,67 @@
 # Integration Overview
 
-Use this page to understand the shared Quillmark workflow before diving into the language-specific API references.
+Use this page to understand the shared Quillmark flow before diving into language-specific API references.
 
 ## Core Workflow
 
-Most integrations follow the same three-step flow:
+Most integrations follow this flow:
 
-1. **Parse** Markdown into a structured document.
-2. **Register** a Quill format with the engine.
-3. **Render** using a workflow and select an output format.
+1. **Load** a render-ready quill (backend attached).
+2. **Parse** markdown (or pass markdown directly to quill render).
+3. **Render** to the target output format.
 
 === "Python"
 
     ```python
-    from quillmark import Quillmark, ParsedDocument, Quill, OutputFormat
+    from quillmark import Quillmark, ParsedDocument, OutputFormat
 
     engine = Quillmark()
-    engine.register_quill(Quill.from_path("path/to/my-quill"))
+    quill = engine.quill_from_path("path/to/my-quill")
 
     parsed = ParsedDocument.from_markdown(markdown_text)
-    workflow = engine.workflow("my-quill")
-    result = workflow.render(parsed, OutputFormat.PDF)
+    result = quill.render(parsed, OutputFormat.PDF)
     ```
 
 === "JavaScript"
 
     ```javascript
-    import { Quill, Quillmark } from "@quillmark-test/wasm";
+    import { ParsedDocument, Quillmark } from "@quillmark-test/wasm";
 
     const engine = new Quillmark();
-    const enc = new TextEncoder();
-    const quill = Quill.fromTree(new Map([
-      ["Quill.yaml", enc.encode(quillYamlString)],
-      ["plate.typ", enc.encode(plateTypString)],
-    ]));
-    engine.registerQuill(quill);
+    const quill = engine.quillFromTree(treeMapOrRecord);
 
-    // markdownText frontmatter must include: QUILL: my_quill
-    const parsed = Quillmark.parseMarkdown(markdownText);
-    const result = engine.render(parsed, { format: "pdf" });
+    const parsed = ParsedDocument.fromMarkdown(markdownText);
+    const result = quill.render(parsed, { format: "pdf" });
     ```
 
-### Loading Quills
+## Dynamic Assets and Fonts
 
-=== "Python"
+Use a `Workflow` when you need runtime asset/font injection:
 
-    ```python
-    from quillmark import Quillmark, Quill
-
-    engine = Quillmark()
-    quill = Quill.from_path("path/to/my-quill")
-    engine.register_quill(quill)
-
-    # You can also pass a Quill object directly
-    workflow = engine.workflow(quill)
-    ```
-
-=== "JavaScript"
-
-    ```javascript
-    import { Quill, Quillmark } from "@quillmark-test/wasm";
-
-    const engine = new Quillmark();
-
-    // Build a Quill handle from path→bytes and register the handle
-    const enc = new TextEncoder();
-    const quill = Quill.fromTree(new Map([
-      ["Quill.yaml", enc.encode(quillYamlString)],
-      ["plate.typ", enc.encode(plateTypString)],
-    ]));
-    engine.registerQuill(quill);
-
-    const parsed = Quillmark.parseMarkdown(markdownText);
-    const result = engine.render(parsed, { format: "pdf" });
-    ```
+```python
+workflow = engine.workflow(quill)
+workflow.add_asset("logo.png", logo_bytes)
+workflow.add_font("Custom.ttf", font_bytes)
+result = workflow.render(parsed, OutputFormat.PDF)
+```
 
 ## Output Formats
 
-Quillmark can produce one or more artifacts depending on the backend and format:
+Quillmark can produce one or more artifacts depending on backend + format:
 
-- `pdf` for document delivery and print workflows
-- `svg` for scalable vector output
-- `png` for raster previews and page images
-
-For advanced format options (for example PNG `ppi`), see the backend and API reference pages.
+- `pdf` for documents and print workflows
+- `svg` for vector output
+- `png` for raster output
 
 ## Error Handling Philosophy
 
-Quillmark returns structured diagnostics with source context so validation and rendering failures are actionable.
+Quillmark returns structured diagnostics with source context so parse, validation, and render failures are actionable.
 
 Recommended pattern:
 
-1. Validate documents early in your pipeline.
-2. Surface parse/validation messages directly to the user or authoring UI.
-3. Fail fast on render errors in automated or batch jobs.
-
-## Common Integration Patterns
-
-- **Format-driven rendering service**: keep Quills versioned and register at startup.
-- **Authoring loop**: parse/validate on save, render only after validation passes.
-- **Batch rendering**: process many documents with one initialized engine.
+1. Validate early (`ParsedDocument.from_markdown`, `workflow.dry_run`).
+2. Surface diagnostics directly to users/authoring UIs.
+3. Fail fast on render errors in automated jobs.
 
 ## Where to Go Next
 

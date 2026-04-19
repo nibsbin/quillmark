@@ -48,7 +48,7 @@ fn print_json(quill: &Quill) -> Result<()> {
     );
     info.insert(
         "backend".to_string(),
-        serde_json::Value::String(quill.backend.clone()),
+        serde_json::Value::String(quill.backend_id.clone()),
     );
 
     // Extract metadata fields: version, author, description
@@ -127,7 +127,7 @@ fn print_human_readable(quill: &Quill) {
         }
     }
 
-    println!("  Backend:     {}", quill.backend);
+    println!("  Backend:     {}", quill.backend_id);
 
     // Field count from schema properties
     let field_count = quill.config.main().fields.len();

@@ -189,5 +189,15 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
             }
             py_err
         }
+        RenderError::NoBackend { diag } => {
+            let py_err = QuillmarkError::new_err(format!("No backend attached: {}", diag.message));
+            if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
+                let py_diag = crate::types::PyDiagnostic {
+                    inner: (*diag).into(),
+                };
+                let _ = exc.setattr("diagnostic", py_diag);
+            }
+            py_err
+        }
     })
 }

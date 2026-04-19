@@ -55,27 +55,25 @@ class Quillmark:
     def __init__(self) -> None:
         """Create engine with auto-registered backends based on enabled features."""
     
-    def register_quill(self, quill: Quill) -> None:  # raises QuillmarkError on validation failure
-        """Register a quill template with the engine."""
-    
-    def workflow(self, quill_ref: str | Quill | ParsedDocument) -> Workflow:
-        """Load a workflow from a quill reference.
+    def quill_from_path(self, path: str | Path) -> Quill:
+        """Load a quill from a filesystem path and attach the appropriate backend.
+        
+        Raises:
+            QuillmarkError: If path doesn't exist, quill is invalid, or backend unavailable
+        """
 
-        Accepts:
-            - str: Quill name (must be registered)
-            - Quill: Quill object (doesn't need to be registered)
-            - ParsedDocument: Parsed document (extracts QUILL field)
+    def workflow(self, quill: Quill) -> Workflow:
+        """Create a workflow for the given quill.
+
+        Args:
+            quill: A Quill object (must have been loaded via quill_from_path or load_quill)
 
         Raises:
-            QuillmarkError: If quill is not registered or backend unavailable
-            TypeError: If quill_ref is not one of the accepted types
+            QuillmarkError: If backend unavailable
         """
     
     def registered_backends(self) -> list[str]:
         """Get list of registered backend IDs."""
-    
-    def registered_quills(self) -> list[str]:
-        """Get list of registered quill names."""
 
 class Workflow:
     """Sealed workflow for executing the render pipeline.
@@ -88,29 +86,10 @@ class Workflow:
         parsed: ParsedDocument,
         format: OutputFormat | None = None
     ) -> RenderResult:
-        """Render parsed document to artifacts.
-        
-        Args:
-            parsed: Parsed markdown document
-            format: Output format (defaults to first supported format)
-        
-        Returns:
-            RenderResult with artifacts and warnings
-        
-        Raises:
-            TemplateError: If template composition fails
-            CompilationError: If backend compilation fails
-        """
+        """Render parsed document to artifacts."""
 
     def dry_run(self, parsed: ParsedDocument) -> None:
-        """Validate document without compilation.
-
-        Args:
-            parsed: Parsed markdown document
-
-        Raises:
-            QuillmarkError: If validation fails
-        """
+        """Validate document without compilation."""
 
     @property
     def backend_id(self) -> str:
@@ -125,25 +104,10 @@ class Workflow:
         """Get quill reference (name@version)."""
 
     def add_asset(self, filename: str, contents: bytes) -> None:
-        """Add a dynamic asset to the workflow.
-        
-        Args:
-            filename: Name of the asset file (e.g., "logo.png")
-            contents: Binary contents of the asset
-        
-        Raises:
-            QuillmarkError: If an asset with the same filename already exists
-        """
+        """Add a dynamic asset to the workflow."""
 
     def add_assets(self, assets: list[tuple[str, bytes]]) -> None:
-        """Add multiple dynamic assets at once.
-        
-        Args:
-            assets: List of tuples (filename, contents)
-        
-        Raises:
-            QuillmarkError: If any asset filename collides
-        """
+        """Add multiple dynamic assets at once."""
 
     def clear_assets(self) -> None:
         """Clear all dynamic assets from the workflow."""
@@ -152,25 +116,10 @@ class Workflow:
         """Get list of dynamic asset filenames currently in the workflow."""
 
     def add_font(self, filename: str, contents: bytes) -> None:
-        """Add a dynamic font to the workflow.
-        
-        Args:
-            filename: Name of the font file (e.g., "custom.ttf")
-            contents: Binary contents of the font
-        
-        Raises:
-            QuillmarkError: If a font with the same filename already exists
-        """
+        """Add a dynamic font to the workflow."""
 
     def add_fonts(self, fonts: list[tuple[str, bytes]]) -> None:
-        """Add multiple dynamic fonts at once.
-        
-        Args:
-            fonts: List of tuples (filename, contents)
-        
-        Raises:
-            QuillmarkError: If any font filename collides
-        """
+        """Add multiple dynamic fonts at once."""
 
     def clear_fonts(self) -> None:
         """Clear all dynamic fonts from the workflow."""
@@ -179,11 +128,11 @@ class Workflow:
         """Get list of dynamic font filenames currently in the workflow."""
 
 class Quill:
-    """Template bundle containing plate templates and assets."""
+    """Format bundle containing plate content and assets."""
     
     @staticmethod
     def from_path(path: str | Path) -> Quill:
-        """Load quill from filesystem path.
+        """Load quill from filesystem path (no backend attached).
         
         Raises:
             QuillmarkError: If path doesn't exist or quill is invalid
@@ -194,8 +143,8 @@ class Quill:
         """Quill name from Quill.yaml"""
     
     @property
-    def backend(self) -> str | None:
-        """Backend identifier from metadata"""
+    def backend(self) -> str:
+        """Backend identifier"""
 
     @property
     def plate(self) -> str | None:
@@ -203,7 +152,7 @@ class Quill:
 
     @property
     def example(self) -> str | None:
-        """Optional example template filename/content declared by the quill."""
+        """Optional example template content"""
     
     @property
     def metadata(self) -> dict[str, Any]:
@@ -228,14 +177,30 @@ class Quill:
     def supported_formats(self) -> list[OutputFormat]:
         """Get supported output formats for this quill's backend."""
 
+    def render(
+        self,
+        input: str | ParsedDocument,
+        format: OutputFormat | None = None,
+    ) -> RenderResult:
+        """Render a document using this quill.
+
+        For dynamic asset or font injection, use engine.workflow(quill) instead.
+
+        Args:
+            input: Markdown string or pre-parsed ParsedDocument
+            format: Output format (defaults to first supported format)
+
+        Raises:
+            QuillmarkError: If this quill was not loaded via engine.quill_from_path()
+            TypeError: If input is not str or ParsedDocument
+        """
+
 class ParsedDocument:
     """Parsed markdown document with frontmatter."""
     
     @staticmethod
     def from_markdown(markdown: str) -> ParsedDocument:
         """Parse markdown with YAML frontmatter.
-
-        The frontmatter must include a QUILL field specifying the quill name.
         
         Raises:
             ParseError: If YAML frontmatter is invalid or QUILL is missing
@@ -282,7 +247,7 @@ class Artifact:
 
     @property
     def mime_type(self) -> str:
-        """MIME type of the artifact (e.g., 'application/pdf', 'image/svg+xml')"""
+        """MIME type of the artifact"""
     
     def save(self, path: str | Path) -> None:
         """Save artifact to file."""

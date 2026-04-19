@@ -371,7 +371,7 @@ See the [Typst Backend Guide](typst-backend.md) for details.
 
 ## Public Schema YAML
 
-Quillmark emits a public schema YAML contract from `QuillConfig`. The output keeps `ui:` hints as `ui:` and is exposed directly in bindings (`quill.schema` in Python and `quillInfo.schema` in WASM).
+Quillmark emits a public schema YAML contract from `QuillConfig`. The output keeps `ui:` hints as `ui:` and is exposed directly in Python bindings (`quill.schema`).
 
 ---
 
