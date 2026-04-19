@@ -3,11 +3,11 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*; // PyResult, Python, etc.
 use pyo3::pycell::PyRef; // PyRef
 use pyo3::types::PyDict; // PyDict
-use pyo3::{Bound, PyAny}; // Bound, PyAny
+use pyo3::Bound; // Bound
 
 use quillmark::{
-    Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderResult, SerializableDiagnostic,
-    Workflow,
+    Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderError, RenderOptions,
+    RenderResult, SerializableDiagnostic, Workflow,
 };
 use std::path::PathBuf;
 
@@ -29,44 +29,20 @@ impl PyQuillmark {
         }
     }
 
-    fn register_quill(&mut self, quill: PyRef<PyQuill>) -> PyResult<()> {
-        self.inner
-            .register_quill(&quill.inner)
+    fn quill_from_path(&self, path: PathBuf) -> PyResult<PyQuill> {
+        let quill = self
+            .inner
+            .quill_from_path(&path)
             .map_err(convert_render_error)?;
-        Ok(())
+        Ok(PyQuill { inner: quill })
     }
 
-    fn workflow(&self, quill_ref: &Bound<'_, PyAny>) -> PyResult<PyWorkflow> {
-        // Handle string (quill name)
-        if let Ok(name) = quill_ref.extract::<String>() {
-            let workflow = self
-                .inner
-                .workflow(name.as_str())
-                .map_err(convert_render_error)?;
-            return Ok(PyWorkflow { inner: workflow });
-        }
-
-        // Handle PyQuill
-        if let Ok(quill) = quill_ref.extract::<PyRef<PyQuill>>() {
-            let workflow = self
-                .inner
-                .workflow(&quill.inner)
-                .map_err(convert_render_error)?;
-            return Ok(PyWorkflow { inner: workflow });
-        }
-
-        // Handle PyParsedDocument
-        if let Ok(parsed) = quill_ref.extract::<PyRef<PyParsedDocument>>() {
-            let workflow = self
-                .inner
-                .workflow(&parsed.inner)
-                .map_err(convert_render_error)?;
-            return Ok(PyWorkflow { inner: workflow });
-        }
-
-        Err(pyo3::exceptions::PyTypeError::new_err(
-            "workflow() expects a string (quill name), Quill object, or ParsedDocument",
-        ))
+    fn workflow(&self, quill: PyRef<PyQuill>) -> PyResult<PyWorkflow> {
+        let workflow = self
+            .inner
+            .workflow(&quill.inner)
+            .map_err(convert_render_error)?;
+        Ok(PyWorkflow { inner: workflow })
     }
 
     fn registered_backends(&self) -> Vec<String> {
@@ -75,21 +51,6 @@ impl PyQuillmark {
             .iter()
             .map(|s| s.to_string())
             .collect()
-    }
-
-    fn registered_quills(&self) -> Vec<String> {
-        self.inner
-            .registered_quills()
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
-    }
-
-    /// Get a registered Quill by name or reference (e.g. "my-quill@1.0")
-    fn get_quill(&self, name_or_ref: String) -> Option<PyQuill> {
-        self.inner
-            .get_quill(&name_or_ref)
-            .map(|q| PyQuill { inner: q.clone() })
     }
 }
 
@@ -242,11 +203,7 @@ impl PyQuill {
 
     #[getter]
     fn backend(&self) -> &str {
-        self.inner
-            .metadata
-            .get("backend")
-            .and_then(|v| v.as_str())
-            .unwrap_or_default()
+        &self.inner.backend_id
     }
 
     #[getter]
@@ -304,20 +261,7 @@ impl PyQuill {
     }
 
     fn supported_formats(&self) -> PyResult<Vec<PyOutputFormat>> {
-        // Get backend from metadata
-        let backend = self
-            .inner
-            .metadata
-            .get("backend")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| {
-                PyErr::new::<crate::errors::QuillmarkError, _>(
-                    "Quill metadata missing 'backend' field",
-                )
-            })?;
-
-        // Determine supported formats based on backend
-        let formats = match backend {
+        let formats = match self.inner.backend_id.as_str() {
             "typst" => vec![
                 PyOutputFormat::PDF,
                 PyOutputFormat::SVG,
@@ -325,8 +269,35 @@ impl PyQuill {
             ],
             _ => vec![],
         };
-
         Ok(formats)
+    }
+
+    #[pyo3(signature = (input, format=None))]
+    fn render(
+        &self,
+        input: &Bound<'_, pyo3::PyAny>,
+        format: Option<PyOutputFormat>,
+    ) -> PyResult<PyRenderResult> {
+        let rust_format = format.map(OutputFormat::from);
+        let opts = RenderOptions {
+            output_format: rust_format,
+            ppi: None,
+        };
+
+        let result: Result<RenderResult, RenderError> = if let Ok(md) = input.extract::<String>() {
+            self.inner.render(md, &opts)
+        } else if let Ok(parsed) = input.extract::<PyRef<PyParsedDocument>>() {
+            self.inner.render(parsed.inner.clone(), &opts)
+        } else {
+            return Err(pyo3::exceptions::PyTypeError::new_err(
+                "render() input must be a str (markdown) or ParsedDocument",
+            ));
+        };
+
+        let render_result = result.map_err(convert_render_error)?;
+        Ok(PyRenderResult {
+            inner: render_result,
+        })
     }
 }
 

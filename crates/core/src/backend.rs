@@ -87,7 +87,7 @@ use crate::{CompiledDocument, Diagnostic, OutputFormat, Quill, RenderOptions, Se
 use std::collections::HashMap;
 
 /// Backend trait for rendering different output formats
-pub trait Backend: Send + Sync {
+pub trait Backend: Send + Sync + std::fmt::Debug {
     /// Get the backend identifier (e.g., "typst", "latex")
     fn id(&self) -> &'static str;
 

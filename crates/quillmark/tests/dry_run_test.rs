@@ -1,29 +1,15 @@
 //! # Dry Run Validation Tests
-//!
-//! Tests for the `Workflow::dry_run()` method that validates input
-//! without backend compilation.
 
-use quillmark::{ParsedDocument, Quill, Quillmark};
+use quillmark::{ParsedDocument, Quillmark};
 use std::fs;
 use tempfile::TempDir;
 
-fn create_test_quill(temp_dir: &TempDir, with_required_field: bool) -> Quill {
+fn make_test_quill_path(temp_dir: &TempDir, with_required_field: bool) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join("test_quill");
-    fs::create_dir_all(&quill_path).expect("Failed to create quill dir");
+    fs::create_dir_all(&quill_path).unwrap();
 
     let fields_section = if with_required_field {
-        r#"
-main:
-  fields:
-    title:
-      type: "string"
-      required: true
-      description: "Document title"
-    author:
-      type: "string"
-      required: false
-      description: "Document author"
-"#
+        "main:\n  fields:\n    title:\n      type: \"string\"\n      required: true\n    author:\n      type: \"string\"\n      required: false\n"
     } else {
         ""
     };
@@ -31,84 +17,46 @@ main:
     fs::write(
         quill_path.join("Quill.yaml"),
         format!(
-            r#"Quill:
-  name: "test_quill"
-  version: "1.0"
-  backend: "typst"
-  plate_file: "plate.typ"
-  description: "Test quill"
-
-{}
-"#,
-            fields_section.replace("=", ":"),
+            "Quill:\n  name: \"test_quill\"\n  version: \"1.0\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test\"\n\n{}",
+            fields_section
         ),
-    )
-    .expect("Failed to write Quill.yaml");
-
-    fs::write(quill_path.join("plate.typ"), "Title: {{ title }}")
-        .expect("Failed to write plate.typ");
-
-    Quill::from_path(quill_path).expect("Failed to load quill")
+    ).unwrap();
+    fs::write(quill_path.join("plate.typ"), "Title: {{ title }}").unwrap();
+    quill_path
 }
 
 #[test]
 fn test_dry_run_success() {
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill = create_test_quill(&temp_dir, true);
+    let temp_dir = TempDir::new().unwrap();
+    let quill_path = make_test_quill_path(&temp_dir, true);
 
-    let mut engine = Quillmark::new();
-    engine
-        .register_quill(&quill)
-        .expect("Failed to register quill");
+    let engine = Quillmark::new();
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
+    let workflow = engine.workflow(&quill).expect("workflow failed");
 
-    let workflow = engine
-        .workflow("test_quill")
-        .expect("Failed to load workflow");
+    let markdown = "---\nQUILL: test_quill\ntitle: My Document\nauthor: Test\n---\n\n# Content\n";
+    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
 
-    let markdown = r#"---
-QUILL: test_quill
-title: My Document
-author: Test Author
----
-
-# Content
-
-This is the content.
-"#;
-
-    let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-
-    // dry_run should succeed for valid input
     let result = workflow.dry_run(&parsed);
-    assert!(result.is_ok(), "dry_run should succeed for valid input");
+    assert!(result.is_ok(), "dry_run should succeed: {:?}", result);
 }
 
 #[test]
 fn test_dry_run_missing_required_field() {
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill = create_test_quill(&temp_dir, true);
+    let temp_dir = TempDir::new().unwrap();
+    let quill_path = make_test_quill_path(&temp_dir, true);
 
-    let mut engine = Quillmark::new();
-    engine
-        .register_quill(&quill)
-        .expect("Failed to register quill");
+    let engine = Quillmark::new();
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
+    let workflow = engine.workflow(&quill).expect("workflow failed");
 
-    let workflow = engine
-        .workflow("test_quill")
-        .expect("Failed to load workflow");
+    let markdown = "---\nQUILL: test_quill\nauthor: Test\n---\n\n# Content\n";
+    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
 
-    // Missing required 'title' field
-    let markdown = r#"---
-QUILL: test_quill
-author: Test Author
----
-
-# Content
-"#;
-
-    let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-
-    // dry_run should fail for missing required field
     let result = workflow.dry_run(&parsed);
     assert!(
         result.is_err(),
@@ -126,30 +74,18 @@ author: Test Author
 
 #[test]
 fn test_dry_run_no_schema() {
-    let temp_dir = TempDir::new().expect("Failed to create temp dir");
-    let quill = create_test_quill(&temp_dir, false); // No required fields
+    let temp_dir = TempDir::new().unwrap();
+    let quill_path = make_test_quill_path(&temp_dir, false);
 
-    let mut engine = Quillmark::new();
-    engine
-        .register_quill(&quill)
-        .expect("Failed to register quill");
+    let engine = Quillmark::new();
+    let quill = engine
+        .quill_from_path(&quill_path)
+        .expect("quill_from_path failed");
+    let workflow = engine.workflow(&quill).expect("workflow failed");
 
-    let workflow = engine
-        .workflow("test_quill")
-        .expect("Failed to load workflow");
+    let markdown = "---\nQUILL: test_quill\nrandom_field: anything\n---\n\n# Content\n";
+    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
 
-    // Any fields should work when there's no schema
-    let markdown = r#"---
-QUILL: test_quill
-random_field: anything
----
-
-# Content
-"#;
-
-    let parsed = ParsedDocument::from_markdown(markdown).expect("Failed to parse markdown");
-
-    // dry_run should succeed when no schema is defined
     let result = workflow.dry_run(&parsed);
     assert!(result.is_ok(), "dry_run should succeed without schema");
 }

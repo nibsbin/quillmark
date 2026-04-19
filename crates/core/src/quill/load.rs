@@ -190,7 +190,8 @@ impl Quill {
         let quill = Quill {
             metadata,
             name: config.name.clone(),
-            backend: config.backend.clone(),
+            backend_id: config.backend.clone(),
+            resolved_backend: None,
             plate: plate_content,
             example: example_content,
             config,

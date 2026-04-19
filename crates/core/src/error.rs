@@ -586,6 +586,13 @@ pub enum RenderError {
         /// Diagnostic information
         diag: Box<Diagnostic>,
     },
+
+    /// Quill has no backend attached (created via from_path/from_tree without load_quill)
+    #[error("{diag}")]
+    NoBackend {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
 }
 
 impl RenderError {
@@ -608,7 +615,8 @@ impl RenderError {
             | RenderError::QuillConfig { diag }
             | RenderError::VersionNotFound { diag }
             | RenderError::QuillNotFound { diag }
-            | RenderError::InvalidVersion { diag } => vec![diag.as_ref()],
+            | RenderError::InvalidVersion { diag }
+            | RenderError::NoBackend { diag } => vec![diag.as_ref()],
         }
     }
 }
@@ -677,6 +685,7 @@ pub fn print_errors(err: &RenderError) {
         RenderError::VersionNotFound { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::QuillNotFound { diag } => eprintln!("{}", diag.fmt_pretty()),
         RenderError::InvalidVersion { diag } => eprintln!("{}", diag.fmt_pretty()),
+        RenderError::NoBackend { diag } => eprintln!("{}", diag.fmt_pretty()),
     }
 }
 

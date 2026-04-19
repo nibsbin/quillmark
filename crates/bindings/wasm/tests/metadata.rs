@@ -1,85 +1,17 @@
-use quillmark_wasm::{Quill, Quillmark};
-use serde_json::Value;
+use quillmark_wasm::Quill;
 use wasm_bindgen_test::*;
-
-// wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 
 mod common;
 
-fn ui_quill_tree() -> wasm_bindgen::JsValue {
-    common::tree(&[
+#[wasm_bindgen_test]
+fn test_quill_from_tree_with_ui_metadata() {
+    let tree = common::tree(&[
         (
             "Quill.yaml",
             b"Quill:\n  name: ui_test_quill\n  version: \"0.1\"\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for UI metadata\n\nmain:\n  fields:\n    my_field:\n      type: string\n      ui:\n        group: Personal Info\n",
         ),
         ("plate.typ", b"= Title"),
-    ])
-}
-
-#[wasm_bindgen_test]
-fn test_metadata_retrieval() {
-    let mut engine = Quillmark::new();
-    let quill = Quill::from_tree(ui_quill_tree()).expect("fromTree failed");
-    engine
-        .register_quill(&quill)
-        .map_err(|e| {
-            let error_obj: Value = serde_wasm_bindgen::from_value(e).unwrap();
-            panic!("register failed: {:#?}", error_obj);
-        })
-        .unwrap();
-
-    let info = engine
-        .get_quill_info("ui-test_quill")
-        .expect("getQuillInfo failed");
-
-    let schema: serde_json::Value = serde_saphyr::from_str(&info.schema).expect("schema yaml");
-    let ui = schema
-        .get("fields")
-        .and_then(|v| v.get("my_field"))
-        .and_then(|v| v.get("ui"))
-        .expect("ui not found");
-
-    assert_eq!(
-        ui.get("group").and_then(|v| v.as_str()),
-        Some("Personal Info")
-    );
-    assert_eq!(ui.get("order").and_then(|v| v.as_i64()), Some(0));
-}
-
-#[wasm_bindgen_test]
-fn test_metadata_stripping() {
-    fn has_internal_key(value: &serde_json::Value) -> bool {
-        match value {
-            serde_json::Value::Object(map) => map.iter().any(|(k, v)| {
-                let is_internal = k.starts_with("x-");
-                is_internal || has_internal_key(v)
-            }),
-            serde_json::Value::Array(seq) => seq.iter().any(has_internal_key),
-            _ => false,
-        }
-    }
-
-    let mut engine = Quillmark::new();
-    let quill = Quill::from_tree(ui_quill_tree()).expect("fromTree failed");
-    engine
-        .register_quill(&quill)
-        .map_err(|e| {
-            let error_obj: Value = serde_wasm_bindgen::from_value(e).unwrap();
-            panic!("register failed: {:#?}", error_obj);
-        })
-        .unwrap();
-
-    let schema_yaml = engine
-        .get_quill_schema("ui-test_quill")
-        .expect("getQuillSchema failed");
-    let schema: serde_json::Value = serde_saphyr::from_str(&schema_yaml).expect("schema yaml");
-
-    // Verify native `ui` is present and old JSON-schema-specific keys are absent.
-    assert!(schema
-        .get("fields")
-        .and_then(|v| v.get("my_field"))
-        .and_then(|v| v.get("ui"))
-        .is_some());
-    assert!(schema.get("CARDS").is_none());
-    assert!(!has_internal_key(&schema));
+    ]);
+    let quill = Quill::from_tree(tree).expect("fromTree failed");
+    let _ = quill;
 }

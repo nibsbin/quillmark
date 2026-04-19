@@ -1,6 +1,7 @@
+use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
-use quillmark_wasm::{Quill, Quillmark};
+use quillmark_wasm::{ParsedDocument, Quill, Quillmark, RenderOptions};
 
 mod common;
 
@@ -13,13 +14,13 @@ fn small_quill_tree() -> wasm_bindgen::JsValue {
             b"Quill:\n  name: test_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for WASM bindings\n",
         ),
         ("plate.typ", b"= Title\n\nThis is a test."),
-        ("content.md", b"---\ntitle: Test\n---\n\n# Hello"),
     ])
 }
 
+const SIMPLE_MARKDOWN: &str = "---\nQUILL: test_quill\ntitle: Hello\n---\n\n# Hello\n";
+
 #[wasm_bindgen_test]
 fn test_parse_markdown() {
-    // Parse simple markdown with frontmatter
     let markdown = r#"---
 title: Test Document
 author: Alice
@@ -27,67 +28,107 @@ QUILL: test_quill
 ---
 
 # Hello World
-
-This is a test document.
 "#;
-
     let parsed = Quillmark::parse_markdown(markdown).expect("parse_markdown failed");
-
-    // Verify it returns a ParsedDocument
     assert_eq!(parsed.quill_ref, "test_quill");
     assert!(parsed.fields.is_object());
 }
 
 #[wasm_bindgen_test]
-fn test_register_and_get_quill_info() {
-    // Create engine
-    let mut engine = Quillmark::new();
-
-    // Register quill
-    let quill = Quill::from_tree(small_quill_tree()).expect("fromTree failed");
-    engine.register_quill(&quill).expect("register failed");
-
-    // Get quill info
-    let info = engine
-        .get_quill_info("test_quill")
-        .expect("getQuillInfo failed");
-
-    // Verify it returns a QuillInfo
-    assert_eq!(info.name, "test_quill");
-    assert_eq!(info.backend, "typst");
+fn test_parse_markdown_static() {
+    let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
+    assert_eq!(parsed.quill_ref, "test_quill");
 }
 
 #[wasm_bindgen_test]
-fn test_workflow_parse_register_get_info_render() {
-    // Step 1: Parse markdown
-    let markdown = r#"---
-title: Test Document
-author: Alice
-QUILL: test_quill
----
+fn test_quill_from_tree() {
+    let engine = Quillmark::new();
+    let quill = engine
+        .quill_from_tree(small_quill_tree())
+        .expect("quillFromTree failed");
+    let _ = quill;
+}
 
-# Hello World
-
-This is a test.
-"#;
-
-    let parsed = Quillmark::parse_markdown(markdown).expect("parse_markdown failed");
-
-    // Step 2: Create engine and register quill
-    let mut engine = Quillmark::new();
+#[wasm_bindgen_test]
+fn test_quill_from_tree_static() {
     let quill = Quill::from_tree(small_quill_tree()).expect("fromTree failed");
-    engine.register_quill(&quill).expect("register failed");
+    let _ = quill;
+}
 
-    // Step 3: Get quill info
-    let info = engine
-        .get_quill_info("test_quill")
-        .expect("getQuillInfo failed");
-    assert_eq!(info.name, "test_quill");
+/// A quill built via `Quill::from_tree` has no backend attached and must error on render.
+#[wasm_bindgen_test]
+fn test_render_no_backend_errors() {
+    let quill = Quill::from_tree(small_quill_tree()).expect("fromTree failed");
+    let result = quill.render(JsValue::from_str(SIMPLE_MARKDOWN), RenderOptions::default());
+    assert!(result.is_err(), "render without backend should return Err");
+}
 
-    // Step 4: Render (this may fail in test environment without full WASM setup)
-    // We'll just verify the API is callable
-    use quillmark_wasm::RenderOptions;
-    let options = RenderOptions::default();
-    let _result = engine.render(parsed, options);
-    // Note: render may fail in test due to typst compilation, but that's ok for API testing
+/// Rendering markdown with a QUILL ref that differs from the quill name must yield
+/// exactly one warning with code `quill::ref_mismatch` and still produce an artifact.
+#[wasm_bindgen_test]
+fn test_render_ref_mismatch_warning() {
+    let engine = Quillmark::new();
+    let quill = engine
+        .quill_from_tree(small_quill_tree())
+        .expect("quillFromTree failed");
+
+    // Document declares a different quill name than the loaded quill ("test_quill")
+    let mismatch_md = "---\nQUILL: other_quill\ntitle: Mismatch\n---\n\n# Content\n";
+    let result = quill
+        .render(JsValue::from_str(mismatch_md), RenderOptions::default())
+        .expect("render should succeed despite mismatch");
+
+    assert_eq!(result.warnings.len(), 1, "expected exactly one warning");
+    assert_eq!(
+        result.warnings[0].code.as_deref(),
+        Some("quill::ref_mismatch"),
+        "warning code should be quill::ref_mismatch"
+    );
+    assert!(!result.artifacts.is_empty(), "artifact must be produced");
+}
+
+/// `quill.render(markdown_string, opts)` — render via raw Markdown string input.
+#[wasm_bindgen_test]
+fn test_render_from_string() {
+    let engine = Quillmark::new();
+    let quill = engine
+        .quill_from_tree(small_quill_tree())
+        .expect("quillFromTree failed");
+
+    let result = quill
+        .render(JsValue::from_str(SIMPLE_MARKDOWN), RenderOptions::default())
+        .expect("render from string failed");
+
+    assert!(
+        !result.artifacts.is_empty(),
+        "should produce at least one artifact"
+    );
+    assert_eq!(
+        result.warnings.len(),
+        0,
+        "no warnings expected for matching quill_ref"
+    );
+}
+
+/// `quill.render(ParsedDocument, opts)` — render via pre-parsed document.
+#[wasm_bindgen_test]
+fn test_render_from_parsed_document() {
+    let engine = Quillmark::new();
+    let quill = engine
+        .quill_from_tree(small_quill_tree())
+        .expect("quillFromTree failed");
+
+    let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
+    // Convert to JsValue so the engine's input-type dispatch treats it as ParsedDocument
+    let parsed_js =
+        serde_wasm_bindgen::to_value(&parsed).expect("ParsedDocument serialization failed");
+
+    let result = quill
+        .render(parsed_js, RenderOptions::default())
+        .expect("render from ParsedDocument failed");
+
+    assert!(
+        !result.artifacts.is_empty(),
+        "should produce at least one artifact"
+    );
 }

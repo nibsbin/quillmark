@@ -1,39 +1,25 @@
-"""Tests for versioned quill retrieval."""
+"""Tests for quill loading."""
 import pytest
 from quillmark import Quillmark, Quill
 
-def test_get_quill_versioning(taro_quill_dir):
-    """Test retrieving quills with version selectors."""
+
+def test_quill_from_path(taro_quill_dir):
+    """Test loading a quill via engine."""
     engine = Quillmark()
-    quill = Quill.from_path(str(taro_quill_dir))
-    
-    # Register the quill (assuming it has a version in Quill.yaml, e.g., 1.0.0)
-    engine.register_quill(quill)
-    
-    # Test valid retrieval by name (implicitly latest)
-    retrieved = engine.get_quill("taro")
-    assert retrieved is not None
-    assert retrieved.name == "taro"
-    
-    # Test valid retrieval by exact version (assuming taro is 1.0.0 or similar)
-    # We first check the version to be sure
-    version = quill.metadata.get("version")
-    assert version is not None
-    
-    retrieved_version = engine.get_quill(f"taro@{version}")
-    assert retrieved_version is not None
-    assert retrieved_version.name == "taro"
-    
-    # Test retrieval by major version
-    major = version.split('.')[0]
-    retrieved_major = engine.get_quill(f"taro@{major}")
-    assert retrieved_major is not None
-    assert retrieved_major.name == "taro"
-    
-    # Test invalid version
-    retrieved_invalid = engine.get_quill("taro@99.99")
-    assert retrieved_invalid is None
-    
-    # Test invalid name
-    retrieved_bad_name = engine.get_quill("nonexistent")
-    assert retrieved_bad_name is None
+    quill = engine.quill_from_path(str(taro_quill_dir))
+    assert quill is not None
+    assert quill.name == "taro"
+    assert quill.backend == "typst"
+
+
+def test_quill_from_path_bad_backend(tmp_path):
+    """Test that loading a quill with unknown backend raises error."""
+    from quillmark import QuillmarkError
+    quill_dir = tmp_path / "test_quill"
+    quill_dir.mkdir()
+    (quill_dir / "Quill.yaml").write_text(
+        'Quill:\n  name: "test"\n  version: "1.0"\n  backend: "nonexistent"\n  description: "Test"\n'
+    )
+    engine = Quillmark()
+    with pytest.raises(QuillmarkError):
+        engine.quill_from_path(str(quill_dir))
