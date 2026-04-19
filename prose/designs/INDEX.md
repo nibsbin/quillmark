@@ -9,7 +9,7 @@
 
 - **[PARSE.md](PARSE.md)** - Markdown parsing and Extended YAML Metadata Standard
 - **[EXTENDED_MARKDOWN.md](EXTENDED_MARKDOWN.md)** - Extended Markdown format specification
-- **[QUILL.md](QUILL.md)** - Quill bundle structure, file tree API, and JSON contract
+- **[QUILL.md](QUILL.md)** - Quill bundle structure and file tree API
 - **[QUILL_VALUE.md](QUILL_VALUE.md)** - Unified value type for TOML/YAML/JSON conversions
 - **[VERSIONING.md](VERSIONING.md)** - Quill version resolution
 - **[SCHEMAS.md](SCHEMAS.md)** - `QuillConfig` schema model, native validation, and emission overview
@@ -18,7 +18,6 @@
 - ~~**[SCOPES.md](SCOPES.md)**~~ - *Superseded by CARDS.md*
 - **[TEMPLATE_DRY_RUN.md](TEMPLATE_DRY_RUN.md)** - Dry run validation
 - **[GLUE_METADATA.md](GLUE_METADATA.md)** - Plate data injection
-- **[DEFAULT_QUILL.md](DEFAULT_QUILL.md)** - Default quill for zero-config rendering
 
 ## Backends
 

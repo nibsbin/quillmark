@@ -82,7 +82,7 @@ author: Jane Doe
 # Content
 ```
 
-If no `QUILL` key is specified, Quillmark uses the `__default__` format provided by the backend (if available).
+`QUILL` is required in top-level frontmatter. If it is missing, parsing fails with an invalid-structure error.
 
 ### Version Selectors
 
@@ -114,7 +114,7 @@ Supported version selectors:
 
 ## Validation
 
-Frontmatter can be validated against JSON schemas defined in your Quill's `Quill.yaml`:
+Frontmatter is validated against native schema rules defined in your Quill's `Quill.yaml`:
 
 ```yaml
 main:

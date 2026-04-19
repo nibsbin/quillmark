@@ -21,67 +21,52 @@ pub struct CardSchema {
 
 `QuillConfig` has a `cards: HashMap<String, CardSchema>` field alongside `fields`.
 
-## Quill.toml Configuration
+## Quill.yaml Configuration
 
-```toml
-[cards.indorsements]
-title = "Routing Indorsements"
-description = "Chain of routing endorsements for multi-level correspondence."
-
-[cards.indorsements.fields.from]
-title = "From office/symbol"
-type = "string"
-required = true
-description = "Office symbol of the endorsing official."
-
-[cards.indorsements.fields.for]
-title = "To office/symbol"
-type = "string"
-required = true
-description = "Office symbol receiving the endorsed memo."
-
-[cards.indorsements.fields.signature_block]
-title = "Signature block lines"
-type = "array"
-required = true
-ui.group = "Signature"
-description = "Name, grade, and duty title."
+```yaml
+cards:
+  indorsements:
+    title: Routing Indorsements
+    description: Chain of routing endorsements for multi-level correspondence.
+    fields:
+      from:
+        title: From office/symbol
+        type: string
+        required: true
+        description: Office symbol of the endorsing official.
+      for:
+        title: To office/symbol
+        type: string
+        required: true
+        description: Office symbol receiving the endorsed memo.
+      signature_block:
+        title: Signature block lines
+        type: array
+        required: true
+        ui:
+          group: Signature
+        description: Name, grade, and duty title.
 ```
 
-## JSON Schema Output
+## Public Schema YAML Output
 
-```json
-{
-  "$schema": "https://json-schema.org/draft/2019-09/schema",
-  "type": "object",
-  "$defs": {
-    "indorsements_card": {
-      "type": "object",
-      "title": "Routing Indorsements",
-      "properties": {
-        "CARD": { "const": "indorsements" },
-        "from": { "type": "string", ... },
-        "for": { "type": "string", ... }
-      },
-      "required": ["CARD", "from", "for"]
-    }
-  },
-  "properties": {
-    "CARDS": {
-      "type": "array",
-      "items": {
-        "oneOf": [{ "$ref": "#/$defs/indorsements_card" }],
-        "x-discriminator": {
-          "propertyName": "CARD",
-          "mapping": { "indorsements": "#/$defs/indorsements_card" }
-        }
-      }
-    }
-  }
-}
+```yaml
+cards:
+  indorsements:
+    title: Routing Indorsements
+    description: Chain of routing endorsements for multi-level correspondence.
+    fields:
+      from:
+        type: string
+      for:
+        type: string
+      signature_block:
+        type: array
+        items:
+          type: string
 ```
 
-`x-discriminator` follows OpenAPI 3.0 semantics. Each card schema includes `"CARD": { "const": "..." }` and adds `"CARD"` to `required`.
+Public schema is emitted from `QuillConfig::public_schema_yaml()` and keeps the same `cards.<name>.fields` shape as `Quill.yaml`.
 
 ## Markdown Syntax
 

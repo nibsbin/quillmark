@@ -11,7 +11,7 @@ Implementation notes for `quillmark-core/src/parse.rs`.
 Stores fields and body in a single `HashMap<String, QuillValue>`.
 
 - Body stored under `BODY_FIELD = "BODY"`
-- Quill reference defaults to `__default__@latest` when not specified
+- Quill reference is required from top-level `QUILL` frontmatter
 - Access via `body()`, `get_field()`, `fields()`, `quill_reference()`
 
 ### Parsing Flow
@@ -27,7 +27,7 @@ Stores fields and body in a single `HashMap<String, QuillValue>`.
 
 ### Error Handling
 
-Fail-fast on malformed YAML. No frontmatter is valid (entire content becomes body).
+Fail-fast on malformed YAML. Top-level frontmatter must include `QUILL`; missing `QUILL` returns `ParseError::InvalidStructure`.
 
 ### Line Endings
 

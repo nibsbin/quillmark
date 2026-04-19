@@ -53,7 +53,7 @@ quillmark render ./my-quill
 
 ### schema
 
-Extract JSON schema from a quill's field definitions.
+Extract the public schema YAML contract from a quill's field definitions.
 
 ```bash
 quillmark schema [OPTIONS] <QUILL_PATH>
@@ -74,10 +74,10 @@ quillmark schema [OPTIONS] <QUILL_PATH>
 quillmark schema ./my-quill
 
 # Save schema to file
-quillmark schema ./my-quill -o schema.json
+quillmark schema ./my-quill -o schema.yaml
 
 # Use with other tools
-quillmark schema ./my-quill | jq '.properties.title'
+quillmark schema ./my-quill | grep '^  title:'
 ```
 
 ### validate
