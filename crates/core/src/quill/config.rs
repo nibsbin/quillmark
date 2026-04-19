@@ -608,6 +608,16 @@ impl QuillConfig {
         chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
     }
 
+    fn is_valid_card_identifier(name: &str) -> bool {
+        let mut chars = name.chars();
+        match chars.next() {
+            Some(c) if c.is_ascii_lowercase() || c == '_' => {}
+            _ => return false,
+        }
+
+        chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+    }
+
     fn is_valid_quill_name(name: &str) -> bool {
         name == "__default__" || Self::is_snake_case_identifier(name)
     }
@@ -790,9 +800,9 @@ impl QuillConfig {
                 .ok_or("'cards' section must be an object")?;
 
             for (card_name, card_value) in cards_table {
-                if !Self::is_snake_case_identifier(card_name) {
+                if !Self::is_valid_card_identifier(card_name) {
                     return Err(format!(
-                        "Invalid card name '{}': card names must be snake_case (lowercase letters, digits, and underscores only).",
+                        "Invalid card name '{}': card names must match [a-z_][a-z0-9_]* (lowercase letters, digits, and underscores only).",
                         card_name
                     )
                     .into());

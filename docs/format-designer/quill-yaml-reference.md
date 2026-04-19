@@ -240,7 +240,7 @@ main:
 
 Cards define composable, repeatable content blocks. A document can have zero or more instances of each card type, interleaved with body content.
 
-Card type names (the keys under `cards`) must be `snake_case` (`^[a-z][a-z0-9_]*$`).
+Card type names (the keys under `cards`) must match `[a-z_][a-z0-9_]*` (leading underscore is allowed).
 
 ```yaml
 cards:
@@ -257,6 +257,12 @@ cards:
         enum: [standard, informal, separate_page]
         default: standard
 ```
+
+Invalid card names include:
+
+- `BadCard` (uppercase letters)
+- `my-card` (hyphen)
+- `2nd_card` (starts with a digit)
 
 ### Card Properties
 
