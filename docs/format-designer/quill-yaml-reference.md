@@ -115,7 +115,7 @@ main:
 | `markdown` | Rich text; backends convert to target format |
 | `object` or `dict` | Supported for typed table rows inside `array.items` |
 
-Use `type: array` with `items: { type: object, properties: {...} }` when you need a **list** of structured rows. Top-level `type: object` fields are not supported.
+Use `type: array` with `items: { type: object, properties: {...} }` when you need a **list** of structured rows. Quill does not yet provide a general-purpose deep-nesting field type, so `type: object` is currently scoped to `array.items` rather than standalone top-level fields.
 
 ### Enum Constraints
 
@@ -240,7 +240,7 @@ main:
 
 Cards define composable, repeatable content blocks. A document can have zero or more instances of each card type, interleaved with body content.
 
-Card type names (the keys under `cards`) must be `snake_case` (`^[a-z][a-z0-9_]*$`).
+Card type names (the keys under `cards`) must match `[a-z_][a-z0-9_]*` (leading underscore is allowed).
 
 ```yaml
 cards:
@@ -257,6 +257,12 @@ cards:
         enum: [standard, informal, separate_page]
         default: standard
 ```
+
+Invalid card names include:
+
+- `BadCard` (uppercase letters)
+- `my-card` (hyphen)
+- `2nd_card` (starts with a digit)
 
 ### Card Properties
 
