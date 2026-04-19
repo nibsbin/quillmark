@@ -187,9 +187,7 @@ impl PyQuill {
     #[staticmethod]
     fn from_path(path: PathBuf) -> PyResult<Self> {
         let engine = Quillmark::new();
-        let quill = engine
-            .quill_from_path(path)
-            .map_err(convert_render_error)?;
+        let quill = engine.quill_from_path(path).map_err(convert_render_error)?;
         Ok(PyQuill { inner: quill })
     }
 

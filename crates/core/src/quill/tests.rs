@@ -2164,7 +2164,8 @@ fn public_schema_snapshot_usaf_memo_0_1_0() {
 
     assert_eq!(yaml, expected, "public schema snapshot changed");
 
-    let parsed: serde_json::Value = serde_saphyr::from_str(&yaml).expect("schema yaml should parse");
+    let parsed: serde_json::Value =
+        serde_saphyr::from_str(&yaml).expect("schema yaml should parse");
     assert!(parsed.get("name").is_some());
     assert!(parsed.get("fields").is_some());
     assert!(parsed.get("cards").is_some());

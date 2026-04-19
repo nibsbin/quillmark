@@ -366,7 +366,7 @@ fn describe_json_type(value: &serde_json::Value) -> &'static str {
 }
 
 fn validate_defaults_against_schema(
-    quill: &Quill,
+    quill: &quillmark::Quill,
     config: &QuillConfig,
     result: &mut ValidationResult,
 ) {

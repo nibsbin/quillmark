@@ -9,7 +9,7 @@ use super::{FileTreeNode, Quill, QuillConfig, QuillIgnore};
 
 impl Quill {
     /// Create a Quill from a directory path
-    pub(crate) fn from_path<P: AsRef<std::path::Path>>(
+    pub fn from_path<P: AsRef<std::path::Path>>(
         path: P,
     ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         use std::fs;
@@ -55,7 +55,7 @@ impl Quill {
     /// - Quill.yaml is not valid UTF-8 or YAML
     /// - The plate file specified in Quill.yaml is not found or not valid UTF-8
     /// - Validation fails
-    pub(crate) fn from_tree(root: FileTreeNode) -> Result<Self, Box<dyn StdError + Send + Sync>> {
+    pub fn from_tree(root: FileTreeNode) -> Result<Self, Box<dyn StdError + Send + Sync>> {
         // Read Quill.yaml
         let quill_yaml_bytes = root
             .get_file("Quill.yaml")

@@ -108,5 +108,8 @@ fn test_quill_render_succeeds_with_engine_loaded_quill() {
         },
     );
 
-    assert!(result.is_ok(), "render should succeed for engine-loaded quill");
+    assert!(
+        result.is_ok(),
+        "render should succeed for engine-loaded quill"
+    );
 }
