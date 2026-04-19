@@ -111,23 +111,7 @@ On the Rust side, the `input` parameter should accept `JsValue` and branch on wh
 
 `RenderOptions` remains as-is. `CompiledDocument.renderPages()` remains unchanged.
 
-### 5. WASM: collapse `Quill.fromTree()` + `engine.registerQuill()` into `engine.loadQuill()`
-
-**File:** `crates/bindings/wasm/src/engine.rs`
-
-Add:
-
-```typescript
-class Quillmark {
-  loadQuill(tree: Map<string, Uint8Array> | Record<string, Uint8Array>): QuillInfo
-}
-```
-
-`loadQuill` is equivalent to `Quill.fromTree(tree)` followed by `engine.registerQuill(quill)`. It returns `QuillInfo` on success. This is the preferred registration path for consumers using the engine's version resolution — it removes the intermediate `Quill` handle from the registration flow when the consumer does not need to hold the quill directly.
-
-`Quill.fromTree()` and `engine.registerQuill()` are not removed. Consumers who want to construct a `Quill` and render from it directly (without the engine) still use `Quill.fromTree()`. Consumers who need to register and later resolve dynamically still use `registerQuill()`.
-
-### 6. Python: add `render()` to `Quill`
+### 5. Python: add `render()` to `Quill`
 
 **Files:** `crates/bindings/python/src/lib.rs`, `crates/bindings/python/python/quillmark/__init__.pyi`
 
@@ -162,7 +146,6 @@ class Quill:
 
 - Add tests for `Quill::render` with a `&str` input and with a `ParsedDocument` input.
 - Add a test for the ref-mismatch warning: render a `ParsedDocument` whose `quill_ref` names a different quill, assert one warning with code `"quill::ref_mismatch"` is present in the result.
-- Add a test for `engine.loadQuill(tree)` producing the same `QuillInfo` as `Quill.fromTree` + `registerQuill`.
 
 **WASM JS tests** (`crates/bindings/wasm/basic.test.js`):
 
@@ -190,7 +173,6 @@ class Quill:
 
 - `quill.render(markdownString, opts)` produces a valid `RenderResult` in both WASM and Python without touching an engine instance.
 - `ParsedDocument.fromMarkdown(markdown)` works as a static in WASM (no engine).
-- `engine.loadQuill(tree)` registers a quill and returns `QuillInfo` in WASM.
 - Rendering a `ParsedDocument` with a mismatched `quill_ref` produces one warning with code `"quill::ref_mismatch"` and still returns an artifact.
 - All existing engine-path tests continue to pass — `engine.render(parsed, opts)` and `engine.workflow(ref).render(parsed)` are unaffected.
 - The Python stub (`__init__.pyi`) reflects the new `Quill.render` signature and the `ParsedDocument.from_markdown` docstring notes the `Workflow` escape hatch.
