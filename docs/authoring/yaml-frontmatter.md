@@ -65,6 +65,9 @@ document:
     margins: [1, 1, 1, 1]
 ```
 
+> [!WARNING]
+> YAML objects and nested structures are syntactically valid in frontmatter. However, when using schema-driven fields from `Quill.yaml`, Quill currently only supports `type: object` inside `array.items` (typed array rows). Top-level fields declared as `type: object` are not supported. See [Quill.yaml Reference: Field Types](../format-designer/quill-yaml-reference.md#field-types).
+
 ## QUILL Key
 
 The `QUILL` key specifies which Quill format to use for rendering:
