@@ -23,6 +23,8 @@ quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 - `<QUILL_PATH>`: Path to quill directory
 - `[MARKDOWN_FILE]`: Path to markdown file with YAML frontmatter (optional — when omitted, the quill's example content is used)
 
+`<QUILL_PATH>` selects the local quill bundle used for rendering. `MARKDOWN_FILE` frontmatter still requires top-level `QUILL` during parsing.
+
 **Options:**
 
 - `-o <PATH>` / `--output <PATH>`: Output file path (default: derived from input filename, e.g. `input.pdf`)
@@ -53,7 +55,7 @@ quillmark render ./my-quill
 
 ### schema
 
-Extract JSON schema from a quill's field definitions.
+Extract the public schema YAML contract from a quill's field definitions.
 
 ```bash
 quillmark schema [OPTIONS] <QUILL_PATH>
@@ -74,10 +76,10 @@ quillmark schema [OPTIONS] <QUILL_PATH>
 quillmark schema ./my-quill
 
 # Save schema to file
-quillmark schema ./my-quill -o schema.json
+quillmark schema ./my-quill -o schema.yaml
 
 # Use with other tools
-quillmark schema ./my-quill | jq '.properties.title'
+quillmark schema ./my-quill | grep '^  title:'
 ```
 
 ### validate
