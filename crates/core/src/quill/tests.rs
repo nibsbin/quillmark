@@ -1000,7 +1000,27 @@ cards:
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
     assert!(err.contains("BadCard"));
-    assert!(err.contains("snake_case"));
+    assert!(err.contains("[a-z_][a-z0-9_]*"));
+}
+
+#[test]
+fn test_quill_config_accepts_leading_underscore_card_name() {
+    let yaml = r#"
+Quill:
+  name: good_quill
+  version: "1.0"
+  backend: typst
+  description: Leading underscore card name
+
+cards:
+  _private_card:
+    fields:
+      title:
+        type: string
+"#;
+
+    let result = QuillConfig::from_yaml(yaml);
+    assert!(result.is_ok());
 }
 
 #[test]

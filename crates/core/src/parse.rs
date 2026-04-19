@@ -300,39 +300,9 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
 
             let content_start = abs_pos + delimiter_len; // After "---\n" or "---\r\n"
 
-            // Check if this --- is a horizontal rule (blank lines above AND below)
-            let preceded_by_blank = if abs_pos > 0 {
-                // Check if there's a blank line before the ---
-                let before = &markdown[..abs_pos];
-                before.ends_with("\n\n") || before.ends_with("\r\n\r\n")
-            } else {
-                false
-            };
+            // Triple dashes are always metadata block delimiters (never horizontal rules)
 
-            let followed_by_blank = if content_start < markdown.len() {
-                markdown[content_start..].starts_with('\n')
-                    || markdown[content_start..].starts_with("\r\n")
-            } else {
-                false
-            };
-
-            // Horizontal rule: blank lines both above and below
-            if preceded_by_blank && followed_by_blank {
-                // This is a horizontal rule in the body, skip it
-                pos = abs_pos + 3; // Skip past "---"
-                continue;
-            }
-
-            // Check if followed by non-blank line (or if we're at document start)
-            // This starts a metadata block
-            if followed_by_blank {
-                // --- followed by blank line but NOT preceded by blank line
-                // This is NOT a metadata block opening, skip it
-                pos = abs_pos + 3;
-                continue;
-            }
-
-            // Found potential metadata block opening (followed by non-blank line)
+            // Found potential metadata block opening
             // Look for closing "\n---\n" or "\r\n---\r\n" etc., OR "\n---" / "\r\n---" at end of document
             let rest = &markdown[content_start..];
 
@@ -505,14 +475,11 @@ fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::err
                 }
 
                 pos = abs_closing_pos + closing_len;
-            } else if abs_pos == 0 {
-                // Frontmatter started but not closed
-                return Err(crate::error::ParseError::InvalidStructure(
-                    "Frontmatter started but not closed with ---".to_string(),
-                ));
             } else {
-                // Not a valid metadata block, skip this position
-                pos = abs_pos + 3;
+                // Metadata block started but not closed
+                return Err(crate::error::ParseError::InvalidStructure(
+                    "Metadata block started but not closed with ---".to_string(),
+                ));
             }
         } else {
             break;
@@ -1793,8 +1760,8 @@ Body of item 1."#;
     }
 
     #[test]
-    fn test_horizontal_rule_with_blank_lines_above_and_below() {
-        // Horizontal rule: blank lines both above AND below the ---
+    fn test_triple_dash_in_body_is_parsed_as_inline_metadata_block() {
+        // Triple dashes are always metadata delimiters, never horizontal rules
         let markdown = r#"---
 QUILL: test_quill
 title: Test
@@ -1806,21 +1773,17 @@ First paragraph.
 
 Second paragraph."#;
 
-        let doc = decompose(markdown).unwrap();
+        let err = decompose(markdown).unwrap_err();
 
-        assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
-
-        // The body should contain the horizontal rule (---) as part of the content
-        let body = doc.body().unwrap();
-        assert!(body.contains("First paragraph."));
-        assert!(body.contains("---"));
-        assert!(body.contains("Second paragraph."));
+        assert!(matches!(
+            err,
+            ParseError::InvalidStructure(ref msg) if msg.contains("not closed with ---")
+        ));
     }
 
     #[test]
-    fn test_horizontal_rule_not_preceded_by_blank() {
-        // --- not preceded by blank line but followed by blank line is NOT a horizontal rule
-        // It's also NOT a valid metadata block opening (since it's followed by blank)
+    fn test_triple_dash_with_single_surrounding_newline_is_also_metadata() {
+        // Triple dashes without CARD in body are rejected as inline metadata blocks
         let markdown = r#"---
 QUILL: test_quill
 title: Test
@@ -1831,11 +1794,12 @@ First paragraph.
 
 Second paragraph."#;
 
-        let doc = decompose(markdown).unwrap();
+        let err = decompose(markdown).unwrap_err();
 
-        let body = doc.body().unwrap();
-        // The second --- should be in the body as text (not a horizontal rule since no blank above)
-        assert!(body.contains("---"));
+        assert!(matches!(
+            err,
+            ParseError::InvalidStructure(ref msg) if msg.contains("not closed with ---")
+        ));
     }
 
     #[test]
