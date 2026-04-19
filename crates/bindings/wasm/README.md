@@ -100,7 +100,7 @@ The main workflow for rendering documents:
 
 - `static parseMarkdown(markdown)` - Parse markdown into a ParsedDocument (Step 1)
 - `Quill.fromTree(tree)` - Build a Quill from `Map<string, Uint8Array>` or plain object tree (Step 2)
-- `registerQuill(quill)` - Register a pre-built Quill handle (Step 3)
+- `registerQuill(quill)` - Register a pre-built Quill handle (Step 3, idempotent for duplicate canonical refs)
 - `render(parsedDoc, options)` - Render a ParsedDocument to final artifacts using the required `QUILL` reference parsed from the document (Step 4)
 
 ### Utility Methods
@@ -112,6 +112,7 @@ Additional methods for managing the engine and debugging:
 - `getQuillSchema(name)` - Get the public YAML schema for a registered Quill
 - `resolveQuill(ref)` - Return `QuillInfo` if the ref is already registered, or `null`
 - `listQuills()` - List all registered Quills as `"name@version"` strings
+- `hasQuill(canonicalRef)` - Check exact canonical ref presence (`name@x.y.z`) without selector resolution
 - `unregisterQuill(name)` - Unregister a Quill by name or `"name@version"`
 - `dryRun(markdown)` - Validate without backend compilation (fast feedback)
 - `compile(parsed, opts?)` - Compile to an opaque `CompiledDocument` handle

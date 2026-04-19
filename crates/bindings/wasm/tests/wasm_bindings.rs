@@ -91,3 +91,21 @@ This is a test.
     let _result = engine.render(parsed, options);
     // Note: render may fail in test due to typst compilation, but that's ok for API testing
 }
+
+#[wasm_bindgen_test]
+fn test_has_quill_exact_canonical_ref() {
+    let mut engine = Quillmark::new();
+    let quill = Quill::from_tree(common::tree(&[
+        (
+            "Quill.yaml",
+            b"Quill:\n  name: canonical_quill\n  version: \"1.0.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill\n",
+        ),
+        ("plate.typ", b"= Title\n\n#{{ body | Content }}"),
+    ]))
+    .expect("fromTree failed");
+
+    assert!(!engine.has_quill("canonical_quill@1.0.0"));
+    engine.register_quill(&quill).expect("register failed");
+    assert!(engine.has_quill("canonical_quill@1.0.0"));
+    assert!(!engine.has_quill("canonical_quill@2.0.0"));
+}

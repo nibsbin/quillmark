@@ -306,6 +306,12 @@ impl Quillmark {
         self.inner.registered_quill_versions()
     }
 
+    /// Returns true if the exact canonical ref (`name@x.y.z`) is registered.
+    #[wasm_bindgen(js_name = hasQuill)]
+    pub fn has_quill(&self, canonical_ref: &str) -> bool {
+        self.inner.has_quill(canonical_ref)
+    }
+
     /// Unregister a Quill by name or specific version.
     ///
     /// If a base name is provided (e.g., "my-quill"), all versions of that quill are freed.

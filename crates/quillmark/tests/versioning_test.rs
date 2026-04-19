@@ -304,7 +304,7 @@ title: Test Document
 
 #[test]
 #[cfg(feature = "typst")]
-fn test_version_collision_error() {
+fn test_register_same_canonical_is_noop() {
     let mut engine = Quillmark::new();
     let temp_dir = TempDir::new().expect("Failed to create temp dir");
 
@@ -314,19 +314,15 @@ fn test_version_collision_error() {
         .register_quill(&quill_1_0)
         .expect("Failed to register first v1.0");
 
-    // Try to register same name+version again
+    // Re-register same canonical ref: no-op
     let quill_1_0_duplicate = create_test_quill(&temp_dir, "resume_template", "1.0");
-    let result = engine.register_quill(&quill_1_0_duplicate);
+    engine
+        .register_quill(&quill_1_0_duplicate)
+        .expect("Registering same canonical ref should be idempotent");
 
-    // Should fail with version collision error
-    assert!(result.is_err());
-    match result {
-        Err(quillmark::RenderError::QuillConfig { diag }) => {
-            assert!(diag.message.contains("already registered"));
-            assert!(diag.message.contains("1.0"));
-        }
-        _ => panic!("Expected QuillConfig error for version collision"),
-    }
+    let versions = engine.registered_quill_versions();
+    assert_eq!(versions.len(), 1);
+    assert_eq!(versions[0], "resume_template@1.0.0");
 }
 
 #[test]
