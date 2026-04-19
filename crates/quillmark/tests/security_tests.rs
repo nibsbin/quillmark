@@ -192,10 +192,10 @@ fn test_quill_card_conflict() {
     );
 }
 
-/// Test that fenced code blocks only accept exactly 3 backticks
+/// Test that CommonMark 4+ backtick fences hide `---` lines from metadata parsing
 #[test]
 fn test_strict_fence_detection() {
-    // Four backticks should NOT be a fence - --- inside should be parsed as metadata
+    // Four backticks open a fence; --- inside must not become a CARD block
     let markdown =
         "---\nQUILL: test_quill\ntitle: Test\n---\n\n````\n---\nCARD: test\nvalue: 1\n---\n````";
     let result = ParsedDocument::from_markdown(markdown);
@@ -203,12 +203,16 @@ fn test_strict_fence_detection() {
     assert!(result.is_ok(), "Should parse successfully");
     let doc = result.unwrap();
     let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
-    assert_eq!(cards.len(), 1, "Should have parsed the CARD block");
+    assert_eq!(
+        cards.len(),
+        0,
+        "--- inside ```` fence should not be parsed as metadata"
+    );
 }
 
-/// Test that tildes are NOT fences
+/// Test that CommonMark tilde fences hide `---` lines from metadata parsing
 #[test]
-fn test_tildes_not_fences() {
+fn test_tilde_fence_hides_metadata() {
     let markdown =
         "---\nQUILL: test_quill\ntitle: Test\n---\n\n~~~\n---\nCARD: test\nvalue: 1\n---\n~~~";
     let result = ParsedDocument::from_markdown(markdown);
@@ -218,7 +222,7 @@ fn test_tildes_not_fences() {
     let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
     assert_eq!(
         cards.len(),
-        1,
-        "Should have parsed the CARD block (tildes are not fences)"
+        0,
+        "--- inside ~~~ fence should not be parsed as metadata"
     );
 }

@@ -77,9 +77,7 @@ Quillmark supports a specific subset of CommonMark to ensure security and consis
 *   **Lists:** Ordered and unordered.
 *   **Links:** Standard `[text](url)`.
 *   **Code:** Inline code and Fenced Code Blocks.
-    *   **Strict Fence Rules:** Only exactly three backticks (```) are recognized as code fence delimiters.
-    *   Tildes (`~~~`) are NOT treated as code fences.
-    *   Four or more backticks (````) are NOT treated as code fences.
+    *   **Fenced blocks:** CommonMark rules apply: lines of three or more matching backticks or tildes open and close a fence; the closing run must be at least as long as the opening run. Metadata `---` delimiters inside a fenced block are ignored (see **Context** under Metadata Blocks).
 *   **Tables:** GFM-style pipe tables with optional column alignment.
 
 ### Unsupported Features
