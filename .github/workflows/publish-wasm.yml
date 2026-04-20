@@ -39,7 +39,7 @@ jobs:
       - name: Install wasm-bindgen-cli
         uses: taiki-e/install-action@v2
         with:
-          tool: wasm-bindgen-cli@0.2.117
+          tool: wasm-bindgen-cli@0.2.118
 
       - name: Build WASM packages
         run: ./scripts/build-wasm.sh
