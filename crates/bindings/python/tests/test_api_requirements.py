@@ -1,7 +1,7 @@
 """Tests for the API requirements."""
 
 import pytest
-from quillmark import Quillmark, Quill, ParsedDocument, OutputFormat, ParseError
+from quillmark import Quillmark, ParsedDocument, OutputFormat, ParseError
 from conftest import QUILLS_PATH, _latest_version
 
 
@@ -18,7 +18,8 @@ def test_parsed_document_quill_ref():
 
 def test_quill_properties(taro_quill_dir):
     """Test that Quill exposes all required properties."""
-    quill = Quill.from_path(str(taro_quill_dir))
+    engine = Quillmark()
+    quill = engine.quill_from_path(str(taro_quill_dir))
 
     assert quill.name == "taro"
     assert quill.backend == "typst"

@@ -184,13 +184,6 @@ pub struct PyQuill {
 
 #[pymethods]
 impl PyQuill {
-    #[staticmethod]
-    fn from_path(path: PathBuf) -> PyResult<Self> {
-        let engine = Quillmark::new();
-        let quill = engine.quill_from_path(path).map_err(convert_render_error)?;
-        Ok(PyQuill { inner: quill })
-    }
-
     #[getter]
     fn print_tree(&self) -> String {
         self.inner.files.print_tree().clone()

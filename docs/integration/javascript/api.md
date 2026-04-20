@@ -41,10 +41,6 @@ type ParsedDocument = {
 };
 ```
 
-### `Quillmark.parseMarkdown(markdown)`
-
-Deprecated wrapper around `ParsedDocument.fromMarkdown(markdown)`.
-
 ### `quill.render(input, options?)`
 
 Renders artifacts. `input` may be:

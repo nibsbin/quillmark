@@ -53,9 +53,6 @@ Build + validate + attach backend. Returns a render-ready `Quill`.
 ### `ParsedDocument.fromMarkdown(markdown)`
 Parse markdown to parsed document.
 
-### `Quillmark.parseMarkdown(markdown)`
-Deprecated wrapper around `ParsedDocument.fromMarkdown`.
-
 ### `quill.render(input, opts?)`
 Render with markdown string or `ParsedDocument`.
 

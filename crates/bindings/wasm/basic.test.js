@@ -7,7 +7,7 @@
  * Setup: Tests use the bundler build via @quillmark-wasm alias (see vitest.config.js)
  */
 
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { Quillmark, ParsedDocument } from '@quillmark-wasm'
 import { makeQuill } from './test-helpers.js'
 
@@ -182,23 +182,3 @@ This document has no QUILL tag.`
   })
 })
 
-// ---------------------------------------------------------------------------
-// Deprecated Quillmark.parseMarkdown wrapper
-// ---------------------------------------------------------------------------
-
-describe('Quillmark.parseMarkdown (deprecated)', () => {
-  it('should still parse markdown and emit a console.warn', () => {
-    const warnSpy = vi.spyOn(console, 'warn')
-
-    const parsed = Quillmark.parseMarkdown(TEST_MARKDOWN)
-
-    expect(parsed).toBeDefined()
-    expect(parsed.fields.title).toBe('Test Document')
-    expect(parsed.quillRef).toBe('test_quill')
-    expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('deprecated')
-    )
-
-    warnSpy.mockRestore()
-  })
-})

@@ -129,15 +129,7 @@ class Workflow:
 
 class Quill:
     """Format bundle containing plate content and assets."""
-    
-    @staticmethod
-    def from_path(path: str | Path) -> Quill:
-        """Load quill from filesystem path.
-        
-        Raises:
-            QuillmarkError: If path doesn't exist, quill is invalid, or backend unavailable
-        """
-    
+
     @property
     def name(self) -> str:
         """Quill name from Quill.yaml"""

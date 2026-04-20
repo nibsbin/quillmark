@@ -20,21 +20,6 @@ fn small_quill_tree() -> wasm_bindgen::JsValue {
 const SIMPLE_MARKDOWN: &str = "---\nQUILL: test_quill\ntitle: Hello\n---\n\n# Hello\n";
 
 #[wasm_bindgen_test]
-fn test_parse_markdown() {
-    let markdown = r#"---
-title: Test Document
-author: Alice
-QUILL: test_quill
----
-
-# Hello World
-"#;
-    let parsed = Quillmark::parse_markdown(markdown).expect("parse_markdown failed");
-    assert_eq!(parsed.quill_ref, "test_quill");
-    assert!(parsed.fields.is_object());
-}
-
-#[wasm_bindgen_test]
 fn test_parse_markdown_static() {
     let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     assert_eq!(parsed.quill_ref, "test_quill");

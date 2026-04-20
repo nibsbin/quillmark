@@ -8,12 +8,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console, js_name = warn)]
-    fn console_warn(s: &str);
-}
-
 fn now_ms() -> f64 {
     #[cfg(target_arch = "wasm32")]
     {
@@ -62,17 +56,6 @@ impl Quillmark {
         Quillmark {
             inner: quillmark::Quillmark::new(),
         }
-    }
-
-    /// Parse markdown into a ParsedDocument.
-    ///
-    /// @deprecated Use `ParsedDocument.fromMarkdown()` instead.
-    #[wasm_bindgen(js_name = parseMarkdown)]
-    pub fn parse_markdown(markdown: &str) -> Result<ParsedDocument, JsValue> {
-        console_warn(
-            "[quillmark] Quillmark.parseMarkdown() is deprecated; use ParsedDocument.fromMarkdown() instead",
-        );
-        parse_markdown_impl(markdown)
     }
 
     /// Load a quill from a file tree and attach the appropriate backend.

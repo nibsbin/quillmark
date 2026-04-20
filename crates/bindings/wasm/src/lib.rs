@@ -26,9 +26,6 @@
 //! const result = quill.render(parsed, { format: 'pdf' });
 //! const pdfBytes = result.artifacts[0].bytes;
 //! ```
-//!
-//! `Quillmark.parseMarkdown(...)` is kept as a deprecated wrapper around
-//! `ParsedDocument.fromMarkdown(...)`.
 
 use wasm_bindgen::prelude::*;
 
