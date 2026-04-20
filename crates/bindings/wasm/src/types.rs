@@ -210,6 +210,16 @@ impl Default for RenderOptions {
     }
 }
 
+impl From<RenderOptions> for quillmark_core::RenderOptions {
+    fn from(opts: RenderOptions) -> Self {
+        Self {
+            output_format: opts.format.map(|f| f.into()),
+            ppi: opts.ppi,
+            pages: opts.pages,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

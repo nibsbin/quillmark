@@ -36,7 +36,21 @@ describe('Quillmark.quill', () => {
     expect(quill).toBeDefined()
   })
 
-  it('should render markdown to PDF via quill.render(parsed)', () => {
+  it('should render markdown to PDF via quill.render(parsed) with default opts', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
+    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
+
+    const result = quill.render(parsed)
+
+    expect(result).toBeDefined()
+    expect(result.artifacts).toBeDefined()
+    expect(result.artifacts.length).toBeGreaterThan(0)
+    expect(result.artifacts[0].bytes.length).toBeGreaterThan(0)
+    expect(result.artifacts[0].mimeType).toBe('application/pdf')
+  })
+
+  it('should render markdown to PDF via quill.render(parsed, opts)', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
     const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
@@ -105,6 +119,10 @@ describe('quill.open + session.render', () => {
     const session = quill.open(parsed)
     expect(typeof session.pageCount).toBe('number')
     expect(session.pageCount).toBeGreaterThan(0)
+
+    const defaultFmt = session.render()
+    expect(defaultFmt.artifacts.length).toBeGreaterThan(0)
+    expect(defaultFmt.artifacts[0].mimeType).toBe('application/pdf')
 
     const allPages = session.render({ format: 'svg' })
     expect(allPages.artifacts.length).toBe(session.pageCount)
