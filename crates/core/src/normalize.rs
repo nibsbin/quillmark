@@ -305,9 +305,7 @@ fn normalize_card_object(
 fn normalize_cards_array(arr: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
     arr.into_iter()
         .map(|elem| match elem {
-            serde_json::Value::Object(map) => {
-                serde_json::Value::Object(normalize_card_object(map))
-            }
+            serde_json::Value::Object(map) => serde_json::Value::Object(normalize_card_object(map)),
             other => other,
         })
         .collect()
@@ -333,11 +331,7 @@ fn normalize_json_value_inner(
 
     match value {
         serde_json::Value::String(s) => {
-            let result = if is_body {
-                normalize_markdown(&s)
-            } else {
-                s
-            };
+            let result = if is_body { normalize_markdown(&s) } else { s };
             Ok(serde_json::Value::String(result))
         }
         serde_json::Value::Array(arr) => {
@@ -350,9 +344,7 @@ fn normalize_json_value_inner(
         serde_json::Value::Object(map) => {
             let processed: Result<serde_json::Map<String, serde_json::Value>, _> = map
                 .into_iter()
-                .map(|(k, v)| {
-                    normalize_json_value_inner(v, false, depth + 1).map(|nv| (k, nv))
-                })
+                .map(|(k, v)| normalize_json_value_inner(v, false, depth + 1).map(|nv| (k, nv)))
                 .collect();
             Ok(serde_json::Value::Object(processed?))
         }
@@ -927,10 +919,7 @@ mod tests {
         );
         let result = normalize_fields(fields);
         // Must NOT be stripped — YAML field values pass through verbatim.
-        assert_eq!(
-            result.get("title").unwrap().as_str().unwrap(),
-            "a\u{202D}b"
-        );
+        assert_eq!(result.get("title").unwrap().as_str().unwrap(), "a\u{202D}b");
     }
 
     /// Case 3: Bidi character inside CARDS[0].BODY → stripped.
@@ -1045,16 +1034,16 @@ mod tests {
         // Array of strings
         fields.insert(
             "tags".to_string(),
-            QuillValue::from_json(serde_json::json!([
-                format!("rust{bidi}lang"),
-                "markdown"
-            ])),
+            QuillValue::from_json(serde_json::json!([format!("rust{bidi}lang"), "markdown"])),
         );
         let result = normalize_fields(fields);
 
         // Nested object strings pass through verbatim
         let addr = result.get("address").unwrap().as_object().unwrap();
-        assert_eq!(addr.get("city").unwrap().as_str().unwrap(), "New\u{202D}York");
+        assert_eq!(
+            addr.get("city").unwrap().as_str().unwrap(),
+            "New\u{202D}York"
+        );
 
         // Array of strings pass through verbatim
         let tags = result.get("tags").unwrap().as_array().unwrap();

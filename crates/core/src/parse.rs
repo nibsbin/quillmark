@@ -90,10 +90,8 @@ impl ParsedDocument {
     pub fn from_markdown_with_warnings(
         markdown: &str,
     ) -> Result<ParseOutput, crate::error::ParseError> {
-        decompose_with_warnings(markdown).map(|(document, warnings)| ParseOutput {
-            document,
-            warnings,
-        })
+        decompose_with_warnings(markdown)
+            .map(|(document, warnings)| ParseOutput { document, warnings })
     }
 
     /// Get the quill reference (name + version selector)
@@ -331,8 +329,10 @@ fn build_block(
     let (tag, quill_ref, yaml_value) = if content.is_empty() {
         (None, None, None)
     } else {
-        match serde_saphyr::from_str_with_options::<serde_json::Value>(content, yaml_parse_options())
-        {
+        match serde_saphyr::from_str_with_options::<serde_json::Value>(
+            content,
+            yaml_parse_options(),
+        ) {
             Ok(parsed) => extract_sentinels(parsed, markdown, abs_pos, block_index)?,
             Err(e) => {
                 let line = markdown[..abs_pos].lines().count() + 1;
@@ -396,14 +396,7 @@ fn extract_sentinels(
     _markdown: &str,
     _abs_pos: usize,
     _block_index: usize,
-) -> Result<
-    (
-        Option<String>,
-        Option<String>,
-        Option<serde_json::Value>,
-    ),
-    ParseError,
-> {
+) -> Result<(Option<String>, Option<String>, Option<serde_json::Value>), ParseError> {
     let Some(mapping) = parsed.as_object() else {
         // Non-mapping (scalar/sequence); keep as-is — upstream will reject if
         // it's a frontmatter/card mapping was expected.

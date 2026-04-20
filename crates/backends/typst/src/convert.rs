@@ -1008,14 +1008,10 @@ where
             // 3. Handle HTML: allowlist <u>…</u> as underline; strip everything else.
             // Spec §6.2 deviation 2 / §6.3: <br> and all other raw HTML produce no output.
             let (event, range) = match event {
-                Event::InlineHtml(ref html) | Event::Html(ref html)
-                    if is_u_open_tag(html) =>
-                {
+                Event::InlineHtml(ref html) | Event::Html(ref html) if is_u_open_tag(html) => {
                     (Event::Start(Tag::Strong), range)
                 }
-                Event::InlineHtml(ref html) | Event::Html(ref html)
-                    if is_u_close_tag(html) =>
-                {
+                Event::InlineHtml(ref html) | Event::Html(ref html) if is_u_close_tag(html) => {
                     (Event::End(TagEnd::Strong), range)
                 }
                 Event::Html(_) | Event::InlineHtml(_) => continue,
@@ -2386,10 +2382,7 @@ mod tests {
             !out.contains("linebreak"),
             "<br> must not produce #linebreak(): {out}"
         );
-        assert!(
-            !out.contains("<br"),
-            "<br> literal must be stripped: {out}"
-        );
+        assert!(!out.contains("<br"), "<br> literal must be stripped: {out}");
         assert!(out.contains("line1"), "surrounding text preserved: {out}");
         assert!(out.contains("line2"), "surrounding text preserved: {out}");
     }
@@ -2397,10 +2390,7 @@ mod tests {
     #[test]
     fn test_table_br_tag_variants_stripped() {
         // <br/> and <br /> variants must also produce no output.
-        for md in [
-            "| A |\n|---|\n| a<br/>b |",
-            "| A |\n|---|\n| a<br />b |",
-        ] {
+        for md in ["| A |\n|---|\n| a<br/>b |", "| A |\n|---|\n| a<br />b |"] {
             let out = mark_to_typst(md).unwrap();
             assert!(
                 !out.contains("linebreak"),
