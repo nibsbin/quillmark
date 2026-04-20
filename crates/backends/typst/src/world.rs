@@ -705,7 +705,7 @@ name = "minimal-package"
 
     #[test]
     fn test_asset_fonts_have_priority() {
-        use quillmark_core::Quill;
+        use quillmark::Quillmark;
         use std::path::Path;
 
         // Use the actual usaf_memo fixture which has real fonts
@@ -725,7 +725,8 @@ name = "minimal-package"
             return;
         }
 
-        let quill = Quill::from_path(&quill_path).unwrap();
+        let engine = Quillmark::new();
+        let quill = engine.quill_from_path(&quill_path).unwrap();
         let world = QuillWorld::new(&quill, "// Test").unwrap();
 
         // Asset fonts should be loaded

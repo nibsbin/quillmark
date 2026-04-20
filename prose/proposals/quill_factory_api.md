@@ -1,5 +1,7 @@
 # Quill Factory API — `quillmark-wasm` Tasking
 
+> **Superseded.** See `prose/taskings/consolidate-quill-creation.md`.
+>
 > **Partially superseded.** `fromJson` was removed; only `fromTree` remains. See `prose/taskings/REMOVE_FROM_JSON.md`.
 
 ## Goal

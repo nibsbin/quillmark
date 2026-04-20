@@ -66,7 +66,7 @@ class Quillmark:
         """Create a workflow for the given quill.
 
         Args:
-            quill: A Quill object (must have been loaded via quill_from_path or load_quill)
+            quill: A Quill object
 
         Raises:
             QuillmarkError: If backend unavailable
@@ -129,15 +129,7 @@ class Workflow:
 
 class Quill:
     """Format bundle containing plate content and assets."""
-    
-    @staticmethod
-    def from_path(path: str | Path) -> Quill:
-        """Load quill from filesystem path (no backend attached).
-        
-        Raises:
-            QuillmarkError: If path doesn't exist or quill is invalid
-        """
-    
+
     @property
     def name(self) -> str:
         """Quill name from Quill.yaml"""
@@ -191,7 +183,7 @@ class Quill:
             format: Output format (defaults to first supported format)
 
         Raises:
-            QuillmarkError: If this quill was not loaded via engine.quill_from_path()
+            QuillmarkError: If rendering fails
             TypeError: If input is not str or ParsedDocument
         """
 

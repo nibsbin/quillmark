@@ -8,7 +8,7 @@
 The current render flow for WASM consumers requires four sequential steps:
 
 ```javascript
-const quill = Quill.fromTree(fileTree)         // 1. build
+const quill = engine.quill(fileTree)           // 1. build
 engine.registerQuill(quill)                    // 2. register
 const parsed = Quillmark.parseMarkdown(md)     // 3. parse
 const result = engine.render(parsed, opts)     // 4. render
@@ -34,7 +34,7 @@ The new canonical flow for WASM consumers:
 
 ```javascript
 const engine = new Quillmark()
-const quill = engine.quillFromTree(fileTree)  // factory: load + attach backend
+const quill = engine.quill(fileTree)          // factory: load + attach backend
 const result = quill.render(markdown, opts)
 ```
 
@@ -90,11 +90,11 @@ Add to `Quillmark`:
 
 ```rust
 impl Quillmark {
-    pub fn load_quill(&self, tree: FileTreeNode) -> Result<Quill, RenderError>;
+    pub fn quill(&self, tree: FileTreeNode) -> Result<Quill, RenderError>;
 }
 ```
 
-`load_quill` reads the `backend` field from `Quill.yaml` inside the tree, looks it up in `self.backends`, and returns `Quill::from_tree(tree)?.with_backend(arc_backend)`. This is the canonical way to produce a render-ready `Quill`.
+`quill` reads the `backend` field from `Quill.yaml` inside the tree, looks it up in `self.backends`, and returns `Quill::from_tree(tree)?.with_backend(arc_backend)`. This is the canonical way to produce a render-ready `Quill`.
 
 ### 3. Add `render()` and `compile()` to core `Quill`
 
@@ -156,11 +156,11 @@ Add the factory method:
 
 ```typescript
 class Quillmark {
-  quillFromTree(tree: Map<string, Uint8Array> | Record<string, Uint8Array>): Quill
+  quill(tree: Map<string, Uint8Array> | Record<string, Uint8Array>): Quill
 }
 ```
 
-Delegates to `Quillmark::load_quill` from task 2.
+Delegates to `Quillmark::quill` from task 2.
 
 ### 6. WASM: move `parseMarkdown` to `ParsedDocument`
 
@@ -251,14 +251,14 @@ class Quill:
 
 **WASM Rust tests** (`crates/bindings/wasm/tests/wasm_bindings.rs`):
 
-- Replace all `engine.registerQuill()` setup with `engine.quillFromTree()`.
+- Replace all `engine.registerQuill()` setup with `engine.quill()`.
 - Add tests for `Quill::render` with a `&str` input and with a `ParsedDocument` input.
 - Add a test for the ref-mismatch warning: render a `ParsedDocument` whose `quill_ref` names a different quill, assert one warning with code `"quill::ref_mismatch"`.
 - Add a test that a `Quill` built via `Quill::from_tree` (no backend) errors on `render` with `NoBackend`.
 
 **WASM JS tests** (`crates/bindings/wasm/basic.test.js`):
 
-- Replace `engine.registerQuill(Quill.fromTree(...))` setup with `engine.quillFromTree(...)`.
+- Replace `engine.registerQuill(...)` setup with direct `engine.quill(...)` construction.
 - Add a test for `quill.render(markdownString, opts)` — the new happy path.
 - Add a test for `ParsedDocument.fromMarkdown(markdown)` as a standalone static call.
 - Verify `Quillmark.parseMarkdown` still works (deprecated wrapper) and logs a `console.warn`.
@@ -284,7 +284,7 @@ class Quill:
 
 ## Done when
 
-- `engine.quillFromTree(tree).render(markdown, opts)` produces a valid `RenderResult` in WASM.
+- `engine.quill(tree).render(markdown, opts)` produces a valid `RenderResult` in WASM.
 - `engine.quill_from_path(path).render(markdown)` produces a valid `RenderResult` in Python.
 - `ParsedDocument.fromMarkdown(markdown)` works as a WASM static with no engine.
 - Rendering a `ParsedDocument` with a mismatched `quill_ref` produces one warning with code `"quill::ref_mismatch"` and still returns an artifact.

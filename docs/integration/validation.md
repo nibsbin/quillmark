@@ -7,7 +7,7 @@ Validate documents before full rendering for faster feedback loops.
 Validation runs against native `QuillConfig` schema rules (no JSON Schema runtime).
 
 - Parse markdown to `ParsedDocument`
-- Render-ready quill via `engine.quill_from_path(...)` / `engine.quillFromTree(...)`
+- Render-ready quill via `engine.quill_from_path(...)` / `engine.quill(...)`
 - Optional `workflow.dry_run()` for fast validation without compilation (Python)
 
 ## Python
@@ -34,7 +34,7 @@ except QuillmarkError as e:
 import { ParsedDocument, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
-const quill = engine.quillFromTree(tree);
+const quill = engine.quill(tree);
 const parsed = ParsedDocument.fromMarkdown(markdown);
 
 // render() performs validation + compilation

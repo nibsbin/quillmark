@@ -32,8 +32,11 @@ pub fn demo(
     } else {
         quills_path(quill_dir)
     };
-    // Default engine flow used by examples: Typst backend, Quill from path, Workflow
-    let quill = quillmark::Quill::from_path(quill_path.clone()).expect("Failed to load quill");
+    // Default engine flow used by examples: Typst backend, engine-provided quill, Workflow
+    let engine = quillmark::Quillmark::new();
+    let quill = engine
+        .quill_from_path(quill_path.clone())
+        .expect("Failed to load quill");
 
     // Load the markdown template from the quill
     let markdown = quill
@@ -45,7 +48,6 @@ pub fn demo(
     // Parse the markdown once
     let parsed = quillmark::ParsedDocument::from_markdown(&markdown)?;
 
-    let engine = quillmark::Quillmark::new();
     let workflow = engine.workflow(&quill).expect("Failed to load workflow");
 
     // render output

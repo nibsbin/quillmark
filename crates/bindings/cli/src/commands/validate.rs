@@ -1,6 +1,6 @@
 use crate::errors::{CliError, Result};
 use clap::Parser;
-use quillmark::Quill;
+use quillmark::Quillmark;
 use quillmark_core::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
 use quillmark_core::QuillValue;
 use std::collections::HashMap;
@@ -142,7 +142,8 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
     }
 
     // Step 5: Try to load the full Quill (this validates schema generation)
-    match Quill::from_path(&args.quill_path) {
+    let engine = Quillmark::new();
+    match engine.quill_from_path(&args.quill_path) {
         Ok(quill) => {
             if args.verbose {
                 println!("  Schema generated successfully");
@@ -365,7 +366,7 @@ fn describe_json_type(value: &serde_json::Value) -> &'static str {
 }
 
 fn validate_defaults_against_schema(
-    quill: &Quill,
+    quill: &quillmark::Quill,
     config: &QuillConfig,
     result: &mut ValidationResult,
 ) {

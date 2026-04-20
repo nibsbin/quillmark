@@ -1,7 +1,7 @@
 use crate::errors::{CliError, Result};
 use crate::output::{derive_output_path, OutputWriter};
 use clap::Parser;
-use quillmark::{ParsedDocument, Quill, Quillmark};
+use quillmark::{ParsedDocument, Quillmark};
 use quillmark_core::OutputFormat;
 use std::fs;
 use std::path::PathBuf;
@@ -55,7 +55,8 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 
     // Load quill
-    let quill = Quill::from_path(args.quill.clone())?;
+    let engine = Quillmark::new();
+    let quill = engine.quill_from_path(args.quill.clone())?;
 
     if args.verbose {
         println!("Quill loaded: {}", quill.name);
@@ -108,8 +109,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         (parsed, None)
     };
 
-    // Create engine and workflow
-    let engine = Quillmark::new();
+    // Create workflow
     let workflow = engine.workflow(&quill)?;
 
     if args.verbose {

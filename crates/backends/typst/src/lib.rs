@@ -21,10 +21,11 @@
 //!
 //! ```no_run
 //! use quillmark_typst::TypstBackend;
-//! use quillmark_core::{Backend, Quill, OutputFormat};
+//! use quillmark::{Backend, Quillmark, OutputFormat};
 //!
 //! let backend = TypstBackend::default();
-//! let quill = Quill::from_path("path/to/quill").unwrap();
+//! let engine = Quillmark::new();
+//! let quill = engine.quill_from_path("path/to/quill").unwrap();
 //!
 //! // Use with Workflow API (recommended)
 //! // let workflow = Workflow::new(Box::new(backend), quill);

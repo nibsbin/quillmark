@@ -28,7 +28,7 @@ Most integrations follow this flow:
     import { ParsedDocument, Quillmark } from "@quillmark-test/wasm";
 
     const engine = new Quillmark();
-    const quill = engine.quillFromTree(treeMapOrRecord);
+    const quill = engine.quill(treeMapOrRecord);
 
     const parsed = ParsedDocument.fromMarkdown(markdownText);
     const result = quill.render(parsed, { format: "pdf" });

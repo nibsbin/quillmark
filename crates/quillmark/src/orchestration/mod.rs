@@ -5,7 +5,7 @@
 //! ## Workflow
 //!
 //! 1. Create an engine with [`Quillmark::new`]
-//! 2. Load a quill with [`Quillmark::load_quill`] or [`Quillmark::quill_from_path`]
+//! 2. Load a quill with [`Quillmark::quill`] or [`Quillmark::quill_from_path`]
 //! 3. Create a workflow with [`Quillmark::workflow`]
 //! 4. Render documents using the workflow
 

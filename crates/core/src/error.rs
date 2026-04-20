@@ -587,7 +587,7 @@ pub enum RenderError {
         diag: Box<Diagnostic>,
     },
 
-    /// Quill has no backend attached (created via from_path/from_tree without load_quill)
+    /// Quill has no backend attached (created without engine-based construction)
     #[error("{diag}")]
     NoBackend {
         /// Diagnostic information

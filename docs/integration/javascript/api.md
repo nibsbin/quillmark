@@ -12,7 +12,7 @@ npm install @quillmark-test/wasm
 import { ParsedDocument, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
-const quill = engine.quillFromTree(treeMapOrRecord);
+const quill = engine.quill(treeMapOrRecord);
 
 const parsed = ParsedDocument.fromMarkdown(markdown); // requires QUILL in frontmatter
 const result = quill.render(parsed, { format: "pdf" });
@@ -24,7 +24,7 @@ const result = quill.render(parsed, { format: "pdf" });
 
 Creates an engine with built-in backend registrations.
 
-### `engine.quillFromTree(tree)`
+### `engine.quill(tree)`
 
 Builds and validates a quill from `Map<string, Uint8Array>` or `Record<string, Uint8Array>`, then attaches the declared backend.
 
@@ -40,10 +40,6 @@ type ParsedDocument = {
   quillRef: string;
 };
 ```
-
-### `Quillmark.parseMarkdown(markdown)`
-
-Deprecated wrapper around `ParsedDocument.fromMarkdown(markdown)`.
 
 ### `quill.render(input, options?)`
 
@@ -73,4 +69,3 @@ Renders selected pages from a compiled document.
 
 - `QUILL` in frontmatter is required when parsing markdown.
 - `quill.render(parsed)` emits a warning (not error) if `parsed.quillRef` does not match the quill name.
-- `Quill.fromTree(tree)` still exists, but it creates a quill **without** a backend. Calling `render`/`compile` on that handle returns a no-backend error. Use `engine.quillFromTree(tree)` for render-ready quills.

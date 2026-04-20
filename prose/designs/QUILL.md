@@ -24,12 +24,14 @@ pub struct Quill {
 }
 ```
 
-## In-memory Tree Contract (`Quill::from_tree`)
+## In-memory Tree Contract (`engine.quill(tree)`)
 
-`Quill::from_tree` is the only in-memory constructor. Input is a `FileTreeNode`
-directory tree with UTF-8 and binary file contents represented as bytes.
+In-memory construction routes through the engine as `engine.quill(tree)`. The
+core `Quill::from_tree` constructor is internal to `quillmark-core`. Input is
+a `FileTreeNode` directory tree with UTF-8 and binary file contents represented
+as bytes.
 
-For JS/WASM consumers this is exposed as `Quill.fromTree(...)` with a flat
+For JS/WASM consumers this is exposed as `engine.quill(...)` with a flat
 `Map<string, Uint8Array>` (or plain object) path→bytes shape.
 
 Validation rules:
@@ -66,8 +68,8 @@ Metadata resolution:
 ## API
 
 Construction:
-- `Quill::from_path(path)` — load from filesystem directory
-- `Quill::from_tree(root)` — load from in-memory file tree
+- `Quillmark::quill_from_path(path)` — load render-ready quill from filesystem directory
+- `Quillmark::quill(tree)` — load render-ready quill from in-memory file tree
 
 Note: `Quill::from_json` is removed from the public API.
 

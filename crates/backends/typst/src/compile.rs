@@ -12,9 +12,10 @@
 //!
 //! ```no_run
 //! use quillmark_typst::compile::compile_to_pdf;
-//! use quillmark_core::Quill;
+//! use quillmark::Quillmark;
 //!
-//! let quill = Quill::from_path("path/to/quill")?;
+//! let engine = Quillmark::new();
+//! let quill = engine.quill_from_path("path/to/quill")?;
 //! let typst_content = "#set document(title: \"Test\")\n= Hello";
 //!
 //! let pdf_bytes = compile_to_pdf(&quill, typst_content, "{}")?;
@@ -285,7 +286,8 @@ mod compile_helper_tests {
     use std::collections::HashMap;
 
     use super::compile_to_document;
-    use quillmark_core::{FileTreeNode, Quill};
+    use quillmark::Quillmark;
+    use quillmark_core::FileTreeNode;
 
     /// Ensures generated `lib.typ` (date conversion, etc.) typechecks when evaluated.
     /// String-only helper tests do not run the Typst compiler.
@@ -312,7 +314,8 @@ mod compile_helper_tests {
             },
         );
         let root = FileTreeNode::Directory { files: root_files };
-        let quill = Quill::from_tree(root).expect("quill");
+        let engine = Quillmark::new();
+        let quill = engine.quill(root).expect("quill");
 
         let json = r#"{"title":"Test","BODY":"Hello","date":"2025-01-15","__meta__":{"content_fields":["BODY"],"card_content_fields":{},"date_fields":["date"],"card_date_fields":{}}}"#;
         let plate = r#"#import "@local/quillmark-helper:0.1.0": data

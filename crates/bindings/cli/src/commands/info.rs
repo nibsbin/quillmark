@@ -1,6 +1,6 @@
 use crate::errors::{CliError, Result};
 use clap::Parser;
-use quillmark::Quill;
+use quillmark::Quillmark;
 use std::path::PathBuf;
 
 /// Standard metadata keys that are surfaced as top-level fields in the output.
@@ -28,7 +28,8 @@ pub fn execute(args: InfoArgs) -> Result<()> {
     }
 
     // Load Quill
-    let quill = Quill::from_path(&args.quill_path)?;
+    let engine = Quillmark::new();
+    let quill = engine.quill_from_path(&args.quill_path)?;
 
     if args.json {
         print_json(&quill)?;
@@ -39,7 +40,7 @@ pub fn execute(args: InfoArgs) -> Result<()> {
     Ok(())
 }
 
-fn print_json(quill: &Quill) -> Result<()> {
+fn print_json(quill: &quillmark::Quill) -> Result<()> {
     // Build a JSON object with the metadata
     let mut info = serde_json::Map::new();
     info.insert(
@@ -104,7 +105,7 @@ fn print_json(quill: &Quill) -> Result<()> {
     Ok(())
 }
 
-fn print_human_readable(quill: &Quill) {
+fn print_human_readable(quill: &quillmark::Quill) {
     println!("Quill: {}", quill.name);
 
     if let Some(description) = quill.metadata.get("description") {

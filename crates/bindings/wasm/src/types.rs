@@ -155,7 +155,7 @@ pub struct RenderResult {
 
 /// Parsed markdown document
 ///
-/// Returned by `Quillmark.parseMarkdown()`. Contains the parsed YAML frontmatter
+/// Returned by `ParsedDocument.fromMarkdown()`. Contains the parsed YAML frontmatter
 /// fields and the quill reference from the required QUILL field.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(from_wasm_abi)]

@@ -222,7 +222,8 @@ const entries = Object.entries(payload.files).map(([path, { contents }]) => [
   path,
   typeof contents === "string" ? enc.encode(contents) : new Uint8Array(contents),
 ]);
-const quill = Quill.fromTree(new Map(entries));
+const engine = new Quillmark();
+const quill = engine.quill(new Map(entries));
 ```
 
 If any first-party client code in this monorepo follows that pattern, move

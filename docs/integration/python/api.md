@@ -49,21 +49,15 @@ class Quillmark:
 
 ```python
 class Quill:
-    @staticmethod
-    def from_path(path: str | Path) -> Quill:
-        """Load quill metadata/files only (no backend attached)."""
-
     def render(
         self,
         input: str | ParsedDocument,
         format: OutputFormat | None = None,
     ) -> RenderResult:
-        """Render directly with this quill.
-
-        Raises QuillmarkError if the quill was created with Quill.from_path()
-        instead of engine.quill_from_path().
-        """
+        """Render directly with this quill."""
 ```
+
+Obtain a `Quill` via `engine.quill_from_path(path)`.
 
 ### `Workflow`
 

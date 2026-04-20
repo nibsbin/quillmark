@@ -1,7 +1,7 @@
 use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
-use quillmark_wasm::{ParsedDocument, Quill, Quillmark, RenderOptions};
+use quillmark_wasm::{ParsedDocument, Quillmark, RenderOptions};
 
 mod common;
 
@@ -20,21 +20,6 @@ fn small_quill_tree() -> wasm_bindgen::JsValue {
 const SIMPLE_MARKDOWN: &str = "---\nQUILL: test_quill\ntitle: Hello\n---\n\n# Hello\n";
 
 #[wasm_bindgen_test]
-fn test_parse_markdown() {
-    let markdown = r#"---
-title: Test Document
-author: Alice
-QUILL: test_quill
----
-
-# Hello World
-"#;
-    let parsed = Quillmark::parse_markdown(markdown).expect("parse_markdown failed");
-    assert_eq!(parsed.quill_ref, "test_quill");
-    assert!(parsed.fields.is_object());
-}
-
-#[wasm_bindgen_test]
 fn test_parse_markdown_static() {
     let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     assert_eq!(parsed.quill_ref, "test_quill");
@@ -43,34 +28,17 @@ fn test_parse_markdown_static() {
 #[wasm_bindgen_test]
 fn test_quill_from_tree() {
     let engine = Quillmark::new();
-    let quill = engine
-        .quill_from_tree(small_quill_tree())
-        .expect("quillFromTree failed");
+    let quill = engine.quill(small_quill_tree()).expect("quill failed");
     let _ = quill;
 }
 
 #[wasm_bindgen_test]
-fn test_quill_from_tree_static() {
-    let quill = Quill::from_tree(small_quill_tree()).expect("fromTree failed");
-    let _ = quill;
-}
-
-/// A quill built via `Quill::from_tree` has no backend attached and must error on render.
-#[wasm_bindgen_test]
-fn test_render_no_backend_errors() {
-    let quill = Quill::from_tree(small_quill_tree()).expect("fromTree failed");
-    let result = quill.render(JsValue::from_str(SIMPLE_MARKDOWN), RenderOptions::default());
-    assert!(result.is_err(), "render without backend should return Err");
-}
-
 /// Rendering markdown with a QUILL ref that differs from the quill name must yield
 /// exactly one warning with code `quill::ref_mismatch` and still produce an artifact.
 #[wasm_bindgen_test]
 fn test_render_ref_mismatch_warning() {
     let engine = Quillmark::new();
-    let quill = engine
-        .quill_from_tree(small_quill_tree())
-        .expect("quillFromTree failed");
+    let quill = engine.quill(small_quill_tree()).expect("quill failed");
 
     // Document declares a different quill name than the loaded quill ("test_quill")
     let mismatch_md = "---\nQUILL: other_quill\ntitle: Mismatch\n---\n\n# Content\n";
@@ -91,9 +59,7 @@ fn test_render_ref_mismatch_warning() {
 #[wasm_bindgen_test]
 fn test_render_from_string() {
     let engine = Quillmark::new();
-    let quill = engine
-        .quill_from_tree(small_quill_tree())
-        .expect("quillFromTree failed");
+    let quill = engine.quill(small_quill_tree()).expect("quill failed");
 
     let result = quill
         .render(JsValue::from_str(SIMPLE_MARKDOWN), RenderOptions::default())
@@ -114,9 +80,7 @@ fn test_render_from_string() {
 #[wasm_bindgen_test]
 fn test_render_from_parsed_document() {
     let engine = Quillmark::new();
-    let quill = engine
-        .quill_from_tree(small_quill_tree())
-        .expect("quillFromTree failed");
+    let quill = engine.quill(small_quill_tree()).expect("quill failed");
 
     let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     // Convert to JsValue so the engine's input-type dispatch treats it as ParsedDocument

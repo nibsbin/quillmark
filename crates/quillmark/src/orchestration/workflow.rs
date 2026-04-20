@@ -23,7 +23,7 @@ struct PreparedRenderContext {
 impl Workflow {
     /// Create a new Workflow with the specified backend and quill.
     pub fn new(backend: Arc<dyn Backend>, quill: Quill) -> Result<Self, RenderError> {
-        // Since Quill::from_path() now automatically validates, we don't need to validate again
+        // Quills are validated at construction time before workflow creation.
         Ok(Self {
             backend,
             quill,

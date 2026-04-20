@@ -2239,6 +2239,7 @@ dependencies = [
  "dirs",
  "js-sys",
  "pulldown-cmark",
+ "quillmark",
  "quillmark-core",
  "serde_json",
  "tempfile",

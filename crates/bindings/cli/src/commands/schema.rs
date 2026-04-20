@@ -1,6 +1,6 @@
 use crate::errors::{CliError, Result};
 use clap::Parser;
-use quillmark::Quill;
+use quillmark::Quillmark;
 use std::fs;
 use std::path::PathBuf;
 
@@ -25,7 +25,8 @@ pub fn execute(args: SchemaArgs) -> Result<()> {
     }
 
     // Load Quill
-    let quill = Quill::from_path(&args.quill_path)?;
+    let engine = Quillmark::new();
+    let quill = engine.quill_from_path(&args.quill_path)?;
 
     // Emit public schema contract as YAML
     let schema_yaml = quill

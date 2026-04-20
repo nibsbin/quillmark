@@ -8,12 +8,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
-#[wasm_bindgen]
-extern "C" {
-    #[wasm_bindgen(js_namespace = console, js_name = warn)]
-    fn console_warn(s: &str);
-}
-
 fn now_ms() -> f64 {
     #[cfg(target_arch = "wasm32")]
     {
@@ -64,26 +58,15 @@ impl Quillmark {
         }
     }
 
-    /// Parse markdown into a ParsedDocument.
-    ///
-    /// @deprecated Use `ParsedDocument.fromMarkdown()` instead.
-    #[wasm_bindgen(js_name = parseMarkdown)]
-    pub fn parse_markdown(markdown: &str) -> Result<ParsedDocument, JsValue> {
-        console_warn(
-            "[quillmark] Quillmark.parseMarkdown() is deprecated; use ParsedDocument.fromMarkdown() instead",
-        );
-        parse_markdown_impl(markdown)
-    }
-
     /// Load a quill from a file tree and attach the appropriate backend.
     ///
     /// The tree must be a `Map<string, Uint8Array>` or `Record<string, Uint8Array>`.
-    #[wasm_bindgen(js_name = quillFromTree)]
-    pub fn quill_from_tree(&self, tree: JsValue) -> Result<Quill, JsValue> {
+    #[wasm_bindgen(js_name = quill)]
+    pub fn quill(&self, tree: JsValue) -> Result<Quill, JsValue> {
         let root = file_tree_from_js_tree(&tree)?;
         let quill = self
             .inner
-            .load_quill(root)
+            .quill(root)
             .map_err(|e| WasmError::from(e).to_js_value())?;
         Ok(Quill {
             inner: Arc::new(quill),
@@ -129,38 +112,8 @@ fn to_core_parsed(parsed: ParsedDocument) -> Result<quillmark_core::ParsedDocume
     Ok(quillmark_core::ParsedDocument::new(fields, quill_ref))
 }
 
-// Namespace merges with the wasm-bindgen-generated `Quill` class declaration.
-#[wasm_bindgen(typescript_custom_section)]
-const QUILL_FACTORY_TS: &str = r#"
-export namespace Quill {
-  /**
-   * Build and validate a Quill from a flat path-to-bytes tree (no backend attached).
-   * Paths may include `/`-separated subdirectory components.
-   * Only relative paths with normal components are accepted.
-   * Throws a structured `WasmError` (code `"quill::invalid_bundle"`) on failure.
-   */
-  export function fromTree(
-    tree: Map<string, Uint8Array> | Record<string, Uint8Array>
-  ): Quill;
-}
-"#;
-
 #[wasm_bindgen]
 impl Quill {
-    /// Build and validate a Quill from a flat path-to-bytes tree (no backend attached).
-    ///
-    /// For rendering, use `Quillmark.quillFromTree()` instead, which attaches a backend.
-    #[wasm_bindgen(js_name = fromTree, skip_typescript)]
-    pub fn from_tree(tree: JsValue) -> Result<Quill, JsValue> {
-        let root = file_tree_from_js_tree(&tree)?;
-        let quill = quillmark_core::Quill::from_tree(root)
-            .map_err(|e| WasmError::with_code("quill::invalid_bundle", e).to_js_value())?;
-
-        Ok(Quill {
-            inner: Arc::new(quill),
-        })
-    }
-
     /// Render a document to final artifacts.
     ///
     /// Input may be a markdown string or a `ParsedDocument` object.
@@ -189,10 +142,7 @@ impl Quill {
     pub fn compile(&self, input: JsValue) -> Result<CompiledDocument, JsValue> {
         let core_input = js_value_to_quill_input(input)?;
         let backend = self.inner.backend().ok_or_else(|| {
-            WasmError::from(
-                "Quill has no backend; use engine.quillFromTree() instead of Quill.fromTree()",
-            )
-            .to_js_value()
+            WasmError::from("Quill has no backend; use engine.quill(...)").to_js_value()
         })?;
         let compiled = self
             .inner
@@ -245,7 +195,7 @@ fn file_tree_from_js_tree(tree: &JsValue) -> Result<quillmark_core::FileTreeNode
 
 fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
     if tree.is_null() || tree.is_undefined() {
-        return Err(WasmError::from("fromTree requires a Map or plain object").to_js_value());
+        return Err(WasmError::from("quill requires a Map or plain object").to_js_value());
     }
 
     let mut entries: Vec<(String, JsValue)> = Vec::new();
@@ -263,9 +213,10 @@ fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
                 WasmError::from(format!("Failed to read Map entry: {:?}", e)).to_js_value()
             })?;
             let pair = Array::from(&pair);
-            let path = pair.get(0).as_string().ok_or_else(|| {
-                WasmError::from("fromTree Map key must be a string").to_js_value()
-            })?;
+            let path = pair
+                .get(0)
+                .as_string()
+                .ok_or_else(|| WasmError::from("quill Map key must be a string").to_js_value())?;
             let value = pair.get(1);
             entries.push((path, value));
         }
@@ -274,12 +225,12 @@ fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
 
     if tree.is_instance_of::<js_sys::Array>() {
         return Err(
-            WasmError::from("fromTree requires a Map or plain object, not an Array").to_js_value(),
+            WasmError::from("quill requires a Map or plain object, not an Array").to_js_value(),
         );
     }
     if tree.is_instance_of::<Uint8Array>() {
         return Err(WasmError::from(
-            "fromTree requires a Map or plain object, not a Uint8Array; \
+            "quill requires a Map or plain object, not a Uint8Array; \
                  did you mean to pass a Map<string, Uint8Array>?",
         )
         .to_js_value());
@@ -290,7 +241,7 @@ fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
         for pair in Object::entries(&obj).iter() {
             let pair = Array::from(&pair);
             let path = pair.get(0).as_string().ok_or_else(|| {
-                WasmError::from("fromTree object key must be a string").to_js_value()
+                WasmError::from("quill object key must be a string").to_js_value()
             })?;
             let value = pair.get(1);
             entries.push((path, value));
@@ -298,7 +249,7 @@ fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
         return Ok(entries);
     }
 
-    Err(WasmError::from("fromTree requires a Map or plain object").to_js_value())
+    Err(WasmError::from("quill requires a Map or plain object").to_js_value())
 }
 
 fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValue> {
