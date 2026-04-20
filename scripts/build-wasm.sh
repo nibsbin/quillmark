@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 # Check for required tools
 if ! command -v wasm-bindgen &> /dev/null; then
     echo "wasm-bindgen not found. Install it with:"
-    echo "  cargo install wasm-bindgen-cli --version 0.2.117"
+    echo "  cargo install wasm-bindgen-cli --version 0.2.118"
     exit 1
 fi
 
