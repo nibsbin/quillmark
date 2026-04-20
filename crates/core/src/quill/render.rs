@@ -4,75 +4,50 @@ use std::sync::Arc;
 use crate::{
     normalize::normalize_document,
     quill::{FieldSchema, FieldType},
-    Backend, CompiledDocument, Diagnostic, ParsedDocument, Quill, QuillValue, RenderError,
-    RenderOptions, RenderResult, Severity,
+    Diagnostic, ParsedDocument, Quill, QuillValue, RenderError, RenderOptions, RenderResult,
+    Severity,
 };
-
-/// Input to a render or compile operation — either raw Markdown or a pre-parsed document.
-pub enum QuillInput {
-    /// Raw Markdown source (will be parsed internally)
-    Markdown(String),
-    /// Pre-parsed document
-    Parsed(ParsedDocument),
-}
-
-impl From<String> for QuillInput {
-    fn from(s: String) -> Self {
-        QuillInput::Markdown(s)
-    }
-}
-
-impl From<&str> for QuillInput {
-    fn from(s: &str) -> Self {
-        QuillInput::Markdown(s.to_string())
-    }
-}
-
-impl From<ParsedDocument> for QuillInput {
-    fn from(p: ParsedDocument) -> Self {
-        QuillInput::Parsed(p)
-    }
-}
 
 impl Quill {
     /// Attach a backend to this quill, returning a render-ready quill.
-    pub fn with_backend(mut self, backend: Arc<dyn Backend>) -> Self {
+    pub fn with_backend(mut self, backend: Arc<dyn crate::Backend>) -> Self {
         self.resolved_backend = Some(backend);
         self
     }
 
     /// Return the resolved backend, if one has been attached.
-    pub fn backend(&self) -> Option<&Arc<dyn Backend>> {
+    pub fn backend(&self) -> Option<&Arc<dyn crate::Backend>> {
         self.resolved_backend.as_ref()
     }
 
     /// Render a document to final artifacts.
+    ///
+    /// Note: page selection (`RenderOptions.pages`) is ignored in this one-shot
+    /// convenience path. Use `open(...).render(...)` for page-selective rendering.
     pub fn render(
         &self,
-        input: impl Into<QuillInput>,
+        parsed: ParsedDocument,
         opts: &RenderOptions,
     ) -> Result<RenderResult, RenderError> {
-        let backend = self.require_backend()?;
-        let (parsed, ref_mismatch_warning) = self.resolve_input(input.into())?;
-        let json_data = self.compile_data_internal(&parsed, backend)?;
-        let plate_content = self.plate.clone().unwrap_or_default();
-        let mut result = backend.compile(&plate_content, self, opts, &json_data)?;
-        if let Some(w) = ref_mismatch_warning {
-            result.warnings.push(w);
-        }
-        Ok(result)
+        let all_pages_opts = RenderOptions {
+            output_format: opts.output_format,
+            ppi: opts.ppi,
+            pages: None,
+        };
+        self.open(parsed)?.render(&all_pages_opts)
     }
 
-    /// Compile a document to a backend-specific compiled handle for page-selective rendering.
-    pub fn compile(&self, input: impl Into<QuillInput>) -> Result<CompiledDocument, RenderError> {
+    /// Open an iterative render session for this parsed document.
+    pub fn open(&self, parsed: ParsedDocument) -> Result<crate::RenderSession, RenderError> {
         let backend = self.require_backend()?;
-        let (parsed, _) = self.resolve_input(input.into())?;
-        let json_data = self.compile_data_internal(&parsed, backend)?;
+        let warning = self.ref_mismatch_warning(&parsed);
+        let json_data = self.compile_data_internal(&parsed)?;
         let plate_content = self.plate.clone().unwrap_or_default();
-        backend.compile_to_document(&plate_content, self, &json_data)
+        let session = backend.open(&plate_content, self, &json_data)?;
+        Ok(session.with_warning(warning))
     }
 
-    fn require_backend(&self) -> Result<&Arc<dyn Backend>, RenderError> {
+    fn require_backend(&self) -> Result<&Arc<dyn crate::Backend>, RenderError> {
         self.resolved_backend.as_ref().ok_or_else(|| RenderError::NoBackend {
             diag: Box::new(
                 Diagnostic::new(
@@ -88,23 +63,6 @@ impl Quill {
                 ),
             ),
         })
-    }
-
-    fn resolve_input(
-        &self,
-        input: QuillInput,
-    ) -> Result<(ParsedDocument, Option<Diagnostic>), RenderError> {
-        match input {
-            QuillInput::Markdown(md) => {
-                let parsed = ParsedDocument::from_markdown(&md)?;
-                let warning = self.ref_mismatch_warning(&parsed);
-                Ok((parsed, warning))
-            }
-            QuillInput::Parsed(parsed) => {
-                let warning = self.ref_mismatch_warning(&parsed);
-                Ok((parsed, warning))
-            }
-        }
     }
 
     fn ref_mismatch_warning(&self, parsed: &ParsedDocument) -> Option<Diagnostic> {
@@ -132,7 +90,6 @@ impl Quill {
     pub(crate) fn compile_data_internal(
         &self,
         parsed: &ParsedDocument,
-        backend: &Arc<dyn Backend>,
     ) -> Result<serde_json::Value, RenderError> {
         let coerced_fields = self
             .config
@@ -151,11 +108,7 @@ impl Quill {
         self.validate_fields(&parsed_coerced)?;
 
         let normalized = normalize_document(parsed_coerced)?;
-
-        let transform_schema = self.build_transform_schema();
-        let transformed_fields = backend.transform_fields(normalized.fields(), &transform_schema);
-
-        let fields_with_defaults = self.apply_schema_defaults(&transformed_fields);
+        let fields_with_defaults = self.apply_schema_defaults(normalized.fields());
         Ok(Self::fields_to_json(&fields_with_defaults))
     }
 
@@ -203,7 +156,7 @@ impl Quill {
         serde_json::Value::Object(json_map)
     }
 
-    pub(crate) fn build_transform_schema(&self) -> QuillValue {
+    pub fn build_transform_schema(&self) -> QuillValue {
         fn field_to_schema(field: &FieldSchema) -> serde_json::Value {
             let mut schema = serde_json::Map::new();
             match field.r#type {
@@ -316,21 +269,5 @@ impl Quill {
             "properties": properties,
             "$defs": defs,
         }))
-    }
-
-    /// Render to the first supported output format (convenience helper).
-    pub fn render_default(
-        &self,
-        input: impl Into<QuillInput>,
-    ) -> Result<RenderResult, RenderError> {
-        let backend = self.require_backend()?;
-        let output_format = backend.supported_formats().first().copied();
-        self.render(
-            input,
-            &RenderOptions {
-                output_format,
-                ppi: None,
-            },
-        )
     }
 }

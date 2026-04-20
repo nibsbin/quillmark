@@ -2,7 +2,7 @@
  * Smoke tests for quillmark-wasm — new Quill.render() API
  *
  * These tests cover the canonical flow introduced by the render API overhaul:
- *   engine.quill(tree) → quill.render(markdown, opts)
+ *   engine.quill(tree) → ParsedDocument.fromMarkdown(markdown) → quill.render(parsed, opts)
  *
  * Setup: Tests use the bundler build via @quillmark-wasm alias (see vitest.config.js)
  */
@@ -36,11 +36,12 @@ describe('Quillmark.quill', () => {
     expect(quill).toBeDefined()
   })
 
-  it('should render markdown to PDF via quill.render(string)', () => {
+  it('should render markdown to PDF via quill.render(parsed)', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
+    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
 
-    const result = quill.render(TEST_MARKDOWN, { format: 'pdf' })
+    const result = quill.render(parsed, { format: 'pdf' })
 
     expect(result).toBeDefined()
     expect(result.artifacts).toBeDefined()
@@ -49,11 +50,12 @@ describe('Quillmark.quill', () => {
     expect(result.artifacts[0].mimeType).toBe('application/pdf')
   })
 
-  it('should render markdown to SVG via quill.render(string)', () => {
+  it('should render markdown to SVG via quill.render(parsed)', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
+    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
 
-    const result = quill.render(TEST_MARKDOWN, { format: 'svg' })
+    const result = quill.render(parsed, { format: 'svg' })
 
     expect(result.artifacts.length).toBeGreaterThan(0)
     expect(result.artifacts[0].mimeType).toBe('image/svg+xml')
@@ -91,23 +93,24 @@ QUILL: other_quill
 })
 
 // ---------------------------------------------------------------------------
-// compile + renderPages
+// open + session.render
 // ---------------------------------------------------------------------------
 
-describe('quill.compile + renderPages', () => {
-  it('should support compile + renderPages with pageCount', () => {
+describe('quill.open + session.render', () => {
+  it('should support open + session.render with pageCount', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
+    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
 
-    const compiled = quill.compile(TEST_MARKDOWN)
-    expect(typeof compiled.pageCount).toBe('number')
-    expect(compiled.pageCount).toBeGreaterThan(0)
+    const session = quill.open(parsed)
+    expect(typeof session.pageCount).toBe('number')
+    expect(session.pageCount).toBeGreaterThan(0)
 
-    const allPages = compiled.renderPages(undefined, { format: 'svg' })
-    expect(allPages.artifacts.length).toBe(compiled.pageCount)
+    const allPages = session.render({ format: 'svg' })
+    expect(allPages.artifacts.length).toBe(session.pageCount)
     expect(allPages.artifacts[0].mimeType).toBe('image/svg+xml')
 
-    const subset = compiled.renderPages([0, 0], { format: 'png', ppi: 80 })
+    const subset = session.render({ format: 'png', ppi: 80, pages: [0, 0] })
     expect(subset.artifacts.length).toBe(2)
     expect(subset.artifacts[0].mimeType).toBe('image/png')
   })
@@ -115,10 +118,11 @@ describe('quill.compile + renderPages', () => {
   it('should warn and skip out-of-bounds page indices', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const compiled = quill.compile(TEST_MARKDOWN)
-    const oob = compiled.pageCount + 10
+    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
+    const session = quill.open(parsed)
+    const oob = session.pageCount + 10
 
-    const result = compiled.renderPages([0, oob], { format: 'png', ppi: 80 })
+    const result = session.render({ format: 'png', ppi: 80, pages: [0, oob] })
     expect(result.artifacts.length).toBe(1)
     expect(result.warnings.length).toBeGreaterThan(0)
     expect(result.warnings[0].message).toContain('out of bounds')
@@ -127,10 +131,11 @@ describe('quill.compile + renderPages', () => {
   it('should error when requesting page selection with PDF', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const compiled = quill.compile(TEST_MARKDOWN)
+    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
+    const session = quill.open(parsed)
 
     expect(() => {
-      compiled.renderPages([0], { format: 'pdf' })
+      session.render({ format: 'pdf', pages: [0] })
     }).toThrow()
   })
 })
@@ -181,4 +186,3 @@ This document has no QUILL tag.`
     }).toThrow()
   })
 })
-

@@ -1,7 +1,7 @@
 //! # Backend Registration Tests
 
 use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark, RenderError};
-use quillmark_core::{Artifact, Backend, RenderOptions, RenderResult};
+use quillmark_core::{session::SessionHandle, Artifact, Backend, RenderOptions, RenderResult};
 use std::fs;
 use tempfile::TempDir;
 
@@ -19,22 +19,34 @@ impl Backend for MockBackend {
         &[OutputFormat::Txt]
     }
 
-    fn plate_extension_types(&self) -> &'static [&'static str] {
-        &[".txt"]
-    }
-
-    fn compile(
+    fn open(
         &self,
         plated: &str,
         _quill: &Quill,
-        _opts: &RenderOptions,
         _json_data: &serde_json::Value,
-    ) -> Result<RenderResult, RenderError> {
-        let artifacts = vec![Artifact {
+    ) -> Result<quillmark::RenderSession, RenderError> {
+        Ok(quillmark::RenderSession::new(Box::new(MockSession {
             bytes: plated.as_bytes().to_vec(),
+        })))
+    }
+}
+
+#[derive(Debug)]
+struct MockSession {
+    bytes: Vec<u8>,
+}
+
+impl SessionHandle for MockSession {
+    fn render(&self, _opts: &RenderOptions) -> Result<RenderResult, RenderError> {
+        let artifacts = vec![Artifact {
+            bytes: self.bytes.clone(),
             output_format: OutputFormat::Txt,
         }];
         Ok(RenderResult::new(artifacts, OutputFormat::Txt))
+    }
+
+    fn page_count(&self) -> usize {
+        1
     }
 }
 

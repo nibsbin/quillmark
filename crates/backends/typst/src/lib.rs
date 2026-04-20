@@ -54,8 +54,8 @@ pub mod fuzz_utils {
 
 use convert::mark_to_typst;
 use quillmark_core::{
-    Artifact, Backend, CompiledDocument, Diagnostic, OutputFormat, Quill, QuillValue, RenderError,
-    RenderOptions, RenderResult, Severity,
+    session::SessionHandle, Backend, Diagnostic, OutputFormat, Quill, QuillValue, RenderError,
+    RenderOptions, RenderResult, RenderSession, Severity,
 };
 use std::collections::HashMap;
 
@@ -63,128 +63,79 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub struct TypstBackend;
 
+const SUPPORTED_FORMATS: &[OutputFormat] =
+    &[OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Png];
+
+#[derive(Debug)]
+struct TypstSession {
+    document: typst::layout::PagedDocument,
+    page_count: usize,
+}
+
+impl SessionHandle for TypstSession {
+    fn render(&self, opts: &RenderOptions) -> Result<RenderResult, RenderError> {
+        let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
+
+        if !SUPPORTED_FORMATS.contains(&format) {
+            return Err(RenderError::FormatNotSupported {
+                diag: Box::new(
+                    Diagnostic::new(
+                        Severity::Error,
+                        format!("{:?} not supported by typst backend", format),
+                    )
+                    .with_code("backend::format_not_supported".to_string())
+                    .with_hint(format!("Supported formats: {:?}", SUPPORTED_FORMATS)),
+                ),
+            });
+        }
+
+        compile::render_document_pages(&self.document, opts.pages.as_deref(), format, opts.ppi)
+    }
+
+    fn page_count(&self) -> usize {
+        self.page_count
+    }
+}
+
 impl Backend for TypstBackend {
     fn id(&self) -> &'static str {
         "typst"
     }
 
     fn supported_formats(&self) -> &'static [OutputFormat] {
-        &[OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Png]
+        SUPPORTED_FORMATS
     }
 
-    fn plate_extension_types(&self) -> &'static [&'static str] {
-        &[".typ"]
-    }
-
-    fn compile(
-        &self,
-        plate_content: &str,
-        quill: &Quill,
-        opts: &RenderOptions,
-        json_data: &serde_json::Value,
-    ) -> Result<RenderResult, RenderError> {
-        let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
-
-        // Check if format is supported
-        if !self.supported_formats().contains(&format) {
-            return Err(RenderError::FormatNotSupported {
-                diag: Box::new(
-                    Diagnostic::new(
-                        Severity::Error,
-                        format!("{:?} not supported by {} backend", format, self.id()),
-                    )
-                    .with_code("backend::format_not_supported".to_string())
-                    .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
-                ),
-            });
-        }
-
-        // Serialize JSON value to string for injection into Typst
-        let json_str = serde_json::to_string(json_data).unwrap_or_else(|_| "{}".to_string());
-
-        match format {
-            OutputFormat::Pdf => {
-                let bytes = compile::compile_to_pdf(quill, plate_content, &json_str)?;
-                let artifacts = vec![Artifact {
-                    bytes,
-                    output_format: OutputFormat::Pdf,
-                }];
-                Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
-            }
-            OutputFormat::Svg => {
-                let svg_pages = compile::compile_to_svg(quill, plate_content, &json_str)?;
-                let artifacts = svg_pages
-                    .into_iter()
-                    .map(|bytes| Artifact {
-                        bytes,
-                        output_format: OutputFormat::Svg,
-                    })
-                    .collect();
-                Ok(RenderResult::new(artifacts, OutputFormat::Svg))
-            }
-            OutputFormat::Png => {
-                let png_pages = compile::compile_to_png(quill, plate_content, &json_str, opts.ppi)?;
-                let artifacts = png_pages
-                    .into_iter()
-                    .map(|bytes| Artifact {
-                        bytes,
-                        output_format: OutputFormat::Png,
-                    })
-                    .collect();
-                Ok(RenderResult::new(artifacts, OutputFormat::Png))
-            }
-            OutputFormat::Txt => Err(RenderError::FormatNotSupported {
-                diag: Box::new(
-                    Diagnostic::new(
-                        Severity::Error,
-                        format!("Text output not supported by {} backend", self.id()),
-                    )
-                    .with_code("backend::format_not_supported".to_string())
-                    .with_hint(format!("Supported formats: {:?}", self.supported_formats())),
-                ),
-            }),
-        }
-    }
-
-    fn compile_to_document(
+    fn open(
         &self,
         plate_content: &str,
         quill: &Quill,
         json_data: &serde_json::Value,
-    ) -> Result<CompiledDocument, RenderError> {
-        let json_str = serde_json::to_string(json_data).unwrap_or_else(|_| "{}".to_string());
+    ) -> Result<RenderSession, RenderError> {
+        let fields = json_data.as_object().map_or_else(HashMap::new, |obj| {
+            obj.iter()
+                .map(|(key, value)| (key.clone(), QuillValue::from_json(value.clone())))
+                .collect::<HashMap<_, _>>()
+        });
+
+        let transformed_fields =
+            transform_markdown_fields(&fields, &quill.build_transform_schema());
+        let transformed_json = serde_json::Value::Object(
+            transformed_fields
+                .into_iter()
+                .map(|(key, value)| (key, value.into_json()))
+                .collect(),
+        );
+
+        let json_str =
+            serde_json::to_string(&transformed_json).unwrap_or_else(|_| "{}".to_string());
         let document = compile::compile_to_document(quill, plate_content, &json_str)?;
         let page_count = document.pages.len();
-        Ok(CompiledDocument::new(Box::new(document), page_count))
-    }
-
-    fn render_pages(
-        &self,
-        doc: &CompiledDocument,
-        pages: Option<&[usize]>,
-        format: OutputFormat,
-        ppi: Option<f32>,
-    ) -> Result<RenderResult, RenderError> {
-        let paged_doc = doc
-            .as_any()
-            .downcast_ref::<typst::layout::PagedDocument>()
-            .ok_or_else(|| RenderError::CompilationFailed {
-                diags: vec![Diagnostic::new(
-                    Severity::Error,
-                    "Compiled document type mismatch for typst backend".to_string(),
-                )
-                .with_code("typst::compiled_document_type_mismatch".to_string())],
-            })?;
-
-        compile::render_document_pages(paged_doc, pages, format, ppi)
-    }
-
-    fn transform_fields(
-        &self,
-        fields: &HashMap<String, QuillValue>,
-        schema: &QuillValue,
-    ) -> HashMap<String, QuillValue> {
-        transform_markdown_fields(fields, schema)
+        let session = TypstSession {
+            document,
+            page_count,
+        };
+        Ok(RenderSession::new(Box::new(session)))
     }
 }
 
@@ -515,8 +466,7 @@ mod tests {
     }
 
     #[test]
-    fn test_transform_fields_trait_method() {
-        let backend = TypstBackend;
+    fn test_transform_markdown_fields_wrapper() {
         let schema = QuillValue::from_json(json!({
             "type": "object",
             "properties": {
@@ -530,7 +480,7 @@ mod tests {
             QuillValue::from_json(json!("_italic_ text")),
         );
 
-        let result = backend.transform_fields(&fields, &schema);
+        let result = transform_markdown_fields(&fields, &schema);
 
         let body = result.get("BODY").unwrap().as_str().unwrap();
         assert!(body.contains("#emph[italic]"));

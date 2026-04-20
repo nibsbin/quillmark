@@ -202,7 +202,7 @@ fn test_strict_fence_detection() {
 
     assert!(result.is_ok(), "Should parse successfully");
     let doc = result.unwrap();
-    let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
     assert_eq!(
         cards.len(),
         0,
@@ -219,7 +219,7 @@ fn test_tilde_fence_hides_metadata() {
 
     assert!(result.is_ok(), "Should parse successfully");
     let doc = result.unwrap();
-    let cards = doc.get_field("CARDS").unwrap().as_sequence().unwrap();
+    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
     assert_eq!(
         cards.len(),
         0,

@@ -50,10 +50,13 @@ pub use error::{
 };
 
 pub mod types;
-pub use types::{Artifact, CompiledDocument, OutputFormat, RenderOptions};
+pub use types::{Artifact, OutputFormat, RenderOptions};
+
+pub mod session;
+pub use session::RenderSession;
 
 pub mod quill;
-pub use quill::{FileTreeNode, Quill, QuillIgnore, QuillInput};
+pub use quill::{FileTreeNode, Quill, QuillIgnore};
 
 pub mod value;
 pub use value::QuillValue;

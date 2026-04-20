@@ -13,7 +13,6 @@ pub(crate) mod validation;
 
 pub use config::{CoercionError, QuillConfig};
 pub use ignore::QuillIgnore;
-pub use render::QuillInput;
 pub use tree::FileTreeNode;
 pub use types::{
     field_key, ui_key, CardSchema, FieldSchema, FieldType, UiContainerSchema, UiFieldSchema,

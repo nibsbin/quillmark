@@ -1,8 +1,8 @@
 //! Quillmark WASM Engine - Simplified API
 
 use crate::error::WasmError;
-use crate::types::{ParsedDocument, RenderOptions, RenderPagesOptions, RenderResult};
-use js_sys::{Array, Object, Uint8Array};
+use crate::types::{ParsedDocument, RenderOptions, RenderResult};
+use js_sys::{Array, Uint8Array};
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -37,9 +37,8 @@ pub struct Quill {
 }
 
 #[wasm_bindgen]
-pub struct CompiledDocument {
-    backend: Arc<dyn quillmark_core::Backend>,
-    inner: quillmark_core::CompiledDocument,
+pub struct RenderSession {
+    inner: quillmark_core::RenderSession,
 }
 
 impl Default for Quillmark {
@@ -60,7 +59,7 @@ impl Quillmark {
 
     /// Load a quill from a file tree and attach the appropriate backend.
     ///
-    /// The tree must be a `Map<string, Uint8Array>` or `Record<string, Uint8Array>`.
+    /// The tree must be a `Map<string, Uint8Array>`.
     #[wasm_bindgen(js_name = quill)]
     pub fn quill(&self, tree: JsValue) -> Result<Quill, JsValue> {
         let root = file_tree_from_js_tree(&tree)?;
@@ -115,19 +114,24 @@ fn to_core_parsed(parsed: ParsedDocument) -> Result<quillmark_core::ParsedDocume
 #[wasm_bindgen]
 impl Quill {
     /// Render a document to final artifacts.
-    ///
-    /// Input may be a markdown string or a `ParsedDocument` object.
     #[wasm_bindgen(js_name = render)]
-    pub fn render(&self, input: JsValue, opts: RenderOptions) -> Result<RenderResult, JsValue> {
+    pub fn render(
+        &self,
+        parsed: ParsedDocument,
+        opts: RenderOptions,
+    ) -> Result<RenderResult, JsValue> {
         let start = now_ms();
-        let core_input = js_value_to_quill_input(input)?;
+        let core_parsed = to_core_parsed(parsed).map_err(|e| {
+            WasmError::from(format!("render: invalid ParsedDocument: {:?}", e)).to_js_value()
+        })?;
         let rust_opts = quillmark_core::RenderOptions {
             output_format: opts.format.map(|f| f.into()),
             ppi: opts.ppi,
+            pages: opts.pages,
         };
         let result = self
             .inner
-            .render(core_input, &rust_opts)
+            .render(core_parsed, &rust_opts)
             .map_err(|e| WasmError::from(e).to_js_value())?;
         Ok(RenderResult {
             artifacts: result.artifacts.into_iter().map(Into::into).collect(),
@@ -137,40 +141,18 @@ impl Quill {
         })
     }
 
-    /// Compile a document to an opaque compiled document handle for page-selective rendering.
-    #[wasm_bindgen(js_name = compile)]
-    pub fn compile(&self, input: JsValue) -> Result<CompiledDocument, JsValue> {
-        let core_input = js_value_to_quill_input(input)?;
-        let backend = self.inner.backend().ok_or_else(|| {
-            WasmError::from("Quill has no backend; use engine.quill(...)").to_js_value()
+    /// Open an iterative render session for page-selective rendering.
+    #[wasm_bindgen(js_name = open)]
+    pub fn open(&self, parsed: ParsedDocument) -> Result<RenderSession, JsValue> {
+        let core_parsed = to_core_parsed(parsed).map_err(|e| {
+            WasmError::from(format!("open: invalid ParsedDocument: {:?}", e)).to_js_value()
         })?;
-        let compiled = self
+        let session = self
             .inner
-            .compile(core_input)
+            .open(core_parsed)
             .map_err(|e| WasmError::from(e).to_js_value())?;
-        Ok(CompiledDocument {
-            backend: Arc::clone(backend),
-            inner: compiled,
-        })
+        Ok(RenderSession { inner: session })
     }
-}
-
-fn js_value_to_quill_input(input: JsValue) -> Result<quillmark_core::QuillInput, JsValue> {
-    if let Some(s) = input.as_string() {
-        return Ok(quillmark_core::QuillInput::Markdown(s));
-    }
-    // Try to deserialize as ParsedDocument (plain JS object)
-    let parsed: ParsedDocument = serde_wasm_bindgen::from_value(input).map_err(|e| {
-        WasmError::from(format!(
-            "render: input must be a string (markdown) or ParsedDocument: {}",
-            e
-        ))
-        .to_js_value()
-    })?;
-    let core_parsed = to_core_parsed(parsed).map_err(|e| {
-        WasmError::from(format!("render: invalid ParsedDocument: {:?}", e)).to_js_value()
-    })?;
-    Ok(quillmark_core::QuillInput::Parsed(core_parsed))
 }
 
 fn file_tree_from_js_tree(tree: &JsValue) -> Result<quillmark_core::FileTreeNode, JsValue> {
@@ -194,62 +176,31 @@ fn file_tree_from_js_tree(tree: &JsValue) -> Result<quillmark_core::FileTreeNode
 }
 
 fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
-    if tree.is_null() || tree.is_undefined() {
-        return Err(WasmError::from("quill requires a Map or plain object").to_js_value());
+    if !tree.is_instance_of::<js_sys::Map>() {
+        return Err(WasmError::from("quill requires a Map<string, Uint8Array>").to_js_value());
     }
+
+    let map = tree.clone().unchecked_into::<js_sys::Map>();
+    let iter = js_sys::try_iter(&map.entries())
+        .map_err(|e| {
+            WasmError::from(format!("Failed to iterate Map entries: {:?}", e)).to_js_value()
+        })?
+        .ok_or_else(|| WasmError::from("Map entries are not iterable").to_js_value())?;
 
     let mut entries: Vec<(String, JsValue)> = Vec::new();
-
-    if tree.is_instance_of::<js_sys::Map>() {
-        let map = tree.clone().unchecked_into::<js_sys::Map>();
-        let iter = js_sys::try_iter(&map.entries())
-            .map_err(|e| {
-                WasmError::from(format!("Failed to iterate Map entries: {:?}", e)).to_js_value()
-            })?
-            .ok_or_else(|| WasmError::from("Map entries are not iterable").to_js_value())?;
-
-        for entry in iter {
-            let pair = entry.map_err(|e| {
-                WasmError::from(format!("Failed to read Map entry: {:?}", e)).to_js_value()
-            })?;
-            let pair = Array::from(&pair);
-            let path = pair
-                .get(0)
-                .as_string()
-                .ok_or_else(|| WasmError::from("quill Map key must be a string").to_js_value())?;
-            let value = pair.get(1);
-            entries.push((path, value));
-        }
-        return Ok(entries);
+    for entry in iter {
+        let pair = entry.map_err(|e| {
+            WasmError::from(format!("Failed to read Map entry: {:?}", e)).to_js_value()
+        })?;
+        let pair = Array::from(&pair);
+        let path = pair
+            .get(0)
+            .as_string()
+            .ok_or_else(|| WasmError::from("quill Map key must be a string").to_js_value())?;
+        let value = pair.get(1);
+        entries.push((path, value));
     }
-
-    if tree.is_instance_of::<js_sys::Array>() {
-        return Err(
-            WasmError::from("quill requires a Map or plain object, not an Array").to_js_value(),
-        );
-    }
-    if tree.is_instance_of::<Uint8Array>() {
-        return Err(WasmError::from(
-            "quill requires a Map or plain object, not a Uint8Array; \
-                 did you mean to pass a Map<string, Uint8Array>?",
-        )
-        .to_js_value());
-    }
-
-    if tree.is_object() {
-        let obj = tree.clone().unchecked_into::<Object>();
-        for pair in Object::entries(&obj).iter() {
-            let pair = Array::from(&pair);
-            let path = pair.get(0).as_string().ok_or_else(|| {
-                WasmError::from("quill object key must be a string").to_js_value()
-            })?;
-            let value = pair.get(1);
-            entries.push((path, value));
-        }
-        return Ok(entries);
-    }
-
-    Err(WasmError::from("quill requires a Map or plain object").to_js_value())
+    Ok(entries)
 }
 
 fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValue> {
@@ -275,31 +226,26 @@ impl ParsedDocument {
 }
 
 #[wasm_bindgen]
-impl CompiledDocument {
-    /// Number of pages in this compiled document.
+impl RenderSession {
+    /// Number of pages in this render session.
     #[wasm_bindgen(getter, js_name = pageCount)]
     pub fn page_count(&self) -> usize {
-        self.inner.page_count
+        self.inner.page_count()
     }
 
-    /// Render selected pages. `pages = null/undefined` renders all pages.
-    #[wasm_bindgen(js_name = renderPages)]
-    pub fn render_pages(
-        &self,
-        pages: Option<Vec<u32>>,
-        opts: RenderPagesOptions,
-    ) -> Result<RenderResult, JsValue> {
-        let page_indices = pages.map(|v| v.into_iter().map(|i| i as usize).collect::<Vec<_>>());
+    /// Render all or selected pages from this session.
+    #[wasm_bindgen(js_name = render)]
+    pub fn render(&self, opts: RenderOptions) -> Result<RenderResult, JsValue> {
         let start = now_ms();
+        let rust_opts = quillmark_core::RenderOptions {
+            output_format: opts.format.map(|f| f.into()),
+            ppi: opts.ppi,
+            pages: opts.pages,
+        };
 
         let result = self
-            .backend
-            .render_pages(
-                &self.inner,
-                page_indices.as_deref(),
-                opts.format.into(),
-                opts.ppi,
-            )
+            .inner
+            .render(&rust_opts)
             .map_err(|e| WasmError::from(e).to_js_value())?;
 
         Ok(RenderResult {

@@ -83,11 +83,6 @@ impl QuillValue {
         self.0.as_array()
     }
 
-    /// Get the value as an array reference (alias for as_array, for YAML compatibility)
-    pub fn as_sequence(&self) -> Option<&Vec<serde_json::Value>> {
-        self.0.as_array()
-    }
-
     /// Get the value as an object reference
     pub fn as_object(&self) -> Option<&serde_json::Map<String, serde_json::Value>> {
         self.0.as_object()

@@ -1,7 +1,6 @@
 use quillmark_core::{
-    normalize::normalize_document, quill::FieldSchema, quill::FieldType, Backend, CompiledDocument,
-    Diagnostic, OutputFormat, ParsedDocument, Quill, QuillValue, RenderError, RenderOptions,
-    RenderResult, Severity,
+    normalize::normalize_document, Backend, Diagnostic, OutputFormat, ParsedDocument, Quill,
+    RenderError, RenderOptions, RenderResult, RenderSession, Severity,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -55,13 +54,8 @@ impl Workflow {
         // Normalize document: strip bidi characters and fix HTML comment fences
         let normalized = normalize_document(parsed_coerced)?;
 
-        // Transform fields for JSON injection (backend-specific transformations)
-        let transformed_fields = self
-            .backend
-            .transform_fields(normalized.fields(), &self.transform_schema());
-
         // Apply schema defaults to fill in missing fields
-        let fields_with_defaults = self.apply_schema_defaults(&transformed_fields);
+        let fields_with_defaults = self.apply_schema_defaults(normalized.fields());
 
         // Serialize transformed fields to JSON for injection
         Ok(Self::fields_to_json(&fields_with_defaults))
@@ -75,28 +69,14 @@ impl Workflow {
         self.render_with_options(parsed, format, None)
     }
 
-    /// Compile parsed data into a backend-specific compiled document for selective page rendering.
-    pub fn compile(&self, parsed: &ParsedDocument) -> Result<CompiledDocument, RenderError> {
+    /// Open a backend-specific iterative render session.
+    pub fn open(&self, parsed: &ParsedDocument) -> Result<RenderSession, RenderError> {
         let context = self.prepare_render_context(parsed)?;
-        self.backend.compile_to_document(
+        self.backend.open(
             &context.plate_content,
             &context.prepared_quill,
             &context.json_data,
         )
-    }
-
-    /// Render selected pages from a compiled document.
-    ///
-    /// - `pages = None` renders all pages.
-    /// - `pages = Some(&[])` renders zero artifacts.
-    pub fn render_pages(
-        &self,
-        doc: &CompiledDocument,
-        pages: Option<&[usize]>,
-        format: OutputFormat,
-        ppi: Option<f32>,
-    ) -> Result<RenderResult, RenderError> {
-        self.backend.render_pages(doc, pages, format, ppi)
     }
 
     /// Render with explicit pixels-per-inch for raster formats (PNG).
@@ -128,7 +108,7 @@ impl Workflow {
         Ok(PreparedRenderContext {
             json_data: self.compile_data(parsed)?,
             plate_content: self.get_plate_content()?.unwrap_or_default(),
-            prepared_quill: self.prepare_quill_with_assets(),
+            prepared_quill: self.prepare_quill_with_assets()?,
         })
     }
 
@@ -156,10 +136,12 @@ impl Workflow {
         let render_opts = RenderOptions {
             output_format: format,
             ppi,
+            pages: None,
         };
 
         self.backend
-            .compile(content, quill, &render_opts, json_data)
+            .open(content, quill, json_data)?
+            .render(&render_opts)
     }
 
     /// Apply defaults from QuillConfig to fill missing fields
@@ -185,122 +167,6 @@ impl Workflow {
             json_map.insert(key.clone(), value.as_json().clone());
         }
         serde_json::Value::Object(json_map)
-    }
-
-    fn transform_schema(&self) -> QuillValue {
-        fn field_to_schema(field: &FieldSchema) -> serde_json::Value {
-            let mut schema = serde_json::Map::new();
-            match field.r#type {
-                FieldType::String => {
-                    schema.insert(
-                        "type".to_string(),
-                        serde_json::Value::String("string".to_string()),
-                    );
-                }
-                FieldType::Markdown => {
-                    schema.insert(
-                        "type".to_string(),
-                        serde_json::Value::String("string".to_string()),
-                    );
-                    schema.insert(
-                        "contentMediaType".to_string(),
-                        serde_json::Value::String("text/markdown".to_string()),
-                    );
-                }
-                FieldType::Number => {
-                    schema.insert(
-                        "type".to_string(),
-                        serde_json::Value::String("number".to_string()),
-                    );
-                }
-                FieldType::Integer => {
-                    schema.insert(
-                        "type".to_string(),
-                        serde_json::Value::String("integer".to_string()),
-                    );
-                }
-                FieldType::Boolean => {
-                    schema.insert(
-                        "type".to_string(),
-                        serde_json::Value::String("boolean".to_string()),
-                    );
-                }
-                FieldType::Array => {
-                    schema.insert(
-                        "type".to_string(),
-                        serde_json::Value::String("array".to_string()),
-                    );
-                    if let Some(items) = &field.items {
-                        schema.insert("items".to_string(), field_to_schema(items));
-                    }
-                }
-                FieldType::Object => {
-                    schema.insert(
-                        "type".to_string(),
-                        serde_json::Value::String("object".to_string()),
-                    );
-                    if let Some(properties) = &field.properties {
-                        let mut props: serde_json::Map<String, serde_json::Value> =
-                            serde_json::Map::new();
-                        for (name, prop) in properties {
-                            props.insert(name.clone(), field_to_schema(prop));
-                        }
-                        schema.insert("properties".to_string(), serde_json::Value::Object(props));
-                    }
-                }
-                FieldType::Date => {
-                    schema.insert(
-                        "type".to_string(),
-                        serde_json::Value::String("string".to_string()),
-                    );
-                    schema.insert(
-                        "format".to_string(),
-                        serde_json::Value::String("date".to_string()),
-                    );
-                }
-                FieldType::DateTime => {
-                    schema.insert(
-                        "type".to_string(),
-                        serde_json::Value::String("string".to_string()),
-                    );
-                    schema.insert(
-                        "format".to_string(),
-                        serde_json::Value::String("date-time".to_string()),
-                    );
-                }
-            }
-            serde_json::Value::Object(schema)
-        }
-
-        let mut properties = serde_json::Map::new();
-        for (name, field) in &self.quill.config.main().fields {
-            properties.insert(name.clone(), field_to_schema(field));
-        }
-        properties.insert(
-            "BODY".to_string(),
-            serde_json::json!({ "type": "string", "contentMediaType": "text/markdown" }),
-        );
-
-        let mut defs = serde_json::Map::new();
-        for card in self.quill.config.card_definitions() {
-            let mut card_properties = serde_json::Map::new();
-            for (name, field) in &card.fields {
-                card_properties.insert(name.clone(), field_to_schema(field));
-            }
-            defs.insert(
-                format!("{}_card", card.name),
-                serde_json::json!({
-                    "type": "object",
-                    "properties": card_properties,
-                }),
-            );
-        }
-
-        QuillValue::from_json(serde_json::json!({
-            "type": "object",
-            "properties": properties,
-            "$defs": defs,
-        }))
     }
 
     /// Get the plate content directly from the quill
@@ -509,31 +375,47 @@ impl Workflow {
     }
 
     /// Internal method to prepare a quill with dynamic assets and fonts
-    fn prepare_quill_with_assets(&self) -> Quill {
+    fn prepare_quill_with_assets(&self) -> Result<Quill, RenderError> {
         use quillmark_core::FileTreeNode;
 
         let mut quill = self.quill.clone();
 
-        // Add dynamic assets to the cloned quill's file system
         for (filename, contents) in &self.dynamic_assets {
             let prefixed_path = format!("assets/DYNAMIC_ASSET__{}", filename);
             let file_node = FileTreeNode::File {
                 contents: contents.clone(),
             };
-            // Ignore errors if insertion fails (e.g., path already exists)
-            let _ = quill.files.insert(&prefixed_path, file_node);
+            quill.files.insert(&prefixed_path, file_node).map_err(|_| {
+                RenderError::DynamicAssetCollision {
+                    diag: Box::new(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!("Asset '{}' conflicts with an existing quill file", filename),
+                        )
+                        .with_code("workflow::asset_collision".to_string()),
+                    ),
+                }
+            })?;
         }
 
-        // Add dynamic fonts to the cloned quill's file system
         for (filename, contents) in &self.dynamic_fonts {
             let prefixed_path = format!("assets/DYNAMIC_FONT__{}", filename);
             let file_node = FileTreeNode::File {
                 contents: contents.clone(),
             };
-            // Ignore errors if insertion fails (e.g., path already exists)
-            let _ = quill.files.insert(&prefixed_path, file_node);
+            quill.files.insert(&prefixed_path, file_node).map_err(|_| {
+                RenderError::DynamicFontCollision {
+                    diag: Box::new(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!("Font '{}' conflicts with an existing quill file", filename),
+                        )
+                        .with_code("workflow::font_collision".to_string()),
+                    ),
+                }
+            })?;
         }
 
-        quill
+        Ok(quill)
     }
 }

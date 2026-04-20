@@ -11,7 +11,7 @@
 //! ## Workflow
 //!
 //! 1. Build a render-ready quill with `engine.quill(...)`
-//! 2. Parse markdown via `ParsedDocument.fromMarkdown(...)` (or pass markdown directly)
+//! 2. Parse markdown via `ParsedDocument.fromMarkdown(...)`
 //! 3. Render with `quill.render(...)`
 //!
 //! ## Example
@@ -33,7 +33,7 @@ mod engine;
 mod error;
 mod types;
 
-pub use engine::{CompiledDocument, Quill, Quillmark};
+pub use engine::{Quill, Quillmark, RenderSession};
 pub use error::WasmError;
 pub use types::*;
 

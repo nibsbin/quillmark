@@ -1,4 +1,3 @@
-use wasm_bindgen::JsValue;
 use wasm_bindgen_test::*;
 
 use quillmark_wasm::{ParsedDocument, Quillmark, RenderOptions};
@@ -32,18 +31,17 @@ fn test_quill_from_tree() {
     let _ = quill;
 }
 
-#[wasm_bindgen_test]
-/// Rendering markdown with a QUILL ref that differs from the quill name must yield
+/// Rendering with a QUILL ref that differs from the quill name must yield
 /// exactly one warning with code `quill::ref_mismatch` and still produce an artifact.
 #[wasm_bindgen_test]
 fn test_render_ref_mismatch_warning() {
     let engine = Quillmark::new();
     let quill = engine.quill(small_quill_tree()).expect("quill failed");
 
-    // Document declares a different quill name than the loaded quill ("test_quill")
     let mismatch_md = "---\nQUILL: other_quill\ntitle: Mismatch\n---\n\n# Content\n";
+    let parsed = ParsedDocument::from_markdown(mismatch_md).expect("fromMarkdown failed");
     let result = quill
-        .render(JsValue::from_str(mismatch_md), RenderOptions::default())
+        .render(parsed, RenderOptions::default())
         .expect("render should succeed despite mismatch");
 
     assert_eq!(result.warnings.len(), 1, "expected exactly one warning");
@@ -55,15 +53,16 @@ fn test_render_ref_mismatch_warning() {
     assert!(!result.artifacts.is_empty(), "artifact must be produced");
 }
 
-/// `quill.render(markdown_string, opts)` — render via raw Markdown string input.
+/// `quill.render(ParsedDocument, opts)` — render via pre-parsed document.
 #[wasm_bindgen_test]
-fn test_render_from_string() {
+fn test_render_from_parsed_document() {
     let engine = Quillmark::new();
     let quill = engine.quill(small_quill_tree()).expect("quill failed");
 
+    let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     let result = quill
-        .render(JsValue::from_str(SIMPLE_MARKDOWN), RenderOptions::default())
-        .expect("render from string failed");
+        .render(parsed, RenderOptions::default())
+        .expect("render from ParsedDocument failed");
 
     assert!(
         !result.artifacts.is_empty(),
@@ -76,23 +75,18 @@ fn test_render_from_string() {
     );
 }
 
-/// `quill.render(ParsedDocument, opts)` — render via pre-parsed document.
+/// `quill.open(ParsedDocument)` returns a render session supporting page_count + render.
 #[wasm_bindgen_test]
-fn test_render_from_parsed_document() {
+fn test_open_session_render() {
     let engine = Quillmark::new();
     let quill = engine.quill(small_quill_tree()).expect("quill failed");
 
     let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
-    // Convert to JsValue so the engine's input-type dispatch treats it as ParsedDocument
-    let parsed_js =
-        serde_wasm_bindgen::to_value(&parsed).expect("ParsedDocument serialization failed");
+    let session = quill.open(parsed).expect("open failed");
+    assert!(session.page_count() > 0, "session should expose page count");
 
-    let result = quill
-        .render(parsed_js, RenderOptions::default())
-        .expect("render from ParsedDocument failed");
-
-    assert!(
-        !result.artifacts.is_empty(),
-        "should produce at least one artifact"
-    );
+    let result = session
+        .render(RenderOptions::default())
+        .expect("session render failed");
+    assert!(!result.artifacts.is_empty(), "should produce artifacts");
 }

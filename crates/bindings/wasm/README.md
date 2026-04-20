@@ -53,11 +53,11 @@ Build + validate + attach backend. Returns a render-ready `Quill`.
 ### `ParsedDocument.fromMarkdown(markdown)`
 Parse markdown to parsed document.
 
-### `quill.render(input, opts?)`
-Render with markdown string or `ParsedDocument`.
+### `quill.render(parsed, opts?)`
+Render with a pre-parsed `ParsedDocument`.
 
-### `quill.compile(input)` + `compiled.renderPages(...)`
-Compile once, render selected pages.
+### `quill.open(parsed)` + `session.render(opts?)`
+Open once, render all or selected pages (`opts.pages`).
 
 ## Notes
 
