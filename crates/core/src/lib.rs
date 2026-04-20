@@ -53,7 +53,7 @@ pub mod types;
 pub use types::{Artifact, CompiledDocument, OutputFormat, RenderOptions};
 
 pub mod quill;
-pub use quill::{FileTreeNode, Quill, QuillIgnore, QuillInput};
+pub use quill::{FileTreeNode, Quill, QuillIgnore};
 
 pub mod value;
 pub use value::QuillValue;

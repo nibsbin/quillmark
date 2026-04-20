@@ -1307,7 +1307,7 @@ main:
   fields:
     author:
       description: The full name of the document author
-      type: str
+      type: string
       ui:
         group: Author Info
 "#;

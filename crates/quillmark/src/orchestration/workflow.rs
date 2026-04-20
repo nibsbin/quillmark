@@ -128,7 +128,7 @@ impl Workflow {
         Ok(PreparedRenderContext {
             json_data: self.compile_data(parsed)?,
             plate_content: self.get_plate_content()?.unwrap_or_default(),
-            prepared_quill: self.prepare_quill_with_assets(),
+            prepared_quill: self.prepare_quill_with_assets()?,
         })
     }
 
@@ -509,31 +509,43 @@ impl Workflow {
     }
 
     /// Internal method to prepare a quill with dynamic assets and fonts
-    fn prepare_quill_with_assets(&self) -> Quill {
+    fn prepare_quill_with_assets(&self) -> Result<Quill, RenderError> {
         use quillmark_core::FileTreeNode;
 
         let mut quill = self.quill.clone();
 
-        // Add dynamic assets to the cloned quill's file system
         for (filename, contents) in &self.dynamic_assets {
             let prefixed_path = format!("assets/DYNAMIC_ASSET__{}", filename);
-            let file_node = FileTreeNode::File {
-                contents: contents.clone(),
-            };
-            // Ignore errors if insertion fails (e.g., path already exists)
-            let _ = quill.files.insert(&prefixed_path, file_node);
+            let file_node = FileTreeNode::File { contents: contents.clone() };
+            quill.files.insert(&prefixed_path, file_node).map_err(|_| {
+                RenderError::DynamicAssetCollision {
+                    diag: Box::new(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!("Asset '{}' conflicts with an existing quill file", filename),
+                        )
+                        .with_code("workflow::asset_collision".to_string()),
+                    ),
+                }
+            })?;
         }
 
-        // Add dynamic fonts to the cloned quill's file system
         for (filename, contents) in &self.dynamic_fonts {
             let prefixed_path = format!("assets/DYNAMIC_FONT__{}", filename);
-            let file_node = FileTreeNode::File {
-                contents: contents.clone(),
-            };
-            // Ignore errors if insertion fails (e.g., path already exists)
-            let _ = quill.files.insert(&prefixed_path, file_node);
+            let file_node = FileTreeNode::File { contents: contents.clone() };
+            quill.files.insert(&prefixed_path, file_node).map_err(|_| {
+                RenderError::DynamicFontCollision {
+                    diag: Box::new(
+                        Diagnostic::new(
+                            Severity::Error,
+                            format!("Font '{}' conflicts with an existing quill file", filename),
+                        )
+                        .with_code("workflow::font_collision".to_string()),
+                    ),
+                }
+            })?;
         }
 
-        quill
+        Ok(quill)
     }
 }

@@ -265,10 +265,10 @@ impl PyQuill {
         Ok(formats)
     }
 
-    #[pyo3(signature = (input, format=None))]
+    #[pyo3(signature = (parsed, format=None))]
     fn render(
         &self,
-        input: &Bound<'_, pyo3::PyAny>,
+        parsed: PyRef<'_, PyParsedDocument>,
         format: Option<PyOutputFormat>,
     ) -> PyResult<PyRenderResult> {
         let rust_format = format.map(OutputFormat::from);
@@ -276,21 +276,11 @@ impl PyQuill {
             output_format: rust_format,
             ppi: None,
         };
-
-        let result: Result<RenderResult, RenderError> = if let Ok(md) = input.extract::<String>() {
-            self.inner.render(md, &opts)
-        } else if let Ok(parsed) = input.extract::<PyRef<PyParsedDocument>>() {
-            self.inner.render(parsed.inner.clone(), &opts)
-        } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
-                "render() input must be a str (markdown) or ParsedDocument",
-            ));
-        };
-
-        let render_result = result.map_err(convert_render_error)?;
-        Ok(PyRenderResult {
-            inner: render_result,
-        })
+        let result = self
+            .inner
+            .render(parsed.inner.clone(), &opts)
+            .map_err(convert_render_error)?;
+        Ok(PyRenderResult { inner: result })
     }
 }
 

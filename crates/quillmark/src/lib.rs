@@ -19,7 +19,7 @@
 // Re-export all core types for convenience
 pub use quillmark_core::{
     Artifact, Backend, Diagnostic, Location, OutputFormat, ParseError, ParsedDocument, Quill,
-    QuillInput, RenderError, RenderOptions, RenderResult, SerializableDiagnostic, Severity,
+    RenderError, RenderOptions, RenderResult, SerializableDiagnostic, Severity,
     BODY_FIELD,
 };
 
