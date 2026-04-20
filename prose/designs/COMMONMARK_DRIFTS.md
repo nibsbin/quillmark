@@ -35,8 +35,7 @@ Only stage 2 uses a CommonMark parser. Stage 1 interprets `---` before
 ### C1. `---` reserved as frontmatter delimiter
 
 **Current behaviour** — any line containing exactly `---` opens or closes a
-YAML metadata block (`parse.rs:267-500`, `EXTENDED_MARKDOWN.md:26`), even
-mid-document.
+YAML metadata block (`parse.rs:267-500`), even mid-document.
 
 **Necessary?** The `QUILL` / `CARD` data model is core to Quillmark and must
 survive. The *blanket* reservation is what causes the conflict, not the
@@ -252,7 +251,7 @@ No open conflicts. Remaining work is implementation + spec authoring.
 - `crates/core/src/parse.rs`
 - `crates/core/src/normalize.rs`
 - `crates/backends/typst/src/convert.rs`
-- `prose/designs/EXTENDED_MARKDOWN.md`
+- `prose/designs/MARKDOWN.md` (authoritative spec derived from this analysis)
 - `prose/designs/PARSE.md`
 - `crates/backends/typst/docs/designs/CONVERT.md`
 - `docs/authoring/markdown-syntax.md`
