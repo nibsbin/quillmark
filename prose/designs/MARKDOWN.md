@@ -234,7 +234,5 @@ Parse errors include:
 - [CommonMark 0.31.2](https://spec.commonmark.org/0.31.2/)
 - [GitHub Flavored Markdown](https://github.github.com/gfm/) (pipe tables,
   strikethrough)
-- [`COMMONMARK_DRIFTS.md`](./COMMONMARK_DRIFTS.md) — analysis that produced
-  this spec
 - [`CARDS.md`](./CARDS.md) — downstream card-handling semantics
 - [`PARSE.md`](./PARSE.md) — parser implementation notes
