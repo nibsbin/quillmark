@@ -22,15 +22,14 @@
 //!
 //! - [`RenderError::EngineCreation`]: Failed to create rendering engine
 //! - [`RenderError::InvalidFrontmatter`]: Malformed YAML frontmatter
-//! - [`RenderError::TemplateFailed`]: Template rendering error
 //! - [`RenderError::CompilationFailed`]: Backend compilation errors
 //! - [`RenderError::FormatNotSupported`]: Requested format not supported
 //! - [`RenderError::UnsupportedBackend`]: Backend not registered
 //! - [`RenderError::DynamicAssetCollision`]: Asset filename collision
 //! - [`RenderError::DynamicFontCollision`]: Font filename collision
-//! - [`RenderError::InputTooLarge`]: Input size limits exceeded
-//! - [`RenderError::YamlTooLarge`]: YAML size exceeded maximum
-//! - [`RenderError::NestingTooDeep`]: Nesting depth exceeded maximum
+//! - [`RenderError::ValidationFailed`]: Field coercion/validation failure
+//! - [`RenderError::QuillConfig`]: Quill configuration error
+//! - [`RenderError::NoBackend`]: Quill has no backend attached
 //!
 //! ## Examples
 //!
@@ -477,7 +476,7 @@ impl From<&str> for ParseError {
     }
 }
 
-/// Main error type for rendering operations
+/// Main error type for rendering operations.
 #[derive(thiserror::Error, Debug)]
 pub enum RenderError {
     /// Failed to create rendering engine
@@ -490,13 +489,6 @@ pub enum RenderError {
     /// Invalid YAML frontmatter in markdown document
     #[error("{diag}")]
     InvalidFrontmatter {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
-    /// Template rendering failed
-    #[error("{diag}")]
-    TemplateFailed {
         /// Diagnostic information
         diag: Box<Diagnostic>,
     },
@@ -536,27 +528,6 @@ pub enum RenderError {
         diag: Box<Diagnostic>,
     },
 
-    /// Input size limits exceeded
-    #[error("{diag}")]
-    InputTooLarge {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
-    /// YAML size exceeded maximum allowed
-    #[error("{diag}")]
-    YamlTooLarge {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
-    /// Nesting depth exceeded maximum allowed
-    #[error("{diag}")]
-    NestingTooDeep {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
     /// Validation failed for parsed document
     #[error("{diag}")]
     ValidationFailed {
@@ -564,37 +535,9 @@ pub enum RenderError {
         diag: Box<Diagnostic>,
     },
 
-    /// Invalid schema definition
-    #[error("{diag}")]
-    InvalidSchema {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
     /// Quill configuration error
     #[error("{diag}")]
     QuillConfig {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
-    /// Version not found
-    #[error("{diag}")]
-    VersionNotFound {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
-    /// Quill not found (name doesn't exist)
-    #[error("{diag}")]
-    QuillNotFound {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
-    /// Invalid version format
-    #[error("{diag}")]
-    InvalidVersion {
         /// Diagnostic information
         diag: Box<Diagnostic>,
     },
@@ -614,20 +557,12 @@ impl RenderError {
             RenderError::CompilationFailed { diags } => diags.iter().collect(),
             RenderError::EngineCreation { diag }
             | RenderError::InvalidFrontmatter { diag }
-            | RenderError::TemplateFailed { diag }
             | RenderError::FormatNotSupported { diag }
             | RenderError::UnsupportedBackend { diag }
             | RenderError::DynamicAssetCollision { diag }
             | RenderError::DynamicFontCollision { diag }
-            | RenderError::InputTooLarge { diag }
-            | RenderError::YamlTooLarge { diag }
-            | RenderError::NestingTooDeep { diag }
             | RenderError::ValidationFailed { diag }
-            | RenderError::InvalidSchema { diag }
             | RenderError::QuillConfig { diag }
-            | RenderError::VersionNotFound { diag }
-            | RenderError::QuillNotFound { diag }
-            | RenderError::InvalidVersion { diag }
             | RenderError::NoBackend { diag } => vec![diag.as_ref()],
         }
     }
@@ -675,29 +610,8 @@ impl RenderResult {
 
 /// Helper to print structured errors
 pub fn print_errors(err: &RenderError) {
-    match err {
-        RenderError::CompilationFailed { diags } => {
-            for d in diags {
-                eprintln!("{}", d.fmt_pretty());
-            }
-        }
-        RenderError::TemplateFailed { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::InvalidFrontmatter { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::EngineCreation { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::FormatNotSupported { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::UnsupportedBackend { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::DynamicAssetCollision { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::DynamicFontCollision { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::InputTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::YamlTooLarge { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::NestingTooDeep { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::ValidationFailed { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::InvalidSchema { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::QuillConfig { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::VersionNotFound { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::QuillNotFound { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::InvalidVersion { diag } => eprintln!("{}", diag.fmt_pretty()),
-        RenderError::NoBackend { diag } => eprintln!("{}", diag.fmt_pretty()),
+    for d in err.diagnostics() {
+        eprintln!("{}", d.fmt_pretty());
     }
 }
 
