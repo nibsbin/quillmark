@@ -11,11 +11,12 @@
 //! ## Quick Example
 //!
 //! ```no_run
-//! use quillmark_typst::compile::compile_to_pdf;
-//! use quillmark::Quillmark;
+//! use std::sync::Arc;
+//! use quillmark_core::{Backend, Quill};
+//! use quillmark_typst::{compile::compile_to_pdf, TypstBackend};
 //!
-//! let engine = Quillmark::new();
-//! let quill = engine.quill_from_path("path/to/quill")?;
+//! let quill = Quill::from_path("path/to/quill")?
+//!     .with_backend(Arc::new(TypstBackend::default()));
 //! let typst_content = "#set document(title: \"Test\")\n= Hello";
 //!
 //! let pdf_bytes = compile_to_pdf(&quill, typst_content, "{}")?;
@@ -284,10 +285,11 @@ pub fn render_document_pages(
 #[cfg(all(test, feature = "embed-default-font"))]
 mod compile_helper_tests {
     use std::collections::HashMap;
+    use std::sync::Arc;
 
     use super::compile_to_document;
-    use quillmark::Quillmark;
-    use quillmark_core::FileTreeNode;
+    use crate::TypstBackend;
+    use quillmark_core::{FileTreeNode, Quill};
 
     /// Ensures generated `lib.typ` (date conversion, etc.) typechecks when evaluated.
     /// String-only helper tests do not run the Typst compiler.
@@ -314,8 +316,8 @@ mod compile_helper_tests {
             },
         );
         let root = FileTreeNode::Directory { files: root_files };
-        let engine = Quillmark::new();
-        let quill = engine.quill(root).expect("quill");
+        let quill = Quill::from_tree(root).expect("quill");
+        let quill = quill.with_backend(Arc::new(TypstBackend::default()));
 
         let json = r#"{"title":"Test","BODY":"Hello","date":"2025-01-15","__meta__":{"content_fields":["BODY"],"card_content_fields":{},"date_fields":["date"],"card_date_fields":{}}}"#;
         let plate = r#"#import "@local/quillmark-helper:0.1.0": data

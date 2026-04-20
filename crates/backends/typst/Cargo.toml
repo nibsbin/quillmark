@@ -31,7 +31,6 @@ wasm-bindgen = "^0.2"
 
 [dev-dependencies]
 tempfile = { workspace = true }
-quillmark = { workspace = true }
 
 [features]
 default = ["native", "embed-default-font"]

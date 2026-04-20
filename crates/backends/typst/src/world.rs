@@ -705,8 +705,10 @@ name = "minimal-package"
 
     #[test]
     fn test_asset_fonts_have_priority() {
-        use quillmark::Quillmark;
         use std::path::Path;
+        use std::sync::Arc;
+
+        use crate::TypstBackend;
 
         // Use the actual usaf_memo fixture which has real fonts
         let quill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -725,8 +727,8 @@ name = "minimal-package"
             return;
         }
 
-        let engine = Quillmark::new();
-        let quill = engine.quill_from_path(&quill_path).unwrap();
+        let quill = Quill::from_path(&quill_path).expect("load quill");
+        let quill = quill.with_backend(Arc::new(TypstBackend::default()));
         let world = QuillWorld::new(&quill, "// Test").unwrap();
 
         // Asset fonts should be loaded

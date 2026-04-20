@@ -20,15 +20,13 @@
 //! ## Example Usage
 //!
 //! ```no_run
+//! use std::sync::Arc;
+//! use quillmark_core::{Backend, Quill};
 //! use quillmark_typst::TypstBackend;
-//! use quillmark::{Backend, Quillmark, OutputFormat};
 //!
-//! let backend = TypstBackend::default();
-//! let engine = Quillmark::new();
-//! let quill = engine.quill_from_path("path/to/quill").unwrap();
-//!
-//! // Use with Workflow API (recommended)
-//! // let workflow = Workflow::new(Box::new(backend), quill);
+//! let _quill = Quill::from_path("path/to/quill")
+//!     .unwrap()
+//!     .with_backend(Arc::new(TypstBackend::default()));
 //! ```
 //! ## Modules
 //!
