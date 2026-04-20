@@ -1,7 +1,7 @@
 //! Quillmark WASM Engine - Simplified API
 
 use crate::error::WasmError;
-use crate::types::{ParsedDocument, RenderOptions, RenderPagesOptions, RenderResult};
+use crate::types::{ParsedDocument, RenderOptions, RenderResult};
 use js_sys::{Array, Uint8Array};
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -37,9 +37,8 @@ pub struct Quill {
 }
 
 #[wasm_bindgen]
-pub struct CompiledDocument {
-    backend: Arc<dyn quillmark_core::Backend>,
-    inner: quillmark_core::CompiledDocument,
+pub struct RenderSession {
+    inner: quillmark_core::RenderSession,
 }
 
 impl Default for Quillmark {
@@ -116,7 +115,11 @@ fn to_core_parsed(parsed: ParsedDocument) -> Result<quillmark_core::ParsedDocume
 impl Quill {
     /// Render a document to final artifacts.
     #[wasm_bindgen(js_name = render)]
-    pub fn render(&self, parsed: ParsedDocument, opts: RenderOptions) -> Result<RenderResult, JsValue> {
+    pub fn render(
+        &self,
+        parsed: ParsedDocument,
+        opts: RenderOptions,
+    ) -> Result<RenderResult, JsValue> {
         let start = now_ms();
         let core_parsed = to_core_parsed(parsed).map_err(|e| {
             WasmError::from(format!("render: invalid ParsedDocument: {:?}", e)).to_js_value()
@@ -124,6 +127,7 @@ impl Quill {
         let rust_opts = quillmark_core::RenderOptions {
             output_format: opts.format.map(|f| f.into()),
             ppi: opts.ppi,
+            pages: opts.pages,
         };
         let result = self
             .inner
@@ -137,23 +141,17 @@ impl Quill {
         })
     }
 
-    /// Compile a document to an opaque compiled document handle for page-selective rendering.
-    #[wasm_bindgen(js_name = compile)]
-    pub fn compile(&self, parsed: ParsedDocument) -> Result<CompiledDocument, JsValue> {
+    /// Open an iterative render session for page-selective rendering.
+    #[wasm_bindgen(js_name = open)]
+    pub fn open(&self, parsed: ParsedDocument) -> Result<RenderSession, JsValue> {
         let core_parsed = to_core_parsed(parsed).map_err(|e| {
-            WasmError::from(format!("compile: invalid ParsedDocument: {:?}", e)).to_js_value()
+            WasmError::from(format!("open: invalid ParsedDocument: {:?}", e)).to_js_value()
         })?;
-        let backend = self.inner.backend().ok_or_else(|| {
-            WasmError::from("Quill has no backend; use engine.quill(...)").to_js_value()
-        })?;
-        let compiled = self
+        let session = self
             .inner
-            .compile(core_parsed)
+            .open(core_parsed)
             .map_err(|e| WasmError::from(e).to_js_value())?;
-        Ok(CompiledDocument {
-            backend: Arc::clone(backend),
-            inner: compiled,
-        })
+        Ok(RenderSession { inner: session })
     }
 }
 
@@ -228,31 +226,26 @@ impl ParsedDocument {
 }
 
 #[wasm_bindgen]
-impl CompiledDocument {
-    /// Number of pages in this compiled document.
+impl RenderSession {
+    /// Number of pages in this render session.
     #[wasm_bindgen(getter, js_name = pageCount)]
     pub fn page_count(&self) -> usize {
-        self.inner.page_count
+        self.inner.page_count()
     }
 
-    /// Render selected pages. `pages = null/undefined` renders all pages.
-    #[wasm_bindgen(js_name = renderPages)]
-    pub fn render_pages(
-        &self,
-        pages: Option<Vec<u32>>,
-        opts: RenderPagesOptions,
-    ) -> Result<RenderResult, JsValue> {
-        let page_indices = pages.map(|v| v.into_iter().map(|i| i as usize).collect::<Vec<_>>());
+    /// Render all or selected pages from this session.
+    #[wasm_bindgen(js_name = render)]
+    pub fn render(&self, opts: RenderOptions) -> Result<RenderResult, JsValue> {
         let start = now_ms();
+        let rust_opts = quillmark_core::RenderOptions {
+            output_format: opts.format.map(|f| f.into()),
+            ppi: opts.ppi,
+            pages: opts.pages,
+        };
 
         let result = self
-            .backend
-            .render_pages(
-                &self.inner,
-                page_indices.as_deref(),
-                opts.format.into(),
-                opts.ppi,
-            )
+            .inner
+            .render(&rust_opts)
             .map_err(|e| WasmError::from(e).to_js_value())?;
 
         Ok(RenderResult {

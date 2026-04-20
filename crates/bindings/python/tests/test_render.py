@@ -19,17 +19,6 @@ def test_save_artifact(taro_quill_dir, taro_md, tmp_path):
     assert output_path.stat().st_size > 0
 
 
-def test_quill_render_from_markdown_string(taro_quill_dir, taro_md):
-    """quill.render(str) parses internally and produces artifacts."""
-    engine = Quillmark()
-    quill = engine.quill_from_path(str(taro_quill_dir))
-
-    result = quill.render(taro_md)
-
-    assert len(result.artifacts) > 0
-    assert len(result.artifacts[0].bytes) > 0
-
-
 def test_quill_render_from_parsed_document(taro_quill_dir, taro_md):
     """quill.render(ParsedDocument) accepts a pre-parsed document."""
     engine = Quillmark()
@@ -47,7 +36,8 @@ def test_quill_render_with_explicit_format(taro_quill_dir, taro_md):
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
 
-    result = quill.render(taro_md, OutputFormat.SVG)
+    parsed = ParsedDocument.from_markdown(taro_md)
+    result = quill.render(parsed, OutputFormat.SVG)
 
     assert len(result.artifacts) > 0
     assert result.output_format == OutputFormat.SVG
@@ -75,6 +65,19 @@ def test_quill_render_ref_mismatch_warning(taro_quill_dir):
     assert len(result.artifacts) > 0, "artifact must still be produced"
 
 
+def test_quill_open_session_page_selection(taro_quill_dir, taro_md):
+    engine = Quillmark()
+    quill = engine.quill_from_path(str(taro_quill_dir))
+    parsed = ParsedDocument.from_markdown(taro_md)
+
+    session = quill.open(parsed)
+    assert session.page_count > 0
+
+    subset = session.render(OutputFormat.SVG, [0])
+    assert len(subset.artifacts) == 1
+    assert subset.output_format == OutputFormat.SVG
+
+
 def test_engine_workflow_still_works(taro_quill_dir, taro_md):
     """engine.workflow(quill) remains the correct path for dynamic-asset renders."""
     engine = Quillmark()
@@ -86,3 +89,17 @@ def test_engine_workflow_still_works(taro_quill_dir, taro_md):
 
     assert len(result.artifacts) > 0
     assert result.output_format == OutputFormat.PDF
+
+
+def test_workflow_open_session(taro_quill_dir, taro_md):
+    engine = Quillmark()
+    quill = engine.quill_from_path(str(taro_quill_dir))
+    workflow = engine.workflow(quill)
+    parsed = ParsedDocument.from_markdown(taro_md)
+
+    session = workflow.open(parsed)
+    assert session.page_count > 0
+
+    subset = session.render(OutputFormat.SVG, [0])
+    assert len(subset.artifacts) == 1
+    assert subset.output_format == OutputFormat.SVG

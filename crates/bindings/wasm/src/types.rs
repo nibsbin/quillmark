@@ -194,17 +194,9 @@ pub struct RenderOptions {
     /// Defaults to 144.0 (2x at 72pt/inch) when omitted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ppi: Option<f32>,
-}
-
-/// Options for rendering pages from a previously compiled document.
-#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(into_wasm_abi, from_wasm_abi)]
-#[serde(rename_all = "camelCase")]
-pub struct RenderPagesOptions {
-    pub format: OutputFormat,
-    /// Pixels per inch for PNG output.
+    /// Optional page indices to render (`undefined` means all pages).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub ppi: Option<f32>,
+    pub pages: Option<Vec<usize>>,
 }
 
 impl Default for RenderOptions {
@@ -213,6 +205,7 @@ impl Default for RenderOptions {
             format: Some(OutputFormat::Pdf),
             assets: None,
             ppi: None,
+            pages: None,
         }
     }
 }
@@ -334,6 +327,7 @@ mod tests {
             format: Some(OutputFormat::Pdf),
             assets: None,
             ppi: None,
+            pages: None,
         };
         let json = serde_json::to_string(&options).unwrap();
         assert!(json.contains("\"format\":\"pdf\""));

@@ -68,5 +68,25 @@ fn test_render_from_parsed_document() {
         !result.artifacts.is_empty(),
         "should produce at least one artifact"
     );
-    assert_eq!(result.warnings.len(), 0, "no warnings expected for matching quill_ref");
+    assert_eq!(
+        result.warnings.len(),
+        0,
+        "no warnings expected for matching quill_ref"
+    );
+}
+
+/// `quill.open(ParsedDocument)` returns a render session supporting page_count + render.
+#[wasm_bindgen_test]
+fn test_open_session_render() {
+    let engine = Quillmark::new();
+    let quill = engine.quill(small_quill_tree()).expect("quill failed");
+
+    let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
+    let session = quill.open(parsed).expect("open failed");
+    assert!(session.page_count() > 0, "session should expose page count");
+
+    let result = session
+        .render(RenderOptions::default())
+        .expect("session render failed");
+    assert!(!result.artifacts.is_empty(), "should produce artifacts");
 }

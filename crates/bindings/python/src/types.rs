@@ -6,8 +6,8 @@ use pyo3::types::PyDict; // PyDict
 use pyo3::Bound; // Bound
 
 use quillmark::{
-    Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderError, RenderOptions,
-    RenderResult, SerializableDiagnostic, Workflow,
+    Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderOptions, RenderResult,
+    RenderSession, SerializableDiagnostic, Workflow,
 };
 use std::path::PathBuf;
 
@@ -74,6 +74,14 @@ impl PyWorkflow {
             .render(&parsed.inner, rust_format)
             .map_err(convert_render_error)?;
         Ok(PyRenderResult { inner: result })
+    }
+
+    fn open(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<PyRenderSession> {
+        let session = self
+            .inner
+            .open(&parsed.inner)
+            .map_err(convert_render_error)?;
+        Ok(PyRenderSession { inner: session })
     }
 
     /// Perform a dry run validation without backend compilation.
@@ -275,12 +283,21 @@ impl PyQuill {
         let opts = RenderOptions {
             output_format: rust_format,
             ppi: None,
+            pages: None,
         };
         let result = self
             .inner
             .render(parsed.inner.clone(), &opts)
             .map_err(convert_render_error)?;
         Ok(PyRenderResult { inner: result })
+    }
+
+    fn open(&self, parsed: PyRef<'_, PyParsedDocument>) -> PyResult<PyRenderSession> {
+        let session = self
+            .inner
+            .open(parsed.inner.clone())
+            .map_err(convert_render_error)?;
+        Ok(PyRenderSession { inner: session })
     }
 }
 
@@ -337,6 +354,34 @@ impl PyParsedDocument {
 #[pyclass(name = "RenderResult")]
 pub struct PyRenderResult {
     pub(crate) inner: RenderResult,
+}
+
+#[pyclass(name = "RenderSession")]
+pub struct PyRenderSession {
+    pub(crate) inner: RenderSession,
+}
+
+#[pymethods]
+impl PyRenderSession {
+    #[getter]
+    fn page_count(&self) -> usize {
+        self.inner.page_count()
+    }
+
+    #[pyo3(signature = (format=None, pages=None))]
+    fn render(
+        &self,
+        format: Option<PyOutputFormat>,
+        pages: Option<Vec<usize>>,
+    ) -> PyResult<PyRenderResult> {
+        let opts = RenderOptions {
+            output_format: format.map(OutputFormat::from),
+            ppi: None,
+            pages,
+        };
+        let result = self.inner.render(&opts).map_err(convert_render_error)?;
+        Ok(PyRenderResult { inner: result })
+    }
 }
 
 #[pymethods]

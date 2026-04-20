@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Vitest integration tests for quillmark-wasm",
   "scripts": {
-    "test": "vitest run",
+    "test": "bash ../../../scripts/build-wasm.sh && vitest run",
     "test:watch": "vitest"
   },
   "devDependencies": {

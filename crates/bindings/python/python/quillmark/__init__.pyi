@@ -88,6 +88,9 @@ class Workflow:
     ) -> RenderResult:
         """Render parsed document to artifacts."""
 
+    def open(self, parsed: ParsedDocument) -> RenderSession:
+        """Open an iterative render session for page-selective rendering."""
+
     def dry_run(self, parsed: ParsedDocument) -> None:
         """Validate document without compilation."""
 
@@ -171,7 +174,7 @@ class Quill:
 
     def render(
         self,
-        input: str | ParsedDocument,
+        parsed: ParsedDocument,
         format: OutputFormat | None = None,
     ) -> RenderResult:
         """Render a document using this quill.
@@ -179,13 +182,15 @@ class Quill:
         For dynamic asset or font injection, use engine.workflow(quill) instead.
 
         Args:
-            input: Markdown string or pre-parsed ParsedDocument
+            parsed: Pre-parsed ParsedDocument
             format: Output format (defaults to first supported format)
 
         Raises:
             QuillmarkError: If rendering fails
-            TypeError: If input is not str or ParsedDocument
         """
+
+    def open(self, parsed: ParsedDocument) -> RenderSession:
+        """Open an iterative render session for page-selective rendering."""
 
 class ParsedDocument:
     """Parsed markdown document with frontmatter."""
@@ -225,6 +230,16 @@ class RenderResult:
     @property
     def output_format(self) -> OutputFormat:
         """Output format that was produced"""
+
+class RenderSession:
+    @property
+    def page_count(self) -> int: ...
+
+    def render(
+        self,
+        format: OutputFormat | None = None,
+        pages: list[int] | None = None,
+    ) -> RenderResult: ...
 
 class Artifact:
     """Output artifact (PDF, SVG, etc.)."""

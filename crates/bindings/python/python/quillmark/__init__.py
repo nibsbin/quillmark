@@ -12,6 +12,7 @@ from ._quillmark import (
     Quillmark,
     QuillmarkError,
     RenderResult,
+    RenderSession,
     Severity,  # No underscore prefix!
     TemplateError,
     Workflow,
@@ -29,6 +30,7 @@ __all__ = [
     "Quillmark",
     "QuillmarkError",
     "RenderResult",
+    "RenderSession",
     "Severity",
     "TemplateError",
     "Workflow",
