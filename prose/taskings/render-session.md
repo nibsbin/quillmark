@@ -7,13 +7,15 @@
 
 The current design exposes `CompiledDocument` as a public type and splits page-selective rendering across two optional `Backend` trait methods (`compile_to_document`, `render_pages`). Both methods have default implementations that return "not supported" errors, making page-selective rendering feel like an afterthought that may or may not work depending on the backend.
 
-This creates three problems:
+This creates four problems:
 
 **Leaky abstraction.** `CompiledDocument` wraps a `Box<dyn Any + Send + Sync>` — a type-erased blob that only the originating backend knows how to use. It is meaningless to consumers and exists solely to thread internal backend state across two API calls. It should never have been public.
 
 **Wrong trait design.** Optional methods with default error implementations are a code smell. A method either belongs on the trait or it doesn't. `compile_to_document` and `render_pages` being optional has let the Backend trait accumulate a split between a "real" required path and a "bonus" optional path. Iterative rendering is a first-class use case; its support should be required, not optional.
 
 **Redundant code paths.** `Quill::render()` and `Quill::compile()` share identical validation and data-compilation logic (`compile_data_internal`), then diverge only at the final backend call. This redundancy exists because the two operations were designed independently rather than as one unified pipeline.
+
+**Dead trait surface.** `plate_extension_types()` is defined on the trait and implemented by every backend, but is never called anywhere in the codebase. `transform_fields()` is called in the shared pipeline but belongs inside each backend's own `open()` implementation — the Typst backend's markdown-to-Typst field conversion and `__meta__` injection is backend-specific logic that should not be exposed as a trait hook.
 
 ## New Design
 
@@ -30,7 +32,7 @@ session.render(opts)            → RenderResult          // all or selected pag
 
 `CompiledDocument` disappears from every public surface. Each backend holds its compiled state in a private struct that implements a sealed internal `SessionHandle` trait. `RenderSession` wraps a `Box<dyn SessionHandle>` — type-erased at the core boundary, concrete inside each backend.
 
-`Backend::compile_to_document` and `Backend::render_pages` are deleted from the trait. They are replaced by a single required `Backend::open()` method that returns a `RenderSession`. `Backend::compile()` is also deleted — `Quill::render()` becomes a thin wrapper over `quill.open(parsed)?.render(opts)`. The backend trait is left with one render-related required method: `open()`.
+`Backend::compile_to_document`, `Backend::render_pages`, `Backend::compile()`, `Backend::transform_fields()`, and `Backend::plate_extension_types()` are all deleted from the trait. They are replaced by a single required `Backend::open()` method that returns a `RenderSession`. `Quill::render()` becomes a thin wrapper over `quill.open(parsed)?.render(opts)`. The backend trait is left with three methods total: `id()`, `supported_formats()`, and `open()`.
 
 ---
 
@@ -103,6 +105,8 @@ Remove:
 - `fn compile(...)` — the one-shot backend method
 - `fn compile_to_document(...)` — the optional compile-to-handle method
 - `fn render_pages(...)` — the optional page-selective render method
+- `fn transform_fields(...)` — backend-specific field transformation that belongs inside `open()`
+- `fn plate_extension_types(...)` — never called anywhere; plate file is declared in `Quill.yaml`
 
 Add one required method:
 
@@ -117,9 +121,7 @@ fn open(
 
 `open()` compiles the plate + data into a backend-specific internal representation and returns an opaque `RenderSession`. The session's `render(opts)` method selects pages and produces artifacts. Backends that cannot support page selection (e.g., a plain-text backend with no page concept) implement `open()` by compiling immediately and storing the result; `page_count()` returns 1; `render()` ignores `opts.pages` and returns the stored artifact.
 
-The trait now has four methods total: `id()`, `supported_formats()`, `plate_extension_types()`, `open()`. All are required.
-
-Remove the `transform_fields` method from this audit only if it is already planned elsewhere — do not change it here.
+The trait now has three methods total: `id()`, `supported_formats()`, `open()`. All are required.
 
 ### 5. Implement `open()` in the Typst backend
 
@@ -139,9 +141,15 @@ Implement `SessionHandle` for `TypestSession`:
 - `page_count()` returns `self.page_count`
 - `render(opts)` selects pages from `self.document` per `opts.pages`, then renders to the requested format (PDF, SVG, PNG) and ppi. This is the logic currently split between `compile_to_document` and `render_pages` — consolidate it here.
 
-Implement `Backend::open()` for the Typst backend by calling the existing `compile::compile_to_document()` helper in `crates/backends/typst/src/compile.rs`, wrapping the resulting `typst::Document` in a `TypestSession`, and returning `RenderSession::new(Box::new(session))`.
+Implement `Backend::open()` for the Typst backend. The implementation must:
 
-The functions `compile_to_pdf`, `compile_to_svg`, `compile_to_png` in `compile.rs` can be removed or made private if they are no longer called from the trait impl — they were only there to serve the old `Backend::compile()` and `Backend::render_pages()`.
+1. Call `transform_markdown_fields(fields, schema)` — the logic previously in `Backend::transform_fields` — to convert markdown-typed fields to Typst markup and inject the `__meta__` key before compilation. This is Typst-specific and belongs here, not in the shared pipeline.
+2. Call the existing `compile::compile_to_document()` helper in `crates/backends/typst/src/compile.rs` with the transformed JSON.
+3. Wrap the resulting `typst::Document` in a `TypestSession` and return `RenderSession::new(Box::new(session))`.
+
+The Typst backend's `build_transform_schema()` call, previously made on `Quill` in the shared pipeline, should be moved into the Typst backend's `open()` as well — `open()` already receives `&Quill` and can call the necessary method directly.
+
+The functions `compile_to_pdf`, `compile_to_svg`, `compile_to_png` in `compile.rs` can be removed or made private — they were only there to serve the old `Backend::compile()` and `Backend::render_pages()`.
 
 ### 6. Replace `Quill::render()` and `Quill::compile()` with `render()` and `open()`
 
@@ -276,7 +284,6 @@ Update `PyQuill::compile()` → `PyQuill::open()` to return `PyRenderSession`. U
 ## Out of scope
 
 - CLI binding — the CLI operates on paths and does not use page-selective rendering. No changes needed.
-- `transform_fields` on the `Backend` trait — unrelated to this change.
 - Dynamic asset/font injection via `Workflow` — the workflow internals are unchanged; only `compile` is renamed to `open`.
 - Adding new backends. The refactor affects all existing backends; new backends are a separate concern.
 
@@ -287,7 +294,8 @@ Update `PyQuill::compile()` → `PyQuill::open()` to return `PyRenderSession`. U
 - `rg 'CompiledDocument' crates/` returns zero hits outside of test fixtures and this file.
 - `rg 'compile_to_document\|render_pages' crates/` returns zero hits in any public module path.
 - `rg 'fn compile\b' crates/core/src/backend.rs` returns zero hits.
-- `Backend` trait has exactly four methods: `id`, `supported_formats`, `plate_extension_types`, `open`.
+- `rg 'transform_fields\|plate_extension_types' crates/core/src/backend.rs` returns zero hits.
+- `Backend` trait has exactly three methods: `id`, `supported_formats`, `open`.
 - `quill.open(parsed).render(opts)` with `opts.pages = Some(vec![0])` returns a single-page artifact in both WASM and Python.
 - `quill.render(parsed, opts)` is a one-liner wrapper over `open` + `render` with no separate backend call.
 - `cargo test --workspace` passes clean.
