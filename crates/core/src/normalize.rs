@@ -280,14 +280,7 @@ pub fn normalize_markdown(markdown: &str) -> String {
 /// All other fields in the card pass through verbatim.
 fn normalize_card_object(
     map: serde_json::Map<String, serde_json::Value>,
-    depth: usize,
-) -> Result<serde_json::Map<String, serde_json::Value>, NormalizationError> {
-    if depth > MAX_NESTING_DEPTH {
-        return Err(NormalizationError::NestingTooDeep {
-            depth,
-            max: MAX_NESTING_DEPTH,
-        });
-    }
+) -> serde_json::Map<String, serde_json::Value> {
     map.into_iter()
         .map(|(k, v)| {
             if k == BODY_FIELD {
@@ -297,10 +290,10 @@ fn normalize_card_object(
                     }
                     other => other,
                 };
-                Ok((k, normalized))
+                (k, normalized)
             } else {
                 // All other card fields pass through verbatim
-                Ok((k, v))
+                (k, v)
             }
         })
         .collect()
@@ -309,17 +302,13 @@ fn normalize_card_object(
 /// Normalize the `CARDS` array: for each element that is an object, normalize its
 /// `BODY` field via `normalize_markdown`; all other card fields pass through verbatim.
 /// Non-object elements (malformed) pass through unchanged.
-fn normalize_cards_array(
-    arr: Vec<serde_json::Value>,
-) -> Result<Vec<serde_json::Value>, NormalizationError> {
+fn normalize_cards_array(arr: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
     arr.into_iter()
-        .enumerate()
-        .map(|(i, elem)| match elem {
+        .map(|elem| match elem {
             serde_json::Value::Object(map) => {
-                let normalized = normalize_card_object(map, i)?;
-                Ok(serde_json::Value::Object(normalized))
+                serde_json::Value::Object(normalize_card_object(map))
             }
-            other => Ok(other),
+            other => other,
         })
         .collect()
 }
@@ -436,14 +425,7 @@ pub fn normalize_fields(fields: HashMap<String, QuillValue>) -> HashMap<String, 
                 let json = value.into_json();
                 let normalized = match json {
                     serde_json::Value::Array(arr) => {
-                        let original = serde_json::Value::Array(arr.clone());
-                        match normalize_cards_array(arr) {
-                            Ok(normalized_arr) => serde_json::Value::Array(normalized_arr),
-                            Err(e) => {
-                                eprintln!("Warning: {}", e);
-                                original
-                            }
-                        }
+                        serde_json::Value::Array(normalize_cards_array(arr))
                     }
                     other => other,
                 };
