@@ -51,18 +51,34 @@ Renders artifacts from a `ParsedDocument`.
 type RenderOptions = {
   format?: "pdf" | "svg" | "txt" | "png";
   ppi?: number;
+  pages?: number[];
 };
 ```
 
-### `quill.compile(input)`
+### `quill.open(parsed)`
 
-Compiles into an opaque `CompiledDocument` handle for page-selective rendering.
+Opens a reusable render session for page-selective rendering.
 
-### `compiled.renderPages(pages?, opts)`
+### `session.pageCount`
 
-Renders selected pages from a compiled document.
+Returns the number of pages in the opened session.
+
+### `session.render(options?)`
+
+Renders all pages or selected pages from the session.
+
+`options`:
+
+```ts
+type RenderOptions = {
+  format?: "pdf" | "svg" | "txt" | "png";
+  ppi?: number;
+  pages?: number[];
+};
+```
 
 ## Notes
 
 - `QUILL` in frontmatter is required when parsing markdown.
 - `quill.render(parsed)` emits a warning (not error) if `parsed.quillRef` does not match the quill name.
+- `pages` selection is intended for page-addressable outputs (for example SVG/PNG), not PDF.

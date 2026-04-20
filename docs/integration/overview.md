@@ -7,7 +7,7 @@ Use this page to understand the shared Quillmark flow before diving into languag
 Most integrations follow this flow:
 
 1. **Load** a render-ready quill (backend attached).
-2. **Parse** markdown (or pass markdown directly to quill render).
+2. **Parse** markdown into a `ParsedDocument`.
 3. **Render** to the target output format.
 
 === "Python"
