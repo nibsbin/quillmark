@@ -46,19 +46,45 @@ feature itself.
 - Setext H2 (`Heading\n---`) — CommonMark §4.3 — unreachable.
 - Thematic break `---` — CommonMark §4.1 — unreachable.
 
-**Resolution candidates**
-1. **Positional rule** — only treat a `---` block as frontmatter at document
-   start, and between top-level `---` pairs. A lone `---` after running
-   prose stays a thematic break; a setext underline stays a heading because
-   it has preceding paragraph text on the prior line with no blank gap.
-2. **Content rule** — require the block to parse as a YAML mapping with at
-   least one key. Non-YAML `---/---` pairs fall through to CommonMark.
-3. **Distinct delimiter** — migrate metadata blocks to `+++` (TOML/Hugo) or
-   `---yaml` fences, freeing `---` entirely. Highest churn but cleanest.
+**Resolution (adopted)** — keep `---` as the single metadata fence, but make
+fence detection contextual so unrelated `---` lines fall through to
+CommonMark. Two rules govern whether a `---` line opens a fence:
 
-Candidates 1 and 2 can stack. The YAGNI question is whether mid-document
-thematic breaks and setext H2s appear in real Quillmark input; if not, (1)
-alone is likely sufficient.
+1. **Sentinel rule.** A `---` / `---` pair is a metadata fence only if the
+   content between, stripped of leading whitespace, begins with `QUILL:`
+   (first block of the document) or `CARD:` (any subsequent block). Any
+   `---` pair whose content does not start with the appropriate sentinel
+   falls through — both delimiters become ordinary CommonMark tokens. This
+   is the existing semantic constraint (first block *must* have `QUILL`,
+   others *must* have `CARD`) promoted to a lexical precondition.
+2. **Leading-blank rule.** A `---` line opens a fence only if the line
+   immediately above it is blank, or the `---` sits at line 1. A `---`
+   directly below a non-blank paragraph line stays a setext H2 underline
+   per CommonMark §4.3.
+
+With both rules in force:
+
+- `Heading\n---\n` → setext H2 (rule 2 fails).
+- Blank line, `---`, blank line → CommonMark thematic break (rule 1 fails
+  — nothing after).
+- Blank line, `---`, `QUILL: resume`, `---` → frontmatter block.
+- Blank line, `---`, `CARD: profile`, `---` → card block.
+
+**Terminology note.** With C1 resolved, "the first block" is recognised for
+what it already is: *frontmatter*. It carries `QUILL`, the document's global
+fields, and the top-level `BODY` (prose between frontmatter close and the
+first card fence). It is the mandatory entrypoint that the Typst backend
+binds to its document function — not a "main card." Card blocks remain
+supplementary records in `CARDS[]`.
+
+**Parser cost.** On seeing a candidate `---` line, the tokenizer looks back
+one line (blank check) and scans forward for a matching `---` plus the first
+non-blank content line (sentinel check). Bounded lookahead.
+
+**New failure mode.** A user mistyping `Card:` (wrong case) or
+`CARDS:` turns an intended card into two thematic breaks with literal YAML
+text between them. Surface via a linter warning: "a `---` pair surrounding a
+`<word>:` line that isn't `QUILL`/`CARD` is usually a typo."
 
 ### C2. `__text__` renders as underline
 
@@ -176,7 +202,7 @@ Each row is either fillable cheaply or deferrable under YAGNI.
 | G6 | Autolink `<http://…>` | Already handled | — | No drift |
 | G7 | Entity / numeric char refs | Already handled by pulldown-cmark | — | Verify in tests |
 | G8 | Backslash escapes of ASCII punctuation | Already handled | — | Verify in tests |
-| G9 | Setext headings | Blocked by C1 | — | Unblocked once C1 resolves |
+| G9 | Setext headings | Unblocked by C1's leading-blank rule | — | Implement alongside C1 |
 | G10 | Hard break via trailing `\\` | Already handled | — | Verify in tests |
 
 ### GFM / ecosystem features (beyond CommonMark)
@@ -198,8 +224,10 @@ break the superset property.
 
 Ordered by how much of the conflict surface they resolve:
 
-1. **C1 — scope `---` frontmatter detection** so setext H2 and `---`
-   thematic breaks remain reachable. Largest single gain.
+1. **C1 — contextual `---` fence detection** via the sentinel + leading-blank
+   rules. Keeps one delimiter for all metadata blocks, restores setext H2
+   and `---` thematic breaks, and folds "main card" back into "frontmatter"
+   as a naming fix. Largest single gain. Unblocks G9.
 2. **C2 — return `__` to strong**; introduce a dedicated underline token if
    underline is wanted.
 3. **C3 — stop preprocessing intraword delimiters**; expose any desired
