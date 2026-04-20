@@ -33,14 +33,7 @@ impl RenderSession {
     pub fn render(&self, opts: &RenderOptions) -> Result<RenderResult, RenderError> {
         let mut result = self.inner.render(opts)?;
         if let Some(warning) = &self.warning {
-            result.warnings.push(Diagnostic {
-                severity: warning.severity,
-                code: warning.code.clone(),
-                message: warning.message.clone(),
-                primary: warning.primary.clone(),
-                hint: warning.hint.clone(),
-                source: None,
-            });
+            result.warnings.push(warning.clone_without_source());
         }
         Ok(result)
     }

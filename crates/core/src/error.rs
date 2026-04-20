@@ -231,6 +231,18 @@ impl Diagnostic {
         self
     }
 
+    /// Clone this diagnostic while dropping any attached source chain.
+    pub(crate) fn clone_without_source(&self) -> Self {
+        Self {
+            severity: self.severity,
+            code: self.code.clone(),
+            message: self.message.clone(),
+            primary: self.primary.clone(),
+            hint: self.hint.clone(),
+            source: None,
+        }
+    }
+
     /// Get the source chain as a list of error messages
     pub fn source_chain(&self) -> Vec<String> {
         let mut chain = Vec::new();
