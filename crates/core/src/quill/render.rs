@@ -8,32 +8,6 @@ use crate::{
     RenderOptions, RenderResult, Severity,
 };
 
-/// Input to a render or compile operation — either raw Markdown or a pre-parsed document.
-pub enum QuillInput {
-    /// Raw Markdown source (will be parsed internally)
-    Markdown(String),
-    /// Pre-parsed document
-    Parsed(ParsedDocument),
-}
-
-impl From<String> for QuillInput {
-    fn from(s: String) -> Self {
-        QuillInput::Markdown(s)
-    }
-}
-
-impl From<&str> for QuillInput {
-    fn from(s: &str) -> Self {
-        QuillInput::Markdown(s.to_string())
-    }
-}
-
-impl From<ParsedDocument> for QuillInput {
-    fn from(p: ParsedDocument) -> Self {
-        QuillInput::Parsed(p)
-    }
-}
-
 impl Quill {
     /// Attach a backend to this quill, returning a render-ready quill.
     pub fn with_backend(mut self, backend: Arc<dyn Backend>) -> Self {
@@ -49,24 +23,23 @@ impl Quill {
     /// Render a document to final artifacts.
     pub fn render(
         &self,
-        input: impl Into<QuillInput>,
+        parsed: ParsedDocument,
         opts: &RenderOptions,
     ) -> Result<RenderResult, RenderError> {
         let backend = self.require_backend()?;
-        let (parsed, ref_mismatch_warning) = self.resolve_input(input.into())?;
+        let warning = self.ref_mismatch_warning(&parsed);
         let json_data = self.compile_data_internal(&parsed, backend)?;
         let plate_content = self.plate.clone().unwrap_or_default();
         let mut result = backend.compile(&plate_content, self, opts, &json_data)?;
-        if let Some(w) = ref_mismatch_warning {
+        if let Some(w) = warning {
             result.warnings.push(w);
         }
         Ok(result)
     }
 
     /// Compile a document to a backend-specific compiled handle for page-selective rendering.
-    pub fn compile(&self, input: impl Into<QuillInput>) -> Result<CompiledDocument, RenderError> {
+    pub fn compile(&self, parsed: ParsedDocument) -> Result<CompiledDocument, RenderError> {
         let backend = self.require_backend()?;
-        let (parsed, _) = self.resolve_input(input.into())?;
         let json_data = self.compile_data_internal(&parsed, backend)?;
         let plate_content = self.plate.clone().unwrap_or_default();
         backend.compile_to_document(&plate_content, self, &json_data)
@@ -88,23 +61,6 @@ impl Quill {
                 ),
             ),
         })
-    }
-
-    fn resolve_input(
-        &self,
-        input: QuillInput,
-    ) -> Result<(ParsedDocument, Option<Diagnostic>), RenderError> {
-        match input {
-            QuillInput::Markdown(md) => {
-                let parsed = ParsedDocument::from_markdown(&md)?;
-                let warning = self.ref_mismatch_warning(&parsed);
-                Ok((parsed, warning))
-            }
-            QuillInput::Parsed(parsed) => {
-                let warning = self.ref_mismatch_warning(&parsed);
-                Ok((parsed, warning))
-            }
-        }
     }
 
     fn ref_mismatch_warning(&self, parsed: &ParsedDocument) -> Option<Diagnostic> {
@@ -319,18 +275,9 @@ impl Quill {
     }
 
     /// Render to the first supported output format (convenience helper).
-    pub fn render_default(
-        &self,
-        input: impl Into<QuillInput>,
-    ) -> Result<RenderResult, RenderError> {
+    pub fn render_default(&self, parsed: ParsedDocument) -> Result<RenderResult, RenderError> {
         let backend = self.require_backend()?;
         let output_format = backend.supported_formats().first().copied();
-        self.render(
-            input,
-            &RenderOptions {
-                output_format,
-                ppi: None,
-            },
-        )
+        self.render(parsed, &RenderOptions { output_format, ppi: None })
     }
 }

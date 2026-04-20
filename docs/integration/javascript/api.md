@@ -41,12 +41,9 @@ type ParsedDocument = {
 };
 ```
 
-### `quill.render(input, options?)`
+### `quill.render(parsed, options?)`
 
-Renders artifacts. `input` may be:
-
-- `string` markdown
-- `ParsedDocument`
+Renders artifacts from a `ParsedDocument`.
 
 `options`:
 

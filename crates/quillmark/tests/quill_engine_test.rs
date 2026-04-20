@@ -100,8 +100,10 @@ fn test_quill_render_succeeds_with_engine_loaded_quill() {
     let quill = engine
         .quill_from_path(quill_path)
         .expect("quill_from_path failed");
+    let parsed = ParsedDocument::from_markdown("---\nQUILL: my_quill\n---\n")
+        .expect("parse failed");
     let result = quill.render(
-        "---\nQUILL: my_quill\n---\n",
+        parsed,
         &quillmark_core::RenderOptions {
             output_format: Some(OutputFormat::Pdf),
             ppi: None,

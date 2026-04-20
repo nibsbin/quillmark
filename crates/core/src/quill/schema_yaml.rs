@@ -95,7 +95,7 @@ fn map_ui_container(ui: &UiContainerSchema) -> PublicUiContainer {
 
 fn map_field(field: &FieldSchema) -> PublicField {
     PublicField {
-        field_type: field.r#type.as_yaml_str().to_string(),
+        field_type: field.r#type.as_str().to_string(),
         title: field.title.clone(),
         description: field.description.clone(),
         required: field.required,

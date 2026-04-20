@@ -115,19 +115,19 @@ fn to_core_parsed(parsed: ParsedDocument) -> Result<quillmark_core::ParsedDocume
 #[wasm_bindgen]
 impl Quill {
     /// Render a document to final artifacts.
-    ///
-    /// Input may be a markdown string or a `ParsedDocument` object.
     #[wasm_bindgen(js_name = render)]
-    pub fn render(&self, input: JsValue, opts: RenderOptions) -> Result<RenderResult, JsValue> {
+    pub fn render(&self, parsed: ParsedDocument, opts: RenderOptions) -> Result<RenderResult, JsValue> {
         let start = now_ms();
-        let core_input = js_value_to_quill_input(input)?;
+        let core_parsed = to_core_parsed(parsed).map_err(|e| {
+            WasmError::from(format!("render: invalid ParsedDocument: {:?}", e)).to_js_value()
+        })?;
         let rust_opts = quillmark_core::RenderOptions {
             output_format: opts.format.map(|f| f.into()),
             ppi: opts.ppi,
         };
         let result = self
             .inner
-            .render(core_input, &rust_opts)
+            .render(core_parsed, &rust_opts)
             .map_err(|e| WasmError::from(e).to_js_value())?;
         Ok(RenderResult {
             artifacts: result.artifacts.into_iter().map(Into::into).collect(),
@@ -139,38 +139,22 @@ impl Quill {
 
     /// Compile a document to an opaque compiled document handle for page-selective rendering.
     #[wasm_bindgen(js_name = compile)]
-    pub fn compile(&self, input: JsValue) -> Result<CompiledDocument, JsValue> {
-        let core_input = js_value_to_quill_input(input)?;
+    pub fn compile(&self, parsed: ParsedDocument) -> Result<CompiledDocument, JsValue> {
+        let core_parsed = to_core_parsed(parsed).map_err(|e| {
+            WasmError::from(format!("compile: invalid ParsedDocument: {:?}", e)).to_js_value()
+        })?;
         let backend = self.inner.backend().ok_or_else(|| {
             WasmError::from("Quill has no backend; use engine.quill(...)").to_js_value()
         })?;
         let compiled = self
             .inner
-            .compile(core_input)
+            .compile(core_parsed)
             .map_err(|e| WasmError::from(e).to_js_value())?;
         Ok(CompiledDocument {
             backend: Arc::clone(backend),
             inner: compiled,
         })
     }
-}
-
-fn js_value_to_quill_input(input: JsValue) -> Result<quillmark_core::QuillInput, JsValue> {
-    if let Some(s) = input.as_string() {
-        return Ok(quillmark_core::QuillInput::Markdown(s));
-    }
-    // Try to deserialize as ParsedDocument (plain JS object)
-    let parsed: ParsedDocument = serde_wasm_bindgen::from_value(input).map_err(|e| {
-        WasmError::from(format!(
-            "render: input must be a string (markdown) or ParsedDocument: {}",
-            e
-        ))
-        .to_js_value()
-    })?;
-    let core_parsed = to_core_parsed(parsed).map_err(|e| {
-        WasmError::from(format!("render: invalid ParsedDocument: {:?}", e)).to_js_value()
-    })?;
-    Ok(quillmark_core::QuillInput::Parsed(core_parsed))
 }
 
 fn file_tree_from_js_tree(tree: &JsValue) -> Result<quillmark_core::FileTreeNode, JsValue> {

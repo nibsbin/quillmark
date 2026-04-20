@@ -90,7 +90,6 @@ pub struct CardSchema {
 #[serde(rename_all = "lowercase")]
 pub enum FieldType {
     /// String type
-    #[serde(alias = "str")]
     String,
     /// Numeric type (integers and decimals)
     Number,
@@ -100,7 +99,7 @@ pub enum FieldType {
     Boolean,
     /// Array type
     Array,
-    /// Dictionary/object type
+    /// Object type
     Object,
     /// Date type (formatted as string with date format)
     Date,
@@ -114,12 +113,12 @@ impl FieldType {
     /// Parse a FieldType from a string
     pub fn from_str(s: &str) -> Option<Self> {
         match s {
-            "string" | "str" => Some(FieldType::String),
+            "string" => Some(FieldType::String),
             "number" => Some(FieldType::Number),
             "integer" => Some(FieldType::Integer),
             "boolean" => Some(FieldType::Boolean),
             "array" => Some(FieldType::Array),
-            "object" | "dict" => Some(FieldType::Object),
+            "object" => Some(FieldType::Object),
             "date" => Some(FieldType::Date),
             "datetime" => Some(FieldType::DateTime),
             "markdown" => Some(FieldType::Markdown),
@@ -135,18 +134,10 @@ impl FieldType {
             FieldType::Integer => "integer",
             FieldType::Boolean => "boolean",
             FieldType::Array => "array",
-            FieldType::Object => "dict",
+            FieldType::Object => "object",
             FieldType::Date => "date",
             FieldType::DateTime => "datetime",
             FieldType::Markdown => "markdown",
-        }
-    }
-
-    /// Get the YAML public-schema representation for this type.
-    pub fn as_yaml_str(&self) -> &'static str {
-        match self {
-            FieldType::Object => "object",
-            _ => self.as_str(),
         }
     }
 }
