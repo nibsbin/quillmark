@@ -11,11 +11,12 @@ create_exception!(_quillmark, ParseError, QuillmarkError);
 create_exception!(_quillmark, TemplateError, QuillmarkError);
 create_exception!(_quillmark, CompilationError, QuillmarkError);
 
-fn attach_diagnostic(py: Python, py_err: &PyErr, diag: Diagnostic) {
+fn with_diag_attached(py: Python, py_err: PyErr, diag: Diagnostic) -> PyErr {
     if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
         let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
         let _ = exc.setattr("diagnostic", py_diag);
     }
+    py_err
 }
 
 pub fn convert_render_error(err: RenderError) -> PyErr {
@@ -34,15 +35,18 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
             }
             py_err
         }
-        RenderError::Single { diag } => {
-            let message = diag.message.clone();
-            let py_err = match diag.code.as_deref() {
-                Some(code) if code.starts_with("parse::") => ParseError::new_err(message),
-                Some(code) if code.starts_with("template::") => TemplateError::new_err(message),
-                _ => QuillmarkError::new_err(message),
-            };
-            attach_diagnostic(py, &py_err, *diag);
-            py_err
+        RenderError::InvalidFrontmatter { diag } => {
+            with_diag_attached(py, ParseError::new_err(diag.message.clone()), *diag)
+        }
+        RenderError::EngineCreation { diag }
+        | RenderError::FormatNotSupported { diag }
+        | RenderError::UnsupportedBackend { diag }
+        | RenderError::DynamicAssetCollision { diag }
+        | RenderError::DynamicFontCollision { diag }
+        | RenderError::ValidationFailed { diag }
+        | RenderError::QuillConfig { diag }
+        | RenderError::NoBackend { diag } => {
+            with_diag_attached(py, QuillmarkError::new_err(diag.message.clone()), *diag)
         }
     })
 }

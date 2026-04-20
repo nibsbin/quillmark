@@ -391,7 +391,7 @@ mod tests {
             })
             .with_hint("This is a hint".to_string());
 
-        let render_err = quillmark_core::RenderError::Single {
+        let render_err = quillmark_core::RenderError::InvalidFrontmatter {
             diag: Box::new(diag),
         };
         let wasm_err: WasmError = render_err.into();

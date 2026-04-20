@@ -44,7 +44,7 @@ impl Quillmark {
 
     /// Build and return a render-ready quill from an in-memory file tree.
     pub fn quill(&self, tree: quillmark_core::FileTreeNode) -> Result<Quill, RenderError> {
-        let quill = Quill::from_tree(tree).map_err(|e| RenderError::Single {
+        let quill = Quill::from_tree(tree).map_err(|e| RenderError::QuillConfig {
             diag: Box::new(
                 Diagnostic::new(
                     Severity::Error,
@@ -61,7 +61,7 @@ impl Quillmark {
         &self,
         path: P,
     ) -> Result<Quill, RenderError> {
-        let quill = Quill::from_path(path).map_err(|e| RenderError::Single {
+        let quill = Quill::from_path(path).map_err(|e| RenderError::QuillConfig {
             diag: Box::new(
                 Diagnostic::new(Severity::Error, format!("Failed to load quill: {}", e))
                     .with_code("quill::load_failed".to_string()),
@@ -75,7 +75,7 @@ impl Quillmark {
         let backend = self
             .backends
             .get(backend_id)
-            .ok_or_else(|| RenderError::Single {
+            .ok_or_else(|| RenderError::UnsupportedBackend {
                 diag: Box::new(
                     Diagnostic::new(
                         Severity::Error,
@@ -101,7 +101,7 @@ impl Quillmark {
         let backend = self
             .backends
             .get(backend_id)
-            .ok_or_else(|| RenderError::Single {
+            .ok_or_else(|| RenderError::UnsupportedBackend {
                 diag: Box::new(
                     Diagnostic::new(
                         Severity::Error,

@@ -48,7 +48,7 @@ impl Quill {
     }
 
     fn require_backend(&self) -> Result<&Arc<dyn crate::Backend>, RenderError> {
-        self.resolved_backend.as_ref().ok_or_else(|| RenderError::Single {
+        self.resolved_backend.as_ref().ok_or_else(|| RenderError::NoBackend {
             diag: Box::new(
                 Diagnostic::new(
                     Severity::Error,
@@ -94,7 +94,7 @@ impl Quill {
         let coerced_fields = self
             .config
             .coerce(parsed.fields())
-            .map_err(|e| RenderError::Single {
+            .map_err(|e| RenderError::ValidationFailed {
                 diag: Box::new(
                     Diagnostic::new(Severity::Error, e.to_string())
                         .with_code("validation::coercion_failed".to_string())
@@ -121,7 +121,7 @@ impl Quill {
                     .map(|e| format!("- {}", e))
                     .collect::<Vec<_>>()
                     .join("\n");
-                Err(RenderError::Single {
+                Err(RenderError::ValidationFailed {
                     diag: Box::new(
                         Diagnostic::new(Severity::Error, error_message)
                             .with_code("validation::document_invalid".to_string())

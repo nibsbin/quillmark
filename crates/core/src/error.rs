@@ -20,10 +20,16 @@
 //!
 //! ### RenderError Variants
 //!
-//! - [`RenderError::Single`]: A single diagnostic. Dispatch on `diag.code` for
-//!   specific error categories (e.g. `"workflow::asset_collision"`,
-//!   `"validation::coercion_failed"`, `"typst::format_not_supported"`).
-//! - [`RenderError::CompilationFailed`]: Backend compilation produced multiple diagnostics
+//! - [`RenderError::EngineCreation`]: Failed to create rendering engine
+//! - [`RenderError::InvalidFrontmatter`]: Malformed YAML frontmatter
+//! - [`RenderError::CompilationFailed`]: Backend compilation errors
+//! - [`RenderError::FormatNotSupported`]: Requested format not supported
+//! - [`RenderError::UnsupportedBackend`]: Backend not registered
+//! - [`RenderError::DynamicAssetCollision`]: Asset filename collision
+//! - [`RenderError::DynamicFontCollision`]: Font filename collision
+//! - [`RenderError::ValidationFailed`]: Field coercion/validation failure
+//! - [`RenderError::QuillConfig`]: Quill configuration error
+//! - [`RenderError::NoBackend`]: Quill has no backend attached
 //!
 //! ## Examples
 //!
@@ -63,7 +69,7 @@
 //!                     eprintln!("{}", diag.fmt_pretty());
 //!                 }
 //!             }
-//!             RenderError::Single { diag } if diag.code.as_deref() == Some("parse::error") => {
+//!             RenderError::InvalidFrontmatter { diag } => {
 //!                 eprintln!("Frontmatter error: {}", diag.message);
 //!             }
 //!             _ => eprintln!("Error: {}", e),
@@ -471,15 +477,18 @@ impl From<&str> for ParseError {
 }
 
 /// Main error type for rendering operations.
-///
-/// Programmatic dispatch is done via `diag.code` (e.g. `"workflow::asset_collision"`,
-/// `"validation::coercion_failed"`, `"typst::format_not_supported"`). The diagnostic
-/// carries the message, code, location, hint, and source chain.
 #[derive(thiserror::Error, Debug)]
 pub enum RenderError {
-    /// Error with a single diagnostic. Dispatch on `diag.code` for specific handling.
+    /// Failed to create rendering engine
     #[error("{diag}")]
-    Single {
+    EngineCreation {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
+
+    /// Invalid YAML frontmatter in markdown document
+    #[error("{diag}")]
+    InvalidFrontmatter {
         /// Diagnostic information
         diag: Box<Diagnostic>,
     },
@@ -490,6 +499,55 @@ pub enum RenderError {
         /// List of diagnostics
         diags: Vec<Diagnostic>,
     },
+
+    /// Requested output format not supported by backend
+    #[error("{diag}")]
+    FormatNotSupported {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
+
+    /// Backend not registered with engine
+    #[error("{diag}")]
+    UnsupportedBackend {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
+
+    /// Dynamic asset filename collision
+    #[error("{diag}")]
+    DynamicAssetCollision {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
+
+    /// Dynamic font filename collision
+    #[error("{diag}")]
+    DynamicFontCollision {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
+
+    /// Validation failed for parsed document
+    #[error("{diag}")]
+    ValidationFailed {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
+
+    /// Quill configuration error
+    #[error("{diag}")]
+    QuillConfig {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
+
+    /// Quill has no backend attached (created without engine-based construction)
+    #[error("{diag}")]
+    NoBackend {
+        /// Diagnostic information
+        diag: Box<Diagnostic>,
+    },
 }
 
 impl RenderError {
@@ -497,15 +555,15 @@ impl RenderError {
     pub fn diagnostics(&self) -> Vec<&Diagnostic> {
         match self {
             RenderError::CompilationFailed { diags } => diags.iter().collect(),
-            RenderError::Single { diag } => vec![diag.as_ref()],
-        }
-    }
-}
-
-impl From<Diagnostic> for RenderError {
-    fn from(diag: Diagnostic) -> Self {
-        RenderError::Single {
-            diag: Box::new(diag),
+            RenderError::EngineCreation { diag }
+            | RenderError::InvalidFrontmatter { diag }
+            | RenderError::FormatNotSupported { diag }
+            | RenderError::UnsupportedBackend { diag }
+            | RenderError::DynamicAssetCollision { diag }
+            | RenderError::DynamicFontCollision { diag }
+            | RenderError::ValidationFailed { diag }
+            | RenderError::QuillConfig { diag }
+            | RenderError::NoBackend { diag } => vec![diag.as_ref()],
         }
     }
 }
@@ -513,7 +571,7 @@ impl From<Diagnostic> for RenderError {
 /// Convert ParseError to RenderError
 impl From<ParseError> for RenderError {
     fn from(err: ParseError) -> Self {
-        RenderError::Single {
+        RenderError::InvalidFrontmatter {
             diag: Box::new(
                 Diagnostic::new(Severity::Error, err.to_string())
                     .with_code("parse::error".to_string()),
