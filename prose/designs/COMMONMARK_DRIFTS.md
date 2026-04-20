@@ -1,169 +1,219 @@
-# CommonMark Drifts in Quillmark Parsing
+# Quillmark Markdown vs CommonMark
 
-**Status:** Analysis
-**Scope:** `quillmark_core::parse`, `quillmark_core::normalize`, `quillmark_typst::convert`
+**Status:** Analysis — input for a future Quillmark Markdown specification
+**Goal:** Quillmark Markdown should be a **superset** of
+[CommonMark 0.31.2](https://spec.commonmark.org/0.31.2/). Every valid
+CommonMark document should parse to an equivalent AST; additional syntax may
+be layered on top.
 
-This document catalogs where Quillmark's two-layer parsing pipeline deviates
-from the [CommonMark 0.31.2](https://spec.commonmark.org/0.31.2/) standard. It
-is descriptive, not normative — the normative specification lives in
-[`EXTENDED_MARKDOWN.md`](./EXTENDED_MARKDOWN.md).
+This document inventories the current parsing behaviour and evaluates each
+deviation under the superset goal. Each item is classified as:
 
-## Pipeline Summary
+- **Extension** — adds syntax or semantics beyond CommonMark without
+  contradicting it. Preserve.
+- **Conflict** — reassigns or suppresses syntax CommonMark gives meaning to.
+  Must be reconciled before the superset property can be claimed.
+- **Gap** — CommonMark feature that is unimplemented. If *YAGNI* — deferrable
+  until a real use case appears. If *needed* — fill before shipping the
+  standard.
 
-Quillmark does not have a single markdown parser. Parsing happens in two
-independent stages:
+## Pipeline
 
-| Stage | Crate | File | Responsibility |
-|---|---|---|---|
-| 1. Frontmatter split | `quillmark-core` | `crates/core/src/parse.rs` | Splits input into YAML metadata blocks and body strings |
-| 1a. Body normalization | `quillmark-core` | `crates/core/src/normalize.rs` | Strips bidi chars and repairs HTML-comment fences in each body |
-| 2. Body rendering | `quillmark-typst` | `crates/backends/typst/src/convert.rs` | Runs `pulldown-cmark` v0.13 over each normalized body and emits Typst markup |
-
-Only stage 2 uses a CommonMark parser (`pulldown-cmark`, with
-`ENABLE_STRIKETHROUGH` and `ENABLE_TABLES` enabled —
-`convert.rs:1236-1237`). Stage 1 operates on raw bytes and interprets `---`
-fences on its own terms.
-
-## Drifts by Category
-
-### A. Structural — Frontmatter Hijacks `---`
-
-The top-level splitter (`parse.rs:267-500`) consumes every line that is
-exactly `---` as a metadata-block delimiter before `pulldown-cmark` ever sees
-the content.
-
-| CommonMark feature | Quillmark behaviour | Reference |
+| Stage | Crate / file | Notes |
 |---|---|---|
-| Setext H2 underline (`---` under a line of text) | Not recognized; the `---` line splits the document into metadata blocks. Text above stays in the preceding body. | `parse.rs:267-350`, `EXTENDED_MARKDOWN.md:26` |
-| Thematic break (`---`) | Not emitted; the line becomes a block delimiter. Only `***` and `___` thematic breaks reach `pulldown-cmark`, and those are also dropped by stage 2 (see below). | `parse.rs:267-350`, `convert.rs` (no `Event::Rule` handler) |
-| `---` inside fenced code | Correctly ignored — the splitter tracks fence state. | `parse.rs:159-249` |
+| 1. Frontmatter split | `quillmark-core` — `crates/core/src/parse.rs` | Splits on bare `---` lines into YAML blocks + body strings. |
+| 1a. Normalize | `crates/core/src/normalize.rs` | Strips Unicode bidi controls; repairs HTML-comment fences. |
+| 2. Body render | `quillmark-typst` — `crates/backends/typst/src/convert.rs` | `pulldown-cmark` 0.13 with `ENABLE_STRIKETHROUGH` + `ENABLE_TABLES`, events mapped to Typst markup. |
 
-This is an intentional, documented reservation of the `---` token.
+Only stage 2 uses a CommonMark parser. Stage 1 interprets `---` before
+`pulldown-cmark` ever sees the text.
 
-### B. Block Elements Silently Dropped
+---
 
-For these tags `convert.rs` has no matching arm, so pulldown-cmark events are
-consumed without emitting Typst output. Inline text inside them may leak into
-the surrounding paragraph; block-level wrappers disappear.
+## Conflicts (must resolve to be a superset)
 
-| Feature | CommonMark status | Quillmark behaviour |
+### C1. `---` reserved as frontmatter delimiter
+
+**Current behaviour** — any line containing exactly `---` opens or closes a
+YAML metadata block (`parse.rs:267-500`, `EXTENDED_MARKDOWN.md:26`), even
+mid-document.
+
+**Necessary?** The `QUILL` / `CARD` data model is core to Quillmark and must
+survive. The *blanket* reservation is what causes the conflict, not the
+feature itself.
+
+**Collateral damage**
+- Setext H2 (`Heading\n---`) — CommonMark §4.3 — unreachable.
+- Thematic break `---` — CommonMark §4.1 — unreachable.
+
+**Resolution candidates**
+1. **Positional rule** — only treat a `---` block as frontmatter at document
+   start, and between top-level `---` pairs. A lone `---` after running
+   prose stays a thematic break; a setext underline stays a heading because
+   it has preceding paragraph text on the prior line with no blank gap.
+2. **Content rule** — require the block to parse as a YAML mapping with at
+   least one key. Non-YAML `---/---` pairs fall through to CommonMark.
+3. **Distinct delimiter** — migrate metadata blocks to `+++` (TOML/Hugo) or
+   `---yaml` fences, freeing `---` entirely. Highest churn but cleanest.
+
+Candidates 1 and 2 can stack. The YAGNI question is whether mid-document
+thematic breaks and setext H2s appear in real Quillmark input; if not, (1)
+alone is likely sufficient.
+
+### C2. `__text__` renders as underline
+
+**Current behaviour** — `convert.rs:264-280` inspects the source and maps
+`__`-bounded strong spans to `#underline[...]` instead of `#strong[...]`.
+
+**Necessary?** Underline is a useful feature. Hijacking CommonMark strong is
+not the only way to expose it.
+
+**Resolution candidates**
+1. Give `__` back to strong; expose underline via a new token (`++text++`,
+   `==text==`, `[u]…[/u]`, or `<u>…</u>` admitted through the HTML rule).
+2. Keep the current mapping and explicitly declare the superset property
+   broken for `__`. (Discouraged — loses compatibility with millions of
+   existing documents.)
+
+### C3. Intraword `__` and `~~` permitted
+
+**Current behaviour** — `convert.rs:1048-1230` preprocesses the source,
+replacing intraword `__…__` and `~~…~~` runs with placeholder characters
+before handing off to `pulldown-cmark`, which would otherwise (correctly)
+treat them as literal per CommonMark §6.2 / GFM delimiter rules.
+
+**Necessary?** Low-value ergonomics at the cost of AST divergence. The CM
+rule exists specifically so that identifiers like `snake_case_name` do not
+accidentally italicise.
+
+**Resolution candidates**
+1. Remove the preprocessor; keep CommonMark delimiter-run semantics.
+2. Restrict the extension to a delimiter that CommonMark does not assign
+   meaning to (e.g. `==…==` for highlight, `++…++` for underline) so
+   identifier text is unaffected.
+
+### C4. Thematic break dropped for `***` and `___`
+
+**Current behaviour** — `pulldown-cmark` emits `Event::Rule`; `convert.rs`
+has no handler, so the event is silently discarded.
+
+**Necessary?** No — this is just unfinished. `---` is tangled up in C1, but
+`***` and `___` have no excuse. Map to Typst `#line(length: 100%)` (see
+`CONVERT.md:906-947`). Effectively a gap, classified here because CommonMark
+requires it.
+
+### C5. Block quotes dropped
+
+**Current behaviour** — no handler for `Tag::BlockQuote`. Outer wrapping
+disappears; inline text may still leak out as paragraphs.
+
+**Necessary?** No. Map to `#quote(block: true)[...]` (Typst has native
+support). Nested quotes can flatten or preserve depth per
+`CONVERT.md:616-693`.
+
+### C6. Raw HTML stripped (except `<br>`)
+
+**Current behaviour** — all HTML events dropped except `<br>` family, which
+is rewritten to `HardBreak` (`convert.rs:969-975`).
+
+**Necessary?** Security and portability argue yes — Typst has no HTML
+renderer and allowing arbitrary HTML passthrough creates injection surface
+when output is later fed back into HTML-producing pipelines. This is a
+**conscious deviation**; the superset spec should declare it explicitly as
+*“raw HTML is accepted syntactically but produces no output”* rather than
+leave it implicit.
+
+---
+
+## Extensions (keep — these are the point)
+
+### E1. YAML metadata blocks (`QUILL` / `CARD`)
+
+Core Quillmark feature. Reclassified from “conflict” once C1 resolves the
+`---` ambiguity.
+
+### E2. `<br>`, `<br/>`, `<br />` → hard break
+
+`convert.rs:970`. Consistent with how most CommonMark renderers already
+treat literal `<br>` in HTML output. Low risk.
+
+### E3. Strikethrough `~~text~~`
+
+GFM extension, enabled via `ENABLE_STRIKETHROUGH`. Standard superset
+material.
+
+### E4. GFM pipe tables
+
+Enabled via `ENABLE_TABLES`. Mapped to `#table(...)` with column alignment
+preserved (`convert.rs:302-340`).
+
+### E5. Bidi control stripping (pre-parse)
+
+`normalize.rs:71-133` removes U+061C / U+200E-F / U+202A-E / U+2066-9 before
+parsing. Defensive; CommonMark is silent on invisible characters. Keep and
+document.
+
+### E6. HTML comment fence repair
+
+`normalize.rs:135-247` inserts a newline after `-->` when text trails on
+the same line, so that trailing text reaches the paragraph parser instead
+of being swallowed by the HTML block rule. Strictly an improvement in
+authoring ergonomics; keep and document as a normalization step.
+
+---
+
+## Gaps (CommonMark features not yet implemented)
+
+Each row is either fillable cheaply or deferrable under YAGNI.
+
+| # | Feature | Impl effort | YAGNI? | Recommendation |
+|---|---|---|---|---|
+| G1 | Images `![alt](src)` | High — requires asset system / resolver | **No, but defer** — images are core CommonMark, but without the asset system the Typst output has nothing to point at | Declare required for v1 of the standard; implement when the asset resolver lands |
+| G2 | Thematic break `***` / `___` | Trivial — `#line(length: 100%)` | No | Fill (C4) |
+| G3 | Block quote `>` | Low — `#quote(block: true)` | No | Fill (C5) |
+| G4 | Link titles `[x](url "title")` | Trivial — threaded through to Typst tooltip or ignored | **Yes** | Defer; document as accepted but not rendered |
+| G5 | Indented code block | Already handled via pulldown-cmark | — | No drift; just note in spec |
+| G6 | Autolink `<http://…>` | Already handled | — | No drift |
+| G7 | Entity / numeric char refs | Already handled by pulldown-cmark | — | Verify in tests |
+| G8 | Backslash escapes of ASCII punctuation | Already handled | — | Verify in tests |
+| G9 | Setext headings | Blocked by C1 | — | Unblocked once C1 resolves |
+| G10 | Hard break via trailing `\\` | Already handled | — | Verify in tests |
+
+### GFM / ecosystem features (beyond CommonMark)
+
+| # | Feature | Recommendation |
 |---|---|---|
-| Thematic break (`***`, `___`) | Required | Dropped |
-| Block quote (`> …`) | Required | Dropped (inner text may still render as paragraphs) |
-| Image (`![alt](src)`) | Required | Dropped |
-| Raw HTML block / inline | Required passthrough | Stripped except `<br>`, `<br/>`, `<br />`, which are rewritten to `HardBreak` (`convert.rs:970`) |
-| HTML comment (`<!-- -->`) | Treated as HTML block | Stripped from output; however stage 1a repairs any content after `-->` on the same line so it is not lost (`normalize.rs:135-247`) |
+| GE1 | Task lists `- [ ]` | YAGNI — defer |
+| GE2 | Footnotes | YAGNI — defer |
+| GE3 | Definition lists | YAGNI — defer |
+| GE4 | Math `$…$`, `$$…$$` | Potentially useful (Typst has native math). Defer as a future extension; document that `$` is currently literal, which is a *compatible* stance. |
+| GE5 | Autolinked URLs (bare) | YAGNI — defer |
 
-Setext H1/H2 is handled separately: pulldown-cmark emits the heading events,
-but `convert.rs:534-549` detects the setext source span and suppresses the
-heading tags while keeping the text as a paragraph (`convert.rs:977-991`).
+None of these are CommonMark features, so not implementing them does not
+break the superset property.
 
-### C. Inline Emphasis
+---
 
-Stage 2 adds one custom emphasis style and diverges from the CommonMark
-delimiter-run rules to support intraword formatting.
+## Summary — what needs to happen before “superset” is truthful
 
-| Markdown | CommonMark | Quillmark → Typst |
-|---|---|---|
-| `*x*`, `_x_` | italic | `#emph[x]` |
-| `**x**` | strong | `#strong[x]` |
-| `__x__` | strong (same as `**`) | `#underline[x]` — diverges (`convert.rs:264-280`) |
-| `foo__bar__baz` | literal (intraword `_` forbidden) | `foo#underline[bar]baz` — diverges; custom preprocessor at `convert.rs:1048-1230` recognizes intraword `__` via placeholder characters |
-| `foo~~bar~~baz` | n/a (strikethrough is GFM) | `foo#strike[bar]baz` — intraword strike is allowed, diverges from GFM's own delimiter-run rule |
-| `~~x~~` | n/a | `#strike[x]` (GFM extension) |
+Ordered by how much of the conflict surface they resolve:
 
-The placeholder pass uses U+FFF9/U+FFFA/U+FFFB/U+2060 as internal markers
-(`convert.rs:1028-1230`); these code points in source text could in theory
-collide but there is no current mitigation.
+1. **C1 — scope `---` frontmatter detection** so setext H2 and `---`
+   thematic breaks remain reachable. Largest single gain.
+2. **C2 — return `__` to strong**; introduce a dedicated underline token if
+   underline is wanted.
+3. **C3 — stop preprocessing intraword delimiters**; expose any desired
+   intraword formatting through a new, non-colliding token.
+4. **C4, C5 — implement thematic breaks (`***`, `___`) and block quotes.**
+   Cheap; gets two full CommonMark sections back.
+5. **C6 — declare raw-HTML behaviour** in the spec as an intentional silent
+   drop, with security rationale. No code change.
+6. **G1 — images** land together with the asset resolver.
 
-### D. Line Breaks
-
-| Source | CommonMark | Quillmark |
-|---|---|---|
-| Two trailing spaces + `\n` | hard break | `#linebreak()` |
-| `\\` + `\n` | hard break | `#linebreak()` (via pulldown-cmark) |
-| Single `\n` | soft break | rendered as a space (`convert.rs:479-481`) |
-| Literal `<br>`, `<br/>`, `<br />` | raw HTML | rewritten to `HardBreak` and emitted as `#linebreak()` (`convert.rs:970`) |
-
-### E. Links
-
-`[text](url "title")` — the title argument is parsed by pulldown-cmark but
-discarded; only `#link("url")[text]` is emitted (`convert.rs:285-291`).
-Reference-style links and autolinks work as pulldown-cmark supplies them.
-
-### F. Tables
-
-GFM pipe tables are enabled (`ENABLE_TABLES`) and mapped to `#table(...)` with
-column alignment preserved (`convert.rs:302-340`). This is a GFM extension, not
-core CommonMark.
-
-### G. Features Not Implemented
-
-Math (`$…$`), footnotes, definition lists, and GFM task lists are not handled.
-`$` is escaped rather than interpreted (`convert.rs:1277, 1489`).
-
-## Pre-parse Input Normalization
-
-Applied in `normalize_markdown` (`normalize.rs:249-277`) before stage 2:
-
-1. **Bidi control stripping** — removes U+061C, U+200E–U+200F, U+202A–U+202E,
-   U+2066–U+2069 so invisible characters cannot desynchronize delimiter runs
-   (`normalize.rs:71-133`). This is defensive and does not correspond to any
-   CommonMark rule.
-2. **HTML comment fence repair** — if text follows `-->` on the same line, a
-   newline is inserted so the trailing text escapes the HTML block rule and
-   reaches the paragraph parser (`normalize.rs:135-247`). This inverts
-   CommonMark HTML-block type 2 behaviour.
-
-## Typst-Specific Escaping
-
-`escape_markup` (`convert.rs:55-71`) escapes `\`, `//`, `~`, `*`, `_`, `` ` ``,
-`#`, `[`, `]`, `{`, `}`, `$`, `<`, `>`, and `@` in emitted text. This is a
-backend concern, not a CommonMark deviation, but it means round-tripping
-markdown through Quillmark is not lossless for these glyphs when they appear
-as literal text.
-
-## Resource Limits
-
-| Limit | Value | Source |
-|---|---|---|
-| Max input size | 10 MB | `parse.rs:498` |
-| Max YAML per block | 1 MB | `parse.rs:301` |
-| Max YAML depth | 100 | `parse.rs:257-263` |
-| Max markdown nesting depth | 100 | `convert.rs:164-177` via `MAX_NESTING_DEPTH` |
-| Max fields / cards | 1000 | `error.rs` constants |
-
-Deeply nested CommonMark constructs that exceed `MAX_NESTING_DEPTH` return a
-parse error rather than the CommonMark-specified unlimited nesting.
-
-## Drift Summary Table
-
-| Feature | CommonMark | Quillmark | Drift |
-|---|---|---|---|
-| ATX headings | ✅ | ✅ | — |
-| Setext headings | ✅ | ❌ suppressed | intentional |
-| Thematic break | ✅ | ❌ dropped | intentional; `---` is reserved |
-| Paragraphs | ✅ | ✅ | — |
-| Block quote | ✅ | ❌ dropped | intentional |
-| Ordered / unordered list | ✅ | ✅ | — |
-| Indented code block | ✅ | ✅ (via pulldown-cmark) | — |
-| Fenced code block | ✅ | ✅ | — |
-| HTML block | ✅ | ❌ stripped (except `<br>`) | intentional |
-| Link ref / autolink / inline link | ✅ | ✅ (titles ignored) | minor |
-| Image | ✅ | ❌ dropped | intentional |
-| Emphasis `*` / `_` | ✅ | ✅ | — |
-| Strong `**` | ✅ | ✅ → `#strong` | — |
-| Strong `__` | ✅ | ❌ reinterpreted as underline | intentional extension |
-| Intraword `_` | forbidden | allowed for `__` | extension |
-| Hard / soft break | ✅ | ✅ | — |
-| Backslash escapes | ✅ | ✅ | — |
-| Entity / numeric refs | ✅ | pass-through via pulldown-cmark | — |
-| Strikethrough (GFM) | n/a | ✅ | GFM |
-| Tables (GFM) | n/a | ✅ | GFM |
-| Task lists (GFM) | n/a | ❌ | — |
-| Footnotes | n/a | ❌ | — |
-| Math | n/a | ❌ (literal `$` escaped) | — |
-| Frontmatter `---` blocks | n/a | ✅ required | extension |
+Everything else (link titles, GFM extras, math, footnotes, task lists,
+definition lists) is YAGNI-deferrable without weakening the superset claim,
+provided the spec is explicit about which CommonMark/GFM features are
+“supported” vs “parsed but ignored” vs “out of scope”.
 
 ## References
 
