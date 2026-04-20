@@ -112,10 +112,28 @@ fn typst_alignment(align: &pulldown_cmark::Alignment) -> &'static str {
     }
 }
 
-/// Returns true if the HTML string is a `<br>` tag (any common variant).
-fn is_br_tag(html: &str) -> bool {
-    let lower = html.trim().to_ascii_lowercase();
-    lower == "<br>" || lower == "<br/>" || lower == "<br />"
+/// Returns true if the HTML string is a `<u>` open tag (tolerates whitespace and case).
+fn is_u_open_tag(html: &str) -> bool {
+    let s = html.trim();
+    // Accept <u>, <U>, <u >, <U > (arbitrary whitespace before >)
+    if s.starts_with('<') && s.ends_with('>') {
+        let inner = s[1..s.len() - 1].trim();
+        inner.eq_ignore_ascii_case("u")
+    } else {
+        false
+    }
+}
+
+/// Returns true if the HTML string is a `</u>` close tag (tolerates whitespace and case).
+fn is_u_close_tag(html: &str) -> bool {
+    let s = html.trim();
+    // Accept </u>, </U>, </u >, </U >
+    if s.starts_with("</") && s.ends_with('>') {
+        let inner = s[2..s.len() - 1].trim();
+        inner.eq_ignore_ascii_case("u")
+    } else {
+        false
+    }
 }
 
 /// Sanitizes a code-block language tag for safe inclusion in Typst raw blocks.
@@ -162,6 +180,7 @@ where
     let mut in_code_block = false; // Track if we're inside a code block
     let mut table_alignments: Vec<pulldown_cmark::Alignment> = Vec::new(); // Column alignments for current table
     let mut depth = 0; // Track nesting depth for DoS prevention
+    let mut in_image = false; // Suppress text events inside ![alt](src)
     let iter = iter.peekable();
 
     for (event, range) in iter {
@@ -262,11 +281,15 @@ where
                         end_newline = false;
                     }
                     Tag::Strong => {
-                        // Detect whether this is __ (underline) or ** (bold) by peeking at source
+                        // Detect whether this is __ (underline), <u> (underline), or ** (bold)
+                        // by peeking at source. Per spec §6.2, __ and <u> both render as underline;
+                        // <u> is synthesized as Tag::Strong by MarkdownFixer.
                         let kind = if range.start + 2 <= source.len() {
-                            match &source[range.start..range.start + 2] {
-                                "__" => StrongKind::Underline,
-                                _ => StrongKind::Bold, // Default to bold for ** or edge cases
+                            let head = &source[range.start..range.start + 2];
+                            if head == "__" || head.eq_ignore_ascii_case("<u") {
+                                StrongKind::Underline
+                            } else {
+                                StrongKind::Bold // ** or edge cases
                             }
                         } else {
                             StrongKind::Bold // Fallback for very short ranges
@@ -288,6 +311,17 @@ where
                         output.push_str("#link(\"");
                         output.push_str(&escape_string(&dest_url));
                         output.push_str("\")[");
+                        end_newline = false;
+                    }
+                    Tag::Image {
+                        dest_url, title: _, ..
+                    } => {
+                        // Spec §6.3: images are required for v1. Emit #image("url") and
+                        // suppress alt-text events until TagEnd::Image.
+                        output.push_str("#image(\"");
+                        output.push_str(&escape_string(&dest_url));
+                        output.push_str("\")");
+                        in_image = true;
                         end_newline = false;
                     }
                     Tag::Heading { level, .. } => {
@@ -416,6 +450,10 @@ where
                         output.push(']');
                         end_newline = false;
                     }
+                    TagEnd::Image => {
+                        // Alt text was suppressed; just clear the in_image flag.
+                        in_image = false;
+                    }
                     TagEnd::Heading(_) => {
                         output.push('\n');
                         output.push('\n'); // Extra newline after heading
@@ -444,7 +482,9 @@ where
                 }
             }
             Event::Text(text) => {
-                if in_code_block {
+                if in_image {
+                    // Suppress alt text inside ![alt](src) — spec §6.3
+                } else if in_code_block {
                     // Code block content - no escaping needed
                     output.push_str(&text);
                     end_newline = text.ends_with('\n');
@@ -483,8 +523,8 @@ where
             _ => {
                 // Ignore other events not specified in requirements
                 // (math, footnotes, etc.)
-                // Note: <br> HTML tags are converted to HardBreak in MarkdownFixer;
-                // all other HTML is stripped.
+                // Note: per spec §6.2/§6.3, raw HTML produces no output except <u>…</u>,
+                // which MarkdownFixer rewrites to Start/End(Tag::Strong) with Underline kind.
             }
         }
     }
@@ -965,10 +1005,18 @@ where
             // 2. Pull from inner
             let (event, range) = self.inner.next()?;
 
-            // 3. Convert <br> tags to HardBreak; strip all other HTML
+            // 3. Handle HTML: allowlist <u>…</u> as underline; strip everything else.
+            // Spec §6.2 deviation 2 / §6.3: <br> and all other raw HTML produce no output.
             let (event, range) = match event {
-                Event::InlineHtml(ref html) | Event::Html(ref html) if is_br_tag(html) => {
-                    (Event::HardBreak, range)
+                Event::InlineHtml(ref html) | Event::Html(ref html)
+                    if is_u_open_tag(html) =>
+                {
+                    (Event::Start(Tag::Strong), range)
+                }
+                Event::InlineHtml(ref html) | Event::Html(ref html)
+                    if is_u_close_tag(html) =>
+                {
+                    (Event::End(TagEnd::Strong), range)
                 }
                 Event::Html(_) | Event::InlineHtml(_) => continue,
                 other => (other, range),
@@ -2330,31 +2378,104 @@ mod tests {
     }
 
     #[test]
-    fn test_table_br_tag_in_cell() {
-        // <br> is the standard way to create line breaks within table cells
+    fn test_table_br_tag_in_cell_is_stripped() {
+        // Per MARKDOWN.md §6.2 / §6.3, raw HTML (including <br>) produces no output.
         let md = "| A |\n|---|\n| line1<br>line2 |";
         let out = mark_to_typst(md).unwrap();
         assert!(
-            out.contains("line1#linebreak()line2"),
-            "<br> should produce line break in cell: {out}"
+            !out.contains("linebreak"),
+            "<br> must not produce #linebreak(): {out}"
+        );
+        assert!(
+            !out.contains("<br"),
+            "<br> literal must be stripped: {out}"
+        );
+        assert!(out.contains("line1"), "surrounding text preserved: {out}");
+        assert!(out.contains("line2"), "surrounding text preserved: {out}");
+    }
+
+    #[test]
+    fn test_table_br_tag_variants_stripped() {
+        // <br/> and <br /> variants must also produce no output.
+        for md in [
+            "| A |\n|---|\n| a<br/>b |",
+            "| A |\n|---|\n| a<br />b |",
+        ] {
+            let out = mark_to_typst(md).unwrap();
+            assert!(
+                !out.contains("linebreak"),
+                "<br> variants must not emit #linebreak(): {out}"
+            );
+            assert!(out.contains('a') && out.contains('b'), "text kept: {out}");
+        }
+    }
+
+    #[test]
+    fn test_u_tag_renders_as_underline() {
+        // Spec §6.2: <u>…</u> is the one allowlisted HTML tag; renders as underline.
+        let md = "This is <u>underlined</u> text.";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("#underline[underlined]"),
+            "<u> must render as #underline[…]: {out}"
         );
     }
 
     #[test]
-    fn test_table_br_tag_variants() {
-        // Test <br/> and <br /> variants
-        let md_slash = "| A |\n|---|\n| a<br/>b |";
-        let out_slash = mark_to_typst(md_slash).unwrap();
+    fn test_u_tag_intraword_renders_as_underline() {
+        // <u> exists specifically to cover arbitrary-range underline that __ cannot reach.
+        let md = "pre<u>mid</u>post";
+        let out = mark_to_typst(md).unwrap();
         assert!(
-            out_slash.contains("a#linebreak()b"),
-            "<br/> should produce line break: {out_slash}"
+            out.contains("#underline[mid]"),
+            "intraword <u> must render as #underline[…]: {out}"
         );
+        assert!(out.contains("pre"), "prefix preserved: {out}");
+        assert!(out.contains("post"), "suffix preserved: {out}");
+    }
 
-        let md_space_slash = "| A |\n|---|\n| a<br />b |";
-        let out_space_slash = mark_to_typst(md_space_slash).unwrap();
+    #[test]
+    fn test_u_tag_case_insensitive() {
+        // Accept <U>…</U> as well as mixed case.
+        let md = "<U>upper</U>";
+        let out = mark_to_typst(md).unwrap();
         assert!(
-            out_space_slash.contains("a#linebreak()b"),
-            "<br /> should produce line break: {out_space_slash}"
+            out.contains("#underline[upper]"),
+            "<U> must render as #underline[…]: {out}"
+        );
+    }
+
+    #[test]
+    fn test_raw_html_is_stripped() {
+        // Spec §6.2 deviation 2: all raw HTML except <u> produces no output.
+        let md = "before <span class=\"x\">inner</span> after";
+        let out = mark_to_typst(md).unwrap();
+        assert!(!out.contains("<span"), "span tag stripped: {out}");
+        assert!(!out.contains("</span>"), "span close tag stripped: {out}");
+        assert!(out.contains("before"), "text preserved: {out}");
+        assert!(out.contains("after"), "text preserved: {out}");
+        assert!(out.contains("inner"), "inner text preserved: {out}");
+    }
+
+    #[test]
+    fn test_image_renders_as_image() {
+        // Spec §6.3: images are required for v1; emit #image("url").
+        let md = "![alt text](path/to/img.png)";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("#image(\"path/to/img.png\")"),
+            "image must emit #image(\"…\"): {out}"
+        );
+        assert!(!out.contains("alt text"), "alt text suppressed: {out}");
+    }
+
+    #[test]
+    fn test_image_with_empty_alt() {
+        let md = "![](x.png)";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("#image(\"x.png\")"),
+            "empty-alt image emits #image: {out}"
         );
     }
 
