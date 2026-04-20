@@ -56,8 +56,9 @@ fn test_quill_engine_backend_not_found() {
 
     assert!(result.is_err());
     match result {
-        Err(quillmark::RenderError::UnsupportedBackend { .. }) => {}
-        other => panic!("Expected UnsupportedBackend, got: {:?}", other),
+        Err(quillmark::RenderError::Single { ref diag })
+            if diag.code.as_deref() == Some("engine::backend_not_found") => {}
+        other => panic!("Expected engine::backend_not_found, got: {:?}", other),
     }
 }
 
@@ -111,8 +112,10 @@ fn test_quill_render_succeeds_with_engine_loaded_quill() {
         },
     );
 
-    if let Err(quillmark::RenderError::EngineCreation { diag }) = &result {
-        if diag.message.contains("No fonts found") {
+    if let Err(quillmark::RenderError::Single { diag }) = &result {
+        if diag.code.as_deref() == Some("typst::world_creation")
+            && diag.message.contains("No fonts found")
+        {
             return;
         }
     }

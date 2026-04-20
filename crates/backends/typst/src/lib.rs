@@ -75,7 +75,7 @@ impl SessionHandle for TypstSession {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
 
         if !SUPPORTED_FORMATS.contains(&format) {
-            return Err(RenderError::FormatNotSupported {
+            return Err(RenderError::Single {
                 diag: Box::new(
                     Diagnostic::new(
                         Severity::Error,

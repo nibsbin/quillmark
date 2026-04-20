@@ -25,7 +25,8 @@ fn test_with_font_collision() {
     let result = workflow.add_font("custom.ttf", vec![4, 5, 6]);
     assert!(matches!(
         result,
-        Err(RenderError::DynamicFontCollision { .. })
+        Err(RenderError::Single { ref diag })
+            if diag.code.as_deref() == Some("workflow::font_collision")
     ));
 }
 

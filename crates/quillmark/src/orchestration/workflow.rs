@@ -38,7 +38,7 @@ impl Workflow {
             .quill
             .config
             .coerce(parsed.fields())
-            .map_err(|e| RenderError::ValidationFailed {
+            .map_err(|e| RenderError::Single {
                 diag: Box::new(
                     Diagnostic::new(Severity::Error, e.to_string())
                         .with_code("validation::coercion_failed".to_string())
@@ -193,7 +193,7 @@ impl Workflow {
             .quill
             .config
             .coerce(parsed.fields())
-            .map_err(|e| RenderError::ValidationFailed {
+            .map_err(|e| RenderError::Single {
                 diag: Box::new(
                     Diagnostic::new(Severity::Error, e.to_string())
                         .with_code("validation::coercion_failed".to_string())
@@ -228,7 +228,7 @@ impl Workflow {
                     .map(|e| format!("- {}", e))
                     .collect::<Vec<_>>()
                     .join("\n");
-                Err(RenderError::ValidationFailed {
+                Err(RenderError::Single {
                     diag: Box::new(
                         Diagnostic::new(Severity::Error, error_message)
                             .with_code("validation::document_invalid".to_string())
@@ -286,7 +286,7 @@ impl Workflow {
 
         // Check for collision
         if self.dynamic_assets.contains_key(&filename) {
-            return Err(RenderError::DynamicAssetCollision {
+            return Err(RenderError::Single {
                 diag: Box::new(
                     Diagnostic::new(
                         Severity::Error,
@@ -339,7 +339,7 @@ impl Workflow {
 
         // Check for collision
         if self.dynamic_fonts.contains_key(&filename) {
-            return Err(RenderError::DynamicFontCollision {
+            return Err(RenderError::Single {
                 diag: Box::new(
                     Diagnostic::new(
                         Severity::Error,
@@ -386,7 +386,7 @@ impl Workflow {
                 contents: contents.clone(),
             };
             quill.files.insert(&prefixed_path, file_node).map_err(|_| {
-                RenderError::DynamicAssetCollision {
+                RenderError::Single {
                     diag: Box::new(
                         Diagnostic::new(
                             Severity::Error,
@@ -404,7 +404,7 @@ impl Workflow {
                 contents: contents.clone(),
             };
             quill.files.insert(&prefixed_path, file_node).map_err(|_| {
-                RenderError::DynamicFontCollision {
+                RenderError::Single {
                     diag: Box::new(
                         Diagnostic::new(
                             Severity::Error,

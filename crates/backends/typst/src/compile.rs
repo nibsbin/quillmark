@@ -67,7 +67,7 @@ pub fn compile_to_document(
     json_data: &str,
 ) -> Result<PagedDocument, RenderError> {
     let world = QuillWorld::new_with_data(quill, plated_content, json_data).map_err(|e| {
-        RenderError::EngineCreation {
+        RenderError::Single {
             diag: Box::new(
                 Diagnostic::new(
                     Severity::Error,
@@ -176,7 +176,7 @@ pub fn render_document_pages(
 ) -> Result<RenderResult, RenderError> {
     // PDF does not support selective page rendering
     if format == OutputFormat::Pdf && pages.is_some() {
-        return Err(RenderError::FormatNotSupported {
+        return Err(RenderError::Single {
             diag: Box::new(
                 Diagnostic::new(
                     Severity::Error,
@@ -270,7 +270,7 @@ pub fn render_document_pages(
                 OutputFormat::Pdf,
             ))
         }
-        OutputFormat::Txt => Err(RenderError::FormatNotSupported {
+        OutputFormat::Txt => Err(RenderError::Single {
             diag: Box::new(
                 Diagnostic::new(
                     Severity::Error,

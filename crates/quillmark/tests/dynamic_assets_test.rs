@@ -26,7 +26,8 @@ fn test_with_asset_collision() {
     let result = workflow.add_asset("taro.png", vec![4, 5, 6]);
     assert!(matches!(
         result,
-        Err(RenderError::DynamicAssetCollision { .. })
+        Err(RenderError::Single { ref diag })
+            if diag.code.as_deref() == Some("workflow::asset_collision")
     ));
 }
 
