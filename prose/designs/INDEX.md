@@ -8,7 +8,7 @@
 ## Components
 
 - **[PARSE.md](PARSE.md)** - Markdown parsing and Extended YAML Metadata Standard
-- **[EXTENDED_MARKDOWN.md](EXTENDED_MARKDOWN.md)** - Extended Markdown format specification
+- **[MARKDOWN.md](MARKDOWN.md)** - Quillmark Markdown specification (superset of CommonMark)
 - **[QUILL.md](QUILL.md)** - Quill bundle structure and file tree API
 - **[QUILL_VALUE.md](QUILL_VALUE.md)** - Unified value type for YAML/JSON conversions
 - **[VERSIONING.md](VERSIONING.md)** - Quill version resolution

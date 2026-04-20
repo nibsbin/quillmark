@@ -2,7 +2,7 @@
 
 Implementation notes for `quillmark-core/src/parse.rs`.
 
-> **Specification**: See [EXTENDED_MARKDOWN.md](./EXTENDED_MARKDOWN.md) for the authoritative syntax standard.
+> **Specification**: See [MARKDOWN.md](./MARKDOWN.md) for the authoritative syntax standard.
 > **Cards**: See [CARDS.md](./CARDS.md) for card block semantics.
 
 ## Architecture
