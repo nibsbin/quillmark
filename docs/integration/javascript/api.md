@@ -12,7 +12,7 @@ npm install @quillmark-test/wasm
 import { ParsedDocument, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
-const quill = engine.quill(treeMapOrRecord);
+const quill = engine.quill(tree);
 
 const parsed = ParsedDocument.fromMarkdown(markdown); // requires QUILL in frontmatter
 const result = quill.render(parsed, { format: "pdf" });
@@ -26,7 +26,7 @@ Creates an engine with built-in backend registrations.
 
 ### `engine.quill(tree)`
 
-Builds and validates a quill from `Map<string, Uint8Array>` or `Record<string, Uint8Array>`, then attaches the declared backend.
+Builds and validates a quill from a `Map<string, Uint8Array>`, then attaches the declared backend.
 
 This is the canonical WASM path for a render-ready quill.
 
