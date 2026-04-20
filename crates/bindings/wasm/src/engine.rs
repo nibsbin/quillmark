@@ -124,11 +124,7 @@ impl Quill {
         let core_parsed = to_core_parsed(parsed).map_err(|e| {
             WasmError::from(format!("render: invalid ParsedDocument: {:?}", e)).to_js_value()
         })?;
-        let rust_opts = quillmark_core::RenderOptions {
-            output_format: opts.format.map(|f| f.into()),
-            ppi: opts.ppi,
-            pages: opts.pages,
-        };
+        let rust_opts: quillmark_core::RenderOptions = opts.into();
         let result = self
             .inner
             .render(core_parsed, &rust_opts)
@@ -237,11 +233,7 @@ impl RenderSession {
     #[wasm_bindgen(js_name = render)]
     pub fn render(&self, opts: RenderOptions) -> Result<RenderResult, JsValue> {
         let start = now_ms();
-        let rust_opts = quillmark_core::RenderOptions {
-            output_format: opts.format.map(|f| f.into()),
-            ppi: opts.ppi,
-            pages: opts.pages,
-        };
+        let rust_opts: quillmark_core::RenderOptions = opts.into();
 
         let result = self
             .inner

@@ -23,7 +23,7 @@
 //! const quill = engine.quill(tree);
 //!
 //! const parsed = ParsedDocument.fromMarkdown(markdown);
-//! const result = quill.render(parsed, { format: 'pdf' });
+//! const result = quill.render(parsed);
 //! const pdfBytes = result.artifacts[0].bytes;
 //! ```
 
