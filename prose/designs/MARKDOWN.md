@@ -16,8 +16,8 @@ structure under this spec, *except* for the two deviations declared in
 §6.2. Additionally, this spec defines:
 
 - **Structured data** — YAML frontmatter and card blocks (§3).
-- **Extensions** — pipe tables, strikethrough, intraword underline via
-  `__`, and `<br>` recognition (§6.1).
+- **Extensions** — strikethrough, pipe tables, and `<u>` for underline
+  (§6.1).
 
 Documents containing neither frontmatter nor card blocks are ordinary
 CommonMark, parsed as such.
@@ -146,22 +146,29 @@ CommonMark 0.31.2 with the extensions and deviations below.
 |---|---|---|
 | Strikethrough | `~~text~~` | GFM rules: word-bounded delimiter runs only. |
 | Pipe tables | GFM pipe-table syntax with alignment rows | Supports `:---`, `:---:`, `---:` alignment. |
-| Intraword underline | `foo__bar__baz` → `foo<u>bar</u>baz` | Deviation from CommonMark §6.2 delimiter-run rules, scoped to `__` only (see 6.2). |
-| Line break via `<br>` | Literal `<br>`, `<br/>`, `<br />` | Rewritten to a hard line break. The only HTML tag with rendered output. |
+| Underline (HTML) | `<u>text</u>` | The one allowlisted HTML tag (see §6.2). Handles intraword and arbitrary-range underline where the `__` delimiter rule does not reach. |
+
+Inline `__text__` *also* produces underline (§6.2, deviation 1), but
+follows CommonMark delimiter-run rules and is therefore word-bounded.
+Intraword underline uses `<u>…</u>`.
 
 ### 6.2 Declared Deviations from CommonMark
 
-1. **`__text__` renders as underline, not strong.** Use `**text**` for
+1. **`__text__` renders as underline, not strong.** Standard CommonMark
+   delimiter-run rules still apply (word-bounded). Use `**text**` for
    strong emphasis. Precedent: Discord. Consequence: `__init__` in prose
    renders as underlined "init"; wrap code-like tokens in backticks
    (`` `__init__` ``) — standard practice.
-2. **Raw HTML other than `<br>` is accepted syntactically but produces no
-   output.** The parser recognises HTML per CommonMark §4.6 / §6.11 and
-   discards the events. Rationale: Typst has no HTML renderer, and
-   arbitrary passthrough would create an injection vector for downstream
-   HTML-producing tooling.
+2. **Raw HTML is accepted syntactically but produces no output, except
+   `<u>…</u>` which renders as underline.** The parser recognises HTML per
+   CommonMark §4.6 / §6.11, discards every event, and re-emits only the
+   `<u>` wrapper. Rationale: Typst has no HTML renderer, and arbitrary
+   passthrough would create an injection vector for downstream
+   HTML-producing tooling; `<u>` is the one exception because no
+   CommonMark-native syntax covers arbitrary-range underline.
 
-No other syntax deviates from CommonMark.
+No other syntax deviates from CommonMark. Delimiter-run semantics for `*`,
+`_`, `**`, `__`, and `~~` follow CommonMark and GFM exactly.
 
 ### 6.3 Out of Scope
 
@@ -175,6 +182,9 @@ implemented in a future revision:
 - Math (`$…$`, `$$…$$`), footnotes, task lists, definition lists — not
   supported; `$` is literal.
 - HTML comments — accepted syntactically, not rendered (see §6.2).
+- `<br>`, `<br/>`, `<br />` — follow the raw-HTML rule (non-rendering);
+  authors use CommonMark-native hard breaks (trailing two spaces plus
+  newline, or trailing `\\` plus newline).
 
 ## 7. Input Normalization
 
