@@ -91,15 +91,12 @@ text between them. Surface via a linter warning: "a `---` pair surrounding a
 **Current behaviour** — `convert.rs:264-280` inspects the source and maps
 `__`-bounded strong spans to `#underline[...]` instead of `#strong[...]`.
 
-**Necessary?** Underline is a useful feature. Hijacking CommonMark strong is
-not the only way to expose it.
-
-**Resolution candidates**
-1. Give `__` back to strong; expose underline via a new token (`++text++`,
-   `==text==`, `[u]…[/u]`, or `<u>…</u>` admitted through the HTML rule).
-2. Keep the current mapping and explicitly declare the superset property
-   broken for `__`. (Discouraged — loses compatibility with millions of
-   existing documents.)
+**Resolution (adopted)** — keep as an intentional deviation. Discord uses
+the same mapping (`__` = underline, `**` = bold), so the pattern has
+real-world precedent and author muscle memory. The spec must declare this
+explicitly: Quillmark Markdown is a superset of CommonMark *except* that
+`__` is rebound from strong to underline. Authors who want strong inside
+an underscore word reach for `**`.
 
 ### C3. Intraword `__` and `~~` permitted
 
@@ -108,15 +105,22 @@ replacing intraword `__…__` and `~~…~~` runs with placeholder characters
 before handing off to `pulldown-cmark`, which would otherwise (correctly)
 treat them as literal per CommonMark §6.2 / GFM delimiter rules.
 
-**Necessary?** Low-value ergonomics at the cost of AST divergence. The CM
-rule exists specifically so that identifiers like `snake_case_name` do not
-accidentally italicise.
+**Resolution (adopted)** — **split:**
 
-**Resolution candidates**
-1. Remove the preprocessor; keep CommonMark delimiter-run semantics.
-2. Restrict the extension to a delimiter that CommonMark does not assign
-   meaning to (e.g. `==…==` for highlight, `++…++` for underline) so
-   identifier text is unaffected.
+- **Keep** the preprocessor **for `__` only.** Since C2 already reassigns
+  `__` to underline (a deliberate, documented deviation), bending its
+  delimiter-run rule to permit intraword use is a scoped extension of the
+  same deviation. This is the native syntax for intraword underline — no
+  HTML fallback required. Intraword italic and bold already work in
+  unmodified CommonMark via `*` and `**` respectively, so no preprocessing
+  is needed for those.
+- **Drop** the preprocessor **for `~~`.** Strikethrough reverts to standard
+  GFM delimiter rules (word-bounded only). `snake~~case~~name` becomes
+  literal text, matching every other GFM renderer.
+
+**Known cost.** Tokens like `__init__` in prose render as underlined
+"init". Authors wrap code-like identifiers in backticks
+(`` `__init__` ``) — already standard practice.
 
 ### C4. Thematic break dropped for `***` and `___`
 
@@ -142,12 +146,13 @@ support). Nested quotes can flatten or preserve depth per
 **Current behaviour** — all HTML events dropped except `<br>` family, which
 is rewritten to `HardBreak` (`convert.rs:969-975`).
 
-**Necessary?** Security and portability argue yes — Typst has no HTML
-renderer and allowing arbitrary HTML passthrough creates injection surface
-when output is later fed back into HTML-producing pipelines. This is a
-**conscious deviation**; the superset spec should declare it explicitly as
-*“raw HTML is accepted syntactically but produces no output”* rather than
-leave it implicit.
+**Resolution (adopted)** — conscious deviation. Typst has no HTML renderer
+and allowing arbitrary HTML passthrough creates an injection surface when
+output is piped into HTML-producing tooling. The spec declares raw HTML
+*"accepted syntactically but producing no output,"* with `<br>` as the
+sole exception (pragmatic — WYSIWYG editors emit it). No other tag is
+admitted; intraword formatting is served natively by `__` (see C3), not
+by `<u>`.
 
 ---
 
@@ -220,28 +225,27 @@ break the superset property.
 
 ---
 
-## Summary — what needs to happen before “superset” is truthful
+## Decision summary
 
-Ordered by how much of the conflict surface they resolve:
+Quillmark Markdown is specified as a superset of CommonMark with two
+explicit, documented deviations (`__` rebound to underline, and raw HTML
+other than `<br>` dropped). Everything else either matches CommonMark or is
+an additive extension.
 
-1. **C1 — contextual `---` fence detection** via the sentinel + leading-blank
-   rules. Keeps one delimiter for all metadata blocks, restores setext H2
-   and `---` thematic breaks, and folds "main card" back into "frontmatter"
-   as a naming fix. Largest single gain. Unblocks G9.
-2. **C2 — return `__` to strong**; introduce a dedicated underline token if
-   underline is wanted.
-3. **C3 — stop preprocessing intraword delimiters**; expose any desired
-   intraword formatting through a new, non-colliding token.
-4. **C4, C5 — implement thematic breaks (`***`, `___`) and block quotes.**
-   Cheap; gets two full CommonMark sections back.
-5. **C6 — declare raw-HTML behaviour** in the spec as an intentional silent
-   drop, with security rationale. No code change.
-6. **G1 — images** land together with the asset resolver.
+| ID | Status | Action |
+|---|---|---|
+| C1 | **Resolved** — contextual `---` fence detection (sentinel + leading-blank rules). Restores setext H2 and `---` thematic breaks. Folds "main card" into "frontmatter" naming. | Implement |
+| C2 | **Resolved** — keep `__` = underline as a declared deviation (Discord precedent). | Document in spec; no code change |
+| C3 | **Resolved** — keep the intraword preprocessor for `__` only; drop it for `~~` (standard GFM). | Narrow preprocessor |
+| C4 | **Resolved** — implement `***` / `___` thematic breaks as `#line(length: 100%)`. | Implement |
+| C5 | **Resolved** — implement block quotes as `#quote(block: true)[...]`. | Implement |
+| C6 | **Resolved** — declare raw HTML as "accepted but non-rendering"; `<br>` as the single pragmatic exception. | Document in spec; no code change |
+| G1 | **Deferred** — images land with the asset resolver. Required for v1. | Track with asset work |
+| G9 | **Unblocked** by C1. Setext headings work once the `---` rules are contextual. | Implement alongside C1 |
+| G2 / G3 | Folded into C4 / C5. | — |
+| G4, GFM extras, math, footnotes, task/def lists | **Deferred (YAGNI).** Spec classifies each as "parsed but ignored" or "out of scope." | Document in spec |
 
-Everything else (link titles, GFM extras, math, footnotes, task lists,
-definition lists) is YAGNI-deferrable without weakening the superset claim,
-provided the spec is explicit about which CommonMark/GFM features are
-“supported” vs “parsed but ignored” vs “out of scope”.
+No open conflicts. Remaining work is implementation + spec authoring.
 
 ## References
 
