@@ -385,8 +385,10 @@ impl Workflow {
             let file_node = FileTreeNode::File {
                 contents: contents.clone(),
             };
-            quill.files.insert(&prefixed_path, file_node).map_err(|_| {
-                RenderError::Single {
+            quill
+                .files
+                .insert(&prefixed_path, file_node)
+                .map_err(|_| RenderError::Single {
                     diag: Box::new(
                         Diagnostic::new(
                             Severity::Error,
@@ -394,8 +396,7 @@ impl Workflow {
                         )
                         .with_code("workflow::asset_collision".to_string()),
                     ),
-                }
-            })?;
+                })?;
         }
 
         for (filename, contents) in &self.dynamic_fonts {
@@ -403,8 +404,10 @@ impl Workflow {
             let file_node = FileTreeNode::File {
                 contents: contents.clone(),
             };
-            quill.files.insert(&prefixed_path, file_node).map_err(|_| {
-                RenderError::Single {
+            quill
+                .files
+                .insert(&prefixed_path, file_node)
+                .map_err(|_| RenderError::Single {
                     diag: Box::new(
                         Diagnostic::new(
                             Severity::Error,
@@ -412,8 +415,7 @@ impl Workflow {
                         )
                         .with_code("workflow::font_collision".to_string()),
                     ),
-                }
-            })?;
+                })?;
         }
 
         Ok(quill)
