@@ -43,7 +43,7 @@ Get started with Quillmark in Python or JavaScript.
     ## Basic Usage
 
     ```javascript
-    import { Quillmark } from "@quillmark-test/wasm";
+    import { ParsedDocument, Quillmark } from "@quillmark-test/wasm";
 
     const engine = new Quillmark();
     const enc = new TextEncoder();
@@ -60,6 +60,7 @@ Get started with Quillmark in Python or JavaScript.
 
     # Hello World`;
 
-    const result = quill.render(markdown, { format: "pdf" });
+    const parsed = ParsedDocument.fromMarkdown(markdown);
+    const result = quill.render(parsed, { format: "pdf" });
     const pdfBytes = result.artifacts[0].bytes;
     ```
