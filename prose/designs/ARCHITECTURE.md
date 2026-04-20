@@ -1,28 +1,30 @@
 # Quillmark Architecture
 
-## System Overview
+## TL;DR
 
-Quillmark converts Markdown with YAML frontmatter into output artifacts (PDF, SVG, TXT). Data flow:
+Quillmark converts Markdown with YAML frontmatter into output artifacts (PDF, SVG, PNG, TXT). A `Workflow` orchestrates the pipeline; backends do the heavy compilation.
 
-1. **Parse** — YAML/frontmatter extraction, CARD aggregation, bidi stripping, HTML fence normalization
-2. **Normalize** — Type coercion, defaults from Quill schema, backend `transform_fields`
-3. **Compile** — Backend processes plate content with injected JSON data
+## Data Flow
+
+1. **Parse** — YAML frontmatter extraction, bidi stripping, HTML fence normalization
+2. **Normalize** — Type coercion, schema defaults, field validation
+3. **Compile** — Backend's `open()` receives plate + JSON data and returns a `RenderSession`; `RenderSession::render()` produces artifacts
 
 ## Crate Structure
 
 ### `quillmark-core`
 
-Types: `Backend`, `Artifact`, `OutputFormat`, `ParsedDocument`, `Quill`, `RenderError`, `Diagnostic`, `Severity`, `Location`, `QuillValue`.
+Foundation types and traits. No backend dependencies; backends depend on this crate.
 
-No external backend dependencies; backends depend on core.
+Key exports: `Backend`, `Artifact`, `OutputFormat`, `RenderOptions`, `RenderSession`, `ParsedDocument`, `Quill`, `FileTreeNode`, `QuillIgnore`, `RenderError`, `Diagnostic`, `Severity`, `Location`, `RenderResult`, `QuillValue`, `QuillReference`, `Version`, `VersionSelector`, `BODY_FIELD`.
 
 ### `quillmark` (orchestration)
 
-High-level API: `Quillmark` (engine), `Workflow` (pipeline). Handles parse → compose → compile, schema coercion, backend auto-registration, and default Quill registration.
+High-level API: `Quillmark` (engine), `Workflow` (pipeline), `QuillRef`. Handles parse → normalize → compile, schema coercion, and backend auto-registration.
 
 ### `backends/quillmark-typst`
 
-Implements `Backend` for PDF/SVG. Markdown→Typst via `transform_fields`. Injects JSON as `@local/quillmark-helper` package. Resolves fonts and assets. See [GLUE_METADATA.md](GLUE_METADATA.md).
+Implements `Backend` for PDF, SVG, and PNG. Converts Markdown fields to Typst markup inside `open()`. Resolves fonts and assets. See [GLUE_METADATA.md](GLUE_METADATA.md).
 
 ### `bindings/quillmark-python`
 
@@ -46,25 +48,26 @@ Fuzz tests for parsing, templating, and rendering.
 
 ## Core Interfaces
 
-- **`Quillmark`** — Engine managing backends and quills
-- **`Workflow`** — Rendering pipeline (parse → template → compile)
-- **`Backend`** — Trait for output formats (`Send + Sync`)
-- **`Quill`** — Template bundle (plate + assets/packages)
-- **`ParsedDocument`** — Frontmatter + body from markdown
+- **`Quillmark`** — Engine managing registered backends; auto-registers `TypstBackend` when the `typst` feature is enabled
+- **`Workflow`** — Rendering pipeline (parse → normalize → compile); supports dynamic asset/font injection and `dry_run` validation
+- **`Backend`** — Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open()`
+- **`RenderSession`** — Opaque handle returned by `Backend::open()`; call `render(opts)` to produce artifacts
+- **`Quill`** — Format bundle (plate + assets/packages/metadata)
+- **`ParsedDocument`** — Frontmatter fields + body from Markdown
 - **`Diagnostic`** — Structured error with severity, code, message, location, hint, source chain
-- **`RenderResult`** — Output artifacts + warnings
+- **`RenderResult`** — Output artifacts + accumulated warnings
 
 ## Data Injection
 
-Backends receive:
-- `plate_content` — raw plate from `Quill.plate` (empty for plate-less backends)
-- `json_data` — JSON after coercion, defaults, normalization, and `transform_fields`
-- `quill` — bundle with assets, packages, and any dynamic assets/fonts injected
+`Backend::open()` receives:
+- `plate_content` — raw plate string from `Quill.plate` (empty string for plate-less backends)
+- `json_data` — JSON object after coercion, defaults, normalization
+- `quill` — bundle with static assets/packages plus any dynamic assets/fonts injected via `Workflow::add_asset` / `add_font`
 
 See [GLUE_METADATA.md](GLUE_METADATA.md) for the Typst helper package.
 
 ## Backend Implementation
 
-Implement the `Backend` trait: `id()`, `supported_formats()`, `plate_extension_types()`, `transform_fields()`, `compile()`. Optionally provide `default_quill()`.
+Implement three methods of the `Backend` trait: `id()`, `supported_formats()`, `open()`. Return a `RenderSession` wrapping a `SessionHandle` that handles format-specific rendering.
 
-See `backends/quillmark-typst` for reference implementation.
+See `backends/quillmark-typst` for the reference implementation.

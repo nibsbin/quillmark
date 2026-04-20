@@ -10,7 +10,7 @@
 - **[PARSE.md](PARSE.md)** - Markdown parsing and Extended YAML Metadata Standard
 - **[EXTENDED_MARKDOWN.md](EXTENDED_MARKDOWN.md)** - Extended Markdown format specification
 - **[QUILL.md](QUILL.md)** - Quill bundle structure and file tree API
-- **[QUILL_VALUE.md](QUILL_VALUE.md)** - Unified value type for TOML/YAML/JSON conversions
+- **[QUILL_VALUE.md](QUILL_VALUE.md)** - Unified value type for YAML/JSON conversions
 - **[VERSIONING.md](VERSIONING.md)** - Quill version resolution
 - **[SCHEMAS.md](SCHEMAS.md)** - `QuillConfig` schema model, native validation, and emission overview
 - **[PUBLIC_SCHEMA.md](PUBLIC_SCHEMA.md)** - External YAML schema contract consumed by bindings/integrations

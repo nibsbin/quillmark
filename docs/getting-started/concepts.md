@@ -45,9 +45,9 @@ This metadata is accessible in formats and is validated against native schema ru
 
 ### Backends
 
-Backends compile raw plate content with injected JSON data into final artifacts:
+Backends compile plate content with injected JSON data into final artifacts:
 
-- **Typst Backend** - Generates PDF and SVG files using the Typst typesetting system. It transforms markdown fields (annotated with `contentMediaType = "text/markdown"`) into Typst markup before serialization.
+- **Typst Backend** - Generates PDF, SVG, and PNG files using the Typst typesetting system. Markdown fields (annotated with `contentMediaType = "text/markdown"`) are converted to Typst markup during compilation.
 
 Each backend has its own compilation process and error mapping.
 
@@ -67,15 +67,14 @@ If `QUILL` is missing, parsing fails with `ParseError::InvalidStructure`.
 
 ## The Rendering Pipeline
 
-Quillmark follows a multi-stage pipeline:
+Quillmark follows a three-stage pipeline:
 
-1. **Parse & Normalize** - Extract YAML frontmatter/body, apply schema coercion/defaults, normalize bidi/HTML fences
-2. **Transform Fields** - Backend-specific shaping (e.g., markdown→Typst markup) before JSON serialization
-3. **Compile** - Backend processes plate with injected JSON data into final artifacts (PDF, SVG, etc.)
-4. **Output** - Return artifacts with metadata
+1. **Parse & Normalize** - Extract YAML frontmatter/body, apply schema coercion/defaults, strip bidi characters, fix HTML fences
+2. **Compile** - Backend receives plate content + JSON data and converts them into final artifacts (PDF, SVG, PNG, etc.)
+3. **Output** - Return artifacts with metadata
 
 ```
-Markdown + YAML → Parse/Normalize → Transform Fields → Compile (Backend) → Artifacts
+Markdown + YAML → Parse/Normalize → Compile (Backend) → Artifacts
 ```
 
 ## Mental Model

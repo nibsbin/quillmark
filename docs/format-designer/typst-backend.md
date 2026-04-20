@@ -90,7 +90,7 @@ Use Typst's `in` operator to check for optional fields:
 
 ### Rendering Body Content
 
-The document body (Markdown content after frontmatter) is stored in `data.BODY` (and accessible via `data.body`). Markdown fields are automatically converted to Typst content objects by the helper package, so you can use them directly:
+The document body (Markdown content after frontmatter) is stored in `data.BODY`. Markdown fields are automatically converted to Typst content objects by the helper package, so you can use them directly:
 
 ```typst
 #data.at("body", default: "")

@@ -19,7 +19,7 @@ Options:
 - `-f, --format <FORMAT>` — `pdf`, `svg`, `png`, or `txt` (default: `pdf`)
 - `--stdout` — write output to stdout
 - `--output-data <FILE>` — write compiled JSON data to file
-- `--verbose` — detailed processing output
+- `-v, --verbose` — detailed processing output
 - `--quiet` — suppress non-error output
 
 ### `schema`
@@ -33,10 +33,13 @@ Outputs the Quill's public schema contract as YAML to stdout or file.
 ### `validate`
 
 ```
-quillmark validate <QUILL_PATH>
+quillmark validate [OPTIONS] <QUILL_PATH>
 ```
 
 Validates quill configuration.
+
+Options:
+- `-v, --verbose` — show all validation details including warnings
 
 ### `info`
 
@@ -66,5 +69,4 @@ crates/bindings/cli/src/
 - `clap` — argument parsing
 - `quillmark` — rendering engine
 - `quillmark-core` — types
-- `anyhow` — error handling
 - `serde_json` — JSON output

@@ -8,6 +8,7 @@ Use metadata blocks with a `CARD` key:
 
 ```markdown
 ---
+QUILL: my_quill@1.0
 title: Main Document
 ---
 

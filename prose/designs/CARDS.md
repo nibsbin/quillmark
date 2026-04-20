@@ -16,35 +16,38 @@ pub struct CardSchema {
     pub title: Option<String>,
     pub description: Option<String>,
     pub fields: HashMap<String, FieldSchema>,
+    pub ui: Option<UiContainerSchema>,
 }
 ```
 
-`QuillConfig` has a `cards: HashMap<String, CardSchema>` field alongside `fields`.
+`QuillConfig` stores `cards: Vec<CardSchema>` where index 0 is always the **main** card (document-level fields). Named card definitions start at index 1 and are accessed via `card_definitions()` / `card_definition(name)`.
 
 ## Quill.yaml Configuration
 
 ```yaml
+main:
+  fields:
+    # ... document-level fields ...
+
 cards:
-  indorsements:
-    title: Routing Indorsements
+  indorsement:
+    title: Routing Indorsement
     description: Chain of routing endorsements for multi-level correspondence.
     fields:
       from:
         title: From office/symbol
         type: string
-        required: true
         description: Office symbol of the endorsing official.
       for:
         title: To office/symbol
         type: string
-        required: true
         description: Office symbol receiving the endorsed memo.
       signature_block:
         title: Signature block lines
         type: array
         required: true
         ui:
-          group: Signature
+          group: Addressing
         description: Name, grade, and duty title.
 ```
 
@@ -52,8 +55,8 @@ cards:
 
 ```yaml
 cards:
-  indorsements:
-    title: Routing Indorsements
+  indorsement:
+    title: Routing Indorsement
     description: Chain of routing endorsements for multi-level correspondence.
     fields:
       from:
@@ -62,17 +65,16 @@ cards:
         type: string
       signature_block:
         type: array
-        items:
-          type: string
+        required: true
 ```
 
-Public schema is emitted from `QuillConfig::public_schema_yaml()` and keeps the same `cards.<name>.fields` shape as `Quill.yaml`.
+Public schema is emitted from `QuillConfig::public_schema_yaml()` and keeps the same `cards.<name>.fields` shape as `Quill.yaml`. The `cards` key is omitted entirely when no named cards are defined.
 
 ## Markdown Syntax
 
 ```markdown
 ---
-CARD: indorsements
+CARD: indorsement
 from: ORG1/SYMBOL
 for: ORG2/SYMBOL
 signature_block:
@@ -85,5 +87,5 @@ Indorsement body content.
 
 ## Backend Consumption
 
-- **Typst**: cards at `data.CARDS`; markdown fields pre-converted to Typst markup
-- **Bindings**: `Workflow::compile_data()` exposes the exact JSON
+- **All backends**: cards are delivered as `data.CARDS`, an array of objects each containing a `CARD` discriminator field, the card's metadata fields, and a `BODY` field with the card's body Markdown.
+- **`Workflow::compile_data()`** returns the fully coerced and validated JSON, including `CARDS`.

@@ -26,14 +26,24 @@ Supported field types:
 | `datetime` | ISO 8601 |
 | `markdown` | Rich text; backends handle conversion |
 
+## Type coercion
+
+`QuillConfig::coerce(&HashMap<String, QuillValue>)` runs before validation.
+
+- Returns `Result<HashMap<String, QuillValue>, CoercionError>`
+- Coerces top-level fields and card fields in `CARDS` to their declared types
+- Fails fast (`Err`) on the first value that cannot be coerced
+- Coercion rules per type: array wrapping, boolean from string/int/float, number/integer from string, string/markdown pass-through, date/datetime format validation, object property recursion
+
 ## Native validation
 
 Validation is implemented by a native walker over `QuillConfig` in `quill/validation.rs`.
 
-- Entry point: `QuillConfig::validate(&HashMap<String, QuillValue>)`
+- Entry point: `QuillConfig::validate(&HashMap<String, QuillValue>)` (dispatches to `validate_document`)
 - Returns `Result<(), Vec<ValidationError>>`
 - Collects all errors (does not short-circuit)
 - Emits path-aware errors for top-level fields and card fields
+- Validates `CARDS` array: each element must have a `CARD` discriminator matching a known card type
 
 ## Public schema emission
 

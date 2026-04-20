@@ -1,6 +1,6 @@
 # Markdown Syntax
 
-Quillmark supports standard CommonMark syntax for document content.
+Quillmark supports a subset of CommonMark for document body content. The sections below cover what is supported; anything not listed (blockquotes, images, thematic breaks, raw HTML, math) is silently dropped.
 
 ## Your First Document
 
@@ -40,6 +40,7 @@ Use this as a base, then layer in the syntax patterns below.
 *Italic text*
 ***Bold and italic***
 ~~Strikethrough~~
+__Underline__
 `Inline code`
 ```
 
@@ -78,28 +79,36 @@ can be placed inside fenced blocks.
 ```
 ````
 
-## Blockquotes
+## Tables
 
 ```markdown
-> This is a blockquote
-> It can span multiple lines
+| Name    | Role      |
+| ------- | --------- |
+| Alice   | Engineer  |
+| Bob     | Designer  |
 ```
 
-## Horizontal Rules
+Column alignment is supported with `:` in the separator row.
 
-Use either:
+## Line Breaks
+
+Use `<br>` for a hard line break within a paragraph or table cell:
 
 ```markdown
-***
+First line<br>Second line
 ```
 
-or:
+## Not Supported
 
-```markdown
-___
-```
+The following are silently dropped and will not appear in rendered output:
 
-The `---` syntax is reserved for metadata delimiters, so it cannot be used as a horizontal rule in Quillmark documents.
+- Blockquotes (`>`)
+- Images (`![alt](src)`)
+- Thematic breaks (`***`, `___`)
+- Raw HTML (other than `<br>`)
+- Math and footnotes
+
+The `---` syntax is always reserved for metadata delimiters and cannot be used as a thematic break.
 
 ## Next Steps
 
