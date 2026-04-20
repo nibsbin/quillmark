@@ -63,7 +63,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 
     // Determine if we have a markdown file or need to use example content
-    let (parsed, markdown_path_for_output) = if let Some(ref markdown_path) = args.markdown_file {
+    let (parse_output, markdown_path_for_output) = if let Some(ref markdown_path) = args.markdown_file {
         // Validate markdown file exists
         if !markdown_path.exists() {
             return Err(CliError::InvalidArgument(format!(
@@ -80,12 +80,12 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         let markdown = fs::read_to_string(markdown_path)?;
 
         // Parse markdown
-        let parsed = ParsedDocument::from_markdown(&markdown)?;
+        let output = ParsedDocument::from_markdown_with_warnings(&markdown)?;
 
         if args.verbose {
             println!("Markdown parsed successfully");
         }
-        (parsed, Some(markdown_path.clone()))
+        (output, Some(markdown_path.clone()))
     } else {
         // Get example content
         let markdown = quill.example.clone().ok_or_else(|| {
@@ -100,14 +100,15 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         }
 
         // Parse markdown
-        let parsed = ParsedDocument::from_markdown(&markdown)?;
+        let output = ParsedDocument::from_markdown_with_warnings(&markdown)?;
 
         if args.verbose {
             println!("Example markdown parsed successfully");
         }
 
-        (parsed, None)
+        (output, None)
     };
+    let (parsed, parse_warnings) = (parse_output.document, parse_output.warnings);
 
     // Create workflow
     let workflow = engine.workflow(&quill)?;
@@ -161,7 +162,11 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 
     // Render
-    let result = workflow.render(&parsed, Some(output_format))?;
+    let mut result = workflow.render(&parsed, Some(output_format))?;
+
+    // Merge parse-time warnings into the render result so downstream tooling
+    // sees them in a single channel.
+    result.warnings.splice(0..0, parse_warnings);
 
     // Display warnings if any
     if !result.warnings.is_empty() && !args.quiet {

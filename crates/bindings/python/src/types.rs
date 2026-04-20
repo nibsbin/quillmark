@@ -69,10 +69,18 @@ impl PyWorkflow {
         format: Option<PyOutputFormat>,
     ) -> PyResult<PyRenderResult> {
         let rust_format = format.map(|f| f.into());
-        let result = self
+        let mut result = self
             .inner
             .render(&parsed.inner, rust_format)
             .map_err(convert_render_error)?;
+        // Prepend parse-time warnings so both parse and render diagnostics
+        // travel on the single RenderResult.warnings channel.
+        let parse_warnings: Vec<_> = parsed
+            .parse_warnings
+            .iter()
+            .map(|d| d.clone_without_source())
+            .collect();
+        result.warnings.splice(0..0, parse_warnings);
         Ok(PyRenderResult { inner: result })
     }
 
@@ -285,10 +293,16 @@ impl PyQuill {
             ppi: None,
             pages: None,
         };
-        let result = self
+        let mut result = self
             .inner
             .render(parsed.inner.clone(), &opts)
             .map_err(convert_render_error)?;
+        let parse_warnings: Vec<_> = parsed
+            .parse_warnings
+            .iter()
+            .map(|d| d.clone_without_source())
+            .collect();
+        result.warnings.splice(0..0, parse_warnings);
         Ok(PyRenderResult { inner: result })
     }
 
@@ -305,13 +319,14 @@ impl PyQuill {
 #[pyclass(name = "ParsedDocument")]
 pub struct PyParsedDocument {
     pub(crate) inner: ParsedDocument,
+    pub(crate) parse_warnings: Vec<quillmark_core::Diagnostic>,
 }
 
 #[pymethods]
 impl PyParsedDocument {
     #[staticmethod]
     fn from_markdown(markdown: &str) -> PyResult<Self> {
-        let parsed = ParsedDocument::from_markdown(markdown).map_err(|e| {
+        let output = ParsedDocument::from_markdown_with_warnings(markdown).map_err(|e| {
             let py_err = PyErr::new::<crate::errors::ParseError, _>(e.to_string());
             Python::attach(|py| {
                 if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
@@ -322,7 +337,18 @@ impl PyParsedDocument {
             });
             py_err
         })?;
-        Ok(PyParsedDocument { inner: parsed })
+        Ok(PyParsedDocument {
+            inner: output.document,
+            parse_warnings: output.warnings,
+        })
+    }
+
+    #[getter]
+    fn warnings(&self) -> Vec<PyDiagnostic> {
+        self.parse_warnings
+            .iter()
+            .map(|d| PyDiagnostic { inner: d.into() })
+            .collect()
     }
 
     fn body(&self) -> Option<&str> {

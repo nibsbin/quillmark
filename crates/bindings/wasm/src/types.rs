@@ -156,7 +156,8 @@ pub struct RenderResult {
 /// Parsed markdown document
 ///
 /// Returned by `ParsedDocument.fromMarkdown()`. Contains the parsed YAML frontmatter
-/// fields and the quill reference from the required QUILL field.
+/// fields, the quill reference from the required QUILL field, and any non-fatal
+/// parse-time warnings (e.g. near-miss sentinel lints).
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
@@ -166,6 +167,10 @@ pub struct ParsedDocument {
     pub fields: serde_json::Value,
     /// The quill reference from the QUILL field
     pub quill_ref: String,
+    /// Non-fatal parse-time warnings (empty unless the source contains
+    /// near-miss metadata sentinels per spec §4.2).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<Diagnostic>,
 }
 
 impl IntoWasmAbi for ParsedDocument {
@@ -497,6 +502,7 @@ mod tests {
         let parsed_doc = ParsedDocument {
             fields: serde_json::Value::Object(fields_obj),
             quill_ref: "test_quill".to_string(),
+            warnings: Vec::new(),
         };
 
         // Serialize and verify structure

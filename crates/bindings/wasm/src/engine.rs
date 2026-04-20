@@ -74,20 +74,21 @@ impl Quillmark {
 }
 
 fn parse_markdown_impl(markdown: &str) -> Result<ParsedDocument, JsValue> {
-    let parsed = quillmark_core::ParsedDocument::from_markdown(markdown)
+    let output = quillmark_core::ParsedDocument::from_markdown_with_warnings(markdown)
         .map_err(WasmError::from)
         .map_err(|e| e.to_js_value())?;
 
-    let quill_ref = parsed.quill_reference().to_string();
+    let quill_ref = output.document.quill_reference().to_string();
 
     let mut fields_obj = serde_json::Map::new();
-    for (key, value) in parsed.fields() {
+    for (key, value) in output.document.fields() {
         fields_obj.insert(key.clone(), value.as_json().clone());
     }
 
     Ok(ParsedDocument {
         fields: serde_json::Value::Object(fields_obj),
         quill_ref,
+        warnings: output.warnings.into_iter().map(Into::into).collect(),
     })
 }
 
@@ -121,6 +122,7 @@ impl Quill {
         opts: RenderOptions,
     ) -> Result<RenderResult, JsValue> {
         let start = now_ms();
+        let parse_warnings = parsed.warnings.clone();
         let core_parsed = to_core_parsed(parsed).map_err(|e| {
             WasmError::from(format!("render: invalid ParsedDocument: {:?}", e)).to_js_value()
         })?;
@@ -129,9 +131,11 @@ impl Quill {
             .inner
             .render(core_parsed, &rust_opts)
             .map_err(|e| WasmError::from(e).to_js_value())?;
+        let mut warnings: Vec<_> = parse_warnings;
+        warnings.extend(result.warnings.into_iter().map(Into::into));
         Ok(RenderResult {
             artifacts: result.artifacts.into_iter().map(Into::into).collect(),
-            warnings: result.warnings.into_iter().map(Into::into).collect(),
+            warnings,
             output_format: result.output_format.into(),
             render_time_ms: now_ms() - start,
         })

@@ -231,7 +231,7 @@ impl Diagnostic {
     }
 
     /// Clone this diagnostic while dropping any attached source chain.
-    pub(crate) fn clone_without_source(&self) -> Self {
+    pub fn clone_without_source(&self) -> Self {
         Self {
             severity: self.severity,
             code: self.code.clone(),
@@ -362,24 +362,9 @@ pub enum ParseError {
         max: usize,
     },
 
-    /// YAML parsing error
-    #[error("YAML parsing error: {0}")]
-    YamlError(#[from] serde_saphyr::Error),
-
-    /// JSON parsing/conversion error
-    #[error("JSON error: {0}")]
-    JsonError(#[from] serde_json::Error),
-
     /// Invalid YAML structure
     #[error("Invalid YAML structure: {0}")]
     InvalidStructure(String),
-
-    /// Missing CARD directive in inline metadata block
-    #[error("{}", .diag.message)]
-    MissingCardDirective {
-        /// Diagnostic information with hint
-        diag: Box<Diagnostic>,
-    },
 
     /// YAML parsing error with location context
     #[error("YAML error at line {line}: {message}")]
@@ -398,47 +383,14 @@ pub enum ParseError {
 }
 
 impl ParseError {
-    /// Create a MissingCardDirective error with helpful hint
-    pub fn missing_card_directive() -> Self {
-        let diag = Diagnostic::new(
-            Severity::Error,
-            "Inline metadata block missing CARD directive".to_string(),
-        )
-        .with_code("parse::missing_card".to_string())
-        .with_hint(
-            "Add 'CARD: <card_type>' to specify which card this block belongs to. \
-            Example:\n---\nCARD: my_card_type\nfield: value\n---"
-                .to_string(),
-        );
-        ParseError::MissingCardDirective {
-            diag: Box::new(diag),
-        }
-    }
-
     /// Convert the parse error into a structured diagnostic
     pub fn to_diagnostic(&self) -> Diagnostic {
         match self {
-            ParseError::MissingCardDirective { diag } => Diagnostic {
-                severity: diag.severity,
-                code: diag.code.clone(),
-                message: diag.message.clone(),
-                primary: diag.primary.clone(),
-                hint: diag.hint.clone(),
-                source: None, // Cannot clone trait object, but it's empty in this case usually
-            },
             ParseError::InputTooLarge { size, max } => Diagnostic::new(
                 Severity::Error,
                 format!("Input too large: {} bytes (max: {} bytes)", size, max),
             )
             .with_code("parse::input_too_large".to_string()),
-            ParseError::YamlError(e) => {
-                Diagnostic::new(Severity::Error, format!("YAML parsing error: {}", e))
-                    .with_code("parse::yaml_error".to_string())
-            } // serde_saphyr::Error implements Error+Clone? No, usually Error is not Clone.
-            ParseError::JsonError(e) => {
-                Diagnostic::new(Severity::Error, format!("JSON conversion error: {}", e))
-                    .with_code("parse::json_error".to_string())
-            }
             ParseError::InvalidStructure(msg) => Diagnostic::new(Severity::Error, msg.clone())
                 .with_code("parse::invalid_structure".to_string()),
             ParseError::YamlErrorWithLocation {
