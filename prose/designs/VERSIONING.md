@@ -38,26 +38,21 @@ Given versions `[1.0.0, 1.0.1, 1.1.0, 2.0.0, 2.1.0, 2.1.1, 3.0.0]`:
 
 ## Quill.yaml
 
-`version` is required:
+`version` and `description` are both required:
 
 ```yaml
 Quill:
   name: my_format
   version: "2.1.0"
   backend: typst
-  description: "..."
+  description: "Short description of this format"
 ```
+
+`version` must parse as `MAJOR.MINOR.PATCH` (or `MAJOR.MINOR`); an invalid or missing value is a hard error at load time.
 
 ## Error Handling
 
-```
-Error: Version not found
-  Quill: resume_format
-  Requested: @2.3
-  Available: 3.0.0, 2.2.0, 2.1.0, 2.0.0, 1.0.0
-
-  Suggestion: Use @2 for latest 2.x.x (currently 2.2.0)
-```
+Version parse errors surface as `RenderError::QuillConfig` with a descriptive message. There is no runtime version-registry lookup — each Quill is loaded directly from a path or in-memory file tree.
 
 See [ERROR.md](ERROR.md) for error handling patterns.
 

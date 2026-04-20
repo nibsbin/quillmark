@@ -4,15 +4,17 @@ Versioning helps format designers evolve Quills safely while keeping document re
 
 ## Version Field in `Quill.yaml`
 
-Each Quill should declare a semantic version:
+Each Quill must declare a semantic version. Both `version` and `description` are required fields:
 
 ```yaml
 Quill:
-  name: my-quill
+  name: my_quill
   backend: typst
   description: A professional document format
   version: "1.2.0"
 ```
+
+Quill names must be `snake_case` (lowercase letters, digits, and underscores only — hyphens are not allowed).
 
 Use semantic versioning (`MAJOR.MINOR.PATCH`) to communicate compatibility:
 
@@ -26,7 +28,7 @@ Authors can target versions through the `QUILL` key in frontmatter:
 
 ```markdown
 ---
-QUILL: my-quill@1.2
+QUILL: my_quill@1.2
 title: Quarterly Report
 ---
 ```
@@ -35,11 +37,11 @@ Supported selectors:
 
 | Selector | Meaning |
 |---|---|
-| `my-quill` | Latest available version |
-| `my-quill@latest` | Latest available version (explicit) |
-| `my-quill@1` | Latest 1.x.x |
-| `my-quill@1.2` | Latest 1.2.x |
-| `my-quill@1.2.0` | Exact version |
+| `my_quill` | Latest available version |
+| `my_quill@latest` | Latest available version (explicit) |
+| `my_quill@1` | Latest 1.x.x |
+| `my_quill@1.2` | Latest 1.2.x |
+| `my_quill@1.2.0` | Exact version |
 
 ## Practical Guidelines
 

@@ -1,11 +1,12 @@
 # YAML Frontmatter
 
-Quillmark documents begin with YAML frontmatter delimited by `---` markers:
+Quillmark documents begin with a YAML frontmatter block delimited by `---` markers. The `QUILL` key is required and names the format used to render the document.
 
 ```markdown
 ---
+QUILL: my_format
 title: My Document
-author: John Doe
+author: Jane Doe
 date: 2025-01-15
 tags: ["important", "draft"]
 ---
@@ -13,9 +14,39 @@ tags: ["important", "draft"]
 # Document content starts here
 ```
 
-## Frontmatter Data Types
+## QUILL Key
 
-YAML supports various data types:
+`QUILL` must appear in the first (global) frontmatter block. If it is missing, parsing fails.
+
+```markdown
+---
+QUILL: my_format
+title: Document Title
+---
+```
+
+### Version Selectors
+
+Pin a specific version with `@version` syntax:
+
+```markdown
+---
+QUILL: my_format@2.1
+title: Document Title
+---
+```
+
+| Syntax | Meaning |
+|--------|---------|
+| `format` | Latest version (default) |
+| `format@latest` | Latest version (explicit) |
+| `format@2` | Latest 2.x.x |
+| `format@2.1` | Latest 2.1.x |
+| `format@2.1.0` | Exact version 2.1.0 |
+
+Quill names must match `[a-z_][a-z0-9_]*` (lowercase letters, digits, and underscores; starts with a letter or underscore).
+
+## Frontmatter Data Types
 
 **Strings:**
 ```yaml
@@ -54,67 +85,39 @@ author:
   email: john@example.com
 ```
 
-**Nested Structures:**
-```yaml
-document:
-  metadata:
-    title: Complex Doc
-    version: 1.0
-  settings:
-    page_size: A4
-    margins: [1, 1, 1, 1]
-```
-
 > [!WARNING]
-> YAML objects and nested structures are syntactically valid in frontmatter. However, Quill’s schema system does not yet provide a general-purpose deep-nesting field type. As a current product-scoping decision, `type: object` is only supported for structured rows inside `array.items` (not as standalone top-level fields). See [Quill.yaml Reference: Field Types](../format-designer/quill-yaml-reference.md#field-types).
+> YAML objects and nested structures are syntactically valid in frontmatter. However, Quill's schema system does not yet provide a general-purpose deep-nesting field type. As a current product-scoping decision, `type: object` is only supported for structured rows inside `array.items` (not as standalone top-level fields). See [Quill.yaml Reference: Field Types](../format-designer/quill-yaml-reference.md#field-types).
 
-## QUILL Key
+## Reserved Field Names
 
-The `QUILL` key specifies which Quill format to use for rendering:
+`BODY` and `CARDS` are reserved and cannot be used in frontmatter — the parser rejects documents that include them. `BODY` holds the document's Markdown body; `CARDS` holds the array of card blocks.
 
-```markdown
----
-QUILL: my-custom-format
-title: Document Title
-author: Jane Doe
----
-
-# Content
-```
-
-`QUILL` is required in top-level frontmatter. If it is missing, parsing fails with an invalid-structure error.
-
-### Version Selectors
-
-You can pin a specific version of a Quill format using `@version` syntax:
-
-```markdown
----
-QUILL: my-format@2.1
-title: Document Title
----
-```
-
-Supported version selectors:
-
-| Syntax | Meaning |
-|--------|---------|
-| `format` | Latest version (default) |
-| `format@latest` | Latest version (explicit) |
-| `format@2` | Latest 2.x.x |
-| `format@2.1` | Latest 2.1.x |
-| `format@2.1.0` | Exact version 2.1.0 |
-
-## Frontmatter Rules
+## Rules Summary
 
 - `QUILL` can only appear in the first (global) metadata block.
-- `BODY` and `CARDS` are reserved field names and cannot be used in frontmatter.
-- A document can only have one global metadata block.
-- The body content is stored in the special `BODY` field.
+- `QUILL` and `CARD` cannot both appear in the same block.
+- A document can have only one global metadata block.
+- All metadata blocks after the first must carry a `CARD` directive (see below).
+
+## Card Blocks
+
+Additional `---`-delimited blocks embedded in the document body are **card blocks**. Each must declare `CARD: <type>`, where `<type>` matches `[a-z_][a-z0-9_]*`. All card blocks are collected into the `CARDS` array available to templates.
+
+```markdown
+---
+CARD: indorsement
+from: ORG/SYMBOL
+for: ORG2/SYMBOL
+---
+
+Indorsement body text here.
+```
+
+See [CARDS.md](../../prose/designs/CARDS.md) for the full card architecture.
 
 ## Validation
 
-Frontmatter is validated against native schema rules defined in your Quill's `Quill.yaml`:
+Frontmatter is validated against the schema defined in your Quill's `Quill.yaml`:
 
 ```yaml
 main:
@@ -131,7 +134,4 @@ main:
       type: string
 ```
 
-When validation is enabled, the parser checks:
-- Required fields are present
-- Field types match the schema
-- Values meet constraints
+When validation runs, the parser checks that required fields are present, field types match the schema, and values meet any constraints.

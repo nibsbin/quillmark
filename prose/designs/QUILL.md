@@ -1,7 +1,7 @@
 # Quill Resource File Structure and API
 
 > **Status**: Final Design - Opinionated, No Backward Compatibility
-> **Implementation**: `quillmark-core/src/quill.rs`
+> **Implementation**: `crates/core/src/quill.rs`
 
 ## Internal File Structure
 
@@ -14,7 +14,7 @@ pub enum FileTreeNode {
 pub struct Quill {
     pub metadata: HashMap<String, QuillValue>,
     pub name: String,
-    pub backend: String,
+    pub backend_id: String,
     pub plate: Option<String>,
     pub example: Option<String>,
     pub config: QuillConfig,
@@ -24,6 +24,8 @@ pub struct Quill {
 }
 ```
 
+`metadata` is populated from `Quill.yaml` fields plus computed entries: `backend`, `description`, `version`, `author`, and any `typst_*` keys from the `[typst]` section.
+
 ## In-memory Tree Contract (`engine.quill(tree)`)
 
 In-memory construction routes through the engine as `engine.quill(tree)`. The
@@ -31,39 +33,63 @@ core `Quill::from_tree` constructor is internal to `quillmark-core`. Input is
 a `FileTreeNode` directory tree with UTF-8 and binary file contents represented
 as bytes.
 
-For JS/WASM consumers this is exposed as `engine.quill(...)` with a flat
-`Map<string, Uint8Array>` (or plain object) path→bytes shape.
+For JS/WASM consumers this is exposed as `engine.quill(...)` accepting a
+`Map<string, Uint8Array>` (path→bytes). Plain objects are not accepted; only
+`Map` instances are supported.
 
 Validation rules:
 1. Root MUST be a directory node
-2. `Quill.yaml` MUST exist and be valid
-3. The `plate_file` referenced in `Quill.yaml` MUST exist
+2. `Quill.yaml` MUST exist and be valid YAML
+3. The `plate_file` referenced in `Quill.yaml`, if specified, MUST exist
 4. File paths use `/` separators and are resolved relative to root
 
 ## `Quill.yaml` Structure
 
+Required top-level sections: `Quill` (bundle metadata). Optional: `main` (document fields), `cards` (card type definitions), `typst` (backend config).
+
 ```yaml
 Quill:
-  name: my_quill
-  backend: typst
-  version: "1.0.0"
-  description: A beautiful format
-  plate_file: plate.typ
-  example_file: example.md
+  name: my_quill          # required; snake_case
+  backend: typst          # required
+  version: "1.0.0"        # required; semver (MAJOR.MINOR.PATCH or MAJOR.MINOR)
+  description: A beautiful format  # required; non-empty
+  author: Jane Doe        # optional; defaults to "Unknown"
+  plate_file: plate.typ   # optional; path to Typst template
+  example_file: example.md  # optional; example document for preview
 
 main:
   fields:
-    author:
-      type: string
-      description: Author of document
     title:
       type: string
       description: Document title
+    count:
+      type: integer
+      description: Whole-number count
+
+cards:
+  quote:
+    title: Quote block
+    description: A single pull quote
+    fields:
+      author:
+        type: string
+        description: Quote author
+
+typst:
+  packages:
+    - "@preview/some-package:1.0.0"
 ```
 
+Field names must be `snake_case`. Capitalized keys (e.g. `BODY`, `CARDS`, `CARD`) are reserved by the engine. Standalone `object` fields are not supported; use `array` with `items: {type: object, properties: {...}}` instead.
+
 Metadata resolution:
-- `name` always read from `Quill.yaml` `Quill.name` (required)
-- `metadata` includes `backend`, `description`, `version`, and other Quill-level keys
+- `name`, `backend`, `version`, `description`, `author` are required/defaulted struct fields in `QuillConfig`
+- `metadata` on `Quill` stores `backend`, `description`, `version`, `author`, any extra `Quill.*` keys, and `typst_*` keys from the `[typst]` section
+- `example_file` also accepts the alias `example` in YAML
+
+## File Ignore Rules
+
+When loading from disk, `Quill::from_path` respects a `.quillignore` file at the bundle root. If absent, default patterns apply: `.git/`, `.gitignore`, `.quillignore`, `target/`, `node_modules/`.
 
 ## API
 
@@ -71,14 +97,13 @@ Construction:
 - `Quillmark::quill_from_path(path)` — load render-ready quill from filesystem directory
 - `Quillmark::quill(tree)` — load render-ready quill from in-memory file tree
 
-Note: `Quill::from_json` is removed from the public API.
+Note: `Quill::from_json` is not part of the public API.
 
-File access:
+File access on `FileTreeNode`:
 - `file_exists(path)` / `get_file(path)` — check/read file
 - `dir_exists(path)` / `list_files(path)` / `list_subdirectories(path)` — directory navigation
 
 Path rules:
-- Always use forward slashes (`/`)
-- Directory paths must end with `/` for `list_files()` and `list_subdirectories()`
-- Root: use `""` or `"/"`
-- `get_file()` returns `Vec<u8>` for all files
+- Use forward slashes (`/`); absolute paths and `..` traversal are rejected
+- Root: use `""` (empty string)
+- `get_file()` returns `&[u8]` for all files

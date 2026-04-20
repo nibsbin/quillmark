@@ -19,12 +19,12 @@ Create a minimal but complete config:
 
 ```yaml
 Quill:
-  name: my-quill
+  name: my_quill
   backend: typst
+  version: "1.0.0"
   description: A simple letter format
   plate_file: plate.typ
   example_file: example.md
-  version: "1.0.0"
 
 main:
   fields:
@@ -39,7 +39,7 @@ main:
       description: Letter date
 ```
 
-Define your document's expected frontmatter fields under `main.fields`. Each field has a `type`, optional `default`, `description`, and validation constraints. Use `integer` for whole numbers only and `number` for values that may include decimals. For the full list of field types, UI hints, typed arrays, and enum constraints, see the [Quill.yaml Reference](quill-yaml-reference.md).
+`name`, `backend`, `version`, and `description` are all required. `name` must be `snake_case`. Define your document's expected frontmatter fields under `main.fields`. Each field has a `type`, optional `default`, `description`, and validation constraints. Use `integer` for whole numbers only and `number` for values that may include decimals. For the full list of field types, UI hints, typed arrays, and enum constraints, see the [Quill.yaml Reference](quill-yaml-reference.md).
 
 ## 3. Write `plate.typ`
 
@@ -88,6 +88,8 @@ For command options and output controls, see the [CLI Reference](../cli/referenc
 
 ## 6. Next steps
 
-- [Quill.yaml Reference](quill-yaml-reference.md)
-- [Typst Backend](typst-backend.md)
+- [Quill.yaml Reference](quill-yaml-reference.md) — full field types, UI hints, `cards`, `typst` section
+- [Typst Backend](typst-backend.md) — data access patterns, CARDS iteration, helper package
 - [Quill Versioning](versioning.md)
+
+**Tip:** To exclude files (fonts, build artifacts) from the bundle when loading from disk, add a `.quillignore` file at the bundle root using gitignore syntax.

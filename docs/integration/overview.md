@@ -51,7 +51,8 @@ Quillmark can produce one or more artifacts depending on backend + format:
 
 - `pdf` for documents and print workflows
 - `svg` for vector output
-- `png` for raster output
+- `png` for raster output (use `render_with_options` / `ppi` to control resolution)
+- `txt` for plain-text output
 
 ## Error Handling Philosophy
 

@@ -10,47 +10,51 @@ Not published: `quillmark-fixtures`, `quillmark-fuzz`, `bindings/quillmark-pytho
 
 ## 1) Continuous Integration (CI)
 
-**Trigger**: pull requests and pushes to `main`.
-**Environment**: single Linux runner.
+**Trigger**: pull requests and pushes to any branch except version tags.
+**Jobs** (all Linux, run in parallel; `ci-success` gate aggregates results):
 
-Steps:
-1. Checkout & stable Rust toolchain
-2. Cache Cargo artifacts
-3. `cargo check` (all features, then no-default-features)
-4. `cargo test` (workspace, all features; doctests included)
-5. `cargo fmt -- --check`
-6. `cargo doc --no-deps`
+| Job | What it does |
+|-----|-------------|
+| `lint` | `cargo fmt --all -- --check` (Clippy commented out, not yet enforced) |
+| `test` | `cargo test --locked` in a matrix: default features and `--all-features` |
+| `docs` | `cargo doc --no-deps --locked` with `-Dwarnings` |
+| `wasm` | `cargo check --package quillmark-wasm --target wasm32-unknown-unknown --locked` |
 
-Excluded: Clippy, multi-OS matrix, MSRV, security scanners, coverage, benchmarks.
+Excluded: multi-OS matrix, MSRV, security scanners, coverage, benchmarks.
 
 ---
 
 ## 2) Continuous Delivery (CD)
 
-### Rust Crates
+### Rust Crates (`publish.yml`)
 
-**Trigger**: manual dispatch (`workflow_dispatch`) or pushed tag `vX.Y.Z`.
-**Auth**: `CARGO_REGISTRY_TOKEN` repository secret.
+**Trigger**: tag `vX.Y.Z` or manual dispatch.
 
-Publish sequence (via `cargo publish`): `quillmark-core` → `backends/quillmark-typst` → `quillmark`.
+1. Runs `cargo test` matrix (same as CI, fail-fast enabled).
+2. Runs `cargo publish --locked --no-verify` to publish all publishable workspace crates.
+**Auth**: `CARGO_REGISTRY_TOKEN` secret (via `Publish` environment).
 
-### Python Bindings
+### Python Bindings (`publish-python.yml`)
 
-**Workflow**: `.github/workflows/publish-python.yml`
-**Trigger**: tag push `vX.Y.Z` or manual dispatch
-**Publish**: PyPI via `maturin publish` (Linux, macOS, Windows wheels)
+**Trigger**: tag `vX.Y.Z` or `py-vX.Y.Z`, or manual dispatch.
 
-### WASM Bindings
+1. Runs pytest via `uv`.
+2. Builds wheels via `maturin-action` for Linux (x86_64, aarch64), Windows (x64), macOS (aarch64) — Python 3.10–3.12 — plus sdist.
+3. Publishes all artifacts to PyPI via `maturin upload`.
+**Auth**: `MATURIN_PYPI_TOKEN` secret (via `Publish` environment).
 
-**Workflow**: `.github/workflows/publish-wasm.yml`
-**Trigger**: tag push `vX.Y.Z` or manual dispatch
-**Publish**: npm via `wasm-pack publish` (bundler, nodejs, web targets)
+### WASM Bindings (`publish-wasm.yml`)
+
+**Trigger**: tag `vX.Y.Z` or `wasm-vX.Y.Z`, or manual dispatch.
+
+1. Builds via `./scripts/build-wasm.sh` and runs `npm test`.
+2. Publishes `@quillmark/wasm` to npm via `npm publish --provenance` (OIDC Trusted Publisher).
+**Auth**: OIDC `id-token: write` permission; no token secret needed.
 
 ---
 
 ## 3) Versioning
 
-- SemVer across all workspace crates and bindings
-- Bump `quillmark-core`, `backends/quillmark-typst`, and `quillmark` together
-- Python and WASM bindings follow the same version as the Rust workspace
-- Tag `vX.Y.Z` required for publishing
+- SemVer across all workspace crates and bindings.
+- Version bumps managed locally via `cargo-release` (`release.toml`): bumps, commits (`chore: release X.Y.Z`), and pushes tag `vX.Y.Z`; publishing is delegated entirely to CI.
+- Python and WASM bindings can also be released independently via `py-vX.Y.Z` / `wasm-vX.Y.Z` tags.

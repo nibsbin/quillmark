@@ -105,7 +105,7 @@ main:
 
 | Type       | Notes |
 |------------|-------|
-| `string`   | Also accepts `str` as alias |
+| `string`   | UTF-8 text |
 | `number`   | Numeric scalar (integers and decimals) |
 | `integer`  | Integer-only numeric scalar |
 | `boolean`  | `true` or `false` |
@@ -113,7 +113,7 @@ main:
 | `date`     | YYYY-MM-DD |
 | `datetime`  | ISO 8601 |
 | `markdown` | Rich text; backends convert to target format |
-| `object` or `dict` | Supported for typed table rows inside `array.items` |
+| `object`   | Structured map; valid only inside `array.items` (not as a standalone field) |
 
 Use `type: array` with `items: { type: object, properties: {...} }` when you need a **list** of structured rows. Quill does not yet provide a general-purpose deep-nesting field type, so `type: object` is currently scoped to `array.items` rather than standalone top-level fields.
 
@@ -213,9 +213,22 @@ main:
         order: 5
 ```
 
+### `compact`
+
+When `true`, the UI renders this field in a compact style (smaller vertical footprint). UI hint only — no effect on validation or rendering.
+
+```yaml
+main:
+  fields:
+    tag:
+      type: string
+      ui:
+        compact: true
+```
+
 ### `multiline`
 
-Controls the initial size of the text input for `markdown` fields. When `true`, the UI starts with a larger text box instead of a single-line input:
+Controls the initial size of the text input for `string` and `markdown` fields. When `true`, the UI starts with a larger text box instead of a single-line input:
 
 ```yaml
 main:
@@ -226,13 +239,19 @@ main:
       ui:
         multiline: true   # start as a larger text box
 
+    notes:
+      type: string
+      description: Free-form notes
+      ui:
+        multiline: true
+
     tagline:
       type: markdown
       description: One-sentence tagline
       # no multiline — single-line input that expands on demand
 ```
 
-`multiline` is a UI hint only — it has no effect on validation or backend processing. It is only meaningful on `markdown` fields and is ignored on other types.
+`multiline` is a UI hint only — it has no effect on validation or backend processing. It is meaningful on `string` and `markdown` fields; ignored on other types.
 
 ---
 

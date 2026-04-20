@@ -50,8 +50,20 @@ Renders artifacts from a `ParsedDocument`.
 ```ts
 type RenderOptions = {
   format?: "pdf" | "svg" | "txt" | "png";
-  ppi?: number;
+  assets?: Record<string, Uint8Array | number[]>;
+  ppi?: number;    // PNG only; defaults to 144 (2× at 72 pt/inch)
   pages?: number[];
+};
+```
+
+Returns:
+
+```ts
+type RenderResult = {
+  artifacts: Array<{ format: string; bytes: Uint8Array; mimeType: string }>;
+  warnings: Diagnostic[];
+  outputFormat: "pdf" | "svg" | "txt" | "png";
+  renderTimeMs: number;
 };
 ```
 
@@ -65,20 +77,10 @@ Returns the number of pages in the opened session.
 
 ### `session.render(options?)`
 
-Renders all pages or selected pages from the session.
-
-`options`:
-
-```ts
-type RenderOptions = {
-  format?: "pdf" | "svg" | "txt" | "png";
-  ppi?: number;
-  pages?: number[];
-};
-```
+Renders all or selected pages from the session. Accepts the same `RenderOptions` as `quill.render()`.
 
 ## Notes
 
 - `QUILL` in frontmatter is required when parsing markdown.
 - `quill.render(parsed)` emits a warning (not error) if `parsed.quillRef` does not match the quill name.
-- `pages` selection is intended for page-addressable outputs (for example SVG/PNG), not PDF.
+- `pages` selection is intended for page-addressable outputs (SVG/PNG), not PDF.

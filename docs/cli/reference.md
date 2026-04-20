@@ -29,7 +29,7 @@ quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 
 - `-o <PATH>` / `--output <PATH>`: Output file path (default: derived from input filename, e.g. `input.pdf`)
 - `-f <FORMAT>` / `--format <FORMAT>`: Output format: `pdf`, `svg`, `png`, `txt` (default: `pdf`)
-- `--output-data <DATA_FILE>`: Write compiled JSON data (after coercion/defaults/transform_fields) to a file
+- `--output-data <DATA_FILE>`: Write compiled JSON data to a file
 - `-v` / `--verbose`: Show detailed processing information
 - `--quiet`: Suppress all non-error output
 - `--stdout`: Write output to stdout instead of file
