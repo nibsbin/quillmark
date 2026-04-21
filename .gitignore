@@ -26,6 +26,9 @@ out/
 # VS Code
 .vscode/
 
+# Claude Code agent worktrees (ephemeral)
+.claude/worktrees/
+
 # Quillmark example output files and directories
 output*.pdf
 output*.svg

@@ -112,10 +112,28 @@ fn typst_alignment(align: &pulldown_cmark::Alignment) -> &'static str {
     }
 }
 
-/// Returns true if the HTML string is a `<br>` tag (any common variant).
-fn is_br_tag(html: &str) -> bool {
-    let lower = html.trim().to_ascii_lowercase();
-    lower == "<br>" || lower == "<br/>" || lower == "<br />"
+/// Returns true if the HTML string is a `<u>` open tag (tolerates whitespace and case).
+fn is_u_open_tag(html: &str) -> bool {
+    let s = html.trim();
+    // Accept <u>, <U>, <u >, <U > (arbitrary whitespace before >)
+    if s.starts_with('<') && s.ends_with('>') {
+        let inner = s[1..s.len() - 1].trim();
+        inner.eq_ignore_ascii_case("u")
+    } else {
+        false
+    }
+}
+
+/// Returns true if the HTML string is a `</u>` close tag (tolerates whitespace and case).
+fn is_u_close_tag(html: &str) -> bool {
+    let s = html.trim();
+    // Accept </u>, </U>, </u >, </U >
+    if s.starts_with("</") && s.ends_with('>') {
+        let inner = s[2..s.len() - 1].trim();
+        inner.eq_ignore_ascii_case("u")
+    } else {
+        false
+    }
 }
 
 /// Sanitizes a code-block language tag for safe inclusion in Typst raw blocks.
@@ -162,6 +180,7 @@ where
     let mut in_code_block = false; // Track if we're inside a code block
     let mut table_alignments: Vec<pulldown_cmark::Alignment> = Vec::new(); // Column alignments for current table
     let mut depth = 0; // Track nesting depth for DoS prevention
+    let mut in_image = false; // Suppress text events inside ![alt](src)
     let iter = iter.peekable();
 
     for (event, range) in iter {
@@ -262,11 +281,15 @@ where
                         end_newline = false;
                     }
                     Tag::Strong => {
-                        // Detect whether this is __ (underline) or ** (bold) by peeking at source
+                        // Detect whether this is __ (underline), <u> (underline), or ** (bold)
+                        // by peeking at source. Per spec §6.2, __ and <u> both render as underline;
+                        // <u> is synthesized as Tag::Strong by MarkdownFixer.
                         let kind = if range.start + 2 <= source.len() {
-                            match &source[range.start..range.start + 2] {
-                                "__" => StrongKind::Underline,
-                                _ => StrongKind::Bold, // Default to bold for ** or edge cases
+                            let head = &source[range.start..range.start + 2];
+                            if head == "__" || head.eq_ignore_ascii_case("<u") {
+                                StrongKind::Underline
+                            } else {
+                                StrongKind::Bold // ** or edge cases
                             }
                         } else {
                             StrongKind::Bold // Fallback for very short ranges
@@ -288,6 +311,17 @@ where
                         output.push_str("#link(\"");
                         output.push_str(&escape_string(&dest_url));
                         output.push_str("\")[");
+                        end_newline = false;
+                    }
+                    Tag::Image {
+                        dest_url, title: _, ..
+                    } => {
+                        // Spec §6.3: images are required for v1. Emit #image("url") and
+                        // suppress alt-text events until TagEnd::Image.
+                        output.push_str("#image(\"");
+                        output.push_str(&escape_string(&dest_url));
+                        output.push_str("\")");
+                        in_image = true;
                         end_newline = false;
                     }
                     Tag::Heading { level, .. } => {
@@ -416,6 +450,10 @@ where
                         output.push(']');
                         end_newline = false;
                     }
+                    TagEnd::Image => {
+                        // Alt text was suppressed; just clear the in_image flag.
+                        in_image = false;
+                    }
                     TagEnd::Heading(_) => {
                         output.push('\n');
                         output.push('\n'); // Extra newline after heading
@@ -444,7 +482,9 @@ where
                 }
             }
             Event::Text(text) => {
-                if in_code_block {
+                if in_image {
+                    // Suppress alt text inside ![alt](src) — spec §6.3
+                } else if in_code_block {
                     // Code block content - no escaping needed
                     output.push_str(&text);
                     end_newline = text.ends_with('\n');
@@ -483,8 +523,8 @@ where
             _ => {
                 // Ignore other events not specified in requirements
                 // (math, footnotes, etc.)
-                // Note: <br> HTML tags are converted to HardBreak in MarkdownFixer;
-                // all other HTML is stripped.
+                // Note: per spec §6.2/§6.3, raw HTML produces no output except <u>…</u>,
+                // which MarkdownFixer rewrites to Start/End(Tag::Strong) with Underline kind.
             }
         }
     }
@@ -492,22 +532,13 @@ where
     Ok(())
 }
 
-/// Iterator that post-processes markdown events to handle specific edge cases:
-/// 1. Coalesces adjacent `Text` events to enable intraword underscore emphasis (fix for `__` sandwich).
-/// 2. Fixes `***` adjacency issues (fix for `***` sandwich).
-/// 3. Suppresses setext-style headings (only ATX-style `# Heading` is supported).
-/// 4. Tracks `__` and `~~` markers across events for intraword nested formatting.
+/// Iterator that post-processes markdown events to handle two edge cases:
+/// 1. Allowlists `<u>…</u>` as underline; strips all other raw HTML.
+/// 2. Fixes `***` adjacency issues.
 struct MarkdownFixer<'a, I: Iterator<Item = (Event<'a>, Range<usize>)>> {
     inner: std::iter::Peekable<I>,
     source: &'a str,
-    /// Buffer of events to emit before pulling from inner
     buffer: Vec<(Event<'a>, Range<usize>)>,
-    /// Track when we're inside a setext heading that should be suppressed
-    in_setext_heading: bool,
-    /// Stack of pending intraword markers (marker type, text before marker, range)
-    /// Marker type: "__" for underline, "~~" for strikethrough
-    pending_markers: Vec<(&'static str, String, Range<usize>)>,
-    /// Track nesting depth of emphasis and strong tags for fixup validation
     emph_depth: usize,
     strong_depth: usize,
 }
@@ -521,30 +552,8 @@ where
             inner: inner.peekable(),
             source,
             buffer: Vec::new(),
-            in_setext_heading: false,
-            pending_markers: Vec::new(),
             emph_depth: 0,
             strong_depth: 0,
-        }
-    }
-
-    /// Check if a heading at the given source range is a setext-style heading.
-    /// Setext headings have the text on one line and `=` or `-` underline on the next.
-    /// ATX headings start with `#` characters.
-    fn is_setext_heading(&self, range: &Range<usize>) -> bool {
-        let source_slice = &self.source[range.clone()];
-        // Setext headings contain a newline followed by = or - characters
-        // ATX headings start with # and don't have this pattern
-        if let Some(newline_pos) = source_slice.find('\n') {
-            let after_newline = &source_slice[newline_pos + 1..];
-            let trimmed = after_newline.trim_start();
-            // Check if the line after newline consists of = or - (setext underline)
-            !trimmed.is_empty()
-                && trimmed
-                    .chars()
-                    .all(|c| c == '=' || c == '-' || c.is_whitespace())
-        } else {
-            false
         }
     }
 
@@ -611,176 +620,6 @@ where
         }
 
         merged_range
-    }
-
-    /// Process a text range, potentially splitting it into multiple events with Strong markers.
-    /// Uses the source slice directly based on range.
-    /// Handles cross-event marker tracking for intraword nested formatting.
-    fn process_text_from_source(&mut self, range: Range<usize>) {
-        let source_slice = &self.source[range.clone()];
-
-        // Skip processing for HTML entities (complex to handle correctly)
-        if source_slice.contains('&') {
-            self.buffer.push((Event::Text(source_slice.into()), range));
-            return;
-        }
-
-        // Check if the slice is preceded by an escape backslash in the full source
-        // If so, the __ at the start is escaped and should not be processed
-        let preceded_by_escape =
-            range.start > 0 && self.source.as_bytes().get(range.start - 1) == Some(&b'\\');
-        if preceded_by_escape && source_slice.starts_with("__") {
-            // Don't process - the __ is escaped
-            self.buffer.push((Event::Text(source_slice.into()), range));
-            return;
-        }
-
-        let mut events: Vec<(Event<'a>, Range<usize>)> = Vec::new();
-        let mut in_underline = false;
-        let mut last_end = 0;
-        let mut i = 0;
-        let bytes = source_slice.as_bytes();
-
-        // Check if this text starts with __ and we have a pending underline opener
-        // Skip if the __ is part of a longer underscore run (3+ consecutive underscores)
-        let starts_with_marker = bytes.len() >= 2
-            && bytes[0] == b'_'
-            && bytes[1] == b'_'
-            && !(bytes.len() >= 3 && bytes[2] == b'_');
-        if starts_with_marker
-            && self
-                .pending_markers
-                .last()
-                .map(|(m, _, _)| *m == "__")
-                .unwrap_or(false)
-        {
-            // Close the pending underline
-            let (_, pending_text, pending_range) = self.pending_markers.pop().unwrap();
-            if !pending_text.is_empty() {
-                events.push((Event::Text(pending_text.into()), pending_range.clone()));
-            }
-            events.push((Event::Start(Tag::Strong), pending_range));
-
-            // Now process the rest after the closing __
-            let marker_range = range.start..range.start + 2;
-            events.push((Event::End(TagEnd::Strong), marker_range));
-            i = 2;
-            last_end = 2;
-        }
-
-        // Process the rest of the text for __ patterns
-        while i < bytes.len() {
-            // Skip over escaped characters (backslash followed by any char)
-            if bytes[i] == b'\\' && i + 1 < bytes.len() {
-                i += 2;
-                continue;
-            }
-
-            if i + 1 < bytes.len() && bytes[i] == b'_' && bytes[i + 1] == b'_' {
-                // Skip __ that is part of a longer underscore run (3+ consecutive underscores)
-                // e.g., "________________" should be literal text, not underline markers
-                let prev_is_underscore = i > 0 && bytes[i - 1] == b'_';
-                let next_is_underscore = i + 2 < bytes.len() && bytes[i + 2] == b'_';
-                if prev_is_underscore || next_is_underscore {
-                    i += 1;
-                    continue;
-                }
-
-                // Found __
-                let before = &source_slice[last_end..i];
-                if !before.is_empty() {
-                    events.push((
-                        Event::Text(before.into()),
-                        range.start + last_end..range.start + i,
-                    ));
-                }
-
-                let marker_range = range.start + i..range.start + i + 2;
-                if in_underline {
-                    // Close underline
-                    events.push((Event::End(TagEnd::Strong), marker_range));
-                    in_underline = false;
-                } else {
-                    // Open underline
-                    events.push((Event::Start(Tag::Strong), marker_range));
-                    in_underline = true;
-                }
-
-                i += 2;
-                last_end = i;
-            } else {
-                i += 1;
-            }
-        }
-
-        // Emit remaining text
-        let remaining = &source_slice[last_end..];
-
-        // If we have an unclosed underline at the end, save it as pending
-        if in_underline {
-            // Find the position of the last __ (which opened the underline)
-            // Events should have Start(Strong) as the last non-text event
-            // We need to extract the text before it and save as pending
-
-            // Find where the opening __ was
-            let mut text_before_opener = String::new();
-            let mut opener_range = range.clone();
-
-            // Collect all events before the unclosed Start(Strong)
-            let mut final_events: Vec<(Event<'a>, Range<usize>)> = Vec::new();
-            for ev in events.into_iter() {
-                match &ev.0 {
-                    Event::Start(Tag::Strong) => {
-                        // This is the unclosed opener - save text before it as pending
-                        opener_range = ev.1.clone();
-                    }
-                    Event::Text(t) => {
-                        // Check if this comes before or after the opener
-                        if ev.1.end <= opener_range.start {
-                            // Before opener - emit it
-                            final_events.push(ev);
-                        } else {
-                            // After opener - accumulate for pending
-                            text_before_opener.push_str(t);
-                        }
-                    }
-                    Event::End(TagEnd::Strong) => {
-                        // Completed underlines - emit
-                        final_events.push(ev);
-                    }
-                    _ => {
-                        final_events.push(ev);
-                    }
-                }
-            }
-
-            // Add remaining text to what goes with the pending marker
-            if !remaining.is_empty() {
-                text_before_opener.push_str(remaining);
-            }
-
-            // Save the pending marker
-            self.pending_markers
-                .push(("__", text_before_opener, opener_range));
-
-            // Emit the events we collected (reversed for buffer)
-            final_events.reverse();
-            self.buffer.extend(final_events);
-        } else if events.is_empty() && remaining == source_slice {
-            // No markers found, emit original text
-            self.buffer.push((Event::Text(source_slice.into()), range));
-        } else {
-            // Add remaining text if any
-            if !remaining.is_empty() {
-                events.push((
-                    Event::Text(remaining.into()),
-                    range.start + last_end..range.end,
-                ));
-            }
-            // Events need to be reversed since we pop from buffer
-            events.reverse();
-            self.buffer.extend(events);
-        }
     }
 
     /// Count how many unclosed emphasis/strong tags the trailing stars could close.
@@ -965,57 +804,19 @@ where
             // 2. Pull from inner
             let (event, range) = self.inner.next()?;
 
-            // 3. Convert <br> tags to HardBreak; strip all other HTML
+            // 3. Handle HTML: allowlist <u>…</u> as underline; strip everything else.
+            // Spec §6.2 deviation 2 / §6.3: <br> and all other raw HTML produce no output.
             let (event, range) = match event {
-                Event::InlineHtml(ref html) | Event::Html(ref html) if is_br_tag(html) => {
-                    (Event::HardBreak, range)
+                Event::InlineHtml(ref html) | Event::Html(ref html) if is_u_open_tag(html) => {
+                    (Event::Start(Tag::Strong), range)
+                }
+                Event::InlineHtml(ref html) | Event::Html(ref html) if is_u_close_tag(html) => {
+                    (Event::End(TagEnd::Strong), range)
                 }
                 Event::Html(_) | Event::InlineHtml(_) => continue,
                 other => (other, range),
             };
 
-            // 4. Handle setext heading suppression (ATX-only policy)
-            match &event {
-                Event::Start(Tag::Heading { .. }) => {
-                    if self.is_setext_heading(&range) {
-                        // Skip setext heading start - the text content will still be emitted
-                        self.in_setext_heading = true;
-                        continue;
-                    }
-                }
-                Event::End(TagEnd::Heading(_)) => {
-                    if self.in_setext_heading {
-                        // Skip setext heading end
-                        self.in_setext_heading = false;
-                        continue;
-                    }
-                }
-                _ => {}
-            }
-
-            // 4. Process Event
-            if let Event::Text(_) = &event {
-                let merged_range = self.coalesce_text_range(range);
-                let source_slice = &self.source[merged_range.clone()];
-
-                if source_slice.contains("__") {
-                    self.process_text_from_source(merged_range);
-                    // Buffer is populated, loop continues to process buffer
-                    continue;
-                } else {
-                    // Fallthrough to handle_candidate for merged text
-                    // We need to pass the merged event
-                    if let Some(result) =
-                        self.handle_candidate((Event::Text(source_slice.into()), merged_range))
-                    {
-                        return Some(result);
-                    } else {
-                        continue;
-                    }
-                }
-            }
-
-            // Handle other events via handle_candidate (checks for End(Strong))
             if let Some(result) = self.handle_candidate((event, range)) {
                 return Some(result);
             } else {
@@ -1024,226 +825,18 @@ where
         }
     }
 }
-
-/// Placeholder markers for intraword formatting.
-/// These are Unicode characters unlikely to appear in normal text.
-const UNDERLINE_OPEN: &str = "\u{FFF9}"; // Interlinear Annotation Anchor
-const UNDERLINE_CLOSE: &str = "\u{FFFA}"; // Interlinear Annotation Separator
-const STRIKE_OPEN: &str = "\u{FFFB}"; // Interlinear Annotation Terminator
-const STRIKE_CLOSE: &str = "\u{2060}"; // Word Joiner (used as strike close)
-
-/// Check if a character is a word character (alphanumeric).
-fn is_word_char(c: char) -> bool {
-    c.is_ascii_alphanumeric()
-}
-
-/// Pre-process markdown to handle INTRAWORD `__` and `~~` markers only.
-///
-/// CommonMark doesn't allow intraword underscore emphasis. This function finds
-/// paired markers that are in intraword positions (adjacent to alphanumeric
-/// without whitespace) and replaces them with placeholders.
-///
-/// Properly bounded markers (with whitespace/punctuation boundaries) are left
-/// for pulldown-cmark to handle natively.
-fn preprocess_intraword_formatting(source: &str) -> String {
-    let mut result = source.to_string();
-
-    // Only transform markers that are truly intraword
-    result = replace_intraword_marker_pairs(&result, "__", UNDERLINE_OPEN, UNDERLINE_CLOSE);
-    result = replace_intraword_marker_pairs(&result, "~~", STRIKE_OPEN, STRIKE_CLOSE);
-
-    result
-}
-
-/// Find and replace INTRAWORD marker pairs only.
-/// An intraword marker pair is one where BOTH markers are adjacent to word characters
-/// on the "inner" side (i.e., opener followed by word char, closer preceded by word char)
-/// AND at least one marker is in a truly intraword position (word char on outer side too).
-fn replace_intraword_marker_pairs(source: &str, marker: &str, open: &str, close: &str) -> String {
-    let chars: Vec<char> = source.chars().collect();
-    let marker_chars: Vec<char> = marker.chars().collect();
-    let marker_len = marker_chars.len();
-
-    // First pass: find all marker positions and their context
-    struct MarkerInfo {
-        pos: usize,         // position in chars array
-        prev_is_word: bool, // char before marker is word char
-        next_is_word: bool, // char after marker is word char
-    }
-
-    let mut markers: Vec<MarkerInfo> = Vec::new();
-    let mut i = 0;
-
-    while i < chars.len() {
-        // Skip escaped characters
-        if chars[i] == '\\' && i + 1 < chars.len() {
-            i += 2;
-            continue;
-        }
-
-        // Skip code spans (backtick-delimited regions) to avoid transforming
-        // markers inside inline code or fenced code blocks
-        if chars[i] == '`' {
-            // Count opening backticks
-            let backtick_start = i;
-            let mut backtick_count = 0;
-            while i < chars.len() && chars[i] == '`' {
-                backtick_count += 1;
-                i += 1;
-            }
-            if backtick_count >= 3 {
-                // Fenced code block: skip until matching closing fence
-                while i < chars.len() {
-                    if chars[i] == '`' {
-                        let mut close_count = 0;
-                        while i < chars.len() && chars[i] == '`' {
-                            close_count += 1;
-                            i += 1;
-                        }
-                        if close_count >= backtick_count {
-                            break;
-                        }
-                    } else {
-                        i += 1;
-                    }
-                }
-            } else {
-                // Inline code span: skip until matching closing backtick(s)
-                let mut found_close = false;
-                while i < chars.len() {
-                    if chars[i] == '`' {
-                        let mut close_count = 0;
-                        while i < chars.len() && chars[i] == '`' {
-                            close_count += 1;
-                            i += 1;
-                        }
-                        if close_count == backtick_count {
-                            found_close = true;
-                            break;
-                        }
-                    } else {
-                        i += 1;
-                    }
-                }
-                if !found_close {
-                    // No matching close: backticks are literal, rewind
-                    // and let the rest of the loop handle subsequent chars.
-                    // (i is already past the backticks)
-                    i = backtick_start + backtick_count;
-                }
-            }
-            continue;
-        }
-
-        // Check for marker
-        if i + marker_len <= chars.len()
-            && chars[i..i + marker_len]
-                .iter()
-                .zip(marker_chars.iter())
-                .all(|(a, b)| a == b)
-        {
-            let prev_char = if i > 0 { Some(chars[i - 1]) } else { None };
-            let next_char = if i + marker_len < chars.len() {
-                Some(chars[i + marker_len])
-            } else {
-                None
-            };
-
-            markers.push(MarkerInfo {
-                pos: i,
-                prev_is_word: prev_char.map(is_word_char).unwrap_or(false),
-                next_is_word: next_char.map(is_word_char).unwrap_or(false),
-            });
-            i += marker_len;
-        } else {
-            i += 1;
-        }
-    }
-
-    // Only transform simple intraword pairs (exactly 2 markers)
-    // Complex nested cases should be handled by MarkdownFixer
-    let mut transform_positions: std::collections::HashSet<usize> =
-        std::collections::HashSet::new();
-
-    if markers.len() == 2 {
-        let opener = &markers[0];
-        let closer = &markers[1];
-
-        // Transform if this is a truly intraword pair:
-        // - Opener preceded by word char (intraword on left)
-        // - OR closer followed by word char (intraword on right)
-        let is_truly_intraword = opener.prev_is_word || closer.next_is_word;
-
-        if is_truly_intraword {
-            transform_positions.insert(opener.pos);
-            transform_positions.insert(closer.pos);
-        }
-    }
-    // For 4+ markers (potential nesting), don't transform - let MarkdownFixer handle it
-
-    // Second pass: build result with transformations
-    let mut result = String::with_capacity(source.len());
-    let mut char_idx = 0;
-    let mut marker_iter = markers.iter().peekable();
-
-    while char_idx < chars.len() {
-        // Check if we're at a marker position
-        if let Some(marker_info) = marker_iter.peek() {
-            if marker_info.pos == char_idx {
-                marker_iter.next();
-                if transform_positions.contains(&char_idx) {
-                    // Determine if this is an opener or closer
-                    // Count how many transformed markers we've seen before this one
-                    let transformed_before = markers
-                        .iter()
-                        .filter(|m| m.pos < char_idx && transform_positions.contains(&m.pos))
-                        .count();
-                    if transformed_before % 2 == 0 {
-                        result.push_str(open);
-                    } else {
-                        result.push_str(close);
-                    }
-                } else {
-                    // Keep original marker
-                    for c in marker_chars.iter() {
-                        result.push(*c);
-                    }
-                }
-                char_idx += marker_len;
-                continue;
-            }
-        }
-        result.push(chars[char_idx]);
-        char_idx += 1;
-    }
-
-    result
-}
-
-/// Convert placeholder markers back to Typst formatting in the output.
-fn convert_placeholders(text: &str) -> String {
-    text.replace(UNDERLINE_OPEN, "#underline[")
-        .replace(UNDERLINE_CLOSE, "]")
-        .replace(STRIKE_OPEN, "#strike[")
-        .replace(STRIKE_CLOSE, "]")
-}
-
 pub fn mark_to_typst(markdown: &str) -> Result<String, ConversionError> {
-    // Pre-process for intraword formatting support (replaces __ and ~~ with placeholders)
-    let preprocessed = preprocess_intraword_formatting(markdown);
-
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
     options.insert(pulldown_cmark::Options::ENABLE_TABLES);
 
-    let parser = Parser::new_ext(&preprocessed, options);
-    let fixer = MarkdownFixer::new(parser.into_offset_iter(), &preprocessed);
+    let parser = Parser::new_ext(markdown, options);
+    let fixer = MarkdownFixer::new(parser.into_offset_iter(), markdown);
     let mut typst_output = String::new();
 
-    push_typst(&mut typst_output, &preprocessed, fixer)?;
+    push_typst(&mut typst_output, markdown, fixer)?;
 
-    // Convert placeholder markers to Typst formatting
-    Ok(convert_placeholders(&typst_output))
+    Ok(typst_output)
 }
 
 #[cfg(test)]
@@ -1615,78 +1208,6 @@ mod tests {
         let markdown = "[Link](https://example.com/foo_bar)";
         let typst = mark_to_typst(markdown).unwrap();
         assert_eq!(typst, "#link(\"https://example.com/foo_bar\")[Link]\n\n");
-    }
-
-    #[test]
-    fn test_emphasis_sandwich_bug() {
-        // Bug: ***__...__***asdf fails to parse outer ***
-        let markdown = "***__Underlined__***suffix";
-        let typst = mark_to_typst(markdown).unwrap();
-        // Expect: #strong[#emph[#underline[Underlined]]]suffix
-        // Or similar nesting.
-        // If it fails, it will likely be: \*\*\*#underline[Underlined]\*\*\*suffix
-        assert_eq!(typst, "#strong[#emph[#underline[Underlined]]]suffix\n\n");
-    }
-
-    #[test]
-    fn test_text_before_strong_emph_underline() {
-        // Bug report: pre***__content__*** doesn't parse correctly
-        // The "pre" before the *** causes pulldown-cmark to parse *** as literal text
-        // But MarkdownFixer should fix this
-        let markdown = "pre***__content__***";
-
-        // Without MarkdownFixer, the *** would render as literal \*\*\*
-        // because pulldown-cmark doesn't recognize them as emphasis markers
-        // after the "pre" text. The MarkdownFixer handles this case.
-
-        let typst = mark_to_typst(markdown).unwrap();
-        // Should render as: pre#strong[#emph[#underline[content]]]
-        assert_eq!(typst, "pre#strong[#emph[#underline[content]]]\n\n");
-    }
-
-    #[test]
-    fn test_text_before_strong_emph_underline_variations() {
-        // Additional test cases for combinations of text, stars, and underlines
-
-        // Variation 1: Just underline after text
-        assert_eq!(
-            mark_to_typst("pre__content__").unwrap(),
-            "pre#underline[content]\n\n"
-        );
-
-        // Variation 2: Stars before underline (no text before)
-        // Note: pulldown-cmark parses *** as emph wrapping strong (not strong wrapping emph)
-        // This is standard markdown behavior where *** = * (emph) + ** (strong)
-        assert_eq!(
-            mark_to_typst("***__content__***").unwrap(),
-            "#emph[#strong[#underline[content]]]\n\n"
-        );
-
-        // Variation 3: 2 stars (bold only) after text
-        assert_eq!(
-            mark_to_typst("pre**__content__**").unwrap(),
-            "pre#strong[#underline[content]]\n\n"
-        );
-
-        // Variation 4: 1 star (emph only) after text
-        assert_eq!(
-            mark_to_typst("pre*__content__*").unwrap(),
-            "pre#emph[#underline[content]]\n\n"
-        );
-
-        // Variation 5: Multiple words before the formatting (with space before ***)
-        // When there's a space before ***, pulldown-cmark recognizes the *** correctly
-        // as emphasis+strong, so it becomes #emph[#strong[...]]
-        assert_eq!(
-            mark_to_typst("some text ***__content__***").unwrap(),
-            "some text #emph[#strong[#underline[content]]]\n\n"
-        );
-
-        // Variation 6: Text after the formatting
-        assert_eq!(
-            mark_to_typst("pre***__content__*** suffix").unwrap(),
-            "pre#strong[#emph[#underline[content]]] suffix\n\n"
-        );
     }
 
     #[test]
@@ -2062,62 +1583,6 @@ mod tests {
         );
     }
 
-    // Tests for intraword underscore emphasis (EmphasisFixer)
-    #[test]
-    fn test_intraword_underscore_emphasis() {
-        // This is the user's reported issue: underscores in middle of word
-        assert_eq!(
-            mark_to_typst("the cow __jumped over the mo__on").unwrap(),
-            "the cow #underline[jumped over the mo]on\n\n"
-        );
-    }
-
-    #[test]
-    fn test_intraword_underscore_start_of_word() {
-        // Underscore starts mid-word
-        assert_eq!(
-            mark_to_typst("foo__bar__baz").unwrap(),
-            "foo#underline[bar]baz\n\n"
-        );
-    }
-
-    #[test]
-    fn test_escaped_intraword_underscore() {
-        // Escaped underscores should remain literal
-        let result = mark_to_typst("foo\\__bar").unwrap();
-        // Contains literal underscore, not underline
-        assert!(result.contains("\\_"));
-        assert!(!result.contains("#underline"));
-    }
-
-    // Tests for nested intraword formatting (the originally problematic cases)
-    #[test]
-    fn test_intraword_underline_wrapping_strikethrough() {
-        // Underline wrapping strikethrough, all intraword
-        assert_eq!(
-            mark_to_typst("outer__~~inner~~__asdf").unwrap(),
-            "outer#underline[#strike[inner]]asdf\n\n"
-        );
-    }
-
-    #[test]
-    fn test_intraword_strikethrough_wrapping_underline() {
-        // Strikethrough wrapping underline, all intraword
-        assert_eq!(
-            mark_to_typst("outer~~__inner__~~asdf").unwrap(),
-            "outer#strike[#underline[inner]]asdf\n\n"
-        );
-    }
-
-    #[test]
-    fn test_intraword_strikethrough_only() {
-        // Simple intraword strikethrough
-        assert_eq!(
-            mark_to_typst("outer~~inner~~asdf").unwrap(),
-            "outer#strike[inner]asdf\n\n"
-        );
-    }
-
     // Tests for Tables
 
     #[test]
@@ -2330,31 +1795,98 @@ mod tests {
     }
 
     #[test]
-    fn test_table_br_tag_in_cell() {
-        // <br> is the standard way to create line breaks within table cells
+    fn test_table_br_tag_in_cell_is_stripped() {
+        // Per MARKDOWN.md §6.2 / §6.3, raw HTML (including <br>) produces no output.
         let md = "| A |\n|---|\n| line1<br>line2 |";
         let out = mark_to_typst(md).unwrap();
         assert!(
-            out.contains("line1#linebreak()line2"),
-            "<br> should produce line break in cell: {out}"
+            !out.contains("linebreak"),
+            "<br> must not produce #linebreak(): {out}"
+        );
+        assert!(!out.contains("<br"), "<br> literal must be stripped: {out}");
+        assert!(out.contains("line1"), "surrounding text preserved: {out}");
+        assert!(out.contains("line2"), "surrounding text preserved: {out}");
+    }
+
+    #[test]
+    fn test_table_br_tag_variants_stripped() {
+        // <br/> and <br /> variants must also produce no output.
+        for md in ["| A |\n|---|\n| a<br/>b |", "| A |\n|---|\n| a<br />b |"] {
+            let out = mark_to_typst(md).unwrap();
+            assert!(
+                !out.contains("linebreak"),
+                "<br> variants must not emit #linebreak(): {out}"
+            );
+            assert!(out.contains('a') && out.contains('b'), "text kept: {out}");
+        }
+    }
+
+    #[test]
+    fn test_u_tag_renders_as_underline() {
+        // Spec §6.2: <u>…</u> is the one allowlisted HTML tag; renders as underline.
+        let md = "This is <u>underlined</u> text.";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("#underline[underlined]"),
+            "<u> must render as #underline[…]: {out}"
         );
     }
 
     #[test]
-    fn test_table_br_tag_variants() {
-        // Test <br/> and <br /> variants
-        let md_slash = "| A |\n|---|\n| a<br/>b |";
-        let out_slash = mark_to_typst(md_slash).unwrap();
+    fn test_u_tag_intraword_renders_as_underline() {
+        // <u> exists specifically to cover arbitrary-range underline that __ cannot reach.
+        let md = "pre<u>mid</u>post";
+        let out = mark_to_typst(md).unwrap();
         assert!(
-            out_slash.contains("a#linebreak()b"),
-            "<br/> should produce line break: {out_slash}"
+            out.contains("#underline[mid]"),
+            "intraword <u> must render as #underline[…]: {out}"
         );
+        assert!(out.contains("pre"), "prefix preserved: {out}");
+        assert!(out.contains("post"), "suffix preserved: {out}");
+    }
 
-        let md_space_slash = "| A |\n|---|\n| a<br />b |";
-        let out_space_slash = mark_to_typst(md_space_slash).unwrap();
+    #[test]
+    fn test_u_tag_case_insensitive() {
+        // Accept <U>…</U> as well as mixed case.
+        let md = "<U>upper</U>";
+        let out = mark_to_typst(md).unwrap();
         assert!(
-            out_space_slash.contains("a#linebreak()b"),
-            "<br /> should produce line break: {out_space_slash}"
+            out.contains("#underline[upper]"),
+            "<U> must render as #underline[…]: {out}"
+        );
+    }
+
+    #[test]
+    fn test_raw_html_is_stripped() {
+        // Spec §6.2 deviation 2: all raw HTML except <u> produces no output.
+        let md = "before <span class=\"x\">inner</span> after";
+        let out = mark_to_typst(md).unwrap();
+        assert!(!out.contains("<span"), "span tag stripped: {out}");
+        assert!(!out.contains("</span>"), "span close tag stripped: {out}");
+        assert!(out.contains("before"), "text preserved: {out}");
+        assert!(out.contains("after"), "text preserved: {out}");
+        assert!(out.contains("inner"), "inner text preserved: {out}");
+    }
+
+    #[test]
+    fn test_image_renders_as_image() {
+        // Spec §6.3: images are required for v1; emit #image("url").
+        let md = "![alt text](path/to/img.png)";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("#image(\"path/to/img.png\")"),
+            "image must emit #image(\"…\"): {out}"
+        );
+        assert!(!out.contains("alt text"), "alt text suppressed: {out}");
+    }
+
+    #[test]
+    fn test_image_with_empty_alt() {
+        let md = "![](x.png)";
+        let out = mark_to_typst(md).unwrap();
+        assert!(
+            out.contains("#image(\"x.png\")"),
+            "empty-alt image emits #image: {out}"
         );
     }
 
@@ -2637,32 +2169,6 @@ mod robustness_tests {
         assert!(result.contains("=== Three"));
     }
 
-    // Setext heading suppression (ATX-only policy)
-
-    #[test]
-    fn test_setext_h1_suppressed() {
-        // Setext H1 (with ===) should be treated as plain text
-        let result = mark_to_typst("My Heading\n==========").unwrap();
-        assert!(!result.contains("= My Heading")); // Should NOT be a heading
-        assert!(result.contains("My Heading")); // Text should still appear
-    }
-
-    #[test]
-    fn test_setext_h2_suppressed() {
-        // Setext H2 (with ---) should be treated as plain text
-        let result = mark_to_typst("My Heading\n----------").unwrap();
-        assert!(!result.contains("== My Heading")); // Should NOT be a heading
-        assert!(result.contains("My Heading")); // Text should still appear
-    }
-
-    #[test]
-    fn test_unclosed_nested_bullet_not_setext() {
-        // This was being incorrectly parsed as a setext heading
-        let result = mark_to_typst("- parent\n  - ").unwrap();
-        assert!(!result.contains("== parent")); // Should NOT be a heading
-        assert!(result.contains("- parent")); // Should be a list item
-    }
-
     #[test]
     fn test_atx_headings_still_work() {
         // ATX headings should still be converted properly
@@ -2670,15 +2176,6 @@ mod robustness_tests {
         assert!(result.contains("= H1"));
         assert!(result.contains("== H2"));
         assert!(result.contains("=== H3"));
-    }
-
-    #[test]
-    fn test_nested_list_empty_item_deep() {
-        // Deeper nesting with empty item should not create setext heading
-        let result = mark_to_typst("- parent\n  - child\n    - ").unwrap();
-        assert!(!result.contains("== child")); // Should NOT be a heading
-        assert!(result.contains("- parent"));
-        assert!(result.contains("- child"));
     }
 
     // Code block handling
@@ -3209,41 +2706,6 @@ More text with `inline code`."#;
         let unclosed = depth.max(0) as usize;
         let unmatched_close = (-max_negative).max(0) as usize;
         (unclosed, unmatched_close)
-    }
-
-    #[test]
-    fn test_intraword_markers_in_code_spans() {
-        // Intraword __ inside inline code should remain literal, not become #underline
-        let result = mark_to_typst("`not__under__lined`").unwrap();
-        assert!(
-            !result.contains("#underline"),
-            "__ in inline code should not become underline markup: got {:?}",
-            result
-        );
-
-        // Intraword ~~ inside inline code should remain literal, not become #strike
-        let result = mark_to_typst("`not~~strike~~through`").unwrap();
-        assert!(
-            !result.contains("#strike"),
-            "~~ in inline code should not become strike markup: got {:?}",
-            result
-        );
-
-        // Intraword ~~ inside fenced code should remain literal
-        let result = mark_to_typst("```\nnot~~strike~~through\n```").unwrap();
-        assert!(
-            !result.contains("#strike"),
-            "~~ in fenced code should not become strike markup: got {:?}",
-            result
-        );
-
-        // Mixed: markers outside code should still work
-        let result = mark_to_typst("word__under__lined and `code__literal__here`").unwrap();
-        assert!(
-            result.contains("#underline"),
-            "__ outside code should still produce underline: got {:?}",
-            result
-        );
     }
 
     #[test]

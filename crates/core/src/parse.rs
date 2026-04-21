@@ -53,9 +53,20 @@ use std::str::FromStr;
 use crate::error::ParseError;
 use crate::value::QuillValue;
 use crate::version::QuillReference;
+use crate::{Diagnostic, Severity};
 
 /// The field name used to store the document body
 pub const BODY_FIELD: &str = "BODY";
+
+/// Parse result carrying both the parsed document and any non-fatal warnings
+/// (e.g. near-miss sentinel lints emitted per spec §4.2).
+#[derive(Debug)]
+pub struct ParseOutput {
+    /// The successfully parsed document.
+    pub document: ParsedDocument,
+    /// Non-fatal warnings collected during parsing.
+    pub warnings: Vec<Diagnostic>,
+}
 
 /// A parsed markdown document with frontmatter
 #[derive(Debug, Clone)]
@@ -70,9 +81,17 @@ impl ParsedDocument {
         Self { fields, quill_ref }
     }
 
-    /// Create a ParsedDocument from markdown string
+    /// Create a ParsedDocument from markdown string, discarding any warnings.
     pub fn from_markdown(markdown: &str) -> Result<Self, crate::error::ParseError> {
         decompose(markdown)
+    }
+
+    /// Create a ParsedDocument from markdown string, returning warnings alongside the document.
+    pub fn from_markdown_with_warnings(
+        markdown: &str,
+    ) -> Result<ParseOutput, crate::error::ParseError> {
+        decompose_with_warnings(markdown)
+            .map(|(document, warnings)| ParseOutput { document, warnings })
     }
 
     /// Get the quill reference (name + version selector)
@@ -156,98 +175,6 @@ fn is_valid_tag_name(name: &str) -> bool {
     true
 }
 
-/// Check if a position is inside a fenced code block.
-///
-/// Uses CommonMark-style fenced block detection:
-/// - Backticks (```) and tildes (~~~) are supported
-/// - Opening fences are 3+ matching fence characters
-/// - Closing fences use the same fence character and length >= opening fence
-fn is_inside_fenced_block(markdown: &str, pos: usize) -> bool {
-    let before = &markdown[..pos];
-    let mut open_fence: Option<(u8, usize)> = None; // (fence char, opening run length)
-
-    // Check if document starts with a fence
-    if let Some((fence_char, fence_len, is_closing)) = fence_marker_at(before, 0, open_fence) {
-        if is_closing {
-            open_fence = None;
-        } else {
-            open_fence = Some((fence_char, fence_len));
-        }
-    }
-
-    // Scan line starts after newlines
-    for (i, _) in before.match_indices('\n') {
-        if let Some((fence_char, fence_len, is_closing)) =
-            fence_marker_at(before, i + 1, open_fence)
-        {
-            if is_closing {
-                open_fence = None;
-            } else {
-                open_fence = Some((fence_char, fence_len));
-            }
-        }
-    }
-
-    open_fence.is_some()
-}
-
-/// Detects a CommonMark fence marker at a given line start position.
-///
-/// Returns (fence_char, fence_len, is_closing).
-fn fence_marker_at(
-    text: &str,
-    pos: usize,
-    open_fence: Option<(u8, usize)>,
-) -> Option<(u8, usize, bool)> {
-    if pos >= text.len() {
-        return None;
-    }
-
-    // Extract line [pos, end)
-    let line_end = text[pos..]
-        .find('\n')
-        .map(|offset| pos + offset)
-        .unwrap_or(text.len());
-    let line = &text[pos..line_end];
-
-    // Optional indentation is up to 3 spaces (CommonMark fence rule)
-    let indent = line.as_bytes().iter().take_while(|&&b| b == b' ').count();
-    if indent > 3 {
-        return None;
-    }
-
-    let trimmed = &line[indent..];
-    let bytes = trimmed.as_bytes();
-    let Some(&first) = bytes.first() else {
-        return None;
-    };
-    if first != b'`' && first != b'~' {
-        return None;
-    }
-
-    let run_len = bytes.iter().take_while(|&&b| b == first).count();
-    if run_len < 3 {
-        return None;
-    }
-
-    let rest = &trimmed[run_len..];
-
-    match open_fence {
-        Some((open_char, open_len)) => {
-            if first != open_char || run_len < open_len {
-                return None;
-            }
-            // Closing fence line may only contain trailing spaces/tabs
-            if rest.chars().all(|c| c == ' ' || c == '\t') {
-                Some((first, run_len, true))
-            } else {
-                None
-            }
-        }
-        None => Some((first, run_len, false)),
-    }
-}
-
 /// Creates serde_saphyr Options with security budgets configured.
 ///
 /// Uses MAX_YAML_DEPTH from error.rs to limit nesting depth at the parser level,
@@ -263,234 +190,479 @@ fn yaml_parse_options() -> serde_saphyr::Options {
     }
 }
 
-/// Find all metadata blocks in the document
-fn find_metadata_blocks(markdown: &str) -> Result<Vec<MetadataBlock>, crate::error::ParseError> {
-    let mut blocks = Vec::new();
-    let mut pos = 0;
+/// Returns true if `line` (without its line ending) is a `---` metadata-fence
+/// marker per MARKDOWN.md §3: exactly three hyphens followed by optional
+/// trailing whitespace (spaces or tabs).
+fn is_fence_marker_line(line: &str) -> bool {
+    let line = line.strip_suffix('\r').unwrap_or(line);
+    // F3 (spec §4): the fence marker is preceded by zero to three spaces of
+    // indentation. Four or more leading spaces (or any leading tab — a tab
+    // counts as four columns of indentation) make the line indented code per
+    // CommonMark §4.4, not a metadata fence.
+    let indent = line.bytes().take_while(|&b| b == b' ').count();
+    if indent > 3 {
+        return false;
+    }
+    if line.as_bytes().first() == Some(&b'\t') {
+        return false;
+    }
+    match line[indent..].strip_prefix("---") {
+        Some(rest) => rest.chars().all(|c| c == ' ' || c == '\t'),
+        None => false,
+    }
+}
 
-    while pos < markdown.len() {
-        // Look for opening "---\n" or "---\r\n"
-        let search_str = &markdown[pos..];
-        let delimiter_result = search_str
-            .find("---\n")
-            .map(|p| (p, 4, "\n"))
-            .or_else(|| search_str.find("---\r\n").map(|p| (p, 5, "\r\n")));
+/// Extracts the first non-blank, non-comment line of `content` and, if it
+/// starts with a `[A-Za-z][A-Za-z0-9_]*` identifier followed by `:`, returns
+/// that identifier. Any leading spaces/tabs on that line are ignored
+/// (YAML indentation-tolerant). YAML `#` comment lines are skipped so the
+/// sentinel rule is indifferent to banner-style comments above the key.
+fn first_content_key(content: &str) -> Option<&str> {
+    let first = content
+        .lines()
+        .find(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))?;
+    let trimmed = first.trim_start_matches([' ', '\t']);
+    let bytes = trimmed.as_bytes();
+    if bytes.is_empty() || !bytes[0].is_ascii_alphabetic() {
+        return None;
+    }
+    let mut i = 1;
+    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
+        i += 1;
+    }
+    if i < bytes.len() && bytes[i] == b':' {
+        Some(&trimmed[..i])
+    } else {
+        None
+    }
+}
 
-        if let Some((delimiter_pos, delimiter_len, _line_ending)) = delimiter_result {
-            let abs_pos = pos + delimiter_pos;
+/// Line-oriented view of the source, used for F1/F2 fence detection.
+struct Lines<'a> {
+    source: &'a str,
+    starts: Vec<usize>, // byte offset of each line's first character
+}
 
-            // Check if the delimiter is at the start of a line
-            let is_start_of_line = if abs_pos == 0 {
-                true
-            } else {
-                let char_before = markdown.as_bytes()[abs_pos - 1];
-                char_before == b'\n' || char_before == b'\r'
-            };
-
-            if !is_start_of_line {
-                pos = abs_pos + 1;
-                continue;
+impl<'a> Lines<'a> {
+    fn new(source: &'a str) -> Self {
+        let mut starts = Vec::new();
+        starts.push(0);
+        for (i, b) in source.bytes().enumerate() {
+            if b == b'\n' {
+                starts.push(i + 1);
             }
-
-            // Skip if inside a fenced code block
-            if is_inside_fenced_block(markdown, abs_pos) {
-                pos = abs_pos + 3;
-                continue;
-            }
-
-            let content_start = abs_pos + delimiter_len; // After "---\n" or "---\r\n"
-
-            // Triple dashes are always metadata block delimiters (never horizontal rules)
-
-            // Found potential metadata block opening
-            // Look for closing "\n---\n" or "\r\n---\r\n" etc., OR "\n---" / "\r\n---" at end of document
-            let rest = &markdown[content_start..];
-
-            // First try to find delimiters with trailing newlines
-            let closing_patterns = ["\n---\n", "\r\n---\r\n", "\n---\r\n", "\r\n---\n"];
-            let closing_with_newline = closing_patterns
-                .iter()
-                .filter_map(|delim| rest.find(delim).map(|p| (p, delim.len())))
-                .min_by_key(|(p, _)| *p);
-
-            // Also check for closing at end of document (no trailing newline)
-            let closing_at_eof = ["\n---", "\r\n---"]
-                .iter()
-                .filter_map(|delim| {
-                    rest.find(delim).and_then(|p| {
-                        if p + delim.len() == rest.len() {
-                            Some((p, delim.len()))
-                        } else {
-                            None
-                        }
-                    })
-                })
-                .min_by_key(|(p, _)| *p);
-
-            let closing_result = match (closing_with_newline, closing_at_eof) {
-                (Some((p1, _l1)), Some((p2, _))) if p2 < p1 => closing_at_eof,
-                (Some(_), Some(_)) => closing_with_newline,
-                (Some(_), None) => closing_with_newline,
-                (None, Some(_)) => closing_at_eof,
-                (None, None) => None,
-            };
-
-            if let Some((closing_pos, closing_len)) = closing_result {
-                let abs_closing_pos = content_start + closing_pos;
-                let content = &markdown[content_start..abs_closing_pos];
-
-                // Check YAML size limit
-                if content.len() > crate::error::MAX_YAML_SIZE {
-                    return Err(crate::error::ParseError::InputTooLarge {
-                        size: content.len(),
-                        max: crate::error::MAX_YAML_SIZE,
-                    });
-                }
-
-                // Parse YAML content to check for reserved keys (QUILL, CARD)
-                // Uses configured budget to limit nesting depth (prevents stack overflow)
-                // Normalize: treat whitespace-only content as empty frontmatter
-                let content = content.trim();
-                let (tag, quill_ref, yaml_value) = if !content.is_empty() {
-                    // Try to parse the YAML with security budgets
-                    match serde_saphyr::from_str_with_options::<serde_json::Value>(
-                        content,
-                        yaml_parse_options(),
-                    ) {
-                        Ok(parsed_yaml) => {
-                            if let Some(mapping) = parsed_yaml.as_object() {
-                                let quill_key = "QUILL";
-                                let card_key = "CARD";
-
-                                let has_quill = mapping.contains_key(quill_key);
-                                let has_card = mapping.contains_key(card_key);
-
-                                if has_quill && has_card {
-                                    return Err(crate::error::ParseError::InvalidStructure(
-                                        "Cannot specify both QUILL and CARD in the same block"
-                                            .to_string(),
-                                    ));
-                                }
-
-                                // Check for reserved field names (BODY, CARDS)
-                                const RESERVED_FIELDS: &[&str] = &["BODY", "CARDS"];
-                                for reserved in RESERVED_FIELDS {
-                                    if mapping.contains_key(*reserved) {
-                                        return Err(crate::error::ParseError::InvalidStructure(
-                                            format!(
-                                                "Reserved field name '{}' cannot be used in YAML frontmatter",
-                                                reserved
-                                            ),
-                                        ));
-                                    }
-                                }
-
-                                if has_quill {
-                                    // Extract and parse quill reference
-                                    let quill_value = mapping.get(quill_key).unwrap();
-                                    let quill_ref_str = quill_value
-                                        .as_str()
-                                        .ok_or("QUILL value must be a string")?;
-
-                                    // Parse as QuillReference to validate name and version
-                                    let _quill_ref =
-                                        quill_ref_str.parse::<QuillReference>().map_err(|e| {
-                                            crate::error::ParseError::InvalidStructure(format!(
-                                                "Invalid QUILL reference '{}': {}",
-                                                quill_ref_str, e
-                                            ))
-                                        })?;
-
-                                    // Remove QUILL from the YAML value for processing
-                                    let mut new_mapping = mapping.clone();
-                                    new_mapping.remove(quill_key);
-                                    let new_value = if new_mapping.is_empty() {
-                                        None
-                                    } else {
-                                        Some(serde_json::Value::Object(new_mapping))
-                                    };
-
-                                    (None, Some(quill_ref_str.to_string()), new_value)
-                                } else if has_card {
-                                    // Extract card field name
-                                    let card_value = mapping.get(card_key).unwrap();
-                                    let field_name =
-                                        card_value.as_str().ok_or("CARD value must be a string")?;
-
-                                    if !is_valid_tag_name(field_name) {
-                                        return Err(crate::error::ParseError::InvalidStructure(format!(
-                                            "Invalid card field name '{}': must match pattern [a-z_][a-z0-9_]*",
-                                            field_name
-                                        )));
-                                    }
-
-                                    // Remove CARD from the YAML value for processing
-                                    let mut new_mapping = mapping.clone();
-                                    new_mapping.remove(card_key);
-                                    let new_value = if new_mapping.is_empty() {
-                                        None
-                                    } else {
-                                        Some(serde_json::Value::Object(new_mapping))
-                                    };
-
-                                    (Some(field_name.to_string()), None, new_value)
-                                } else {
-                                    // No reserved keys, keep the parsed YAML
-                                    (None, None, Some(parsed_yaml))
-                                }
-                            } else {
-                                // Not a mapping, keep the parsed YAML (could be null for whitespace)
-                                (None, None, Some(parsed_yaml))
-                            }
-                        }
-                        Err(e) => {
-                            // Calculate line number for the start of this block
-                            let block_start_line = markdown[..abs_pos].lines().count() + 1;
-                            return Err(crate::error::ParseError::YamlErrorWithLocation {
-                                message: e.to_string(),
-                                line: block_start_line,
-                                block_index: blocks.len(),
-                            });
-                        }
-                    }
-                } else {
-                    // Empty content
-                    (None, None, None)
-                };
-
-                blocks.push(MetadataBlock {
-                    start: abs_pos,
-                    end: abs_closing_pos + closing_len, // After closing delimiter
-                    yaml_value,
-                    tag,
-                    quill_ref,
-                });
-
-                // Check card count limit to prevent memory exhaustion
-                if blocks.len() > crate::error::MAX_CARD_COUNT {
-                    return Err(crate::error::ParseError::InputTooLarge {
-                        size: blocks.len(),
-                        max: crate::error::MAX_CARD_COUNT,
-                    });
-                }
-
-                pos = abs_closing_pos + closing_len;
-            } else {
-                // Metadata block started but not closed
-                return Err(crate::error::ParseError::InvalidStructure(
-                    "Metadata block started but not closed with ---".to_string(),
-                ));
-            }
+        }
+        Self { source, starts }
+    }
+    fn len(&self) -> usize {
+        self.starts.len()
+    }
+    fn line_start(&self, k: usize) -> usize {
+        self.starts[k]
+    }
+    /// Byte position immediately after line k's trailing `\n` (or end-of-source
+    /// if no newline follows).
+    fn line_end_inclusive(&self, k: usize) -> usize {
+        if k + 1 < self.starts.len() {
+            self.starts[k + 1]
         } else {
-            break;
+            self.source.len()
+        }
+    }
+    /// Line text without its trailing line ending.
+    fn line_text(&self, k: usize) -> &'a str {
+        let start = self.starts[k];
+        let mut end = self.line_end_inclusive(k);
+        if end > start && self.source.as_bytes()[end - 1] == b'\n' {
+            end -= 1;
+        }
+        if end > start && self.source.as_bytes()[end - 1] == b'\r' {
+            end -= 1;
+        }
+        &self.source[start..end]
+    }
+    fn is_blank(&self, k: usize) -> bool {
+        self.line_text(k).chars().all(char::is_whitespace)
+    }
+}
+
+/// Detect a CommonMark fenced code-block marker line. Returns `Some((char,
+/// run_len))` if the line opens a fence, or `Some` with `is_closing=true` if
+/// it closes one matching `open_fence`.
+fn code_fence_on_line(line: &str, open_fence: Option<(u8, usize)>) -> Option<(u8, usize, bool)> {
+    let indent = line.as_bytes().iter().take_while(|&&b| b == b' ').count();
+    if indent > 3 {
+        return None;
+    }
+    let trimmed = &line[indent..];
+    let bytes = trimmed.as_bytes();
+    let &first = bytes.first()?;
+    if first != b'`' && first != b'~' {
+        return None;
+    }
+    let run_len = bytes.iter().take_while(|&&b| b == first).count();
+    if run_len < 3 {
+        return None;
+    }
+    let rest = &trimmed[run_len..];
+    match open_fence {
+        Some((open_char, open_len)) => {
+            if first == open_char
+                && run_len >= open_len
+                && rest.chars().all(|c| c == ' ' || c == '\t')
+            {
+                Some((first, run_len, true))
+            } else {
+                None
+            }
+        }
+        None => Some((first, run_len, false)),
+    }
+}
+
+/// Process YAML content for a recognized metadata fence and build a
+/// `MetadataBlock`. The `is_first_block` flag governs whether `QUILL` is
+/// expected (vs. `CARD`). Returns errors per spec §9.
+fn build_block(
+    markdown: &str,
+    abs_pos: usize,
+    abs_closing_pos: usize,
+    block_end: usize,
+    block_index: usize,
+) -> Result<MetadataBlock, ParseError> {
+    let raw_content = &markdown[abs_pos + fence_opener_len(markdown, abs_pos)..abs_closing_pos];
+
+    // Check YAML size limit (spec §8)
+    if raw_content.len() > crate::error::MAX_YAML_SIZE {
+        return Err(ParseError::InputTooLarge {
+            size: raw_content.len(),
+            max: crate::error::MAX_YAML_SIZE,
+        });
+    }
+
+    let content = raw_content.trim();
+    let (tag, quill_ref, yaml_value) = if content.is_empty() {
+        (None, None, None)
+    } else {
+        match serde_saphyr::from_str_with_options::<serde_json::Value>(
+            content,
+            yaml_parse_options(),
+        ) {
+            Ok(parsed) => extract_sentinels(parsed, markdown, abs_pos, block_index)?,
+            Err(e) => {
+                let line = markdown[..abs_pos].lines().count() + 1;
+                return Err(ParseError::YamlErrorWithLocation {
+                    message: e.to_string(),
+                    line,
+                    block_index,
+                });
+            }
+        }
+    };
+
+    // Per-fence field-count check (spec §8, §6.1 of GAP analysis)
+    if let Some(serde_json::Value::Object(ref map)) = yaml_value {
+        // Add +1 for QUILL (stripped) or CARD (stripped) so the cap matches
+        // what the user wrote, not what's left after sentinel extraction.
+        let sentinel_extra = if quill_ref.is_some() || tag.is_some() {
+            1
+        } else {
+            0
+        };
+        if map.len() + sentinel_extra > crate::error::MAX_FIELD_COUNT {
+            return Err(ParseError::InputTooLarge {
+                size: map.len() + sentinel_extra,
+                max: crate::error::MAX_FIELD_COUNT,
+            });
         }
     }
 
-    Ok(blocks)
+    Ok(MetadataBlock {
+        start: abs_pos,
+        end: block_end,
+        yaml_value,
+        tag,
+        quill_ref,
+    })
 }
 
-/// Decompose markdown into frontmatter fields and body
+/// Number of bytes occupied by the opener `---[ \t]*\n` or `---[ \t]*\r\n`
+/// starting at `abs_pos`. Only called on a line that already matched
+/// `is_fence_marker_line`.
+fn fence_opener_len(markdown: &str, abs_pos: usize) -> usize {
+    let bytes = markdown.as_bytes();
+    let mut i = abs_pos + 3; // past the "---"
+    while i < bytes.len() && (bytes[i] == b' ' || bytes[i] == b'\t') {
+        i += 1;
+    }
+    if i < bytes.len() && bytes[i] == b'\r' {
+        i += 1;
+    }
+    if i < bytes.len() && bytes[i] == b'\n' {
+        i += 1;
+    }
+    i - abs_pos
+}
+
+/// Extract `QUILL` / `CARD` sentinels and remaining fields from a parsed-YAML
+/// mapping. Returns `(tag, quill_ref, yaml_without_sentinel)`.
+fn extract_sentinels(
+    parsed: serde_json::Value,
+    _markdown: &str,
+    _abs_pos: usize,
+    _block_index: usize,
+) -> Result<(Option<String>, Option<String>, Option<serde_json::Value>), ParseError> {
+    let Some(mapping) = parsed.as_object() else {
+        // Non-mapping (scalar/sequence); keep as-is — upstream will reject if
+        // it's a frontmatter/card mapping was expected.
+        return Ok((None, None, Some(parsed)));
+    };
+
+    let has_quill = mapping.contains_key("QUILL");
+    let has_card = mapping.contains_key("CARD");
+
+    if has_quill && has_card {
+        return Err(ParseError::InvalidStructure(
+            "Cannot specify both QUILL and CARD in the same block".to_string(),
+        ));
+    }
+
+    // Reserved keys (BODY, CARDS) — spec §3
+    for reserved in ["BODY", "CARDS"] {
+        if mapping.contains_key(reserved) {
+            return Err(ParseError::InvalidStructure(format!(
+                "Reserved field name '{}' cannot be used in YAML frontmatter",
+                reserved
+            )));
+        }
+    }
+
+    if has_quill {
+        let quill_str = mapping
+            .get("QUILL")
+            .unwrap()
+            .as_str()
+            .ok_or("QUILL value must be a string")?;
+        quill_str.parse::<QuillReference>().map_err(|e| {
+            ParseError::InvalidStructure(format!("Invalid QUILL reference '{}': {}", quill_str, e))
+        })?;
+        let mut new_map = mapping.clone();
+        new_map.remove("QUILL");
+        let new_val = if new_map.is_empty() {
+            None
+        } else {
+            Some(serde_json::Value::Object(new_map))
+        };
+        Ok((None, Some(quill_str.to_string()), new_val))
+    } else if has_card {
+        let field_name = mapping
+            .get("CARD")
+            .unwrap()
+            .as_str()
+            .ok_or("CARD value must be a string")?;
+        if !is_valid_tag_name(field_name) {
+            return Err(ParseError::InvalidStructure(format!(
+                "Invalid card field name '{}': must match pattern [a-z_][a-z0-9_]*",
+                field_name
+            )));
+        }
+        let mut new_map = mapping.clone();
+        new_map.remove("CARD");
+        let new_val = if new_map.is_empty() {
+            None
+        } else {
+            Some(serde_json::Value::Object(new_map))
+        };
+        Ok((Some(field_name.to_string()), None, new_val))
+    } else {
+        Ok((None, None, Some(parsed)))
+    }
+}
+
+/// Find all metadata fences in the document per MARKDOWN.md §3–§4.
+///
+/// Implements fence rules F1 (sentinel) and F2 (leading blank). Returns
+/// successfully detected blocks plus any lint warnings emitted for
+/// near-miss sentinels (§4.2).
+/// Outcome of the fence-detection pass: the recognised metadata blocks, any
+/// non-fatal diagnostics accumulated along the way, and (if applicable) the
+/// first-fence F1 failure captured so the top-level error can be specific.
+type FenceScan = (Vec<MetadataBlock>, Vec<Diagnostic>, Option<(String, usize)>);
+
+fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseError> {
+    let lines = Lines::new(markdown);
+    let mut blocks: Vec<MetadataBlock> = Vec::new();
+    let mut warnings: Vec<Diagnostic> = Vec::new();
+    // (char, min_run_len, opener_line_index)
+    let mut open_code_fence: Option<(u8, usize, usize)> = None;
+    // First-fence F1 failure context, captured for a clearer top-level error
+    // if no valid QUILL fence is ever found. (actual_key, 1-based line).
+    let mut first_fence_issue: Option<(String, usize)> = None;
+
+    let mut k: usize = 0;
+    while k < lines.len() {
+        let text = lines.line_text(k);
+
+        // Track open CommonMark fenced-code-block state so that `---` inside
+        // them is ignored (spec §3 "Fences inside fenced code blocks").
+        if let Some((ch, min, _opener)) = open_code_fence {
+            if let Some((_, _, true)) = code_fence_on_line(text, Some((ch, min))) {
+                open_code_fence = None;
+            }
+            k += 1;
+            continue;
+        }
+        if let Some((ch, run_len, _)) = code_fence_on_line(text, None) {
+            open_code_fence = Some((ch, run_len, k));
+            k += 1;
+            continue;
+        }
+
+        // Candidate fence opener?
+        if !is_fence_marker_line(text) {
+            k += 1;
+            continue;
+        }
+
+        // F2 — Leading blank rule
+        let f2_ok = k == 0 || lines.is_blank(k - 1);
+        if !f2_ok {
+            k += 1;
+            continue;
+        }
+
+        // Scan ahead for the closer. Inside a metadata fence, YAML content is
+        // opaque — don't update code-block state.
+        let mut closer_k: Option<usize> = None;
+        let mut j = k + 1;
+        while j < lines.len() {
+            if is_fence_marker_line(lines.line_text(j)) {
+                closer_k = Some(j);
+                break;
+            }
+            j += 1;
+        }
+
+        let content_start = lines.line_end_inclusive(k);
+        let (content_end, block_end) = match closer_k {
+            Some(cj) => (lines.line_start(cj), lines.line_end_inclusive(cj)),
+            None => (markdown.len(), markdown.len()),
+        };
+        let content = &markdown[content_start..content_end];
+
+        // F1 — Sentinel rule. First non-blank line of content must match the
+        // expected sentinel (`QUILL` for the first fence, `CARD` thereafter).
+        let expected = if blocks.is_empty() { "QUILL" } else { "CARD" };
+        let key = first_content_key(content);
+        let f1_ok = key == Some(expected);
+
+        if !f1_ok {
+            // Near-miss lint (spec §4.2): first key looked like an identifier
+            // but wasn't the expected sentinel.
+            if let Some(actual) = key {
+                if actual != expected {
+                    warnings.push(
+                        Diagnostic::new(
+                            Severity::Warning,
+                            format!(
+                                "Near-miss metadata sentinel `{}:` at line {} — expected `{}:`. This `---/---` pair is treated as literal Markdown; if you intended a metadata fence, change the key to `{}`.",
+                                actual, k + 1, expected, expected
+                            ),
+                        )
+                        .with_code("parse::near_miss_sentinel".to_string()),
+                    );
+                    // Capture the first-fence F1 failure so the top-level
+                    // "Missing required QUILL field" error can be specific
+                    // about the actual key found.
+                    if blocks.is_empty() && first_fence_issue.is_none() {
+                        first_fence_issue = Some((actual.to_string(), k + 1));
+                    }
+                }
+            }
+            // Delegate this opener to CommonMark — advance past the opener
+            // line only; the closer (if any) may become its own candidate
+            // opener on a later iteration (it will fail F2 and be skipped).
+            k += 1;
+            continue;
+        }
+
+        // F1 passed — a legitimate fence. If the closer was missing, this is
+        // a hard error (spec §9).
+        let Some(cj) = closer_k else {
+            return Err(ParseError::InvalidStructure(
+                "Metadata block started but not closed with ---".to_string(),
+            ));
+        };
+
+        let abs_pos = lines.line_start(k);
+        let abs_closing_pos = lines.line_start(cj);
+        let block = build_block(markdown, abs_pos, abs_closing_pos, block_end, blocks.len())?;
+        blocks.push(block);
+
+        k = cj + 1;
+    }
+
+    // Card-count check counts only blocks carrying a CARD sentinel (spec §8).
+    let card_count = blocks.iter().filter(|b| b.tag.is_some()).count();
+    if card_count > crate::error::MAX_CARD_COUNT {
+        return Err(ParseError::InputTooLarge {
+            size: card_count,
+            max: crate::error::MAX_CARD_COUNT,
+        });
+    }
+
+    // Unclosed fenced code block at end-of-document: any metadata fences below
+    // the unclosed opener were silently shielded, which is almost never what
+    // the author intended. Surface it as a non-fatal warning.
+    if let Some((_, _, opener_line)) = open_code_fence {
+        warnings.push(
+            Diagnostic::new(
+                Severity::Warning,
+                format!(
+                    "Unclosed fenced code block opened at line {} — end-of-document reached without a matching closing fence. Any `---/---` pairs after this line were treated as code and not parsed as metadata fences.",
+                    opener_line + 1
+                ),
+            )
+            .with_code("parse::unclosed_code_block".to_string()),
+        );
+    }
+
+    Ok((blocks, warnings, first_fence_issue))
+}
+
+/// Decompose markdown, discarding warnings. Test- and `from_markdown`-facing.
 fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError> {
+    decompose_with_warnings(markdown).map(|(doc, _)| doc)
+}
+
+/// Construct the top-level "missing QUILL" error message. If we saw a
+/// first-fence F1 failure, tailor the message to the actual key found:
+/// a case-insensitive match to `QUILL` is a typo, anything else is a
+/// key-ordering problem.
+fn missing_quill_message(first_fence_issue: Option<(String, usize)>) -> String {
+    match first_fence_issue {
+        Some((actual, line)) if actual.eq_ignore_ascii_case("QUILL") => format!(
+            "Missing required QUILL field. Found `{}:` at line {} — expected `QUILL:` (uppercase). Change the key to `QUILL` to register this fence as the document frontmatter.",
+            actual, line
+        ),
+        Some((actual, line)) => format!(
+            "Missing required QUILL field. The first YAML key in the frontmatter must be `QUILL:` (found `{}:` at line {}). Reorder the frontmatter so `QUILL: <name>` is the first key.",
+            actual, line
+        ),
+        None => "Missing required QUILL field. Add `QUILL: <name>` to the frontmatter.".to_string(),
+    }
+}
+
+/// Decompose markdown into frontmatter fields and body, returning any
+/// non-fatal warnings collected during fence scanning.
+fn decompose_with_warnings(
+    markdown: &str,
+) -> Result<(ParsedDocument, Vec<Diagnostic>), crate::error::ParseError> {
+    // Strip a leading UTF-8 BOM if present. Editors on Windows (Notepad, some
+    // Word exports) prepend `\u{FEFF}` which otherwise defeats F2 because the
+    // first line no longer matches `---`.
+    let markdown = markdown.strip_prefix('\u{FEFF}').unwrap_or(markdown);
+
     // Check input size limit
     if markdown.len() > crate::error::MAX_INPUT_SIZE {
         return Err(crate::error::ParseError::InputTooLarge {
@@ -501,109 +673,38 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
 
     let mut fields = HashMap::new();
 
-    // Find all metadata blocks
-    let blocks = find_metadata_blocks(markdown)?;
+    // Find all metadata blocks. F1/F2 already guarantee that block 0 carries
+    // QUILL and that every subsequent block carries CARD.
+    let (blocks, warnings, first_fence_issue) = find_metadata_blocks(markdown)?;
 
     if blocks.is_empty() {
-        // No metadata blocks — entire content is body, but QUILL is required
         return Err(crate::error::ParseError::InvalidStructure(
-            "Missing required QUILL field. Add `QUILL: <name>` to the frontmatter.".to_string(),
+            missing_quill_message(first_fence_issue),
         ));
     }
 
-    // Collect all card items into unified CARDS array
     let mut cards_array: Vec<serde_json::Value> = Vec::new();
-    let mut global_frontmatter_index: Option<usize> = None;
-    let mut quill_ref: Option<String> = None;
 
-    // First pass: identify global frontmatter, quill directive, and validate
-    for (idx, block) in blocks.iter().enumerate() {
-        if idx == 0 {
-            // Top-level frontmatter: can have QUILL or neither (not considered a card)
-            if let Some(ref name) = block.quill_ref {
-                quill_ref = Some(name.clone());
-            }
-            // If it has neither QUILL nor CARD, it's global frontmatter
-            if block.tag.is_none() && block.quill_ref.is_none() {
-                global_frontmatter_index = Some(idx);
-            }
-        } else {
-            // Inline blocks (idx > 0): MUST have CARD, cannot have QUILL
-            if block.quill_ref.is_some() {
-                return Err(crate::error::ParseError::InvalidStructure("QUILL directive can only appear in the top-level frontmatter, not in inline blocks. Use CARD instead.".to_string()));
-            }
-            if block.tag.is_none() {
-                // Inline block without CARD
-                return Err(crate::error::ParseError::missing_card_directive());
+    // Block 0 is always the QUILL frontmatter (F1 guarantee).
+    let frontmatter = &blocks[0];
+    let quill_tag = frontmatter.quill_ref.clone().ok_or_else(|| {
+        ParseError::InvalidStructure(
+            "Missing required QUILL field. Add `QUILL: <name>` to the frontmatter.".to_string(),
+        )
+    })?;
+
+    // Merge frontmatter fields (YAML content with QUILL stripped).
+    match &frontmatter.yaml_value {
+        Some(serde_json::Value::Object(mapping)) => {
+            for (key, value) in mapping {
+                fields.insert(key.clone(), QuillValue::from_json(value.clone()));
             }
         }
-    }
-
-    // Parse global frontmatter if present
-    if let Some(idx) = global_frontmatter_index {
-        let block = &blocks[idx];
-
-        // Get parsed JSON fields directly (already parsed in find_metadata_blocks)
-        let json_fields: HashMap<String, serde_json::Value> = match &block.yaml_value {
-            Some(serde_json::Value::Object(mapping)) => mapping
-                .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
-                .collect(),
-            Some(serde_json::Value::Null) => {
-                // Null value (from whitespace-only YAML) - treat as empty mapping
-                HashMap::new()
-            }
-            Some(_) => {
-                // Non-mapping, non-null YAML (e.g., scalar, sequence) - this is an error for frontmatter
-                return Err(crate::error::ParseError::InvalidStructure(
-                    "Invalid YAML frontmatter: expected a mapping".to_string(),
-                ));
-            }
-            None => HashMap::new(),
-        };
-
-        // Convert JSON values to QuillValue at boundary
-        for (key, value) in json_fields {
-            fields.insert(key, QuillValue::from_json(value));
-        }
-    }
-
-    // Process blocks with quill directives
-    for block in &blocks {
-        if block.quill_ref.is_some() {
-            // Quill directive blocks can have YAML content (becomes part of frontmatter)
-            if let Some(ref json_val) = block.yaml_value {
-                let json_fields: HashMap<String, serde_json::Value> = match json_val {
-                    serde_json::Value::Object(mapping) => mapping
-                        .iter()
-                        .map(|(k, v)| (k.clone(), v.clone()))
-                        .collect(),
-                    serde_json::Value::Null => {
-                        // Null value (from whitespace-only YAML) - treat as empty mapping
-                        HashMap::new()
-                    }
-                    _ => {
-                        return Err(crate::error::ParseError::InvalidStructure(
-                            "Invalid YAML in quill block: expected a mapping".to_string(),
-                        ));
-                    }
-                };
-
-                // Check for conflicts with existing fields
-                for key in json_fields.keys() {
-                    if fields.contains_key(key) {
-                        return Err(crate::error::ParseError::InvalidStructure(format!(
-                            "Name collision: quill block field '{}' conflicts with existing field",
-                            key
-                        )));
-                    }
-                }
-
-                // Convert JSON values to QuillValue at boundary
-                for (key, value) in json_fields {
-                    fields.insert(key, QuillValue::from_json(value));
-                }
-            }
+        Some(serde_json::Value::Null) | None => {}
+        Some(_) => {
+            return Err(ParseError::InvalidStructure(
+                "Invalid YAML frontmatter: expected a mapping".to_string(),
+            ));
         }
     }
 
@@ -654,38 +755,15 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
         }
     }
 
-    // Extract global body
-    // Body starts after global frontmatter or quill block (whichever comes first)
-    // Body ends at the first card block or EOF
-    let first_non_card_block_idx = blocks
+    // Global body: between end of frontmatter (block 0) and start of the
+    // first CARD block (or EOF).
+    let body_start = blocks[0].end;
+    let body_end = blocks
         .iter()
-        .position(|b| b.tag.is_none() && b.quill_ref.is_none())
-        .or_else(|| blocks.iter().position(|b| b.quill_ref.is_some()));
-
-    let (body_start, body_end) = if let Some(idx) = first_non_card_block_idx {
-        // Body starts after the first non-card block (global frontmatter or quill)
-        let start = blocks[idx].end;
-
-        // Body ends at the first card block after this, or EOF
-        let end = blocks
-            .iter()
-            .skip(idx + 1)
-            .find(|b| b.tag.is_some())
-            .map(|b| b.start)
-            .unwrap_or(markdown.len());
-
-        (start, end)
-    } else {
-        // No global frontmatter or quill block - body is everything before the first card block
-        let end = blocks
-            .iter()
-            .find(|b| b.tag.is_some())
-            .map(|b| b.start)
-            .unwrap_or(0);
-
-        (0, end)
-    };
-
+        .skip(1)
+        .find(|b| b.tag.is_some())
+        .map(|b| b.start)
+        .unwrap_or(markdown.len());
     let global_body = &markdown[body_start..body_end];
 
     fields.insert(
@@ -699,25 +777,12 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
         QuillValue::from_json(serde_json::Value::Array(cards_array)),
     );
 
-    // Check field count limit to prevent memory exhaustion
-    if fields.len() > crate::error::MAX_FIELD_COUNT {
-        return Err(crate::error::ParseError::InputTooLarge {
-            size: fields.len(),
-            max: crate::error::MAX_FIELD_COUNT,
-        });
-    }
-
-    let quill_tag = quill_ref.ok_or_else(|| {
-        ParseError::InvalidStructure(
-            "Missing required QUILL field. Add `QUILL: <name>` to the frontmatter.".to_string(),
-        )
-    })?;
     let quill_ref = QuillReference::from_str(&quill_tag).map_err(|e| {
         ParseError::InvalidStructure(format!("Invalid QUILL tag '{}': {}", quill_tag, e))
     })?;
     let parsed = ParsedDocument::new(fields, quill_ref);
 
-    Ok(parsed)
+    Ok((parsed, warnings))
 }
 
 #[cfg(test)]
@@ -958,7 +1023,9 @@ Content here."#;
 
     #[test]
     fn test_invalid_yaml() {
+        // Real fence (QUILL first) with invalid YAML — size check happens, then YAML parse fails.
         let markdown = r#"---
+QUILL: test_quill
 title: [invalid yaml
 author: missing close bracket
 ---
@@ -973,7 +1040,9 @@ Content here."#;
 
     #[test]
     fn test_unclosed_frontmatter() {
+        // Real fence (QUILL first) without closer → spec §9 "not closed" error.
         let markdown = r#"---
+QUILL: test_quill
 title: Test
 author: Test Author
 
@@ -1222,7 +1291,12 @@ Item 1 body"#;
 
     #[test]
     fn test_reserved_field_body_rejected() {
+        // BODY reserved inside a CARD block (requires prior QUILL fence per spec §4 F1).
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: section
 BODY: Test
 ---"#;
@@ -1237,7 +1311,9 @@ BODY: Test
 
     #[test]
     fn test_reserved_field_cards_rejected() {
+        // CARDS reserved inside the QUILL frontmatter.
         let markdown = r#"---
+QUILL: test_quill
 title: Test
 CARDS: []
 ---"#;
@@ -1325,7 +1401,12 @@ More content.
 
     #[test]
     fn test_invalid_tag_syntax() {
+        // CARD must follow a prior QUILL fence per spec §4 F1.
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: Invalid-Name
 title: Test
 ---"#;
@@ -1340,6 +1421,9 @@ title: Test
 
     #[test]
     fn test_multiple_global_frontmatter_blocks() {
+        // Two `---/---` blocks without QUILL/CARD sentinels both fail F1
+        // and are delegated to CommonMark, so the document has no metadata
+        // blocks and parsing fails with the missing-QUILL error.
         let markdown = r#"---
 title: First
 ---
@@ -1352,20 +1436,11 @@ author: Second
 
 More body"#;
 
-        let result = decompose(markdown);
-        assert!(result.is_err());
-
-        // Verify the error message contains CARD hint
-        let err = result.unwrap_err();
+        let err = decompose(markdown).unwrap_err();
         let err_str = err.to_string();
         assert!(
-            err_str.contains("CARD"),
-            "Error should mention CARD directive: {}",
-            err_str
-        );
-        assert!(
-            err_str.contains("missing"),
-            "Error should indicate missing directive: {}",
+            err_str.contains("QUILL"),
+            "Error should mention missing QUILL: {}",
             err_str
         );
     }
@@ -1612,6 +1687,10 @@ Section 1 body."#;
 
     #[test]
     fn test_multiple_quill_directives_error() {
+        // A second fence whose first key is QUILL (instead of CARD) fails F1
+        // and is delegated to CommonMark. A near-miss warning is emitted per
+        // spec §4.2; the document itself parses successfully with the stray
+        // `---` lines preserved in the body.
         let markdown = r#"---
 QUILL: first
 ---
@@ -1620,13 +1699,13 @@ QUILL: first
 QUILL: second
 ---"#;
 
-        let result = decompose(markdown);
-        assert!(result.is_err());
-        // QUILL in inline block is now an error (must appear in top-level frontmatter only)
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("top-level frontmatter"));
+        let output = ParsedDocument::from_markdown_with_warnings(markdown).unwrap();
+        assert!(output
+            .warnings
+            .iter()
+            .any(|w| w.code.as_deref() == Some("parse::near_miss_sentinel")
+                && w.message.contains("QUILL")));
+        assert!(output.document.body().unwrap().contains("QUILL: second"));
     }
 
     #[test]
@@ -1660,6 +1739,10 @@ QUILL: 123
     #[test]
     fn test_card_wrong_value_type() {
         let markdown = r#"---
+QUILL: test_quill
+---
+
+---
 CARD: 123
 ---"#;
 
@@ -1760,8 +1843,9 @@ Body of item 1."#;
     }
 
     #[test]
-    fn test_triple_dash_in_body_is_parsed_as_inline_metadata_block() {
-        // Triple dashes are always metadata delimiters, never horizontal rules
+    fn test_triple_dash_in_body_without_sentinel_is_delegated() {
+        // Triple-dash pairs without a QUILL or CARD sentinel fail F1 and are
+        // delegated to CommonMark, so the `---` lines stay in the body.
         let markdown = r#"---
 QUILL: test_quill
 title: Test
@@ -1773,17 +1857,17 @@ First paragraph.
 
 Second paragraph."#;
 
-        let err = decompose(markdown).unwrap_err();
-
-        assert!(matches!(
-            err,
-            ParseError::InvalidStructure(ref msg) if msg.contains("not closed with ---")
-        ));
+        let doc = decompose(markdown).unwrap();
+        let body = doc.body().unwrap();
+        assert!(body.contains("First paragraph."));
+        assert!(body.contains("Second paragraph."));
+        assert!(body.contains("---"));
     }
 
     #[test]
-    fn test_triple_dash_with_single_surrounding_newline_is_also_metadata() {
-        // Triple dashes without CARD in body are rejected as inline metadata blocks
+    fn test_lone_triple_dash_in_body_is_delegated() {
+        // A single `---` line not preceded by a blank fails F2 and is left as
+        // body content.
         let markdown = r#"---
 QUILL: test_quill
 title: Test
@@ -1794,12 +1878,11 @@ First paragraph.
 
 Second paragraph."#;
 
-        let err = decompose(markdown).unwrap_err();
-
-        assert!(matches!(
-            err,
-            ParseError::InvalidStructure(ref msg) if msg.contains("not closed with ---")
-        ));
+        let doc = decompose(markdown).unwrap();
+        let body = doc.body().unwrap();
+        assert!(body.contains("First paragraph."));
+        assert!(body.contains("Second paragraph."));
+        assert!(body.contains("---"));
     }
 
     #[test]
@@ -1930,7 +2013,7 @@ mod demo_file_test {
     #[test]
     fn test_yaml_size_limit() {
         // Create YAML block larger than MAX_YAML_SIZE (1 MB)
-        let mut markdown = String::from("---\n");
+        let mut markdown = String::from("---\nQUILL: test_quill\n");
 
         // Create a very large YAML field
         let size = crate::error::MAX_YAML_SIZE + 1;
@@ -2453,6 +2536,9 @@ name: Item
 
     #[test]
     fn test_card_consecutive_blocks() {
+        // Per spec §4 F2 each metadata fence opener must be preceded by a
+        // blank line (or start-of-file), so consecutive CARD blocks need a
+        // blank separator.
         let markdown = r#"---
 QUILL: test_quill
 ---
@@ -2461,6 +2547,7 @@ QUILL: test_quill
 CARD: a
 id: 1
 ---
+
 ---
 CARD: a
 id: 2
@@ -2551,7 +2638,7 @@ Body content."#;
 
     #[test]
     fn test_invalid_scope_name_uppercase() {
-        let markdown = "---\nCARD: ITEMS\n---\n\nBody.";
+        let markdown = "---\nQUILL: test_quill\n---\n\n---\nCARD: ITEMS\n---\n\nBody.";
         let result = decompose(markdown);
         assert!(result.is_err());
         assert!(result
@@ -2759,8 +2846,8 @@ Body content."#;
     #[test]
     fn test_spec_example() {
         let markdown = r#"---
-title: My Document
 QUILL: blog_post
+title: My Document
 ---
 Main document body.
 

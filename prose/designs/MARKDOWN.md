@@ -61,19 +61,37 @@ optional trailing whitespace). The content between is parsed as YAML.
 
 A `---` line opens a metadata fence **iff both** of the following hold:
 
-**F1 — Sentinel.** The first non-blank line of content between the opening
-`---` and the next `---` line matches `KEY: value`, where `KEY` is:
+**F1 — Sentinel.** The first non-blank, non-comment line of content between
+the opening `---` and the next `---` line matches `KEY: value`, where `KEY`
+is:
 
 - `QUILL` if this is the first metadata fence in the document, or
 - `CARD` if any metadata fence has already been recognised.
 
+For F1 purposes a *comment line* is any line whose first non-whitespace
+character is `#`; such lines are skipped when locating the first content
+line. This mirrors YAML's own treatment of `#` comments and lets fences
+carry banner comments above the sentinel (e.g. `# Essential`).
+
 **F2 — Leading blank.** The opening `---` is on line 1 of the document, or
 the line immediately above it is blank.
 
-A `---` line that fails either rule is delegated to CommonMark unchanged:
+**F3 — Column.** The `---` marker is preceded by zero to three spaces of
+indentation. A line with four or more leading spaces (or any leading tab,
+which counts as four columns under CommonMark) is never a fence marker;
+per CommonMark §4.4 such a line is indented code. This rule applies
+symmetrically to the opening and closing fence markers, and piggy-backs on
+the same indentation rule CommonMark already uses for thematic breaks, so
+`---` lines that appear inside indented code blocks are automatically
+excluded without special tracking.
+
+A `---` line that fails any of F1, F2, or F3 is delegated to CommonMark
+unchanged:
 
 - If the line above is non-blank paragraph text, `---` is a setext H2
   underline.
+- If the line is indented by four or more columns, `---` is part of an
+  indented code block.
 - Otherwise, `---` is a thematic break.
 
 ### 4.1 Worked Examples
@@ -107,8 +125,8 @@ A `---`/`---` pair whose content's first key is almost-but-not-quite
 `CARD` (e.g. `Card:`, `CARDS:`, `card:`) fails F1 and is interpreted as
 two thematic breaks with literal YAML between. Implementations **should**
 emit a lint warning when they encounter a `---`/`---` pair whose content's
-first non-blank line matches `[A-Za-z][A-Za-z0-9_]*:` but whose key is not
-the expected sentinel.
+first non-blank, non-comment line matches `[A-Za-z][A-Za-z0-9_]*:` but whose
+key is not the expected sentinel.
 
 ## 5. Data Model
 
@@ -190,10 +208,16 @@ implemented in a future revision:
 
 Before CommonMark parsing, each body region is normalized:
 
-1. **Bidi control stripping.** Remove U+061C, U+200E, U+200F,
+1. **Line-ending canonicalization.** `\r\n` and bare `\r` sequences are
+   converted to `\n`. YAML scalars receive this treatment from the YAML
+   parser itself; the body region does not, so this step ensures both
+   layers agree. Authors editing on Windows or pasting from sources that
+   emit CR-bearing line terminators otherwise leave bare `\r` bytes in
+   the body, which some backends render as visible garbage.
+2. **Bidi control stripping.** Remove U+061C, U+200E, U+200F,
    U+202A–U+202E, U+2066–U+2069. These invisible characters can
    desynchronize delimiter runs when copy-pasted from bidi-aware sources.
-2. **HTML comment fence repair.** If `-->` is followed by non-whitespace
+3. **HTML comment fence repair.** If `-->` is followed by non-whitespace
    text on the same line, insert a newline after `-->` so the trailing
    text reaches the paragraph parser instead of being consumed by the
    CommonMark HTML-block rule (type 2).
