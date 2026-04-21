@@ -25,11 +25,7 @@ fn f2_fence_directly_under_paragraph_is_not_a_fence() {
 fn f1_first_fence_without_quill_is_rejected() {
     let md = "---\ntitle: X\n---\n\nBody.";
     let err = ParsedDocument::from_markdown(md).unwrap_err().to_string();
-    assert!(
-        err.contains("Missing required QUILL field"),
-        "got: {}",
-        err
-    );
+    assert!(err.contains("Missing required QUILL field"), "got: {}", err);
 }
 
 // §4.2 — Near-miss sentinel warning.
@@ -38,10 +34,9 @@ fn near_miss_sentinel_emits_warning_and_delegates() {
     let md = "---\nQUILL: t\n---\n\nBody.\n\n---\nCard: oops\nname: X\n---\n\nTrailing.";
     let out = ParsedDocument::from_markdown_with_warnings(md).unwrap();
     assert!(
-        out.warnings
-            .iter()
-            .any(|w| w.message.contains("Near-miss metadata sentinel")
-                && w.message.contains("Card")),
+        out.warnings.iter().any(
+            |w| w.message.contains("Near-miss metadata sentinel") && w.message.contains("Card")
+        ),
         "expected near-miss warning, got: {:?}",
         out.warnings
             .iter()
@@ -49,12 +44,7 @@ fn near_miss_sentinel_emits_warning_and_delegates() {
             .collect::<Vec<_>>()
     );
     // And the `Card:` fence must NOT have registered as a card.
-    let cards = out
-        .document
-        .get_field("CARDS")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let cards = out.document.get_field("CARDS").unwrap().as_array().unwrap();
     assert!(
         cards.is_empty(),
         "near-miss CARD must be delegated, not registered"
