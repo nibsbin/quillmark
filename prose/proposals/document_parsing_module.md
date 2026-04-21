@@ -181,6 +181,14 @@ Rejected alternatives:
   quotes on emit) has no workaround in the exposed API. Adding an
   archived crate to the dep tree when we already have a maintained
   parse/emit library is pure downside.
+- `yaml_serde` (YAML organization): the officially-blessed successor
+  to `serde_yaml`, actively maintained, both ser and de. Two reasons
+  not to pick it over `serde-saphyr`: (1) no documented style options
+  for controlling scalar quoting, which is the specific feature we
+  need; (2) it would be a **second** YAML library in the dep tree
+  alongside our existing `serde-saphyr` parser, reintroducing the
+  dialect-mismatch risk `serde-saphyr`-on-both-sides avoids. Low
+  adoption (~12K downloads) is a footnote, not the reason.
 - `serde_yml` (sebastienrousseau fork): RUSTSEC-2025-0068 (unsound,
   unmaintained) as of September 2025. Explicit non-starter.
 - `serde-yaml-ng` (acatton fork): maintained, but no exposed
