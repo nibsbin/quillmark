@@ -306,3 +306,66 @@ def test_invariants_after_mutation_sequence():
 
     # Document identity preserved
     assert doc.quill_ref() == "test_quill"
+
+
+# ---------------------------------------------------------------------------
+# Phase 4c — emitter integration tests (fromMarkdown → mutate → emit → re-parse)
+# ---------------------------------------------------------------------------
+
+
+def test_to_markdown_general_round_trip():
+    """Mutated document survives emit → re-parse with structure intact."""
+    doc = Document.from_markdown(SIMPLE_MD)
+    original_card_count = len(doc.cards)  # 0 for SIMPLE_MD
+
+    # Mutate
+    doc.set_field("title", "New Title")
+    doc.push_card({"tag": "note", "fields": {"author": "Alice"}, "body": "Hello"})
+    doc.replace_body("Updated body")
+
+    # Emit
+    emitted = doc.to_markdown()
+    assert isinstance(emitted, str)
+    assert len(emitted) > 0
+
+    # Re-parse and assert structure survives
+    doc2 = Document.from_markdown(emitted)
+    assert doc2.frontmatter["title"] == "New Title"
+    assert doc2.body == "Updated body"
+    assert len(doc2.cards) == original_card_count + 1
+    assert doc2.cards[0]["tag"] == "note"
+    assert doc2.cards[0]["fields"]["author"] == "Alice"
+    assert doc2.cards[0]["body"] == "Hello"
+
+
+def test_to_markdown_ambiguous_string_survival():
+    """YAML-keyword values set via set_field survive emit → re-parse as strings.
+
+    "on", "off", "yes", "no", "true", "false", "null" are all YAML
+    booleans/null in permissive parsers. The emitter must double-quote them
+    so they survive through a re-parse as strings, not bools or null.
+    """
+    doc = Document.from_markdown(SIMPLE_MD)
+    doc.set_field("flag_on", "on")
+    doc.set_field("flag_off", "off")
+    doc.set_field("flag_yes", "yes")
+    doc.set_field("flag_no", "no")
+    doc.set_field("str_true", "true")
+    doc.set_field("str_false", "false")
+    doc.set_field("str_null", "null")
+    doc.set_field("octal_str", "01234")
+    doc.set_field("date_str", "2024-01-15")
+
+    emitted = doc.to_markdown()
+    doc2 = Document.from_markdown(emitted)
+
+    # Every value must survive as a string, not be re-interpreted
+    assert doc2.frontmatter["flag_on"] == "on"
+    assert doc2.frontmatter["flag_off"] == "off"
+    assert doc2.frontmatter["flag_yes"] == "yes"
+    assert doc2.frontmatter["flag_no"] == "no"
+    assert doc2.frontmatter["str_true"] == "true"
+    assert doc2.frontmatter["str_false"] == "false"
+    assert doc2.frontmatter["str_null"] == "null"
+    assert doc2.frontmatter["octal_str"] == "01234"
+    assert doc2.frontmatter["date_str"] == "2024-01-15"

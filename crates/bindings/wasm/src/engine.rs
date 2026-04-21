@@ -49,8 +49,8 @@ pub struct RenderSession {
 /// - `cards` (array of Card objects)
 /// - `warnings` (array of Diagnostic objects)
 ///
-/// `toMarkdown()` is a stub — it throws with a "not yet implemented (phase 4)"
-/// message until the emitter is implemented in Phase 4.
+/// `toMarkdown()` emits canonical Quillmark Markdown that round-trips back to
+/// an equal `Document` by value and by type.
 #[wasm_bindgen]
 pub struct Document {
     inner: quillmark_core::Document,
@@ -143,10 +143,12 @@ impl Document {
 
     /// Emit canonical Quillmark Markdown.
     ///
-    /// **Not yet implemented.** Throws with a clear message until Phase 4.
+    /// Returns the document serialised as a Quillmark Markdown string.
+    /// The output is type-fidelity round-trip safe: re-parsing the result
+    /// produces a `Document` equal to `self` by value and by type.
     #[wasm_bindgen(js_name = toMarkdown)]
-    pub fn to_markdown(&self) -> Result<String, JsValue> {
-        Err(WasmError::from("toMarkdown not yet implemented (phase 4)").to_js_value())
+    pub fn to_markdown(&self) -> String {
+        self.inner.to_markdown()
     }
 
     /// The QUILL reference string (e.g. `"usaf_memo@0.1"`).
@@ -222,8 +224,9 @@ impl Document {
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = setField)]
     pub fn set_field(&mut self, name: &str, value: JsValue) -> Result<(), JsValue> {
-        let json: serde_json::Value = serde_wasm_bindgen::from_value(value)
-            .map_err(|e| WasmError::from(format!("setField: invalid value: {}", e)).to_js_value())?;
+        let json: serde_json::Value = serde_wasm_bindgen::from_value(value).map_err(|e| {
+            WasmError::from(format!("setField: invalid value: {}", e)).to_js_value()
+        })?;
         let qv = quillmark_core::QuillValue::from_json(json);
         self.inner
             .set_field(name, qv)
@@ -239,7 +242,9 @@ impl Document {
             Some(v) => {
                 let serializer =
                     serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-                v.as_json().serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
+                v.as_json()
+                    .serialize(&serializer)
+                    .unwrap_or(JsValue::UNDEFINED)
             }
             None => JsValue::UNDEFINED,
         }
@@ -253,8 +258,11 @@ impl Document {
     #[wasm_bindgen(js_name = setQuillRef)]
     pub fn set_quill_ref(&mut self, ref_str: &str) -> Result<(), JsValue> {
         let qr: quillmark_core::QuillReference = ref_str.parse().map_err(|e| {
-            WasmError::from(format!("setQuillRef: invalid reference '{}': {}", ref_str, e))
-                .to_js_value()
+            WasmError::from(format!(
+                "setQuillRef: invalid reference '{}': {}",
+                ref_str, e
+            ))
+            .to_js_value()
         })?;
         self.inner.set_quill_ref(qr);
         Ok(())
@@ -279,7 +287,9 @@ impl Document {
     #[wasm_bindgen(js_name = pushCard)]
     pub fn push_card(&mut self, card: JsValue) -> Result<(), JsValue> {
         let core_card = js_value_to_card(&card)?;
-        self.inner.push_card(core_card).map_err(|e| edit_error_to_js(&e))
+        self.inner
+            .push_card(core_card)
+            .map_err(|e| edit_error_to_js(&e))
     }
 
     /// Insert a card at the given index.

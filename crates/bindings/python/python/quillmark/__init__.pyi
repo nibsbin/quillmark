@@ -215,7 +215,9 @@ class Document:
     def to_markdown(self) -> str:
         """Emit canonical Quillmark Markdown.
 
-        Not yet implemented — raises NotImplementedError until Phase 4.
+        Returns the document serialised as a Quillmark Markdown string.
+        The output is type-fidelity round-trip safe: re-parsing the result
+        produces a ``Document`` equal to ``self`` by value and by type.
         """
 
     def quill_ref(self) -> str:

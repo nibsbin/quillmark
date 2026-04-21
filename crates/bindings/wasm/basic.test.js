@@ -122,13 +122,63 @@ This document has no QUILL tag.`
   })
 })
 
-describe('Document.toMarkdown (stub)', () => {
-  it('should throw "not yet implemented (phase 4)"', () => {
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+// ---------------------------------------------------------------------------
+// Document.toMarkdown — emitter integration tests (Phase 4c)
+// ---------------------------------------------------------------------------
 
-    expect(() => {
-      doc.toMarkdown()
-    }).toThrow(/phase 4/i)
+describe('Document.toMarkdown — fromMarkdown → mutate → emit → re-parse', () => {
+  it('general round-trip: mutated document survives emit → re-parse', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const originalCardCount = doc.cards.length  // 0 for TEST_MARKDOWN
+
+    // Mutate
+    doc.setField('title', 'New Title')
+    doc.pushCard({ tag: 'note', fields: { author: 'Alice' }, body: 'Hello' })
+    doc.replaceBody('Updated body')
+
+    // Emit
+    const emitted = doc.toMarkdown()
+    expect(typeof emitted).toBe('string')
+    expect(emitted.length).toBeGreaterThan(0)
+
+    // Re-parse and assert structure survives
+    const doc2 = Document.fromMarkdown(emitted)
+    expect(doc2.frontmatter.title).toBe('New Title')
+    expect(doc2.body).toBe('Updated body')
+    expect(doc2.cards.length).toBe(originalCardCount + 1)
+    expect(doc2.cards[0].tag).toBe('note')
+    expect(doc2.cards[0].fields.author).toBe('Alice')
+    expect(doc2.cards[0].body).toBe('Hello')
+  })
+
+  it('ambiguous-string survival: YAML-keyword values are preserved as strings', () => {
+    // "on", "off", "yes", "no", "true", "false", "null" are all YAML booleans/null
+    // in permissive parsers. The emitter must double-quote them so they survive
+    // as strings through a re-parse.
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    doc.setField('flag_on', 'on')
+    doc.setField('flag_off', 'off')
+    doc.setField('flag_yes', 'yes')
+    doc.setField('flag_no', 'no')
+    doc.setField('str_true', 'true')
+    doc.setField('str_false', 'false')
+    doc.setField('str_null', 'null')
+    doc.setField('octal_str', '01234')
+    doc.setField('date_str', '2024-01-15')
+
+    const emitted = doc.toMarkdown()
+    const doc2 = Document.fromMarkdown(emitted)
+
+    // Every value must survive as a string, not be re-interpreted as bool/null/number
+    expect(doc2.frontmatter.flag_on).toBe('on')
+    expect(doc2.frontmatter.flag_off).toBe('off')
+    expect(doc2.frontmatter.flag_yes).toBe('yes')
+    expect(doc2.frontmatter.flag_no).toBe('no')
+    expect(doc2.frontmatter.str_true).toBe('true')
+    expect(doc2.frontmatter.str_false).toBe('false')
+    expect(doc2.frontmatter.str_null).toBe('null')
+    expect(doc2.frontmatter.octal_str).toBe('01234')
+    expect(doc2.frontmatter.date_str).toBe('2024-01-15')
   })
 })
 

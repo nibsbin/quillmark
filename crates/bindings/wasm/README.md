@@ -53,6 +53,10 @@ Build + validate + attach backend. Returns a render-ready `Quill`.
 ### `Document.fromMarkdown(markdown)`
 Parse markdown to parsed document.
 
+### `doc.toMarkdown()`
+Emit canonical Quillmark Markdown. Type-fidelity round-trip safe:
+`Document.fromMarkdown(doc.toMarkdown())` returns a document equal to `doc`.
+
 ### `quill.render(parsed, opts?)`
 Render with a pre-parsed `Document`.
 

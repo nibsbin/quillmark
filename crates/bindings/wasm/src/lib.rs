@@ -6,7 +6,7 @@
 //!
 //! - [`Quillmark`] - engine for loading render-ready quills from in-memory trees
 //! - [`Quill`] - quill handle for rendering/compiling
-//! - [`engine::Document`] - typed parsed document (`fromMarkdown` static, `toMarkdown` stub)
+//! - [`engine::Document`] - typed parsed document (`fromMarkdown` static, `toMarkdown` emitter)
 //!
 //! ## Workflow
 //!

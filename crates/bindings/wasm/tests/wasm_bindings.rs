@@ -100,10 +100,14 @@ fn test_open_session_render() {
     assert!(!result.artifacts.is_empty(), "should produce artifacts");
 }
 
-/// `toMarkdown` is a stub — it must throw until Phase 4.
+/// `toMarkdown` emits canonical Quillmark Markdown and round-trips cleanly.
 #[wasm_bindgen_test]
-fn test_to_markdown_is_stub() {
+fn test_to_markdown_round_trip() {
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
-    let result = doc.to_markdown();
-    assert!(result.is_err(), "toMarkdown must throw (not yet implemented)");
+    let emitted = doc.to_markdown();
+    assert!(!emitted.is_empty(), "toMarkdown must return non-empty output");
+
+    // Re-parse: the emitted document must parse back cleanly
+    let doc2 = Document::from_markdown(&emitted).expect("re-parse of emitted markdown failed");
+    assert_eq!(doc2.quill_ref(), doc.quill_ref(), "quill_ref must survive round-trip");
 }

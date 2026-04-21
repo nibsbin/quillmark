@@ -29,6 +29,12 @@ title: Hello World
 parsed = Document.from_markdown(markdown)
 result = quill.render(parsed, OutputFormat.PDF)
 result.artifacts[0].save("output.pdf")
+
+# Round-trip: mutate, emit, re-parse
+parsed.set_field("title", "Updated")
+emitted = parsed.to_markdown()
+reparsed = Document.from_markdown(emitted)
+assert reparsed.frontmatter["title"] == "Updated"
 ```
 
 ## API Overview

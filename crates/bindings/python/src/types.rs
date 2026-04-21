@@ -285,7 +285,7 @@ impl PyQuill {
 ///
 /// Exposes:
 /// - `from_markdown(markdown)` — static constructor
-/// - `to_markdown()` — stub, raises NotImplementedError until Phase 4
+/// - `to_markdown()` — emit canonical Quillmark Markdown
 /// - `quill_ref()` — quill reference string
 /// - `frontmatter` — dict of typed YAML fields (no QUILL/BODY/CARDS)
 /// - `body` — global Markdown body (str, never None)
@@ -320,11 +320,11 @@ impl PyDocument {
 
     /// Emit canonical Quillmark Markdown.
     ///
-    /// Not yet implemented — raises `NotImplementedError` until Phase 4.
-    fn to_markdown(&self) -> PyResult<String> {
-        Err(pyo3::exceptions::PyNotImplementedError::new_err(
-            "to_markdown not yet implemented (phase 4)",
-        ))
+    /// Returns the document serialised as a Quillmark Markdown string.
+    /// The output is type-fidelity round-trip safe: re-parsing the result
+    /// produces a `Document` equal to `self` by value and by type.
+    fn to_markdown(&self) -> String {
+        self.inner.to_markdown()
     }
 
     /// The QUILL reference string (e.g. `"usaf_memo@0.1"`).
@@ -406,9 +406,9 @@ impl PyDocument {
     ///
     /// This method never modifies `warnings`.
     fn set_quill_ref(&mut self, ref_str: &str) -> PyResult<()> {
-        let qr: quillmark_core::QuillReference = ref_str
-            .parse()
-            .map_err(|e| PyValueError::new_err(format!("invalid QuillReference '{}': {}", ref_str, e)))?;
+        let qr: quillmark_core::QuillReference = ref_str.parse().map_err(|e| {
+            PyValueError::new_err(format!("invalid QuillReference '{}': {}", ref_str, e))
+        })?;
         self.inner.set_quill_ref(qr);
         Ok(())
     }
@@ -449,7 +449,11 @@ impl PyDocument {
     /// Remove and return the card at `index`, or `None` if out of range.
     ///
     /// This method never modifies `warnings`.
-    fn remove_card<'py>(&mut self, py: Python<'py>, index: usize) -> PyResult<Option<Bound<'py, PyDict>>> {
+    fn remove_card<'py>(
+        &mut self,
+        py: Python<'py>,
+        index: usize,
+    ) -> PyResult<Option<Bound<'py, PyDict>>> {
         match self.inner.remove_card(index) {
             Some(card) => {
                 let d = PyDict::new(py);
@@ -492,10 +496,9 @@ impl PyDocument {
     ) -> PyResult<()> {
         let qv = py_to_quillvalue(&value)?;
         let len = self.inner.cards().len();
-        let card = self
-            .inner
-            .card_mut(index)
-            .ok_or_else(|| convert_edit_error(quillmark_core::EditError::IndexOutOfRange { index, len }))?;
+        let card = self.inner.card_mut(index).ok_or_else(|| {
+            convert_edit_error(quillmark_core::EditError::IndexOutOfRange { index, len })
+        })?;
         card.set_field(name, qv).map_err(convert_edit_error)
     }
 
@@ -506,10 +509,9 @@ impl PyDocument {
     /// This method never modifies `warnings`.
     fn update_card_body(&mut self, index: usize, body: &str) -> PyResult<()> {
         let len = self.inner.cards().len();
-        let card = self
-            .inner
-            .card_mut(index)
-            .ok_or_else(|| convert_edit_error(quillmark_core::EditError::IndexOutOfRange { index, len }))?;
+        let card = self.inner.card_mut(index).ok_or_else(|| {
+            convert_edit_error(quillmark_core::EditError::IndexOutOfRange { index, len })
+        })?;
         card.set_body(body);
         Ok(())
     }
@@ -764,7 +766,8 @@ fn py_to_json(value: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
     }
     if value.is_instance_of::<PyList>() {
         let list = value.downcast::<PyList>()?;
-        let arr: PyResult<Vec<serde_json::Value>> = list.iter().map(|item| py_to_json(&item)).collect();
+        let arr: PyResult<Vec<serde_json::Value>> =
+            list.iter().map(|item| py_to_json(&item)).collect();
         return Ok(serde_json::Value::Array(arr?));
     }
     if value.is_instance_of::<PyDict>() {
@@ -784,9 +787,9 @@ fn py_to_json(value: &Bound<'_, PyAny>) -> PyResult<serde_json::Value> {
 /// Convert a Python dict `{"tag": str, "fields"?: dict, "body"?: str}` to a
 /// [`quillmark_core::Card`].  Raises `EditError` on invalid tag or field names.
 fn py_dict_to_card(value: &Bound<'_, PyAny>) -> PyResult<quillmark_core::Card> {
-    let dict = value.downcast::<PyDict>().map_err(|_| {
-        PyValueError::new_err("card must be a dict with a 'tag' key")
-    })?;
+    let dict = value
+        .downcast::<PyDict>()
+        .map_err(|_| PyValueError::new_err("card must be a dict with a 'tag' key"))?;
 
     let tag: String = dict
         .get_item("tag")?
@@ -796,13 +799,14 @@ fn py_dict_to_card(value: &Bound<'_, PyAny>) -> PyResult<quillmark_core::Card> {
     let mut card = quillmark_core::Card::new(tag).map_err(convert_edit_error)?;
 
     if let Some(fields_val) = dict.get_item("fields")? {
-        let fields_dict = fields_val.downcast::<PyDict>().map_err(|_| {
-            PyValueError::new_err("card 'fields' must be a dict")
-        })?;
+        let fields_dict = fields_val
+            .downcast::<PyDict>()
+            .map_err(|_| PyValueError::new_err("card 'fields' must be a dict"))?;
         for (k, v) in fields_dict.iter() {
             let field_name: String = k.extract()?;
             let qv = py_to_quillvalue(&v)?;
-            card.set_field(&field_name, qv).map_err(convert_edit_error)?;
+            card.set_field(&field_name, qv)
+                .map_err(convert_edit_error)?;
         }
     }
 
