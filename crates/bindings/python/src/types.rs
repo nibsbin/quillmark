@@ -279,6 +279,48 @@ impl PyQuill {
             .map_err(convert_render_error)?;
         Ok(PyRenderSession { inner: session })
     }
+
+    /// Project a document through this quill's schema.
+    ///
+    /// Returns a dict with keys `main`, `cards`, and `diagnostics`:
+    ///
+    /// - `main`: dict with `schema` (dict) and `values` (dict of field → value info)
+    /// - `cards`: list of dicts in the same shape as `main`
+    /// - `diagnostics`: list of dicts with `severity`, `code`, `message`, etc.
+    ///
+    /// Each `values` entry is a dict with:
+    /// - `value`: the current document value, or `None` if absent
+    /// - `default`: the schema default value, or `None` if none declared
+    /// - `source`: one of `"document"`, `"default"`, or `"missing"`
+    ///
+    /// This is a **read-only snapshot**. Call `project_form` again after any
+    /// edits to the document to obtain an updated projection.
+    ///
+    /// Cards with unknown tags are excluded from `cards`; each produces a
+    /// diagnostic with code `"form::unknown_card_tag"`.
+    fn project_form<'py>(
+        &self,
+        py: Python<'py>,
+        doc: PyRef<'_, PyDocument>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let projection = self.inner.project_form(&doc.inner);
+
+        // Serialise through serde_json → Python dict to avoid writing bespoke
+        // conversion for every nested type (CardSchema, FormFieldValue, etc.).
+        let json_value =
+            serde_json::to_value(&projection).map_err(|e| {
+                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                    "project_form: serialization failed: {e}"
+                ))
+            })?;
+        let py_obj = json_to_py(py, &json_value)?;
+        let dict = py_obj.downcast::<PyDict>().map_err(|_| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                "project_form: expected object at top level",
+            )
+        })?;
+        Ok(dict.clone())
+    }
 }
 
 /// Python wrapper for the typed Quillmark `Document`.

@@ -268,7 +268,6 @@ impl PartialEq for Diagnostic {
 }
 
 impl Diagnostic {
-
     /// Get the source chain as a list of error messages
     pub fn source_chain(&self) -> Vec<String> {
         let mut chain = Vec::new();
@@ -334,7 +333,7 @@ impl std::fmt::Display for Diagnostic {
 /// FFI boundaries (e.g., Python, WASM). Unlike `Diagnostic`, it does not
 /// contain the non-serializable `source` field, but instead includes a
 /// flattened `source_chain` for display purposes.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SerializableDiagnostic {
     /// Error severity level
     pub severity: Severity,

@@ -521,3 +521,82 @@ describe('quill.open + session.render', () => {
     }).toThrow()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Phase 5: quill.projectForm — schema-aware form projection
+// NOTE: These tests cannot run in the devcontainer (no wasm-pack / browser
+//       runtime available).  They are written to run in CI where the WASM
+//       bundle is built by wasm-pack and loaded into a vitest/jsdom context.
+// ---------------------------------------------------------------------------
+
+describe('quill.projectForm', () => {
+  const QUILL_YAML = `Quill:
+  name: form_smoke_test
+  version: "1.0"
+  backend: typst
+  description: Smoke test for projectForm
+
+main:
+  fields:
+    title:
+      type: string
+      default: "Untitled"
+    count:
+      type: integer
+`
+
+  const MD_WITH_TITLE = `---
+QUILL: form_smoke_test
+title: "Hello"
+---
+`
+
+  it('projectForm returns a plain object with main, cards, diagnostics', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(makeQuill({ name: 'form_smoke_test', quillYaml: QUILL_YAML }))
+    const doc = Document.fromMarkdown(MD_WITH_TITLE)
+
+    const projection = quill.projectForm(doc)
+
+    expect(typeof projection).toBe('object')
+    expect(projection).not.toBeNull()
+    expect('main' in projection).toBe(true)
+    expect('cards' in projection).toBe(true)
+    expect('diagnostics' in projection).toBe(true)
+    expect(Array.isArray(projection.cards)).toBe(true)
+    expect(Array.isArray(projection.diagnostics)).toBe(true)
+  })
+
+  it('projectForm main.values has correct sources', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(makeQuill({ name: 'form_smoke_test', quillYaml: QUILL_YAML }))
+    const doc = Document.fromMarkdown(MD_WITH_TITLE)
+
+    const projection = quill.projectForm(doc)
+    const values = projection.main.values
+
+    // title is present in doc → source: document
+    expect(values.title).toBeDefined()
+    expect(values.title.source).toBe('document')
+    expect(values.title.value).toBe('Hello')
+
+    // count is absent but schema has no default → source: missing
+    expect(values.count).toBeDefined()
+    expect(values.count.source).toBe('missing')
+    expect(values.count.value).toBeNull()
+  })
+
+  it('projectForm result is JSON.stringify-able and round-trips', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(makeQuill({ name: 'form_smoke_test', quillYaml: QUILL_YAML }))
+    const doc = Document.fromMarkdown(MD_WITH_TITLE)
+
+    const projection = quill.projectForm(doc)
+    const json = JSON.stringify(projection)
+    expect(typeof json).toBe('string')
+    expect(json.length).toBeGreaterThan(0)
+
+    const parsed = JSON.parse(json)
+    expect(parsed.main.values.title.source).toBe('document')
+  })
+})

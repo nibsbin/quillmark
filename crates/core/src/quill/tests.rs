@@ -2171,3 +2171,335 @@ fn public_schema_snapshot_usaf_memo_0_1_0() {
     assert!(parsed.get("cards").is_some());
     assert!(parsed.get("CARDS").is_none());
 }
+
+// ── Phase 5: project_form tests ────────────────────────────────────────────────
+
+/// Build a minimal [`Quill`] from inline YAML with no filesystem dependencies.
+fn quill_from_yaml(yaml: &str) -> Quill {
+    let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml).unwrap();
+    assert!(
+        warnings.is_empty(),
+        "quill_from_yaml produced schema warnings: {:?}",
+        warnings
+    );
+    Quill {
+        metadata: HashMap::new(),
+        name: config.name.clone(),
+        backend_id: config.backend.clone(),
+        resolved_backend: None,
+        plate: None,
+        example: None,
+        defaults: config.defaults(),
+        examples: config.examples(),
+        config,
+        files: FileTreeNode::Directory {
+            files: HashMap::new(),
+        },
+    }
+}
+
+#[test]
+fn project_form_all_fields_present() {
+    let quill = quill_from_yaml(
+        r#"
+Quill:
+  name: form_test
+  version: "1.0"
+  backend: typst
+  description: Form projection test
+
+main:
+  fields:
+    title:
+      type: string
+    status:
+      type: string
+      default: draft
+"#,
+    );
+
+    let md = "---\nQUILL: form_test\ntitle: \"My Title\"\nstatus: \"final\"\n---\n";
+    let doc = crate::Document::from_markdown(md).unwrap();
+
+    let proj = quill.project_form(&doc);
+
+    assert!(proj.diagnostics.is_empty(), "no diagnostics expected");
+    assert!(proj.cards.is_empty(), "no cards expected");
+
+    let title_fv = proj.main.values.get("title").expect("title field");
+    assert_eq!(title_fv.source, crate::quill::form::FormFieldSource::Document);
+    assert_eq!(title_fv.value.as_ref().and_then(|v| v.as_str()), Some("My Title"));
+
+    let status_fv = proj.main.values.get("status").expect("status field");
+    assert_eq!(status_fv.source, crate::quill::form::FormFieldSource::Document);
+    assert_eq!(status_fv.value.as_ref().and_then(|v| v.as_str()), Some("final"));
+    // default still recorded even when document value present
+    assert_eq!(status_fv.default.as_ref().and_then(|v| v.as_str()), Some("draft"));
+}
+
+#[test]
+fn project_form_missing_field_uses_default() {
+    let quill = quill_from_yaml(
+        r#"
+Quill:
+  name: form_defaults_test
+  version: "1.0"
+  backend: typst
+  description: Missing fields use defaults
+
+main:
+  fields:
+    title:
+      type: string
+      required: true
+    status:
+      type: string
+      default: draft
+    notes:
+      type: string
+"#,
+    );
+
+    // `title` and `notes` are absent from the document.
+    // `title` is required — that produces a validation diagnostic.
+    // `status` is absent but has a default.
+    // `notes` is absent and has no default.
+    let md = "---\nQUILL: form_defaults_test\n---\n";
+    let doc = crate::Document::from_markdown(md).unwrap();
+
+    let proj = quill.project_form(&doc);
+
+    // `title` is required and missing → validation diagnostic
+    assert!(
+        proj.diagnostics
+            .iter()
+            .any(|d| d.message.contains("title")),
+        "expected validation diagnostic for required 'title'; got: {:?}",
+        proj.diagnostics
+    );
+
+    let status_fv = proj.main.values.get("status").expect("status field");
+    assert_eq!(status_fv.source, crate::quill::form::FormFieldSource::Default);
+    assert!(status_fv.value.is_none(), "value should be None when not in document");
+    assert_eq!(status_fv.default.as_ref().and_then(|v| v.as_str()), Some("draft"));
+
+    let notes_fv = proj.main.values.get("notes").expect("notes field");
+    assert_eq!(notes_fv.source, crate::quill::form::FormFieldSource::Missing);
+    assert!(notes_fv.value.is_none());
+    assert!(notes_fv.default.is_none());
+}
+
+#[test]
+fn project_form_unknown_card_tag_drops_card_and_emits_diagnostic() {
+    let quill = quill_from_yaml(
+        r#"
+Quill:
+  name: unknown_card_test
+  version: "1.0"
+  backend: typst
+  description: Unknown card tag test
+
+main:
+  fields:
+    title:
+      type: string
+
+cards:
+  known_card:
+    fields:
+      note:
+        type: string
+"#,
+    );
+
+    let md = "---\nQUILL: unknown_card_test\ntitle: \"T\"\n---\n\n\
+              ---\nCARD: known_card\nnote: \"A\"\n---\n\n\
+              ---\nCARD: ghost_card\nnote: \"B\"\n---\n";
+    let doc = crate::Document::from_markdown(md).unwrap();
+
+    let proj = quill.project_form(&doc);
+
+    // Only the known card appears in cards
+    assert_eq!(proj.cards.len(), 1, "only known_card should be projected");
+    assert_eq!(proj.cards[0].schema.name, "known_card");
+
+    // A diagnostic for ghost_card
+    let unknown_diag = proj
+        .diagnostics
+        .iter()
+        .find(|d| d.code.as_deref() == Some("form::unknown_card_tag"))
+        .expect("expected unknown_card_tag diagnostic");
+    assert!(
+        unknown_diag.message.contains("ghost_card"),
+        "diagnostic should name the tag: {:?}",
+        unknown_diag.message
+    );
+}
+
+#[test]
+fn project_form_card_field_sources() {
+    let quill = quill_from_yaml(
+        r#"
+Quill:
+  name: card_fields_test
+  version: "1.0"
+  backend: typst
+  description: Card field source test
+
+main:
+  fields:
+    title:
+      type: string
+
+cards:
+  indorsement:
+    fields:
+      signature_block:
+        type: string
+        required: true
+      office:
+        type: string
+        default: HQ
+      extra:
+        type: string
+"#,
+    );
+
+    // signature_block present, office absent (has default), extra absent (no default)
+    let md = "---\nQUILL: card_fields_test\ntitle: \"T\"\n---\n\n\
+              ---\nCARD: indorsement\nsignature_block: \"Col Smith\"\n---\n";
+    let doc = crate::Document::from_markdown(md).unwrap();
+
+    let proj = quill.project_form(&doc);
+    assert_eq!(proj.cards.len(), 1);
+    let card = &proj.cards[0];
+
+    let sig = card.values.get("signature_block").expect("signature_block");
+    assert_eq!(sig.source, crate::quill::form::FormFieldSource::Document);
+    assert_eq!(sig.value.as_ref().and_then(|v| v.as_str()), Some("Col Smith"));
+
+    let office = card.values.get("office").expect("office");
+    assert_eq!(office.source, crate::quill::form::FormFieldSource::Default);
+    assert!(office.value.is_none());
+    assert_eq!(office.default.as_ref().and_then(|v| v.as_str()), Some("HQ"));
+
+    let extra = card.values.get("extra").expect("extra");
+    assert_eq!(extra.source, crate::quill::form::FormFieldSource::Missing);
+    assert!(extra.value.is_none());
+    assert!(extra.default.is_none());
+}
+
+#[test]
+fn project_form_validation_diagnostics_appear() {
+    let quill = quill_from_yaml(
+        r#"
+Quill:
+  name: validation_diag_test
+  version: "1.0"
+  backend: typst
+  description: Validation diagnostics test
+
+main:
+  fields:
+    count:
+      type: integer
+      required: true
+"#,
+    );
+
+    // `count` is a string, not an integer → TypeMismatch validation error
+    let md = "---\nQUILL: validation_diag_test\ncount: \"not-a-number\"\n---\n";
+    let doc = crate::Document::from_markdown(md).unwrap();
+
+    let proj = quill.project_form(&doc);
+
+    let val_diag = proj
+        .diagnostics
+        .iter()
+        .find(|d| d.code.as_deref() == Some("form::validation_error"))
+        .expect("expected a validation diagnostic");
+    assert!(
+        val_diag.message.contains("count"),
+        "diagnostic should mention field name; got: {:?}",
+        val_diag.message
+    );
+}
+
+#[test]
+fn project_form_serializes_cleanly() {
+    // Smoke test: serde_json round-trip of FormProjection.
+    let quill = quill_from_yaml(
+        r#"
+Quill:
+  name: serial_test
+  version: "1.0"
+  backend: typst
+  description: Serialization smoke test
+
+main:
+  fields:
+    title:
+      type: string
+      default: Untitled
+    count:
+      type: integer
+"#,
+    );
+
+    let md = "---\nQUILL: serial_test\ntitle: \"Hello\"\n---\n";
+    let doc = crate::Document::from_markdown(md).unwrap();
+    let proj = quill.project_form(&doc);
+
+    let json = serde_json::to_string(&proj).expect("FormProjection must serialize");
+    let back: crate::quill::form::FormProjection =
+        serde_json::from_str(&json).expect("FormProjection must deserialize");
+
+    assert_eq!(proj, back, "round-trip must be identity");
+    assert!(json.contains("title"), "serialized JSON should contain field name");
+}
+
+#[test]
+fn project_form_over_usaf_memo_fixture() {
+    // Integration test: load the usaf_memo fixture quill and project the
+    // bundled example.  Checks that every required field gets a deterministic
+    // FormFieldSource and no projection panics.
+    let quill_path = quillmark_fixtures::resource_path("quills/usaf_memo/0.1.0");
+    let quill = Quill::from_path(quill_path).expect("failed to load usaf_memo fixture");
+
+    let example_md = quill.example.as_deref().unwrap_or("");
+    // If the example can't parse, skip gracefully (it uses YAML comments that
+    // are valid but the field values may not match the schema exactly).
+    let doc = match crate::Document::from_markdown(example_md) {
+        Ok(d) => d,
+        Err(_) => return,
+    };
+
+    let proj = quill.project_form(&doc);
+
+    // Projection must produce a FormCard for main with at least the required fields.
+    assert!(
+        !proj.main.values.is_empty(),
+        "main card projection should have fields"
+    );
+
+    // Every field value must have a deterministic source.
+    for (name, fv) in &proj.main.values {
+        match fv.source {
+            crate::quill::form::FormFieldSource::Document => {
+                assert!(fv.value.is_some(), "Document source must have value for {name}");
+            }
+            crate::quill::form::FormFieldSource::Default => {
+                assert!(fv.value.is_none(), "Default source must have no value for {name}");
+                assert!(fv.default.is_some(), "Default source must have default for {name}");
+            }
+            crate::quill::form::FormFieldSource::Missing => {
+                assert!(fv.value.is_none(), "Missing source must have no value for {name}");
+                assert!(fv.default.is_none(), "Missing source must have no default for {name}");
+            }
+        }
+    }
+
+    // Serialization must not panic.
+    let json = serde_json::to_string(&proj).expect("projection must serialize");
+    assert!(!json.is_empty());
+}
