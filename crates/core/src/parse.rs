@@ -206,7 +206,7 @@ fn is_fence_marker_line(line: &str) -> bool {
 /// Any leading spaces/tabs on that line are ignored (YAML indentation-tolerant).
 fn first_content_key(content: &str) -> Option<&str> {
     let first = content.lines().find(|l| !l.trim().is_empty())?;
-    let trimmed = first.trim_start_matches(|c: char| c == ' ' || c == '\t');
+    let trimmed = first.trim_start_matches([' ', '\t']);
     let bytes = trimmed.as_bytes();
     if bytes.is_empty() || !bytes[0].is_ascii_alphabetic() {
         return None;
