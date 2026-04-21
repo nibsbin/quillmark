@@ -1828,16 +1828,34 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
     let mut frontmatter = indexmap::IndexMap::new();
-    frontmatter.insert("count".to_string(), QuillValue::from_json(serde_json::json!("42")));
-    frontmatter.insert("active".to_string(), QuillValue::from_json(serde_json::json!("true")));
-    frontmatter.insert("signed_on".to_string(), QuillValue::from_json(serde_json::json!("2026-04-13")));
-    frontmatter.insert("created_at".to_string(), QuillValue::from_json(serde_json::json!("2026-04-13T20:00:00Z")));
+    frontmatter.insert(
+        "count".to_string(),
+        QuillValue::from_json(serde_json::json!("42")),
+    );
+    frontmatter.insert(
+        "active".to_string(),
+        QuillValue::from_json(serde_json::json!("true")),
+    );
+    frontmatter.insert(
+        "signed_on".to_string(),
+        QuillValue::from_json(serde_json::json!("2026-04-13")),
+    );
+    frontmatter.insert(
+        "created_at".to_string(),
+        QuillValue::from_json(serde_json::json!("2026-04-13T20:00:00Z")),
+    );
 
     let coerced = config.coerce_frontmatter(&frontmatter).unwrap();
     assert_eq!(coerced.get("count").unwrap().as_i64(), Some(42));
     assert_eq!(coerced.get("active").unwrap().as_bool(), Some(true));
-    assert_eq!(coerced.get("signed_on").unwrap().as_str(), Some("2026-04-13"));
-    assert_eq!(coerced.get("created_at").unwrap().as_str(), Some("2026-04-13T20:00:00Z"));
+    assert_eq!(
+        coerced.get("signed_on").unwrap().as_str(),
+        Some("2026-04-13")
+    );
+    assert_eq!(
+        coerced.get("created_at").unwrap().as_str(),
+        Some("2026-04-13T20:00:00Z")
+    );
 }
 
 #[test]
@@ -1857,7 +1875,10 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
     let mut frontmatter = indexmap::IndexMap::new();
-    frontmatter.insert("count".to_string(), QuillValue::from_json(serde_json::json!("42")));
+    frontmatter.insert(
+        "count".to_string(),
+        QuillValue::from_json(serde_json::json!("42")),
+    );
 
     let coerced = config.coerce_frontmatter(&frontmatter).unwrap();
     assert_eq!(coerced.get("count").unwrap().as_i64(), Some(42));
@@ -1880,7 +1901,10 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
     let mut frontmatter = indexmap::IndexMap::new();
-    frontmatter.insert("count".to_string(), QuillValue::from_json(serde_json::json!("42.5")));
+    frontmatter.insert(
+        "count".to_string(),
+        QuillValue::from_json(serde_json::json!("42.5")),
+    );
 
     let error = config.coerce_frontmatter(&frontmatter).unwrap_err();
     assert!(matches!(
@@ -1952,8 +1976,14 @@ cards:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
     let mut card_fields = indexmap::IndexMap::new();
-    card_fields.insert("score".to_string(), QuillValue::from_json(serde_json::json!("100")));
-    card_fields.insert("active".to_string(), QuillValue::from_json(serde_json::json!("false")));
+    card_fields.insert(
+        "score".to_string(),
+        QuillValue::from_json(serde_json::json!("100")),
+    );
+    card_fields.insert(
+        "active".to_string(),
+        QuillValue::from_json(serde_json::json!("false")),
+    );
 
     let coerced = config.coerce_card("indorsement", &card_fields).unwrap();
     assert_eq!(coerced.get("score").unwrap().as_i64(), Some(100));
@@ -1977,7 +2007,10 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
     let mut frontmatter = indexmap::IndexMap::new();
-    frontmatter.insert("signed_on".to_string(), QuillValue::from_json(serde_json::json!("13-04-2026")));
+    frontmatter.insert(
+        "signed_on".to_string(),
+        QuillValue::from_json(serde_json::json!("13-04-2026")),
+    );
 
     let error = config.coerce_frontmatter(&frontmatter).unwrap_err();
     assert!(matches!(
@@ -2004,7 +2037,10 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
     let mut frontmatter = indexmap::IndexMap::new();
-    frontmatter.insert("count".to_string(), QuillValue::from_json(serde_json::json!("forty-two")));
+    frontmatter.insert(
+        "count".to_string(),
+        QuillValue::from_json(serde_json::json!("forty-two")),
+    );
 
     let error = config.coerce_frontmatter(&frontmatter).unwrap_err();
     assert!(matches!(

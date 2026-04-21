@@ -314,10 +314,7 @@ main:
         )
     }
 
-    fn doc_with_typed_cards(
-        fm: &[(&str, serde_json::Value)],
-        cards: Vec<Card>,
-    ) -> Document {
+    fn doc_with_typed_cards(fm: &[(&str, serde_json::Value)], cards: Vec<Card>) -> Document {
         let mut frontmatter = IndexMap::new();
         for (k, v) in fm {
             frontmatter.insert(k.to_string(), QuillValue::from_json(v.clone()));
@@ -559,7 +556,10 @@ main:
         );
         let doc = doc_with_typed_cards(
             &[],
-            vec![typed_card("indorsement", &[("signature_block", json!("Signed"))])],
+            vec![typed_card(
+                "indorsement",
+                &[("signature_block", json!("Signed"))],
+            )],
         );
         assert!(validate_typed_document(&config, &doc).is_ok());
     }
