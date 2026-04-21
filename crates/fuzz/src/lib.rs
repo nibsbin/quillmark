@@ -17,6 +17,9 @@
 mod convert_fuzz;
 
 #[cfg(test)]
+mod emit_roundtrip_fuzz;
+
+#[cfg(test)]
 mod filter_fuzz;
 
 #[cfg(test)]

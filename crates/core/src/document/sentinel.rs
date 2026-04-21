@@ -96,7 +96,12 @@ pub(super) fn extract_sentinels(
             ParseError::InvalidStructure(format!("Invalid QUILL reference '{}': {}", quill_str, e))
         })?;
         let mut new_map = mapping.clone();
-        new_map.remove("QUILL");
+        // Use `shift_remove` (order-preserving, O(n)) rather than the
+        // default `remove` which is `swap_remove` (O(1), disrupts order).
+        // serde_json::Map with `preserve_order` uses indexmap internally;
+        // its `.remove()` calls `swap_remove`, not `shift_remove`, so we
+        // call `shift_remove` explicitly to maintain insertion order.
+        new_map.shift_remove("QUILL");
         let new_val = if new_map.is_empty() {
             None
         } else {
@@ -116,7 +121,7 @@ pub(super) fn extract_sentinels(
             )));
         }
         let mut new_map = mapping.clone();
-        new_map.remove("CARD");
+        new_map.shift_remove("CARD");
         let new_val = if new_map.is_empty() {
             None
         } else {

@@ -144,7 +144,10 @@ Body of item 1."#;
     assert_eq!(doc.cards().len(), 1);
     let card = &doc.cards()[0];
     assert_eq!(card.tag(), "items");
-    assert_eq!(card.fields().get("name").unwrap().as_str().unwrap(), "Item 1");
+    assert_eq!(
+        card.fields().get("name").unwrap().as_str().unwrap(),
+        "Item 1"
+    );
     assert_eq!(card.body(), "\nBody of item 1.");
 }
 
@@ -175,11 +178,17 @@ Second item body."#;
 
     let card1 = &doc.cards()[0];
     assert_eq!(card1.tag(), "items");
-    assert_eq!(card1.fields().get("name").unwrap().as_str().unwrap(), "Item 1");
+    assert_eq!(
+        card1.fields().get("name").unwrap().as_str().unwrap(),
+        "Item 1"
+    );
 
     let card2 = &doc.cards()[1];
     assert_eq!(card2.tag(), "items");
-    assert_eq!(card2.fields().get("name").unwrap().as_str().unwrap(), "Item 2");
+    assert_eq!(
+        card2.fields().get("name").unwrap().as_str().unwrap(),
+        "Item 2"
+    );
 }
 
 #[test]
@@ -208,7 +217,10 @@ Section 2 content."#;
 
     let doc = decompose(markdown).unwrap();
 
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Global");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "Global"
+    );
     assert_eq!(doc.body(), "\nGlobal body.\n\n");
     assert_eq!(doc.cards().len(), 2);
     assert_eq!(doc.cards()[0].tag(), "sections");
@@ -498,11 +510,17 @@ Section 1 body"#;
 
     let card0 = &doc.cards()[0];
     assert_eq!(card0.tag(), "items");
-    assert_eq!(card0.fields().get("name").unwrap().as_str().unwrap(), "Item 1");
+    assert_eq!(
+        card0.fields().get("name").unwrap().as_str().unwrap(),
+        "Item 1"
+    );
 
     let card1 = &doc.cards()[1];
     assert_eq!(card1.tag(), "sections");
-    assert_eq!(card1.fields().get("title").unwrap().as_str().unwrap(), "Section 1");
+    assert_eq!(
+        card1.fields().get("title").unwrap().as_str().unwrap(),
+        "Section 1"
+    );
 }
 
 #[test]
@@ -590,9 +608,18 @@ rating: 4
     let doc = decompose(markdown).unwrap();
 
     // Verify global frontmatter
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Product Catalog");
-    assert_eq!(doc.frontmatter().get("author").unwrap().as_str().unwrap(), "John Doe");
-    assert_eq!(doc.frontmatter().get("date").unwrap().as_str().unwrap(), "2024-01-01");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "Product Catalog"
+    );
+    assert_eq!(
+        doc.frontmatter().get("author").unwrap().as_str().unwrap(),
+        "John Doe"
+    );
+    assert_eq!(
+        doc.frontmatter().get("date").unwrap().as_str().unwrap(),
+        "2024-01-01"
+    );
 
     // Verify global body
     assert!(doc.body().contains("main catalog description"));
@@ -602,16 +629,56 @@ rating: 4
 
     // First 2 are products
     assert_eq!(doc.cards()[0].tag(), "products");
-    assert_eq!(doc.cards()[0].fields().get("name").unwrap().as_str().unwrap(), "Widget A");
-    assert_eq!(doc.cards()[0].fields().get("price").unwrap().as_f64().unwrap(), 19.99);
+    assert_eq!(
+        doc.cards()[0]
+            .fields()
+            .get("name")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "Widget A"
+    );
+    assert_eq!(
+        doc.cards()[0]
+            .fields()
+            .get("price")
+            .unwrap()
+            .as_f64()
+            .unwrap(),
+        19.99
+    );
 
     assert_eq!(doc.cards()[1].tag(), "products");
-    assert_eq!(doc.cards()[1].fields().get("name").unwrap().as_str().unwrap(), "Gadget B");
+    assert_eq!(
+        doc.cards()[1]
+            .fields()
+            .get("name")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "Gadget B"
+    );
 
     // Last 2 are reviews
     assert_eq!(doc.cards()[2].tag(), "reviews");
-    assert_eq!(doc.cards()[2].fields().get("product").unwrap().as_str().unwrap(), "Widget A");
-    assert_eq!(doc.cards()[2].fields().get("rating").unwrap().as_i64().unwrap(), 5);
+    assert_eq!(
+        doc.cards()[2]
+            .fields()
+            .get("product")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "Widget A"
+    );
+    assert_eq!(
+        doc.cards()[2]
+            .fields()
+            .get("rating")
+            .unwrap()
+            .as_i64()
+            .unwrap(),
+        5
+    );
 
     // Frontmatter has 3 fields: title, author, date
     assert_eq!(doc.frontmatter().len(), 3);
@@ -630,7 +697,11 @@ This is the memo body."#;
     let doc = decompose(markdown).unwrap();
     assert_eq!(doc.quill_reference().name, "usaf_memo");
     assert_eq!(
-        doc.frontmatter().get("memo_for").unwrap().as_array().unwrap()[0]
+        doc.frontmatter()
+            .get("memo_for")
+            .unwrap()
+            .as_array()
+            .unwrap()[0]
             .as_str()
             .unwrap(),
         "ORG/SYMBOL"
@@ -656,7 +727,10 @@ Section 1 body."#;
 
     let doc = decompose(markdown).unwrap();
     assert_eq!(doc.quill_reference().name, "document");
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test Document");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "Test Document"
+    );
     assert_eq!(doc.cards().len(), 1);
     assert_eq!(doc.cards()[0].tag(), "sections");
     assert_eq!(doc.body(), "\nMain body.\n\n");
@@ -761,10 +835,20 @@ This is the body."#;
 
     let doc = decompose(markdown).unwrap();
     assert_eq!(doc.body(), "\n# Hello World\n\nThis is the body.");
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test Document");
-    assert_eq!(doc.frontmatter().get("author").unwrap().as_str().unwrap(), "Test Author");
     assert_eq!(
-        doc.frontmatter().get("description").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "Test Document"
+    );
+    assert_eq!(
+        doc.frontmatter().get("author").unwrap().as_str().unwrap(),
+        "Test Author"
+    );
+    assert_eq!(
+        doc.frontmatter()
+            .get("description")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "This has a blank line above it"
     );
     let tags = doc.frontmatter().get("tags").unwrap().as_array().unwrap();
@@ -794,7 +878,10 @@ Body of item 1."#;
     assert_eq!(doc.cards().len(), 1);
     let card = &doc.cards()[0];
     assert_eq!(card.tag(), "items");
-    assert_eq!(card.fields().get("name").unwrap().as_str().unwrap(), "Item 1");
+    assert_eq!(
+        card.fields().get("name").unwrap().as_str().unwrap(),
+        "Item 1"
+    );
     assert_eq!(card.fields().get("price").unwrap().as_f64().unwrap(), 19.99);
     let tags = card.fields().get("tags").unwrap().as_array().unwrap();
     assert_eq!(tags.len(), 2);
@@ -855,9 +942,18 @@ version: 1.0
 Body content."#;
 
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test");
-    assert_eq!(doc.frontmatter().get("author").unwrap().as_str().unwrap(), "John Doe");
-    assert_eq!(doc.frontmatter().get("version").unwrap().as_f64().unwrap(), 1.0);
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "Test"
+    );
+    assert_eq!(
+        doc.frontmatter().get("author").unwrap().as_str().unwrap(),
+        "John Doe"
+    );
+    assert_eq!(
+        doc.frontmatter().get("version").unwrap().as_f64().unwrap(),
+        1.0
+    );
 }
 
 #[test]
@@ -882,10 +978,19 @@ fn test_extended_metadata_demo_file() {
     let markdown = include_str!("../../../../fixtures/resources/extended_metadata_demo.md");
     let doc = decompose(markdown).unwrap();
 
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Extended Metadata Demo");
-    assert_eq!(doc.frontmatter().get("author").unwrap().as_str().unwrap(), "Quillmark Team");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "Extended Metadata Demo"
+    );
+    assert_eq!(
+        doc.frontmatter().get("author").unwrap().as_str().unwrap(),
+        "Quillmark Team"
+    );
     // version is parsed as a number by YAML
-    assert_eq!(doc.frontmatter().get("version").unwrap().as_f64().unwrap(), 1.0);
+    assert_eq!(
+        doc.frontmatter().get("version").unwrap().as_f64().unwrap(),
+        1.0
+    );
 
     // Verify body
     assert!(doc.body().contains("extended YAML metadata standard"));
@@ -894,14 +999,23 @@ fn test_extended_metadata_demo_file() {
     assert_eq!(doc.cards().len(), 5);
 
     let features_count = doc.cards().iter().filter(|c| c.tag() == "features").count();
-    let use_cases_count = doc.cards().iter().filter(|c| c.tag() == "use_cases").count();
+    let use_cases_count = doc
+        .cards()
+        .iter()
+        .filter(|c| c.tag() == "use_cases")
+        .count();
     assert_eq!(features_count, 3);
     assert_eq!(use_cases_count, 2);
 
     // Check first card is a feature
     assert_eq!(doc.cards()[0].tag(), "features");
     assert_eq!(
-        doc.cards()[0].fields().get("name").unwrap().as_str().unwrap(),
+        doc.cards()[0]
+            .fields()
+            .get("name")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "Tag Directives"
     );
 }
@@ -1049,7 +1163,12 @@ metadata:
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    let metadata = doc.frontmatter().get("metadata").unwrap().as_object().unwrap();
+    let metadata = doc
+        .frontmatter()
+        .get("metadata")
+        .unwrap()
+        .as_object()
+        .unwrap();
     assert_eq!(
         metadata.get("description").unwrap().as_str().unwrap(),
         "<<nested value>>"
@@ -1113,7 +1232,12 @@ description: "<<tagged yaml>>"
 Item body."#;
     let doc = decompose(markdown).unwrap();
     assert_eq!(
-        doc.cards()[0].fields().get("description").unwrap().as_str().unwrap(),
+        doc.cards()[0]
+            .fields()
+            .get("description")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "<<tagged yaml>>"
     );
 }
@@ -1127,7 +1251,10 @@ count: 42
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.frontmatter().get("count").unwrap().as_i64().unwrap(), 42);
+    assert_eq!(
+        doc.frontmatter().get("count").unwrap().as_i64().unwrap(),
+        42
+    );
 }
 
 #[test]
@@ -1211,7 +1338,10 @@ fn test_four_dashes() {
 fn test_crlf_line_endings() {
     let markdown = "---\r\nQUILL: test_quill\r\ntitle: Test\r\n---\r\n\r\nBody content.";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "Test"
+    );
     assert!(doc.body().contains("Body content."));
 }
 
@@ -1219,14 +1349,20 @@ fn test_crlf_line_endings() {
 fn test_mixed_line_endings() {
     let markdown = "---\nQUILL: test_quill\r\ntitle: Test\r\n---\n\nBody.";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "Test"
+    );
 }
 
 #[test]
 fn test_frontmatter_at_eof_no_trailing_newline() {
     let markdown = "---\nQUILL: test_quill\ntitle: Test\n---";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "Test"
+    );
     assert_eq!(doc.body(), "");
 }
 
@@ -1258,7 +1394,10 @@ fn test_whitespace_only_frontmatter() {
 fn test_unicode_in_yaml_keys() {
     let markdown = "---\nQUILL: test_quill\ntitre: Bonjour\nタイトル: こんにちは\n---\n\nBody.";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.frontmatter().get("titre").unwrap().as_str().unwrap(), "Bonjour");
+    assert_eq!(
+        doc.frontmatter().get("titre").unwrap().as_str().unwrap(),
+        "Bonjour"
+    );
     assert_eq!(
         doc.frontmatter().get("タイトル").unwrap().as_str().unwrap(),
         "こんにちは"
@@ -1297,7 +1436,12 @@ description: |
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    let desc = doc.frontmatter().get("description").unwrap().as_str().unwrap();
+    let desc = doc
+        .frontmatter()
+        .get("description")
+        .unwrap()
+        .as_str()
+        .unwrap();
     assert!(desc.contains("multiline string"));
     assert!(desc.contains('\n'));
 }
@@ -1314,7 +1458,12 @@ description: >
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    let desc = doc.frontmatter().get("description").unwrap().as_str().unwrap();
+    let desc = doc
+        .frontmatter()
+        .get("description")
+        .unwrap()
+        .as_str()
+        .unwrap();
     assert!(desc.contains("folded"));
 }
 
@@ -1329,7 +1478,10 @@ fn test_yaml_null_value() {
 fn test_yaml_empty_string_value() {
     let markdown = "---\nQUILL: test_quill\nempty: \"\"\n---\n\nBody.";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.frontmatter().get("empty").unwrap().as_str().unwrap(), "");
+    assert_eq!(
+        doc.frontmatter().get("empty").unwrap().as_str().unwrap(),
+        ""
+    );
 }
 
 #[test]
@@ -1356,7 +1508,12 @@ config:
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    let config = doc.frontmatter().get("config").unwrap().as_object().unwrap();
+    let config = doc
+        .frontmatter()
+        .get("config")
+        .unwrap()
+        .as_object()
+        .unwrap();
     let db = config.get("database").unwrap().as_object().unwrap();
     assert_eq!(db.get("host").unwrap().as_str().unwrap(), "localhost");
     assert_eq!(db.get("port").unwrap().as_i64().unwrap(), 5432);
@@ -1445,8 +1602,14 @@ author: John Doe
 Body content."#;
     let doc = decompose(markdown).unwrap();
     assert_eq!(doc.quill_reference().name, "my_quill");
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Document Title");
-    assert_eq!(doc.frontmatter().get("author").unwrap().as_str().unwrap(), "John Doe");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "Document Title"
+    );
+    assert_eq!(
+        doc.frontmatter().get("author").unwrap().as_str().unwrap(),
+        "John Doe"
+    );
 }
 
 // Error handling
@@ -1579,8 +1742,14 @@ items:
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.frontmatter().get("count").unwrap().as_i64().unwrap(), 42);
-    assert_eq!(doc.frontmatter().get("price").unwrap().as_f64().unwrap(), 19.99);
+    assert_eq!(
+        doc.frontmatter().get("count").unwrap().as_i64().unwrap(),
+        42
+    );
+    assert_eq!(
+        doc.frontmatter().get("price").unwrap().as_f64().unwrap(),
+        19.99
+    );
     assert!(doc.frontmatter().get("active").unwrap().as_bool().unwrap());
 }
 
@@ -1614,7 +1783,15 @@ Body
     );
     assert_eq!(doc.cards().len(), 1);
     assert_eq!(doc.cards()[0].tag(), "my_card");
-    assert_eq!(doc.cards()[0].fields().get("title").unwrap().as_str().unwrap(), "My Card");
+    assert_eq!(
+        doc.cards()[0]
+            .fields()
+            .get("title")
+            .unwrap()
+            .as_str()
+            .unwrap(),
+        "My Card"
+    );
 }
 
 #[test]
@@ -1628,11 +1805,19 @@ regular_field: normal value
 Body content."#;
     let doc = decompose(markdown).unwrap();
     assert_eq!(
-        doc.frontmatter().get("memo_from").unwrap().as_str().unwrap(),
+        doc.frontmatter()
+            .get("memo_from")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "2d lt example"
     );
     assert_eq!(
-        doc.frontmatter().get("regular_field").unwrap().as_str().unwrap(),
+        doc.frontmatter()
+            .get("regular_field")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "normal value"
     );
     assert_eq!(doc.body(), "\nBody content.");
@@ -1666,7 +1851,10 @@ Conclusion content.
 
     let doc = decompose(markdown).unwrap();
 
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "My Document");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "My Document"
+    );
     assert_eq!(doc.quill_reference().name, "blog_post");
 
     let body = doc.body();
@@ -1677,13 +1865,23 @@ Conclusion content.
     assert_eq!(doc.cards().len(), 2);
     assert_eq!(doc.cards()[0].tag(), "section");
     assert_eq!(
-        doc.cards()[0].fields().get("heading").unwrap().as_str().unwrap(),
+        doc.cards()[0]
+            .fields()
+            .get("heading")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "Introduction"
     );
     assert_eq!(doc.cards()[0].body(), "Introduction content.\n\n");
     assert_eq!(doc.cards()[1].tag(), "section");
     assert_eq!(
-        doc.cards()[1].fields().get("heading").unwrap().as_str().unwrap(),
+        doc.cards()[1]
+            .fields()
+            .get("heading")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "Conclusion"
     );
     assert_eq!(doc.cards()[1].body(), "Conclusion content.\n");
@@ -1705,10 +1903,8 @@ fn test_missing_quill_field_errors() {
 /// Verify to_plate_json produces the correct shape for a simple document.
 #[test]
 fn test_to_plate_json_simple() {
-    let doc = Document::from_markdown(
-        "---\nQUILL: my_quill\ntitle: Hello\n---\n\nBody text.\n",
-    )
-    .unwrap();
+    let doc =
+        Document::from_markdown("---\nQUILL: my_quill\ntitle: Hello\n---\n\nBody text.\n").unwrap();
     let json = doc.to_plate_json();
 
     assert_eq!(json["QUILL"], "my_quill");
@@ -1752,10 +1948,7 @@ Card body here.
 /// to_plate_json parity: the QUILL key appears first.
 #[test]
 fn test_to_plate_json_quill_first() {
-    let doc = Document::from_markdown(
-        "---\nQUILL: my_quill\nfoo: bar\nbaz: qux\n---\n",
-    )
-    .unwrap();
+    let doc = Document::from_markdown("---\nQUILL: my_quill\nfoo: bar\nbaz: qux\n---\n").unwrap();
     let json = doc.to_plate_json();
     let obj = json.as_object().unwrap();
     let keys: Vec<&String> = obj.keys().collect();
@@ -1783,4 +1976,24 @@ fn test_to_plate_json_fixture_snapshot() {
     assert_eq!(cards[0]["CARD"], "indorsement");
     // Card has BODY
     assert!(cards[0].get("BODY").is_some());
+}
+
+/// Regression test for the `serde_json::Map::remove` / `shift_remove` bug.
+///
+/// `serde_json::Map::remove` with `preserve_order` uses `swap_remove` under
+/// the hood (O(1), moves last element into removed slot) — NOT the order-
+/// preserving `shift_remove` (O(n)).  `extract_sentinels` must use
+/// `shift_remove` explicitly so YAML frontmatter field order is preserved
+/// after the QUILL sentinel is stripped.
+#[test]
+fn frontmatter_field_order_preserved_after_quill_removal() {
+    let md = "---\nQUILL: q\nsender: Alice\nrecipient: Bob\ndate: March 15\nsubject: hi\n---\n";
+    let doc = Document::from_markdown(md).unwrap();
+    let keys: Vec<&str> = doc.frontmatter().keys().map(|s| s.as_str()).collect();
+    // Fields must appear in YAML document order, not alphabetical or swap-order.
+    assert_eq!(
+        keys,
+        vec!["sender", "recipient", "date", "subject"],
+        "Frontmatter fields must preserve insertion order after QUILL removal"
+    );
 }
