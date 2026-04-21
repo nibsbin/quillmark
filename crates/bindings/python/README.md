@@ -13,7 +13,7 @@ pip install quillmark
 ## Quick Start
 
 ```python
-from quillmark import Quillmark, ParsedDocument, OutputFormat
+from quillmark import Quillmark, Document, OutputFormat
 
 engine = Quillmark()
 quill = engine.quill_from_path("path/to/quill")
@@ -26,7 +26,7 @@ title: Hello World
 # Hello
 """
 
-parsed = ParsedDocument.from_markdown(markdown)
+parsed = Document.from_markdown(markdown)
 result = quill.render(parsed, OutputFormat.PDF)
 result.artifacts[0].save("output.pdf")
 ```
