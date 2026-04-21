@@ -117,8 +117,13 @@ already exists as a contiguous section of `parse.rs`.
 
 `Document::to_markdown() -> String` produces Markdown such that:
 
-1. **Parse-idempotent:** `Document::from_markdown(doc.to_markdown())`
-   returns a `Document` equal to `doc` (by value).
+1. **Type-fidelity round-trip:**
+   `Document::from_markdown(doc.to_markdown())` returns a `Document`
+   equal to `doc` by value **and by type**. A `QuillValue::String("on")`
+   survives round-trip as a string, never as a `QuillValue::Bool`. A
+   `QuillValue::String("01234")` survives as a string, never as an
+   integer. This is the primary guarantee — the whole point of owning
+   emission.
 2. **Emit-idempotent:** `doc.to_markdown()` is a pure function of
    `doc`. Calling it twice returns byte-equal strings.
 3. **Round-trip stable on pure-editor paths:** if a `Document` was
@@ -131,100 +136,139 @@ A document parsed from human-authored Markdown may be re-emitted with
 different whitespace, quoting, key order, or comment removal. This is
 the explicit tradeoff accepted in §2.
 
-### 5.2 Canonical form
+### 5.2 Canonical form — opinionated, uniform
 
-For the initial version the emitter applies these rules. Each rule is
-deliberately conservative and can be tightened later without breaking
-the contract above.
+The emitter is deliberately one-note: every choice collapses to the
+rule that preserves type fidelity without exception. We trade pretty
+output for a property we can state in one sentence and test with one
+property.
 
 - **Line endings:** `\n`. CRLF is normalized on import.
 - **Frontmatter block:**
   - Opener `---\n` at byte 0.
-  - `QUILL: <name>[@<selector>]` on the first content line, unquoted
-    when the grammar allows (it always does for valid quill refs).
-  - Remaining fields in **insertion order** (`HashMap` becomes
-    `IndexMap` — see §7.1). This is the "canonicalization" contract:
-    the emitter does not sort, but it does honor insertion order
-    deterministically.
+  - `QUILL: <name>[@<selector>]` on the first content line.
+  - Remaining fields in **insertion order** (`frontmatter` is an
+    `IndexMap` per §7.1).
   - Closer `---\n` followed by one blank line.
-- **Body:** emitted verbatim. `BODY` is a `String`; what's stored is
-  what's written. The parser already guarantees `BODY` begins with a
-  newline when non-empty, per current behavior.
-- **Cards:** each card is emitted as `---\nCARD: <name>\n<fields>\n---\n<body>`
-  in the order they appear in the `CARDS` array. A single blank line
-  precedes each opener to satisfy the F2 leading-blank rule.
+- **Body:** emitted verbatim.
+- **Cards:** each card as `---\nCARD: <tag>\n<fields>\n---\n<body>` in
+  `cards` order. Single blank line precedes each opener.
+- **Mapping style:** block style only. No flow (`{ a: 1 }`).
+- **Sequence style:** block style only. No flow (`[a, b]`).
+- **String scalars: always double-quoted.** This is the load-bearing
+  rule. Every `QuillValue::String` emits as `"..."` with JSON-style
+  escaping (`\"`, `\\`, `\n`, `\t`, `\u00XX` for control / non-ASCII
+  below 0x20). No "is this scalar safe to emit plain?" heuristic —
+  that heuristic is the entire Norway / numeric-string / date-string
+  bug family. Quoting unconditionally makes it impossible for YAML
+  to re-interpret the value as any other type.
+- **Numeric scalars:** emitted as bare numeric literals (`42`, `3.14`,
+  `-0.5`). Integer vs. float chosen from `QuillValue` shape. NaN /
+  Infinity are not representable in JSON-ish YAML; `QuillValue`
+  cannot hold them, so not our problem.
+- **Boolean scalars:** `true` / `false`. Never `yes`/`no`/`on`/`off`.
+- **Null scalar:** `null`. Never `~` or empty.
+- **Multi-line strings:** emitted as double-quoted with `\n` escapes.
+  Readable? No. Unambiguous? Yes. Block scalar (`|`) output is a
+  possible v2 enhancement with its own round-trip tests; v1 stays
+  uniform.
+- **Empty containers:** empty mapping as nothing (a key whose value is
+  an empty map is emitted as `key:` with nothing on the right); empty
+  sequence as `key: []` (flow-style exception, because block-style
+  empty sequence has no representation). Alternative: skip empty
+  containers entirely — open, defer to implementation.
 - **YAML scalar emission:** handled by a single
   `emit::yaml::emit_mapping` helper — no ad-hoc YAML string building
-  elsewhere. Emitter implementation is an open question; see §5.2.1.
+  elsewhere. Crate choice in §5.2.1.
 
 ### 5.2.1 YAML emitter: `serde-saphyr`
 
-We already depend on `serde-saphyr` for parsing. It also exposes a
-`Serializer` with `SerializerOptions` (style control, block vs. flow,
-scalar styles). **Use it for emission too.**
+The opinionated rule in §5.2 compresses the emitter requirement to
+one feature: **emit every string scalar as double-quoted,
+unconditionally.** Everything else (map style, sequence style,
+booleans, numbers, null) is either fixed or trivial. That's a much
+weaker ask than "expose full style control," and almost any emitter
+we pick can hit it — in the worst case by pre-processing strings
+with a newtype whose `Serialize` impl writes the literal bytes we
+want.
+
+Given a trivial requirement, crate choice is driven by the one
+remaining risk: **dialect symmetry.** We already parse with
+`serde-saphyr`. Any divergence between what our emitter produces and
+what our parser accepts is a silent round-trip bug. The cheapest way
+to eliminate that class of bug is to put `serde-saphyr` on both
+sides.
 
 Rationale:
 
-- One crate on both sides of the round-trip eliminates a whole class
-  of dialect-mismatch bugs where a foreign emitter writes something
-  our parser then misreads.
-- No new dependency, no license/audit churn.
-- `serde-saphyr` exposes knobs for string scalar style that
-  `serde_yaml` does not — specifically usable to avoid the Norway
-  problem (`no`/`yes`/`on`/`off` unquoted) and unquoted
-  numeric-looking strings.
+- **Dialect symmetry.** Same crate, same dialect assumptions, zero
+  risk of emitter/parser drift.
+- **No new dependency.** Already in the tree; no audit, license, or
+  MSRV churn.
+- **Force-quoting is achievable.** `serde-saphyr` exposes
+  `SerializerOptions` with scalar-style knobs. If a global
+  "always-double-quote-strings" flag exists, we use it. If not, we
+  wrap every `QuillValue::String` leaf in a local newtype whose
+  `Serialize` impl emits the pre-quoted, pre-escaped bytes directly.
+  That wrapper is ~20 lines and testable in isolation.
 
 Rejected alternatives:
 
-- `serde_yaml` (dtolnay): archived March 2024. Functional but
-  unmaintained. Its open issue #347 (numeric-looking strings losing
-  quotes on emit) has no workaround in the exposed API. Adding an
-  archived crate to the dep tree when we already have a maintained
-  parse/emit library is pure downside.
-- `yaml_serde` (YAML organization): the officially-blessed successor
-  to `serde_yaml`, actively maintained, both ser and de. Two reasons
-  not to pick it over `serde-saphyr`: (1) no documented style options
-  for controlling scalar quoting, which is the specific feature we
-  need; (2) it would be a **second** YAML library in the dep tree
-  alongside our existing `serde-saphyr` parser, reintroducing the
-  dialect-mismatch risk `serde-saphyr`-on-both-sides avoids. Low
-  adoption (~12K downloads) is a footnote, not the reason.
+- `serde_yaml` (dtolnay): archived March 2024. Open issue #347
+  (numeric-looking strings losing quotes on emit) with no workaround
+  through the exposed API. Adding an archived crate alongside our
+  maintained parser is pure downside.
+- `yaml_serde` (YAML organization): the officially-blessed
+  successor to `serde_yaml`, both ser and de. Not picked because it
+  would be a **second** YAML library alongside `serde-saphyr`,
+  reintroducing the dialect-drift risk that symmetry eliminates.
+  Not a quality argument — a blast-radius argument.
 - `serde_yml` (sebastienrousseau fork): RUSTSEC-2025-0068 (unsound,
-  unmaintained) as of September 2025. Explicit non-starter.
-- `serde-yaml-ng` (acatton fork): maintained, but no exposed
-  formatting options. Same fundamental gap as `serde_yaml` for the
-  quoting rules we need.
-- Hand-rolled emitter: the "bounded scope, sharp rake" trap. The YAML
-  plain-scalar safety rule (quote if the value could be parsed as
-  bool, null, int, float, timestamp, or starts with `- `, `? `, `[`,
-  `{`, etc.) is where we'd get stung. Not worth reinventing.
+  unmaintained) as of September 2025. Non-starter.
+- `serde-yaml-ng` (acatton fork): maintained, no asymmetry advantage,
+  same story as `yaml_serde`.
+- Hand-rolled emitter: viable given how narrow our canonical form
+  is — the hard part of YAML emission (plain-scalar safety) is
+  deleted by the always-quote rule. But dialect symmetry still
+  favors the existing parser crate. Keep this in our back pocket as
+  the fallback if `serde-saphyr` serialization turns out to be
+  impractical, not the default choice.
 
 ### 5.2.2 Pre-implementation spike (reduced scope)
 
-Since the emitter choice is resolved, the spike is narrower:
+Since the emitter choice is resolved and the emission rule is
+opinionated, the spike reduces to a single property:
 
-**Verify `serde-saphyr::SerializerOptions` can produce output that
-round-trips our fixture corpus under the §5.1 contract.**
+**Given `QuillValue::String(s)` for any `s`, can we make
+`serde-saphyr` emit it as a double-quoted scalar — always, without
+inspection?**
 
 Concretely:
 
-1. Configure `SerializerOptions` to force-quote strings that would
-   otherwise parse as non-strings (Norway values, numeric-looking,
-   date-looking, null-looking). Read the docs or source to confirm
-   the right option combination exists. If it doesn't, escalate
-   before step 6 — we may need to submit a PR upstream or pre-process
-   `QuillValue::String` values on the way in to force quoting.
-2. For every `.md` fixture in `crates/fixtures`, run
-   `from_markdown → to_markdown → from_markdown` and assert the two
-   `Document` values are equal.
-3. For every failure, classify: legitimate information loss we accept
-   (comments, custom tags per §5.3), or an emitter gap that needs an
-   upstream fix or a pre-serialization wrapper.
+1. Try the direct path: find the `SerializerOptions` combination
+   (or equivalent API) that forces all string scalars to
+   double-quoted style. Small test: emit `{"on": "on", "yes": "1",
+   "null": "null"}` and confirm every string value is quoted in the
+   output.
+2. If (1) fails, try the wrapper path: a `struct
+   ForceQuoted<'a>(&'a str)` whose `Serialize` impl writes
+   `"<escaped>"` literally. Insert it at every `QuillValue::String`
+   leaf during emission.
+3. Validate against the fixture corpus: for every `.md` in
+   `crates/fixtures`, run `from_markdown → to_markdown →
+   from_markdown` and assert the two `Document` values are equal
+   **by type and value** (not just `serde_json::Value` equality —
+   see §5.1 contract).
+4. Type-fidelity regression set: add unit cases for the known
+   ambiguous strings — `"on"`, `"off"`, `"yes"`, `"no"`, `"true"`,
+   `"false"`, `"null"`, `"~"`, `"01234"`, `"1e10"`, `"2024-01-15"`,
+   `""`, strings with leading/trailing whitespace, strings
+   containing `\n`, `"`, `\`.
 
-Expected outcome: the spike passes, or identifies a small set of
-`SerializerOptions` combinations + targeted string pre-processing that
-makes it pass. Either way it's bounded work, not a crate-selection
-decision.
+Expected outcome: path (1) or (2) works. If neither does, the
+fallback is the hand-rolled emitter (§5.2.1, last bullet), which is
+tractable precisely because our emission rule has no plain-scalar
+heuristic.
 
 ### 5.3 What survives
 
@@ -637,13 +681,15 @@ consumer side.
    shape is right. Iteration order now stable for emission.
 5. **Typed `Card` and editor surface.** Add `document::edit` plus the
    editor methods on `Document`. Unit tests around every invariant.
-6. **Emitter implementation.** Run §5.2.2 spike on
-   `serde-saphyr::SerializerOptions` (narrow: verify quoting covers
-   Norway / numeric-string / date-string cases). Add `document::emit`
-   and `Document::to_markdown`. Golden-file tests using the fixture
-   corpus: `from_markdown` → `to_markdown` → `from_markdown` returns
-   an equal `Document`. `to_markdown` idempotence: emit twice,
-   compare bytes.
+6. **Emitter implementation.** Run the §5.2.2 spike: verify
+   `serde-saphyr` can force every string scalar to double-quoted
+   (direct option, newtype wrapper fallback, or hand-rolled emitter
+   as last resort). Add `document::emit` and `Document::to_markdown`.
+   Tests: type-fidelity round-trip (`from_markdown` → `to_markdown`
+   → `from_markdown` returns an equal `Document` by type and value)
+   against the fixture corpus and the §5.2.2 ambiguous-strings
+   regression set; `to_markdown` idempotence (emit twice, compare
+   bytes).
 7. **Form projection.** Add `Quill::project_form` and `FormProjection`.
    Tests: all-fields-present, all-defaults, partial-defaults,
    validation-error cases.
@@ -670,9 +716,18 @@ Resolved:
 - ~~Render path: round-trip or passthrough~~ — resolved. `Quill::render`
   calls `to_plate_json()` directly; no markdown round-trip at render
   time.
-- ~~YAML emitter choice~~ — resolved in §5.2.1: use `serde-saphyr`
-  (already our parser). A narrow spike (§5.2.2) verifies its
-  `SerializerOptions` cover our quoting requirements.
+- ~~YAML emitter choice~~ — resolved in §5.2.1: `serde-saphyr` on
+  both sides for dialect symmetry. A narrow spike (§5.2.2) verifies
+  we can force every string scalar to double-quoted, with a newtype
+  wrapper as the documented fallback path.
+- ~~Type fidelity vs. prettiness~~ — resolved by the opinionated
+  emission rule in §5.2. Uniform double-quoting eliminates the Norway
+  problem, numeric-looking-string ambiguity, date-looking-string
+  ambiguity, and null-looking-string ambiguity in one stroke. The
+  tradeoff is verbose output; we accept it.
+- ~~Multi-line string style~~ — resolved: always double-quoted with
+  `\n` escapes. Block scalar (`|`) emission is a v2 enhancement only
+  if a concrete consumer request surfaces.
 
 Still open:
 
@@ -683,6 +738,11 @@ Still open:
   contracts, but visible in diffs). Defer to step 6 — the emitter
   spike will surface whether nested-order preservation is free or
   expensive.
+- **Empty-container representation.** §5.2 leaves open whether an
+  empty mapping value renders as `key:` or is skipped entirely, and
+  whether an empty sequence renders as `key: []` or is skipped. Both
+  preserve type fidelity (empty map ≠ empty seq ≠ null on
+  re-parse); the choice is diff-aesthetics. Defer to step 6.
 - **Comments.** Confirmed lost on round-trip per §5.3. No known
   consumer blocks on this today. If a future requirement surfaces,
   layout-preserving round-trip (§2 non-goal) comes back on the table
