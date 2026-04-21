@@ -144,9 +144,9 @@ impl Quill {
     pub fn project_form(&self, doc: &Document) -> Result<JsValue, JsValue> {
         let projection = self.inner.project_form(&doc.inner);
         let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-        projection
-            .serialize(&serializer)
-            .map_err(|e| WasmError::from(format!("projectForm: serialization failed: {e}")).to_js_value())
+        projection.serialize(&serializer).map_err(|e| {
+            WasmError::from(format!("projectForm: serialization failed: {e}")).to_js_value()
+        })
     }
 }
 

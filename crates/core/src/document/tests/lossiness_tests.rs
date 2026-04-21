@@ -24,7 +24,8 @@ use crate::document::Document;
 #[test]
 fn yaml_comments_disappear_on_round_trip() {
     // Source has a YAML comment on the title line.
-    let src = "---\nQUILL: q\ntitle: My Document # this is a comment\nauthor: Alice\n---\n\nBody.\n";
+    let src =
+        "---\nQUILL: q\ntitle: My Document # this is a comment\nauthor: Alice\n---\n\nBody.\n";
 
     let doc = Document::from_markdown(src).unwrap();
     let emitted = doc.to_markdown();
@@ -148,7 +149,16 @@ fn original_quoting_style_is_not_preserved() {
 
     // Values must survive round-trip.
     let doc2 = Document::from_markdown(&emitted).unwrap();
-    assert_eq!(doc2.frontmatter().get("single_q").and_then(|v| v.as_str()), Some("hello"));
-    assert_eq!(doc2.frontmatter().get("unquoted").and_then(|v| v.as_str()), Some("world"));
-    assert_eq!(doc2.frontmatter().get("double_q").and_then(|v| v.as_str()), Some("already"));
+    assert_eq!(
+        doc2.frontmatter().get("single_q").and_then(|v| v.as_str()),
+        Some("hello")
+    );
+    assert_eq!(
+        doc2.frontmatter().get("unquoted").and_then(|v| v.as_str()),
+        Some("world")
+    );
+    assert_eq!(
+        doc2.frontmatter().get("double_q").and_then(|v| v.as_str()),
+        Some("already")
+    );
 }

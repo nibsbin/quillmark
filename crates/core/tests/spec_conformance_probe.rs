@@ -34,7 +34,10 @@ fn f1_first_fence_without_quill_is_rejected() {
 fn f1_yaml_comment_banners_above_sentinel_are_accepted() {
     let md = "---\n# Essential\n#===========\nQUILL: t\ntitle: T\n---\n\nBody.";
     let doc = Document::from_markdown(md).unwrap();
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "T");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "T"
+    );
 }
 
 // §4.2 — near-miss detection also ignores `#` comment banners.
@@ -83,7 +86,10 @@ fn near_miss_sentinel_emits_warning_and_delegates() {
 fn fence_marker_with_trailing_whitespace_is_accepted() {
     let md = "---  \nQUILL: t\ntitle: T\n---\t\n\nBody.";
     let doc = Document::from_markdown(md).unwrap();
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "T");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "T"
+    );
 }
 
 // §3 — `---` inside a fenced code block must be ignored.
@@ -91,7 +97,10 @@ fn fence_marker_with_trailing_whitespace_is_accepted() {
 fn fences_inside_code_blocks_are_ignored() {
     let md = "---\nQUILL: t\n---\n\n```\n---\nCARD: x\n---\n```\n\nBody.";
     let doc = Document::from_markdown(md).unwrap();
-    assert!(doc.cards().is_empty(), "fences inside code blocks must not parse");
+    assert!(
+        doc.cards().is_empty(),
+        "fences inside code blocks must not parse"
+    );
 }
 
 // §3 — Reserved keys BODY/CARDS cannot be user-defined.
@@ -229,7 +238,10 @@ fn card_body_crlf_line_endings_are_normalized() {
 fn utf8_bom_at_start_is_stripped() {
     let md = "\u{FEFF}---\nQUILL: t\ntitle: T\n---\n\nBody.";
     let doc = Document::from_markdown(md).unwrap();
-    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "T");
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "T"
+    );
 }
 
 // §4 / §9 — First-fence near-miss (case-only) produces a specific error.

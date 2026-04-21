@@ -259,7 +259,11 @@ impl Card {
         if !is_valid_tag_name(&tag) {
             return Err(EditError::InvalidTagName(tag));
         }
-        Ok(Card::new_internal(tag, indexmap::IndexMap::new(), String::new()))
+        Ok(Card::new_internal(
+            tag,
+            indexmap::IndexMap::new(),
+            String::new(),
+        ))
     }
 
     /// Set a card field by name.

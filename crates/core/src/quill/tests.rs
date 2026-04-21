@@ -2227,14 +2227,29 @@ main:
     assert!(proj.cards.is_empty(), "no cards expected");
 
     let title_fv = proj.main.values.get("title").expect("title field");
-    assert_eq!(title_fv.source, crate::quill::form::FormFieldSource::Document);
-    assert_eq!(title_fv.value.as_ref().and_then(|v| v.as_str()), Some("My Title"));
+    assert_eq!(
+        title_fv.source,
+        crate::quill::form::FormFieldSource::Document
+    );
+    assert_eq!(
+        title_fv.value.as_ref().and_then(|v| v.as_str()),
+        Some("My Title")
+    );
 
     let status_fv = proj.main.values.get("status").expect("status field");
-    assert_eq!(status_fv.source, crate::quill::form::FormFieldSource::Document);
-    assert_eq!(status_fv.value.as_ref().and_then(|v| v.as_str()), Some("final"));
+    assert_eq!(
+        status_fv.source,
+        crate::quill::form::FormFieldSource::Document
+    );
+    assert_eq!(
+        status_fv.value.as_ref().and_then(|v| v.as_str()),
+        Some("final")
+    );
     // default still recorded even when document value present
-    assert_eq!(status_fv.default.as_ref().and_then(|v| v.as_str()), Some("draft"));
+    assert_eq!(
+        status_fv.default.as_ref().and_then(|v| v.as_str()),
+        Some("draft")
+    );
 }
 
 #[test]
@@ -2271,20 +2286,30 @@ main:
 
     // `title` is required and missing → validation diagnostic
     assert!(
-        proj.diagnostics
-            .iter()
-            .any(|d| d.message.contains("title")),
+        proj.diagnostics.iter().any(|d| d.message.contains("title")),
         "expected validation diagnostic for required 'title'; got: {:?}",
         proj.diagnostics
     );
 
     let status_fv = proj.main.values.get("status").expect("status field");
-    assert_eq!(status_fv.source, crate::quill::form::FormFieldSource::Default);
-    assert!(status_fv.value.is_none(), "value should be None when not in document");
-    assert_eq!(status_fv.default.as_ref().and_then(|v| v.as_str()), Some("draft"));
+    assert_eq!(
+        status_fv.source,
+        crate::quill::form::FormFieldSource::Default
+    );
+    assert!(
+        status_fv.value.is_none(),
+        "value should be None when not in document"
+    );
+    assert_eq!(
+        status_fv.default.as_ref().and_then(|v| v.as_str()),
+        Some("draft")
+    );
 
     let notes_fv = proj.main.values.get("notes").expect("notes field");
-    assert_eq!(notes_fv.source, crate::quill::form::FormFieldSource::Missing);
+    assert_eq!(
+        notes_fv.source,
+        crate::quill::form::FormFieldSource::Missing
+    );
     assert!(notes_fv.value.is_none());
     assert!(notes_fv.default.is_none());
 }
@@ -2376,7 +2401,10 @@ cards:
 
     let sig = card.values.get("signature_block").expect("signature_block");
     assert_eq!(sig.source, crate::quill::form::FormFieldSource::Document);
-    assert_eq!(sig.value.as_ref().and_then(|v| v.as_str()), Some("Col Smith"));
+    assert_eq!(
+        sig.value.as_ref().and_then(|v| v.as_str()),
+        Some("Col Smith")
+    );
 
     let office = card.values.get("office").expect("office");
     assert_eq!(office.source, crate::quill::form::FormFieldSource::Default);
@@ -2455,7 +2483,10 @@ main:
         serde_json::from_str(&json).expect("FormProjection must deserialize");
 
     assert_eq!(proj, back, "round-trip must be identity");
-    assert!(json.contains("title"), "serialized JSON should contain field name");
+    assert!(
+        json.contains("title"),
+        "serialized JSON should contain field name"
+    );
 }
 
 #[test]
@@ -2486,15 +2517,30 @@ fn project_form_over_usaf_memo_fixture() {
     for (name, fv) in &proj.main.values {
         match fv.source {
             crate::quill::form::FormFieldSource::Document => {
-                assert!(fv.value.is_some(), "Document source must have value for {name}");
+                assert!(
+                    fv.value.is_some(),
+                    "Document source must have value for {name}"
+                );
             }
             crate::quill::form::FormFieldSource::Default => {
-                assert!(fv.value.is_none(), "Default source must have no value for {name}");
-                assert!(fv.default.is_some(), "Default source must have default for {name}");
+                assert!(
+                    fv.value.is_none(),
+                    "Default source must have no value for {name}"
+                );
+                assert!(
+                    fv.default.is_some(),
+                    "Default source must have default for {name}"
+                );
             }
             crate::quill::form::FormFieldSource::Missing => {
-                assert!(fv.value.is_none(), "Missing source must have no value for {name}");
-                assert!(fv.default.is_none(), "Missing source must have no default for {name}");
+                assert!(
+                    fv.value.is_none(),
+                    "Missing source must have no value for {name}"
+                );
+                assert!(
+                    fv.default.is_none(),
+                    "Missing source must have no default for {name}"
+                );
             }
         }
     }

@@ -20,13 +20,12 @@ fn assert_round_trip(label: &str, src: &str) {
     let a = Document::from_markdown(src)
         .unwrap_or_else(|e| panic!("{}: from_markdown failed on original: {}", label, e));
     let emitted = a.to_markdown();
-    let b = Document::from_markdown(&emitted)
-        .unwrap_or_else(|e| {
-            panic!(
-                "{}: from_markdown failed on emitted document.\nError: {}\nEmitted:\n{}",
-                label, e, emitted
-            )
-        });
+    let b = Document::from_markdown(&emitted).unwrap_or_else(|e| {
+        panic!(
+            "{}: from_markdown failed on emitted document.\nError: {}\nEmitted:\n{}",
+            label, e, emitted
+        )
+    });
     assert_eq!(
         a, b,
         "{}: round-trip produced different Documents.\nEmitted:\n{}",
@@ -71,7 +70,9 @@ fn fixture_corpus_round_trip() {
     }
 
     // Also add the appreciated_letter subdirectory.
-    let appreciated = resources_dir.join("appreciated_letter").join("appreciated_letter.md");
+    let appreciated = resources_dir
+        .join("appreciated_letter")
+        .join("appreciated_letter.md");
     if appreciated.exists() {
         fixture_paths.push(appreciated);
     }

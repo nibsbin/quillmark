@@ -41,7 +41,11 @@ fn emit_idempotence_over_fixture_corpus() {
     let mut paths: Vec<std::path::PathBuf> = Vec::new();
     collect_md_files(&resources_dir, &mut paths);
 
-    assert!(!paths.is_empty(), "no fixture files found under {}", resources_dir.display());
+    assert!(
+        !paths.is_empty(),
+        "no fixture files found under {}",
+        resources_dir.display()
+    );
 
     let mut passed = 0usize;
     let mut skipped = 0usize;

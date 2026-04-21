@@ -1,6 +1,4 @@
-use quillmark_core::{
-    normalize::normalize_document, quill::QuillConfig, Document,
-};
+use quillmark_core::{normalize::normalize_document, quill::QuillConfig, Document};
 use serde_json::json;
 
 #[test]

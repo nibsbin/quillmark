@@ -105,9 +105,16 @@ fn test_open_session_render() {
 fn test_to_markdown_round_trip() {
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     let emitted = doc.to_markdown();
-    assert!(!emitted.is_empty(), "toMarkdown must return non-empty output");
+    assert!(
+        !emitted.is_empty(),
+        "toMarkdown must return non-empty output"
+    );
 
     // Re-parse: the emitted document must parse back cleanly
     let doc2 = Document::from_markdown(&emitted).expect("re-parse of emitted markdown failed");
-    assert_eq!(doc2.quill_ref(), doc.quill_ref(), "quill_ref must survive round-trip");
+    assert_eq!(
+        doc2.quill_ref(),
+        doc.quill_ref(),
+        "quill_ref must survive round-trip"
+    );
 }

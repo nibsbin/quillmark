@@ -109,10 +109,7 @@ fn test_edit_error_index_out_of_range() {
     let mut doc = make_doc(); // no cards
     let card = Card::new("note").unwrap();
     let result = doc.insert_card(5, card);
-    assert_eq!(
-        result,
-        Err(EditError::IndexOutOfRange { index: 5, len: 0 })
-    );
+    assert_eq!(result, Err(EditError::IndexOutOfRange { index: 5, len: 0 }));
 }
 
 // ── EditError Display ────────────────────────────────────────────────────────
@@ -171,7 +168,10 @@ fn test_card_set_field_rejects_all_reserved_names() {
 fn test_document_set_field_inserts() {
     let mut doc = make_doc();
     doc.set_field("author", qv("Alice")).unwrap();
-    assert_eq!(doc.frontmatter().get("author").unwrap().as_str(), Some("Alice"));
+    assert_eq!(
+        doc.frontmatter().get("author").unwrap().as_str(),
+        Some("Alice")
+    );
 }
 
 #[test]
@@ -362,10 +362,7 @@ fn test_card_new_valid() {
 #[test]
 fn test_card_new_invalid_tag_uppercase() {
     let result = Card::new("Note");
-    assert_eq!(
-        result,
-        Err(EditError::InvalidTagName("Note".to_string()))
-    );
+    assert_eq!(result, Err(EditError::InvalidTagName("Note".to_string())));
 }
 
 #[test]
@@ -389,7 +386,10 @@ fn test_card_new_invalid_tag_with_hyphen() {
 fn test_card_set_field_valid() {
     let mut card = Card::new("note").unwrap();
     card.set_field("content", qv("Some text")).unwrap();
-    assert_eq!(card.fields().get("content").unwrap().as_str(), Some("Some text"));
+    assert_eq!(
+        card.fields().get("content").unwrap().as_str(),
+        Some("Some text")
+    );
 }
 
 #[test]
@@ -452,7 +452,10 @@ fn test_invariants_after_mutation_sequence() {
     doc.insert_card(1, c3).unwrap(); // now: note, appendix, summary
 
     // 3. Mutate a card field
-    doc.card_mut(0).unwrap().set_field("text", qv("Hello")).unwrap();
+    doc.card_mut(0)
+        .unwrap()
+        .set_field("text", qv("Hello"))
+        .unwrap();
 
     // 4. Move cards around
     doc.move_card(2, 0).unwrap(); // summary, note, appendix

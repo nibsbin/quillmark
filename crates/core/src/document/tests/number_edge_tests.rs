@@ -13,12 +13,8 @@ fn assert_round_trip(label: &str, src: &str) {
     let a = Document::from_markdown(src)
         .unwrap_or_else(|e| panic!("{}: from_markdown failed: {}", label, e));
     let emitted = a.to_markdown();
-    let b = Document::from_markdown(&emitted).unwrap_or_else(|e| {
-        panic!(
-            "{}: re-parse failed: {}\nEmitted:\n{}",
-            label, e, emitted
-        )
-    });
+    let b = Document::from_markdown(&emitted)
+        .unwrap_or_else(|e| panic!("{}: re-parse failed: {}\nEmitted:\n{}", label, e, emitted));
     assert_eq!(
         a, b,
         "{}: round-trip produced different Documents.\nEmitted:\n{}",
@@ -110,11 +106,26 @@ fn emitted_number_representation_matches_parse() {
     }
 
     let cases = [
-        Case { src_value: "42", key: "count" },
-        Case { src_value: "3.14", key: "pi" },
-        Case { src_value: "0", key: "zero" },
-        Case { src_value: "-7", key: "neg" },
-        Case { src_value: "9999999999999", key: "big" },
+        Case {
+            src_value: "42",
+            key: "count",
+        },
+        Case {
+            src_value: "3.14",
+            key: "pi",
+        },
+        Case {
+            src_value: "0",
+            key: "zero",
+        },
+        Case {
+            src_value: "-7",
+            key: "neg",
+        },
+        Case {
+            src_value: "9999999999999",
+            key: "big",
+        },
     ];
 
     for case in &cases {
@@ -122,7 +133,10 @@ fn emitted_number_representation_matches_parse() {
         let doc = Document::from_markdown(&src).unwrap();
         let emitted = doc.to_markdown();
         let doc2 = Document::from_markdown(&emitted).unwrap_or_else(|e| {
-            panic!("re-parse failed for {}: {}\nEmitted:\n{}", case.src_value, e, emitted)
+            panic!(
+                "re-parse failed for {}: {}\nEmitted:\n{}",
+                case.src_value, e, emitted
+            )
         });
         let v1 = doc.frontmatter().get(case.key).unwrap();
         let v2 = doc2.frontmatter().get(case.key).unwrap();

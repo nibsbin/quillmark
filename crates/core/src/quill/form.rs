@@ -203,10 +203,7 @@ impl Quill {
 
 /// Build a [`FormCard`] by walking each schema-declared field and looking up
 /// its value in `fields`.
-fn project_card(
-    schema: &CardSchema,
-    fields: &IndexMap<String, QuillValue>,
-) -> FormCard {
+fn project_card(schema: &CardSchema, fields: &IndexMap<String, QuillValue>) -> FormCard {
     let mut values: IndexMap<String, FormFieldValue> = IndexMap::new();
 
     // Collect field names sorted by their ui.order (if available), falling

@@ -307,12 +307,11 @@ impl PyQuill {
 
         // Serialise through serde_json → Python dict to avoid writing bespoke
         // conversion for every nested type (CardSchema, FormFieldValue, etc.).
-        let json_value =
-            serde_json::to_value(&projection).map_err(|e| {
-                PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                    "project_form: serialization failed: {e}"
-                ))
-            })?;
+        let json_value = serde_json::to_value(&projection).map_err(|e| {
+            PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
+                "project_form: serialization failed: {e}"
+            ))
+        })?;
         let py_obj = json_to_py(py, &json_value)?;
         let dict = py_obj.downcast::<PyDict>().map_err(|_| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(

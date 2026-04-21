@@ -327,13 +327,18 @@ mod tests {
     #[test]
     fn double_quoted_ambiguous_strings() {
         // These must remain strings on re-parse — the double-quoting is the guarantee.
-        for ambiguous in &["on", "off", "yes", "no", "true", "false", "null", "~", "01234", "1e10"] {
+        for ambiguous in &[
+            "on", "off", "yes", "no", "true", "false", "null", "~", "01234", "1e10",
+        ] {
             let mut s = String::new();
             emit_double_quoted(&mut s, ambiguous);
-            assert!(s.starts_with('"') && s.ends_with('"'),
-                "should be double-quoted: {}", s);
+            assert!(
+                s.starts_with('"') && s.ends_with('"'),
+                "should be double-quoted: {}",
+                s
+            );
             // Verify the content is correct (no extra escaping for these).
-            assert_eq!(&s[1..s.len()-1], *ambiguous);
+            assert_eq!(&s[1..s.len() - 1], *ambiguous);
         }
     }
 

@@ -300,5 +300,4 @@ impl Document {
 
         serde_json::Value::Object(map)
     }
-
 }
