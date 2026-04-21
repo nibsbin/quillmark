@@ -153,11 +153,45 @@ the contract above.
 - **Cards:** each card is emitted as `---\nCARD: <name>\n<fields>\n---\n<body>`
   in the order they appear in the `CARDS` array. A single blank line
   precedes each opener to satisfy the F2 leading-blank rule.
-- **YAML scalar emission:** use `serde_yaml` (or equivalent) with
-  settings tuned to avoid the Norway problem and to always quote
-  strings that would otherwise be parsed as non-strings. A shared
-  `emit::yaml::emit_mapping` helper is the single choke point; no
-  ad-hoc YAML string building elsewhere.
+- **YAML scalar emission:** handled by a single
+  `emit::yaml::emit_mapping` helper — no ad-hoc YAML string building
+  elsewhere. Emitter implementation is an open question; see §5.2.1.
+
+### 5.2.1 YAML emitter choice — pre-implementation spike
+
+The workspace today uses `serde-saphyr` for YAML **parsing only** (the
+crate is parse-side). There is no emitter in the dependency tree. This
+is a concrete technical risk, not a footnote:
+
+- `serde_yaml` is archived / unmaintained upstream but still functional
+  and widely used; known issues around booleans-as-strings (the
+  "Norway problem"), `y` / `yes` / `on` as booleans, and unquoted
+  numeric-looking strings. All tractable with `Tag::force_quote` or
+  equivalent, but every rule has to be verified against our
+  round-trip test corpus.
+- `saphyr-emitter` (companion to `saphyr-parser`) exists but is
+  separately versioned and may not match the parse dialect
+  `serde-saphyr` accepts. Symmetry with the parser is desirable but
+  not required — the contract is round-trip equality of `Document`,
+  not byte-equality of YAML.
+- Hand-rolling emission against the Quillmark schema is feasible
+  because frontmatter values are constrained (`QuillValue`, no anchors
+  or tags survive round-trip, §5.3). Only needed as a fallback.
+
+**Mandatory spike before step 4:** verify that the chosen emitter
+round-trips the full fixture corpus under the §5.1 contract. Concretely:
+
+1. Pick one of the three candidates above.
+2. For every `.md` fixture in `crates/fixtures`, run
+   `from_markdown → to_markdown → from_markdown` and assert the two
+   `Document` values are equal.
+3. For every failure, classify as (a) legitimate information loss we
+   accept (comments, custom tags per §5.3), or (b) an emitter bug that
+   blocks this proposal.
+
+If the chosen emitter has blocker-class bugs, escalate before starting
+step 4 — the emitter choice constrains the canonical-form rules in
+§5.2, and switching later is expensive.
 
 ### 5.3 What survives
 
@@ -250,27 +284,34 @@ edits and emission. This is a breaking change to the return type of
 opaque. I'd default to (a) unless we find a consumer that relies on the
 concrete type.
 
-### 7.2 Cards: array-in-fields vs. first-class field
+### 7.2 Cards: array-in-fields vs. first-class field — RESOLVED
 
-Today `CARDS` lives inside `fields` as a `QuillValue::Array`. That made
-sense when `ParsedDocument` was a read-only JSON-ish dump. Once we have
-a `Card` type and a typed editor, the in-`fields` copy is redundant and
-easy to desynchronize.
+Today `CARDS` lives inside `fields` as a `QuillValue::Array` and `BODY`
+as a `QuillValue::String`. Audit shows these are not just convention —
+real callers depend on the shape:
 
-Options:
+- `crates/backends/typst/src/lib.rs:227` reads `result.get("CARDS")`
+  to run card-field transformation.
+- `crates/backends/typst/src/lib.typ.template:61-88` reads
+  `d.at("CARDS")` at runtime inside the Typst plate.
+- `crates/core/src/quill/validation.rs`, `crates/core/src/quill/config.rs`
+  both consume `CARDS` from `fields` during validation and coercion.
+- `crates/bindings/python/src/types.rs:366-371` exposes `fields` as a
+  `PyDict` to Python consumers — removing `CARDS`/`BODY` there is a
+  visible API break.
 
-- **Keep both, derived.** `Document` stores `cards: Vec<Card>`
-  separately; `fields()` synthesizes the `CARDS` entry on demand for
-  backend/template consumers. Editor mutates the typed side only.
-  Backend sees no change.
-- **Drop the copy.** `fields()` no longer contains `CARDS`; callers
-  use `cards()` explicitly. Backends and templates need updating.
+**Resolution: commit to "keep derived."** `Document` stores
+`cards: Vec<Card>` and `body: String` as first-class fields. `fields()`
+returns a view that synthesizes `CARDS` (from `cards`) and `BODY` (from
+`body`) on access, so backends, templates, validation, and Python
+bindings are unchanged. The editor mutates only the typed sides; there
+is no possible desync because the view is derived, not cached.
 
-First option is the safe default. Second option is cleaner long-term.
-**Recommendation:** first option, with a note to revisit once we're
-sure no external consumer relies on `fields().get("CARDS")`.
-
-The same argument applies to `BODY` living inside `fields`.
+If `fields()` returning a synthesized `IndexMap` on every call is a
+performance concern in the render hot path, we can memoize it behind
+`&self` with interior mutability or expose a separate `fields_view()`
+method that takes `&self` and returns `impl Iterator`. That's an
+implementation detail, not a design question.
 
 ## 8. Schema-aware form projection
 
@@ -310,6 +351,48 @@ The implementation piggybacks on the existing `QuillConfig::coerce`,
 shape a form consumer can render without writing its own merge logic.
 `Workflow` continues to call those functions directly for rendering; it
 does not need `FormProjection`.
+
+## 8.1 Python surface
+
+`quillmark-python` (`crates/bindings/python/src/types.rs`) currently
+exposes `ParsedDocument` as read-only: `from_markdown`, `body()`,
+`get_field()`, `fields()` (returning `PyDict`), and `warnings`.
+
+The proposal mirrors the WASM surface here:
+
+```python
+class ParsedDocument:
+    @staticmethod
+    def from_markdown(markdown: str) -> ParsedDocument: ...
+    def to_markdown(self) -> str: ...
+
+    # read (existing)
+    quill_ref: str
+    fields: dict[str, Any]
+    body: str
+    # new
+    cards: list[Card]
+    warnings: list[Diagnostic]
+
+    # write (new)
+    def set_field(self, name: str, value: Any) -> None: ...
+    def remove_field(self, name: str) -> None: ...
+    def set_quill_ref(self, ref: str) -> None: ...
+    def replace_body(self, body: str) -> None: ...
+    def push_card(self, card: Card) -> None: ...
+    def insert_card(self, index: int, card: Card) -> None: ...
+    def remove_card(self, index: int) -> None: ...
+    def move_card(self, from_: int, to: int) -> None: ...
+
+class Quill:
+    def project_form(self, doc: ParsedDocument) -> FormProjection: ...
+```
+
+Errors raise `ValueError` (existing `PyO3` convention for this crate).
+`fields` stays a `PyDict` view including synthesized `CARDS`/`BODY` per
+§7.2. Python is not a form-editor host today, but mirroring the surface
+keeps the two bindings from drifting and costs little beyond a PyO3
+method wrapper per method.
 
 ## 9. WASM surface
 
@@ -405,20 +488,68 @@ flag. Step 3 onward can land incrementally as new public API.
 
 ## 12. Open questions
 
+Resolved during sanity-check:
+
+- ~~`CARDS` / `BODY` derived vs. stored~~ — resolved in §7.2 (derived,
+  mandatory, driven by typst backend + Python bindings consumer audit).
+- ~~YAML emitter choice~~ — escalated to §5.2.1 as a mandatory
+  pre-implementation spike.
+
+Still open:
+
 - **`Document` rename.** Keep the name `ParsedDocument` for compat, or
-  rename to `Document` with an alias? I lean toward the rename — the
-  type's role is changing, and the old name will actively mislead.
-- **`CARDS` / `BODY` derived vs. stored.** §7.2 leaves this open. Worth
-  deciding before step 3 since the editor API differs slightly.
-- **YAML emitter choice.** `serde_yaml` is the obvious default but has
-  known issues around booleans-as-strings. `serde_saphyr` (already in
-  the parse path) may or may not support emission; worth a half-day
-  spike before step 4.
-- **Canonical ordering of nested mappings.** Do we require `IndexMap`
-  all the way down, or only at the top level? Preserving order in
-  nested maps requires a custom serde pipeline; the alternative is
-  sorted emission for nested maps (still deterministic, but not
-  author-visible order).
-- **Comments.** Confirmed lost on round-trip. Is there any consumer
-  where this is a blocker? If so, layout-preserving round-trip (the
-  option we rejected) re-enters the discussion.
+  rename to `Document` with a deprecated alias? I lean toward the
+  rename — the type's role is changing and the old name will actively
+  mislead — but this is cosmetic. Safe to defer to step 1 of rollout.
+- **Nested map ordering.** `IndexMap` at the top level is confirmed in
+  §7.1. For nested `QuillValue::Object` mappings, preserving author
+  order requires a custom serde flow. Alternative: sort keys on emit
+  (still deterministic, satisfies §5.1 contracts, but visible in
+  diffs). Defer to step 4 — the emitter spike will surface whether
+  nested-order preservation is free or expensive.
+- **Render path: round-trip or passthrough.** `Quill::render(parsed)`
+  could either (a) call `parsed.to_markdown()` and re-parse, or (b)
+  feed the typed `Document` to `Workflow::compile_data` directly.
+  Option (b) avoids a round-trip per render; option (a) is simpler and
+  makes the parse boundary the single validation gate. Defer to step 6.
+- **Comments.** Confirmed lost on round-trip per §5.3. No known
+  consumer blocks on this today. If a future requirement surfaces,
+  layout-preserving round-trip (§2 non-goal) comes back on the table
+  and this proposal would need a follow-up.
+
+## 13. Call-site inventory for the implementation team
+
+Locations that touch the surfaces this proposal changes, so the
+implementation team can sweep them without re-grepping:
+
+**`ParsedDocument::fields()` returning `HashMap`** (will become
+`IndexMap`, ~11 call sites):
+
+- `crates/core/src/normalize.rs:500`
+- `crates/core/src/quill/render.rs:96, 116`
+- `crates/quillmark/src/orchestration/workflow.rs:40, 195, 223`
+- `crates/bindings/python/src/types.rs:366-371`
+- `crates/fuzz/src/parse_fuzz.rs:21, 82, 143`
+- `crates/core/src/parse.rs:826, 1613` (tests)
+
+**`"CARDS"` / `"BODY"` string keys** that must keep working through
+the derivation view (§7.2):
+
+- `crates/backends/typst/src/lib.rs:227, 231, 418, 428, 438, 471, 477, 483, 521`
+- `crates/backends/typst/src/lib.typ.template:61, 63, 88`
+- `crates/core/src/quill/validation.rs` (validation pulls `CARDS`)
+- `crates/core/src/quill/config.rs` (coerce pulls `CARDS`)
+
+**Existing `ParsedDocument` public API** (must remain callable):
+
+- `ParsedDocument::from_markdown`, `::from_markdown_with_warnings`,
+  `::new`, `::quill_reference`, `::body`, `::get_field`, `::fields`,
+  `::with_defaults` (all in `crates/core/src/parse.rs`).
+
+**Bindings entry points** that construct `ParsedDocument`:
+
+- `crates/bindings/wasm/src/engine.rs:76` (`parse_markdown_impl`)
+- `crates/bindings/python/src/types.rs:328` (`from_markdown`)
+- `crates/bindings/cli/src/commands/render.rs` (calls
+  `from_markdown_with_warnings`, parse-only — no editor surface needed
+  in the CLI).
