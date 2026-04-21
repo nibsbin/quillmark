@@ -141,7 +141,9 @@ pub const MAX_NESTING_DEPTH: usize = 100;
 
 /// Maximum YAML nesting depth (100 levels)
 /// Prevents stack overflow from deeply nested YAML structures
-pub const MAX_YAML_DEPTH: usize = 100;
+///
+/// Re-exported from [`crate::document::limits::MAX_YAML_DEPTH`].
+pub use crate::document::limits::MAX_YAML_DEPTH;
 
 /// Maximum number of CARD blocks allowed per document
 /// Prevents memory exhaustion from documents with excessive card blocks

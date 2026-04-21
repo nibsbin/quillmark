@@ -3,7 +3,7 @@
 //! These tests verify that the system properly handles malicious input
 //! and prevents common attack vectors like injection, DoS, and path traversal.
 
-use quillmark_core::parse::ParsedDocument;
+use quillmark_core::ParsedDocument;
 
 /// Test deeply nested YAML structures hit the depth limit
 #[test]

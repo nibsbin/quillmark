@@ -49,7 +49,7 @@
 //! assert_eq!(cleaned, "**asdf** or **(1234**");
 //! ```
 
-use crate::parse::BODY_FIELD;
+use crate::document::BODY_FIELD;
 use crate::value::QuillValue;
 use std::collections::HashMap;
 use unicode_normalization::UnicodeNormalization;
@@ -468,7 +468,7 @@ pub fn normalize_field_name(name: &str) -> String {
 ///
 /// # Direct API Usage
 ///
-/// If you're constructing a `ParsedDocument` directly via [`crate::parse::ParsedDocument::new`]
+/// If you're constructing a `ParsedDocument` directly via [`crate::document::ParsedDocument::new`]
 /// rather than parsing from markdown, you **MUST** call this function to ensure
 /// consistent normalization:
 ///
@@ -495,10 +495,10 @@ pub fn normalize_field_name(name: &str) -> String {
 /// This function is idempotent - calling it multiple times produces the same result.
 /// However, for performance reasons, avoid unnecessary repeated calls.
 pub fn normalize_document(
-    doc: crate::parse::ParsedDocument,
-) -> Result<crate::parse::ParsedDocument, crate::error::ParseError> {
+    doc: crate::document::ParsedDocument,
+) -> Result<crate::document::ParsedDocument, crate::error::ParseError> {
     let normalized_fields = normalize_fields(doc.fields().clone());
-    Ok(crate::parse::ParsedDocument::new(
+    Ok(crate::document::ParsedDocument::new(
         normalized_fields,
         doc.quill_reference().clone(),
     ))
@@ -1039,7 +1039,7 @@ mod tests {
 
     #[test]
     fn test_normalize_document_basic() {
-        use crate::parse::ParsedDocument;
+        use crate::document::ParsedDocument;
 
         let mut fields = std::collections::HashMap::new();
         fields.insert(
@@ -1069,7 +1069,7 @@ mod tests {
 
     #[test]
     fn test_normalize_document_preserves_quill_tag() {
-        use crate::parse::ParsedDocument;
+        use crate::document::ParsedDocument;
         use crate::version::QuillReference;
         use std::str::FromStr;
 
@@ -1083,7 +1083,7 @@ mod tests {
 
     #[test]
     fn test_normalize_document_idempotent() {
-        use crate::parse::ParsedDocument;
+        use crate::document::ParsedDocument;
 
         let mut fields = std::collections::HashMap::new();
         fields.insert(

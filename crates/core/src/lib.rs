@@ -27,7 +27,7 @@
 //!
 //! The crate is organized into modules:
 //!
-//! - [`parse`]: Markdown parsing with YAML frontmatter support
+//! - [`document`]: Markdown parsing with YAML frontmatter support
 //! - [`backend`]: Backend trait for output format implementations
 //! - [`error`]: Structured error handling and diagnostics
 //! - [`types`]: Core rendering types (OutputFormat, Artifact, RenderOptions)
@@ -38,8 +38,8 @@
 //! - [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) - Detailed parsing documentation
 //! - [Examples](https://github.com/nibsbin/quillmark/tree/main/examples) - Working examples
 
-pub mod parse;
-pub use parse::{ParseOutput, ParsedDocument, BODY_FIELD};
+pub mod document;
+pub use document::{ParseOutput, ParsedDocument, BODY_FIELD};
 
 pub mod backend;
 pub use backend::Backend;
