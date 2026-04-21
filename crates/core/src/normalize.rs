@@ -49,7 +49,6 @@
 //! assert_eq!(cleaned, "**asdf** or **(1234**");
 //! ```
 
-use crate::error::MAX_NESTING_DEPTH;
 use crate::parse::BODY_FIELD;
 use crate::value::QuillValue;
 use std::collections::HashMap;
@@ -311,47 +310,6 @@ fn normalize_cards_array(arr: Vec<serde_json::Value>) -> Vec<serde_json::Value> 
         .collect()
 }
 
-// Keep normalize_json_value_inner for the depth-limit test that uses it directly.
-/// Recursively normalize a JSON value with depth tracking.
-///
-/// Returns an error if nesting exceeds MAX_NESTING_DEPTH to prevent stack overflow.
-/// NOTE: This helper is retained only for the depth-limit guard test; the main
-/// normalization path in `normalize_fields` no longer uses it.
-fn normalize_json_value_inner(
-    value: serde_json::Value,
-    is_body: bool,
-    depth: usize,
-) -> Result<serde_json::Value, NormalizationError> {
-    if depth > MAX_NESTING_DEPTH {
-        return Err(NormalizationError::NestingTooDeep {
-            depth,
-            max: MAX_NESTING_DEPTH,
-        });
-    }
-
-    match value {
-        serde_json::Value::String(s) => {
-            let result = if is_body { normalize_markdown(&s) } else { s };
-            Ok(serde_json::Value::String(result))
-        }
-        serde_json::Value::Array(arr) => {
-            let normalized: Result<Vec<_>, _> = arr
-                .into_iter()
-                .map(|v| normalize_json_value_inner(v, false, depth + 1))
-                .collect();
-            Ok(serde_json::Value::Array(normalized?))
-        }
-        serde_json::Value::Object(map) => {
-            let processed: Result<serde_json::Map<String, serde_json::Value>, _> = map
-                .into_iter()
-                .map(|(k, v)| normalize_json_value_inner(v, false, depth + 1).map(|nv| (k, nv)))
-                .collect();
-            Ok(serde_json::Value::Object(processed?))
-        }
-        // Pass through other types unchanged (numbers, booleans, null)
-        other => Ok(other),
-    }
-}
 
 /// Normalizes document fields per the Quillmark §7 spec.
 ///
@@ -1049,41 +1007,6 @@ mod tests {
         let tags = result.get("tags").unwrap().as_array().unwrap();
         assert_eq!(tags[0].as_str().unwrap(), "rust\u{202D}lang");
         assert_eq!(tags[1].as_str().unwrap(), "markdown");
-    }
-
-    // Tests for depth limiting
-
-    #[test]
-    fn test_normalize_json_value_inner_depth_exceeded() {
-        // Create a deeply nested JSON structure that exceeds MAX_NESTING_DEPTH
-        let mut value = serde_json::json!("leaf");
-        for _ in 0..=crate::error::MAX_NESTING_DEPTH {
-            value = serde_json::json!([value]);
-        }
-
-        // The inner function should return an error
-        let result = super::normalize_json_value_inner(value, false, 0);
-        assert!(result.is_err());
-
-        if let Err(NormalizationError::NestingTooDeep { depth, max }) = result {
-            assert!(depth > max);
-            assert_eq!(max, crate::error::MAX_NESTING_DEPTH);
-        } else {
-            panic!("Expected NestingTooDeep error");
-        }
-    }
-
-    #[test]
-    fn test_normalize_json_value_inner_within_limit() {
-        // Create a nested structure just within the limit
-        let mut value = serde_json::json!("leaf");
-        for _ in 0..50 {
-            value = serde_json::json!([value]);
-        }
-
-        // This should succeed
-        let result = super::normalize_json_value_inner(value, false, 0);
-        assert!(result.is_ok());
     }
 
     // Tests for normalize_document
