@@ -310,7 +310,6 @@ fn normalize_cards_array(arr: Vec<serde_json::Value>) -> Vec<serde_json::Value> 
         .collect()
 }
 
-
 /// Normalizes document fields per the Quillmark §7 spec.
 ///
 /// Only **body regions** receive normalization (bidi stripping + HTML comment fence
