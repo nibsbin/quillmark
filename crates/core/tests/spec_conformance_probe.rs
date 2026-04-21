@@ -195,7 +195,10 @@ fn f3_indented_four_spaces_is_not_a_fence() {
 fn f3_three_leading_spaces_is_still_a_fence() {
     let md = "   ---\nQUILL: t\n   ---\n\nBody.";
     let doc = ParsedDocument::from_markdown(md).unwrap();
-    assert_eq!(doc.get_field("QUILL").is_some() || doc.body().is_some(), true);
+    assert_eq!(
+        doc.get_field("QUILL").is_some() || doc.body().is_some(),
+        true
+    );
     // More directly: the body should be present and the fence should have parsed.
     assert!(doc.body().unwrap().contains("Body."));
 }
@@ -295,12 +298,7 @@ fn unclosed_code_block_emits_warning() {
             .collect::<Vec<_>>()
     );
     // And the shielded CARD fence must NOT have registered.
-    let cards = out
-        .document
-        .get_field("CARDS")
-        .unwrap()
-        .as_array()
-        .unwrap();
+    let cards = out.document.get_field("CARDS").unwrap().as_array().unwrap();
     assert!(
         cards.is_empty(),
         "shielded CARD must not have been parsed as a fence"
