@@ -61,11 +61,17 @@ optional trailing whitespace). The content between is parsed as YAML.
 
 A `---` line opens a metadata fence **iff both** of the following hold:
 
-**F1 — Sentinel.** The first non-blank line of content between the opening
-`---` and the next `---` line matches `KEY: value`, where `KEY` is:
+**F1 — Sentinel.** The first non-blank, non-comment line of content between
+the opening `---` and the next `---` line matches `KEY: value`, where `KEY`
+is:
 
 - `QUILL` if this is the first metadata fence in the document, or
 - `CARD` if any metadata fence has already been recognised.
+
+For F1 purposes a *comment line* is any line whose first non-whitespace
+character is `#`; such lines are skipped when locating the first content
+line. This mirrors YAML's own treatment of `#` comments and lets fences
+carry banner comments above the sentinel (e.g. `# Essential`).
 
 **F2 — Leading blank.** The opening `---` is on line 1 of the document, or
 the line immediately above it is blank.
@@ -107,8 +113,8 @@ A `---`/`---` pair whose content's first key is almost-but-not-quite
 `CARD` (e.g. `Card:`, `CARDS:`, `card:`) fails F1 and is interpreted as
 two thematic breaks with literal YAML between. Implementations **should**
 emit a lint warning when they encounter a `---`/`---` pair whose content's
-first non-blank line matches `[A-Za-z][A-Za-z0-9_]*:` but whose key is not
-the expected sentinel.
+first non-blank, non-comment line matches `[A-Za-z][A-Za-z0-9_]*:` but whose
+key is not the expected sentinel.
 
 ## 5. Data Model
 

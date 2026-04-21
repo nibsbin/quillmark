@@ -201,11 +201,15 @@ fn is_fence_marker_line(line: &str) -> bool {
     }
 }
 
-/// Extracts the first non-blank line of `content` and, if it starts with a
-/// `[A-Za-z][A-Za-z0-9_]*` identifier followed by `:`, returns that identifier.
-/// Any leading spaces/tabs on that line are ignored (YAML indentation-tolerant).
+/// Extracts the first non-blank, non-comment line of `content` and, if it
+/// starts with a `[A-Za-z][A-Za-z0-9_]*` identifier followed by `:`, returns
+/// that identifier. Any leading spaces/tabs on that line are ignored
+/// (YAML indentation-tolerant). YAML `#` comment lines are skipped so the
+/// sentinel rule is indifferent to banner-style comments above the key.
 fn first_content_key(content: &str) -> Option<&str> {
-    let first = content.lines().find(|l| !l.trim().is_empty())?;
+    let first = content
+        .lines()
+        .find(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))?;
     let trimmed = first.trim_start_matches([' ', '\t']);
     let bytes = trimmed.as_bytes();
     if bytes.is_empty() || !bytes[0].is_ascii_alphabetic() {

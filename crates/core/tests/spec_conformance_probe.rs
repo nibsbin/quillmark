@@ -28,6 +28,34 @@ fn f1_first_fence_without_quill_is_rejected() {
     assert!(err.contains("Missing required QUILL field"), "got: {}", err);
 }
 
+// §4 F1 — YAML `#` comment lines at the top of a fence are skipped when
+// locating the sentinel. A banner comment above `QUILL:` must not trip F1.
+#[test]
+fn f1_yaml_comment_banners_above_sentinel_are_accepted() {
+    let md = "---\n# Essential\n#===========\nQUILL: t\ntitle: T\n---\n\nBody.";
+    let doc = ParsedDocument::from_markdown(md).unwrap();
+    assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "T");
+}
+
+// §4.2 — near-miss detection also ignores `#` comment banners, so a fence
+// whose first real key is a near-miss still warns rather than silently
+// delegating.
+#[test]
+fn near_miss_sentinel_sees_past_comment_banners() {
+    let md = "---\nQUILL: t\n---\n\nB.\n\n---\n# banner\nCard: oops\nname: X\n---\n\nTrailing.";
+    let out = ParsedDocument::from_markdown_with_warnings(md).unwrap();
+    assert!(
+        out.warnings.iter().any(
+            |w| w.message.contains("Near-miss metadata sentinel") && w.message.contains("Card")
+        ),
+        "expected near-miss warning even with leading comment, got: {:?}",
+        out.warnings
+            .iter()
+            .map(|w| w.message.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
 // §4.2 — Near-miss sentinel warning.
 #[test]
 fn near_miss_sentinel_emits_warning_and_delegates() {
