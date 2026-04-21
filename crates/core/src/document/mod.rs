@@ -75,9 +75,12 @@ use crate::version::QuillReference;
 use crate::Diagnostic;
 
 pub mod assemble;
+pub mod edit;
 pub mod fences;
 pub mod limits;
 pub mod sentinel;
+
+pub use edit::EditError;
 
 #[cfg(test)]
 mod tests;
@@ -112,12 +115,13 @@ pub struct Card {
 }
 
 impl Card {
-    /// Create a new `Card` with a tag, fields, and body.
-    pub fn new(
-        tag: String,
-        fields: IndexMap<String, QuillValue>,
-        body: String,
-    ) -> Self {
+    /// Create a `Card` directly from typed parts.
+    ///
+    /// Used by `assemble.rs`, `normalize.rs`, and the `Workflow`.
+    /// Does **not** validate the tag name or field names — callers are
+    /// responsible for providing already-valid data.  For user-facing
+    /// construction use [`Card::new`] (defined in `edit.rs`).
+    pub fn new_internal(tag: String, fields: IndexMap<String, QuillValue>, body: String) -> Self {
         Self { tag, fields, body }
     }
 

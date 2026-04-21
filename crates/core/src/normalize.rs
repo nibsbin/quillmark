@@ -328,9 +328,7 @@ fn normalize_line_endings(s: &str) -> String {
 /// // Title passes through verbatim
 /// assert_eq!(result.get("title").unwrap().as_str().unwrap(), "<<hello>>");
 /// ```
-pub fn normalize_fields(
-    fields: IndexMap<String, QuillValue>,
-) -> IndexMap<String, QuillValue> {
+pub fn normalize_fields(fields: IndexMap<String, QuillValue>) -> IndexMap<String, QuillValue> {
     fields
         .into_iter()
         .map(|(key, value)| {
@@ -418,7 +416,7 @@ pub fn normalize_document(
                 .map(|(k, v)| (normalize_field_name(k), v.clone()))
                 .collect();
             let normalized_card_body = normalize_markdown(card.body());
-            Card::new(
+            Card::new_internal(
                 card.tag().to_string(),
                 normalized_card_fields,
                 normalized_card_body,
@@ -733,7 +731,12 @@ mod tests {
 
         // Title has chevrons preserved (only bidi stripped on body)
         assert_eq!(
-            normalized.frontmatter().get("title").unwrap().as_str().unwrap(),
+            normalized
+                .frontmatter()
+                .get("title")
+                .unwrap()
+                .as_str()
+                .unwrap(),
             "<<placeholder>>"
         );
 
@@ -757,11 +760,9 @@ mod tests {
     fn test_normalize_document_idempotent() {
         use crate::document::Document;
 
-        let doc =
-            Document::from_markdown("---\nQUILL: test\n---\n\n<<content>>").unwrap();
+        let doc = Document::from_markdown("---\nQUILL: test\n---\n\n<<content>>").unwrap();
         let normalized_once = super::normalize_document(doc).unwrap();
-        let normalized_twice =
-            super::normalize_document(normalized_once.clone()).unwrap();
+        let normalized_twice = super::normalize_document(normalized_once.clone()).unwrap();
 
         assert_eq!(normalized_once.body(), normalized_twice.body());
     }
@@ -770,10 +771,7 @@ mod tests {
     fn test_normalize_document_body_bidi_stripped() {
         use crate::document::Document;
 
-        let doc = Document::from_markdown(
-            "---\nQUILL: test\n---\n\nhello\u{202D}world",
-        )
-        .unwrap();
+        let doc = Document::from_markdown("---\nQUILL: test\n---\n\nhello\u{202D}world").unwrap();
         let normalized = super::normalize_document(doc).unwrap();
         assert_eq!(normalized.body(), "\nhelloworld");
     }
@@ -782,12 +780,16 @@ mod tests {
     fn test_normalize_document_yaml_field_bidi_preserved() {
         use crate::document::Document;
 
-        let doc =
-            Document::from_markdown("---\nQUILL: test\ntitle: a\u{202D}b\n---\n").unwrap();
+        let doc = Document::from_markdown("---\nQUILL: test\ntitle: a\u{202D}b\n---\n").unwrap();
         let normalized = super::normalize_document(doc).unwrap();
         // Bidi preserved in YAML fields
         assert_eq!(
-            normalized.frontmatter().get("title").unwrap().as_str().unwrap(),
+            normalized
+                .frontmatter()
+                .get("title")
+                .unwrap()
+                .as_str()
+                .unwrap(),
             "a\u{202D}b"
         );
     }
@@ -826,8 +828,7 @@ mod tests {
     fn test_normalize_document_card_body_html_comment_repair() {
         use crate::document::Document;
 
-        let md =
-            "---\nQUILL: test\n---\n\n---\nCARD: note\n---\n<!-- comment -->Trailing text\n";
+        let md = "---\nQUILL: test\n---\n\n---\nCARD: note\n---\n<!-- comment -->Trailing text\n";
         let doc = Document::from_markdown(md).unwrap();
         let normalized = super::normalize_document(doc).unwrap();
         assert_eq!(

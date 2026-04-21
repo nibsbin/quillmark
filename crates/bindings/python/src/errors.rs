@@ -1,7 +1,7 @@
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use quillmark_core::{Diagnostic, RenderError};
+use quillmark_core::{Diagnostic, EditError, RenderError};
 
 // Base exception
 create_exception!(_quillmark, QuillmarkError, PyException);
@@ -10,6 +10,22 @@ create_exception!(_quillmark, QuillmarkError, PyException);
 create_exception!(_quillmark, ParseError, QuillmarkError);
 create_exception!(_quillmark, TemplateError, QuillmarkError);
 create_exception!(_quillmark, CompilationError, QuillmarkError);
+
+// Python exception for editor-surface errors.
+// Raised by `Document` and `Card` mutators when an invariant is violated.
+// The exception message includes the `EditError` variant name and details.
+create_exception!(_quillmark, PyEditError, QuillmarkError);
+
+/// Convert an [`EditError`] to a `PyErr` (raises `quillmark.EditError`).
+pub fn convert_edit_error(err: EditError) -> PyErr {
+    let variant = match &err {
+        EditError::ReservedName(_) => "ReservedName",
+        EditError::InvalidFieldName(_) => "InvalidFieldName",
+        EditError::InvalidTagName(_) => "InvalidTagName",
+        EditError::IndexOutOfRange { .. } => "IndexOutOfRange",
+    };
+    PyEditError::new_err(format!("[EditError::{}] {}", variant, err))
+}
 
 fn with_diag_attached(py: Python, py_err: PyErr, diag: Diagnostic) -> PyErr {
     if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {

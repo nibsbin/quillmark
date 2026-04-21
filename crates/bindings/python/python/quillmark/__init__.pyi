@@ -49,6 +49,14 @@ class TemplateError(QuillmarkError):
 class CompilationError(QuillmarkError):
     """Backend compilation failed."""
 
+class EditError(QuillmarkError):
+    """Editor-surface invariant violated.
+
+    Raised by ``Document`` and ``Card`` mutators.
+    The exception message includes the variant name (e.g. ``ReservedName``,
+    ``InvalidFieldName``, ``InvalidTagName``, ``IndexOutOfRange``) and details.
+    """
+
 class Quillmark:
     """High-level engine for orchestrating backends and quills."""
 
@@ -231,6 +239,70 @@ class Document:
     @property
     def warnings(self) -> list[Diagnostic]:
         """Non-fatal parse-time warnings."""
+
+    def set_field(self, name: str, value: Any) -> None:
+        """Set a frontmatter field.
+
+        Raises:
+            EditError: If ``name`` is a reserved sentinel or does not match
+                ``[a-z_][a-z0-9_]*``.
+        """
+
+    def remove_field(self, name: str) -> Any | None:
+        """Remove a frontmatter field, returning the value or ``None``."""
+
+    def set_quill_ref(self, ref_str: str) -> None:
+        """Replace the QUILL reference string.
+
+        Raises:
+            ValueError: If ``ref_str`` is not a valid ``QuillReference``.
+        """
+
+    def replace_body(self, body: str) -> None:
+        """Replace the global Markdown body."""
+
+    def push_card(self, card: dict[str, Any]) -> None:
+        """Append a card to the card list.
+
+        ``card`` must be a dict with a ``tag`` key and optional ``fields`` and ``body``.
+
+        Raises:
+            EditError: If ``card["tag"]`` is not a valid tag name or a field name
+                is invalid.
+        """
+
+    def insert_card(self, index: int, card: dict[str, Any]) -> None:
+        """Insert a card at ``index``.
+
+        Raises:
+            EditError: If ``index`` is out of range or the card is invalid.
+        """
+
+    def remove_card(self, index: int) -> dict[str, Any] | None:
+        """Remove and return the card at ``index``, or ``None`` if out of range."""
+
+    def move_card(self, from_idx: int, to_idx: int) -> None:
+        """Move the card at ``from_idx`` to ``to_idx``.
+
+        ``from_idx == to_idx`` is a no-op.
+
+        Raises:
+            EditError: If either index is out of range.
+        """
+
+    def update_card_field(self, index: int, name: str, value: Any) -> None:
+        """Update a field on the card at ``index``.
+
+        Raises:
+            EditError: If ``index`` is out of range or ``name`` is invalid.
+        """
+
+    def update_card_body(self, index: int, body: str) -> None:
+        """Replace the body of the card at ``index``.
+
+        Raises:
+            EditError: If ``index`` is out of range.
+        """
 
 class RenderResult:
     """Result of rendering operation."""

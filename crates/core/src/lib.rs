@@ -43,7 +43,7 @@
 //! - [Examples](https://github.com/nibsbin/quillmark/tree/main/examples) - Working examples
 
 pub mod document;
-pub use document::{Card, Document, ParseOutput};
+pub use document::{Card, Document, EditError, ParseOutput};
 
 pub mod backend;
 pub use backend::Backend;

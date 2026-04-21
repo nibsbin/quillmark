@@ -5,6 +5,7 @@ from ._quillmark import (
     CompilationError,
     Diagnostic,
     Document,
+    EditError,
     Location,
     OutputFormat,  # No underscore prefix!
     ParseError,
@@ -23,6 +24,7 @@ __all__ = [
     "CompilationError",
     "Diagnostic",
     "Document",
+    "EditError",
     "Location",
     "OutputFormat",
     "ParseError",

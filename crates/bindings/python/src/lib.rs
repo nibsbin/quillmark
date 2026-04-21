@@ -6,7 +6,8 @@ mod types;
 
 pub use enums::{PyOutputFormat, PySeverity};
 pub use errors::{
-    convert_render_error, CompilationError, ParseError, QuillmarkError, TemplateError,
+    convert_edit_error, convert_render_error, CompilationError, ParseError, PyEditError,
+    QuillmarkError, TemplateError,
 };
 pub use types::{
     PyArtifact, PyDiagnostic, PyDocument, PyLocation, PyQuill, PyQuillmark, PyRenderResult,
@@ -35,6 +36,7 @@ fn _quillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("ParseError", m.py().get_type::<ParseError>())?;
     m.add("TemplateError", m.py().get_type::<TemplateError>())?;
     m.add("CompilationError", m.py().get_type::<CompilationError>())?;
+    m.add("EditError", m.py().get_type::<PyEditError>())?;
 
     Ok(())
 }

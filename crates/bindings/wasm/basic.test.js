@@ -199,6 +199,228 @@ title: Mismatch Test
 })
 
 // ---------------------------------------------------------------------------
+// Document editor surface (Phase 3)
+// ---------------------------------------------------------------------------
+
+describe('Document editor surface — setField / removeField', () => {
+  it('setField inserts a new frontmatter field', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    doc.setField('subtitle', 'A subtitle')
+    expect(doc.frontmatter.subtitle).toBe('A subtitle')
+  })
+
+  it('setField updates an existing field', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    doc.setField('title', 'Updated')
+    expect(doc.frontmatter.title).toBe('Updated')
+  })
+
+  it('setField throws EditError::ReservedName for BODY', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(() => doc.setField('BODY', 'x')).toThrow(/ReservedName/)
+  })
+
+  it('setField throws EditError::ReservedName for CARDS', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(() => doc.setField('CARDS', [])).toThrow(/ReservedName/)
+  })
+
+  it('setField throws EditError::ReservedName for QUILL', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(() => doc.setField('QUILL', 'x')).toThrow(/ReservedName/)
+  })
+
+  it('setField throws EditError::ReservedName for CARD', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(() => doc.setField('CARD', 'x')).toThrow(/ReservedName/)
+  })
+
+  it('setField throws EditError::InvalidFieldName for uppercase name', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(() => doc.setField('Title', 'x')).toThrow(/InvalidFieldName/)
+  })
+
+  it('removeField returns the removed value', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const removed = doc.removeField('title')
+    expect(removed).toBe('Test Document')
+    expect(doc.frontmatter.title).toBeUndefined()
+  })
+
+  it('removeField returns undefined when field absent', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(doc.removeField('nonexistent')).toBeUndefined()
+  })
+})
+
+describe('Document editor surface — setQuillRef / replaceBody', () => {
+  it('setQuillRef changes the quillRef', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    doc.setQuillRef('new_quill')
+    expect(doc.quillRef).toBe('new_quill')
+  })
+
+  it('setQuillRef throws on invalid reference', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(() => doc.setQuillRef('INVALID QUILL REF WITH SPACES')).toThrow()
+  })
+
+  it('replaceBody changes the body', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    doc.replaceBody('Brand new body.')
+    expect(doc.body).toBe('Brand new body.')
+  })
+})
+
+describe('Document editor surface — card mutations', () => {
+  const MD_WITH_CARDS = `---
+QUILL: test_quill
+---
+
+Body.
+
+---
+CARD: note
+foo: bar
+---
+
+Card one.
+
+---
+CARD: summary
+---
+
+Card two.
+`
+
+  it('pushCard appends a card', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    doc.pushCard({ tag: 'note', fields: {}, body: 'My card.' })
+    expect(doc.cards.length).toBe(1)
+    expect(doc.cards[0].tag).toBe('note')
+    expect(doc.cards[0].body).toBe('My card.')
+  })
+
+  it('pushCard throws on invalid tag', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(() => doc.pushCard({ tag: 'BadTag' })).toThrow(/InvalidTagName/)
+  })
+
+  it('insertCard inserts at specified index', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARDS)
+    doc.insertCard(0, { tag: 'intro' })
+    expect(doc.cards[0].tag).toBe('intro')
+    expect(doc.cards[1].tag).toBe('note')
+  })
+
+  it('insertCard throws IndexOutOfRange when index > len', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN) // 0 cards
+    expect(() => doc.insertCard(5, { tag: 'note' })).toThrow(/IndexOutOfRange/)
+  })
+
+  it('removeCard removes and returns the card', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARDS)
+    const removed = doc.removeCard(0)
+    expect(removed).toBeDefined()
+    expect(removed.tag).toBe('note')
+    expect(doc.cards.length).toBe(1)
+    expect(doc.cards[0].tag).toBe('summary')
+  })
+
+  it('removeCard returns undefined when out of range', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(doc.removeCard(0)).toBeUndefined()
+  })
+
+  it('moveCard swaps positions correctly', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARDS)
+    doc.moveCard(1, 0) // summary → front
+    expect(doc.cards[0].tag).toBe('summary')
+    expect(doc.cards[1].tag).toBe('note')
+  })
+
+  it('moveCard no-op when from == to', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARDS)
+    doc.moveCard(0, 0)
+    expect(doc.cards[0].tag).toBe('note')
+  })
+
+  it('moveCard throws IndexOutOfRange on out-of-range index', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARDS) // 2 cards
+    expect(() => doc.moveCard(5, 0)).toThrow(/IndexOutOfRange/)
+  })
+})
+
+describe('Document editor surface — updateCardField / updateCardBody', () => {
+  const MD_WITH_CARD = `---
+QUILL: test_quill
+---
+
+Body.
+
+---
+CARD: note
+foo: bar
+---
+
+Card body.
+`
+
+  it('updateCardField sets a field on a card', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARD)
+    doc.updateCardField(0, 'content', 'hello')
+    expect(doc.cards[0].fields.content).toBe('hello')
+  })
+
+  it('updateCardField throws EditError::ReservedName for BODY', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARD)
+    expect(() => doc.updateCardField(0, 'BODY', 'x')).toThrow(/ReservedName/)
+  })
+
+  it('updateCardField throws IndexOutOfRange when card absent', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN) // 0 cards
+    expect(() => doc.updateCardField(0, 'title', 'x')).toThrow(/IndexOutOfRange/)
+  })
+
+  it('updateCardBody replaces card body', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARD)
+    doc.updateCardBody(0, 'New card body.')
+    expect(doc.cards[0].body).toBe('New card body.')
+  })
+
+  it('updateCardBody throws IndexOutOfRange when card absent', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN) // 0 cards
+    expect(() => doc.updateCardBody(0, 'x')).toThrow(/IndexOutOfRange/)
+  })
+})
+
+describe('Document editor surface — parse→mutate→read round-trip', () => {
+  it('mutated document reflects changes in subsequent reads', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+
+    // Mutate
+    doc.setField('author', 'Bob')
+    doc.replaceBody('New body text.')
+    doc.pushCard({ tag: 'note', body: 'Card content.' })
+    doc.setQuillRef('updated_quill')
+
+    // Assert state
+    expect(doc.frontmatter.author).toBe('Bob')
+    expect(doc.body).toBe('New body text.')
+    expect(doc.cards.length).toBe(1)
+    expect(doc.cards[0].tag).toBe('note')
+    expect(doc.cards[0].body).toBe('Card content.')
+    expect(doc.quillRef).toBe('updated_quill')
+
+    // Original title still present
+    expect(doc.frontmatter.title).toBe('Test Document')
+
+    // Warnings untouched
+    expect(Array.isArray(doc.warnings)).toBe(true)
+  })
+})
+
+// ---------------------------------------------------------------------------
 // open + session.render
 // ---------------------------------------------------------------------------
 

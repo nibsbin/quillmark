@@ -1,0 +1,518 @@
+//! Unit tests for the document editor surface (Phase 3).
+
+use crate::document::edit::{is_reserved_name, is_valid_field_name, EditError, RESERVED_NAMES};
+use crate::document::sentinel::is_valid_tag_name;
+use crate::document::{Card, Document};
+use crate::value::QuillValue;
+use crate::version::QuillReference;
+use indexmap::IndexMap;
+use std::str::FromStr;
+
+// ── Helper ───────────────────────────────────────────────────────────────────
+
+fn make_doc() -> Document {
+    Document::from_markdown("---\nQUILL: test_quill\ntitle: Hello\n---\n\nBody text.\n").unwrap()
+}
+
+fn make_doc_with_cards() -> Document {
+    Document::from_markdown(
+        "---\nQUILL: test_quill\ntitle: Hello\n---\n\nBody.\n\n---\nCARD: note\nfoo: bar\n---\n\nCard body.\n\n---\nCARD: summary\n---\n",
+    )
+    .unwrap()
+}
+
+fn qv(s: &str) -> QuillValue {
+    QuillValue::from_json(serde_json::json!(s))
+}
+
+fn qv_int(n: i64) -> QuillValue {
+    QuillValue::from_json(serde_json::json!(n))
+}
+
+// ── is_valid_field_name ──────────────────────────────────────────────────────
+
+#[test]
+fn test_valid_field_names() {
+    assert!(is_valid_field_name("title"));
+    assert!(is_valid_field_name("my_field"));
+    assert!(is_valid_field_name("_private"));
+    assert!(is_valid_field_name("abc123"));
+    assert!(is_valid_field_name("a1b2c3"));
+    assert!(is_valid_field_name("x"));
+    assert!(is_valid_field_name("_"));
+}
+
+#[test]
+fn test_invalid_field_names() {
+    assert!(!is_valid_field_name(""));
+    assert!(!is_valid_field_name("Title")); // uppercase
+    assert!(!is_valid_field_name("123abc")); // starts with digit
+    assert!(!is_valid_field_name("my-field")); // hyphen not allowed
+    assert!(!is_valid_field_name("my field")); // space not allowed
+    assert!(!is_valid_field_name("BODY")); // uppercase (reserved)
+    assert!(!is_valid_field_name("CARDS")); // uppercase (reserved)
+}
+
+// ── is_reserved_name ────────────────────────────────────────────────────────
+
+#[test]
+fn test_reserved_names_constant() {
+    // All four names are present
+    assert!(RESERVED_NAMES.contains(&"BODY"));
+    assert!(RESERVED_NAMES.contains(&"CARDS"));
+    assert!(RESERVED_NAMES.contains(&"QUILL"));
+    assert!(RESERVED_NAMES.contains(&"CARD"));
+    assert_eq!(RESERVED_NAMES.len(), 4);
+}
+
+#[test]
+fn test_is_reserved_name() {
+    assert!(is_reserved_name("BODY"));
+    assert!(is_reserved_name("CARDS"));
+    assert!(is_reserved_name("QUILL"));
+    assert!(is_reserved_name("CARD"));
+    assert!(!is_reserved_name("body")); // case-sensitive
+    assert!(!is_reserved_name("title"));
+    assert!(!is_reserved_name(""));
+}
+
+// ── EditError variants ───────────────────────────────────────────────────────
+
+#[test]
+fn test_edit_error_reserved_name() {
+    let mut doc = make_doc();
+    let result = doc.set_field("BODY", qv("value"));
+    assert_eq!(result, Err(EditError::ReservedName("BODY".to_string())));
+}
+
+#[test]
+fn test_edit_error_invalid_field_name() {
+    let mut doc = make_doc();
+    let result = doc.set_field("My-Field", qv("value"));
+    assert_eq!(
+        result,
+        Err(EditError::InvalidFieldName("My-Field".to_string()))
+    );
+}
+
+#[test]
+fn test_edit_error_invalid_tag_name() {
+    let result = Card::new("Invalid-Tag");
+    assert_eq!(
+        result,
+        Err(EditError::InvalidTagName("Invalid-Tag".to_string()))
+    );
+}
+
+#[test]
+fn test_edit_error_index_out_of_range() {
+    let mut doc = make_doc(); // no cards
+    let card = Card::new("note").unwrap();
+    let result = doc.insert_card(5, card);
+    assert_eq!(
+        result,
+        Err(EditError::IndexOutOfRange { index: 5, len: 0 })
+    );
+}
+
+// ── EditError Display ────────────────────────────────────────────────────────
+
+#[test]
+fn test_edit_error_display() {
+    assert!(EditError::ReservedName("BODY".to_string())
+        .to_string()
+        .contains("BODY"));
+    assert!(EditError::InvalidFieldName("Bad-Name".to_string())
+        .to_string()
+        .contains("Bad-Name"));
+    assert!(EditError::InvalidTagName("Bad-Tag".to_string())
+        .to_string()
+        .contains("Bad-Tag"));
+    assert!(EditError::IndexOutOfRange { index: 3, len: 2 }
+        .to_string()
+        .contains("3"));
+}
+
+// ── Reserved-name matrix: Document::set_field ────────────────────────────────
+
+#[test]
+fn test_document_set_field_rejects_all_reserved_names() {
+    for &name in RESERVED_NAMES {
+        let mut doc = make_doc();
+        let result = doc.set_field(name, qv("value"));
+        assert_eq!(
+            result,
+            Err(EditError::ReservedName(name.to_string())),
+            "expected ReservedName for '{}'",
+            name
+        );
+    }
+}
+
+// ── Reserved-name matrix: Card::set_field ────────────────────────────────────
+
+#[test]
+fn test_card_set_field_rejects_all_reserved_names() {
+    for &name in RESERVED_NAMES {
+        let mut card = Card::new("note").unwrap();
+        let result = card.set_field(name, qv("value"));
+        assert_eq!(
+            result,
+            Err(EditError::ReservedName(name.to_string())),
+            "expected ReservedName for '{}'",
+            name
+        );
+    }
+}
+
+// ── Document::set_field (happy path) ─────────────────────────────────────────
+
+#[test]
+fn test_document_set_field_inserts() {
+    let mut doc = make_doc();
+    doc.set_field("author", qv("Alice")).unwrap();
+    assert_eq!(doc.frontmatter().get("author").unwrap().as_str(), Some("Alice"));
+}
+
+#[test]
+fn test_document_set_field_updates_existing() {
+    let mut doc = make_doc();
+    doc.set_field("title", qv("New Title")).unwrap();
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str(),
+        Some("New Title")
+    );
+}
+
+// ── Document::remove_field ───────────────────────────────────────────────────
+
+#[test]
+fn test_document_remove_field_existing() {
+    let mut doc = make_doc();
+    let removed = doc.remove_field("title");
+    assert_eq!(removed.unwrap().as_str(), Some("Hello"));
+    assert!(doc.frontmatter().get("title").is_none());
+}
+
+#[test]
+fn test_document_remove_field_absent() {
+    let mut doc = make_doc();
+    let removed = doc.remove_field("nonexistent");
+    assert!(removed.is_none());
+}
+
+#[test]
+fn test_document_remove_field_reserved_returns_none() {
+    // Reserved names can't be in frontmatter; remove must return None.
+    let mut doc = make_doc();
+    let removed = doc.remove_field("BODY");
+    assert!(removed.is_none());
+}
+
+// ── Document::set_quill_ref ──────────────────────────────────────────────────
+
+#[test]
+fn test_document_set_quill_ref() {
+    let mut doc = make_doc();
+    let new_ref = QuillReference::from_str("new_quill").unwrap();
+    doc.set_quill_ref(new_ref);
+    assert_eq!(doc.quill_reference().name, "new_quill");
+}
+
+// ── Document::replace_body ───────────────────────────────────────────────────
+
+#[test]
+fn test_document_replace_body() {
+    let mut doc = make_doc();
+    doc.replace_body("New body content.");
+    assert_eq!(doc.body(), "New body content.");
+}
+
+// ── Document::push_card ──────────────────────────────────────────────────────
+
+#[test]
+fn test_document_push_card() {
+    let mut doc = make_doc();
+    let card = Card::new("note").unwrap();
+    doc.push_card(card).unwrap();
+    assert_eq!(doc.cards().len(), 1);
+    assert_eq!(doc.cards()[0].tag(), "note");
+}
+
+// ── Document::insert_card ────────────────────────────────────────────────────
+
+#[test]
+fn test_document_insert_card_at_zero() {
+    let mut doc = make_doc_with_cards(); // 2 cards: note, summary
+    let card = Card::new("intro").unwrap();
+    doc.insert_card(0, card).unwrap();
+    assert_eq!(doc.cards().len(), 3);
+    assert_eq!(doc.cards()[0].tag(), "intro");
+    assert_eq!(doc.cards()[1].tag(), "note");
+}
+
+#[test]
+fn test_document_insert_card_at_end() {
+    let mut doc = make_doc_with_cards(); // 2 cards
+    let len = doc.cards().len();
+    let card = Card::new("footer").unwrap();
+    doc.insert_card(len, card).unwrap();
+    assert_eq!(doc.cards()[len].tag(), "footer");
+}
+
+#[test]
+fn test_document_insert_card_out_of_range() {
+    let mut doc = make_doc(); // 0 cards
+    let card = Card::new("note").unwrap();
+    let result = doc.insert_card(1, card);
+    assert_eq!(result, Err(EditError::IndexOutOfRange { index: 1, len: 0 }));
+}
+
+// ── Document::remove_card ────────────────────────────────────────────────────
+
+#[test]
+fn test_document_remove_card() {
+    let mut doc = make_doc_with_cards(); // 2 cards: note, summary
+    let removed = doc.remove_card(0);
+    assert!(removed.is_some());
+    assert_eq!(removed.unwrap().tag(), "note");
+    assert_eq!(doc.cards().len(), 1);
+    assert_eq!(doc.cards()[0].tag(), "summary");
+}
+
+#[test]
+fn test_document_remove_card_out_of_range() {
+    let mut doc = make_doc();
+    let removed = doc.remove_card(0);
+    assert!(removed.is_none());
+}
+
+// ── Document::card_mut ───────────────────────────────────────────────────────
+
+#[test]
+fn test_document_card_mut() {
+    let mut doc = make_doc_with_cards();
+    {
+        let card = doc.card_mut(0).unwrap();
+        card.set_body("Updated card body.");
+    }
+    assert_eq!(doc.cards()[0].body(), "Updated card body.");
+}
+
+#[test]
+fn test_document_card_mut_out_of_range() {
+    let mut doc = make_doc();
+    assert!(doc.card_mut(0).is_none());
+}
+
+// ── Document::move_card ──────────────────────────────────────────────────────
+
+#[test]
+fn test_move_card_no_op_same_index() {
+    let mut doc = make_doc_with_cards(); // note(0), summary(1)
+    let result = doc.move_card(0, 0);
+    assert_eq!(result, Ok(()));
+    assert_eq!(doc.cards()[0].tag(), "note");
+    assert_eq!(doc.cards()[1].tag(), "summary");
+}
+
+#[test]
+fn test_move_card_last_to_first() {
+    let mut doc = make_doc_with_cards(); // note(0), summary(1)
+    doc.move_card(1, 0).unwrap();
+    assert_eq!(doc.cards()[0].tag(), "summary");
+    assert_eq!(doc.cards()[1].tag(), "note");
+}
+
+#[test]
+fn test_move_card_first_to_last() {
+    let mut doc = make_doc_with_cards(); // note(0), summary(1)
+    let last = doc.cards().len() - 1;
+    doc.move_card(0, last).unwrap();
+    assert_eq!(doc.cards()[0].tag(), "summary");
+    assert_eq!(doc.cards()[last].tag(), "note");
+}
+
+#[test]
+fn test_move_card_from_out_of_range() {
+    let mut doc = make_doc_with_cards(); // 2 cards
+    let len = doc.cards().len();
+    let result = doc.move_card(len, 0);
+    assert_eq!(result, Err(EditError::IndexOutOfRange { index: len, len }));
+}
+
+#[test]
+fn test_move_card_to_out_of_range() {
+    let mut doc = make_doc_with_cards(); // 2 cards
+    let len = doc.cards().len();
+    let result = doc.move_card(0, len);
+    assert_eq!(result, Err(EditError::IndexOutOfRange { index: len, len }));
+}
+
+// ── Card::new ────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_card_new_valid() {
+    let card = Card::new("note").unwrap();
+    assert_eq!(card.tag(), "note");
+    assert!(card.fields().is_empty());
+    assert_eq!(card.body(), "");
+}
+
+#[test]
+fn test_card_new_invalid_tag_uppercase() {
+    let result = Card::new("Note");
+    assert_eq!(
+        result,
+        Err(EditError::InvalidTagName("Note".to_string()))
+    );
+}
+
+#[test]
+fn test_card_new_invalid_tag_empty() {
+    let result = Card::new("");
+    assert_eq!(result, Err(EditError::InvalidTagName("".to_string())));
+}
+
+#[test]
+fn test_card_new_invalid_tag_with_hyphen() {
+    let result = Card::new("my-card");
+    assert_eq!(
+        result,
+        Err(EditError::InvalidTagName("my-card".to_string()))
+    );
+}
+
+// ── Card::set_field ──────────────────────────────────────────────────────────
+
+#[test]
+fn test_card_set_field_valid() {
+    let mut card = Card::new("note").unwrap();
+    card.set_field("content", qv("Some text")).unwrap();
+    assert_eq!(card.fields().get("content").unwrap().as_str(), Some("Some text"));
+}
+
+#[test]
+fn test_card_set_field_invalid_name() {
+    let mut card = Card::new("note").unwrap();
+    let result = card.set_field("Content", qv("text"));
+    assert_eq!(
+        result,
+        Err(EditError::InvalidFieldName("Content".to_string()))
+    );
+}
+
+// ── Card::remove_field ───────────────────────────────────────────────────────
+
+#[test]
+fn test_card_remove_field_existing() {
+    let mut doc = make_doc_with_cards();
+    // doc.cards()[0] is "note" with field "foo" = "bar"
+    let card = doc.card_mut(0).unwrap();
+    let removed = card.remove_field("foo");
+    assert_eq!(removed.unwrap().as_str(), Some("bar"));
+    assert!(card.fields().get("foo").is_none());
+}
+
+#[test]
+fn test_card_remove_field_absent() {
+    let mut card = Card::new("note").unwrap();
+    assert!(card.remove_field("nonexistent").is_none());
+}
+
+// ── Card::set_body ───────────────────────────────────────────────────────────
+
+#[test]
+fn test_card_set_body() {
+    let mut card = Card::new("note").unwrap();
+    card.set_body("Card body text.");
+    assert_eq!(card.body(), "Card body text.");
+}
+
+// ── Invariant check: sequence of mutations ───────────────────────────────────
+
+/// After a deterministic sequence of mutations, the document must satisfy:
+/// - No reserved key in frontmatter
+/// - Every card tag passes is_valid_tag_name
+/// - The plate JSON can be produced without panicking
+#[test]
+fn test_invariants_after_mutation_sequence() {
+    let mut doc = make_doc();
+
+    // 1. Add some frontmatter fields
+    doc.set_field("author", qv("Alice")).unwrap();
+    doc.set_field("version", qv_int(3)).unwrap();
+
+    // 2. Add cards
+    let c1 = Card::new("note").unwrap();
+    let c2 = Card::new("summary").unwrap();
+    let c3 = Card::new("appendix").unwrap();
+    doc.push_card(c1).unwrap();
+    doc.push_card(c2).unwrap();
+    doc.insert_card(1, c3).unwrap(); // now: note, appendix, summary
+
+    // 3. Mutate a card field
+    doc.card_mut(0).unwrap().set_field("text", qv("Hello")).unwrap();
+
+    // 4. Move cards around
+    doc.move_card(2, 0).unwrap(); // summary, note, appendix
+
+    // 5. Remove a card
+    doc.remove_card(1); // summary, appendix
+
+    // 6. Replace body
+    doc.replace_body("Updated body.");
+
+    // 7. Remove a frontmatter field
+    doc.remove_field("version");
+
+    // --- Assertions ---
+
+    // No reserved key in frontmatter
+    for key in doc.frontmatter().keys() {
+        assert!(
+            !is_reserved_name(key),
+            "reserved key '{}' found in frontmatter",
+            key
+        );
+    }
+
+    // Every card tag is valid
+    for card in doc.cards() {
+        assert!(
+            is_valid_tag_name(card.tag()),
+            "invalid tag '{}' found",
+            card.tag()
+        );
+    }
+
+    // Can produce plate JSON without panicking
+    let json = doc.to_plate_json();
+    assert!(json.is_object());
+    assert_eq!(json["QUILL"].as_str(), Some("test_quill"));
+    assert!(json["CARDS"].is_array());
+    assert_eq!(json["BODY"].as_str(), Some("Updated body."));
+
+    // Frontmatter still has expected keys
+    assert_eq!(
+        doc.frontmatter().get("author").unwrap().as_str(),
+        Some("Alice")
+    );
+    assert!(doc.frontmatter().get("version").is_none());
+}
+
+// ── Warnings never touched ───────────────────────────────────────────────────
+
+#[test]
+fn test_mutators_do_not_touch_warnings() {
+    let doc = make_doc();
+    let initial_warnings = doc.warnings().to_vec();
+
+    let mut doc = doc;
+    doc.set_field("extra", qv("value")).unwrap();
+    doc.replace_body("New body.");
+    let card = Card::new("new_card").unwrap();
+    doc.push_card(card).unwrap();
+
+    assert_eq!(doc.warnings(), initial_warnings.as_slice());
+}

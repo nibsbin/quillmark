@@ -223,7 +223,7 @@ pub(super) fn decompose_with_warnings(
             };
             let card_body = markdown[card_body_start..card_body_end].to_string();
 
-            cards.push(Card::new(tag_name.clone(), card_fields, card_body));
+            cards.push(Card::new_internal(tag_name.clone(), card_fields, card_body));
         }
     }
 

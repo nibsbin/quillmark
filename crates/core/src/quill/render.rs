@@ -6,8 +6,7 @@ use crate::{
     document::Card,
     normalize::normalize_document,
     quill::{FieldSchema, FieldType},
-    Diagnostic, Document, Quill, QuillValue, RenderError, RenderOptions, RenderResult,
-    Severity,
+    Diagnostic, Document, Quill, QuillValue, RenderError, RenderOptions, RenderResult, Severity,
 };
 
 impl Quill {
@@ -26,11 +25,7 @@ impl Quill {
     ///
     /// Note: page selection (`RenderOptions.pages`) is ignored in this one-shot
     /// convenience path. Use `open(...).render(...)` for page-selective rendering.
-    pub fn render(
-        &self,
-        doc: Document,
-        opts: &RenderOptions,
-    ) -> Result<RenderResult, RenderError> {
+    pub fn render(&self, doc: Document, opts: &RenderOptions) -> Result<RenderResult, RenderError> {
         let all_pages_opts = RenderOptions {
             output_format: opts.output_format,
             ppi: opts.ppi,
@@ -111,20 +106,20 @@ impl Quill {
         // Coerce card fields
         let mut coerced_cards: Vec<Card> = Vec::new();
         for card in doc.cards() {
-            let coerced_fields = self
-                .config
-                .coerce_card(card.tag(), card.fields())
-                .map_err(|e| RenderError::ValidationFailed {
-                    diag: Box::new(
-                        Diagnostic::new(Severity::Error, e.to_string())
-                            .with_code("validation::coercion_failed".to_string())
-                            .with_hint(
-                                "Ensure all card fields can be coerced to their declared types"
-                                    .to_string(),
-                            ),
-                    ),
-                })?;
-            coerced_cards.push(Card::new(
+            let coerced_fields =
+                self.config
+                    .coerce_card(card.tag(), card.fields())
+                    .map_err(|e| RenderError::ValidationFailed {
+                        diag: Box::new(
+                            Diagnostic::new(Severity::Error, e.to_string())
+                                .with_code("validation::coercion_failed".to_string())
+                                .with_hint(
+                                    "Ensure all card fields can be coerced to their declared types"
+                                        .to_string(),
+                                ),
+                        ),
+                    })?;
+            coerced_cards.push(Card::new_internal(
                 card.tag().to_string(),
                 coerced_fields,
                 card.body().to_string(),
@@ -167,7 +162,7 @@ impl Quill {
                         }
                     }
                 }
-                Card::new(card.tag().to_string(), cf, card.body().to_string())
+                Card::new_internal(card.tag().to_string(), cf, card.body().to_string())
             })
             .collect();
 

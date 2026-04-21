@@ -1,8 +1,8 @@
+use indexmap::IndexMap;
 use quillmark_core::{
     normalize::normalize_document, Backend, Card, Diagnostic, Document, OutputFormat, Quill,
     QuillValue, RenderError, RenderOptions, RenderResult, RenderSession, Severity,
 };
-use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -47,8 +47,7 @@ impl Workflow {
                     Diagnostic::new(Severity::Error, e.to_string())
                         .with_code("validation::coercion_failed".to_string())
                         .with_hint(
-                            "Ensure all fields can be coerced to their declared types"
-                                .to_string(),
+                            "Ensure all fields can be coerced to their declared types".to_string(),
                         ),
                 ),
             })?;
@@ -70,7 +69,7 @@ impl Workflow {
                             ),
                     ),
                 })?;
-            coerced_cards.push(Card::new(
+            coerced_cards.push(Card::new_internal(
                 card.tag().to_string(),
                 coerced_fields,
                 card.body().to_string(),
@@ -99,7 +98,7 @@ impl Workflow {
             .iter()
             .map(|card| {
                 let fields_with_defaults = self.apply_card_defaults(card.tag(), card.fields());
-                Card::new(
+                Card::new_internal(
                     card.tag().to_string(),
                     fields_with_defaults,
                     card.body().to_string(),
@@ -158,10 +157,7 @@ impl Workflow {
         )
     }
 
-    fn prepare_render_context(
-        &self,
-        doc: &Document,
-    ) -> Result<PreparedRenderContext, RenderError> {
+    fn prepare_render_context(&self, doc: &Document) -> Result<PreparedRenderContext, RenderError> {
         Ok(PreparedRenderContext {
             json_data: self.compile_data(doc)?,
             plate_content: self.get_plate_content()?.unwrap_or_default(),
@@ -271,7 +267,7 @@ impl Workflow {
                             ),
                     ),
                 })?;
-            coerced_cards.push(Card::new(
+            coerced_cards.push(Card::new_internal(
                 card.tag().to_string(),
                 coerced_fields,
                 card.body().to_string(),
