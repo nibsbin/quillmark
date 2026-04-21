@@ -157,41 +157,66 @@ the contract above.
   `emit::yaml::emit_mapping` helper — no ad-hoc YAML string building
   elsewhere. Emitter implementation is an open question; see §5.2.1.
 
-### 5.2.1 YAML emitter choice — pre-implementation spike
+### 5.2.1 YAML emitter: `serde-saphyr`
 
-The workspace today uses `serde-saphyr` for YAML **parsing only** (the
-crate is parse-side). There is no emitter in the dependency tree. This
-is a concrete technical risk, not a footnote:
+We already depend on `serde-saphyr` for parsing. It also exposes a
+`Serializer` with `SerializerOptions` (style control, block vs. flow,
+scalar styles). **Use it for emission too.**
 
-- `serde_yaml` is archived / unmaintained upstream but still functional
-  and widely used; known issues around booleans-as-strings (the
-  "Norway problem"), `y` / `yes` / `on` as booleans, and unquoted
-  numeric-looking strings. All tractable with `Tag::force_quote` or
-  equivalent, but every rule has to be verified against our
-  round-trip test corpus.
-- `saphyr-emitter` (companion to `saphyr-parser`) exists but is
-  separately versioned and may not match the parse dialect
-  `serde-saphyr` accepts. Symmetry with the parser is desirable but
-  not required — the contract is round-trip equality of `Document`,
-  not byte-equality of YAML.
-- Hand-rolling emission against the Quillmark schema is feasible
-  because frontmatter values are constrained (`QuillValue`, no anchors
-  or tags survive round-trip, §5.3). Only needed as a fallback.
+Rationale:
 
-**Mandatory spike before step 4:** verify that the chosen emitter
-round-trips the full fixture corpus under the §5.1 contract. Concretely:
+- One crate on both sides of the round-trip eliminates a whole class
+  of dialect-mismatch bugs where a foreign emitter writes something
+  our parser then misreads.
+- No new dependency, no license/audit churn.
+- `serde-saphyr` exposes knobs for string scalar style that
+  `serde_yaml` does not — specifically usable to avoid the Norway
+  problem (`no`/`yes`/`on`/`off` unquoted) and unquoted
+  numeric-looking strings.
 
-1. Pick one of the three candidates above.
+Rejected alternatives:
+
+- `serde_yaml` (dtolnay): archived March 2024. Functional but
+  unmaintained. Its open issue #347 (numeric-looking strings losing
+  quotes on emit) has no workaround in the exposed API. Adding an
+  archived crate to the dep tree when we already have a maintained
+  parse/emit library is pure downside.
+- `serde_yml` (sebastienrousseau fork): RUSTSEC-2025-0068 (unsound,
+  unmaintained) as of September 2025. Explicit non-starter.
+- `serde-yaml-ng` (acatton fork): maintained, but no exposed
+  formatting options. Same fundamental gap as `serde_yaml` for the
+  quoting rules we need.
+- Hand-rolled emitter: the "bounded scope, sharp rake" trap. The YAML
+  plain-scalar safety rule (quote if the value could be parsed as
+  bool, null, int, float, timestamp, or starts with `- `, `? `, `[`,
+  `{`, etc.) is where we'd get stung. Not worth reinventing.
+
+### 5.2.2 Pre-implementation spike (reduced scope)
+
+Since the emitter choice is resolved, the spike is narrower:
+
+**Verify `serde-saphyr::SerializerOptions` can produce output that
+round-trips our fixture corpus under the §5.1 contract.**
+
+Concretely:
+
+1. Configure `SerializerOptions` to force-quote strings that would
+   otherwise parse as non-strings (Norway values, numeric-looking,
+   date-looking, null-looking). Read the docs or source to confirm
+   the right option combination exists. If it doesn't, escalate
+   before step 6 — we may need to submit a PR upstream or pre-process
+   `QuillValue::String` values on the way in to force quoting.
 2. For every `.md` fixture in `crates/fixtures`, run
    `from_markdown → to_markdown → from_markdown` and assert the two
    `Document` values are equal.
-3. For every failure, classify as (a) legitimate information loss we
-   accept (comments, custom tags per §5.3), or (b) an emitter bug that
-   blocks this proposal.
+3. For every failure, classify: legitimate information loss we accept
+   (comments, custom tags per §5.3), or an emitter gap that needs an
+   upstream fix or a pre-serialization wrapper.
 
-If the chosen emitter has blocker-class bugs, escalate before starting
-step 4 — the emitter choice constrains the canonical-form rules in
-§5.2, and switching later is expensive.
+Expected outcome: the spike passes, or identifies a small set of
+`SerializerOptions` combinations + targeted string pre-processing that
+makes it pass. Either way it's bounded work, not a crate-selection
+decision.
 
 ### 5.3 What survives
 
@@ -604,11 +629,13 @@ consumer side.
    shape is right. Iteration order now stable for emission.
 5. **Typed `Card` and editor surface.** Add `document::edit` plus the
    editor methods on `Document`. Unit tests around every invariant.
-6. **Emitter spike + implementation.** Run §5.2.1 spike. Choose
-   emitter. Add `document::emit` and `Document::to_markdown`.
-   Golden-file tests using the fixture corpus: `from_markdown` →
-   `to_markdown` → `from_markdown` returns an equal `Document`.
-   `to_markdown` idempotence: emit twice, compare bytes.
+6. **Emitter implementation.** Run §5.2.2 spike on
+   `serde-saphyr::SerializerOptions` (narrow: verify quoting covers
+   Norway / numeric-string / date-string cases). Add `document::emit`
+   and `Document::to_markdown`. Golden-file tests using the fixture
+   corpus: `from_markdown` → `to_markdown` → `from_markdown` returns
+   an equal `Document`. `to_markdown` idempotence: emit twice,
+   compare bytes.
 7. **Form projection.** Add `Quill::project_form` and `FormProjection`.
    Tests: all-fields-present, all-defaults, partial-defaults,
    validation-error cases.
@@ -635,8 +662,9 @@ Resolved:
 - ~~Render path: round-trip or passthrough~~ — resolved. `Quill::render`
   calls `to_plate_json()` directly; no markdown round-trip at render
   time.
-- ~~YAML emitter choice~~ — escalated to §5.2.1 as a mandatory
-  pre-implementation spike.
+- ~~YAML emitter choice~~ — resolved in §5.2.1: use `serde-saphyr`
+  (already our parser). A narrow spike (§5.2.2) verifies its
+  `SerializerOptions` cover our quoting requirements.
 
 Still open:
 
