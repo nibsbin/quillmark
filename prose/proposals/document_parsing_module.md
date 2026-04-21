@@ -2,7 +2,7 @@
 
 **Status:** Draft — design only, not scheduled.
 **Author:** (session proposal)
-**Scope:** `quillmark-core`, `quillmark-wasm`. No backend changes. No schema-model changes.
+**Scope:** `quillmark-core`, `quillmark-wasm`, `quillmark-python`. Backend Rust glue in `quillmark-typst` is refactored to consume the typed `Document` (§7.2); the plate wire format and the `.typ.template` are unchanged. No schema-model changes.
 
 ---
 
@@ -48,10 +48,10 @@ Non-goals:
 
 ## 3. Core idea
 
-**`ParsedDocument` becomes a canonical in-memory document representation
-— not a "parsed markdown payload".** Markdown is one import format and
-one export format; the structure is primary. Everything else in this
-proposal follows from that rename of intent.
+**The canonical type is `Document`.** It is a typed, in-memory
+Quillmark document — not a "parsed markdown payload". Markdown is one
+import format and one export format; the structure is primary.
+Everything else in this proposal follows.
 
 Read this as the new contract:
 
@@ -63,9 +63,9 @@ Read this as the new contract:
 > would parse to the same `Document`, byte-equal across round-trips of
 > a `Document` that was constructed without re-parsing.
 
-The type may keep the name `ParsedDocument` for binary compatibility, or
-we rename it to `Document` and keep `ParsedDocument` as a type alias for
-one release. That's a call to make during implementation, not here.
+**Naming: we rename `ParsedDocument` → `Document`.** `ParsedDocument`
+remains as a `#[deprecated]` type alias for one release so downstream
+consumers can upgrade at their own pace, then is removed.
 
 ## 4. Module layout
 
@@ -284,34 +284,121 @@ edits and emission. This is a breaking change to the return type of
 opaque. I'd default to (a) unless we find a consumer that relies on the
 concrete type.
 
-### 7.2 Cards: array-in-fields vs. first-class field — RESOLVED
+### 7.2 Two layers: internal model vs. plate wire format
 
 Today `CARDS` lives inside `fields` as a `QuillValue::Array` and `BODY`
-as a `QuillValue::String`. Audit shows these are not just convention —
-real callers depend on the shape:
+as a `QuillValue::String`. An audit of consumers shows the string keys
+are doing two very different jobs, which the first draft of this
+proposal conflated.
 
-- `crates/backends/typst/src/lib.rs:227` reads `result.get("CARDS")`
-  to run card-field transformation.
-- `crates/backends/typst/src/lib.typ.template:61-88` reads
-  `d.at("CARDS")` at runtime inside the Typst plate.
-- `crates/core/src/quill/validation.rs`, `crates/core/src/quill/config.rs`
-  both consume `CARDS` from `fields` during validation and coercion.
-- `crates/bindings/python/src/types.rs:366-371` exposes `fields` as a
-  `PyDict` to Python consumers — removing `CARDS`/`BODY` there is a
-  visible API break.
+**Layer A — Rust-side internal consumers.** These read `CARDS` / `BODY`
+as string keys out of a `HashMap<String, QuillValue>` because the
+underlying representation *is* a stringly-typed map. They are
+historical accidents, not contracts:
 
-**Resolution: commit to "keep derived."** `Document` stores
-`cards: Vec<Card>` and `body: String` as first-class fields. `fields()`
-returns a view that synthesizes `CARDS` (from `cards`) and `BODY` (from
-`body`) on access, so backends, templates, validation, and Python
-bindings are unchanged. The editor mutates only the typed sides; there
-is no possible desync because the view is derived, not cached.
+| Site | Pattern | Simpler if typed |
+|---|---|---|
+| `core/src/quill/validation.rs:50` | `fields.get("CARDS").and_then(as_array)` | `for card in doc.cards()` |
+| `core/src/quill/config.rs:173` | Same | `doc.cards()` |
+| `backends/typst/src/lib.rs:227` | Same (Rust glue before JSON serialization) | `doc.cards()` / `doc.body()` |
+| `bindings/python/src/types.rs` | `fields` exposes CARDS/BODY to Python via PyDict | `doc.cards` / `doc.body` typed accessors |
 
-If `fields()` returning a synthesized `IndexMap` on every call is a
-performance concern in the render hot path, we can memoize it behind
-`&self` with interior mutability or expose a separate `fields_view()`
-method that takes `&self` and returns `impl Iterator`. That's an
-implementation detail, not a design question.
+All four branch on "what if CARDS isn't an array?" — a case that can't
+arise once cards are typed.
+
+**Layer B — the plate data contract.** This is the JSON payload
+backends receive at render time:
+
+- `backends/typst/src/lib.typ.template:61-88` reads `d.at("CARDS")` at
+  Typst runtime, and `d.at("BODY")` elsewhere. Plate authors code
+  against this shape.
+
+Layer B is a genuine public API — the wire format that crosses the
+Rust ↔ backend boundary. It does **not** follow the internal model.
+
+### Resolution
+
+Draw the line between the two layers explicitly.
+
+**Internal model (Layer A) goes typed.** `Document` stores:
+
+```rust
+pub struct Document {
+    quill_ref: QuillReference,
+    frontmatter: IndexMap<String, QuillValue>,  // no CARDS, no BODY
+    body: String,
+    cards: Vec<Card>,
+}
+```
+
+Accessors: `doc.quill_ref()`, `doc.frontmatter()`, `doc.body()`,
+`doc.cards()`, plus the editor methods from §6.
+
+Consumers migrate:
+
+- `validation.rs` iterates `doc.cards()` directly. The type-mismatch
+  branch ("CARDS must be an array") is deleted.
+- `config.rs` coerce walks `doc.cards()`. Same branch deleted.
+- `typst/src/lib.rs` Rust glue calls `doc.cards()` / `doc.body()` /
+  `doc.frontmatter()` and assembles the plate JSON from those.
+- Python `fields` becomes the frontmatter dict only (no CARDS/BODY).
+  Python gains typed `cards` and `body` accessors (Python already has
+  `body()` — good; we make it consistent and add `cards`).
+
+**Plate wire format (Layer B) stays as-is, explicitly.** A new method
+on `Document`:
+
+```rust
+impl Document {
+    /// Serialize this document into the JSON payload format expected
+    /// by backend plates. The payload is the wire contract authors
+    /// code against: `CARDS` and `BODY` appear as top-level keys.
+    pub fn to_plate_json(&self) -> serde_json::Value;
+}
+```
+
+`Workflow::compile_data` calls `to_plate_json()` instead of manually
+assembling a map from `fields()`. The typst Rust glue and the
+`.typ.template` are unchanged because the JSON they see is unchanged.
+
+### Consequence: no derived-`fields()` method
+
+The first draft proposed a synthesized `fields()` view that would
+include `CARDS` and `BODY` for backward compatibility. That's dropped.
+The clearer split is:
+
+- `frontmatter()` — typed internal map, frontmatter only.
+- `to_plate_json()` — wire-format JSON, includes `CARDS`/`BODY`.
+
+Callers that want the flat map shape today get it from
+`to_plate_json()` (plus `.as_object()`). Callers that want frontmatter
+get `frontmatter()`. No single accessor does both badly.
+
+### Migration cost
+
+Concrete, bounded. This is larger than the first draft's "keep
+derived" resolution, but cleaner:
+
+- `crates/core/src/quill/validation.rs` — one function (`validate_document`)
+  rewritten to iterate typed cards. Simpler, fewer error paths.
+- `crates/core/src/quill/config.rs` — one function (`coerce`)
+  rewritten the same way.
+- `crates/backends/typst/src/lib.rs:189-235` — `transform_markdown_fields`
+  takes `&Document` (or structured pieces) instead of `HashMap`, and
+  builds the plate JSON at the end. Scope: one file.
+- `crates/quillmark/src/orchestration/workflow.rs:164-170`
+  (`fields_to_json`) — replaced by `doc.to_plate_json()`. Deletion.
+- `crates/bindings/python/src/types.rs:366-371` — `fields` property
+  changes shape. **Breaking change for Python consumers.** Document
+  in the crate's changelog; Python minor version bump. Mitigation: we
+  can keep `fields` returning CARDS/BODY for one release with a
+  deprecation warning and make it opt-in to the new shape, but I'd
+  rather do the clean break at the same time as the `Document`
+  rename.
+- `crates/bindings/wasm/src/engine.rs` — `parsed_document_impl` and
+  `to_core_parsed` no longer round-trip through a JSON `fields`
+  object; they ferry typed `Document`. WASM bindings expose
+  `frontmatter` and `cards` directly per §9.
 
 ## 8. Schema-aware form projection
 
@@ -356,25 +443,25 @@ does not need `FormProjection`.
 
 `quillmark-python` (`crates/bindings/python/src/types.rs`) currently
 exposes `ParsedDocument` as read-only: `from_markdown`, `body()`,
-`get_field()`, `fields()` (returning `PyDict`), and `warnings`.
+`get_field()`, `fields()` (returning `PyDict` including CARDS/BODY),
+and `warnings`.
 
-The proposal mirrors the WASM surface here:
+The new Python surface:
 
 ```python
-class ParsedDocument:
+class Document:  # renamed from ParsedDocument
     @staticmethod
-    def from_markdown(markdown: str) -> ParsedDocument: ...
+    def from_markdown(markdown: str) -> Document: ...
     def to_markdown(self) -> str: ...
 
-    # read (existing)
+    # read
     quill_ref: str
-    fields: dict[str, Any]
-    body: str
-    # new
-    cards: list[Card]
+    frontmatter: dict[str, Any]       # frontmatter only; no CARDS, no BODY
+    body: str                         # typed, was get_field("BODY")
+    cards: list[Card]                 # typed, was get_field("CARDS")
     warnings: list[Diagnostic]
 
-    # write (new)
+    # write
     def set_field(self, name: str, value: Any) -> None: ...
     def remove_field(self, name: str) -> None: ...
     def set_quill_ref(self, ref: str) -> None: ...
@@ -385,14 +472,15 @@ class ParsedDocument:
     def move_card(self, from_: int, to: int) -> None: ...
 
 class Quill:
-    def project_form(self, doc: ParsedDocument) -> FormProjection: ...
+    def project_form(self, doc: Document) -> FormProjection: ...
 ```
 
-Errors raise `ValueError` (existing `PyO3` convention for this crate).
-`fields` stays a `PyDict` view including synthesized `CARDS`/`BODY` per
-§7.2. Python is not a form-editor host today, but mirroring the surface
-keeps the two bindings from drifting and costs little beyond a PyO3
-method wrapper per method.
+Errors raise `ValueError` (existing PyO3 convention for this crate).
+Note the **breaking change to `fields`**: it is renamed `frontmatter`
+and no longer includes `CARDS` / `BODY`. Python consumers reading
+`doc.fields["BODY"]` migrate to `doc.body`; `doc.fields["CARDS"]` to
+`doc.cards`. Python minor-version bump; documented in the crate's
+changelog alongside the `Document` rename.
 
 ## 9. WASM surface
 
@@ -400,13 +488,13 @@ Every public `Document` method and `Quill::project_form` gets a WASM
 wrapper. Concretely:
 
 ```typescript
-class ParsedDocument {
-  static fromMarkdown(markdown: string): ParsedDocument;
+class Document {                        // renamed from ParsedDocument
+  static fromMarkdown(markdown: string): Document;
   toMarkdown(): string;
 
-  // read
+  // read — frontmatter, body, cards are separate surfaces
   readonly quillRef: string;
-  readonly fields: Record<string, unknown>;    // synthesized, includes CARDS/BODY
+  readonly frontmatter: Record<string, unknown>;  // no CARDS, no BODY
   readonly body: string;
   readonly cards: Card[];
 
@@ -423,9 +511,15 @@ class ParsedDocument {
   updateCardBody(index: number, body: string): void;
 }
 
+interface Card {
+  tag: string;                           // e.g. "indorsement"
+  fields: Record<string, unknown>;
+  body: string;
+}
+
 class Quill {
-  // existing: render, open
-  projectForm(doc: ParsedDocument): FormProjection;
+  // existing: render, open — signatures unchanged, accept Document
+  projectForm(doc: Document): FormProjection;
 }
 
 interface FormProjection { /* mirrors the Rust type */ }
@@ -435,121 +529,210 @@ Design notes:
 
 - Everything that can fail throws a structured error (reuse existing
   `WasmError` path; add `EditError` variants).
-- `fields` stays a plain object (a `Record`) for the read path because
-  consumers already depend on that shape. Writes go through typed
-  methods only — we do **not** make `fields` a `Proxy` that intercepts
+- `frontmatter` is a plain read-only object. Writes go through typed
+  methods only — we do **not** make it a `Proxy` that intercepts
   assignments.
 - `Card` on the JS side is a plain value object; `pushCard` takes a
   `{ tag, fields, body }` and validates. No opaque JS handle needed.
-- The `parsed: ParsedDocument` arguments to `Quill.render` and
-  `Quill.open` continue to work unchanged — they call `toMarkdown` (or
-  an internal equivalent) and feed the result through the existing
-  pipeline. TBD whether we keep going through the markdown round-trip
-  or pass the typed document straight through; former is simpler for
-  the initial implementation, latter avoids a round-trip per render.
+- The existing `ParsedDocument` class name is kept as a deprecated
+  alias in the WASM surface for one release. `ParsedDocument.fromMarkdown`
+  returns a `Document`; existing `fields` access on it is removed
+  because we can't ship a half-typed shim that doesn't match either
+  old or new — see §10 for why.
+- The `parsed: Document` arguments to `Quill.render` and `Quill.open`
+  continue to work unchanged — internally they call `to_plate_json()`
+  (not `to_markdown`) and feed the result through the existing
+  pipeline. No markdown round-trip at render time.
 
 ## 10. Migration
 
-This is a non-breaking change for Rust consumers **if** we choose (b)
-in §7.1 and keep `BODY`/`CARDS` in `fields` as derived views (§7.2
-first option). The `ParsedDocument::from_markdown` entry point keeps
-working; new capabilities arrive as additional methods.
+This release is **deliberately breaking** on the `fields()` surface.
+The two-layer split in §7.2 is the headline change, and splitting it
+across releases (keeping CARDS/BODY in `frontmatter` for one release,
+then removing them) would ship a half-typed intermediate state that
+matches neither old nor new consumers.
 
-For WASM consumers, all current call sites (`ParsedDocument.fromMarkdown`
-+ `quill.render(parsed, opts)`) keep working. New methods appear as
-additions. The form editor switches off its hand-rolled YAML path at
-its own pace.
+**Rust:**
+- `Document::from_markdown` works unchanged.
+- `Document::fields()` is removed. Callers use `frontmatter()`,
+  `body()`, `cards()`, or `to_plate_json()` depending on intent.
+- `ParsedDocument` remains as a `#[deprecated]` type alias for one
+  release, with a compiler note pointing at `Document`.
+- `with_defaults` stays on `Document` with the same signature.
+
+**WASM:**
+- `Document` is the primary class. `ParsedDocument` is kept as a
+  deprecated alias of `Document` (via `#[wasm_bindgen(js_name = ...)]`
+  or re-export).
+- `.fields` on the returned object is removed. Consumers that read
+  `fields.BODY` / `fields.CARDS` migrate to `.body` / `.cards`; others
+  migrate to `.frontmatter`.
+- `quill.render(doc)` and `quill.open(doc)` accept the new `Document`
+  unchanged. The form editor does parse → mutate → `toMarkdown` (for
+  storage) or parse → mutate → `quill.render` (for preview) without
+  touching YAML strings.
+
+**Python:**
+- Same as WASM. Breaking changes to `Document.fields` → `frontmatter`
+  + typed `cards` property. Minor version bump with a migration note
+  in `docs/integration/python/api.md`.
+
+**CLI:**
+- Zero impact. `crates/bindings/cli` only calls `from_markdown_with_warnings`
+  and hands the result to `Workflow`; no `fields()` reads.
+
+The form editor cutover happens in a single step after this release
+lands: delete its hand-rolled YAML emitter, call `Document.toMarkdown()`
+and the typed editor methods instead. No staged rollout needed on the
+consumer side.
 
 ## 11. Rollout plan (implementation order — not this session)
 
 1. **Module split without behavior change.** Move code from `parse.rs`
    into `document/fences.rs`, `document/sentinel.rs`,
    `document/assemble.rs`, `document/limits.rs`. All existing tests
-   pass unchanged. `parse` remains a re-export facade.
-2. **Switch `fields` to `IndexMap`.** Update call sites. Behavior
-   unchanged except iteration order is now stable.
-3. **Typed `Card` and editor surface.** Add `document::edit` plus the
-   typed methods on `Document`. Unit tests around every invariant.
-4. **Emitter.** Add `document::emit` and `Document::to_markdown`.
-   Golden-file tests using the fixture corpus: `from_markdown` +
-   `to_markdown` + `from_markdown` round-trip returns an equal
-   `Document`. `to_markdown` idempotence: emit twice, compare bytes.
-5. **Form projection.** Add `Quill::project_form` and `FormProjection`.
-   Tests covering: all-fields-present, all-defaults, partial-defaults,
+   pass unchanged. `parse` remains a re-export facade. No type changes.
+2. **Rename `ParsedDocument` → `Document`; add deprecated alias.**
+   Behavior unchanged. Internal callers migrate. This is a separable
+   PR because the rename alone doesn't touch any field/card shape.
+3. **Reshape `Document` into typed fields (`frontmatter`, `body`,
+   `cards`).** This is the big one. Touches validation.rs, config.rs,
+   typst/lib.rs, workflow.rs, Python bindings. Add `to_plate_json()`
+   and remove the old `fields()`. All tests still green via the new
+   accessors; no fixtures should change. **Land behind a single PR.**
+4. **Switch `frontmatter` to `IndexMap`.** Small follow-up PR once the
+   shape is right. Iteration order now stable for emission.
+5. **Typed `Card` and editor surface.** Add `document::edit` plus the
+   editor methods on `Document`. Unit tests around every invariant.
+6. **Emitter spike + implementation.** Run §5.2.1 spike. Choose
+   emitter. Add `document::emit` and `Document::to_markdown`.
+   Golden-file tests using the fixture corpus: `from_markdown` →
+   `to_markdown` → `from_markdown` returns an equal `Document`.
+   `to_markdown` idempotence: emit twice, compare bytes.
+7. **Form projection.** Add `Quill::project_form` and `FormProjection`.
+   Tests: all-fields-present, all-defaults, partial-defaults,
    validation-error cases.
-6. **WASM surface.** Wrap everything in `bindings/wasm`. TypeScript
-   declarations regenerated. Add a JS integration test that does
-   parse → mutate → emit → parse.
-7. **Form editor cutover.** Downstream replaces its hand-rolled YAML
-   emission with `toMarkdown`. Out of scope for this repo.
+8. **WASM surface.** Wrap everything in `bindings/wasm`. TypeScript
+   declarations regenerated. JS integration test: parse → mutate →
+   emit → parse.
+9. **Python surface.** Mirror in `bindings/python`. Breaking-change
+   note in `docs/integration/python/api.md`.
+10. **Form editor cutover.** Downstream replaces hand-rolled YAML
+    emission with `toMarkdown`. Out of scope for this repo.
 
-Each step is a reviewable PR. Steps 1 and 2 land behind no feature
-flag. Step 3 onward can land incrementally as new public API.
+Each step is a reviewable PR. Steps 1–4 are sequenced; 5–9 can
+interleave.
 
 ## 12. Open questions
 
-Resolved during sanity-check:
+Resolved:
 
-- ~~`CARDS` / `BODY` derived vs. stored~~ — resolved in §7.2 (derived,
-  mandatory, driven by typst backend + Python bindings consumer audit).
+- ~~`CARDS` / `BODY` derived vs. stored~~ — resolved in §7.2 via the
+  Layer A / Layer B split. Internal model is typed; wire format keeps
+  the keys explicitly via `to_plate_json()`.
+- ~~`Document` rename~~ — confirmed. `ParsedDocument` becomes a
+  deprecated alias.
+- ~~Render path: round-trip or passthrough~~ — resolved. `Quill::render`
+  calls `to_plate_json()` directly; no markdown round-trip at render
+  time.
 - ~~YAML emitter choice~~ — escalated to §5.2.1 as a mandatory
   pre-implementation spike.
 
 Still open:
 
-- **`Document` rename.** Keep the name `ParsedDocument` for compat, or
-  rename to `Document` with a deprecated alias? I lean toward the
-  rename — the type's role is changing and the old name will actively
-  mislead — but this is cosmetic. Safe to defer to step 1 of rollout.
-- **Nested map ordering.** `IndexMap` at the top level is confirmed in
-  §7.1. For nested `QuillValue::Object` mappings, preserving author
-  order requires a custom serde flow. Alternative: sort keys on emit
-  (still deterministic, satisfies §5.1 contracts, but visible in
-  diffs). Defer to step 4 — the emitter spike will surface whether
-  nested-order preservation is free or expensive.
-- **Render path: round-trip or passthrough.** `Quill::render(parsed)`
-  could either (a) call `parsed.to_markdown()` and re-parse, or (b)
-  feed the typed `Document` to `Workflow::compile_data` directly.
-  Option (b) avoids a round-trip per render; option (a) is simpler and
-  makes the parse boundary the single validation gate. Defer to step 6.
+- **Nested map ordering.** `IndexMap` on `frontmatter` gives
+  top-level deterministic order. For nested `QuillValue::Object`
+  mappings, preserving author order requires a custom serde flow.
+  Alternative: sort keys on emit (still deterministic, satisfies §5.1
+  contracts, but visible in diffs). Defer to step 6 — the emitter
+  spike will surface whether nested-order preservation is free or
+  expensive.
 - **Comments.** Confirmed lost on round-trip per §5.3. No known
   consumer blocks on this today. If a future requirement surfaces,
   layout-preserving round-trip (§2 non-goal) comes back on the table
   and this proposal would need a follow-up.
+- **Python `get_field` fate.** Keep as a thin alias over
+  `frontmatter.get(name)`, or remove? Keeping costs nothing and
+  smooths migration; I lean toward keep-with-deprecation. Non-blocking.
 
 ## 13. Call-site inventory for the implementation team
 
-Locations that touch the surfaces this proposal changes, so the
-implementation team can sweep them without re-grepping:
+Locations that touch the surfaces this proposal changes, grouped by
+the step that sweeps them.
 
-**`ParsedDocument::fields()` returning `HashMap`** (will become
-`IndexMap`, ~11 call sites):
+### Step 3 sweep — fields reshape (biggest PR)
 
-- `crates/core/src/normalize.rs:500`
-- `crates/core/src/quill/render.rs:96, 116`
-- `crates/quillmark/src/orchestration/workflow.rs:40, 195, 223`
-- `crates/bindings/python/src/types.rs:366-371`
-- `crates/fuzz/src/parse_fuzz.rs:21, 82, 143`
-- `crates/core/src/parse.rs:826, 1613` (tests)
+**Layer A Rust consumers — migrate to typed accessors:**
 
-**`"CARDS"` / `"BODY"` string keys** that must keep working through
-the derivation view (§7.2):
+- `crates/core/src/quill/validation.rs:50-103` — `validate_document`.
+  Replace `fields.get("CARDS").and_then(as_array)` branching with
+  iteration over `doc.cards()`. Delete the "CARDS is not an array"
+  `ValidationError::TypeMismatch` arm.
+- `crates/core/src/quill/config.rs:173-190` — coerce. Same pattern.
+  Delete the matching `CoercionError::Uncoercible` arm.
+- `crates/backends/typst/src/lib.rs:189-235`
+  (`transform_markdown_fields`) — take `&Document` or a typed tuple
+  of `(frontmatter, body, cards)`. Build plate JSON at the end.
+- `crates/quillmark/src/orchestration/workflow.rs:40, 164-170, 195, 223` —
+  `coerce(parsed.fields())` becomes direct typed dispatch; the
+  `fields_to_json` helper is deleted in favor of
+  `doc.to_plate_json()`.
+- `crates/core/src/normalize.rs:500` — `normalize_document` walks
+  `doc.fields().clone()`. Migrate to typed walk over frontmatter
+  entries, `body`, and each card's body (the `CARDS` / `BODY`
+  normalization loops are already split in `normalize_fields`; this
+  is plumbing, not logic).
+- `crates/core/src/parse.rs:826, 1613` and
+  `crates/fuzz/src/parse_fuzz.rs:21, 82, 143` — tests asserting
+  `fields().len()`. Rewrite against `frontmatter().len()` + explicit
+  card / body checks.
 
-- `crates/backends/typst/src/lib.rs:227, 231, 418, 428, 438, 471, 477, 483, 521`
-- `crates/backends/typst/src/lib.typ.template:61, 63, 88`
-- `crates/core/src/quill/validation.rs` (validation pulls `CARDS`)
-- `crates/core/src/quill/config.rs` (coerce pulls `CARDS`)
+**Python binding — breaking change:**
 
-**Existing `ParsedDocument` public API** (must remain callable):
+- `crates/bindings/python/src/types.rs:358-377` — remove `get_field`
+  (or keep as a thin alias over `frontmatter`); rename `fields` →
+  `frontmatter`; add `cards` property. `body()` stays.
 
-- `ParsedDocument::from_markdown`, `::from_markdown_with_warnings`,
-  `::new`, `::quill_reference`, `::body`, `::get_field`, `::fields`,
-  `::with_defaults` (all in `crates/core/src/parse.rs`).
+**Layer B — does NOT change in this step:**
 
-**Bindings entry points** that construct `ParsedDocument`:
+- `crates/backends/typst/src/lib.rs` all `result.get("CARDS" | "BODY")`
+  sites that operate on JSON (post-`to_plate_json`) stay, because they
+  are reading the wire format.
+- `crates/backends/typst/src/lib.typ.template:61-88` stays — it reads
+  the JSON payload at Typst runtime.
 
-- `crates/bindings/wasm/src/engine.rs:76` (`parse_markdown_impl`)
-- `crates/bindings/python/src/types.rs:328` (`from_markdown`)
-- `crates/bindings/cli/src/commands/render.rs` (calls
-  `from_markdown_with_warnings`, parse-only — no editor surface needed
-  in the CLI).
+### Step 4 sweep — IndexMap
+
+After step 3, the only map remaining on `Document` is `frontmatter`.
+Change its type to `IndexMap<String, QuillValue>`. Impact:
+
+- `crates/core/src/normalize.rs` — iteration order becomes stable.
+- Tests asserting iteration order can be tightened.
+
+### Steps 5–6 sweep — editor and emitter
+
+New code in `crates/core/src/document/edit.rs` and
+`crates/core/src/document/emit.rs`. No existing call-site edits.
+
+### Step 8–9 sweep — bindings
+
+**WASM entry points currently handling `ParsedDocument`:**
+
+- `crates/bindings/wasm/src/engine.rs:76-113` (`parse_markdown_impl`,
+  `to_core_parsed`). The JSON round-trip (`fields_obj`) is deleted;
+  wrap the typed `Document` directly.
+- `crates/bindings/wasm/src/types.rs:164-174` — `ParsedDocument` tsify
+  struct. Replace `fields: serde_json::Value` with typed
+  `frontmatter`, `body`, `cards`.
+
+**Python entry point:**
+
+- `crates/bindings/python/src/types.rs:319-377` — `PyParsedDocument`.
+  Rename class to `Document`, add editor methods, match §8.1.
+
+### Out of scope
+
+- `crates/bindings/cli/src/commands/render.rs` — parse-only; no
+  changes.
+- All test fixture `.md` files under `crates/fixtures` — unchanged.
+  Round-trip tests in step 6 consume them as inputs.
