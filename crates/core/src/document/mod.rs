@@ -76,6 +76,7 @@ use crate::Diagnostic;
 
 pub mod assemble;
 pub mod edit;
+pub mod emit;
 pub mod fences;
 pub mod limits;
 pub mod sentinel;
@@ -300,18 +301,4 @@ impl Document {
         serde_json::Value::Object(map)
     }
 
-    /// Emit canonical Quillmark Markdown.
-    ///
-    /// # Note
-    ///
-    /// **Not yet implemented** — this stub exists to reserve the API surface.
-    /// Full emission (type-fidelity round-trip, double-quoted strings) is
-    /// implemented in Phase 4.
-    ///
-    /// # Panics
-    ///
-    /// Always panics with `"to_markdown not yet implemented (phase 4)"`.
-    pub fn to_markdown(&self) -> String {
-        unimplemented!("to_markdown not yet implemented (phase 4)")
-    }
 }
