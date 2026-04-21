@@ -51,13 +51,13 @@ class CompilationError(QuillmarkError):
 
 class Quillmark:
     """High-level engine for orchestrating backends and quills."""
-    
+
     def __init__(self) -> None:
         """Create engine with auto-registered backends based on enabled features."""
-    
+
     def quill_from_path(self, path: str | Path) -> Quill:
         """Load a quill from a filesystem path and attach the appropriate backend.
-        
+
         Raises:
             QuillmarkError: If path doesn't exist, quill is invalid, or backend unavailable
         """
@@ -71,37 +71,37 @@ class Quillmark:
         Raises:
             QuillmarkError: If backend unavailable
         """
-    
+
     def registered_backends(self) -> list[str]:
         """Get list of registered backend IDs."""
 
 class Workflow:
     """Sealed workflow for executing the render pipeline.
-    
+
     Supports dynamic asset and font injection at runtime via add_asset/add_font methods.
     """
-    
+
     def render(
         self,
-        parsed: ParsedDocument,
+        doc: Document,
         format: OutputFormat | None = None
     ) -> RenderResult:
-        """Render parsed document to artifacts."""
+        """Render document to artifacts."""
 
-    def open(self, parsed: ParsedDocument) -> RenderSession:
+    def open(self, doc: Document) -> RenderSession:
         """Open an iterative render session for page-selective rendering."""
 
-    def dry_run(self, parsed: ParsedDocument) -> None:
+    def dry_run(self, doc: Document) -> None:
         """Validate document without compilation."""
 
     @property
     def backend_id(self) -> str:
         """Get backend identifier."""
-    
+
     @property
     def supported_formats(self) -> list[OutputFormat]:
         """Get supported output formats."""
-    
+
     @property
     def quill_ref(self) -> str:
         """Get quill reference (name@version)."""
@@ -136,7 +136,7 @@ class Quill:
     @property
     def name(self) -> str:
         """Quill name from Quill.yaml"""
-    
+
     @property
     def backend(self) -> str:
         """Backend identifier"""
@@ -148,7 +148,7 @@ class Quill:
     @property
     def example(self) -> str | None:
         """Optional example template content"""
-    
+
     @property
     def metadata(self) -> dict[str, Any]:
         """Quill metadata from Quill.yaml"""
@@ -174,55 +174,71 @@ class Quill:
 
     def render(
         self,
-        parsed: ParsedDocument,
+        doc: Document,
         format: OutputFormat | None = None,
     ) -> RenderResult:
         """Render a document using this quill.
 
-        For dynamic asset or font injection, use engine.workflow(quill) instead.
-
         Args:
-            parsed: Pre-parsed ParsedDocument
+            doc: Pre-parsed Document
             format: Output format (defaults to first supported format)
 
         Raises:
             QuillmarkError: If rendering fails
         """
 
-    def open(self, parsed: ParsedDocument) -> RenderSession:
+    def open(self, doc: Document) -> RenderSession:
         """Open an iterative render session for page-selective rendering."""
 
-class ParsedDocument:
-    """Parsed markdown document with frontmatter."""
-    
+class Document:
+    """Typed in-memory Quillmark document.
+
+    Created via `Document.from_markdown(markdown)`.
+    """
+
     @staticmethod
-    def from_markdown(markdown: str) -> ParsedDocument:
-        """Parse markdown with YAML frontmatter.
-        
+    def from_markdown(markdown: str) -> Document:
+        """Parse Quillmark Markdown into a typed Document.
+
         Raises:
             ParseError: If YAML frontmatter is invalid or QUILL is missing
         """
-    
-    def body(self) -> str | None:
-        """Get document body content."""
-    
-    def get_field(self, key: str) -> Any | None:
-        """Get frontmatter field value."""
-    
-    @property
-    def fields(self) -> dict[str, Any]:
-        """Get all frontmatter fields."""
+
+    def to_markdown(self) -> str:
+        """Emit canonical Quillmark Markdown.
+
+        Not yet implemented — raises NotImplementedError until Phase 4.
+        """
 
     def quill_ref(self) -> str:
-        """Get quill reference from the document."""
+        """The QUILL reference string (e.g. ``"usaf_memo@0.1"``)."""
+
+    @property
+    def frontmatter(self) -> dict[str, Any]:
+        """Typed YAML frontmatter fields (no QUILL, BODY, or CARDS keys)."""
+
+    @property
+    def body(self) -> str:
+        """Global Markdown body. Empty string when absent."""
+
+    @property
+    def cards(self) -> list[dict[str, Any]]:
+        """Ordered list of card blocks.
+
+        Each card dict has keys: ``tag`` (str), ``fields`` (dict), ``body`` (str).
+        """
+
+    @property
+    def warnings(self) -> list[Diagnostic]:
+        """Non-fatal parse-time warnings."""
 
 class RenderResult:
     """Result of rendering operation."""
-    
+
     @property
     def artifacts(self) -> list[Artifact]:
         """Output artifacts"""
-    
+
     @property
     def warnings(self) -> list[Diagnostic]:
         """Warning diagnostics"""
@@ -243,11 +259,11 @@ class RenderSession:
 
 class Artifact:
     """Output artifact (PDF, SVG, etc.)."""
-    
+
     @property
     def bytes(self) -> bytes:
         """Artifact binary data"""
-    
+
     @property
     def output_format(self) -> OutputFormat:
         """Output format"""
@@ -255,6 +271,6 @@ class Artifact:
     @property
     def mime_type(self) -> str:
         """MIME type of the artifact"""
-    
+
     def save(self, path: str | Path) -> None:
         """Save artifact to file."""

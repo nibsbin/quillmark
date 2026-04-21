@@ -1,9 +1,7 @@
 use quillmark_core::{
-    normalize::normalize_document, quill::QuillConfig, version::QuillReference, ParsedDocument,
-    QuillValue,
+    normalize::normalize_document, quill::QuillConfig, Document,
 };
 use serde_json::json;
-use std::collections::HashMap;
 
 #[test]
 fn test_markdown_field_public_schema_emission() {
@@ -38,33 +36,29 @@ main:
 
 #[test]
 fn test_markdown_field_normalization() {
-    // Create a document with chevrons in both fields
-    let mut doc_fields = HashMap::new();
-    doc_fields.insert(
-        "markdown_field".to_string(),
-        QuillValue::from_json(json!("This has <<guillemets>>")),
-    );
-    doc_fields.insert(
-        "string_field".to_string(),
-        QuillValue::from_json(json!("This has <<stripped>>")),
-    );
-
-    let doc = ParsedDocument::new(doc_fields, QuillReference::latest("test".to_string()));
+    // Create a document via from_markdown
+    let md = "---\nQUILL: test\nmarkdown_field: This has <<guillemets>>\nstring_field: This has <<stripped>>\n---\n";
+    let doc = Document::from_markdown(md).unwrap();
 
     // Normalize
     let normalized = normalize_document(doc).expect("Failed to normalize document");
-    let norm_fields = normalized.fields();
+    let fm = normalized.frontmatter();
 
-    // 4. Verify results
-    // Markdown field: chevrons pass through unchanged
+    // Both fields pass through unchanged (no stripping on YAML fields)
     assert_eq!(
-        norm_fields.get("markdown_field").unwrap().as_str().unwrap(),
+        fm.get("markdown_field").unwrap().as_str().unwrap(),
         "This has <<guillemets>>"
     );
-
-    // String field: chevrons also pass through unchanged
     assert_eq!(
-        norm_fields.get("string_field").unwrap().as_str().unwrap(),
+        fm.get("string_field").unwrap().as_str().unwrap(),
         "This has <<stripped>>"
     );
+}
+
+#[test]
+fn test_normalize_document_body_is_str_not_option() {
+    // body() now returns &str (not Option<&str>)
+    let doc = Document::from_markdown("---\nQUILL: t\n---\n\nHello body.").unwrap();
+    let normalized = normalize_document(doc).unwrap();
+    assert!(normalized.body().contains("Hello body."));
 }

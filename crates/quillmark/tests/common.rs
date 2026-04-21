@@ -46,7 +46,7 @@ pub fn demo(
         .clone();
 
     // Parse the markdown once
-    let parsed = quillmark::ParsedDocument::from_markdown(&markdown)?;
+    let parsed = quillmark::Document::from_markdown(&markdown)?;
 
     let workflow = engine.workflow(&quill).expect("Failed to load workflow");
 

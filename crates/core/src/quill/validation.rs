@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
+use indexmap::IndexMap;
 use time::format_description::well_known::Rfc3339;
 use time::{Date, OffsetDateTime};
 
+use crate::document::Document;
 use crate::quill::formats::DATE_FORMAT;
 use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
 use crate::value::QuillValue;
@@ -109,6 +111,64 @@ pub fn validate_document(
     } else {
         Err(errors)
     }
+}
+
+/// Validate a typed [`Document`] (with `IndexMap` frontmatter + typed `Card` list).
+///
+/// This is the typed entry point used by `QuillConfig::validate_document`.
+pub fn validate_typed_document(
+    config: &QuillConfig,
+    doc: &Document,
+) -> Result<(), Vec<ValidationError>> {
+    let mut errors = validate_fields_for_card_indexmap(config.main(), doc.frontmatter(), "");
+
+    for (index, card) in doc.cards().iter().enumerate() {
+        let card_name = card.tag();
+        let item_path = format!("cards[{index}]");
+
+        let Some(card_schema) = config.card_definition(card_name) else {
+            errors.push(ValidationError::UnknownCard {
+                path: item_path,
+                card: card_name.to_string(),
+            });
+            continue;
+        };
+
+        let card_path = format!("cards.{card_name}[{index}]");
+        errors.extend(validate_fields_for_card_indexmap(
+            card_schema,
+            card.fields(),
+            &card_path,
+        ));
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+fn validate_fields_for_card_indexmap(
+    card: &CardSchema,
+    fields: &IndexMap<String, QuillValue>,
+    base_path: &str,
+) -> Vec<ValidationError> {
+    let mut errors = Vec::new();
+    let mut field_names: Vec<&String> = card.fields.keys().collect();
+    field_names.sort();
+
+    for field_name in field_names {
+        let schema = &card.fields[field_name];
+        let path = child_path(base_path, field_name);
+        match fields.get(field_name) {
+            Some(value) => errors.extend(validate_field(schema, value, &path)),
+            None if schema.required => errors.push(ValidationError::MissingRequired { path }),
+            None => {}
+        }
+    }
+
+    errors
 }
 
 fn validate_fields_for_card(

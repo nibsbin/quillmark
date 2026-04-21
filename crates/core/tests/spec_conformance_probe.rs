@@ -3,15 +3,15 @@
 //! These tests exercise concrete spec requirements that are most likely to
 //! diverge between the parser and the written standard.
 
-use quillmark_core::normalize::{normalize_document, normalize_fields};
-use quillmark_core::{ParsedDocument, QuillValue};
+use quillmark_core::normalize::normalize_document;
+use quillmark_core::Document;
 
 // §4 F2 — Leading blank: a `---` line directly under non-blank text is not a fence.
 #[test]
 fn f2_fence_directly_under_paragraph_is_not_a_fence() {
     let md = "---\nQUILL: t\n---\n\nParagraph text.\n---\n\nAfter.";
-    let doc = ParsedDocument::from_markdown(md).unwrap();
-    let body = doc.body().unwrap();
+    let doc = Document::from_markdown(md).unwrap();
+    let body = doc.body();
     assert!(
         body.contains("Paragraph text.") && body.contains("---") && body.contains("After."),
         "stray `---` under paragraph must be left to CommonMark, body was: {:?}",
@@ -24,7 +24,7 @@ fn f2_fence_directly_under_paragraph_is_not_a_fence() {
 #[test]
 fn f1_first_fence_without_quill_is_rejected() {
     let md = "---\ntitle: X\n---\n\nBody.";
-    let err = ParsedDocument::from_markdown(md).unwrap_err().to_string();
+    let err = Document::from_markdown(md).unwrap_err().to_string();
     assert!(err.contains("Missing required QUILL field"), "got: {}", err);
 }
 
@@ -33,17 +33,15 @@ fn f1_first_fence_without_quill_is_rejected() {
 #[test]
 fn f1_yaml_comment_banners_above_sentinel_are_accepted() {
     let md = "---\n# Essential\n#===========\nQUILL: t\ntitle: T\n---\n\nBody.";
-    let doc = ParsedDocument::from_markdown(md).unwrap();
-    assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "T");
+    let doc = Document::from_markdown(md).unwrap();
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "T");
 }
 
-// §4.2 — near-miss detection also ignores `#` comment banners, so a fence
-// whose first real key is a near-miss still warns rather than silently
-// delegating.
+// §4.2 — near-miss detection also ignores `#` comment banners.
 #[test]
 fn near_miss_sentinel_sees_past_comment_banners() {
     let md = "---\nQUILL: t\n---\n\nB.\n\n---\n# banner\nCard: oops\nname: X\n---\n\nTrailing.";
-    let out = ParsedDocument::from_markdown_with_warnings(md).unwrap();
+    let out = Document::from_markdown_with_warnings(md).unwrap();
     assert!(
         out.warnings.iter().any(
             |w| w.message.contains("Near-miss metadata sentinel") && w.message.contains("Card")
@@ -60,7 +58,7 @@ fn near_miss_sentinel_sees_past_comment_banners() {
 #[test]
 fn near_miss_sentinel_emits_warning_and_delegates() {
     let md = "---\nQUILL: t\n---\n\nBody.\n\n---\nCard: oops\nname: X\n---\n\nTrailing.";
-    let out = ParsedDocument::from_markdown_with_warnings(md).unwrap();
+    let out = Document::from_markdown_with_warnings(md).unwrap();
     assert!(
         out.warnings.iter().any(
             |w| w.message.contains("Near-miss metadata sentinel") && w.message.contains("Card")
@@ -71,31 +69,29 @@ fn near_miss_sentinel_emits_warning_and_delegates() {
             .map(|w| w.message.clone())
             .collect::<Vec<_>>()
     );
-    // And the `Card:` fence must NOT have registered as a card.
-    let cards = out.document.get_field("CARDS").unwrap().as_array().unwrap();
+    // The `Card:` fence must NOT have registered as a card.
     assert!(
-        cards.is_empty(),
+        out.document.cards().is_empty(),
         "near-miss CARD must be delegated, not registered"
     );
     // Body must contain the delegated content.
-    assert!(out.document.body().unwrap().contains("Card: oops"));
+    assert!(out.document.body().contains("Card: oops"));
 }
 
 // §3 — Trailing whitespace on the fence marker must be accepted.
 #[test]
 fn fence_marker_with_trailing_whitespace_is_accepted() {
     let md = "---  \nQUILL: t\ntitle: T\n---\t\n\nBody.";
-    let doc = ParsedDocument::from_markdown(md).unwrap();
-    assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "T");
+    let doc = Document::from_markdown(md).unwrap();
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "T");
 }
 
 // §3 — `---` inside a fenced code block must be ignored.
 #[test]
 fn fences_inside_code_blocks_are_ignored() {
     let md = "---\nQUILL: t\n---\n\n```\n---\nCARD: x\n---\n```\n\nBody.";
-    let doc = ParsedDocument::from_markdown(md).unwrap();
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert!(cards.is_empty(), "fences inside code blocks must not parse");
+    let doc = Document::from_markdown(md).unwrap();
+    assert!(doc.cards().is_empty(), "fences inside code blocks must not parse");
 }
 
 // §3 — Reserved keys BODY/CARDS cannot be user-defined.
@@ -103,7 +99,7 @@ fn fences_inside_code_blocks_are_ignored() {
 fn reserved_keys_in_frontmatter_are_rejected() {
     for reserved in ["BODY", "CARDS"] {
         let md = format!("---\nQUILL: t\n{}: nope\n---\n\nBody.", reserved);
-        let err = ParsedDocument::from_markdown(&md).unwrap_err().to_string();
+        let err = Document::from_markdown(&md).unwrap_err().to_string();
         assert!(
             err.contains(&format!("Reserved field name '{}'", reserved)),
             "reserved key {} must error, got: {}",
@@ -113,45 +109,38 @@ fn reserved_keys_in_frontmatter_are_rejected() {
     }
 }
 
-// §5 — CARDS is always present, even when empty.
+// §5 — CARDS is always accessible, even when empty.
 #[test]
 fn cards_is_always_present_even_when_empty() {
-    let doc = ParsedDocument::from_markdown("---\nQUILL: t\n---\n\nBody.").unwrap();
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert!(cards.is_empty());
+    let doc = Document::from_markdown("---\nQUILL: t\n---\n\nBody.").unwrap();
+    assert!(doc.cards().is_empty());
 }
 
 // §5 — CARD value pattern.
 #[test]
 fn card_name_pattern_enforced() {
     let md = "---\nQUILL: t\n---\n\nB.\n\n---\nCARD: ITEMS\n---\n\nX.";
-    let err = ParsedDocument::from_markdown(md).unwrap_err().to_string();
+    let err = Document::from_markdown(md).unwrap_err().to_string();
     assert!(err.contains("Invalid card field name"), "got: {}", err);
 }
 
-// §7 — Body bidi stripped.
+// §7 — Body bidi stripped during normalize_document.
 #[test]
 fn normalize_body_strips_bidi() {
-    let mut f = std::collections::HashMap::new();
-    f.insert(
-        "BODY".to_string(),
-        QuillValue::from_json(serde_json::json!("hi\u{202D}there")),
-    );
-    let out = normalize_fields(f);
-    assert_eq!(out.get("BODY").unwrap().as_str().unwrap(), "hithere");
+    let md = "---\nQUILL: t\n---\n\nhi\u{202D}there";
+    let doc = Document::from_markdown(md).unwrap();
+    let doc = normalize_document(doc).unwrap();
+    assert_eq!(doc.body(), "\nhithere");
 }
 
 // §7 — YAML scalar bidi NOT stripped.
 #[test]
 fn normalize_yaml_scalar_keeps_bidi() {
-    let mut f = std::collections::HashMap::new();
-    f.insert(
-        "title".to_string(),
-        QuillValue::from_json(serde_json::json!("hi\u{202D}there")),
-    );
-    let out = normalize_fields(f);
+    let md = "---\nQUILL: t\ntitle: hi\u{202D}there\n---\n";
+    let doc = Document::from_markdown(md).unwrap();
+    let doc = normalize_document(doc).unwrap();
     assert_eq!(
-        out.get("title").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
         "hi\u{202D}there"
     );
 }
@@ -160,10 +149,9 @@ fn normalize_yaml_scalar_keeps_bidi() {
 #[test]
 fn normalize_reaches_card_body() {
     let md = "---\nQUILL: t\n---\n\n---\nCARD: x\n---\n\n<!-- c -->trailing\u{202D}text";
-    let doc = ParsedDocument::from_markdown(md).unwrap();
+    let doc = Document::from_markdown(md).unwrap();
     let doc = normalize_document(doc).unwrap();
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    let body = cards[0].get("BODY").unwrap().as_str().unwrap();
+    let body = doc.cards()[0].body();
     assert!(
         body.contains("<!-- c -->\ntrailingtext"),
         "card body missing repair/bidi-strip, got: {:?}",
@@ -171,18 +159,16 @@ fn normalize_reaches_card_body() {
     );
 }
 
-// §4 F3 — A `---` line indented by four or more spaces is indented code,
-// not a fence marker.
+// §4 F3 — A `---` line indented by four or more spaces is indented code.
 #[test]
 fn f3_indented_four_spaces_is_not_a_fence() {
     let md = "---\nQUILL: t\n---\n\n    ---\n    CARD: x\n    ---\n\nafter.";
-    let doc = ParsedDocument::from_markdown(md).unwrap();
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
+    let doc = Document::from_markdown(md).unwrap();
     assert!(
-        cards.is_empty(),
+        doc.cards().is_empty(),
         "indented `---` must not register as a fence"
     );
-    let body = doc.body().unwrap();
+    let body = doc.body();
     assert!(
         body.contains("    ---") && body.contains("CARD: x"),
         "indented fence content must be delegated to CommonMark, body was: {:?}",
@@ -194,23 +180,17 @@ fn f3_indented_four_spaces_is_not_a_fence() {
 #[test]
 fn f3_three_leading_spaces_is_still_a_fence() {
     let md = "   ---\nQUILL: t\n   ---\n\nBody.";
-    let doc = ParsedDocument::from_markdown(md).unwrap();
-    assert_eq!(
-        doc.get_field("QUILL").is_some() || doc.body().is_some(),
-        true
-    );
-    // More directly: the body should be present and the fence should have parsed.
-    assert!(doc.body().unwrap().contains("Body."));
+    let doc = Document::from_markdown(md).unwrap();
+    assert!(doc.body().contains("Body."));
 }
 
 // §4 F3 — Tab indentation disqualifies a line from being a fence marker.
 #[test]
 fn f3_tab_indented_is_not_a_fence() {
     let md = "---\nQUILL: t\n---\n\n\t---\n\tCARD: x\n\t---\n\nafter.";
-    let doc = ParsedDocument::from_markdown(md).unwrap();
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
+    let doc = Document::from_markdown(md).unwrap();
     assert!(
-        cards.is_empty(),
+        doc.cards().is_empty(),
         "tab-indented `---` must not register as a fence"
     );
 }
@@ -219,9 +199,9 @@ fn f3_tab_indented_is_not_a_fence() {
 #[test]
 fn body_crlf_line_endings_are_normalized() {
     let md = "---\nQUILL: t\n---\n\nLine one.\r\nLine two.\r\n";
-    let doc = ParsedDocument::from_markdown(md).unwrap();
+    let doc = Document::from_markdown(md).unwrap();
     let doc = normalize_document(doc).unwrap();
-    let body = doc.body().unwrap();
+    let body = doc.body();
     assert!(
         !body.contains('\r'),
         "body must not contain bare \\r after normalization, got: {:?}",
@@ -234,10 +214,9 @@ fn body_crlf_line_endings_are_normalized() {
 #[test]
 fn card_body_crlf_line_endings_are_normalized() {
     let md = "---\nQUILL: t\n---\n\n---\nCARD: x\n---\n\nCard line one.\r\nCard line two.\r\n";
-    let doc = ParsedDocument::from_markdown(md).unwrap();
+    let doc = Document::from_markdown(md).unwrap();
     let doc = normalize_document(doc).unwrap();
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    let body = cards[0].get("BODY").unwrap().as_str().unwrap();
+    let body = doc.cards()[0].body();
     assert!(
         !body.contains('\r'),
         "card body must not contain bare \\r after normalization, got: {:?}",
@@ -249,15 +228,14 @@ fn card_body_crlf_line_endings_are_normalized() {
 #[test]
 fn utf8_bom_at_start_is_stripped() {
     let md = "\u{FEFF}---\nQUILL: t\ntitle: T\n---\n\nBody.";
-    let doc = ParsedDocument::from_markdown(md).unwrap();
-    assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "T");
+    let doc = Document::from_markdown(md).unwrap();
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "T");
 }
 
-// §4 / §9 — First-fence near-miss (case-only) produces a specific error
-// naming the actual key, not a generic "Missing QUILL" message.
+// §4 / §9 — First-fence near-miss (case-only) produces a specific error.
 #[test]
 fn first_fence_case_near_miss_error_is_specific() {
-    let err = ParsedDocument::from_markdown("---\nQuill: t\n---\n\nBody.")
+    let err = Document::from_markdown("---\nQuill: t\n---\n\nBody.")
         .unwrap_err()
         .to_string();
     assert!(
@@ -267,11 +245,10 @@ fn first_fence_case_near_miss_error_is_specific() {
     );
 }
 
-// §4 / §9 — First-fence ordering error (QUILL not first) names the actual
-// first key and explains the ordering requirement.
+// §4 / §9 — First-fence ordering error (QUILL not first) names the actual first key.
 #[test]
 fn first_fence_out_of_order_error_is_specific() {
-    let err = ParsedDocument::from_markdown("---\ntitle: X\nQUILL: t\n---\n\nBody.")
+    let err = Document::from_markdown("---\ntitle: X\nQUILL: t\n---\n\nBody.")
         .unwrap_err()
         .to_string();
     assert!(
@@ -281,12 +258,11 @@ fn first_fence_out_of_order_error_is_specific() {
     );
 }
 
-// §3 — Unclosed fenced code block at end-of-document emits a warning so
-// silently-shielded metadata fences don't disappear without trace.
+// §3 — Unclosed fenced code block at end-of-document emits a warning.
 #[test]
 fn unclosed_code_block_emits_warning() {
     let md = "---\nQUILL: t\n---\n\n```\ncode line\n\n---\nCARD: x\n---\n\ntrailing body";
-    let out = ParsedDocument::from_markdown_with_warnings(md).unwrap();
+    let out = Document::from_markdown_with_warnings(md).unwrap();
     assert!(
         out.warnings
             .iter()
@@ -298,9 +274,8 @@ fn unclosed_code_block_emits_warning() {
             .collect::<Vec<_>>()
     );
     // And the shielded CARD fence must NOT have registered.
-    let cards = out.document.get_field("CARDS").unwrap().as_array().unwrap();
     assert!(
-        cards.is_empty(),
+        out.document.cards().is_empty(),
         "shielded CARD must not have been parsed as a fence"
     );
 }
@@ -313,7 +288,7 @@ fn per_fence_field_count_cap() {
         s.push_str(&format!("f{}: v\n", i));
     }
     s.push_str("---\n\nBody.");
-    let err = ParsedDocument::from_markdown(&s).unwrap_err().to_string();
+    let err = Document::from_markdown(&s).unwrap_err().to_string();
     assert!(err.contains("Input too large"), "got: {}", err);
 }
 
@@ -324,6 +299,6 @@ fn card_count_cap_is_per_card() {
     for _ in 0..1001 {
         s.push_str("\n---\nCARD: x\n---\n\nB.\n");
     }
-    let err = ParsedDocument::from_markdown(&s).unwrap_err().to_string();
+    let err = Document::from_markdown(&s).unwrap_err().to_string();
     assert!(err.contains("Input too large"), "got: {}", err);
 }

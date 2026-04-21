@@ -19,7 +19,8 @@
 //!
 //! - [`strip_bidi_formatting`] - Remove Unicode bidi control characters
 //! - [`normalize_markdown`] - Apply all markdown-specific normalizations
-//! - [`normalize_fields`] - Normalize document fields (bidi stripping)
+//! - [`normalize_fields`] - Normalize document frontmatter fields (bidi stripping on body only)
+//! - [`normalize_document`] - Normalize a typed [`crate::document::Document`] in-place
 //!
 //! ## Why Normalize?
 //!
@@ -49,9 +50,9 @@
 //! assert_eq!(cleaned, "**asdf** or **(1234**");
 //! ```
 
-use crate::document::BODY_FIELD;
+use crate::document::Card;
 use crate::value::QuillValue;
-use std::collections::HashMap;
+use indexmap::IndexMap;
 use unicode_normalization::UnicodeNormalization;
 
 /// Errors that can occur during normalization
@@ -302,116 +303,42 @@ fn normalize_line_endings(s: &str) -> String {
     out
 }
 
-/// Normalize a single card object: apply `normalize_markdown` to the `BODY` key only.
-/// All other fields in the card pass through verbatim.
-fn normalize_card_object(
-    map: serde_json::Map<String, serde_json::Value>,
-) -> serde_json::Map<String, serde_json::Value> {
-    map.into_iter()
-        .map(|(k, v)| {
-            if k == BODY_FIELD {
-                let normalized = match v {
-                    serde_json::Value::String(s) => {
-                        serde_json::Value::String(normalize_markdown(&s))
-                    }
-                    other => other,
-                };
-                (k, normalized)
-            } else {
-                // All other card fields pass through verbatim
-                (k, v)
-            }
-        })
-        .collect()
-}
-
-/// Normalize the `CARDS` array: for each element that is an object, normalize its
-/// `BODY` field via `normalize_markdown`; all other card fields pass through verbatim.
-/// Non-object elements (malformed) pass through unchanged.
-fn normalize_cards_array(arr: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
-    arr.into_iter()
-        .map(|elem| match elem {
-            serde_json::Value::Object(map) => serde_json::Value::Object(normalize_card_object(map)),
-            other => other,
-        })
-        .collect()
-}
-
-/// Normalizes document fields per the Quillmark §7 spec.
+/// Normalizes document frontmatter fields per the Quillmark §7 spec.
 ///
-/// Only **body regions** receive normalization (bidi stripping + HTML comment fence
-/// repair). All other field values — including nested objects and arrays — pass
-/// through verbatim so that YAML scalar values are never silently mutated.
-///
-/// Specifically:
-/// - The top-level `BODY` field is fully normalized via [`normalize_markdown`].
-/// - Each object inside the top-level `CARDS` array has its own `BODY` field
-///   normalized via [`normalize_markdown`]; all other fields in those objects
-///   pass through unchanged.
-/// - Every other top-level field (strings, numbers, booleans, nested maps,
-///   arrays of scalars, etc.) passes through verbatim.
+/// This is an internal helper used by [`normalize_document`]. It operates on
+/// the typed `IndexMap<String, QuillValue>` frontmatter; it does **not** touch
+/// `body` or `cards` (those are normalized separately by the caller).
 ///
 /// Field names at the top level are NFC-normalized (see [`normalize_field_name`]).
-/// Keys inside nested objects are **not** NFC-normalized.
-///
-/// Double chevrons (`<<` and `>>`) are passed through unchanged in all fields.
+/// Only **body regions** receive content normalization (bidi stripping + HTML comment
+/// fence repair). All other field values pass through verbatim.
 ///
 /// # Examples
 ///
 /// ```
 /// use quillmark_core::normalize::normalize_fields;
 /// use quillmark_core::QuillValue;
-/// use std::collections::HashMap;
+/// use indexmap::IndexMap;
 ///
-/// let mut fields = HashMap::new();
+/// let mut fields = IndexMap::new();
 /// fields.insert("title".to_string(), QuillValue::from_json(serde_json::json!("<<hello>>")));
-/// fields.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("**bold** \u{202D}**more**")));
 ///
 /// let result = normalize_fields(fields);
 ///
-/// // Title passes through verbatim (no bidi stripping on YAML fields)
+/// // Title passes through verbatim
 /// assert_eq!(result.get("title").unwrap().as_str().unwrap(), "<<hello>>");
-///
-/// // Body has bidi chars stripped and HTML comment fences repaired
-/// assert_eq!(result.get("BODY").unwrap().as_str().unwrap(), "**bold** **more**");
 /// ```
-pub fn normalize_fields(fields: HashMap<String, QuillValue>) -> HashMap<String, QuillValue> {
-    const CARDS_FIELD: &str = "CARDS";
-
+pub fn normalize_fields(
+    fields: IndexMap<String, QuillValue>,
+) -> IndexMap<String, QuillValue> {
     fields
         .into_iter()
         .map(|(key, value)| {
             // Normalize field name to NFC form for consistent key comparison.
-            // This ensures café (composed) and café (decomposed) are treated as the same key.
-            // NFC normalization is applied to top-level keys only.
             let normalized_key = normalize_field_name(&key);
-
-            let processed = if normalized_key == BODY_FIELD {
-                // Top-level BODY: full markdown normalization (bidi + HTML fence repair).
-                let json = value.into_json();
-                let normalized = match json {
-                    serde_json::Value::String(s) => {
-                        serde_json::Value::String(normalize_markdown(&s))
-                    }
-                    other => other,
-                };
-                QuillValue::from_json(normalized)
-            } else if normalized_key == CARDS_FIELD {
-                // CARDS array: normalize only the BODY field inside each card object.
-                let json = value.into_json();
-                let normalized = match json {
-                    serde_json::Value::Array(arr) => {
-                        serde_json::Value::Array(normalize_cards_array(arr))
-                    }
-                    other => other,
-                };
-                QuillValue::from_json(normalized)
-            } else {
-                // All other top-level fields pass through verbatim.
-                value
-            };
-
-            (normalized_key, processed)
+            // All top-level frontmatter fields pass through verbatim — body
+            // regions are handled separately in normalize_document.
+            (normalized_key, value)
         })
         .collect()
 }
@@ -439,68 +366,72 @@ pub fn normalize_field_name(name: &str) -> String {
     name.nfc().collect()
 }
 
-/// Normalizes a parsed document by applying all field-level normalizations.
+/// Normalizes a typed [`crate::document::Document`] by applying all field-level normalizations.
 ///
 /// This is the **primary entry point** for normalizing documents after parsing.
 /// It ensures consistent processing regardless of how the document was created.
 ///
 /// # Normalization Steps
 ///
-/// This function applies all normalizations in the correct order:
-/// 1. **Unicode NFC normalization** - Field names are normalized to NFC form
-/// 2. **Bidi stripping** - Invisible bidirectional control characters are removed
-/// 3. **HTML comment fence fixing** - Trailing text after `-->` is preserved (body only)
+/// 1. **Unicode NFC normalization** — Frontmatter field names are normalized to NFC form.
+/// 2. **Bidi stripping** — Invisible bidirectional control characters are removed from
+///    body regions (`Document::body` and each `Card::body`). YAML field values in
+///    `frontmatter` and `Card::fields` pass through verbatim (spec §7).
+/// 3. **HTML comment fence fixing** — Trailing text after `-->` is preserved in body
+///    regions only.
 ///
 /// Double chevrons (`<<` and `>>`) are passed through unchanged without conversion.
 ///
-/// # When to Use
-///
-/// Call this function after parsing and before rendering:
-///
-/// ```no_run
-/// use quillmark_core::{ParsedDocument, normalize::normalize_document};
-///
-/// let markdown = "---\ntitle: Example\n---\n\nBody with <<placeholder>>";
-/// let doc = ParsedDocument::from_markdown(markdown).unwrap();
-/// let normalized = normalize_document(doc);
-/// // Use normalized document for rendering...
-/// ```
-///
-/// # Direct API Usage
-///
-/// If you're constructing a `ParsedDocument` directly via [`crate::document::ParsedDocument::new`]
-/// rather than parsing from markdown, you **MUST** call this function to ensure
-/// consistent normalization:
-///
-/// ```
-/// use quillmark_core::{ParsedDocument, QuillValue, normalize::normalize_document};
-/// use quillmark_core::version::QuillReference;
-/// use std::collections::HashMap;
-///
-/// // Direct construction (e.g., from API or database)
-/// let mut fields = HashMap::new();
-/// fields.insert("title".to_string(), QuillValue::from_json(serde_json::json!("Test")));
-/// fields.insert("BODY".to_string(), QuillValue::from_json(serde_json::json!("<<content>>")));
-///
-/// let quill_ref = QuillReference::latest("my_quill".to_string());
-/// let doc = ParsedDocument::new(fields, quill_ref);
-/// let normalized = normalize_document(doc).expect("Failed to normalize document");
-///
-/// // Body has chevrons preserved
-/// assert_eq!(normalized.body().unwrap(), "<<content>>");
-/// ```
-///
 /// # Idempotency
 ///
-/// This function is idempotent - calling it multiple times produces the same result.
-/// However, for performance reasons, avoid unnecessary repeated calls.
+/// This function is idempotent — calling it multiple times produces the same result.
+///
+/// # Example
+///
+/// ```no_run
+/// use quillmark_core::{Document, normalize::normalize_document};
+///
+/// let markdown = "---\nQUILL: my_quill\ntitle: Example\n---\n\nBody with <<placeholder>>";
+/// let doc = Document::from_markdown(markdown).unwrap();
+/// let normalized = normalize_document(doc).unwrap();
+/// ```
 pub fn normalize_document(
-    doc: crate::document::ParsedDocument,
-) -> Result<crate::document::ParsedDocument, crate::error::ParseError> {
-    let normalized_fields = normalize_fields(doc.fields().clone());
-    Ok(crate::document::ParsedDocument::new(
-        normalized_fields,
+    doc: crate::document::Document,
+) -> Result<crate::document::Document, crate::error::ParseError> {
+    use crate::document::Document;
+
+    // NFC-normalize frontmatter field names; values pass through verbatim.
+    let normalized_frontmatter = normalize_fields(doc.frontmatter().clone());
+
+    // Normalize global body (bidi + HTML comment fence repair).
+    let normalized_body = normalize_markdown(doc.body());
+
+    // Normalize each card's body; card fields pass through verbatim.
+    let normalized_cards: Vec<Card> = doc
+        .cards()
+        .iter()
+        .map(|card| {
+            // NFC-normalize card field names; values pass through verbatim.
+            let normalized_card_fields: IndexMap<String, QuillValue> = card
+                .fields()
+                .iter()
+                .map(|(k, v)| (normalize_field_name(k), v.clone()))
+                .collect();
+            let normalized_card_body = normalize_markdown(card.body());
+            Card::new(
+                card.tag().to_string(),
+                normalized_card_fields,
+                normalized_card_body,
+            )
+        })
+        .collect();
+
+    Ok(Document::new_internal(
         doc.quill_reference().clone(),
+        normalized_frontmatter,
+        normalized_body,
+        normalized_cards,
+        doc.warnings().to_vec(),
     ))
 }
 
@@ -741,55 +672,11 @@ mod tests {
         );
     }
 
-    // Tests for normalize_fields
-
-    #[test]
-    fn test_normalize_fields_body_bidi() {
-        let mut fields = HashMap::new();
-        fields.insert(
-            BODY_FIELD.to_string(),
-            QuillValue::from_json(serde_json::json!("**bold** \u{202D}**more**")),
-        );
-
-        let result = normalize_fields(fields);
-        assert_eq!(
-            result.get(BODY_FIELD).unwrap().as_str().unwrap(),
-            "**bold** **more**"
-        );
-    }
-
-    #[test]
-    fn test_normalize_fields_body_chevrons_preserved() {
-        let mut fields = HashMap::new();
-        fields.insert(
-            BODY_FIELD.to_string(),
-            QuillValue::from_json(serde_json::json!("<<raw>>")),
-        );
-
-        let result = normalize_fields(fields);
-        // Chevrons are passed through unchanged
-        assert_eq!(result.get(BODY_FIELD).unwrap().as_str().unwrap(), "<<raw>>");
-    }
-
-    #[test]
-    fn test_normalize_fields_body_chevrons_and_bidi() {
-        let mut fields = HashMap::new();
-        fields.insert(
-            BODY_FIELD.to_string(),
-            QuillValue::from_json(serde_json::json!("<<raw>> \u{202D}**bold**")),
-        );
-
-        let result = normalize_fields(fields);
-        // Bidi stripped, chevrons preserved
-        assert_eq!(
-            result.get(BODY_FIELD).unwrap().as_str().unwrap(),
-            "<<raw>> **bold**"
-        );
-    }
+    // Tests for normalize_fields (frontmatter only)
 
     #[test]
     fn test_normalize_fields_other_field_chevrons_preserved() {
-        let mut fields = HashMap::new();
+        let mut fields = IndexMap::new();
         fields.insert(
             "title".to_string(),
             QuillValue::from_json(serde_json::json!("<<hello>>")),
@@ -804,7 +691,7 @@ mod tests {
     fn test_normalize_fields_other_field_bidi_preserved() {
         // Per spec §7: bidi stripping is NOT applied to YAML field values.
         // Only body regions are normalized.
-        let mut fields = HashMap::new();
+        let mut fields = IndexMap::new();
         fields.insert(
             "title".to_string(),
             QuillValue::from_json(serde_json::json!("a\u{202D}b")),
@@ -816,51 +703,8 @@ mod tests {
     }
 
     #[test]
-    fn test_normalize_fields_nested_values_verbatim() {
-        // Nested arrays inside YAML fields pass through verbatim (no bidi stripping).
-        let mut fields = HashMap::new();
-        fields.insert(
-            "items".to_string(),
-            QuillValue::from_json(serde_json::json!(["<<a>>", "\u{202D}b"])),
-        );
-
-        let result = normalize_fields(fields);
-        let items = result.get("items").unwrap().as_array().unwrap();
-        // All values pass through unchanged — no bidi stripping on YAML fields
-        assert_eq!(items[0].as_str().unwrap(), "<<a>>");
-        assert_eq!(items[1].as_str().unwrap(), "\u{202D}b");
-    }
-
-    #[test]
-    fn test_normalize_fields_object_values_verbatim() {
-        // Nested objects inside YAML fields pass through verbatim.
-        // Even if a nested key happens to be named BODY, it is NOT a body region.
-        let mut fields = HashMap::new();
-        fields.insert(
-            "meta".to_string(),
-            QuillValue::from_json(serde_json::json!({
-                "title": "a\u{202D}b",
-                BODY_FIELD: "c\u{202D}d"
-            })),
-        );
-
-        let result = normalize_fields(fields);
-        let meta = result.get("meta").unwrap();
-        let meta_obj = meta.as_object().unwrap();
-        // Both fields pass through verbatim — nested objects are not body regions
-        assert_eq!(
-            meta_obj.get("title").unwrap().as_str().unwrap(),
-            "a\u{202D}b"
-        );
-        assert_eq!(
-            meta_obj.get(BODY_FIELD).unwrap().as_str().unwrap(),
-            "c\u{202D}d"
-        );
-    }
-
-    #[test]
     fn test_normalize_fields_non_string_unchanged() {
-        let mut fields = HashMap::new();
+        let mut fields = IndexMap::new();
         fields.insert(
             "count".to_string(),
             QuillValue::from_json(serde_json::json!(42)),
@@ -875,207 +719,35 @@ mod tests {
         assert!(result.get("enabled").unwrap().as_bool().unwrap());
     }
 
-    // ── §7 spec contract tests ──────────────────────────────────────────────────
-    // Cover all 8 cases required by MARKDOWN_GAPS.md §3.
-
-    /// Case 1: Bidi character in top-level BODY → stripped.
-    #[test]
-    fn test_spec_case1_body_bidi_stripped() {
-        let mut fields = HashMap::new();
-        fields.insert(
-            BODY_FIELD.to_string(),
-            QuillValue::from_json(serde_json::json!("hello\u{202D}world")),
-        );
-        let result = normalize_fields(fields);
-        assert_eq!(
-            result.get(BODY_FIELD).unwrap().as_str().unwrap(),
-            "helloworld"
-        );
-    }
-
-    /// Case 2: Bidi character in a top-level YAML string field → PRESERVED.
-    #[test]
-    fn test_spec_case2_yaml_field_bidi_preserved() {
-        let mut fields = HashMap::new();
-        fields.insert(
-            "title".to_string(),
-            QuillValue::from_json(serde_json::json!("a\u{202D}b")),
-        );
-        let result = normalize_fields(fields);
-        // Must NOT be stripped — YAML field values pass through verbatim.
-        assert_eq!(result.get("title").unwrap().as_str().unwrap(), "a\u{202D}b");
-    }
-
-    /// Case 3: Bidi character inside CARDS[0].BODY → stripped.
-    #[test]
-    fn test_spec_case3_card_body_bidi_stripped() {
-        let card = serde_json::json!({
-            "CARD": "profile",
-            BODY_FIELD: "card\u{202D}body",
-            "name": "Alice"
-        });
-        let mut fields = HashMap::new();
-        fields.insert(
-            "CARDS".to_string(),
-            QuillValue::from_json(serde_json::json!([card])),
-        );
-        let result = normalize_fields(fields);
-        let cards = result.get("CARDS").unwrap().as_array().unwrap();
-        let body = cards[0].get(BODY_FIELD).unwrap().as_str().unwrap();
-        assert_eq!(body, "cardbody");
-    }
-
-    /// Case 4: Bidi character inside CARDS[0].someField (not BODY) → PRESERVED.
-    #[test]
-    fn test_spec_case4_card_other_field_bidi_preserved() {
-        let card = serde_json::json!({
-            "CARD": "profile",
-            BODY_FIELD: "clean body",
-            "name": "Ali\u{202D}ce"
-        });
-        let mut fields = HashMap::new();
-        fields.insert(
-            "CARDS".to_string(),
-            QuillValue::from_json(serde_json::json!([card])),
-        );
-        let result = normalize_fields(fields);
-        let cards = result.get("CARDS").unwrap().as_array().unwrap();
-        let name = cards[0].get("name").unwrap().as_str().unwrap();
-        // Non-BODY card fields pass through verbatim.
-        assert_eq!(name, "Ali\u{202D}ce");
-    }
-
-    /// Case 5: HTML comment fence repair applied inside CARDS[0].BODY.
-    #[test]
-    fn test_spec_case5_card_body_html_comment_repair() {
-        let card = serde_json::json!({
-            "CARD": "note",
-            BODY_FIELD: "<!-- comment -->Trailing text"
-        });
-        let mut fields = HashMap::new();
-        fields.insert(
-            "CARDS".to_string(),
-            QuillValue::from_json(serde_json::json!([card])),
-        );
-        let result = normalize_fields(fields);
-        let cards = result.get("CARDS").unwrap().as_array().unwrap();
-        let body = cards[0].get(BODY_FIELD).unwrap().as_str().unwrap();
-        assert_eq!(body, "<!-- comment -->\nTrailing text");
-    }
-
-    /// Case 6: HTML comment fence repair applied on top-level BODY.
-    #[test]
-    fn test_spec_case6_toplevel_body_html_comment_repair() {
-        let mut fields = HashMap::new();
-        fields.insert(
-            BODY_FIELD.to_string(),
-            QuillValue::from_json(serde_json::json!("<!-- note -->Content here")),
-        );
-        let result = normalize_fields(fields);
-        assert_eq!(
-            result.get(BODY_FIELD).unwrap().as_str().unwrap(),
-            "<!-- note -->\nContent here"
-        );
-    }
-
-    /// Case 7: Non-string fields (numbers, bools, nested arrays of numbers) pass through untouched.
-    #[test]
-    fn test_spec_case7_non_string_fields_untouched() {
-        let mut fields = HashMap::new();
-        fields.insert(
-            "count".to_string(),
-            QuillValue::from_json(serde_json::json!(42)),
-        );
-        fields.insert(
-            "active".to_string(),
-            QuillValue::from_json(serde_json::json!(false)),
-        );
-        fields.insert(
-            "scores".to_string(),
-            QuillValue::from_json(serde_json::json!([1, 2, 3])),
-        );
-        let result = normalize_fields(fields);
-        assert_eq!(result.get("count").unwrap().as_i64().unwrap(), 42);
-        assert_eq!(result.get("active").unwrap().as_bool().unwrap(), false);
-        let scores = result.get("scores").unwrap().as_array().unwrap();
-        assert_eq!(scores.len(), 3);
-        assert_eq!(scores[0].as_i64().unwrap(), 1);
-    }
-
-    /// Case 8: Nested objects / arrays of strings inside YAML fields: strings NOT modified.
-    #[test]
-    fn test_spec_case8_nested_strings_not_modified() {
-        let bidi = "\u{202D}";
-        let mut fields = HashMap::new();
-        // Nested object inside a YAML field
-        fields.insert(
-            "address".to_string(),
-            QuillValue::from_json(serde_json::json!({
-                "city": format!("New{bidi}York"),
-                "zip": "10001"
-            })),
-        );
-        // Array of strings
-        fields.insert(
-            "tags".to_string(),
-            QuillValue::from_json(serde_json::json!([format!("rust{bidi}lang"), "markdown"])),
-        );
-        let result = normalize_fields(fields);
-
-        // Nested object strings pass through verbatim
-        let addr = result.get("address").unwrap().as_object().unwrap();
-        assert_eq!(
-            addr.get("city").unwrap().as_str().unwrap(),
-            "New\u{202D}York"
-        );
-
-        // Array of strings pass through verbatim
-        let tags = result.get("tags").unwrap().as_array().unwrap();
-        assert_eq!(tags[0].as_str().unwrap(), "rust\u{202D}lang");
-        assert_eq!(tags[1].as_str().unwrap(), "markdown");
-    }
-
     // Tests for normalize_document
 
     #[test]
     fn test_normalize_document_basic() {
-        use crate::document::ParsedDocument;
+        use crate::document::Document;
 
-        let mut fields = std::collections::HashMap::new();
-        fields.insert(
-            "title".to_string(),
-            crate::value::QuillValue::from_json(serde_json::json!("<<placeholder>>")),
-        );
-        fields.insert(
-            BODY_FIELD.to_string(),
-            crate::value::QuillValue::from_json(serde_json::json!("<<content>> \u{202D}**bold**")),
-        );
-
-        let doc = ParsedDocument::new(
-            fields,
-            crate::version::QuillReference::latest("test".to_string()),
-        );
+        let doc = Document::from_markdown(
+            "---\nQUILL: test\ntitle: <<placeholder>>\n---\n\n<<content>> \u{202D}**bold**",
+        )
+        .unwrap();
         let normalized = super::normalize_document(doc).unwrap();
 
-        // Title has chevrons preserved (only bidi stripped)
+        // Title has chevrons preserved (only bidi stripped on body)
         assert_eq!(
-            normalized.get_field("title").unwrap().as_str().unwrap(),
+            normalized.frontmatter().get("title").unwrap().as_str().unwrap(),
             "<<placeholder>>"
         );
 
         // Body has bidi stripped, chevrons preserved
-        assert_eq!(normalized.body().unwrap(), "<<content>> **bold**");
+        assert_eq!(normalized.body(), "\n<<content>> **bold**");
     }
 
     #[test]
     fn test_normalize_document_preserves_quill_tag() {
-        use crate::document::ParsedDocument;
+        use crate::document::Document;
         use crate::version::QuillReference;
         use std::str::FromStr;
 
-        let fields = std::collections::HashMap::new();
-        let quill_ref = QuillReference::from_str("custom_quill").unwrap();
-        let doc = ParsedDocument::new(fields, quill_ref);
+        let doc = Document::from_markdown("---\nQUILL: custom_quill\n---\n").unwrap();
         let normalized = super::normalize_document(doc).unwrap();
 
         assert_eq!(normalized.quill_reference().name, "custom_quill");
@@ -1083,25 +755,94 @@ mod tests {
 
     #[test]
     fn test_normalize_document_idempotent() {
-        use crate::document::ParsedDocument;
+        use crate::document::Document;
 
-        let mut fields = std::collections::HashMap::new();
-        fields.insert(
-            BODY_FIELD.to_string(),
-            crate::value::QuillValue::from_json(serde_json::json!("<<content>>")),
-        );
-
-        let doc = ParsedDocument::new(
-            fields,
-            crate::version::QuillReference::latest("test".to_string()),
-        );
+        let doc =
+            Document::from_markdown("---\nQUILL: test\n---\n\n<<content>>").unwrap();
         let normalized_once = super::normalize_document(doc).unwrap();
-        let normalized_twice = super::normalize_document(normalized_once.clone()).unwrap();
+        let normalized_twice =
+            super::normalize_document(normalized_once.clone()).unwrap();
 
-        // Calling normalize_document twice should produce the same result
+        assert_eq!(normalized_once.body(), normalized_twice.body());
+    }
+
+    #[test]
+    fn test_normalize_document_body_bidi_stripped() {
+        use crate::document::Document;
+
+        let doc = Document::from_markdown(
+            "---\nQUILL: test\n---\n\nhello\u{202D}world",
+        )
+        .unwrap();
+        let normalized = super::normalize_document(doc).unwrap();
+        assert_eq!(normalized.body(), "\nhelloworld");
+    }
+
+    #[test]
+    fn test_normalize_document_yaml_field_bidi_preserved() {
+        use crate::document::Document;
+
+        let doc =
+            Document::from_markdown("---\nQUILL: test\ntitle: a\u{202D}b\n---\n").unwrap();
+        let normalized = super::normalize_document(doc).unwrap();
+        // Bidi preserved in YAML fields
         assert_eq!(
-            normalized_once.body().unwrap(),
-            normalized_twice.body().unwrap()
+            normalized.frontmatter().get("title").unwrap().as_str().unwrap(),
+            "a\u{202D}b"
         );
+    }
+
+    #[test]
+    fn test_normalize_document_card_body_bidi_stripped() {
+        use crate::document::Document;
+
+        let md = "---\nQUILL: test\n---\n\nbody\n\n---\nCARD: note\n---\ncard\u{202D}body\n";
+        let doc = Document::from_markdown(md).unwrap();
+        assert_eq!(doc.cards().len(), 1, "expected 1 card");
+        let normalized = super::normalize_document(doc).unwrap();
+        assert_eq!(normalized.cards()[0].body(), "cardbody\n");
+    }
+
+    #[test]
+    fn test_normalize_document_card_field_bidi_preserved() {
+        use crate::document::Document;
+
+        let md = "---\nQUILL: test\n---\n\nbody\n\n---\nCARD: note\nname: Ali\u{202D}ce\n---\n";
+        let doc = Document::from_markdown(md).unwrap();
+        assert_eq!(doc.cards().len(), 1, "expected 1 card");
+        let normalized = super::normalize_document(doc).unwrap();
+        assert_eq!(
+            normalized.cards()[0]
+                .fields()
+                .get("name")
+                .unwrap()
+                .as_str()
+                .unwrap(),
+            "Ali\u{202D}ce"
+        );
+    }
+
+    #[test]
+    fn test_normalize_document_card_body_html_comment_repair() {
+        use crate::document::Document;
+
+        let md =
+            "---\nQUILL: test\n---\n\n---\nCARD: note\n---\n<!-- comment -->Trailing text\n";
+        let doc = Document::from_markdown(md).unwrap();
+        let normalized = super::normalize_document(doc).unwrap();
+        assert_eq!(
+            normalized.cards()[0].body(),
+            "<!-- comment -->\nTrailing text\n"
+        );
+    }
+
+    #[test]
+    fn test_normalize_document_toplevel_body_html_comment_repair() {
+        use crate::document::Document;
+
+        let md = "---\nQUILL: test\n---\n\n<!-- note -->Content here";
+        let doc = Document::from_markdown(md).unwrap();
+        let normalized = super::normalize_document(doc).unwrap();
+        assert_eq!(normalized.body(), "\n<!-- note -->\nContent here");
     }
 }

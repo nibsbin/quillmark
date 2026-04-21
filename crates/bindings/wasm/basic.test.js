@@ -1,20 +1,20 @@
 /**
- * Smoke tests for quillmark-wasm — new Quill.render() API
+ * Smoke tests for quillmark-wasm — Document API (Phase 2)
  *
- * These tests cover the canonical flow introduced by the render API overhaul:
- *   engine.quill(tree) → ParsedDocument.fromMarkdown(markdown) → quill.render(parsed, opts)
+ * These tests cover the canonical flow:
+ *   engine.quill(tree) → Document.fromMarkdown(markdown) → quill.render(doc, opts)
  *
  * Setup: Tests use the bundler build via @quillmark-wasm alias (see vitest.config.js)
  */
 
 import { describe, it, expect } from 'vitest'
-import { Quillmark, ParsedDocument } from '@quillmark-wasm'
+import { Quillmark, Document } from '@quillmark-wasm'
 import { makeQuill } from './test-helpers.js'
 
 const TEST_MARKDOWN = `---
+QUILL: test_quill
 title: Test Document
 author: Test Author
-QUILL: test_quill
 ---
 
 # Hello World
@@ -29,6 +29,109 @@ const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
 
 #body`
 
+describe('Document.fromMarkdown', () => {
+  it('should parse markdown with YAML frontmatter', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+
+    expect(doc).toBeDefined()
+    expect(doc.quillRef).toBe('test_quill')
+  })
+
+  it('should expose typed frontmatter (no QUILL/BODY/CARDS)', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+
+    expect(doc.frontmatter).toBeDefined()
+    expect(doc.frontmatter instanceof Object).toBe(true)
+    expect(doc.frontmatter.title).toBe('Test Document')
+    expect(doc.frontmatter.author).toBe('Test Author')
+    // QUILL, BODY, CARDS must NOT appear in frontmatter
+    expect(doc.frontmatter.QUILL).toBeUndefined()
+    expect(doc.frontmatter.BODY).toBeUndefined()
+    expect(doc.frontmatter.CARDS).toBeUndefined()
+  })
+
+  it('should expose body as a string', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+
+    expect(typeof doc.body).toBe('string')
+    expect(doc.body).toContain('Hello World')
+  })
+
+  it('should expose cards as an array', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+
+    expect(Array.isArray(doc.cards)).toBe(true)
+    expect(doc.cards.length).toBe(0)
+  })
+
+  it('should expose card fields and body', () => {
+    const md = `---
+QUILL: test_quill
+---
+
+Global body.
+
+---
+CARD: note
+foo: bar
+---
+
+Card body.
+`
+    const doc = Document.fromMarkdown(md)
+
+    expect(doc.cards.length).toBe(1)
+    expect(doc.cards[0].tag).toBe('note')
+    expect(doc.cards[0].fields.foo).toBe('bar')
+    expect(doc.cards[0].body).toContain('Card body.')
+  })
+
+  it('should expose warnings array', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(Array.isArray(doc.warnings)).toBe(true)
+    expect(doc.warnings.length).toBe(0)
+  })
+
+  it('should throw on invalid YAML frontmatter', () => {
+    const badMarkdown = `---
+title: Test
+QUILL: test_quill
+this is not valid yaml
+---
+
+# Content`
+
+    expect(() => {
+      Document.fromMarkdown(badMarkdown)
+    }).toThrow()
+  })
+
+  it('should throw when QUILL field is absent', () => {
+    const markdownWithoutQuill = `---
+title: Default Test
+author: Test Author
+---
+
+# Hello Default
+
+This document has no QUILL tag.`
+
+    expect(() => {
+      Document.fromMarkdown(markdownWithoutQuill)
+    }).toThrow()
+  })
+})
+
+describe('Document.toMarkdown (stub)', () => {
+  it('should throw "not yet implemented (phase 4)"', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+
+    expect(() => {
+      doc.toMarkdown()
+    }).toThrow(/phase 4/i)
+  })
+})
+
 describe('Quillmark.quill', () => {
   it('should return a render-ready Quill', () => {
     const engine = new Quillmark()
@@ -36,12 +139,12 @@ describe('Quillmark.quill', () => {
     expect(quill).toBeDefined()
   })
 
-  it('should render markdown to PDF via quill.render(parsed) with default opts', () => {
+  it('should render markdown to PDF via quill.render(doc) with default opts', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
-    const result = quill.render(parsed)
+    const result = quill.render(doc)
 
     expect(result).toBeDefined()
     expect(result.artifacts).toBeDefined()
@@ -50,12 +153,12 @@ describe('Quillmark.quill', () => {
     expect(result.artifacts[0].mimeType).toBe('application/pdf')
   })
 
-  it('should render markdown to PDF via quill.render(parsed, opts)', () => {
+  it('should render markdown to PDF via quill.render(doc, opts)', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
-    const result = quill.render(parsed, { format: 'pdf' })
+    const result = quill.render(doc, { format: 'pdf' })
 
     expect(result).toBeDefined()
     expect(result.artifacts).toBeDefined()
@@ -64,41 +167,30 @@ describe('Quillmark.quill', () => {
     expect(result.artifacts[0].mimeType).toBe('application/pdf')
   })
 
-  it('should render markdown to SVG via quill.render(parsed)', () => {
+  it('should render markdown to SVG via quill.render(doc)', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
-    const result = quill.render(parsed, { format: 'svg' })
+    const result = quill.render(doc, { format: 'svg' })
 
     expect(result.artifacts.length).toBeGreaterThan(0)
     expect(result.artifacts[0].mimeType).toBe('image/svg+xml')
   })
 
-  it('should render a ParsedDocument via quill.render(ParsedDocument)', () => {
-    const engine = new Quillmark()
-    const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
-
-    const result = quill.render(parsed, { format: 'pdf' })
-
-    expect(result.artifacts.length).toBeGreaterThan(0)
-    expect(result.artifacts[0].mimeType).toBe('application/pdf')
-  })
-
-  it('should emit a quill::ref_mismatch warning when ParsedDocument QUILL differs from quill name', () => {
+  it('should emit a quill::ref_mismatch warning when Document QUILL differs from quill name', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
 
     // Document declares a different quill name
     const otherMarkdown = `---
-title: Mismatch Test
 QUILL: other_quill
+title: Mismatch Test
 ---
 
 # Content`
-    const parsed = ParsedDocument.fromMarkdown(otherMarkdown)
-    const result = quill.render(parsed, { format: 'pdf' })
+    const doc = Document.fromMarkdown(otherMarkdown)
+    const result = quill.render(doc, { format: 'pdf' })
 
     expect(result.warnings.length).toBe(1)
     expect(result.warnings[0].code).toBe('quill::ref_mismatch')
@@ -114,9 +206,9 @@ describe('quill.open + session.render', () => {
   it('should support open + session.render with pageCount', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
-    const session = quill.open(parsed)
+    const session = quill.open(doc)
     expect(typeof session.pageCount).toBe('number')
     expect(session.pageCount).toBeGreaterThan(0)
 
@@ -136,8 +228,8 @@ describe('quill.open + session.render', () => {
   it('should warn and skip out-of-bounds page indices', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
-    const session = quill.open(parsed)
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const session = quill.open(doc)
     const oob = session.pageCount + 10
 
     const result = session.render({ format: 'png', ppi: 80, pages: [0, oob] })
@@ -149,58 +241,11 @@ describe('quill.open + session.render', () => {
   it('should error when requesting page selection with PDF', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
-    const session = quill.open(parsed)
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const session = quill.open(doc)
 
     expect(() => {
       session.render({ format: 'pdf', pages: [0] })
-    }).toThrow()
-  })
-})
-
-// ---------------------------------------------------------------------------
-// ParsedDocument.fromMarkdown (standalone static)
-// ---------------------------------------------------------------------------
-
-describe('ParsedDocument.fromMarkdown', () => {
-  it('should parse markdown with YAML frontmatter as a standalone static call', () => {
-    const parsed = ParsedDocument.fromMarkdown(TEST_MARKDOWN)
-
-    expect(parsed).toBeDefined()
-    expect(parsed.fields).toBeDefined()
-    expect(parsed.fields instanceof Map).toBe(false)
-    expect(parsed.fields instanceof Object).toBe(true)
-    expect(parsed.fields.title).toBe('Test Document')
-    expect(parsed.fields.author).toBe('Test Author')
-    expect(parsed.quillRef).toBe('test_quill')
-  })
-
-  it('should throw on invalid YAML frontmatter', () => {
-    const badMarkdown = `---
-title: Test
-QUILL: test_quill
-this is not valid yaml
----
-
-# Content`
-
-    expect(() => {
-      ParsedDocument.fromMarkdown(badMarkdown)
-    }).toThrow()
-  })
-
-  it('should throw when QUILL field is absent', () => {
-    const markdownWithoutQuill = `---
-title: Default Test
-author: Test Author
----
-
-# Hello Default
-
-This document has no QUILL tag.`
-
-    expect(() => {
-      ParsedDocument.fromMarkdown(markdownWithoutQuill)
     }).toThrow()
   })
 })

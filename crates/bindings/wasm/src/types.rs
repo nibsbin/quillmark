@@ -2,7 +2,6 @@
 
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
-use wasm_bindgen::convert::IntoWasmAbi;
 use wasm_bindgen::prelude::*;
 
 /// Output formats supported by backends
@@ -153,35 +152,20 @@ pub struct RenderResult {
     pub render_time_ms: f64,
 }
 
-/// Parsed markdown document
+/// A single card block parsed from a Quillmark Markdown document.
 ///
-/// Returned by `ParsedDocument.fromMarkdown()`. Contains the parsed YAML frontmatter
-/// fields, the quill reference from the required QUILL field, and any non-fatal
-/// parse-time warnings (e.g. near-miss sentinel lints).
+/// Exposed as a plain JS object via the `Document.cards` getter.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
-#[tsify(from_wasm_abi)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
-pub struct ParsedDocument {
-    /// YAML frontmatter fields
-    #[tsify(type = "Record<string, any>")]
+pub struct Card {
+    /// The CARD sentinel value (e.g. `"indorsement"`).
+    pub tag: String,
+    /// Typed YAML fields from the card fence (no `CARD` key).
+    #[tsify(type = "Record<string, unknown>")]
     pub fields: serde_json::Value,
-    /// The quill reference from the QUILL field
-    pub quill_ref: String,
-    /// Non-fatal parse-time warnings (empty unless the source contains
-    /// near-miss metadata sentinels per spec §4.2).
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub warnings: Vec<Diagnostic>,
-}
-
-impl IntoWasmAbi for ParsedDocument {
-    type Abi = <JsValue as IntoWasmAbi>::Abi;
-
-    fn into_abi(self) -> Self::Abi {
-        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-        self.serialize(&serializer)
-            .unwrap_or(JsValue::UNDEFINED)
-            .into_abi()
-    }
+    /// Markdown body after the card's closing `---`. Empty string when absent.
+    pub body: String,
 }
 
 /// Options for rendering
@@ -231,7 +215,6 @@ mod tests {
 
     #[test]
     fn test_output_format_serialization() {
-        // Test that OutputFormat serializes to lowercase strings
         let pdf = OutputFormat::Pdf;
         let json_pdf = serde_json::to_string(&pdf).unwrap();
         assert_eq!(json_pdf, "\"pdf\"");
@@ -247,7 +230,6 @@ mod tests {
 
     #[test]
     fn test_output_format_deserialization() {
-        // Test that lowercase strings deserialize to OutputFormat
         let pdf: OutputFormat = serde_json::from_str("\"pdf\"").unwrap();
         assert_eq!(pdf, OutputFormat::Pdf);
 
@@ -260,7 +242,6 @@ mod tests {
 
     #[test]
     fn test_severity_serialization() {
-        // Test that Severity serializes to lowercase strings
         let error = Severity::Error;
         let json_error = serde_json::to_string(&error).unwrap();
         assert_eq!(json_error, "\"error\"");
@@ -276,7 +257,6 @@ mod tests {
 
     #[test]
     fn test_severity_deserialization() {
-        // Test that lowercase strings deserialize to Severity
         let error: Severity = serde_json::from_str("\"error\"").unwrap();
         assert_eq!(error, Severity::Error);
 
@@ -289,7 +269,6 @@ mod tests {
 
     #[test]
     fn test_diagnostic_serialization() {
-        // Test that diagnostics with all fields serialize correctly
         let diag = quillmark_core::Diagnostic::new(
             quillmark_core::Severity::Error,
             "Test error message".to_string(),
@@ -316,7 +295,6 @@ mod tests {
 
     #[test]
     fn test_diagnostic_with_source_chain() {
-        // Test that diagnostics with source chains serialize correctly
         let root_error = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
         let diag = quillmark_core::Diagnostic::new(
             quillmark_core::Severity::Error,
@@ -337,7 +315,6 @@ mod tests {
 
     #[test]
     fn test_render_options_with_format() {
-        // Test that RenderOptions with format works correctly
         let options = RenderOptions {
             format: Some(OutputFormat::Pdf),
             assets: None,
@@ -347,38 +324,8 @@ mod tests {
         let json = serde_json::to_string(&options).unwrap();
         assert!(json.contains("\"format\":\"pdf\""));
 
-        // Test deserialization
         let options_from_json: RenderOptions = serde_json::from_str(r#"{"format":"svg"}"#).unwrap();
         assert_eq!(options_from_json.format, Some(OutputFormat::Svg));
-    }
-
-    #[test]
-    fn test_render_options_with_assets() {
-        // Test that assets field can be deserialized from JSON object
-        let json = r#"{
-            "format": "pdf",
-            "assets": {
-                "logo.png": [137, 80, 78, 71],
-                "font.ttf": [0, 1, 2, 3]
-            }
-        }"#;
-
-        let options: RenderOptions = serde_json::from_str(json).unwrap();
-        assert_eq!(options.format, Some(OutputFormat::Pdf));
-        assert!(options.assets.is_some());
-
-        // Verify assets is a JSON object
-        let assets = options.assets.unwrap();
-        assert!(assets.is_object());
-        let assets_obj = assets.as_object().unwrap();
-        assert_eq!(assets_obj.len(), 2);
-        assert!(assets_obj.contains_key("logo.png"));
-        assert!(assets_obj.contains_key("font.ttf"));
-
-        // Verify asset values are arrays
-        let logo_bytes = assets_obj.get("logo.png").unwrap().as_array().unwrap();
-        assert_eq!(logo_bytes.len(), 4);
-        assert_eq!(logo_bytes[0].as_u64().unwrap(), 137);
     }
 
     #[test]
@@ -386,7 +333,6 @@ mod tests {
         use crate::error::WasmError;
         use quillmark_core::{Diagnostic, Location, Severity};
 
-        // Create a single diagnostic error
         let diag = Diagnostic::new(Severity::Error, "Test error message".to_string())
             .with_code("E001".to_string())
             .with_location(Location {
@@ -401,14 +347,11 @@ mod tests {
         };
         let wasm_err: WasmError = render_err.into();
 
-        // Serialize to JSON and verify structure
         let json = serde_json::to_value(&wasm_err).unwrap();
         assert!(json.is_object());
 
         let obj = json.as_object().unwrap();
         assert_eq!(obj.get("type").unwrap().as_str().unwrap(), "diagnostic");
-
-        // Check that diagnostic fields are flattened
         assert_eq!(obj.get("severity").unwrap().as_str().unwrap(), "Error");
         assert_eq!(obj.get("code").unwrap().as_str().unwrap(), "E001");
         assert_eq!(
@@ -417,7 +360,6 @@ mod tests {
         );
         assert_eq!(obj.get("hint").unwrap().as_str().unwrap(), "This is a hint");
 
-        // Verify location is nested
         let primary = obj.get("primary").unwrap().as_object().unwrap();
         assert_eq!(primary.get("file").unwrap().as_str().unwrap(), "test.typ");
         assert_eq!(primary.get("line").unwrap().as_u64().unwrap(), 10);
@@ -429,7 +371,6 @@ mod tests {
         use crate::error::WasmError;
         use quillmark_core::{Diagnostic, Severity};
 
-        // Create multiple diagnostics error
         let diag1 = Diagnostic::new(Severity::Error, "Error 1".to_string());
         let diag2 = Diagnostic::new(Severity::Error, "Error 2".to_string());
 
@@ -438,7 +379,6 @@ mod tests {
         };
         let wasm_err: WasmError = render_err.into();
 
-        // Serialize to JSON and verify structure
         let json = serde_json::to_value(&wasm_err).unwrap();
         assert!(json.is_object());
 
@@ -449,7 +389,6 @@ mod tests {
         );
         assert!(obj.get("message").unwrap().as_str().unwrap().contains("2"));
 
-        // Check diagnostics array
         let diagnostics = obj.get("diagnostics").unwrap().as_array().unwrap();
         assert_eq!(diagnostics.len(), 2);
 
@@ -466,7 +405,6 @@ mod tests {
 
         let wasm_err: WasmError = "Simple error message".into();
 
-        // Serialize to JSON and verify structure
         let json = serde_json::to_value(&wasm_err).unwrap();
         assert!(json.is_object());
 
@@ -487,39 +425,7 @@ mod tests {
         let wasm_err: WasmError = "Test error".into();
         let js_value = wasm_err.to_js_value();
 
-        // Verify it's not undefined or null
         assert!(!js_value.is_undefined());
         assert!(!js_value.is_null());
-    }
-
-    #[test]
-    fn test_parsed_document_fields_is_object() {
-        // Test that ParsedDocument fields is a plain JSON object
-        let mut fields_obj = serde_json::Map::new();
-        fields_obj.insert("title".to_string(), serde_json::json!("My Document"));
-        fields_obj.insert("author".to_string(), serde_json::json!("Alice"));
-
-        let parsed_doc = ParsedDocument {
-            fields: serde_json::Value::Object(fields_obj),
-            quill_ref: "test_quill".to_string(),
-            warnings: Vec::new(),
-        };
-
-        // Serialize and verify structure
-        let json = serde_json::to_value(&parsed_doc).unwrap();
-        assert!(json.is_object());
-
-        let obj = json.as_object().unwrap();
-        assert_eq!(obj.get("quillRef").unwrap().as_str().unwrap(), "test_quill");
-
-        // Verify fields is an object (not a Map)
-        let fields = obj.get("fields").unwrap();
-        assert!(fields.is_object());
-        let fields_obj = fields.as_object().unwrap();
-        assert_eq!(
-            fields_obj.get("title").unwrap().as_str().unwrap(),
-            "My Document"
-        );
-        assert_eq!(fields_obj.get("author").unwrap().as_str().unwrap(), "Alice");
     }
 }

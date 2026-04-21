@@ -253,8 +253,13 @@ pub(super) fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseErr
 
         let abs_pos = lines.line_start(k);
         let abs_closing_pos = lines.line_start(cj);
-        let block =
-            super::assemble::build_block(markdown, abs_pos, abs_closing_pos, block_end, blocks.len())?;
+        let block = super::assemble::build_block(
+            markdown,
+            abs_pos,
+            abs_closing_pos,
+            block_end,
+            blocks.len(),
+        )?;
         blocks.push(block);
 
         k = cj + 1;

@@ -243,6 +243,31 @@ impl Diagnostic {
             source: None,
         }
     }
+}
+
+impl Clone for Diagnostic {
+    /// Clone a `Diagnostic`, dropping the source error chain.
+    ///
+    /// The `source` field holds a boxed `dyn Error` which is not `Clone`;
+    /// the cloned value will have `source: None`. Use `clone_without_source()`
+    /// explicitly if you want to be clear about this loss.
+    fn clone(&self) -> Self {
+        self.clone_without_source()
+    }
+}
+
+impl PartialEq for Diagnostic {
+    /// Two `Diagnostic`s are equal when all fields except `source` are equal.
+    fn eq(&self, other: &Self) -> bool {
+        self.severity == other.severity
+            && self.code == other.code
+            && self.message == other.message
+            && self.primary == other.primary
+            && self.hint == other.hint
+    }
+}
+
+impl Diagnostic {
 
     /// Get the source chain as a list of error messages
     pub fn source_chain(&self) -> Vec<String> {

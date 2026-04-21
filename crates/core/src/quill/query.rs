@@ -25,8 +25,7 @@ impl Quill {
     /// Returns a reference to the pre-computed defaults HashMap that was extracted
     /// during Quill construction.
     ///
-    /// This is used by `ParsedDocument::with_defaults()` to apply default values
-    /// to missing fields.
+    /// This is used by the `Workflow` to apply default values to missing fields.
     pub fn extract_defaults(&self) -> &HashMap<String, QuillValue> {
         &self.defaults
     }

@@ -1,6 +1,6 @@
 //! # Dry Run Validation Tests
 
-use quillmark::{ParsedDocument, Quillmark};
+use quillmark::{Document, Quillmark};
 use std::fs;
 use tempfile::TempDir;
 
@@ -37,7 +37,7 @@ fn test_dry_run_success() {
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\ntitle: My Document\nauthor: Test\n---\n\n# Content\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
     let result = workflow.dry_run(&parsed);
     assert!(result.is_ok(), "dry_run should succeed: {:?}", result);
@@ -55,7 +55,7 @@ fn test_dry_run_missing_required_field() {
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\nauthor: Test\n---\n\n# Content\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
     let result = workflow.dry_run(&parsed);
     assert!(
@@ -84,7 +84,7 @@ fn test_dry_run_no_schema() {
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\nrandom_field: anything\n---\n\n# Content\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
     let result = workflow.dry_run(&parsed);
     assert!(result.is_ok(), "dry_run should succeed without schema");

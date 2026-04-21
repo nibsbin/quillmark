@@ -1,10 +1,12 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
+use indexmap::IndexMap;
+
 use crate::{
+    document::Card,
     normalize::normalize_document,
     quill::{FieldSchema, FieldType},
-    Diagnostic, ParsedDocument, Quill, QuillValue, RenderError, RenderOptions, RenderResult,
+    Diagnostic, Document, Quill, QuillValue, RenderError, RenderOptions, RenderResult,
     Severity,
 };
 
@@ -26,7 +28,7 @@ impl Quill {
     /// convenience path. Use `open(...).render(...)` for page-selective rendering.
     pub fn render(
         &self,
-        parsed: ParsedDocument,
+        doc: Document,
         opts: &RenderOptions,
     ) -> Result<RenderResult, RenderError> {
         let all_pages_opts = RenderOptions {
@@ -34,14 +36,14 @@ impl Quill {
             ppi: opts.ppi,
             pages: None,
         };
-        self.open(parsed)?.render(&all_pages_opts)
+        self.open(doc)?.render(&all_pages_opts)
     }
 
-    /// Open an iterative render session for this parsed document.
-    pub fn open(&self, parsed: ParsedDocument) -> Result<crate::RenderSession, RenderError> {
+    /// Open an iterative render session for this document.
+    pub fn open(&self, doc: Document) -> Result<crate::RenderSession, RenderError> {
         let backend = self.require_backend()?;
-        let warning = self.ref_mismatch_warning(&parsed);
-        let json_data = self.compile_data_internal(&parsed)?;
+        let warning = self.ref_mismatch_warning(&doc);
+        let json_data = self.compile_data_internal(&doc)?;
         let plate_content = self.plate.clone().unwrap_or_default();
         let session = backend.open(&plate_content, self, &json_data)?;
         Ok(session.with_warning(warning))
@@ -65,8 +67,8 @@ impl Quill {
         })
     }
 
-    fn ref_mismatch_warning(&self, parsed: &ParsedDocument) -> Option<Diagnostic> {
-        let doc_ref = parsed.quill_reference().name.as_str();
+    fn ref_mismatch_warning(&self, doc: &Document) -> Option<Diagnostic> {
+        let doc_ref = doc.quill_reference().name.as_str();
         if doc_ref != self.name {
             Some(
                 Diagnostic::new(
@@ -89,11 +91,12 @@ impl Quill {
 
     pub(crate) fn compile_data_internal(
         &self,
-        parsed: &ParsedDocument,
+        doc: &Document,
     ) -> Result<serde_json::Value, RenderError> {
-        let coerced_fields = self
+        // Coerce frontmatter
+        let coerced_frontmatter = self
             .config
-            .coerce(parsed.fields())
+            .coerce_frontmatter(doc.frontmatter())
             .map_err(|e| RenderError::ValidationFailed {
                 diag: Box::new(
                     Diagnostic::new(Severity::Error, e.to_string())
@@ -104,16 +107,83 @@ impl Quill {
                         ),
                 ),
             })?;
-        let parsed_coerced = ParsedDocument::new(coerced_fields, parsed.quill_reference().clone());
-        self.validate_fields(&parsed_coerced)?;
 
-        let normalized = normalize_document(parsed_coerced)?;
-        let fields_with_defaults = self.apply_schema_defaults(normalized.fields());
-        Ok(Self::fields_to_json(&fields_with_defaults))
+        // Coerce card fields
+        let mut coerced_cards: Vec<Card> = Vec::new();
+        for card in doc.cards() {
+            let coerced_fields = self
+                .config
+                .coerce_card(card.tag(), card.fields())
+                .map_err(|e| RenderError::ValidationFailed {
+                    diag: Box::new(
+                        Diagnostic::new(Severity::Error, e.to_string())
+                            .with_code("validation::coercion_failed".to_string())
+                            .with_hint(
+                                "Ensure all card fields can be coerced to their declared types"
+                                    .to_string(),
+                            ),
+                    ),
+                })?;
+            coerced_cards.push(Card::new(
+                card.tag().to_string(),
+                coerced_fields,
+                card.body().to_string(),
+            ));
+        }
+
+        let coerced_doc = Document::new_internal(
+            doc.quill_reference().clone(),
+            coerced_frontmatter,
+            doc.body().to_string(),
+            coerced_cards,
+            doc.warnings().to_vec(),
+        );
+
+        self.validate_fields(&coerced_doc)?;
+
+        let normalized = normalize_document(coerced_doc)?;
+
+        // Apply frontmatter defaults
+        let frontmatter_with_defaults: IndexMap<String, QuillValue> = {
+            let mut fm = normalized.frontmatter().clone();
+            for (field_name, default_value) in self.config.defaults() {
+                if !fm.contains_key(&field_name) {
+                    fm.insert(field_name, default_value);
+                }
+            }
+            fm
+        };
+
+        // Apply card defaults
+        let cards_with_defaults: Vec<Card> = normalized
+            .cards()
+            .iter()
+            .map(|card| {
+                let mut cf = card.fields().clone();
+                if let Some(card_defaults) = self.config.card_defaults(card.tag()) {
+                    for (k, v) in card_defaults {
+                        if !cf.contains_key(&k) {
+                            cf.insert(k, v);
+                        }
+                    }
+                }
+                Card::new(card.tag().to_string(), cf, card.body().to_string())
+            })
+            .collect();
+
+        let final_doc = Document::new_internal(
+            normalized.quill_reference().clone(),
+            frontmatter_with_defaults,
+            normalized.body().to_string(),
+            cards_with_defaults,
+            normalized.warnings().to_vec(),
+        );
+
+        Ok(final_doc.to_plate_json())
     }
 
-    fn validate_fields(&self, parsed: &ParsedDocument) -> Result<(), RenderError> {
-        match self.config.validate(parsed.fields()) {
+    fn validate_fields(&self, doc: &Document) -> Result<(), RenderError> {
+        match self.config.validate_document(doc) {
             Ok(_) => Ok(()),
             Err(errors) => {
                 let error_message = errors
@@ -133,27 +203,6 @@ impl Quill {
                 })
             }
         }
-    }
-
-    fn apply_schema_defaults(
-        &self,
-        fields: &HashMap<String, QuillValue>,
-    ) -> HashMap<String, QuillValue> {
-        let mut result = fields.clone();
-        for (field_name, default_value) in self.config.defaults() {
-            if !result.contains_key(&field_name) {
-                result.insert(field_name, default_value);
-            }
-        }
-        result
-    }
-
-    fn fields_to_json(fields: &HashMap<String, QuillValue>) -> serde_json::Value {
-        let mut json_map = serde_json::Map::new();
-        for (key, value) in fields {
-            json_map.insert(key.clone(), value.as_json().clone());
-        }
-        serde_json::Value::Object(json_map)
     }
 
     pub fn build_transform_schema(&self) -> QuillValue {

@@ -1,10 +1,11 @@
-//! Assembly of fences and sentinels into a `ParsedDocument`.
+//! Assembly of fences and sentinels into a [`Document`].
 //!
 //! This module contains the top-level parsing glue: it calls the fence scanner,
-//! extracts sentinels, and assembles a `ParsedDocument` from the pieces.
+//! extracts sentinels, and assembles a typed [`Document`] from the pieces.
 
-use std::collections::HashMap;
 use std::str::FromStr;
+
+use indexmap::IndexMap;
 
 use crate::error::ParseError;
 use crate::value::QuillValue;
@@ -13,8 +14,7 @@ use crate::Diagnostic;
 
 use super::fences::{fence_opener_len, find_metadata_blocks};
 use super::sentinel::extract_sentinels;
-use super::ParsedDocument;
-use super::BODY_FIELD;
+use super::{Card, Document};
 
 /// An intermediate representation of one `---…---` metadata block.
 #[derive(Debug)]
@@ -126,15 +126,15 @@ fn missing_quill_message(first_fence_issue: Option<(String, usize)>) -> String {
 }
 
 /// Decompose markdown, discarding warnings. Test- and `from_markdown`-facing.
-pub(super) fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError> {
+pub(super) fn decompose(markdown: &str) -> Result<Document, crate::error::ParseError> {
     decompose_with_warnings(markdown).map(|(doc, _)| doc)
 }
 
-/// Decompose markdown into frontmatter fields and body, returning any
-/// non-fatal warnings collected during fence scanning.
+/// Decompose markdown into a typed [`Document`], returning any non-fatal warnings
+/// collected during fence scanning.
 pub(super) fn decompose_with_warnings(
     markdown: &str,
-) -> Result<(ParsedDocument, Vec<Diagnostic>), crate::error::ParseError> {
+) -> Result<(Document, Vec<Diagnostic>), crate::error::ParseError> {
     // Strip a leading UTF-8 BOM if present. Editors on Windows (Notepad, some
     // Word exports) prepend `\u{FEFF}` which otherwise defeats F2 because the
     // first line no longer matches `---`.
@@ -148,8 +148,6 @@ pub(super) fn decompose_with_warnings(
         });
     }
 
-    let mut fields = HashMap::new();
-
     // Find all metadata blocks. F1/F2 already guarantee that block 0 carries
     // QUILL and that every subsequent block carries CARD.
     let (blocks, warnings, first_fence_issue) = find_metadata_blocks(markdown)?;
@@ -160,21 +158,20 @@ pub(super) fn decompose_with_warnings(
         ));
     }
 
-    let mut cards_array: Vec<serde_json::Value> = Vec::new();
-
     // Block 0 is always the QUILL frontmatter (F1 guarantee).
-    let frontmatter = &blocks[0];
-    let quill_tag = frontmatter.quill_ref.clone().ok_or_else(|| {
+    let frontmatter_block = &blocks[0];
+    let quill_tag = frontmatter_block.quill_ref.clone().ok_or_else(|| {
         ParseError::InvalidStructure(
             "Missing required QUILL field. Add `QUILL: <name>` to the frontmatter.".to_string(),
         )
     })?;
 
-    // Merge frontmatter fields (YAML content with QUILL stripped).
-    match &frontmatter.yaml_value {
+    // Build frontmatter IndexMap (YAML content with QUILL stripped).
+    let mut frontmatter: IndexMap<String, QuillValue> = IndexMap::new();
+    match &frontmatter_block.yaml_value {
         Some(serde_json::Value::Object(mapping)) => {
             for (key, value) in mapping {
-                fields.insert(key.clone(), QuillValue::from_json(value.clone()));
+                frontmatter.insert(key.clone(), QuillValue::from_json(value.clone()));
             }
         }
         Some(serde_json::Value::Null) | None => {}
@@ -182,53 +179,6 @@ pub(super) fn decompose_with_warnings(
             return Err(ParseError::InvalidStructure(
                 "Invalid YAML frontmatter: expected a mapping".to_string(),
             ));
-        }
-    }
-
-    // Parse tagged blocks (CARD blocks)
-    for (idx, block) in blocks.iter().enumerate() {
-        if let Some(ref tag_name) = block.tag {
-            // Get YAML metadata directly (already parsed in find_metadata_blocks)
-            // Get JSON metadata directly (already parsed in find_metadata_blocks)
-            let mut item_fields: serde_json::Map<String, serde_json::Value> =
-                match &block.yaml_value {
-                    Some(serde_json::Value::Object(mapping)) => mapping.clone(),
-                    Some(serde_json::Value::Null) => {
-                        // Null value (from whitespace-only YAML) - treat as empty mapping
-                        serde_json::Map::new()
-                    }
-                    Some(_) => {
-                        return Err(crate::error::ParseError::InvalidStructure(format!(
-                            "Invalid YAML in card block '{}': expected a mapping",
-                            tag_name
-                        )));
-                    }
-                    None => serde_json::Map::new(),
-                };
-
-            // Extract body for this card block
-            let body_start = block.end;
-            let body_end = if idx + 1 < blocks.len() {
-                blocks[idx + 1].start
-            } else {
-                markdown.len()
-            };
-            let body = &markdown[body_start..body_end];
-
-            // Add body to item fields
-            item_fields.insert(
-                BODY_FIELD.to_string(),
-                serde_json::Value::String(body.to_string()),
-            );
-
-            // Add CARD discriminator field
-            item_fields.insert(
-                "CARD".to_string(),
-                serde_json::Value::String(tag_name.clone()),
-            );
-
-            // Add to CARDS array
-            cards_array.push(serde_json::Value::Object(item_fields));
         }
     }
 
@@ -241,23 +191,47 @@ pub(super) fn decompose_with_warnings(
         .find(|b| b.tag.is_some())
         .map(|b| b.start)
         .unwrap_or(markdown.len());
-    let global_body = &markdown[body_start..body_end];
+    let global_body = markdown[body_start..body_end].to_string();
 
-    fields.insert(
-        BODY_FIELD.to_string(),
-        QuillValue::from_json(serde_json::Value::String(global_body.to_string())),
-    );
+    // Parse tagged blocks (CARD blocks) into typed Cards.
+    let mut cards: Vec<Card> = Vec::new();
+    for (idx, block) in blocks.iter().enumerate() {
+        if let Some(ref tag_name) = block.tag {
+            // Build the card's typed fields.
+            let mut card_fields: IndexMap<String, QuillValue> = IndexMap::new();
+            match &block.yaml_value {
+                Some(serde_json::Value::Object(mapping)) => {
+                    for (key, value) in mapping {
+                        card_fields.insert(key.clone(), QuillValue::from_json(value.clone()));
+                    }
+                }
+                Some(serde_json::Value::Null) | None => {}
+                Some(_) => {
+                    return Err(crate::error::ParseError::InvalidStructure(format!(
+                        "Invalid YAML in card block '{}': expected a mapping",
+                        tag_name
+                    )));
+                }
+            }
 
-    // Always add CARDS array to fields (may be empty)
-    fields.insert(
-        "CARDS".to_string(),
-        QuillValue::from_json(serde_json::Value::Array(cards_array)),
-    );
+            // Card body: between this block's end and the next block's start (or EOF).
+            let card_body_start = block.end;
+            let card_body_end = if idx + 1 < blocks.len() {
+                blocks[idx + 1].start
+            } else {
+                markdown.len()
+            };
+            let card_body = markdown[card_body_start..card_body_end].to_string();
+
+            cards.push(Card::new(tag_name.clone(), card_fields, card_body));
+        }
+    }
 
     let quill_ref = QuillReference::from_str(&quill_tag).map_err(|e| {
         ParseError::InvalidStructure(format!("Invalid QUILL tag '{}': {}", quill_tag, e))
     })?;
-    let parsed = ParsedDocument::new(fields, quill_ref);
 
-    Ok((parsed, warnings))
+    let doc = Document::new_internal(quill_ref, frontmatter, global_body, cards, warnings.clone());
+
+    Ok((doc, warnings))
 }

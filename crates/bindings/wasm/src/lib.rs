@@ -6,24 +6,24 @@
 //!
 //! - [`Quillmark`] - engine for loading render-ready quills from in-memory trees
 //! - [`Quill`] - quill handle for rendering/compiling
-//! - [`ParsedDocument`] - parsed markdown payload (`fromMarkdown` static)
+//! - [`engine::Document`] - typed parsed document (`fromMarkdown` static, `toMarkdown` stub)
 //!
 //! ## Workflow
 //!
 //! 1. Build a render-ready quill with `engine.quill(...)`
-//! 2. Parse markdown via `ParsedDocument.fromMarkdown(...)`
+//! 2. Parse markdown via `Document.fromMarkdown(...)`
 //! 3. Render with `quill.render(...)`
 //!
 //! ## Example
 //!
 //! ```javascript
-//! import { ParsedDocument, Quillmark } from '@quillmark-test/wasm';
+//! import { Document, Quillmark } from '@quillmark-test/wasm';
 //!
 //! const engine = new Quillmark();
 //! const quill = engine.quill(tree);
 //!
-//! const parsed = ParsedDocument.fromMarkdown(markdown);
-//! const result = quill.render(parsed);
+//! const doc = Document.fromMarkdown(markdown);
+//! const result = quill.render(doc);
 //! const pdfBytes = result.artifacts[0].bytes;
 //! ```
 
@@ -33,7 +33,7 @@ mod engine;
 mod error;
 mod types;
 
-pub use engine::{Quill, Quillmark, RenderSession};
+pub use engine::{Document, Quill, Quillmark, RenderSession};
 pub use error::WasmError;
 pub use types::*;
 

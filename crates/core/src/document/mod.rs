@@ -4,19 +4,20 @@
 //!
 //! ## Overview
 //!
-//! The `document` module provides the [`ParsedDocument::from_markdown`] function for parsing markdown documents
+//! The `document` module provides the [`Document::from_markdown`] function for parsing
+//! markdown documents into a typed in-memory model.
 //!
 //! ## Key Types
 //!
-//! - [`ParsedDocument`]: Container for parsed frontmatter fields and body content
-//! - [`BODY_FIELD`]: Constant for the field name storing document body
+//! - [`Document`]: Typed in-memory Quillmark document — frontmatter, body, and cards.
+//! - [`Card`]: A single `CARD:` block with a tag, typed fields, and a body.
 //!
 //! ## Examples
 //!
 //! ### Basic Parsing
 //!
 //! ```
-//! use quillmark_core::ParsedDocument;
+//! use quillmark_core::Document;
 //!
 //! let markdown = r#"---
 //! QUILL: my_quill
@@ -29,15 +30,33 @@
 //! Document content here.
 //! "#;
 //!
-//! let doc = ParsedDocument::from_markdown(markdown).unwrap();
-//! let title = doc.get_field("title")
+//! let doc = Document::from_markdown(markdown).unwrap();
+//! let title = doc.frontmatter()
+//!     .get("title")
 //!     .and_then(|v| v.as_str())
 //!     .unwrap_or("Untitled");
+//! assert_eq!(title, "My Document");
+//! assert_eq!(doc.cards().len(), 0);
+//! ```
+//!
+//! ### Accessing the plate wire format
+//!
+//! ```
+//! use quillmark_core::Document;
+//!
+//! let doc = Document::from_markdown(
+//!     "---\nQUILL: my_quill\ntitle: Hi\n---\n\nBody here.\n"
+//! ).unwrap();
+//! let json = doc.to_plate_json();
+//! assert_eq!(json["QUILL"], "my_quill");
+//! assert_eq!(json["title"], "Hi");
+//! assert_eq!(json["BODY"], "\nBody here.\n");
+//! assert!(json["CARDS"].is_array());
 //! ```
 //!
 //! ## Error Handling
 //!
-//! The [`ParsedDocument::from_markdown`] function returns errors for:
+//! [`Document::from_markdown`] returns errors for:
 //! - Malformed YAML syntax
 //! - Unclosed frontmatter blocks
 //! - Multiple global frontmatter blocks
@@ -45,9 +64,10 @@
 //! - Reserved field name usage
 //! - Name collisions
 //!
-//! See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) for comprehensive documentation of the Extended YAML Metadata Standard.
+//! See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) for
+//! comprehensive documentation of the Extended YAML Metadata Standard.
 
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 use crate::error::ParseError;
 use crate::value::QuillValue;
@@ -62,89 +82,232 @@ pub mod sentinel;
 #[cfg(test)]
 mod tests;
 
-/// The field name used to store the document body
-pub const BODY_FIELD: &str = "BODY";
-
 /// Parse result carrying both the parsed document and any non-fatal warnings
 /// (e.g. near-miss sentinel lints emitted per spec §4.2).
 #[derive(Debug)]
 pub struct ParseOutput {
     /// The successfully parsed document.
-    pub document: ParsedDocument,
+    pub document: Document,
     /// Non-fatal warnings collected during parsing.
     pub warnings: Vec<Diagnostic>,
 }
 
-/// A parsed markdown document with frontmatter
-#[derive(Debug, Clone)]
-pub struct ParsedDocument {
-    fields: HashMap<String, QuillValue>,
-    quill_ref: QuillReference,
+/// A single `CARD:` block parsed from a Quillmark Markdown document.
+///
+/// Every card has a `tag` (the value of its `CARD:` sentinel), typed `fields`
+/// (all YAML key-value pairs from the fence body, excluding the `CARD` key
+/// itself), and a `body` (the Markdown text that follows the closing `---`).
+///
+/// ## Card body absence
+///
+/// If a card block has no trailing Markdown content (e.g. the next block or
+/// EOF immediately follows the closing fence), `body` is the empty string `""`.
+/// It is never `None`; callers that need to distinguish "absent" from "empty"
+/// should check `card.body().is_empty()`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Card {
+    tag: String,
+    fields: IndexMap<String, QuillValue>,
+    body: String,
 }
 
-impl ParsedDocument {
-    /// Create a ParsedDocument from fields and quill reference
-    pub fn new(fields: HashMap<String, QuillValue>, quill_ref: QuillReference) -> Self {
-        Self { fields, quill_ref }
+impl Card {
+    /// Create a new `Card` with a tag, fields, and body.
+    pub fn new(
+        tag: String,
+        fields: IndexMap<String, QuillValue>,
+        body: String,
+    ) -> Self {
+        Self { tag, fields, body }
     }
 
-    /// Create a ParsedDocument from markdown string, discarding any warnings.
+    /// The card tag (value of the `CARD:` sentinel).
+    pub fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    /// Typed fields from this card's YAML fence (excluding the `CARD` key).
+    pub fn fields(&self) -> &IndexMap<String, QuillValue> {
+        &self.fields
+    }
+
+    /// Markdown body that follows this card's closing fence.
+    ///
+    /// Empty string when no trailing content is present.
+    pub fn body(&self) -> &str {
+        &self.body
+    }
+}
+
+/// A fully-parsed, typed in-memory Quillmark document.
+///
+/// `Document` is the canonical representation of a Quillmark Markdown file.
+/// Markdown is one import format (and will be one export format in Phase 4);
+/// the structured data here is primary.
+///
+/// ## Fields vs. plate wire format
+///
+/// `Document` stores:
+/// - `frontmatter` — user-visible YAML fields (no `CARDS`, no `BODY` sentinel keys)
+/// - `body` — global Markdown body between the frontmatter fence and the first card
+/// - `cards` — ordered list of `Card` values
+///
+/// When a backend plate needs the legacy flat JSON shape, call
+/// [`Document::to_plate_json`]. That method is the **only** place in core that
+/// reconstructs `{"QUILL": ..., "CARDS": [...], "BODY": "..."}`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Document {
+    quill_ref: QuillReference,
+    frontmatter: IndexMap<String, QuillValue>,
+    body: String,
+    cards: Vec<Card>,
+    warnings: Vec<Diagnostic>,
+}
+
+impl Document {
+    /// Create a `Document` directly from typed parts.
+    ///
+    /// This is used by `assemble.rs`, `normalize.rs`, and the `Workflow`.
+    pub fn new_internal(
+        quill_ref: QuillReference,
+        frontmatter: IndexMap<String, QuillValue>,
+        body: String,
+        cards: Vec<Card>,
+        warnings: Vec<Diagnostic>,
+    ) -> Self {
+        Self {
+            quill_ref,
+            frontmatter,
+            body,
+            cards,
+            warnings,
+        }
+    }
+
+    /// Parse a Quillmark Markdown document, discarding any non-fatal warnings.
     pub fn from_markdown(markdown: &str) -> Result<Self, ParseError> {
         assemble::decompose(markdown)
     }
 
-    /// Create a ParsedDocument from markdown string, returning warnings alongside the document.
+    /// Parse a Quillmark Markdown document, returning warnings alongside the document.
     pub fn from_markdown_with_warnings(markdown: &str) -> Result<ParseOutput, ParseError> {
         assemble::decompose_with_warnings(markdown)
             .map(|(document, warnings)| ParseOutput { document, warnings })
     }
 
-    /// Get the quill reference (name + version selector)
+    // ── Accessors ──────────────────────────────────────────────────────────────
+
+    /// The quill reference (`name@version-selector`).
     pub fn quill_reference(&self) -> &QuillReference {
         &self.quill_ref
     }
 
-    /// Get the document body
-    pub fn body(&self) -> Option<&str> {
-        self.fields.get(BODY_FIELD).and_then(|v| v.as_str())
+    /// User-visible YAML frontmatter fields.
+    ///
+    /// Does **not** include the `QUILL`, `CARDS`, or `BODY` sentinel keys;
+    /// those are available via [`Document::quill_reference`], [`Document::cards`], and [`Document::body`].
+    pub fn frontmatter(&self) -> &IndexMap<String, QuillValue> {
+        &self.frontmatter
     }
 
-    /// Get a specific field
-    pub fn get_field(&self, name: &str) -> Option<&QuillValue> {
-        self.fields.get(name)
+    /// Global Markdown body between the frontmatter fence and the first card.
+    ///
+    /// Empty string when no body is present.
+    pub fn body(&self) -> &str {
+        &self.body
     }
 
-    /// Get all fields (including body)
-    pub fn fields(&self) -> &HashMap<String, QuillValue> {
-        &self.fields
+    /// Ordered list of card blocks.
+    pub fn cards(&self) -> &[Card] {
+        &self.cards
     }
 
-    /// Create a new ParsedDocument with default values applied
-    ///
-    /// This method creates a new ParsedDocument with default values applied for any
-    /// fields that are missing from the original document but have defaults specified.
-    /// Existing fields are preserved and not overwritten.
-    ///
-    /// # Arguments
-    ///
-    /// * `defaults` - A HashMap of field names to their default QuillValues
-    ///
-    /// # Returns
-    ///
-    /// A new ParsedDocument with defaults applied for missing fields
-    pub fn with_defaults(&self, defaults: &HashMap<String, QuillValue>) -> Self {
-        let mut fields = self.fields.clone();
+    /// Non-fatal warnings collected during parsing.
+    pub fn warnings(&self) -> &[Diagnostic] {
+        &self.warnings
+    }
 
-        for (field_name, default_value) in defaults {
-            // Only apply default if field is missing
-            if !fields.contains_key(field_name) {
-                fields.insert(field_name.clone(), default_value.clone());
-            }
+    // ── Wire format ────────────────────────────────────────────────────────────
+
+    /// Serialize this document to the JSON shape expected by backend plates.
+    ///
+    /// The output has the following top-level keys, which match what
+    /// `lib.typ.template` reads at Typst runtime:
+    ///
+    /// ```json
+    /// {
+    ///   "QUILL": "<ref>",
+    ///   "<field>": <value>,
+    ///   ...
+    ///   "BODY": "<global-body>",
+    ///   "CARDS": [
+    ///     { "CARD": "<tag>", "<field>": <value>, ..., "BODY": "<card-body>" },
+    ///     ...
+    ///   ]
+    /// }
+    /// ```
+    ///
+    /// This is the **only** place in `quillmark-core` that knows about the plate
+    /// wire format. All internal consumers (workflow, backends) call this instead
+    /// of constructing the shape by hand.
+    pub fn to_plate_json(&self) -> serde_json::Value {
+        let mut map = serde_json::Map::new();
+
+        // QUILL first — plate authors expect this at the top.
+        map.insert(
+            "QUILL".to_string(),
+            serde_json::Value::String(self.quill_ref.to_string()),
+        );
+
+        // Frontmatter fields in insertion order.
+        for (key, value) in &self.frontmatter {
+            map.insert(key.clone(), value.as_json().clone());
         }
 
-        Self {
-            fields,
-            quill_ref: self.quill_ref.clone(),
-        }
+        // Global body.
+        map.insert(
+            "BODY".to_string(),
+            serde_json::Value::String(self.body.clone()),
+        );
+
+        // Cards array.
+        let cards_array: Vec<serde_json::Value> = self
+            .cards
+            .iter()
+            .map(|card| {
+                let mut card_map = serde_json::Map::new();
+                card_map.insert(
+                    "CARD".to_string(),
+                    serde_json::Value::String(card.tag.clone()),
+                );
+                for (key, value) in &card.fields {
+                    card_map.insert(key.clone(), value.as_json().clone());
+                }
+                card_map.insert(
+                    "BODY".to_string(),
+                    serde_json::Value::String(card.body.clone()),
+                );
+                serde_json::Value::Object(card_map)
+            })
+            .collect();
+
+        map.insert("CARDS".to_string(), serde_json::Value::Array(cards_array));
+
+        serde_json::Value::Object(map)
+    }
+
+    /// Emit canonical Quillmark Markdown.
+    ///
+    /// # Note
+    ///
+    /// **Not yet implemented** — this stub exists to reserve the API surface.
+    /// Full emission (type-fidelity round-trip, double-quoted strings) is
+    /// implemented in Phase 4.
+    ///
+    /// # Panics
+    ///
+    /// Always panics with `"to_markdown not yet implemented (phase 4)"`.
+    pub fn to_markdown(&self) -> String {
+        unimplemented!("to_markdown not yet implemented (phase 4)")
     }
 }

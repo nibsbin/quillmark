@@ -1,19 +1,19 @@
 """Tests for the API requirements."""
 
 import pytest
-from quillmark import Quillmark, ParsedDocument, OutputFormat, ParseError
+from quillmark import Quillmark, Document, OutputFormat, ParseError
 from conftest import QUILLS_PATH, _latest_version
 
 
 def test_parsed_document_quill_ref():
-    """Test that ParsedDocument exposes quill_ref method."""
+    """Test that Document exposes quill_ref method."""
     markdown_with_quill = "---\nQUILL: my_quill\ntitle: Test\n---\n\n# Content\n"
-    parsed = ParsedDocument.from_markdown(markdown_with_quill)
+    parsed = Document.from_markdown(markdown_with_quill)
     assert parsed.quill_ref() == "my_quill"
 
     markdown_without_quill = "---\ntitle: Test\n---\n\n# Content\n"
     with pytest.raises(ParseError):
-        ParsedDocument.from_markdown(markdown_without_quill)
+        Document.from_markdown(markdown_without_quill)
 
 
 def test_quill_properties(taro_quill_dir):
@@ -49,7 +49,7 @@ def test_full_workflow():
     workflow = engine.workflow(quill)
 
     markdown = "---\nQUILL: taro\nauthor: Test Author\nice_cream: Chocolate\ntitle: Test\n---\n\nContent.\n"
-    parsed = ParsedDocument.from_markdown(markdown)
+    parsed = Document.from_markdown(markdown)
     assert parsed.quill_ref() == "taro"
 
     assert "taro" in workflow.quill_ref

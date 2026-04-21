@@ -6,21 +6,21 @@
 //! ## Quick Start
 //!
 //! ```no_run
-//! use quillmark::{Quillmark, OutputFormat, ParsedDocument};
+//! use quillmark::{Quillmark, OutputFormat, Document};
 //!
 //! let engine = Quillmark::new();
 //! let quill = engine.quill_from_path("path/to/quill").unwrap();
 //! let workflow = engine.workflow(&quill).unwrap();
 //!
-//! let parsed = ParsedDocument::from_markdown("---\ntitle: Hello\n---\n# Hello World").unwrap();
+//! let parsed = Document::from_markdown("---\nQUILL: my_quill\ntitle: Hello\n---\n# Hello World").unwrap();
 //! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
 
 // Re-export all core types for convenience
 pub use quillmark_core::{
-    Artifact, Backend, Diagnostic, Location, OutputFormat, ParseError, ParsedDocument, Quill,
-    RenderError, RenderOptions, RenderResult, RenderSession, SerializableDiagnostic, Severity,
-    BODY_FIELD,
+    Artifact, Backend, Card, Diagnostic, Document, Location, OutputFormat, ParseError, ParseOutput,
+    Quill, RenderError, RenderOptions, RenderResult, RenderSession, SerializableDiagnostic,
+    Severity,
 };
 
 // Declare orchestration module

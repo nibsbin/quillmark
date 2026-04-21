@@ -2,6 +2,8 @@
 use std::collections::HashMap;
 use std::error::Error as StdError;
 
+use indexmap::IndexMap;
+
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::{Date, OffsetDateTime};
@@ -196,6 +198,65 @@ impl QuillConfig {
         fields: &HashMap<String, QuillValue>,
     ) -> Result<(), Vec<super::validation::ValidationError>> {
         super::validation::validate_document(self, fields)
+    }
+
+    /// Coerce typed frontmatter fields (IndexMap, no CARDS/BODY keys).
+    ///
+    /// This is the typed counterpart to [`QuillConfig::coerce`] used by the `Workflow`.
+    pub fn coerce_frontmatter(
+        &self,
+        frontmatter: &IndexMap<String, QuillValue>,
+    ) -> Result<IndexMap<String, QuillValue>, CoercionError> {
+        let mut coerced: IndexMap<String, QuillValue> = IndexMap::new();
+        for (field_name, field_value) in frontmatter {
+            if let Some(field_schema) = self.main().fields.get(field_name) {
+                let path = field_name.as_str();
+                coerced.insert(
+                    field_name.clone(),
+                    Self::coerce_value_strict(field_value, field_schema, path)?,
+                );
+            } else {
+                coerced.insert(field_name.clone(), field_value.clone());
+            }
+        }
+        Ok(coerced)
+    }
+
+    /// Coerce typed fields for a single card (IndexMap, no CARD/BODY keys).
+    ///
+    /// This is the typed counterpart to the inner loop in [`QuillConfig::coerce`] used by
+    /// the `Workflow`. Returns the input unchanged when the card tag is unknown.
+    pub fn coerce_card(
+        &self,
+        card_tag: &str,
+        fields: &IndexMap<String, QuillValue>,
+    ) -> Result<IndexMap<String, QuillValue>, CoercionError> {
+        let Some(card_schema) = self.card_definition(card_tag) else {
+            return Ok(fields.clone());
+        };
+        let mut coerced: IndexMap<String, QuillValue> = IndexMap::new();
+        for (field_name, field_value) in fields {
+            if let Some(field_schema) = card_schema.fields.get(field_name) {
+                let path = format!("cards.{card_tag}.{field_name}");
+                coerced.insert(
+                    field_name.clone(),
+                    Self::coerce_value_strict(field_value, field_schema, &path)?,
+                );
+            } else {
+                coerced.insert(field_name.clone(), field_value.clone());
+            }
+        }
+        Ok(coerced)
+    }
+
+    /// Validate a typed [`crate::document::Document`] against this configuration.
+    ///
+    /// This is the typed counterpart to [`QuillConfig::validate`] used by the `Workflow`.
+    pub fn validate_document(
+        &self,
+        doc: &crate::document::Document,
+    ) -> Result<(), Vec<super::validation::ValidationError>> {
+        super::validation::validate_typed_document(self, doc)
     }
 
     fn coerce_cards_array_strict(

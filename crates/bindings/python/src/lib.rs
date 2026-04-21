@@ -9,7 +9,7 @@ pub use errors::{
     convert_render_error, CompilationError, ParseError, QuillmarkError, TemplateError,
 };
 pub use types::{
-    PyArtifact, PyDiagnostic, PyLocation, PyParsedDocument, PyQuill, PyQuillmark, PyRenderResult,
+    PyArtifact, PyDiagnostic, PyDocument, PyLocation, PyQuill, PyQuillmark, PyRenderResult,
     PyRenderSession, PyWorkflow,
 };
 
@@ -19,7 +19,7 @@ fn _quillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyQuillmark>()?;
     m.add_class::<PyWorkflow>()?;
     m.add_class::<PyQuill>()?;
-    m.add_class::<PyParsedDocument>()?;
+    m.add_class::<PyDocument>()?;
     m.add_class::<PyRenderResult>()?;
     m.add_class::<PyRenderSession>()?;
     m.add_class::<PyArtifact>()?;

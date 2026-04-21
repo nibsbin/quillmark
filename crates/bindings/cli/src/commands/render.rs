@@ -1,7 +1,7 @@
 use crate::errors::{CliError, Result};
 use crate::output::{derive_output_path, OutputWriter};
 use clap::Parser;
-use quillmark::{ParsedDocument, Quillmark};
+use quillmark::{Document, Quillmark};
 use quillmark_core::OutputFormat;
 use std::fs;
 use std::path::PathBuf;
@@ -81,7 +81,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             let markdown = fs::read_to_string(markdown_path)?;
 
             // Parse markdown
-            let output = ParsedDocument::from_markdown_with_warnings(&markdown)?;
+            let output = Document::from_markdown_with_warnings(&markdown)?;
 
             if args.verbose {
                 println!("Markdown parsed successfully");
@@ -101,7 +101,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             }
 
             // Parse markdown
-            let output = ParsedDocument::from_markdown_with_warnings(&markdown)?;
+            let output = Document::from_markdown_with_warnings(&markdown)?;
 
             if args.verbose {
                 println!("Example markdown parsed successfully");

@@ -1,6 +1,6 @@
 //! # Default Values Tests
 
-use quillmark::{ParsedDocument, Quillmark};
+use quillmark::{Document, Quillmark};
 use std::fs;
 use tempfile::TempDir;
 
@@ -48,7 +48,7 @@ main:
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\ntitle: My Document\n---\n\n# Content\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
     let result = workflow.dry_run(&parsed);
     assert!(
@@ -87,7 +87,7 @@ main:
 
     let markdown =
         "---\nQUILL: test_quill\ntitle: My Document\nstatus: published\n---\n\n# Content\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
     let result = workflow.dry_run(&parsed);
     assert!(
@@ -126,7 +126,7 @@ main:
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\n---\n\n# Content";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
     let dry_run_result = workflow.dry_run(&parsed);
     assert!(
@@ -165,7 +165,7 @@ main:
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\nstatus: published\n---\n\n# Content\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
     let result = workflow.dry_run(&parsed);
     assert!(

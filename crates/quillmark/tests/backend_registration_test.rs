@@ -1,6 +1,6 @@
 //! # Backend Registration Tests
 
-use quillmark::{OutputFormat, ParsedDocument, Quill, Quillmark, RenderError};
+use quillmark::{Document, OutputFormat, Quill, Quillmark, RenderError};
 use quillmark_core::{session::SessionHandle, Artifact, Backend, RenderOptions, RenderResult};
 use std::fs;
 use tempfile::TempDir;
@@ -101,7 +101,7 @@ fn test_workflow_with_custom_backend() {
     assert!(workflow.supported_formats().contains(&OutputFormat::Txt));
 
     let markdown = "---\nQUILL: custom_backend_quill\ntitle: Hello Custom Backend\n---\n\n# Test\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
     let result = workflow
         .render(&parsed, Some(OutputFormat::Txt))
         .expect("render failed");

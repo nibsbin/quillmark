@@ -1,8 +1,6 @@
 use crate::document::assemble::decompose;
 use crate::document::sentinel::is_valid_tag_name;
-use crate::document::{ParsedDocument, BODY_FIELD};
-use crate::value::QuillValue;
-use crate::version::QuillReference;
+use crate::document::Document;
 
 #[test]
 fn test_no_frontmatter() {
@@ -29,16 +27,17 @@ This is the body."#;
 
     let doc = decompose(markdown).unwrap();
 
-    assert_eq!(doc.body(), Some("\n# Hello World\n\nThis is the body."));
+    assert_eq!(doc.body(), "\n# Hello World\n\nThis is the body.");
     assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
         "Test Document"
     );
     assert_eq!(
-        doc.get_field("author").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("author").unwrap().as_str().unwrap(),
         "Test Author"
     );
-    assert_eq!(doc.fields().len(), 4); // title, author, body, CARDS
+    assert_eq!(doc.frontmatter().len(), 2); // title, author
+    assert_eq!(doc.cards().len(), 0);
     assert_eq!(doc.quill_reference().name, "test_quill");
 }
 
@@ -72,168 +71,16 @@ Content here."#;
 
     let doc = decompose(markdown).unwrap();
 
-    assert_eq!(doc.body(), Some("\nContent here."));
+    assert_eq!(doc.body(), "\nContent here.");
     assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
         "Complex Document"
     );
 
-    let tags = doc.get_field("tags").unwrap().as_array().unwrap();
+    let tags = doc.frontmatter().get("tags").unwrap().as_array().unwrap();
     assert_eq!(tags.len(), 2);
     assert_eq!(tags[0].as_str().unwrap(), "test");
     assert_eq!(tags[1].as_str().unwrap(), "yaml");
-}
-
-#[test]
-fn test_with_defaults_empty_document() {
-    use std::collections::HashMap;
-
-    let mut defaults = HashMap::new();
-    defaults.insert(
-        "status".to_string(),
-        QuillValue::from_json(serde_json::json!("draft")),
-    );
-    defaults.insert(
-        "version".to_string(),
-        QuillValue::from_json(serde_json::json!(1)),
-    );
-
-    // Create an empty parsed document
-    let doc = ParsedDocument::new(HashMap::new(), QuillReference::latest("test".to_string()));
-    let doc_with_defaults = doc.with_defaults(&defaults);
-
-    // Check that defaults were applied
-    assert_eq!(
-        doc_with_defaults
-            .get_field("status")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "draft"
-    );
-    assert_eq!(
-        doc_with_defaults
-            .get_field("version")
-            .unwrap()
-            .as_number()
-            .unwrap()
-            .as_i64()
-            .unwrap(),
-        1
-    );
-}
-
-#[test]
-fn test_with_defaults_preserves_existing_values() {
-    use std::collections::HashMap;
-
-    let mut defaults = HashMap::new();
-    defaults.insert(
-        "status".to_string(),
-        QuillValue::from_json(serde_json::json!("draft")),
-    );
-
-    // Create document with existing status
-    let mut fields = HashMap::new();
-    fields.insert(
-        "status".to_string(),
-        QuillValue::from_json(serde_json::json!("published")),
-    );
-    let doc = ParsedDocument::new(fields, QuillReference::latest("test".to_string()));
-
-    let doc_with_defaults = doc.with_defaults(&defaults);
-
-    // Existing value should be preserved
-    assert_eq!(
-        doc_with_defaults
-            .get_field("status")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "published"
-    );
-}
-
-#[test]
-fn test_with_defaults_partial_application() {
-    use std::collections::HashMap;
-
-    let mut defaults = HashMap::new();
-    defaults.insert(
-        "status".to_string(),
-        QuillValue::from_json(serde_json::json!("draft")),
-    );
-    defaults.insert(
-        "version".to_string(),
-        QuillValue::from_json(serde_json::json!(1)),
-    );
-
-    // Create document with only one field
-    let mut fields = HashMap::new();
-    fields.insert(
-        "status".to_string(),
-        QuillValue::from_json(serde_json::json!("published")),
-    );
-    let doc = ParsedDocument::new(fields, QuillReference::latest("test".to_string()));
-
-    let doc_with_defaults = doc.with_defaults(&defaults);
-
-    // Existing field preserved, missing field gets default
-    assert_eq!(
-        doc_with_defaults
-            .get_field("status")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "published"
-    );
-    assert_eq!(
-        doc_with_defaults
-            .get_field("version")
-            .unwrap()
-            .as_number()
-            .unwrap()
-            .as_i64()
-            .unwrap(),
-        1
-    );
-}
-
-#[test]
-fn test_with_defaults_no_defaults() {
-    use std::collections::HashMap;
-
-    let defaults = HashMap::new(); // Empty defaults map
-
-    let doc = ParsedDocument::new(HashMap::new(), QuillReference::latest("test".to_string()));
-    let doc_with_defaults = doc.with_defaults(&defaults);
-
-    // No defaults should be applied
-    assert!(doc_with_defaults.fields().is_empty());
-}
-
-#[test]
-fn test_with_defaults_complex_types() {
-    use std::collections::HashMap;
-
-    let mut defaults = HashMap::new();
-    defaults.insert(
-        "tags".to_string(),
-        QuillValue::from_json(serde_json::json!(["default", "tag"])),
-    );
-
-    let doc = ParsedDocument::new(HashMap::new(), QuillReference::latest("test".to_string()));
-    let doc_with_defaults = doc.with_defaults(&defaults);
-
-    // Complex default value should be applied
-    let tags = doc_with_defaults
-        .get_field("tags")
-        .unwrap()
-        .as_array()
-        .unwrap();
-    assert_eq!(tags.len(), 2);
-    assert_eq!(tags[0].as_str().unwrap(), "default");
-    assert_eq!(tags[1].as_str().unwrap(), "tag");
 }
 
 #[test]
@@ -288,23 +135,17 @@ Body of item 1."#;
 
     let doc = decompose(markdown).unwrap();
 
-    assert_eq!(doc.body(), Some("\nMain body content.\n\n"));
+    assert_eq!(doc.body(), "\nMain body content.\n\n");
     assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
         "Main Document"
     );
 
-    // Cards are now in CARDS array with CARD discriminator
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 1);
-
-    let item = cards[0].as_object().unwrap();
-    assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-    assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
-    assert_eq!(
-        item.get(BODY_FIELD).unwrap().as_str().unwrap(),
-        "\nBody of item 1."
-    );
+    assert_eq!(doc.cards().len(), 1);
+    let card = &doc.cards()[0];
+    assert_eq!(card.tag(), "items");
+    assert_eq!(card.fields().get("name").unwrap().as_str().unwrap(), "Item 1");
+    assert_eq!(card.body(), "\nBody of item 1.");
 }
 
 #[test]
@@ -330,18 +171,15 @@ tags: [c, d]
 Second item body."#;
 
     let doc = decompose(markdown).unwrap();
+    assert_eq!(doc.cards().len(), 2);
 
-    // Cards are in CARDS array
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 2);
+    let card1 = &doc.cards()[0];
+    assert_eq!(card1.tag(), "items");
+    assert_eq!(card1.fields().get("name").unwrap().as_str().unwrap(), "Item 1");
 
-    let item1 = cards[0].as_object().unwrap();
-    assert_eq!(item1.get("CARD").unwrap().as_str().unwrap(), "items");
-    assert_eq!(item1.get("name").unwrap().as_str().unwrap(), "Item 1");
-
-    let item2 = cards[1].as_object().unwrap();
-    assert_eq!(item2.get("CARD").unwrap().as_str().unwrap(), "items");
-    assert_eq!(item2.get("name").unwrap().as_str().unwrap(), "Item 2");
+    let card2 = &doc.cards()[1];
+    assert_eq!(card2.tag(), "items");
+    assert_eq!(card2.fields().get("name").unwrap().as_str().unwrap(), "Item 2");
 }
 
 #[test]
@@ -370,22 +208,10 @@ Section 2 content."#;
 
     let doc = decompose(markdown).unwrap();
 
-    assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Global");
-    assert_eq!(doc.body(), Some("\nGlobal body.\n\n"));
-
-    // Cards are in unified CARDS array
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 2);
-    assert_eq!(
-        cards[0]
-            .as_object()
-            .unwrap()
-            .get("CARD")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "sections"
-    );
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Global");
+    assert_eq!(doc.body(), "\nGlobal body.\n\n");
+    assert_eq!(doc.cards().len(), 2);
+    assert_eq!(doc.cards()[0].tag(), "sections");
 }
 
 #[test]
@@ -401,16 +227,11 @@ CARD: items
 Body without metadata."#;
 
     let doc = decompose(markdown).unwrap();
-
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 1);
-
-    let item = cards[0].as_object().unwrap();
-    assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-    assert_eq!(
-        item.get(BODY_FIELD).unwrap().as_str().unwrap(),
-        "\nBody without metadata."
-    );
+    assert_eq!(doc.cards().len(), 1);
+    let card = &doc.cards()[0];
+    assert_eq!(card.tag(), "items");
+    assert!(card.fields().is_empty());
+    assert_eq!(card.body(), "\nBody without metadata.");
 }
 
 #[test]
@@ -425,13 +246,10 @@ name: Item
 ---"#;
 
     let doc = decompose(markdown).unwrap();
-
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 1);
-
-    let item = cards[0].as_object().unwrap();
-    assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-    assert_eq!(item.get(BODY_FIELD).unwrap().as_str().unwrap(), "");
+    assert_eq!(doc.cards().len(), 1);
+    let card = &doc.cards()[0];
+    assert_eq!(card.tag(), "items");
+    assert_eq!(card.body(), ""); // empty, not absent
 }
 
 #[test]
@@ -482,7 +300,6 @@ Scope item 1 body"#;
 
 #[test]
 fn test_empty_global_array_with_card() {
-    // CARD type names CAN now conflict with frontmatter field names
     let markdown = r#"---
 QUILL: test_quill
 items: []
@@ -560,14 +377,13 @@ More content.
 
     let doc = decompose(markdown).unwrap();
     // The --- inside the code block should NOT be parsed as metadata
-    assert!(doc.body().unwrap().contains("fake: frontmatter"));
-    assert!(doc.get_field("fake").is_none());
+    assert!(doc.body().contains("fake: frontmatter"));
+    assert!(doc.frontmatter().get("fake").is_none());
 }
 
 #[test]
 fn test_tildes_are_fences() {
     // Per CommonMark: tildes (~~~) are valid fenced code block delimiters.
-    // So --- inside ~~~ should NOT be parsed as a metadata block.
     let markdown = r#"---
 QUILL: test_quill
 title: Test
@@ -585,14 +401,12 @@ More content.
 "#;
 
     let doc = decompose(markdown).unwrap();
-    assert!(doc.body().unwrap().contains("fake: frontmatter"));
-    assert!(doc.get_field("fake").is_none());
+    assert!(doc.body().contains("fake: frontmatter"));
+    assert!(doc.frontmatter().get("fake").is_none());
 }
 
 #[test]
 fn test_four_backticks_are_fences() {
-    // Per CommonMark: 4+ backticks are valid fenced code block delimiters.
-    // So --- inside ```` should NOT be parsed as a metadata block.
     let markdown = r#"---
 QUILL: test_quill
 title: Test
@@ -610,13 +424,12 @@ More content.
 "#;
 
     let doc = decompose(markdown).unwrap();
-    assert!(doc.body().unwrap().contains("fake: frontmatter"));
-    assert!(doc.get_field("fake").is_none());
+    assert!(doc.body().contains("fake: frontmatter"));
+    assert!(doc.frontmatter().get("fake").is_none());
 }
 
 #[test]
 fn test_invalid_tag_syntax() {
-    // CARD must follow a prior QUILL fence per spec §4 F1.
     let markdown = r#"---
 QUILL: test_quill
 ---
@@ -681,20 +494,15 @@ title: Section 1
 Section 1 body"#;
 
     let doc = decompose(markdown).unwrap();
+    assert_eq!(doc.cards().len(), 2);
 
-    // All cards in unified CARDS array
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 2);
+    let card0 = &doc.cards()[0];
+    assert_eq!(card0.tag(), "items");
+    assert_eq!(card0.fields().get("name").unwrap().as_str().unwrap(), "Item 1");
 
-    // First card is "items" type
-    let item = cards[0].as_object().unwrap();
-    assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-    assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
-
-    // Second card is "sections" type
-    let section = cards[1].as_object().unwrap();
-    assert_eq!(section.get("CARD").unwrap().as_str().unwrap(), "sections");
-    assert_eq!(section.get("title").unwrap().as_str().unwrap(), "Section 1");
+    let card1 = &doc.cards()[1];
+    assert_eq!(card1.tag(), "sections");
+    assert_eq!(card1.fields().get("title").unwrap().as_str().unwrap(), "Section 1");
 }
 
 #[test]
@@ -725,14 +533,11 @@ id: 3
 Third"#;
 
     let doc = decompose(markdown).unwrap();
+    assert_eq!(doc.cards().len(), 3);
 
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 3);
-
-    for (i, card) in cards.iter().enumerate() {
-        let mapping = card.as_object().unwrap();
-        assert_eq!(mapping.get("CARD").unwrap().as_str().unwrap(), "items");
-        let id = mapping.get("id").unwrap().as_i64().unwrap();
+    for (i, card) in doc.cards().iter().enumerate() {
+        assert_eq!(card.tag(), "items");
+        let id = card.fields().get("id").unwrap().as_i64().unwrap();
         assert_eq!(id, (i + 1) as i64);
     }
 }
@@ -784,48 +589,32 @@ rating: 4
 
     let doc = decompose(markdown).unwrap();
 
-    // Verify global fields
-    assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
-        "Product Catalog"
-    );
-    assert_eq!(
-        doc.get_field("author").unwrap().as_str().unwrap(),
-        "John Doe"
-    );
-    assert_eq!(
-        doc.get_field("date").unwrap().as_str().unwrap(),
-        "2024-01-01"
-    );
+    // Verify global frontmatter
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Product Catalog");
+    assert_eq!(doc.frontmatter().get("author").unwrap().as_str().unwrap(), "John Doe");
+    assert_eq!(doc.frontmatter().get("date").unwrap().as_str().unwrap(), "2024-01-01");
 
     // Verify global body
-    assert!(doc.body().unwrap().contains("main catalog description"));
+    assert!(doc.body().contains("main catalog description"));
 
-    // All cards in unified CARDS array
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 4); // 2 products + 2 reviews
+    // 4 cards total
+    assert_eq!(doc.cards().len(), 4);
 
     // First 2 are products
-    let product1 = cards[0].as_object().unwrap();
-    assert_eq!(product1.get("CARD").unwrap().as_str().unwrap(), "products");
-    assert_eq!(product1.get("name").unwrap().as_str().unwrap(), "Widget A");
-    assert_eq!(product1.get("price").unwrap().as_f64().unwrap(), 19.99);
+    assert_eq!(doc.cards()[0].tag(), "products");
+    assert_eq!(doc.cards()[0].fields().get("name").unwrap().as_str().unwrap(), "Widget A");
+    assert_eq!(doc.cards()[0].fields().get("price").unwrap().as_f64().unwrap(), 19.99);
 
-    let product2 = cards[1].as_object().unwrap();
-    assert_eq!(product2.get("CARD").unwrap().as_str().unwrap(), "products");
-    assert_eq!(product2.get("name").unwrap().as_str().unwrap(), "Gadget B");
+    assert_eq!(doc.cards()[1].tag(), "products");
+    assert_eq!(doc.cards()[1].fields().get("name").unwrap().as_str().unwrap(), "Gadget B");
 
     // Last 2 are reviews
-    let review1 = cards[2].as_object().unwrap();
-    assert_eq!(review1.get("CARD").unwrap().as_str().unwrap(), "reviews");
-    assert_eq!(
-        review1.get("product").unwrap().as_str().unwrap(),
-        "Widget A"
-    );
-    assert_eq!(review1.get("rating").unwrap().as_i64().unwrap(), 5);
+    assert_eq!(doc.cards()[2].tag(), "reviews");
+    assert_eq!(doc.cards()[2].fields().get("product").unwrap().as_str().unwrap(), "Widget A");
+    assert_eq!(doc.cards()[2].fields().get("rating").unwrap().as_i64().unwrap(), 5);
 
-    // Total fields: title, author, date, body, CARDS = 5
-    assert_eq!(doc.fields().len(), 5);
+    // Frontmatter has 3 fields: title, author, date
+    assert_eq!(doc.frontmatter().len(), 3);
 }
 
 #[test]
@@ -839,20 +628,14 @@ memo_from: [ORG/SYMBOL]
 This is the memo body."#;
 
     let doc = decompose(markdown).unwrap();
-
-    // Verify quill tag is set
     assert_eq!(doc.quill_reference().name, "usaf_memo");
-
-    // Verify fields from quill block become frontmatter
     assert_eq!(
-        doc.get_field("memo_for").unwrap().as_array().unwrap()[0]
+        doc.frontmatter().get("memo_for").unwrap().as_array().unwrap()[0]
             .as_str()
             .unwrap(),
         "ORG/SYMBOL"
     );
-
-    // Verify body
-    assert_eq!(doc.body(), Some("\nThis is the memo body."));
+    assert_eq!(doc.body(), "\nThis is the memo body.");
 }
 
 #[test]
@@ -872,40 +655,15 @@ name: Section 1
 Section 1 body."#;
 
     let doc = decompose(markdown).unwrap();
-
-    // Verify quill tag
     assert_eq!(doc.quill_reference().name, "document");
-
-    // Verify global field from quill block
-    assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
-        "Test Document"
-    );
-
-    // Verify card blocks work via CARDS array
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 1);
-    assert_eq!(
-        cards[0]
-            .as_object()
-            .unwrap()
-            .get("CARD")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "sections"
-    );
-
-    // Verify body
-    assert_eq!(doc.body(), Some("\nMain body.\n\n"));
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test Document");
+    assert_eq!(doc.cards().len(), 1);
+    assert_eq!(doc.cards()[0].tag(), "sections");
+    assert_eq!(doc.body(), "\nMain body.\n\n");
 }
 
 #[test]
 fn test_multiple_quill_directives_error() {
-    // A second fence whose first key is QUILL (instead of CARD) fails F1
-    // and is delegated to CommonMark. A near-miss warning is emitted per
-    // spec §4.2; the document itself parses successfully with the stray
-    // `---` lines preserved in the body.
     let markdown = r#"---
 QUILL: first
 ---
@@ -914,13 +672,13 @@ QUILL: first
 QUILL: second
 ---"#;
 
-    let output = ParsedDocument::from_markdown_with_warnings(markdown).unwrap();
+    let output = Document::from_markdown_with_warnings(markdown).unwrap();
     assert!(output
         .warnings
         .iter()
         .any(|w| w.code.as_deref() == Some("parse::near_miss_sentinel")
             && w.message.contains("QUILL")));
-    assert!(output.document.body().unwrap().contains("QUILL: second"));
+    assert!(output.document.body().contains("QUILL: second"));
 }
 
 #[test]
@@ -986,7 +744,6 @@ CARD: items
 
 #[test]
 fn test_blank_lines_in_frontmatter() {
-    // New parsing standard: blank lines are allowed within YAML blocks
     let markdown = r#"---
 QUILL: test_quill
 title: Test Document
@@ -1003,28 +760,19 @@ tags:
 This is the body."#;
 
     let doc = decompose(markdown).unwrap();
-
-    assert_eq!(doc.body(), Some("\n# Hello World\n\nThis is the body."));
+    assert_eq!(doc.body(), "\n# Hello World\n\nThis is the body.");
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test Document");
+    assert_eq!(doc.frontmatter().get("author").unwrap().as_str().unwrap(), "Test Author");
     assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
-        "Test Document"
-    );
-    assert_eq!(
-        doc.get_field("author").unwrap().as_str().unwrap(),
-        "Test Author"
-    );
-    assert_eq!(
-        doc.get_field("description").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("description").unwrap().as_str().unwrap(),
         "This has a blank line above it"
     );
-
-    let tags = doc.get_field("tags").unwrap().as_array().unwrap();
+    let tags = doc.frontmatter().get("tags").unwrap().as_array().unwrap();
     assert_eq!(tags.len(), 2);
 }
 
 #[test]
 fn test_blank_lines_in_scope_blocks() {
-    // Blank lines should be allowed in CARD blocks too
     let markdown = r#"---
 QUILL: test_quill
 ---
@@ -1043,24 +791,17 @@ tags:
 Body of item 1."#;
 
     let doc = decompose(markdown).unwrap();
-
-    // Cards are in CARDS array
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 1);
-
-    let item = cards[0].as_object().unwrap();
-    assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-    assert_eq!(item.get("name").unwrap().as_str().unwrap(), "Item 1");
-    assert_eq!(item.get("price").unwrap().as_f64().unwrap(), 19.99);
-
-    let tags = item.get("tags").unwrap().as_array().unwrap();
+    assert_eq!(doc.cards().len(), 1);
+    let card = &doc.cards()[0];
+    assert_eq!(card.tag(), "items");
+    assert_eq!(card.fields().get("name").unwrap().as_str().unwrap(), "Item 1");
+    assert_eq!(card.fields().get("price").unwrap().as_f64().unwrap(), 19.99);
+    let tags = card.fields().get("tags").unwrap().as_array().unwrap();
     assert_eq!(tags.len(), 2);
 }
 
 #[test]
 fn test_triple_dash_in_body_without_sentinel_is_delegated() {
-    // Triple-dash pairs without a QUILL or CARD sentinel fail F1 and are
-    // delegated to CommonMark, so the `---` lines stay in the body.
     let markdown = r#"---
 QUILL: test_quill
 title: Test
@@ -1073,7 +814,7 @@ First paragraph.
 Second paragraph."#;
 
     let doc = decompose(markdown).unwrap();
-    let body = doc.body().unwrap();
+    let body = doc.body();
     assert!(body.contains("First paragraph."));
     assert!(body.contains("Second paragraph."));
     assert!(body.contains("---"));
@@ -1081,8 +822,6 @@ Second paragraph."#;
 
 #[test]
 fn test_lone_triple_dash_in_body_is_delegated() {
-    // A single `---` line not preceded by a blank fails F2 and is left as
-    // body content.
     let markdown = r#"---
 QUILL: test_quill
 title: Test
@@ -1094,7 +833,7 @@ First paragraph.
 Second paragraph."#;
 
     let doc = decompose(markdown).unwrap();
-    let body = doc.body().unwrap();
+    let body = doc.body();
     assert!(body.contains("First paragraph."));
     assert!(body.contains("Second paragraph."));
     assert!(body.contains("---"));
@@ -1102,7 +841,6 @@ Second paragraph."#;
 
 #[test]
 fn test_multiple_blank_lines_in_yaml() {
-    // Multiple blank lines should also be allowed
     let markdown = r#"---
 QUILL: test_quill
 title: Test
@@ -1117,13 +855,9 @@ version: 1.0
 Body content."#;
 
     let doc = decompose(markdown).unwrap();
-
-    assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
-    assert_eq!(
-        doc.get_field("author").unwrap().as_str().unwrap(),
-        "John Doe"
-    );
-    assert_eq!(doc.get_field("version").unwrap().as_f64().unwrap(), 1.0);
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test");
+    assert_eq!(doc.frontmatter().get("author").unwrap().as_str().unwrap(), "John Doe");
+    assert_eq!(doc.frontmatter().get("version").unwrap().as_f64().unwrap(), 1.0);
 }
 
 #[test]
@@ -1137,10 +871,7 @@ key: value
 ---
 "#;
     let doc = decompose(markdown).unwrap();
-
-    // The comment should be ignored (or at least not cause a parse error)
-    // The frontmatter should be parsed
-    let key = doc.get_field("key").and_then(|v| v.as_str());
+    let key = doc.frontmatter().get("key").and_then(|v| v.as_str());
     assert_eq!(key, Some("value"));
 }
 
@@ -1151,84 +882,43 @@ fn test_extended_metadata_demo_file() {
     let markdown = include_str!("../../../../fixtures/resources/extended_metadata_demo.md");
     let doc = decompose(markdown).unwrap();
 
-    // Verify global fields
-    assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
-        "Extended Metadata Demo"
-    );
-    assert_eq!(
-        doc.get_field("author").unwrap().as_str().unwrap(),
-        "Quillmark Team"
-    );
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Extended Metadata Demo");
+    assert_eq!(doc.frontmatter().get("author").unwrap().as_str().unwrap(), "Quillmark Team");
     // version is parsed as a number by YAML
-    assert_eq!(doc.get_field("version").unwrap().as_f64().unwrap(), 1.0);
+    assert_eq!(doc.frontmatter().get("version").unwrap().as_f64().unwrap(), 1.0);
 
     // Verify body
-    assert!(doc
-        .body()
-        .unwrap()
-        .contains("extended YAML metadata standard"));
+    assert!(doc.body().contains("extended YAML metadata standard"));
 
-    // All cards are now in unified CARDS array
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 5); // 3 features + 2 use_cases
+    // 5 cards total: 3 features + 2 use_cases
+    assert_eq!(doc.cards().len(), 5);
 
-    // Count features and use_cases cards
-    let features_count = cards
-        .iter()
-        .filter(|c| {
-            c.as_object()
-                .unwrap()
-                .get("CARD")
-                .unwrap()
-                .as_str()
-                .unwrap()
-                == "features"
-        })
-        .count();
-    let use_cases_count = cards
-        .iter()
-        .filter(|c| {
-            c.as_object()
-                .unwrap()
-                .get("CARD")
-                .unwrap()
-                .as_str()
-                .unwrap()
-                == "use_cases"
-        })
-        .count();
+    let features_count = doc.cards().iter().filter(|c| c.tag() == "features").count();
+    let use_cases_count = doc.cards().iter().filter(|c| c.tag() == "use_cases").count();
     assert_eq!(features_count, 3);
     assert_eq!(use_cases_count, 2);
 
     // Check first card is a feature
-    let feature1 = cards[0].as_object().unwrap();
-    assert_eq!(feature1.get("CARD").unwrap().as_str().unwrap(), "features");
+    assert_eq!(doc.cards()[0].tag(), "features");
     assert_eq!(
-        feature1.get("name").unwrap().as_str().unwrap(),
+        doc.cards()[0].fields().get("name").unwrap().as_str().unwrap(),
         "Tag Directives"
     );
 }
 
 #[test]
 fn test_input_size_limit() {
-    // Create markdown larger than MAX_INPUT_SIZE (10 MB)
     let size = crate::error::MAX_INPUT_SIZE + 1;
     let large_markdown = "a".repeat(size);
 
     let result = decompose(&large_markdown);
     assert!(result.is_err());
-
-    let err_msg = result.unwrap_err().to_string();
-    assert!(err_msg.contains("Input too large"));
+    assert!(result.unwrap_err().to_string().contains("Input too large"));
 }
 
 #[test]
 fn test_yaml_size_limit() {
-    // Create YAML block larger than MAX_YAML_SIZE (1 MB)
     let mut markdown = String::from("---\nQUILL: test_quill\n");
-
-    // Create a very large YAML field
     let size = crate::error::MAX_YAML_SIZE + 1;
     markdown.push_str("data: \"");
     markdown.push_str(&"x".repeat(size));
@@ -1236,15 +926,12 @@ fn test_yaml_size_limit() {
 
     let result = decompose(&markdown);
     assert!(result.is_err());
-
-    let err_msg = result.unwrap_err().to_string();
-    assert!(err_msg.contains("Input too large"));
+    assert!(result.unwrap_err().to_string().contains("Input too large"));
 }
 
 #[test]
 fn test_input_within_size_limit() {
-    // Create markdown just under the limit
-    let size = 1000; // Much smaller than limit
+    let size = 1000;
     let markdown = format!(
         "---\nQUILL: test_quill\ntitle: Test\n---\n\n{}",
         "a".repeat(size)
@@ -1256,17 +943,13 @@ fn test_input_within_size_limit() {
 
 #[test]
 fn test_yaml_within_size_limit() {
-    // Create YAML block well within the limit
     let markdown = "---\nQUILL: test_quill\ntitle: Test\nauthor: John Doe\n---\n\nBody content";
-
     let result = decompose(markdown);
     assert!(result.is_ok());
 }
 
 #[test]
 fn test_yaml_depth_limit() {
-    // Create deeply nested YAML that exceeds MAX_YAML_DEPTH (100 levels)
-    // This tests serde-saphyr's Budget.max_depth enforcement
     let mut yaml_content = String::new();
     for i in 0..110 {
         yaml_content.push_str(&"  ".repeat(i));
@@ -1278,7 +961,6 @@ fn test_yaml_depth_limit() {
 
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
-    // serde-saphyr returns "budget exceeded" or similar for depth violations
     assert!(
         err_msg.to_lowercase().contains("budget")
             || err_msg.to_lowercase().contains("depth")
@@ -1290,7 +972,6 @@ fn test_yaml_depth_limit() {
 
 #[test]
 fn test_yaml_depth_within_limit() {
-    // Create reasonably nested YAML (should succeed)
     let markdown = r#"---
 QUILL: test_quill
 level1:
@@ -1306,15 +987,13 @@ Body content"#;
     assert!(result.is_ok());
 }
 
-// Tests for guillemet preservation in parsing (guillemets are NOT converted during parsing)
-// Guillemet conversion now happens in process_plate, not during parsing
+// Guillemet preservation tests
+
 #[test]
 fn test_chevrons_preserved_in_body_no_frontmatter() {
     let markdown = "---\nQUILL: test_quill\n---\nUse <<raw content>> here.";
     let doc = decompose(markdown).unwrap();
-
-    // Body should preserve chevrons (conversion happens later in process_plate)
-    assert_eq!(doc.body(), Some("Use <<raw content>> here."));
+    assert_eq!(doc.body(), "Use <<raw content>> here.");
 }
 
 #[test]
@@ -1326,9 +1005,7 @@ title: Test
 
 Use <<raw content>> here."#;
     let doc = decompose(markdown).unwrap();
-
-    // Body should preserve chevrons
-    assert_eq!(doc.body(), Some("\nUse <<raw content>> here."));
+    assert_eq!(doc.body(), "\nUse <<raw content>> here.");
 }
 
 #[test]
@@ -1340,10 +1017,8 @@ title: Test <<with chevrons>>
 
 Body content."#;
     let doc = decompose(markdown).unwrap();
-
-    // YAML string values should preserve chevrons
     assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
         "Test <<with chevrons>>"
     );
 }
@@ -1359,8 +1034,7 @@ items:
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-
-    let items = doc.get_field("items").unwrap().as_array().unwrap();
+    let items = doc.frontmatter().get("items").unwrap().as_array().unwrap();
     assert_eq!(items[0].as_str().unwrap(), "<<first>>");
     assert_eq!(items[1].as_str().unwrap(), "<<second>>");
 }
@@ -1375,8 +1049,7 @@ metadata:
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-
-    let metadata = doc.get_field("metadata").unwrap().as_object().unwrap();
+    let metadata = doc.frontmatter().get("metadata").unwrap().as_object().unwrap();
     assert_eq!(
         metadata.get("description").unwrap().as_str().unwrap(),
         "<<nested value>>"
@@ -1388,21 +1061,16 @@ fn test_chevrons_preserved_in_code_blocks() {
     let markdown =
         "---\nQUILL: test_quill\n---\n```\n<<in code block>>\n```\n\n<<outside code block>>";
     let doc = decompose(markdown).unwrap();
-
-    let body = doc.body().unwrap();
-    // All chevrons should be preserved (no conversion during parsing)
+    let body = doc.body();
     assert!(body.contains("<<in code block>>"));
     assert!(body.contains("<<outside code block>>"));
 }
 
 #[test]
 fn test_chevrons_preserved_in_inline_code() {
-    let markdown =
-        "---\nQUILL: test_quill\n---\n`<<in inline code>>` and <<outside inline code>>";
+    let markdown = "---\nQUILL: test_quill\n---\n`<<in inline code>>` and <<outside inline code>>";
     let doc = decompose(markdown).unwrap();
-
-    let body = doc.body().unwrap();
-    // All chevrons should be preserved
+    let body = doc.body();
     assert!(body.contains("`<<in inline code>>`"));
     assert!(body.contains("<<outside inline code>>"));
 }
@@ -1423,13 +1091,9 @@ name: Item 1
 
 Use <<raw>> here."#;
     let doc = decompose(markdown).unwrap();
-
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    let item = cards[0].as_object().unwrap();
-    assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-    let item_body = item.get(BODY_FIELD).unwrap().as_str().unwrap();
-    // Tagged block body should preserve chevrons
-    assert!(item_body.contains("<<raw>>"));
+    assert_eq!(doc.cards().len(), 1);
+    assert_eq!(doc.cards()[0].tag(), "items");
+    assert!(doc.cards()[0].body().contains("<<raw>>"));
 }
 
 #[test]
@@ -1448,20 +1112,14 @@ description: "<<tagged yaml>>"
 
 Item body."#;
     let doc = decompose(markdown).unwrap();
-
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    let item = cards[0].as_object().unwrap();
-    assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-    // Tagged block YAML should preserve chevrons
     assert_eq!(
-        item.get("description").unwrap().as_str().unwrap(),
+        doc.cards()[0].fields().get("description").unwrap().as_str().unwrap(),
         "<<tagged yaml>>"
     );
 }
 
 #[test]
 fn test_yaml_numbers_not_affected() {
-    // Numbers should not be affected
     let markdown = r#"---
 QUILL: test_quill
 count: 42
@@ -1469,12 +1127,11 @@ count: 42
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.get_field("count").unwrap().as_i64().unwrap(), 42);
+    assert_eq!(doc.frontmatter().get("count").unwrap().as_i64().unwrap(), 42);
 }
 
 #[test]
 fn test_yaml_booleans_not_affected() {
-    // Booleans should not be affected
     let markdown = r#"---
 QUILL: test_quill
 active: true
@@ -1482,17 +1139,14 @@ active: true
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    assert!(doc.get_field("active").unwrap().as_bool().unwrap());
+    assert!(doc.frontmatter().get("active").unwrap().as_bool().unwrap());
 }
 
 #[test]
 fn test_multiline_chevrons_preserved() {
-    // Multiline chevrons should be preserved as-is
     let markdown = "---\nQUILL: test_quill\n---\n<<text\nacross lines>>";
     let doc = decompose(markdown).unwrap();
-
-    let body = doc.body().unwrap();
-    // Should contain the original chevrons
+    let body = doc.body();
     assert!(body.contains("<<text"));
     assert!(body.contains("across lines>>"));
 }
@@ -1501,15 +1155,10 @@ fn test_multiline_chevrons_preserved() {
 fn test_unmatched_chevrons_preserved() {
     let markdown = "---\nQUILL: test_quill\n---\n<<unmatched";
     let doc = decompose(markdown).unwrap();
-
-    let body = doc.body().unwrap();
-    // Unmatched should remain as-is
-    assert_eq!(body, "<<unmatched");
+    assert_eq!(doc.body(), "<<unmatched");
 }
 
-// --- robustness_tests ---
-
-// Edge cases for delimiter handling
+// Robustness tests
 
 #[test]
 fn test_empty_document() {
@@ -1533,7 +1182,6 @@ fn test_only_whitespace() {
 
 #[test]
 fn test_only_dashes() {
-    // "---" without newline is not a frontmatter delimiter → no blocks → QUILL error
     let result = decompose("---");
     assert!(result.is_err());
     assert!(result
@@ -1544,15 +1192,13 @@ fn test_only_dashes() {
 
 #[test]
 fn test_dashes_in_middle_of_line() {
-    // --- not at start of line should not be treated as delimiter
     let markdown = "---\nQUILL: test_quill\n---\nsome text --- more text";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.body(), Some("some text --- more text"));
+    assert_eq!(doc.body(), "some text --- more text");
 }
 
 #[test]
 fn test_four_dashes() {
-    // ---- is not a valid delimiter — QUILL required
     let result = decompose("----\ntitle: Test\n----\n\nBody");
     assert!(result.is_err());
     assert!(result
@@ -1563,33 +1209,29 @@ fn test_four_dashes() {
 
 #[test]
 fn test_crlf_line_endings() {
-    // Windows-style line endings
     let markdown = "---\r\nQUILL: test_quill\r\ntitle: Test\r\n---\r\n\r\nBody content.";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
-    assert!(doc.body().unwrap().contains("Body content."));
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test");
+    assert!(doc.body().contains("Body content."));
 }
 
 #[test]
 fn test_mixed_line_endings() {
-    // Mix of \n and \r\n
     let markdown = "---\nQUILL: test_quill\r\ntitle: Test\r\n---\n\nBody.";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test");
 }
 
 #[test]
 fn test_frontmatter_at_eof_no_trailing_newline() {
-    // Frontmatter closed at EOF without trailing newline
     let markdown = "---\nQUILL: test_quill\ntitle: Test\n---";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.get_field("title").unwrap().as_str().unwrap(), "Test");
-    assert_eq!(doc.body(), Some(""));
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Test");
+    assert_eq!(doc.body(), "");
 }
 
 #[test]
 fn test_empty_frontmatter() {
-    // Empty/whitespace-only frontmatter has no QUILL → error
     let markdown = "---\n \n---\n\nBody content.";
     let result = decompose(markdown);
     assert!(result.is_err());
@@ -1601,7 +1243,6 @@ fn test_empty_frontmatter() {
 
 #[test]
 fn test_whitespace_only_frontmatter() {
-    // Frontmatter with only whitespace → no QUILL → error
     let markdown = "---\n   \n\n   \n---\n\nBody.";
     let result = decompose(markdown);
     assert!(result.is_err());
@@ -1617,9 +1258,9 @@ fn test_whitespace_only_frontmatter() {
 fn test_unicode_in_yaml_keys() {
     let markdown = "---\nQUILL: test_quill\ntitre: Bonjour\nタイトル: こんにちは\n---\n\nBody.";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.get_field("titre").unwrap().as_str().unwrap(), "Bonjour");
+    assert_eq!(doc.frontmatter().get("titre").unwrap().as_str().unwrap(), "Bonjour");
     assert_eq!(
-        doc.get_field("タイトル").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("タイトル").unwrap().as_str().unwrap(),
         "こんにちは"
     );
 }
@@ -1629,7 +1270,7 @@ fn test_unicode_in_yaml_values() {
     let markdown = "---\nQUILL: test_quill\ntitle: 你好世界 🎉\n---\n\nBody.";
     let doc = decompose(markdown).unwrap();
     assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
         "你好世界 🎉"
     );
 }
@@ -1638,8 +1279,8 @@ fn test_unicode_in_yaml_values() {
 fn test_unicode_in_body() {
     let markdown = "---\nQUILL: test_quill\ntitle: Test\n---\n\n日本語テキスト with emoji 🚀";
     let doc = decompose(markdown).unwrap();
-    assert!(doc.body().unwrap().contains("日本語テキスト"));
-    assert!(doc.body().unwrap().contains("🚀"));
+    assert!(doc.body().contains("日本語テキスト"));
+    assert!(doc.body().contains("🚀"));
 }
 
 // YAML edge cases
@@ -1656,7 +1297,7 @@ description: |
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    let desc = doc.get_field("description").unwrap().as_str().unwrap();
+    let desc = doc.frontmatter().get("description").unwrap().as_str().unwrap();
     assert!(desc.contains("multiline string"));
     assert!(desc.contains('\n'));
 }
@@ -1673,8 +1314,7 @@ description: >
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    let desc = doc.get_field("description").unwrap().as_str().unwrap();
-    // Folded strings join lines with spaces
+    let desc = doc.frontmatter().get("description").unwrap().as_str().unwrap();
     assert!(desc.contains("folded"));
 }
 
@@ -1682,23 +1322,22 @@ Body."#;
 fn test_yaml_null_value() {
     let markdown = "---\nQUILL: test_quill\noptional: null\n---\n\nBody.";
     let doc = decompose(markdown).unwrap();
-    assert!(doc.get_field("optional").unwrap().is_null());
+    assert!(doc.frontmatter().get("optional").unwrap().is_null());
 }
 
 #[test]
 fn test_yaml_empty_string_value() {
     let markdown = "---\nQUILL: test_quill\nempty: \"\"\n---\n\nBody.";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.get_field("empty").unwrap().as_str().unwrap(), "");
+    assert_eq!(doc.frontmatter().get("empty").unwrap().as_str().unwrap(), "");
 }
 
 #[test]
 fn test_yaml_special_characters_in_string() {
-    let markdown =
-        "---\nQUILL: test_quill\nspecial: \"colon: here, and [brackets]\"\n---\n\nBody.";
+    let markdown = "---\nQUILL: test_quill\nspecial: \"colon: here, and [brackets]\"\n---\n\nBody.";
     let doc = decompose(markdown).unwrap();
     assert_eq!(
-        doc.get_field("special").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("special").unwrap().as_str().unwrap(),
         "colon: here, and [brackets]"
     );
 }
@@ -1717,7 +1356,7 @@ config:
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    let config = doc.get_field("config").unwrap().as_object().unwrap();
+    let config = doc.frontmatter().get("config").unwrap().as_object().unwrap();
     let db = config.get("database").unwrap().as_object().unwrap();
     assert_eq!(db.get("host").unwrap().as_str().unwrap(), "localhost");
     assert_eq!(db.get("port").unwrap().as_i64().unwrap(), 5432);
@@ -1736,18 +1375,13 @@ CARD: items
 name: Item
 ---"#;
     let doc = decompose(markdown).unwrap();
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 1);
-    let item = cards[0].as_object().unwrap();
-    assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-    assert_eq!(item.get(BODY_FIELD).unwrap().as_str().unwrap(), "");
+    assert_eq!(doc.cards().len(), 1);
+    assert_eq!(doc.cards()[0].tag(), "items");
+    assert_eq!(doc.cards()[0].body(), "");
 }
 
 #[test]
 fn test_card_consecutive_blocks() {
-    // Per spec §4 F2 each metadata fence opener must be preceded by a
-    // blank line (or start-of-file), so consecutive CARD blocks need a
-    // blank separator.
     let markdown = r#"---
 QUILL: test_quill
 ---
@@ -1762,28 +1396,9 @@ CARD: a
 id: 2
 ---"#;
     let doc = decompose(markdown).unwrap();
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 2);
-    assert_eq!(
-        cards[0]
-            .as_object()
-            .unwrap()
-            .get("CARD")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "a"
-    );
-    assert_eq!(
-        cards[1]
-            .as_object()
-            .unwrap()
-            .get("CARD")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "a"
-    );
+    assert_eq!(doc.cards().len(), 2);
+    assert_eq!(doc.cards()[0].tag(), "a");
+    assert_eq!(doc.cards()[1].tag(), "a");
 }
 
 #[test]
@@ -1799,11 +1414,8 @@ name: Item
 
 Some text with --- dashes in it."#;
     let doc = decompose(markdown).unwrap();
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    let item = cards[0].as_object().unwrap();
-    assert_eq!(item.get("CARD").unwrap().as_str().unwrap(), "items");
-    let body = item.get(BODY_FIELD).unwrap().as_str().unwrap();
-    assert!(body.contains("--- dashes"));
+    assert_eq!(doc.cards().len(), 1);
+    assert!(doc.cards()[0].body().contains("--- dashes"));
 }
 
 // QUILL directive edge cases
@@ -1833,14 +1445,8 @@ author: John Doe
 Body content."#;
     let doc = decompose(markdown).unwrap();
     assert_eq!(doc.quill_reference().name, "my_quill");
-    assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
-        "Document Title"
-    );
-    assert_eq!(
-        doc.get_field("author").unwrap().as_str().unwrap(),
-        "John Doe"
-    );
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "Document Title");
+    assert_eq!(doc.frontmatter().get("author").unwrap().as_str().unwrap(), "John Doe");
 }
 
 // Error handling
@@ -1889,7 +1495,6 @@ fn test_yaml_syntax_error_bad_indentation() {
     let markdown = "---\nitems:\n- one\n - two\n---\n\nBody.";
     let result = decompose(markdown);
     // Bad indentation may or may not be an error depending on YAML parser
-    // Just ensure it doesn't panic
     let _ = result;
 }
 
@@ -1897,26 +1502,23 @@ fn test_yaml_syntax_error_bad_indentation() {
 
 #[test]
 fn test_body_with_leading_newlines() {
-    let markdown =
-        "---\nQUILL: test_quill\ntitle: Test\n---\n\n\n\nBody with leading newlines.";
+    let markdown = "---\nQUILL: test_quill\ntitle: Test\n---\n\n\n\nBody with leading newlines.";
     let doc = decompose(markdown).unwrap();
-    // Body should preserve leading newlines after frontmatter
-    assert!(doc.body().unwrap().starts_with('\n'));
+    assert!(doc.body().starts_with('\n'));
 }
 
 #[test]
 fn test_body_with_trailing_newlines() {
     let markdown = "---\nQUILL: test_quill\ntitle: Test\n---\n\nBody.\n\n\n";
     let doc = decompose(markdown).unwrap();
-    // Body should preserve trailing newlines
-    assert!(doc.body().unwrap().ends_with('\n'));
+    assert!(doc.body().ends_with('\n'));
 }
 
 #[test]
 fn test_no_body_after_frontmatter() {
     let markdown = "---\nQUILL: test_quill\ntitle: Test\n---";
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.body(), Some(""));
+    assert_eq!(doc.body(), "");
 }
 
 // Tag name validation
@@ -1960,7 +1562,7 @@ fn test_invalid_tag_name_special_chars() {
     assert!(!is_valid_tag_name("my items"));
 }
 
-// Guillemet preprocessing in YAML
+// Guillemet preprocessing
 
 #[test]
 fn test_guillemet_in_yaml_preserves_non_strings() {
@@ -1977,19 +1579,17 @@ items:
 
 Body."#;
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.get_field("count").unwrap().as_i64().unwrap(), 42);
-    assert_eq!(doc.get_field("price").unwrap().as_f64().unwrap(), 19.99);
-    assert!(doc.get_field("active").unwrap().as_bool().unwrap());
+    assert_eq!(doc.frontmatter().get("count").unwrap().as_i64().unwrap(), 42);
+    assert_eq!(doc.frontmatter().get("price").unwrap().as_f64().unwrap(), 19.99);
+    assert!(doc.frontmatter().get("active").unwrap().as_bool().unwrap());
 }
 
 #[test]
 fn test_guillemet_double_conversion_prevention() {
-    // Ensure «» in input doesn't get double-processed
     let markdown = "---\nQUILL: test_quill\ntitle: Already «converted»\n---\n\nBody.";
     let doc = decompose(markdown).unwrap();
-    // Should remain as-is (not double-escaped)
     assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
         "Already «converted»"
     );
 }
@@ -2007,28 +1607,18 @@ title: "My Card"
 ---
 Body
 "#;
-    // This should SUCCEED according to new PARSE.md
     let doc = decompose(markdown).unwrap();
-
-    // Verify global field exists
     assert_eq!(
-        doc.get_field("my_card").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("my_card").unwrap().as_str().unwrap(),
         "some global value"
     );
-
-    // Verify Card exists in CARDS array
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert!(!cards.is_empty());
-    let card = cards
-        .iter()
-        .find(|v| v.get("CARD").and_then(|c| c.as_str()) == Some("my_card"))
-        .expect("Card not found");
-    assert_eq!(card.get("title").unwrap().as_str().unwrap(), "My Card");
+    assert_eq!(doc.cards().len(), 1);
+    assert_eq!(doc.cards()[0].tag(), "my_card");
+    assert_eq!(doc.cards()[0].fields().get("title").unwrap().as_str().unwrap(), "My Card");
 }
 
 #[test]
 fn test_yaml_custom_tags_in_frontmatter() {
-    // User-defined YAML tags like !fill should be accepted and ignored
     let markdown = r#"---
 QUILL: test_quill
 memo_from: !fill 2d lt example
@@ -2037,21 +1627,18 @@ regular_field: normal value
 
 Body content."#;
     let doc = decompose(markdown).unwrap();
-
-    // The tag !fill should be ignored, value parsed as string "2d lt example"
     assert_eq!(
-        doc.get_field("memo_from").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("memo_from").unwrap().as_str().unwrap(),
         "2d lt example"
     );
-    // Regular fields should still work
     assert_eq!(
-        doc.get_field("regular_field").unwrap().as_str().unwrap(),
+        doc.frontmatter().get("regular_field").unwrap().as_str().unwrap(),
         "normal value"
     );
-    assert_eq!(doc.body(), Some("\nBody content."));
+    assert_eq!(doc.body(), "\nBody content.");
 }
 
-/// Test the exact example from EXTENDED_MARKDOWN.md (lines 92-127)
+/// Test the exact example from EXTENDED_MARKDOWN.md
 #[test]
 fn test_spec_example() {
     let markdown = r#"---
@@ -2079,46 +1666,27 @@ Conclusion content.
 
     let doc = decompose(markdown).unwrap();
 
-    // Verify global fields
-    assert_eq!(
-        doc.get_field("title").unwrap().as_str().unwrap(),
-        "My Document"
-    );
+    assert_eq!(doc.frontmatter().get("title").unwrap().as_str().unwrap(), "My Document");
     assert_eq!(doc.quill_reference().name, "blog_post");
 
-    // Verify body contains horizontal rule (*** preserved)
-    let body = doc.body().unwrap();
+    let body = doc.body();
     assert!(body.contains("Main document body."));
     assert!(body.contains("***"));
     assert!(body.contains("More content after horizontal rule."));
 
-    // Verify CARDS array
-    let cards = doc.get_field("CARDS").unwrap().as_array().unwrap();
-    assert_eq!(cards.len(), 2);
-
-    // First card
-    let card1 = cards[0].as_object().unwrap();
-    assert_eq!(card1.get("CARD").unwrap().as_str().unwrap(), "section");
+    assert_eq!(doc.cards().len(), 2);
+    assert_eq!(doc.cards()[0].tag(), "section");
     assert_eq!(
-        card1.get("heading").unwrap().as_str().unwrap(),
+        doc.cards()[0].fields().get("heading").unwrap().as_str().unwrap(),
         "Introduction"
     );
+    assert_eq!(doc.cards()[0].body(), "Introduction content.\n\n");
+    assert_eq!(doc.cards()[1].tag(), "section");
     assert_eq!(
-        card1.get("BODY").unwrap().as_str().unwrap(),
-        "Introduction content.\n\n"
-    );
-
-    // Second card
-    let card2 = cards[1].as_object().unwrap();
-    assert_eq!(card2.get("CARD").unwrap().as_str().unwrap(), "section");
-    assert_eq!(
-        card2.get("heading").unwrap().as_str().unwrap(),
+        doc.cards()[1].fields().get("heading").unwrap().as_str().unwrap(),
         "Conclusion"
     );
-    assert_eq!(
-        card2.get("BODY").unwrap().as_str().unwrap(),
-        "Conclusion content.\n"
-    );
+    assert_eq!(doc.cards()[1].body(), "Conclusion content.\n");
 }
 
 #[test]
@@ -2130,4 +1698,89 @@ fn test_missing_quill_field_errors() {
         .unwrap_err()
         .to_string()
         .contains("Missing required QUILL field"));
+}
+
+// ── to_plate_json round-trip snapshot ─────────────────────────────────────────
+
+/// Verify to_plate_json produces the correct shape for a simple document.
+#[test]
+fn test_to_plate_json_simple() {
+    let doc = Document::from_markdown(
+        "---\nQUILL: my_quill\ntitle: Hello\n---\n\nBody text.\n",
+    )
+    .unwrap();
+    let json = doc.to_plate_json();
+
+    assert_eq!(json["QUILL"], "my_quill");
+    assert_eq!(json["title"], "Hello");
+    assert_eq!(json["BODY"], "\nBody text.\n");
+    assert!(json["CARDS"].is_array());
+    assert_eq!(json["CARDS"].as_array().unwrap().len(), 0);
+}
+
+/// to_plate_json with cards produces CARDS array with CARD, fields, BODY.
+#[test]
+fn test_to_plate_json_with_cards() {
+    let markdown = r#"---
+QUILL: usaf_memo
+title: Test
+---
+
+Global body.
+
+---
+CARD: indorsement
+for: ORG
+---
+
+Card body here.
+"#;
+    let doc = Document::from_markdown(markdown).unwrap();
+    let json = doc.to_plate_json();
+
+    assert_eq!(json["QUILL"], "usaf_memo");
+    assert_eq!(json["title"], "Test");
+    assert_eq!(json["BODY"], "\nGlobal body.\n\n");
+
+    let cards = json["CARDS"].as_array().unwrap();
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0]["CARD"], "indorsement");
+    assert_eq!(cards[0]["for"], "ORG");
+    assert_eq!(cards[0]["BODY"], "\nCard body here.\n");
+}
+
+/// to_plate_json parity: the QUILL key appears first.
+#[test]
+fn test_to_plate_json_quill_first() {
+    let doc = Document::from_markdown(
+        "---\nQUILL: my_quill\nfoo: bar\nbaz: qux\n---\n",
+    )
+    .unwrap();
+    let json = doc.to_plate_json();
+    let obj = json.as_object().unwrap();
+    let keys: Vec<&String> = obj.keys().collect();
+    assert_eq!(keys[0], "QUILL");
+}
+
+/// Snapshot test against usaf_memo fixture example.md
+#[test]
+fn test_to_plate_json_fixture_snapshot() {
+    let markdown = include_str!("../../../../fixtures/resources/quills/usaf_memo/0.1.0/example.md");
+    let doc = Document::from_markdown(markdown).unwrap();
+    let json = doc.to_plate_json();
+
+    // QUILL key is present
+    assert_eq!(json["QUILL"], "usaf_memo@0.1");
+    // frontmatter fields are present at top level
+    assert!(json.get("memo_for").is_some());
+    assert!(json.get("date").is_some());
+    // BODY and CARDS present
+    assert!(json.get("BODY").is_some());
+    assert!(json["CARDS"].is_array());
+    // One indorsement card
+    let cards = json["CARDS"].as_array().unwrap();
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0]["CARD"], "indorsement");
+    // Card has BODY
+    assert!(cards[0].get("BODY").is_some());
 }

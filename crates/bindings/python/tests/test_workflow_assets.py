@@ -2,7 +2,7 @@
 
 import pytest
 
-from quillmark import OutputFormat, ParsedDocument, Quill, Quillmark, QuillmarkError
+from quillmark import OutputFormat, Document, Quill, Quillmark, QuillmarkError
 
 
 def test_render_result_output_format(taro_quill_dir, taro_md):
@@ -10,7 +10,7 @@ def test_render_result_output_format(taro_quill_dir, taro_md):
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
     workflow = engine.workflow(quill)
-    parsed = ParsedDocument.from_markdown(taro_md)
+    parsed = Document.from_markdown(taro_md)
     result = workflow.render(parsed, OutputFormat.PDF)
     assert result.output_format == OutputFormat.PDF
 
@@ -20,7 +20,7 @@ def test_artifact_mime_type(taro_quill_dir, taro_md):
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
     workflow = engine.workflow(quill)
-    parsed = ParsedDocument.from_markdown(taro_md)
+    parsed = Document.from_markdown(taro_md)
 
     result_pdf = workflow.render(parsed, OutputFormat.PDF)
     assert len(result_pdf.artifacts) > 0

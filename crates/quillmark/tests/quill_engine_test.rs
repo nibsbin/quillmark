@@ -3,7 +3,7 @@
 use std::fs;
 use tempfile::TempDir;
 
-use quillmark::{OutputFormat, ParsedDocument, Quillmark};
+use quillmark::{Document, OutputFormat, Quillmark};
 
 fn make_quill_dir(temp_dir: &TempDir, name: &str, backend: &str) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join(name);
@@ -84,7 +84,7 @@ fn test_quill_engine_end_to_end() {
     let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: my_test_quill\ntitle: Test Document\n---\n\n# Introduction\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
     let result = workflow.dry_run(&parsed);
     assert!(result.is_ok(), "dry_run failed: {:?}", result);
@@ -101,7 +101,7 @@ fn test_quill_render_succeeds_with_engine_loaded_quill() {
         .quill_from_path(quill_path)
         .expect("quill_from_path failed");
     let parsed =
-        ParsedDocument::from_markdown("---\nQUILL: my_quill\n---\n").expect("parse failed");
+        Document::from_markdown("---\nQUILL: my_quill\n---\n").expect("parse failed");
     let result = quill.render(
         parsed,
         &quillmark_core::RenderOptions {

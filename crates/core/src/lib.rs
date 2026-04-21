@@ -15,12 +15,16 @@
 //! ## Quick Start
 //!
 //! ```no_run
-//! use quillmark_core::ParsedDocument;
+//! use quillmark_core::Document;
 //!
 //! // Parse markdown with frontmatter
-//! let markdown = "---\ntitle: Example\n---\n\n# Content";
-//! let doc = ParsedDocument::from_markdown(markdown);
-//!
+//! let markdown = "---\nQUILL: my_quill\ntitle: Example\n---\n\n# Content";
+//! let doc = Document::from_markdown(markdown).unwrap();
+//! let title = doc.frontmatter()
+//!     .get("title")
+//!     .and_then(|v| v.as_str())
+//!     .unwrap_or("Untitled");
+//! assert_eq!(title, "Example");
 //! ```
 //!
 //! ## Architecture
@@ -39,7 +43,7 @@
 //! - [Examples](https://github.com/nibsbin/quillmark/tree/main/examples) - Working examples
 
 pub mod document;
-pub use document::{ParseOutput, ParsedDocument, BODY_FIELD};
+pub use document::{Card, Document, ParseOutput};
 
 pub mod backend;
 pub use backend::Backend;

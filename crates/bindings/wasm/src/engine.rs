@@ -1,11 +1,10 @@
 //! Quillmark WASM Engine - Simplified API
 
 use crate::error::WasmError;
-use crate::types::{ParsedDocument, RenderOptions, RenderResult};
+use crate::types::{Diagnostic, RenderOptions, RenderResult};
 use js_sys::{Array, Uint8Array};
+use serde::Serialize;
 use std::collections::HashMap;
-use std::str::FromStr;
-use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 
 fn now_ms() -> f64 {
@@ -33,12 +32,30 @@ pub struct Quillmark {
 /// Opaque, shareable Quill handle.
 #[wasm_bindgen]
 pub struct Quill {
-    inner: Arc<quillmark_core::Quill>,
+    inner: std::sync::Arc<quillmark_core::Quill>,
 }
 
 #[wasm_bindgen]
 pub struct RenderSession {
     inner: quillmark_core::RenderSession,
+}
+
+/// Typed in-memory Quillmark document.
+///
+/// Created via `Document.fromMarkdown(markdown)`. Exposes:
+/// - `quillRef` (string)
+/// - `frontmatter` (JS object/Record)
+/// - `body` (string)
+/// - `cards` (array of Card objects)
+/// - `warnings` (array of Diagnostic objects)
+///
+/// `toMarkdown()` is a stub — it throws with a "not yet implemented (phase 4)"
+/// message until the emitter is implemented in Phase 4.
+#[wasm_bindgen]
+pub struct Document {
+    inner: quillmark_core::Document,
+    /// Parse-time warnings (e.g. near-miss sentinel lints).
+    parse_warnings: Vec<quillmark_core::Diagnostic>,
 }
 
 impl Default for Quillmark {
@@ -68,48 +85,9 @@ impl Quillmark {
             .quill(root)
             .map_err(|e| WasmError::from(e).to_js_value())?;
         Ok(Quill {
-            inner: Arc::new(quill),
+            inner: std::sync::Arc::new(quill),
         })
     }
-}
-
-fn parse_markdown_impl(markdown: &str) -> Result<ParsedDocument, JsValue> {
-    let output = quillmark_core::ParsedDocument::from_markdown_with_warnings(markdown)
-        .map_err(WasmError::from)
-        .map_err(|e| e.to_js_value())?;
-
-    let quill_ref = output.document.quill_reference().to_string();
-
-    let mut fields_obj = serde_json::Map::new();
-    for (key, value) in output.document.fields() {
-        fields_obj.insert(key.clone(), value.as_json().clone());
-    }
-
-    Ok(ParsedDocument {
-        fields: serde_json::Value::Object(fields_obj),
-        quill_ref,
-        warnings: output.warnings.into_iter().map(Into::into).collect(),
-    })
-}
-
-fn to_core_parsed(parsed: ParsedDocument) -> Result<quillmark_core::ParsedDocument, JsValue> {
-    let mut fields = std::collections::HashMap::new();
-
-    if let serde_json::Value::Object(obj) = parsed.fields {
-        for (key, value) in obj {
-            fields.insert(key, quillmark_core::value::QuillValue::from_json(value));
-        }
-    }
-
-    let quill_ref =
-        quillmark_core::version::QuillReference::from_str(&parsed.quill_ref).map_err(|e| {
-            JsValue::from_str(&format!(
-                "Invalid QUILL reference '{}': {}",
-                parsed.quill_ref, e
-            ))
-        })?;
-
-    Ok(quillmark_core::ParsedDocument::new(fields, quill_ref))
 }
 
 #[wasm_bindgen]
@@ -118,20 +96,17 @@ impl Quill {
     #[wasm_bindgen(js_name = render)]
     pub fn render(
         &self,
-        parsed: ParsedDocument,
+        doc: Document,
         opts: RenderOptions,
     ) -> Result<RenderResult, JsValue> {
         let start = now_ms();
-        let parse_warnings = parsed.warnings.clone();
-        let core_parsed = to_core_parsed(parsed).map_err(|e| {
-            WasmError::from(format!("render: invalid ParsedDocument: {:?}", e)).to_js_value()
-        })?;
+        let parse_warnings = doc.parse_warnings.clone();
         let rust_opts: quillmark_core::RenderOptions = opts.into();
         let result = self
             .inner
-            .render(core_parsed, &rust_opts)
+            .render(doc.inner, &rust_opts)
             .map_err(|e| WasmError::from(e).to_js_value())?;
-        let mut warnings: Vec<_> = parse_warnings;
+        let mut warnings: Vec<Diagnostic> = parse_warnings.into_iter().map(Into::into).collect();
         warnings.extend(result.warnings.into_iter().map(Into::into));
         Ok(RenderResult {
             artifacts: result.artifacts.into_iter().map(Into::into).collect(),
@@ -143,15 +118,101 @@ impl Quill {
 
     /// Open an iterative render session for page-selective rendering.
     #[wasm_bindgen(js_name = open)]
-    pub fn open(&self, parsed: ParsedDocument) -> Result<RenderSession, JsValue> {
-        let core_parsed = to_core_parsed(parsed).map_err(|e| {
-            WasmError::from(format!("open: invalid ParsedDocument: {:?}", e)).to_js_value()
-        })?;
+    pub fn open(&self, doc: Document) -> Result<RenderSession, JsValue> {
         let session = self
             .inner
-            .open(core_parsed)
+            .open(doc.inner)
             .map_err(|e| WasmError::from(e).to_js_value())?;
         Ok(RenderSession { inner: session })
+    }
+}
+
+#[wasm_bindgen]
+impl Document {
+    /// Parse markdown into a typed Document.
+    ///
+    /// Returns the document with any parse-time warnings accessible via `.warnings`.
+    /// Throws on parse errors.
+    #[wasm_bindgen(js_name = fromMarkdown)]
+    pub fn from_markdown(markdown: &str) -> Result<Document, JsValue> {
+        let output = quillmark_core::Document::from_markdown_with_warnings(markdown)
+            .map_err(WasmError::from)
+            .map_err(|e| e.to_js_value())?;
+
+        Ok(Document {
+            inner: output.document,
+            parse_warnings: output.warnings,
+        })
+    }
+
+    /// Emit canonical Quillmark Markdown.
+    ///
+    /// **Not yet implemented.** Throws with a clear message until Phase 4.
+    #[wasm_bindgen(js_name = toMarkdown)]
+    pub fn to_markdown(&self) -> Result<String, JsValue> {
+        Err(WasmError::from("toMarkdown not yet implemented (phase 4)").to_js_value())
+    }
+
+    /// The QUILL reference string (e.g. `"usaf_memo@0.1"`).
+    #[wasm_bindgen(getter, js_name = quillRef)]
+    pub fn quill_ref(&self) -> String {
+        self.inner.quill_reference().to_string()
+    }
+
+    /// Typed YAML frontmatter fields as a JS object (no QUILL, BODY, or CARDS keys).
+    #[wasm_bindgen(getter, js_name = frontmatter)]
+    pub fn frontmatter(&self) -> JsValue {
+        let mut map = serde_json::Map::new();
+        for (k, v) in self.inner.frontmatter() {
+            map.insert(k.clone(), v.as_json().clone());
+        }
+        let val = serde_json::Value::Object(map);
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        val.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
+    }
+
+    /// Global Markdown body between frontmatter and the first card.
+    ///
+    /// Empty string when no body is present.
+    #[wasm_bindgen(getter, js_name = body)]
+    pub fn body(&self) -> String {
+        self.inner.body().to_string()
+    }
+
+    /// Ordered list of card blocks as JS objects with `tag`, `fields`, and `body`.
+    #[wasm_bindgen(getter, js_name = cards)]
+    pub fn cards(&self) -> JsValue {
+        let cards: Vec<serde_json::Value> = self
+            .inner
+            .cards()
+            .iter()
+            .map(|card| {
+                let mut fields_map = serde_json::Map::new();
+                for (k, v) in card.fields() {
+                    fields_map.insert(k.clone(), v.as_json().clone());
+                }
+                serde_json::json!({
+                    "tag": card.tag(),
+                    "fields": serde_json::Value::Object(fields_map),
+                    "body": card.body(),
+                })
+            })
+            .collect();
+        let val = serde_json::Value::Array(cards);
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        val.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
+    }
+
+    /// Non-fatal parse-time warnings as a JS array of Diagnostic objects.
+    #[wasm_bindgen(getter, js_name = warnings)]
+    pub fn warnings(&self) -> JsValue {
+        let diags: Vec<Diagnostic> = self
+            .parse_warnings
+            .iter()
+            .map(|d| d.clone().into())
+            .collect();
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        diags.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
     }
 }
 
@@ -214,15 +275,6 @@ fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValu
 
     let bytes = value.unchecked_into::<Uint8Array>();
     Ok(bytes.to_vec())
-}
-
-#[wasm_bindgen]
-impl ParsedDocument {
-    /// Parse markdown into a ParsedDocument.
-    #[wasm_bindgen(js_name = fromMarkdown)]
-    pub fn from_markdown(markdown: &str) -> Result<ParsedDocument, JsValue> {
-        parse_markdown_impl(markdown)
-    }
 }
 
 #[wasm_bindgen]

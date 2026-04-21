@@ -6,7 +6,7 @@ use pyo3::types::PyDict; // PyDict
 use pyo3::Bound; // Bound
 
 use quillmark::{
-    Location, OutputFormat, ParsedDocument, Quill, Quillmark, RenderOptions, RenderResult,
+    Document, Location, OutputFormat, Quill, Quillmark, RenderOptions, RenderResult,
     RenderSession, SerializableDiagnostic, Workflow,
 };
 use std::path::PathBuf;
@@ -62,20 +62,20 @@ pub struct PyWorkflow {
 
 #[pymethods]
 impl PyWorkflow {
-    #[pyo3(signature = (parsed, format=None))]
+    #[pyo3(signature = (doc, format=None))]
     fn render(
         &self,
-        parsed: PyRef<PyParsedDocument>,
+        doc: PyRef<PyDocument>,
         format: Option<PyOutputFormat>,
     ) -> PyResult<PyRenderResult> {
         let rust_format = format.map(|f| f.into());
         let mut result = self
             .inner
-            .render(&parsed.inner, rust_format)
+            .render(&doc.inner, rust_format)
             .map_err(convert_render_error)?;
         // Prepend parse-time warnings so both parse and render diagnostics
         // travel on the single RenderResult.warnings channel.
-        let parse_warnings: Vec<_> = parsed
+        let parse_warnings: Vec<_> = doc
             .parse_warnings
             .iter()
             .map(|d| d.clone_without_source())
@@ -84,10 +84,10 @@ impl PyWorkflow {
         Ok(PyRenderResult { inner: result })
     }
 
-    fn open(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<PyRenderSession> {
+    fn open(&self, doc: PyRef<PyDocument>) -> PyResult<PyRenderSession> {
         let session = self
             .inner
-            .open(&parsed.inner)
+            .open(&doc.inner)
             .map_err(convert_render_error)?;
         Ok(PyRenderSession { inner: session })
     }
@@ -95,9 +95,9 @@ impl PyWorkflow {
     /// Perform a dry run validation without backend compilation.
     ///
     /// Raises QuillmarkError with diagnostic payload on validation failure.
-    fn dry_run(&self, parsed: PyRef<PyParsedDocument>) -> PyResult<()> {
+    fn dry_run(&self, doc: PyRef<PyDocument>) -> PyResult<()> {
         self.inner
-            .dry_run(&parsed.inner)
+            .dry_run(&doc.inner)
             .map_err(convert_render_error)
     }
 
@@ -121,13 +121,6 @@ impl PyWorkflow {
     }
 
     /// Add a dynamic asset to the workflow.
-    ///
-    /// Args:
-    ///     filename: Name of the asset file (e.g., "logo.png")
-    ///     contents: Binary contents of the asset
-    ///
-    /// Raises:
-    ///     QuillmarkError: If an asset with the same filename already exists
     fn add_asset(&mut self, filename: String, contents: Vec<u8>) -> PyResult<()> {
         self.inner
             .add_asset(filename, contents)
@@ -135,12 +128,6 @@ impl PyWorkflow {
     }
 
     /// Add multiple dynamic assets at once.
-    ///
-    /// Args:
-    ///     assets: List of tuples (filename, contents)
-    ///
-    /// Raises:
-    ///     QuillmarkError: If any asset filename collides
     fn add_assets(&mut self, assets: Vec<(String, Vec<u8>)>) -> PyResult<()> {
         self.inner.add_assets(assets).map_err(convert_render_error)
     }
@@ -156,13 +143,6 @@ impl PyWorkflow {
     }
 
     /// Add a dynamic font to the workflow.
-    ///
-    /// Args:
-    ///     filename: Name of the font file (e.g., "custom.ttf")
-    ///     contents: Binary contents of the font
-    ///
-    /// Raises:
-    ///     QuillmarkError: If a font with the same filename already exists
     fn add_font(&mut self, filename: String, contents: Vec<u8>) -> PyResult<()> {
         self.inner
             .add_font(filename, contents)
@@ -170,12 +150,6 @@ impl PyWorkflow {
     }
 
     /// Add multiple dynamic fonts at once.
-    ///
-    /// Args:
-    ///     fonts: List of tuples (filename, contents)
-    ///
-    /// Raises:
-    ///     QuillmarkError: If any font filename collides
     fn add_fonts(&mut self, fonts: Vec<(String, Vec<u8>)>) -> PyResult<()> {
         self.inner.add_fonts(fonts).map_err(convert_render_error)
     }
@@ -227,7 +201,6 @@ impl PyQuill {
 
     #[getter]
     fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        // Convert QuillValue to Python dict
         let dict = PyDict::new(py);
         for (key, value) in &self.inner.metadata {
             dict.set_item(key, quillvalue_to_py(py, value)?)?;
@@ -247,7 +220,6 @@ impl PyQuill {
 
     #[getter]
     fn defaults<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        // Convert cached defaults HashMap to Python dict
         let dict = PyDict::new(py);
         for (key, value) in self.inner.config.defaults() {
             dict.set_item(key, quillvalue_to_py(py, &value)?)?;
@@ -257,7 +229,6 @@ impl PyQuill {
 
     #[getter]
     fn examples<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
-        // Convert cached examples HashMap to Python dict of lists
         let dict = PyDict::new(py);
         for (key, values) in self.inner.config.examples() {
             let py_list = pyo3::types::PyList::empty(py);
@@ -281,10 +252,10 @@ impl PyQuill {
         Ok(formats)
     }
 
-    #[pyo3(signature = (parsed, format=None))]
+    #[pyo3(signature = (doc, format=None))]
     fn render(
         &self,
-        parsed: PyRef<'_, PyParsedDocument>,
+        doc: PyRef<'_, PyDocument>,
         format: Option<PyOutputFormat>,
     ) -> PyResult<PyRenderResult> {
         let rust_format = format.map(OutputFormat::from);
@@ -295,9 +266,9 @@ impl PyQuill {
         };
         let mut result = self
             .inner
-            .render(parsed.inner.clone(), &opts)
+            .render(doc.inner.clone(), &opts)
             .map_err(convert_render_error)?;
-        let parse_warnings: Vec<_> = parsed
+        let parse_warnings: Vec<_> = doc
             .parse_warnings
             .iter()
             .map(|d| d.clone_without_source())
@@ -306,27 +277,36 @@ impl PyQuill {
         Ok(PyRenderResult { inner: result })
     }
 
-    fn open(&self, parsed: PyRef<'_, PyParsedDocument>) -> PyResult<PyRenderSession> {
+    fn open(&self, doc: PyRef<'_, PyDocument>) -> PyResult<PyRenderSession> {
         let session = self
             .inner
-            .open(parsed.inner.clone())
+            .open(doc.inner.clone())
             .map_err(convert_render_error)?;
         Ok(PyRenderSession { inner: session })
     }
 }
 
-// ParsedDocument wrapper
-#[pyclass(name = "ParsedDocument")]
-pub struct PyParsedDocument {
-    pub(crate) inner: ParsedDocument,
+/// Python wrapper for the typed Quillmark `Document`.
+///
+/// Exposes:
+/// - `from_markdown(markdown)` — static constructor
+/// - `to_markdown()` — stub, raises NotImplementedError until Phase 4
+/// - `quill_ref()` — quill reference string
+/// - `frontmatter` — dict of typed YAML fields (no QUILL/BODY/CARDS)
+/// - `body` — global Markdown body (str, never None)
+/// - `cards` — list of `Card` dicts
+/// - `warnings` — list of `Diagnostic` objects
+#[pyclass(name = "Document")]
+pub struct PyDocument {
+    pub(crate) inner: Document,
     pub(crate) parse_warnings: Vec<quillmark_core::Diagnostic>,
 }
 
 #[pymethods]
-impl PyParsedDocument {
+impl PyDocument {
     #[staticmethod]
     fn from_markdown(markdown: &str) -> PyResult<Self> {
-        let output = ParsedDocument::from_markdown_with_warnings(markdown).map_err(|e| {
+        let output = Document::from_markdown_with_warnings(markdown).map_err(|e| {
             let py_err = PyErr::new::<crate::errors::ParseError, _>(e.to_string());
             Python::attach(|py| {
                 if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
@@ -337,12 +317,27 @@ impl PyParsedDocument {
             });
             py_err
         })?;
-        Ok(PyParsedDocument {
+        Ok(PyDocument {
             inner: output.document,
             parse_warnings: output.warnings,
         })
     }
 
+    /// Emit canonical Quillmark Markdown.
+    ///
+    /// Not yet implemented — raises `NotImplementedError` until Phase 4.
+    fn to_markdown(&self) -> PyResult<String> {
+        Err(pyo3::exceptions::PyNotImplementedError::new_err(
+            "to_markdown not yet implemented (phase 4)",
+        ))
+    }
+
+    /// The QUILL reference string (e.g. `"usaf_memo@0.1"`).
+    fn quill_ref(&self) -> String {
+        self.inner.quill_reference().to_string()
+    }
+
+    /// Non-fatal parse-time warnings.
     #[getter]
     fn warnings(&self) -> Vec<PyDiagnostic> {
         self.parse_warnings
@@ -351,28 +346,40 @@ impl PyParsedDocument {
             .collect()
     }
 
-    fn body(&self) -> Option<&str> {
+    /// Global Markdown body (str, never None).
+    #[getter]
+    fn body(&self) -> &str {
         self.inner.body()
     }
 
-    fn get_field<'py>(&self, key: &str, py: Python<'py>) -> PyResult<Option<Bound<'py, PyAny>>> {
-        match self.inner.get_field(key) {
-            Some(value) => Ok(Some(quillvalue_to_py(py, value)?)),
-            None => Ok(None),
-        }
-    }
-
+    /// Typed YAML frontmatter fields (no QUILL, BODY, or CARDS keys).
     #[getter]
-    fn fields<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+    fn frontmatter<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, value) in self.inner.fields() {
+        for (key, value) in self.inner.frontmatter() {
             dict.set_item(key, quillvalue_to_py(py, value)?)?;
         }
         Ok(dict)
     }
 
-    fn quill_ref(&self) -> String {
-        self.inner.quill_reference().to_string()
+    /// Ordered list of card blocks.
+    ///
+    /// Each card is a dict with keys: `tag` (str), `fields` (dict), `body` (str).
+    #[getter]
+    fn cards<'py>(&self, py: Python<'py>) -> PyResult<Vec<Bound<'py, PyDict>>> {
+        let mut result = Vec::new();
+        for card in self.inner.cards() {
+            let d = PyDict::new(py);
+            d.set_item("tag", card.tag())?;
+            let fields_dict = PyDict::new(py);
+            for (k, v) in card.fields() {
+                fields_dict.set_item(k, quillvalue_to_py(py, v)?)?;
+            }
+            d.set_item("fields", fields_dict)?;
+            d.set_item("body", card.body())?;
+            result.push(d);
+        }
+        Ok(result)
     }
 }
 
