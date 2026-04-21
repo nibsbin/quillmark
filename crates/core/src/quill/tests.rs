@@ -1782,9 +1782,8 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    // Simulate YAML parsing where numbers are represented as strings
-    let mut fields = std::collections::HashMap::new();
-    fields.insert(
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert(
         "scores".to_string(),
         crate::value::QuillValue::from_json(serde_json::json!([
             {"name": "Math", "value": "95", "active": "true"},
@@ -1792,7 +1791,7 @@ main:
         ])),
     );
 
-    let coerced = config.coerce(&fields).unwrap();
+    let coerced = config.coerce_frontmatter(&frontmatter).unwrap();
     let scores = coerced.get("scores").unwrap();
     let arr = scores.as_array().unwrap();
 
@@ -1828,35 +1827,17 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
-        "count".to_string(),
-        QuillValue::from_json(serde_json::json!("42")),
-    );
-    fields.insert(
-        "active".to_string(),
-        QuillValue::from_json(serde_json::json!("true")),
-    );
-    fields.insert(
-        "signed_on".to_string(),
-        QuillValue::from_json(serde_json::json!("2026-04-13")),
-    );
-    fields.insert(
-        "created_at".to_string(),
-        QuillValue::from_json(serde_json::json!("2026-04-13T20:00:00Z")),
-    );
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert("count".to_string(), QuillValue::from_json(serde_json::json!("42")));
+    frontmatter.insert("active".to_string(), QuillValue::from_json(serde_json::json!("true")));
+    frontmatter.insert("signed_on".to_string(), QuillValue::from_json(serde_json::json!("2026-04-13")));
+    frontmatter.insert("created_at".to_string(), QuillValue::from_json(serde_json::json!("2026-04-13T20:00:00Z")));
 
-    let coerced = config.coerce(&fields).unwrap();
+    let coerced = config.coerce_frontmatter(&frontmatter).unwrap();
     assert_eq!(coerced.get("count").unwrap().as_i64(), Some(42));
     assert_eq!(coerced.get("active").unwrap().as_bool(), Some(true));
-    assert_eq!(
-        coerced.get("signed_on").unwrap().as_str(),
-        Some("2026-04-13")
-    );
-    assert_eq!(
-        coerced.get("created_at").unwrap().as_str(),
-        Some("2026-04-13T20:00:00Z")
-    );
+    assert_eq!(coerced.get("signed_on").unwrap().as_str(), Some("2026-04-13"));
+    assert_eq!(coerced.get("created_at").unwrap().as_str(), Some("2026-04-13T20:00:00Z"));
 }
 
 #[test]
@@ -1875,13 +1856,10 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
-        "count".to_string(),
-        QuillValue::from_json(serde_json::json!("42")),
-    );
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert("count".to_string(), QuillValue::from_json(serde_json::json!("42")));
 
-    let coerced = config.coerce(&fields).unwrap();
+    let coerced = config.coerce_frontmatter(&frontmatter).unwrap();
     assert_eq!(coerced.get("count").unwrap().as_i64(), Some(42));
 }
 
@@ -1901,13 +1879,10 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
-        "count".to_string(),
-        QuillValue::from_json(serde_json::json!("42.5")),
-    );
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert("count".to_string(), QuillValue::from_json(serde_json::json!("42.5")));
 
-    let error = config.coerce(&fields).unwrap_err();
+    let error = config.coerce_frontmatter(&frontmatter).unwrap_err();
     assert!(matches!(
         error,
         super::CoercionError::Uncoercible { ref path, ref target, .. }
@@ -1938,8 +1913,8 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert(
         "items".to_string(),
         QuillValue::from_json(serde_json::json!([
             {"score": "90", "active": "true"},
@@ -1947,7 +1922,7 @@ main:
         ])),
     );
 
-    let coerced = config.coerce(&fields).unwrap();
+    let coerced = config.coerce_frontmatter(&frontmatter).unwrap();
     let items = coerced.get("items").unwrap().as_array().unwrap();
     let first = items[0].as_object().unwrap();
     let second = items[1].as_object().unwrap();
@@ -1976,19 +1951,13 @@ cards:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
-        "CARDS".to_string(),
-        QuillValue::from_json(serde_json::json!([
-            {"CARD": "indorsement", "score": "100", "active": "false"}
-        ])),
-    );
+    let mut card_fields = indexmap::IndexMap::new();
+    card_fields.insert("score".to_string(), QuillValue::from_json(serde_json::json!("100")));
+    card_fields.insert("active".to_string(), QuillValue::from_json(serde_json::json!("false")));
 
-    let coerced = config.coerce(&fields).unwrap();
-    let cards = coerced.get("CARDS").unwrap().as_array().unwrap();
-    let card = cards[0].as_object().unwrap();
-    assert_eq!(card["score"], serde_json::json!(100));
-    assert_eq!(card["active"], serde_json::json!(false));
+    let coerced = config.coerce_card("indorsement", &card_fields).unwrap();
+    assert_eq!(coerced.get("score").unwrap().as_i64(), Some(100));
+    assert_eq!(coerced.get("active").unwrap().as_bool(), Some(false));
 }
 
 #[test]
@@ -2007,13 +1976,10 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
-        "signed_on".to_string(),
-        QuillValue::from_json(serde_json::json!("13-04-2026")),
-    );
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert("signed_on".to_string(), QuillValue::from_json(serde_json::json!("13-04-2026")));
 
-    let error = config.coerce(&fields).unwrap_err();
+    let error = config.coerce_frontmatter(&frontmatter).unwrap_err();
     assert!(matches!(
         error,
         super::CoercionError::Uncoercible { ref path, ref target, .. }
@@ -2037,13 +2003,10 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
-        "count".to_string(),
-        QuillValue::from_json(serde_json::json!("forty-two")),
-    );
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert("count".to_string(), QuillValue::from_json(serde_json::json!("forty-two")));
 
-    let error = config.coerce(&fields).unwrap_err();
+    let error = config.coerce_frontmatter(&frontmatter).unwrap_err();
     assert!(matches!(
         error,
         super::CoercionError::Uncoercible { ref path, ref target, .. }
