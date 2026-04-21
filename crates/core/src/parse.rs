@@ -195,7 +195,18 @@ fn yaml_parse_options() -> serde_saphyr::Options {
 /// trailing whitespace (spaces or tabs).
 fn is_fence_marker_line(line: &str) -> bool {
     let line = line.strip_suffix('\r').unwrap_or(line);
-    match line.strip_prefix("---") {
+    // F3 (spec §4): the fence marker is preceded by zero to three spaces of
+    // indentation. Four or more leading spaces (or any leading tab — a tab
+    // counts as four columns of indentation) make the line indented code per
+    // CommonMark §4.4, not a metadata fence.
+    let indent = line.bytes().take_while(|&b| b == b' ').count();
+    if indent > 3 {
+        return false;
+    }
+    if line.as_bytes().first() == Some(&b'\t') {
+        return false;
+    }
+    match line[indent..].strip_prefix("---") {
         Some(rest) => rest.chars().all(|c| c == ' ' || c == '\t'),
         None => false,
     }
@@ -473,13 +484,20 @@ fn extract_sentinels(
 /// Implements fence rules F1 (sentinel) and F2 (leading blank). Returns
 /// successfully detected blocks plus any lint warnings emitted for
 /// near-miss sentinels (§4.2).
-fn find_metadata_blocks(
-    markdown: &str,
-) -> Result<(Vec<MetadataBlock>, Vec<Diagnostic>), ParseError> {
+/// Outcome of the fence-detection pass: the recognised metadata blocks, any
+/// non-fatal diagnostics accumulated along the way, and (if applicable) the
+/// first-fence F1 failure captured so the top-level error can be specific.
+type FenceScan = (Vec<MetadataBlock>, Vec<Diagnostic>, Option<(String, usize)>);
+
+fn find_metadata_blocks(markdown: &str) -> Result<FenceScan, ParseError> {
     let lines = Lines::new(markdown);
     let mut blocks: Vec<MetadataBlock> = Vec::new();
     let mut warnings: Vec<Diagnostic> = Vec::new();
-    let mut open_code_fence: Option<(u8, usize)> = None;
+    // (char, min_run_len, opener_line_index)
+    let mut open_code_fence: Option<(u8, usize, usize)> = None;
+    // First-fence F1 failure context, captured for a clearer top-level error
+    // if no valid QUILL fence is ever found. (actual_key, 1-based line).
+    let mut first_fence_issue: Option<(String, usize)> = None;
 
     let mut k: usize = 0;
     while k < lines.len() {
@@ -487,7 +505,7 @@ fn find_metadata_blocks(
 
         // Track open CommonMark fenced-code-block state so that `---` inside
         // them is ignored (spec §3 "Fences inside fenced code blocks").
-        if let Some((ch, min)) = open_code_fence {
+        if let Some((ch, min, _opener)) = open_code_fence {
             if let Some((_, _, true)) = code_fence_on_line(text, Some((ch, min))) {
                 open_code_fence = None;
             }
@@ -495,7 +513,7 @@ fn find_metadata_blocks(
             continue;
         }
         if let Some((ch, run_len, _)) = code_fence_on_line(text, None) {
-            open_code_fence = Some((ch, run_len));
+            open_code_fence = Some((ch, run_len, k));
             k += 1;
             continue;
         }
@@ -553,6 +571,12 @@ fn find_metadata_blocks(
                         )
                         .with_code("parse::near_miss_sentinel".to_string()),
                     );
+                    // Capture the first-fence F1 failure so the top-level
+                    // "Missing required QUILL field" error can be specific
+                    // about the actual key found.
+                    if blocks.is_empty() && first_fence_issue.is_none() {
+                        first_fence_issue = Some((actual.to_string(), k + 1));
+                    }
                 }
             }
             // Delegate this opener to CommonMark — advance past the opener
@@ -587,7 +611,23 @@ fn find_metadata_blocks(
         });
     }
 
-    Ok((blocks, warnings))
+    // Unclosed fenced code block at end-of-document: any metadata fences below
+    // the unclosed opener were silently shielded, which is almost never what
+    // the author intended. Surface it as a non-fatal warning.
+    if let Some((_, _, opener_line)) = open_code_fence {
+        warnings.push(
+            Diagnostic::new(
+                Severity::Warning,
+                format!(
+                    "Unclosed fenced code block opened at line {} — end-of-document reached without a matching closing fence. Any `---/---` pairs after this line were treated as code and not parsed as metadata fences.",
+                    opener_line + 1
+                ),
+            )
+            .with_code("parse::unclosed_code_block".to_string()),
+        );
+    }
+
+    Ok((blocks, warnings, first_fence_issue))
 }
 
 /// Decompose markdown, discarding warnings. Test- and `from_markdown`-facing.
@@ -595,11 +635,34 @@ fn decompose(markdown: &str) -> Result<ParsedDocument, crate::error::ParseError>
     decompose_with_warnings(markdown).map(|(doc, _)| doc)
 }
 
+/// Construct the top-level "missing QUILL" error message. If we saw a
+/// first-fence F1 failure, tailor the message to the actual key found:
+/// a case-insensitive match to `QUILL` is a typo, anything else is a
+/// key-ordering problem.
+fn missing_quill_message(first_fence_issue: Option<(String, usize)>) -> String {
+    match first_fence_issue {
+        Some((actual, line)) if actual.eq_ignore_ascii_case("QUILL") => format!(
+            "Missing required QUILL field. Found `{}:` at line {} — expected `QUILL:` (uppercase). Change the key to `QUILL` to register this fence as the document frontmatter.",
+            actual, line
+        ),
+        Some((actual, line)) => format!(
+            "Missing required QUILL field. The first YAML key in the frontmatter must be `QUILL:` (found `{}:` at line {}). Reorder the frontmatter so `QUILL: <name>` is the first key.",
+            actual, line
+        ),
+        None => "Missing required QUILL field. Add `QUILL: <name>` to the frontmatter.".to_string(),
+    }
+}
+
 /// Decompose markdown into frontmatter fields and body, returning any
 /// non-fatal warnings collected during fence scanning.
 fn decompose_with_warnings(
     markdown: &str,
 ) -> Result<(ParsedDocument, Vec<Diagnostic>), crate::error::ParseError> {
+    // Strip a leading UTF-8 BOM if present. Editors on Windows (Notepad, some
+    // Word exports) prepend `\u{FEFF}` which otherwise defeats F2 because the
+    // first line no longer matches `---`.
+    let markdown = markdown.strip_prefix('\u{FEFF}').unwrap_or(markdown);
+
     // Check input size limit
     if markdown.len() > crate::error::MAX_INPUT_SIZE {
         return Err(crate::error::ParseError::InputTooLarge {
@@ -612,11 +675,11 @@ fn decompose_with_warnings(
 
     // Find all metadata blocks. F1/F2 already guarantee that block 0 carries
     // QUILL and that every subsequent block carries CARD.
-    let (blocks, warnings) = find_metadata_blocks(markdown)?;
+    let (blocks, warnings, first_fence_issue) = find_metadata_blocks(markdown)?;
 
     if blocks.is_empty() {
         return Err(crate::error::ParseError::InvalidStructure(
-            "Missing required QUILL field. Add `QUILL: <name>` to the frontmatter.".to_string(),
+            missing_quill_message(first_fence_issue),
         ));
     }
 

@@ -271,8 +271,35 @@ pub fn fix_html_comment_fences(s: &str) -> String {
 /// assert_eq!(normalized, "<!-- comment -->\nSome text");
 /// ```
 pub fn normalize_markdown(markdown: &str) -> String {
-    let cleaned = strip_bidi_formatting(markdown);
+    let cleaned = normalize_line_endings(markdown);
+    let cleaned = strip_bidi_formatting(&cleaned);
     fix_html_comment_fences(&cleaned)
+}
+
+/// Convert CRLF (`\r\n`) and bare CR (`\r`) line endings to LF (`\n`).
+///
+/// YAML parsing already normalizes line endings inside scalar values, but the
+/// Markdown body is passed through verbatim. Authoring on Windows or pasting
+/// from some clipboard sources leaves `\r` bytes in the body which some
+/// backends render as visible garbage. This canonicalization is performed
+/// only on the Markdown body (see §7); YAML scalars are unaffected.
+fn normalize_line_endings(s: &str) -> String {
+    if !s.contains('\r') {
+        return s.to_string();
+    }
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\r' {
+            if chars.peek() == Some(&'\n') {
+                chars.next();
+            }
+            out.push('\n');
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// Normalize a single card object: apply `normalize_markdown` to the `BODY` key only.
