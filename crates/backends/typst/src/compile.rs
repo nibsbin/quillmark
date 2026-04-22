@@ -58,7 +58,7 @@ pub fn compile_to_document(
                     format!("Failed to create Typst compilation environment: {}", e),
                 )
                 .with_code("typst::world_creation".to_string())
-                .with_source(e),
+                .with_source(e.as_ref()),
             ),
         }
     })?;

@@ -22,7 +22,7 @@
 // at the crate root — Quillmark consumers work with the renderable `Quill`.
 pub use quillmark_core::{
     Artifact, Backend, Card, Diagnostic, Document, Location, OutputFormat, ParseError, ParseOutput,
-    RenderError, RenderOptions, RenderResult, RenderSession, SerializableDiagnostic, Severity,
+    RenderError, RenderOptions, RenderResult, RenderSession, Severity,
 };
 
 // Declare modules

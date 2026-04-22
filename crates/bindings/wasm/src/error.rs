@@ -1,36 +1,36 @@
 //! Error handling utilities for WASM bindings
 
-use quillmark_core::{ParseError, RenderError, SerializableDiagnostic};
+use quillmark_core::{Diagnostic, ParseError, RenderError, Severity};
 use serde::{Deserialize, Serialize};
 use wasm_bindgen::prelude::*;
 
-/// Serializable error for JavaScript consumption
+/// Serializable error for JavaScript consumption.
+///
+/// Shape matches the success-path [`quillmark_core::Diagnostic`] so JS
+/// consumers can use a single renderer for both thrown errors and warnings
+/// in `RenderResult.warnings`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(tag = "type")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum WasmError {
     /// Single diagnostic error
     Diagnostic {
         #[serde(flatten)]
-        diagnostic: SerializableDiagnostic,
+        diagnostic: Diagnostic,
     },
     /// Multiple diagnostics (e.g., compilation errors)
     MultipleDiagnostics {
         message: String,
-        diagnostics: Vec<SerializableDiagnostic>,
+        diagnostics: Vec<Diagnostic>,
     },
 }
 
 impl WasmError {
     /// Convert to a JS `Error` object for throwing.
     ///
-    /// The returned value is a real `Error` instance whose `message` is the
-    /// primary diagnostic message. Structured data is attached as a `diagnostic`
-    /// property for callers that need to branch on error codes, severity, etc.
-    ///
-    /// Returning an `Error` (rather than a plain object or `Map`) ensures that
-    /// JavaScript consumers — including Vitest's `toThrow(regex)` matcher —
-    /// see `err instanceof Error === true` and `err.message` populated.
+    /// Returns a real `Error` whose `.message` is the primary diagnostic
+    /// message. Structured data is attached as a `.diagnostic` property for
+    /// callers that need to branch on codes, severity, etc. The shape
+    /// mirrors the diagnostics in `result.warnings`.
     pub fn to_js_value(&self) -> JsValue {
         let message = match self {
             WasmError::Diagnostic { diagnostic } => diagnostic.message.clone(),
@@ -47,28 +47,8 @@ impl WasmError {
 
 impl From<ParseError> for WasmError {
     fn from(error: ParseError) -> Self {
-        match error {
-            ParseError::InputTooLarge { size, max } => WasmError::Diagnostic {
-                diagnostic: SerializableDiagnostic {
-                    severity: quillmark_core::Severity::Error,
-                    code: Some("input_too_large".to_string()),
-                    message: format!("Input too large: {} bytes (max: {} bytes)", size, max),
-                    primary: None,
-                    hint: None,
-                    source_chain: vec![],
-                },
-            },
-            // Fallback for other errors to basic diagnostic
-            _ => WasmError::Diagnostic {
-                diagnostic: SerializableDiagnostic {
-                    severity: quillmark_core::Severity::Error,
-                    code: None,
-                    message: error.to_string(),
-                    primary: None,
-                    hint: None,
-                    source_chain: vec![],
-                },
-            },
+        WasmError::Diagnostic {
+            diagnostic: error.to_diagnostic(),
         }
     }
 }
@@ -78,28 +58,15 @@ impl From<RenderError> for WasmError {
         match error {
             RenderError::CompilationFailed { diags } => WasmError::MultipleDiagnostics {
                 message: format!("Compilation failed with {} error(s)", diags.len()),
-                diagnostics: diags.into_iter().map(|d| d.into()).collect(),
+                diagnostics: diags,
             },
-            // All other variants contain a single Diagnostic
             _ => {
-                let diags = error.diagnostics();
-                if let Some(diag) = diags.first() {
-                    WasmError::Diagnostic {
-                        diagnostic: (*diag).into(),
-                    }
-                } else {
-                    // Fallback for edge cases
-                    WasmError::Diagnostic {
-                        diagnostic: SerializableDiagnostic {
-                            severity: quillmark_core::Severity::Error,
-                            code: None,
-                            message: error.to_string(),
-                            primary: None,
-                            hint: None,
-                            source_chain: vec![],
-                        },
-                    }
-                }
+                let diagnostic = error
+                    .diagnostics()
+                    .first()
+                    .map(|d| (*d).clone())
+                    .unwrap_or_else(|| Diagnostic::new(Severity::Error, error.to_string()));
+                WasmError::Diagnostic { diagnostic }
             }
         }
     }
@@ -108,14 +75,7 @@ impl From<RenderError> for WasmError {
 impl From<String> for WasmError {
     fn from(message: String) -> Self {
         WasmError::Diagnostic {
-            diagnostic: SerializableDiagnostic {
-                severity: quillmark_core::Severity::Error,
-                code: None,
-                message,
-                primary: None,
-                hint: None,
-                source_chain: vec![],
-            },
+            diagnostic: Diagnostic::new(Severity::Error, message),
         }
     }
 }
@@ -140,7 +100,7 @@ mod tests {
 
         match wasm_err {
             WasmError::Diagnostic { diagnostic } => {
-                assert_eq!(diagnostic.code.as_deref(), Some("input_too_large"));
+                assert_eq!(diagnostic.code.as_deref(), Some("parse::input_too_large"));
                 assert!(diagnostic.message.contains("Input too large"));
             }
             _ => panic!("Expected Diagnostic variant"),

@@ -36,9 +36,9 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
         severity,
         code,
         message: error.message.to_string(),
-        primary: location,
+        location,
         hint,
-        source: None,
+        source_chain: Vec::new(),
     }
 }
 
@@ -52,12 +52,12 @@ fn resolve_span_to_location(span: &typst::syntax::Span, world: &QuillWorld) -> O
 
     let text = source.text();
     let line = text[..range.start].matches('\n').count() + 1;
-    let col = range.start - text[..range.start].rfind('\n').map_or(0, |pos| pos + 1) + 1;
+    let column = range.start - text[..range.start].rfind('\n').map_or(0, |pos| pos + 1) + 1;
 
     Some(Location {
         file: source.id().vpath().as_rootless_path().display().to_string(),
         line: line as u32,
-        col: col as u32,
+        column: column as u32,
     })
 }
 

@@ -6,8 +6,7 @@ use pyo3::types::PyDict; // PyDict
 use pyo3::Bound; // Bound
 
 use quillmark::{
-    Document, Location, OutputFormat, Quill, Quillmark, RenderResult, RenderSession,
-    SerializableDiagnostic,
+    Diagnostic, Document, Location, OutputFormat, Quill, Quillmark, RenderResult, RenderSession,
 };
 use std::path::PathBuf;
 
@@ -156,12 +155,9 @@ impl PyQuill {
             .inner
             .render(&doc.inner, &opts)
             .map_err(convert_render_error)?;
-        let parse_warnings: Vec<_> = doc
-            .parse_warnings
-            .iter()
-            .map(|d| d.clone_without_source())
-            .collect();
-        result.warnings.splice(0..0, parse_warnings);
+        result
+            .warnings
+            .splice(0..0, doc.parse_warnings.iter().cloned());
         Ok(PyRenderResult { inner: result })
     }
 
@@ -243,8 +239,9 @@ impl PyDocument {
             let py_err = PyErr::new::<crate::errors::ParseError, _>(e.to_string());
             Python::attach(|py| {
                 if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                    let diag = e.to_diagnostic();
-                    let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                    let py_diag = crate::types::PyDiagnostic {
+                        inner: e.to_diagnostic(),
+                    };
                     let _ = exc.setattr("diagnostic", py_diag);
                 }
             });
@@ -275,7 +272,7 @@ impl PyDocument {
     fn warnings(&self) -> Vec<PyDiagnostic> {
         self.parse_warnings
             .iter()
-            .map(|d| PyDiagnostic { inner: d.into() })
+            .map(|d| PyDiagnostic { inner: d.clone() })
             .collect()
     }
 
@@ -508,7 +505,7 @@ impl PyRenderResult {
         self.inner
             .warnings
             .iter()
-            .map(|d| PyDiagnostic { inner: d.into() })
+            .map(|d| PyDiagnostic { inner: d.clone() })
             .collect()
     }
 
@@ -562,7 +559,7 @@ impl PyArtifact {
 #[pyclass(name = "Diagnostic")]
 #[derive(Clone)]
 pub struct PyDiagnostic {
-    pub(crate) inner: SerializableDiagnostic,
+    pub(crate) inner: Diagnostic,
 }
 
 #[pymethods]
@@ -583,9 +580,9 @@ impl PyDiagnostic {
     }
 
     #[getter]
-    fn primary(&self) -> Option<PyLocation> {
+    fn location(&self) -> Option<PyLocation> {
         self.inner
-            .primary
+            .location
             .as_ref()
             .map(|l| PyLocation { inner: l.clone() })
     }
@@ -621,8 +618,8 @@ impl PyLocation {
     }
 
     #[getter]
-    fn col(&self) -> usize {
-        self.inner.col as usize
+    fn column(&self) -> usize {
+        self.inner.column as usize
     }
 }
 

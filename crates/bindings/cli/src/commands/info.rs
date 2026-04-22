@@ -159,7 +159,11 @@ fn print_human_readable(quill: &quillmark::Quill) {
     // Plate and example
     println!(
         "  Has plate:   {}",
-        if source.plate().is_some() { "yes" } else { "no" }
+        if source.plate().is_some() {
+            "yes"
+        } else {
+            "no"
+        }
     );
     println!(
         "  Has example: {}",

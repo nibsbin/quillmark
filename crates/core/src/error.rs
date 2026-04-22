@@ -40,7 +40,7 @@
 //!     .with_location(Location {
 //!         file: "template.typ".to_string(),
 //!         line: 10,
-//!         col: 5,
+//!         column: 5,
 //!     })
 //!     .with_hint("Check variable spelling".to_string());
 //!
@@ -106,6 +106,7 @@ pub const MAX_FIELD_COUNT: usize = 1000;
 
 /// Error severity levels
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum Severity {
     /// Fatal error that prevents completion
     Error,
@@ -117,33 +118,41 @@ pub enum Severity {
 
 /// Location information for diagnostics
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Location {
     /// Source file name (e.g., "plate.typ", "template.typ", "input.md")
     pub file: String,
     /// Line number (1-indexed)
     pub line: u32,
     /// Column number (1-indexed)
-    pub col: u32,
+    pub column: u32,
 }
 
-/// Structured diagnostic information
-#[derive(Debug, serde::Serialize)]
+/// Structured diagnostic information.
+///
+/// `source_chain` is a flat list of error messages from any attached
+/// `std::error::Error` cause chain, eagerly walked at construction time so
+/// the diagnostic remains trivially `Clone` and fully serializable across
+/// every binding boundary.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Diagnostic {
     /// Error severity level
     pub severity: Severity,
     /// Optional error code (e.g., "E001", "typst::syntax")
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub code: Option<String>,
     /// Human-readable error message
     pub message: String,
     /// Primary source location
-    pub primary: Option<Location>,
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub location: Option<Location>,
     /// Optional hint for fixing the error
+    #[serde(skip_serializing_if = "Option::is_none", default)]
     pub hint: Option<String>,
-    /// Source error that caused this diagnostic (for error chaining)
-    /// Note: This field is excluded from serialization as Error trait
-    /// objects cannot be serialized
-    #[serde(skip)]
-    pub source: Option<Box<dyn std::error::Error + Send + Sync>>,
+    /// Flattened cause chain (outermost first).
+    #[serde(skip_serializing_if = "Vec::is_empty", default)]
+    pub source_chain: Vec<String>,
 }
 
 impl Diagnostic {
@@ -153,9 +162,9 @@ impl Diagnostic {
             severity,
             code: None,
             message,
-            primary: None,
+            location: None,
             hint: None,
-            source: None,
+            source_chain: Vec::new(),
         }
     }
 
@@ -167,7 +176,7 @@ impl Diagnostic {
 
     /// Set the primary location
     pub fn with_location(mut self, location: Location) -> Self {
-        self.primary = Some(location);
+        self.location = Some(location);
         self
     }
 
@@ -177,60 +186,14 @@ impl Diagnostic {
         self
     }
 
-    /// Set error source (chainable)
-    pub fn with_source(mut self, source: Box<dyn std::error::Error + Send + Sync>) -> Self {
-        self.source = Some(source);
+    /// Attach an error cause chain, walked eagerly into `source_chain`.
+    pub fn with_source(mut self, source: &(dyn std::error::Error + 'static)) -> Self {
+        let mut current: Option<&(dyn std::error::Error + 'static)> = Some(source);
+        while let Some(err) = current {
+            self.source_chain.push(err.to_string());
+            current = err.source();
+        }
         self
-    }
-
-    /// Clone this diagnostic while dropping any attached source chain.
-    pub fn clone_without_source(&self) -> Self {
-        Self {
-            severity: self.severity,
-            code: self.code.clone(),
-            message: self.message.clone(),
-            primary: self.primary.clone(),
-            hint: self.hint.clone(),
-            source: None,
-        }
-    }
-}
-
-impl Clone for Diagnostic {
-    /// Clone a `Diagnostic`, dropping the source error chain.
-    ///
-    /// The `source` field holds a boxed `dyn Error` which is not `Clone`;
-    /// the cloned value will have `source: None`. Use `clone_without_source()`
-    /// explicitly if you want to be clear about this loss.
-    fn clone(&self) -> Self {
-        self.clone_without_source()
-    }
-}
-
-impl PartialEq for Diagnostic {
-    /// Two `Diagnostic`s are equal when all fields except `source` are equal.
-    fn eq(&self, other: &Self) -> bool {
-        self.severity == other.severity
-            && self.code == other.code
-            && self.message == other.message
-            && self.primary == other.primary
-            && self.hint == other.hint
-    }
-}
-
-impl Diagnostic {
-    /// Get the source chain as a list of error messages
-    pub fn source_chain(&self) -> Vec<String> {
-        let mut chain = Vec::new();
-        let mut current_source = self
-            .source
-            .as_ref()
-            .map(|b| b.as_ref() as &dyn std::error::Error);
-        while let Some(err) = current_source {
-            chain.push(err.to_string());
-            current_source = err.source();
-        }
-        chain
     }
 
     /// Format diagnostic for pretty printing
@@ -249,8 +212,8 @@ impl Diagnostic {
             result.push_str(&format!(" ({})", code));
         }
 
-        if let Some(ref loc) = self.primary {
-            result.push_str(&format!("\n  --> {}:{}:{}", loc.file, loc.line, loc.col));
+        if let Some(ref loc) = self.location {
+            result.push_str(&format!("\n  --> {}:{}:{}", loc.file, loc.line, loc.column));
         }
 
         if let Some(ref hint) = self.hint {
@@ -264,7 +227,7 @@ impl Diagnostic {
     pub fn fmt_pretty_with_source(&self) -> String {
         let mut result = self.fmt_pretty();
 
-        for (i, cause) in self.source_chain().iter().enumerate() {
+        for (i, cause) in self.source_chain.iter().enumerate() {
             result.push_str(&format!("\n  cause {}: {}", i + 1, cause));
         }
 
@@ -275,55 +238,6 @@ impl Diagnostic {
 impl std::fmt::Display for Diagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.message)
-    }
-}
-
-/// Serializable diagnostic for cross-language boundaries
-///
-/// This type is used when diagnostics need to be serialized and sent across
-/// FFI boundaries (e.g., Python, WASM). Unlike `Diagnostic`, it does not
-/// contain the non-serializable `source` field, but instead includes a
-/// flattened `source_chain` for display purposes.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct SerializableDiagnostic {
-    /// Error severity level
-    pub severity: Severity,
-    /// Optional error code (e.g., "E001", "typst::syntax")
-    pub code: Option<String>,
-    /// Human-readable error message
-    pub message: String,
-    /// Primary source location
-    pub primary: Option<Location>,
-    /// Optional hint for fixing the error
-    pub hint: Option<String>,
-    /// Source chain as list of strings (for display purposes)
-    pub source_chain: Vec<String>,
-}
-
-impl From<Diagnostic> for SerializableDiagnostic {
-    fn from(diag: Diagnostic) -> Self {
-        let source_chain = diag.source_chain();
-        Self {
-            severity: diag.severity,
-            code: diag.code,
-            message: diag.message,
-            primary: diag.primary,
-            hint: diag.hint,
-            source_chain,
-        }
-    }
-}
-
-impl From<&Diagnostic> for SerializableDiagnostic {
-    fn from(diag: &Diagnostic) -> Self {
-        Self {
-            severity: diag.severity,
-            code: diag.code.clone(),
-            message: diag.message.clone(),
-            primary: diag.primary.clone(),
-            hint: diag.hint.clone(),
-            source_chain: diag.source_chain(),
-        }
     }
 }
 
@@ -528,11 +442,10 @@ mod tests {
     fn test_diagnostic_with_source_chain() {
         let root_err = std::io::Error::new(std::io::ErrorKind::NotFound, "File not found");
         let diag = Diagnostic::new(Severity::Error, "Rendering failed".to_string())
-            .with_source(Box::new(root_err));
+            .with_source(&root_err);
 
-        let chain = diag.source_chain();
-        assert_eq!(chain.len(), 1);
-        assert!(chain[0].contains("File not found"));
+        assert_eq!(diag.source_chain.len(), 1);
+        assert!(diag.source_chain[0].contains("File not found"));
     }
 
     #[test]
@@ -542,13 +455,14 @@ mod tests {
             .with_location(Location {
                 file: "test.typ".to_string(),
                 line: 10,
-                col: 5,
+                column: 5,
             });
 
-        let serializable: SerializableDiagnostic = diag.into();
-        let json = serde_json::to_string(&serializable).unwrap();
+        let json = serde_json::to_string(&diag).unwrap();
         assert!(json.contains("Test error"));
         assert!(json.contains("E001"));
+        assert!(json.contains("\"severity\":\"error\""));
+        assert!(json.contains("\"column\":5"));
     }
 
     #[test]
@@ -571,7 +485,7 @@ mod tests {
             .with_location(Location {
                 file: "input.md".to_string(),
                 line: 5,
-                col: 10,
+                column: 10,
             })
             .with_hint("Use the new field name instead".to_string());
 
@@ -588,7 +502,7 @@ mod tests {
         let root_err = std::io::Error::other("Underlying error");
         let diag = Diagnostic::new(Severity::Error, "Top-level error".to_string())
             .with_code("E002".to_string())
-            .with_source(Box::new(root_err));
+            .with_source(&root_err);
 
         let output = diag.fmt_pretty_with_source();
         assert!(output.contains("[ERROR]"));
