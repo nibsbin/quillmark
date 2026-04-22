@@ -51,14 +51,21 @@ jobs:
           CURRENT="${{ steps.current.outputs.version }}"
 
           if [ "${{ inputs.prerelease }}" == "true" ]; then
-            # cargo-release has no "minor-rc" compound bump, so compute the
-            # target version ourselves: bump, then append -rc.1.
-            BASE="${CURRENT%%-*}"  # strip pre-release suffix (e.g. 0.58.1-rc.1 → 0.58.1)
-            IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
-            if [ "${{ inputs.bump }}" == "minor" ]; then
-              NEXT="${MAJOR}.$((MINOR + 1)).0-rc.1"
+            # cargo-release has no "minor-rc" compound bump, so we compute the
+            # target version ourselves.
+            if [[ "$CURRENT" == *-rc.* ]]; then
+              # Already on an RC — increment the RC number (e.g. 0.59.0-rc.1 → 0.59.0-rc.2)
+              RC_NUM="${CURRENT##*-rc.}"
+              BASE_WITH_RC="${CURRENT%-rc.*}"
+              NEXT="${BASE_WITH_RC}-rc.$((RC_NUM + 1))"
             else
-              NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))-rc.1"
+              # Stable version — bump and start at rc.1
+              IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+              if [ "${{ inputs.bump }}" == "minor" ]; then
+                NEXT="${MAJOR}.$((MINOR + 1)).0-rc.1"
+              else
+                NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))-rc.1"
+              fi
             fi
           else
             NEXT="${{ inputs.bump }}"
