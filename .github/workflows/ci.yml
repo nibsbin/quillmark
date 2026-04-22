@@ -74,8 +74,23 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Check WASM build
-        run: cargo check --package quillmark-wasm --target wasm32-unknown-unknown --locked
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install wasm-bindgen-cli
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.118
+
+      - name: Install npm dependencies
+        working-directory: crates/bindings/wasm
+        run: npm install
+
+      - name: Build and test WASM
+        working-directory: crates/bindings/wasm
+        run: npm test
 
   ci-success:
     runs-on: ubuntu-latest
