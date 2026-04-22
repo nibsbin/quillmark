@@ -161,7 +161,7 @@ jobs:
 
       - name: Run WASM tests
         working-directory: crates/bindings/wasm
-        run: npm test
+        run: npx vitest run
 
       # npm 11.5.1+ required for Trusted Publishers (OIDC)
       - name: Upgrade npm for Trusted Publishers
