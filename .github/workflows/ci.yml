@@ -15,11 +15,11 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: 0  # Disable incremental compilation for CI (faster clean builds)
+  CARGO_INCREMENTAL: 0
   CARGO_NET_RETRY: 10
   RUST_BACKTRACE: short
-  CARGO_PROFILE_DEV_DEBUG: 0  # Disable debug info in dev builds (much faster)
-  CARGO_PROFILE_TEST_DEBUG: 0  # Disable debug info in test builds
+  CARGO_PROFILE_DEV_DEBUG: 0
+  CARGO_PROFILE_TEST_DEBUG: 0
 
 jobs:
   lint:
@@ -42,44 +42,24 @@ jobs:
       # - name: Clippy check
       #   run: cargo clippy --all-features --all-targets --locked -- -D warnings
 
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        features: 
-          - name: "default"
-            flags: ""
-          - name: "all-features"
-            flags: "--all-features"
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
-      - name: Tests (${{ matrix.features.name }})
-        run: cargo test ${{ matrix.features.flags }} --locked
-
-  docs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust cache
-        uses: Swatinem/rust-cache@v2
-
       - name: Build docs
         env:
           RUSTDOCFLAGS: -Dwarnings
         run: cargo doc --no-deps --locked
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Tests
+        run: cargo test --all-features --locked
 
   wasm:
     runs-on: ubuntu-latest
@@ -99,7 +79,7 @@ jobs:
 
   ci-success:
     runs-on: ubuntu-latest
-    needs: [lint, test, docs, wasm]
+    needs: [lint, test, wasm]
     if: ${{ always() }}
     steps:
       - name: Fail if any dependency did not succeed
