@@ -51,7 +51,12 @@ fn load_dir(
             .ok_or("invalid filename")?
             .to_string();
         if p.is_file() {
-            files.insert(name, FileTreeNode::File { contents: fs::read(&p)? });
+            files.insert(
+                name,
+                FileTreeNode::File {
+                    contents: fs::read(&p)?,
+                },
+            );
         } else if p.is_dir() {
             files.insert(name, load_dir(&p, base, ignore)?);
         }
@@ -60,9 +65,7 @@ fn load_dir(
 }
 
 /// Test helper: filesystem equivalent of the old `Quill::from_path`.
-fn load_from_path<P: AsRef<Path>>(
-    path: P,
-) -> Result<QuillSource, Box<dyn StdError + Send + Sync>> {
+fn load_from_path<P: AsRef<Path>>(path: P) -> Result<QuillSource, Box<dyn StdError + Send + Sync>> {
     let tree = load_tree(path.as_ref())?;
     QuillSource::from_tree(tree)
 }

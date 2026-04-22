@@ -110,9 +110,9 @@ impl Quill {
         };
 
         let warning = self.ref_mismatch_warning(doc);
-        let session = self
-            .backend
-            .open(&context.plate_content, &self.source, &context.json_data)?;
+        let session =
+            self.backend
+                .open(&context.plate_content, &self.source, &context.json_data)?;
         let session = session.with_warning(warning);
         session.render(&render_opts)
     }
@@ -121,9 +121,9 @@ impl Quill {
     pub fn open(&self, doc: &Document) -> Result<RenderSession, RenderError> {
         let context = self.prepare_render_context(doc)?;
         let warning = self.ref_mismatch_warning(doc);
-        let session = self
-            .backend
-            .open(&context.plate_content, &self.source, &context.json_data)?;
+        let session =
+            self.backend
+                .open(&context.plate_content, &self.source, &context.json_data)?;
         Ok(session.with_warning(warning))
     }
 

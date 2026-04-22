@@ -705,7 +705,12 @@ name = "minimal-package"
                 let p: PathBuf = entry.path();
                 let name = p.file_name().unwrap().to_string_lossy().into_owned();
                 if p.is_file() {
-                    files.insert(name, FileTreeNode::File { contents: fs::read(&p)? });
+                    files.insert(
+                        name,
+                        FileTreeNode::File {
+                            contents: fs::read(&p)?,
+                        },
+                    );
                 } else if p.is_dir() {
                     files.insert(name, walk(&p, base)?);
                 }

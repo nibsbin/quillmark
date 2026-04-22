@@ -1,7 +1,9 @@
 //! # Backend Registration Tests
 
 use quillmark::{Document, OutputFormat, Quillmark, RenderError};
-use quillmark_core::{session::SessionHandle, Artifact, Backend, QuillSource, RenderOptions, RenderResult};
+use quillmark_core::{
+    session::SessionHandle, Artifact, Backend, QuillSource, RenderOptions, RenderResult,
+};
 use std::fs;
 use tempfile::TempDir;
 
