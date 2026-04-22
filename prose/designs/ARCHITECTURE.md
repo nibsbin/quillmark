@@ -16,7 +16,7 @@ Quillmark converts Markdown with YAML frontmatter into output artifacts (PDF, SV
 
 Foundation types and traits. No backend dependencies; backends depend on this crate.
 
-Key exports: `Backend`, `Artifact`, `OutputFormat`, `RenderOptions`, `RenderSession`, `ParsedDocument`, `QuillSource`, `FileTreeNode`, `QuillIgnore`, `RenderError`, `Diagnostic`, `Severity`, `Location`, `RenderResult`, `QuillValue`, `QuillReference`, `Version`, `VersionSelector`, `BODY_FIELD`.
+Key exports: `Backend`, `Artifact`, `OutputFormat`, `RenderOptions`, `RenderSession`, `Document`, `QuillSource`, `FileTreeNode`, `QuillIgnore`, `RenderError`, `Diagnostic`, `Severity`, `Location`, `RenderResult`, `QuillValue`, `QuillReference`, `Version`, `VersionSelector`, `BODY_FIELD`.
 
 ### `quillmark` (orchestration)
 
@@ -28,11 +28,11 @@ Implements `Backend` for PDF, SVG, and PNG. Converts Markdown fields to Typst ma
 
 ### `bindings/quillmark-python`
 
-PyO3 bindings published as `quillmark` on PyPI. See [PYTHON.md](PYTHON.md).
+PyO3 bindings published as `quillmark` on PyPI.
 
 ### `bindings/quillmark-wasm`
 
-wasm-bindgen bindings published as `@quillmark-test/wasm`. Supports bundler, Node.js, and web targets. See [WASM.md](WASM.md).
+wasm-bindgen bindings published as `@quillmark-test/wasm`. Supports bundler, Node.js, and web targets.
 
 ### `bindings/quillmark-cli`
 
@@ -53,7 +53,7 @@ Fuzz tests for parsing, templating, and rendering.
 - **`QuillSource`** — Pure data in `quillmark-core`: file bundle + config + metadata; no render ability
 - **`Backend`** — Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open(plate, &QuillSource, json)`
 - **`RenderSession`** — Opaque handle returned by `Backend::open()`; call `render(opts)` to produce artifacts
-- **`ParsedDocument`** — Frontmatter fields + body from Markdown
+- **`Document`** — Typed in-memory representation of a Quillmark Markdown file (frontmatter, body, cards)
 - **`Diagnostic`** — Structured error with severity, code, message, location, hint, source chain
 - **`RenderResult`** — Output artifacts + accumulated warnings
 

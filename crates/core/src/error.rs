@@ -30,52 +30,6 @@
 //!
 //! ## Examples
 //!
-//! ### Error Handling
-//!
-//! ```no_run
-//! use quillmark_core::{RenderError, error::print_errors};
-//! # use quillmark_core::{RenderResult, OutputFormat};
-//! # struct Quill;
-//! # impl Quill {
-//! #     fn render(&self, _: &str, _: Option<()>) -> Result<RenderResult, RenderError> {
-//! #         Ok(RenderResult::new(vec![], OutputFormat::Pdf))
-//! #     }
-//! # }
-//! # let quill = Quill;
-//! # let markdown = "";
-//!
-//! match quill.render(markdown, None) {
-//!     Ok(result) => {
-//!         // Process artifacts
-//!         for artifact in result.artifacts {
-//!             std::fs::write(
-//!                 format!("output.{:?}", artifact.output_format),
-//!                 &artifact.bytes
-//!             )?;
-//!         }
-//!     }
-//!     Err(e) => {
-//!         // Print structured diagnostics
-//!         print_errors(&e);
-//!         
-//!         // Match specific error types
-//!         match e {
-//!             RenderError::CompilationFailed { diags } => {
-//!                 eprintln!("Compilation failed with {} errors:", diags.len());
-//!                 for diag in diags {
-//!                     eprintln!("{}", diag.fmt_pretty());
-//!                 }
-//!             }
-//!             RenderError::InvalidFrontmatter { diag } => {
-//!                 eprintln!("Frontmatter error: {}", diag.message);
-//!             }
-//!             _ => eprintln!("Error: {}", e),
-//!         }
-//!     }
-//! }
-//! # Ok::<(), Box<dyn std::error::Error>>(())
-//! ```
-//!
 //! ### Creating Diagnostics
 //!
 //! ```
