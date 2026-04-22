@@ -6,8 +6,8 @@ use pyo3::types::PyDict; // PyDict
 use pyo3::Bound; // Bound
 
 use quillmark::{
-    Document, Location, OutputFormat, Quill, Quillmark, RenderOptions, RenderResult, RenderSession,
-    SerializableDiagnostic, Workflow,
+    Document, Location, OutputFormat, Quill, Quillmark, RenderResult, RenderSession,
+    SerializableDiagnostic,
 };
 use std::path::PathBuf;
 
@@ -37,82 +37,12 @@ impl PyQuillmark {
         Ok(PyQuill { inner: quill })
     }
 
-    fn workflow(&self, quill: PyRef<PyQuill>) -> PyResult<PyWorkflow> {
-        let workflow = self
-            .inner
-            .workflow(&quill.inner)
-            .map_err(convert_render_error)?;
-        Ok(PyWorkflow { inner: workflow })
-    }
-
     fn registered_backends(&self) -> Vec<String> {
         self.inner
             .registered_backends()
             .iter()
             .map(|s| s.to_string())
             .collect()
-    }
-}
-
-// Workflow wrapper
-#[pyclass(name = "Workflow")]
-pub struct PyWorkflow {
-    pub(crate) inner: Workflow,
-}
-
-#[pymethods]
-impl PyWorkflow {
-    #[pyo3(signature = (doc, format=None))]
-    fn render(
-        &self,
-        doc: PyRef<PyDocument>,
-        format: Option<PyOutputFormat>,
-    ) -> PyResult<PyRenderResult> {
-        let rust_format = format.map(|f| f.into());
-        let mut result = self
-            .inner
-            .render(&doc.inner, rust_format)
-            .map_err(convert_render_error)?;
-        // Prepend parse-time warnings so both parse and render diagnostics
-        // travel on the single RenderResult.warnings channel.
-        let parse_warnings: Vec<_> = doc
-            .parse_warnings
-            .iter()
-            .map(|d| d.clone_without_source())
-            .collect();
-        result.warnings.splice(0..0, parse_warnings);
-        Ok(PyRenderResult { inner: result })
-    }
-
-    fn open(&self, doc: PyRef<PyDocument>) -> PyResult<PyRenderSession> {
-        let session = self.inner.open(&doc.inner).map_err(convert_render_error)?;
-        Ok(PyRenderSession { inner: session })
-    }
-
-    /// Perform a dry run validation without backend compilation.
-    ///
-    /// Raises QuillmarkError with diagnostic payload on validation failure.
-    fn dry_run(&self, doc: PyRef<PyDocument>) -> PyResult<()> {
-        self.inner.dry_run(&doc.inner).map_err(convert_render_error)
-    }
-
-    #[getter]
-    fn backend_id(&self) -> &str {
-        self.inner.backend_id()
-    }
-
-    #[getter]
-    fn supported_formats(&self) -> Vec<PyOutputFormat> {
-        self.inner
-            .supported_formats()
-            .iter()
-            .map(|f| (*f).into())
-            .collect()
-    }
-
-    #[getter]
-    fn quill_ref(&self) -> String {
-        self.inner.quill_ref()
     }
 }
 
@@ -127,33 +57,38 @@ pub struct PyQuill {
 impl PyQuill {
     #[getter]
     fn print_tree(&self) -> String {
-        self.inner.files.print_tree().clone()
+        self.inner.source().files.print_tree().clone()
     }
 
     #[getter]
-    fn name(&self) -> &str {
-        &self.inner.name
+    fn name(&self) -> String {
+        self.inner.source().name.clone()
     }
 
     #[getter]
-    fn backend(&self) -> &str {
-        &self.inner.backend_id
+    fn backend(&self) -> String {
+        self.inner.backend_id().to_string()
     }
 
     #[getter]
     fn plate(&self) -> Option<String> {
-        self.inner.plate.clone()
+        self.inner.source().plate.clone()
     }
 
     #[getter]
     fn example(&self) -> Option<String> {
-        self.inner.example.clone()
+        self.inner.source().example.clone()
+    }
+
+    #[getter]
+    fn quill_ref(&self) -> String {
+        self.inner.quill_ref()
     }
 
     #[getter]
     fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, value) in &self.inner.metadata {
+        for (key, value) in &self.inner.source().metadata {
             dict.set_item(key, quillvalue_to_py(py, value)?)?;
         }
         Ok(dict)
@@ -163,6 +98,7 @@ impl PyQuill {
     fn schema<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         let yaml = self
             .inner
+            .source()
             .config
             .public_schema_yaml()
             .map_err(|e| PyValueError::new_err(format!("schema: {}", e)))?;
@@ -172,7 +108,7 @@ impl PyQuill {
     #[getter]
     fn defaults<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, value) in self.inner.config.defaults() {
+        for (key, value) in self.inner.source().config.defaults() {
             dict.set_item(key, quillvalue_to_py(py, &value)?)?;
         }
         Ok(dict)
@@ -181,7 +117,7 @@ impl PyQuill {
     #[getter]
     fn examples<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, values) in self.inner.config.examples() {
+        for (key, values) in self.inner.source().config.examples() {
             let py_list = pyo3::types::PyList::empty(py);
             for value in values {
                 py_list.append(quillvalue_to_py(py, &value)?)?;
@@ -191,16 +127,13 @@ impl PyQuill {
         Ok(dict)
     }
 
-    fn supported_formats(&self) -> PyResult<Vec<PyOutputFormat>> {
-        let formats = match self.inner.backend_id.as_str() {
-            "typst" => vec![
-                PyOutputFormat::PDF,
-                PyOutputFormat::SVG,
-                PyOutputFormat::PNG,
-            ],
-            _ => vec![],
-        };
-        Ok(formats)
+    #[getter]
+    fn supported_formats(&self) -> Vec<PyOutputFormat> {
+        self.inner
+            .supported_formats()
+            .iter()
+            .map(|f| (*f).into())
+            .collect()
     }
 
     #[pyo3(signature = (doc, format=None))]
@@ -210,14 +143,9 @@ impl PyQuill {
         format: Option<PyOutputFormat>,
     ) -> PyResult<PyRenderResult> {
         let rust_format = format.map(OutputFormat::from);
-        let opts = RenderOptions {
-            output_format: rust_format,
-            ppi: None,
-            pages: None,
-        };
         let mut result = self
             .inner
-            .render(doc.inner.clone(), &opts)
+            .render(&doc.inner, rust_format)
             .map_err(convert_render_error)?;
         let parse_warnings: Vec<_> = doc
             .parse_warnings
@@ -229,11 +157,15 @@ impl PyQuill {
     }
 
     fn open(&self, doc: PyRef<'_, PyDocument>) -> PyResult<PyRenderSession> {
-        let session = self
-            .inner
-            .open(doc.inner.clone())
-            .map_err(convert_render_error)?;
+        let session = self.inner.open(&doc.inner).map_err(convert_render_error)?;
         Ok(PyRenderSession { inner: session })
+    }
+
+    /// Perform a dry run validation without backend compilation.
+    ///
+    /// Raises QuillmarkError with diagnostic payload on validation failure.
+    fn dry_run(&self, doc: PyRef<'_, PyDocument>) -> PyResult<()> {
+        self.inner.dry_run(&doc.inner).map_err(convert_render_error)
     }
 
     /// Project a document through this quill's schema.
@@ -538,7 +470,7 @@ impl PyRenderSession {
         format: Option<PyOutputFormat>,
         pages: Option<Vec<usize>>,
     ) -> PyResult<PyRenderResult> {
-        let opts = RenderOptions {
+        let opts = quillmark::RenderOptions {
             output_format: format.map(OutputFormat::from),
             ppi: None,
             pages,

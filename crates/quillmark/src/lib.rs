@@ -10,17 +10,16 @@
 //!
 //! let engine = Quillmark::new();
 //! let quill = engine.quill_from_path("path/to/quill").unwrap();
-//! let workflow = engine.workflow(&quill).unwrap();
 //!
 //! let parsed = Document::from_markdown("---\nQUILL: my_quill\ntitle: Hello\n---\n# Hello World").unwrap();
-//! let result = workflow.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
+//! let result = quill.render(&parsed, Some(OutputFormat::Pdf)).unwrap();
 //! ```
 
-// Re-export all core types for convenience
+// Re-export core types for convenience. Note: `QuillSource` is not re-exported
+// at the crate root — Quillmark consumers work with the renderable `Quill`.
 pub use quillmark_core::{
     Artifact, Backend, Card, Diagnostic, Document, Location, OutputFormat, ParseError, ParseOutput,
-    Quill, RenderError, RenderOptions, RenderResult, RenderSession, SerializableDiagnostic,
-    Severity,
+    RenderError, RenderOptions, RenderResult, RenderSession, SerializableDiagnostic, Severity,
 };
 
 // Declare modules
@@ -31,4 +30,4 @@ pub mod orchestration;
 pub use form::{FormCard, FormFieldSource, FormFieldValue, FormProjection};
 
 // Re-export types from orchestration module
-pub use orchestration::{QuillRef, Quillmark, Workflow};
+pub use orchestration::{Quill, QuillRef, Quillmark};

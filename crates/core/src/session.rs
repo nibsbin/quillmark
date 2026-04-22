@@ -21,7 +21,9 @@ impl RenderSession {
         }
     }
 
-    pub(crate) fn with_warning(mut self, warning: Option<Diagnostic>) -> Self {
+    /// Attach a non-fatal warning to this session. The warning is appended to
+    /// [`RenderResult::warnings`] on each call to [`RenderSession::render`].
+    pub fn with_warning(mut self, warning: Option<Diagnostic>) -> Self {
         self.warning = warning;
         self
     }

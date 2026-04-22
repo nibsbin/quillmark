@@ -8,22 +8,6 @@
 //! - [`compile_to_svg()`] - Compile Typst to SVG format (one file per page)
 //! - [`compile_to_png()`] - Compile Typst to PNG format (one image per page) at a given PPI
 //!
-//! ## Quick Example
-//!
-//! ```no_run
-//! use std::sync::Arc;
-//! use quillmark_core::{Backend, Quill};
-//! use quillmark_typst::{compile::compile_to_pdf, TypstBackend};
-//!
-//! let quill = Quill::from_path("path/to/quill")?
-//!     .with_backend(Arc::new(TypstBackend::default()));
-//! let typst_content = "#set document(title: \"Test\")\n= Hello";
-//!
-//! let pdf_bytes = compile_to_pdf(&quill, typst_content, "{}")?;
-//! std::fs::write("output.pdf", pdf_bytes)?;
-//! # Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
-//! ```
-//!
 //! ## Process
 //!
 //! 1. Creates a `QuillWorld` with the quill's assets and packages
@@ -40,7 +24,7 @@ use typst_pdf::PdfOptions;
 use crate::error_mapping::map_typst_errors;
 use crate::world::QuillWorld;
 use quillmark_core::{
-    Artifact, Diagnostic, OutputFormat, Quill, RenderError, RenderResult, Severity,
+    Artifact, Diagnostic, OutputFormat, QuillSource, RenderError, RenderResult, Severity,
 };
 
 /// Internal compilation function
@@ -62,11 +46,11 @@ fn compile_document(world: &QuillWorld) -> Result<PagedDocument, RenderError> {
 
 /// Compile Typst source into a paged document with injected JSON data.
 pub fn compile_to_document(
-    quill: &Quill,
+    source: &QuillSource,
     plated_content: &str,
     json_data: &str,
 ) -> Result<PagedDocument, RenderError> {
-    let world = QuillWorld::new_with_data(quill, plated_content, json_data).map_err(|e| {
+    let world = QuillWorld::new_with_data(source, plated_content, json_data).map_err(|e| {
         RenderError::EngineCreation {
             diag: Box::new(
                 Diagnostic::new(
@@ -87,11 +71,11 @@ pub fn compile_to_document(
 /// This function creates a `@local/quillmark-helper:0.1.0` package containing
 /// the JSON data, which can be imported by the plate file.
 pub fn compile_to_pdf(
-    quill: &Quill,
+    source: &QuillSource,
     plated_content: &str,
     json_data: &str,
 ) -> Result<Vec<u8>, RenderError> {
-    let document = compile_to_document(quill, plated_content, json_data)?;
+    let document = compile_to_document(source, plated_content, json_data)?;
 
     let pdf = typst_pdf::pdf(&document, &PdfOptions::default()).map_err(|e| {
         RenderError::CompilationFailed {
@@ -111,11 +95,11 @@ pub fn compile_to_pdf(
 /// This function creates a `@local/quillmark-helper:0.1.0` package containing
 /// the JSON data, which can be imported by the plate file.
 pub fn compile_to_svg(
-    quill: &Quill,
+    source: &QuillSource,
     plated_content: &str,
     json_data: &str,
 ) -> Result<Vec<Vec<u8>>, RenderError> {
-    let document = compile_to_document(quill, plated_content, json_data)?;
+    let document = compile_to_document(source, plated_content, json_data)?;
 
     let mut pages = Vec::new();
     for page in &document.pages {
@@ -140,12 +124,12 @@ const DEFAULT_PPI: f32 = 144.0;
 /// * `json_data` - JSON string containing the document data
 /// * `ppi` - Pixels per inch. Defaults to 144.0 when `None`.
 pub fn compile_to_png(
-    quill: &Quill,
+    source: &QuillSource,
     plated_content: &str,
     json_data: &str,
     ppi: Option<f32>,
 ) -> Result<Vec<Vec<u8>>, RenderError> {
-    let document = compile_to_document(quill, plated_content, json_data)?;
+    let document = compile_to_document(source, plated_content, json_data)?;
 
     let ppi = ppi.unwrap_or(DEFAULT_PPI);
 
@@ -285,11 +269,9 @@ pub fn render_document_pages(
 #[cfg(all(test, feature = "embed-default-font"))]
 mod compile_helper_tests {
     use std::collections::HashMap;
-    use std::sync::Arc;
 
     use super::compile_to_document;
-    use crate::TypstBackend;
-    use quillmark_core::{FileTreeNode, Quill};
+    use quillmark_core::{FileTreeNode, QuillSource};
 
     /// Ensures generated `lib.typ` (date conversion, etc.) typechecks when evaluated.
     /// String-only helper tests do not run the Typst compiler.
@@ -316,15 +298,14 @@ mod compile_helper_tests {
             },
         );
         let root = FileTreeNode::Directory { files: root_files };
-        let quill = Quill::from_tree(root).expect("quill");
-        let quill = quill.with_backend(Arc::new(TypstBackend::default()));
+        let source = QuillSource::from_tree(root).expect("quill source");
 
         let json = r#"{"title":"Test","BODY":"Hello","date":"2025-01-15","__meta__":{"content_fields":["BODY"],"card_content_fields":{},"date_fields":["date"],"card_date_fields":{}}}"#;
         let plate = r#"#import "@local/quillmark-helper:0.1.0": data
 #set page(height: auto, width: auto)
 #data.title"#;
 
-        let result = compile_to_document(&quill, plate, json);
+        let result = compile_to_document(&source, plate, json);
         assert!(
             result.is_ok(),
             "generated helper should compile: {:?}",

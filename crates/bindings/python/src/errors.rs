@@ -58,8 +58,7 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         | RenderError::FormatNotSupported { diag }
         | RenderError::UnsupportedBackend { diag }
         | RenderError::ValidationFailed { diag }
-        | RenderError::QuillConfig { diag }
-        | RenderError::NoBackend { diag } => {
+        | RenderError::QuillConfig { diag } => {
             with_diag_attached(py, QuillmarkError::new_err(diag.message.clone()), *diag)
         }
     })

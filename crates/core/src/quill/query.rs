@@ -1,39 +1,21 @@
-//! Quill file/query convenience methods.
+//! QuillSource file/query convenience methods.
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use crate::value::QuillValue;
 
-use super::{FileTreeNode, Quill};
+use super::{FileTreeNode, QuillSource};
 
-impl Quill {
-    /// Get the list of typst packages to download, if specified in Quill.yaml
-    pub fn typst_packages(&self) -> Vec<String> {
-        self.metadata
-            .get("typst_packages")
-            .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                    .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    /// Get default values from cached config-derived defaults
+impl QuillSource {
+    /// Get default values from cached config-derived defaults.
     ///
     /// Returns a reference to the pre-computed defaults HashMap that was extracted
-    /// during Quill construction.
-    ///
-    /// This is used by the `Workflow` to apply default values to missing fields.
+    /// during construction.
     pub fn extract_defaults(&self) -> &HashMap<String, QuillValue> {
         &self.defaults
     }
 
-    /// Get example values from cached config-derived examples
-    ///
-    /// Returns a reference to the pre-computed examples HashMap that was extracted
-    /// during Quill construction.
+    /// Get example values from cached config-derived examples.
     pub fn extract_examples(&self) -> &HashMap<String, Vec<QuillValue>> {
         &self.examples
     }

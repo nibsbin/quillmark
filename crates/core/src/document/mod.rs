@@ -118,7 +118,7 @@ pub struct Card {
 impl Card {
     /// Create a `Card` directly from typed parts.
     ///
-    /// Used by `assemble.rs`, `normalize.rs`, and the `Workflow`.
+    /// Used by `assemble.rs`, `normalize.rs`, and the `Quill`.
     /// Does **not** validate the tag name or field names — callers are
     /// responsible for providing already-valid data.  For user-facing
     /// construction use [`Card::new`] (defined in `edit.rs`).
@@ -172,7 +172,7 @@ pub struct Document {
 impl Document {
     /// Create a `Document` directly from typed parts.
     ///
-    /// This is used by `assemble.rs`, `normalize.rs`, and the `Workflow`.
+    /// This is used by `assemble.rs`, `normalize.rs`, and the `Quill`.
     pub fn new_internal(
         quill_ref: QuillReference,
         frontmatter: IndexMap<String, QuillValue>,
@@ -253,7 +253,7 @@ impl Document {
     /// ```
     ///
     /// This is the **only** place in `quillmark-core` that knows about the plate
-    /// wire format. All internal consumers (workflow, backends) call this instead
+    /// wire format. All internal consumers (Quill, backends) call this instead
     /// of constructing the shape by hand.
     pub fn to_plate_json(&self) -> serde_json::Value {
         let mut map = serde_json::Map::new();

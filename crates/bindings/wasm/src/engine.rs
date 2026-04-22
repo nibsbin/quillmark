@@ -32,7 +32,7 @@ pub struct Quillmark {
 /// Opaque, shareable Quill handle.
 #[wasm_bindgen]
 pub struct Quill {
-    inner: std::sync::Arc<quillmark_core::Quill>,
+    inner: quillmark::Quill,
 }
 
 #[wasm_bindgen]
@@ -84,9 +84,7 @@ impl Quillmark {
             .inner
             .quill(root)
             .map_err(|e| WasmError::from(e).to_js_value())?;
-        Ok(Quill {
-            inner: std::sync::Arc::new(quill),
-        })
+        Ok(Quill { inner: quill })
     }
 }
 
@@ -100,7 +98,7 @@ impl Quill {
         let rust_opts: quillmark_core::RenderOptions = opts.into();
         let result = self
             .inner
-            .render(doc.inner, &rust_opts)
+            .render_with_options(&doc.inner, rust_opts.output_format, rust_opts.ppi)
             .map_err(|e| WasmError::from(e).to_js_value())?;
         let mut warnings: Vec<Diagnostic> = parse_warnings.into_iter().map(Into::into).collect();
         warnings.extend(result.warnings.into_iter().map(Into::into));
@@ -117,9 +115,15 @@ impl Quill {
     pub fn open(&self, doc: Document) -> Result<RenderSession, JsValue> {
         let session = self
             .inner
-            .open(doc.inner)
+            .open(&doc.inner)
             .map_err(|e| WasmError::from(e).to_js_value())?;
         Ok(RenderSession { inner: session })
+    }
+
+    /// The resolved backend identifier (e.g. `"typst"`).
+    #[wasm_bindgen(getter, js_name = backendId)]
+    pub fn backend_id(&self) -> String {
+        self.inner.backend_id().to_string()
     }
 
     /// Project a document through this quill's schema.

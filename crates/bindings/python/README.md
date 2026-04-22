@@ -45,21 +45,15 @@ assert reparsed.frontmatter["title"] == "Updated"
 engine = Quillmark()
 engine.registered_backends()      # ['typst']
 quill = engine.quill_from_path("path/to/quill")
-workflow = engine.workflow(quill)
 ```
 
 ### `Quill`
 
 ```python
 quill = engine.quill_from_path("path")
-result = quill.render(markdown_or_parsed, OutputFormat.PDF)
-```
-
-### `Workflow`
-
-```python
-workflow = engine.workflow(quill)
-result = workflow.render(parsed, OutputFormat.PDF)
+result = quill.render(parsed, OutputFormat.PDF)
+session = quill.open(parsed)
+quill.dry_run(parsed)
 ```
 
 ## Development
