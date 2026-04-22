@@ -100,8 +100,8 @@ impl Document {
         out.push_str(&self.body);
 
         // ── Cards ─────────────────────────────────────────────────────────────
-        // Each card's body already contains the blank line before the next
-        // card fence, so no extra `\n` is injected between cards.
+        // `emit_card` normalises the separator before each fence, so edited
+        // bodies (which may lack a trailing blank line) still round-trip.
         for card in &self.cards {
             emit_card(&mut out, card);
         }
