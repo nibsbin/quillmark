@@ -1103,66 +1103,47 @@ Body content"#;
 
 // Guillemet preservation tests
 
+/// Guillemet/chevron sequences (`<<...>>`) must survive parsing unmodified in
+/// every context — body, YAML string values, YAML arrays, nested maps, code
+/// blocks, inline code, and card bodies/fields. A single integrative document
+/// exercises all of these.
 #[test]
-fn test_chevrons_preserved_in_body_no_frontmatter() {
-    let markdown = "---\nQUILL: test_quill\n---\nUse <<raw content>> here.";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.body(), "Use <<raw content>> here.");
-}
-
-#[test]
-fn test_chevrons_preserved_in_body_with_frontmatter() {
-    let markdown = r#"---
-QUILL: test_quill
-title: Test
----
-
-Use <<raw content>> here."#;
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.body(), "\nUse <<raw content>> here.");
-}
-
-#[test]
-fn test_chevrons_preserved_in_yaml_string() {
+fn test_chevrons_preserved_in_all_contexts() {
     let markdown = r#"---
 QUILL: test_quill
 title: Test <<with chevrons>>
----
-
-Body content."#;
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(
-        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
-        "Test <<with chevrons>>"
-    );
-}
-
-#[test]
-fn test_chevrons_preserved_in_yaml_array() {
-    let markdown = r#"---
-QUILL: test_quill
 items:
   - "<<first>>"
   - "<<second>>"
----
-
-Body."#;
-    let doc = decompose(markdown).unwrap();
-    let items = doc.frontmatter().get("items").unwrap().as_array().unwrap();
-    assert_eq!(items[0].as_str().unwrap(), "<<first>>");
-    assert_eq!(items[1].as_str().unwrap(), "<<second>>");
-}
-
-#[test]
-fn test_chevrons_preserved_in_yaml_nested() {
-    let markdown = r#"---
-QUILL: test_quill
 metadata:
   description: "<<nested value>>"
 ---
 
-Body."#;
+<<body>> text.
+
+```
+<<in code block>>
+```
+
+`<<inline code>>` and <<plain>>
+
+---
+CARD: items
+description: "<<card yaml>>"
+---
+
+Use <<card body>> here."#;
+
     let doc = decompose(markdown).unwrap();
+
+    // Frontmatter scalar, array, nested map.
+    assert_eq!(
+        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        "Test <<with chevrons>>"
+    );
+    let items = doc.frontmatter().get("items").unwrap().as_array().unwrap();
+    assert_eq!(items[0].as_str().unwrap(), "<<first>>");
+    assert_eq!(items[1].as_str().unwrap(), "<<second>>");
     let metadata = doc
         .frontmatter()
         .get("metadata")
@@ -1173,73 +1154,21 @@ Body."#;
         metadata.get("description").unwrap().as_str().unwrap(),
         "<<nested value>>"
     );
-}
 
-#[test]
-fn test_chevrons_preserved_in_code_blocks() {
-    let markdown =
-        "---\nQUILL: test_quill\n---\n```\n<<in code block>>\n```\n\n<<outside code block>>";
-    let doc = decompose(markdown).unwrap();
+    // Body: plain, fenced code, inline code.
     let body = doc.body();
+    assert!(body.contains("<<body>>"));
     assert!(body.contains("<<in code block>>"));
-    assert!(body.contains("<<outside code block>>"));
-}
+    assert!(body.contains("`<<inline code>>`"));
+    assert!(body.contains("<<plain>>"));
 
-#[test]
-fn test_chevrons_preserved_in_inline_code() {
-    let markdown = "---\nQUILL: test_quill\n---\n`<<in inline code>>` and <<outside inline code>>";
-    let doc = decompose(markdown).unwrap();
-    let body = doc.body();
-    assert!(body.contains("`<<in inline code>>`"));
-    assert!(body.contains("<<outside inline code>>"));
-}
-
-#[test]
-fn test_chevrons_preserved_in_tagged_block_body() {
-    let markdown = r#"---
-QUILL: test_quill
-title: Main
----
-
-Main body.
-
----
-CARD: items
-name: Item 1
----
-
-Use <<raw>> here."#;
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.cards().len(), 1);
-    assert_eq!(doc.cards()[0].tag(), "items");
-    assert!(doc.cards()[0].body().contains("<<raw>>"));
-}
-
-#[test]
-fn test_chevrons_preserved_in_tagged_block_yaml() {
-    let markdown = r#"---
-QUILL: test_quill
-title: Main
----
-
-Main body.
-
----
-CARD: items
-description: "<<tagged yaml>>"
----
-
-Item body."#;
-    let doc = decompose(markdown).unwrap();
+    // Card yaml and body.
+    let card = &doc.cards()[0];
     assert_eq!(
-        doc.cards()[0]
-            .fields()
-            .get("description")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "<<tagged yaml>>"
+        card.fields().get("description").unwrap().as_str().unwrap(),
+        "<<card yaml>>"
     );
+    assert!(card.body().contains("<<card body>>"));
 }
 
 #[test]
@@ -1287,34 +1216,19 @@ fn test_unmatched_chevrons_preserved() {
 
 // Robustness tests
 
+/// Inputs with no parseable QUILL frontmatter must all fail with "Missing
+/// required QUILL field". Covers empty, whitespace-only, lone/quad dashes.
 #[test]
-fn test_empty_document() {
-    let result = decompose("");
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Missing required QUILL field"));
-}
-
-#[test]
-fn test_only_whitespace() {
-    let result = decompose("   \n\n   \t");
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Missing required QUILL field"));
-}
-
-#[test]
-fn test_only_dashes() {
-    let result = decompose("---");
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Missing required QUILL field"));
+fn test_missing_quill_field() {
+    for input in ["", "   \n\n   \t", "---", "----\ntitle: Test\n----\n\nBody"] {
+        let err = decompose(input).unwrap_err().to_string();
+        assert!(
+            err.contains("Missing required QUILL field"),
+            "input {:?} produced unexpected error: {}",
+            input,
+            err
+        );
+    }
 }
 
 #[test]
@@ -1324,35 +1238,19 @@ fn test_dashes_in_middle_of_line() {
     assert_eq!(doc.body(), "some text --- more text");
 }
 
+/// CRLF and mixed line endings must parse identically to LF.
 #[test]
-fn test_four_dashes() {
-    let result = decompose("----\ntitle: Test\n----\n\nBody");
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("Missing required QUILL field"));
-}
-
-#[test]
-fn test_crlf_line_endings() {
-    let markdown = "---\r\nQUILL: test_quill\r\ntitle: Test\r\n---\r\n\r\nBody content.";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(
-        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
-        "Test"
-    );
-    assert!(doc.body().contains("Body content."));
-}
-
-#[test]
-fn test_mixed_line_endings() {
-    let markdown = "---\nQUILL: test_quill\r\ntitle: Test\r\n---\n\nBody.";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(
-        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
-        "Test"
-    );
+fn test_line_ending_normalization() {
+    for markdown in [
+        "---\r\nQUILL: test_quill\r\ntitle: Test\r\n---\r\n\r\nBody content.",
+        "---\nQUILL: test_quill\r\ntitle: Test\r\n---\n\nBody.",
+    ] {
+        let doc = decompose(markdown).unwrap();
+        assert_eq!(
+            doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+            "Test"
+        );
+    }
 }
 
 #[test]
@@ -1687,42 +1585,15 @@ fn test_no_body_after_frontmatter() {
 // Tag name validation
 
 #[test]
-fn test_valid_tag_name_single_underscore() {
-    assert!(is_valid_tag_name("_"));
-}
-
-#[test]
-fn test_valid_tag_name_underscore_prefix() {
-    assert!(is_valid_tag_name("_private"));
-}
-
-#[test]
-fn test_valid_tag_name_with_numbers() {
-    assert!(is_valid_tag_name("item1"));
-    assert!(is_valid_tag_name("item_2"));
-}
-
-#[test]
-fn test_invalid_tag_name_empty() {
-    assert!(!is_valid_tag_name(""));
-}
-
-#[test]
-fn test_invalid_tag_name_starts_with_number() {
-    assert!(!is_valid_tag_name("1item"));
-}
-
-#[test]
-fn test_invalid_tag_name_uppercase() {
-    assert!(!is_valid_tag_name("Items"));
-    assert!(!is_valid_tag_name("ITEMS"));
-}
-
-#[test]
-fn test_invalid_tag_name_special_chars() {
-    assert!(!is_valid_tag_name("my-items"));
-    assert!(!is_valid_tag_name("my.items"));
-    assert!(!is_valid_tag_name("my items"));
+fn test_tag_name_validator() {
+    for &name in &["_", "_private", "item1", "item_2"] {
+        assert!(is_valid_tag_name(name), "expected valid: {:?}", name);
+    }
+    for &name in &[
+        "", "1item", "Items", "ITEMS", "my-items", "my.items", "my items",
+    ] {
+        assert!(!is_valid_tag_name(name), "expected invalid: {:?}", name);
+    }
 }
 
 // Guillemet preprocessing

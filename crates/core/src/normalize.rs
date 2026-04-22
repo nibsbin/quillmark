@@ -747,8 +747,6 @@ mod tests {
     #[test]
     fn test_normalize_document_preserves_quill_tag() {
         use crate::document::Document;
-        use crate::version::QuillReference;
-        use std::str::FromStr;
 
         let doc = Document::from_markdown("---\nQUILL: custom_quill\n---\n").unwrap();
         let normalized = super::normalize_document(doc).unwrap();

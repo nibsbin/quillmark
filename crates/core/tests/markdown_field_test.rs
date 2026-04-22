@@ -1,5 +1,4 @@
 use quillmark_core::{normalize::normalize_document, quill::QuillConfig, Document};
-use serde_json::json;
 
 #[test]
 fn test_markdown_field_public_schema_emission() {

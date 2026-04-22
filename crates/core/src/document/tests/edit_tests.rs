@@ -5,7 +5,6 @@ use crate::document::sentinel::is_valid_tag_name;
 use crate::document::{Card, Document};
 use crate::value::QuillValue;
 use crate::version::QuillReference;
-use indexmap::IndexMap;
 use std::str::FromStr;
 
 // ── Helper ───────────────────────────────────────────────────────────────────
@@ -360,24 +359,13 @@ fn test_card_new_valid() {
 }
 
 #[test]
-fn test_card_new_invalid_tag_uppercase() {
-    let result = Card::new("Note");
-    assert_eq!(result, Err(EditError::InvalidTagName("Note".to_string())));
-}
-
-#[test]
-fn test_card_new_invalid_tag_empty() {
-    let result = Card::new("");
-    assert_eq!(result, Err(EditError::InvalidTagName("".to_string())));
-}
-
-#[test]
-fn test_card_new_invalid_tag_with_hyphen() {
-    let result = Card::new("my-card");
-    assert_eq!(
-        result,
-        Err(EditError::InvalidTagName("my-card".to_string()))
-    );
+fn test_card_new_invalid_tag_rejected() {
+    for tag in ["Note", "", "my-card"] {
+        assert_eq!(
+            Card::new(tag),
+            Err(EditError::InvalidTagName(tag.to_string()))
+        );
+    }
 }
 
 // ── Card::set_field ──────────────────────────────────────────────────────────
