@@ -2,7 +2,7 @@
 """Example demonstrating the current quillmark-python workflow API."""
 
 from pathlib import Path
-from quillmark import Quillmark, ParsedDocument, OutputFormat
+from quillmark import Quillmark, Document, OutputFormat
 
 
 def main():
@@ -39,7 +39,7 @@ title: My Favorite Ice Cream
 I love **Taro** ice cream!
 """
 
-    parsed = ParsedDocument.from_markdown(markdown)
+    parsed = Document.from_markdown(markdown)
 
     print(f"Loaded quill: {quill.name}")
     print(f"Backend: {quill.backend}")

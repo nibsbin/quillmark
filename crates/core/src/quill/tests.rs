@@ -2,9 +2,73 @@
 
 use super::*;
 use crate::Severity;
+use std::collections::HashMap;
+use std::error::Error as StdError;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tempfile::TempDir;
+
+/// Test helper: recursively load a directory as a FileTreeNode.
+fn load_tree(path: &Path) -> Result<FileTreeNode, Box<dyn StdError + Send + Sync>> {
+    let default_ignore = QuillIgnore::new(vec![
+        ".git/".to_string(),
+        ".gitignore".to_string(),
+        ".quillignore".to_string(),
+        "target/".to_string(),
+        "node_modules/".to_string(),
+    ]);
+    let quillignore_path = path.join(".quillignore");
+    let ignore = if quillignore_path.exists() {
+        let content = fs::read_to_string(&quillignore_path)?;
+        QuillIgnore::from_content(&content)
+    } else {
+        default_ignore
+    };
+    load_dir(path, path, &ignore)
+}
+
+fn load_dir(
+    current: &Path,
+    base: &Path,
+    ignore: &QuillIgnore,
+) -> Result<FileTreeNode, Box<dyn StdError + Send + Sync>> {
+    if !current.exists() {
+        return Ok(FileTreeNode::Directory {
+            files: HashMap::new(),
+        });
+    }
+    let mut files = HashMap::new();
+    for entry in fs::read_dir(current)? {
+        let entry = entry?;
+        let p = entry.path();
+        let rel = p.strip_prefix(base)?;
+        if ignore.is_ignored(rel) {
+            continue;
+        }
+        let name = p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or("invalid filename")?
+            .to_string();
+        if p.is_file() {
+            files.insert(
+                name,
+                FileTreeNode::File {
+                    contents: fs::read(&p)?,
+                },
+            );
+        } else if p.is_dir() {
+            files.insert(name, load_dir(&p, base, ignore)?);
+        }
+    }
+    Ok(FileTreeNode::Directory { files })
+}
+
+/// Test helper: filesystem equivalent of the old `Quill::from_path`.
+fn load_from_path<P: AsRef<Path>>(path: P) -> Result<QuillSource, Box<dyn StdError + Send + Sync>> {
+    let tree = load_tree(path.as_ref())?;
+    QuillSource::from_tree(tree)
+}
 
 #[test]
 fn test_quillignore_parsing() {
@@ -68,7 +132,7 @@ fn test_in_memory_file_system() {
     fs::write(packages_dir.join("package.typ"), "package content").unwrap();
 
     // Load quill
-    let quill = Quill::from_path(quill_dir).unwrap();
+    let quill = load_from_path(quill_dir).unwrap();
 
     // Test file access
     assert!(quill.file_exists("plate.typ"));
@@ -108,7 +172,7 @@ fn test_quillignore_integration() {
     fs::write(target_dir.join("debug.txt"), "also ignored").unwrap();
 
     // Load quill
-    let quill = Quill::from_path(quill_dir).unwrap();
+    let quill = load_from_path(quill_dir).unwrap();
 
     // Test that ignored files are not loaded
     assert!(quill.file_exists("plate.typ"));
@@ -139,7 +203,7 @@ fn test_find_files_pattern() {
     fs::write(fonts_dir.join("font.ttf"), "font data").unwrap();
 
     // Load quill
-    let quill = Quill::from_path(quill_dir).unwrap();
+    let quill = load_from_path(quill_dir).unwrap();
 
     // Test pattern matching
     let all_assets = quill.find_files("assets/*");
@@ -173,7 +237,7 @@ Quill:
     .unwrap();
 
     // Load quill
-    let quill = Quill::from_path(quill_dir).unwrap();
+    let quill = load_from_path(quill_dir).unwrap();
 
     // Test that name comes from YAML, not directory
     assert_eq!(quill.name, "my_custom_quill");
@@ -203,36 +267,6 @@ Quill:
 }
 
 #[test]
-fn test_typst_packages_parsing() {
-    let temp_dir = TempDir::new().unwrap();
-    let quill_dir = temp_dir.path();
-
-    let yaml_content = r#"
-Quill:
-  name: "test_quill"
-  version: "1.0"
-  backend: "typst"
-  plate_file: "plate.typ"
-  description: "Test quill for packages"
-
-typst:
-  packages:
-    - "@preview/bubble:0.2.2"
-    - "@preview/example:1.0.0"
-"#;
-
-    fs::write(quill_dir.join("Quill.yaml"), yaml_content).unwrap();
-    fs::write(quill_dir.join("plate.typ"), "test").unwrap();
-
-    let quill = Quill::from_path(quill_dir).unwrap();
-    let packages = quill.typst_packages();
-
-    assert_eq!(packages.len(), 2);
-    assert_eq!(packages[0], "@preview/bubble:0.2.2");
-    assert_eq!(packages[1], "@preview/example:1.0.0");
-}
-
-#[test]
 fn test_template_loading() {
     let temp_dir = TempDir::new().unwrap();
     let quill_dir = temp_dir.path();
@@ -255,7 +289,7 @@ fn test_template_loading() {
     .unwrap();
 
     // Load quill
-    let quill = Quill::from_path(quill_dir).unwrap();
+    let quill = load_from_path(quill_dir).unwrap();
 
     // Test that example content is loaded and includes some the text
     assert!(quill.example.is_some());
@@ -295,7 +329,7 @@ fn test_template_smart_default() {
     .unwrap();
 
     // Load quill
-    let quill = Quill::from_path(quill_dir).unwrap();
+    let quill = load_from_path(quill_dir).unwrap();
 
     // Test that example content is loaded
     assert!(quill.example.is_some());
@@ -321,7 +355,7 @@ fn test_template_optional() {
     fs::write(quill_dir.join("plate.typ"), "plate content").unwrap();
 
     // Load quill
-    let quill = Quill::from_path(quill_dir).unwrap();
+    let quill = load_from_path(quill_dir).unwrap();
 
     // Test that example fields are None
     assert_eq!(quill.example, None);
@@ -362,7 +396,7 @@ fn test_from_tree() {
     let root = FileTreeNode::Directory { files: root_files };
 
     // Create Quill from tree
-    let quill = Quill::from_tree(root).unwrap();
+    let quill = QuillSource::from_tree(root).unwrap();
 
     // Validate the quill
     assert_eq!(quill.name, "test_from_tree");
@@ -413,7 +447,7 @@ Quill:
     let root = FileTreeNode::Directory { files: root_files };
 
     // Create Quill from tree
-    let quill = Quill::from_tree(root).unwrap();
+    let quill = QuillSource::from_tree(root).unwrap();
 
     // Validate template is loaded
     assert_eq!(quill.example, Some(template_content.to_string()));
@@ -456,7 +490,7 @@ fn test_from_tree_structure_direct() {
 
     let root = FileTreeNode::Directory { files: root_files };
 
-    let quill = Quill::from_tree(root).unwrap();
+    let quill = QuillSource::from_tree(root).unwrap();
 
     assert_eq!(quill.name, "direct_tree");
     assert!(quill.file_exists("src/main.rs"));
@@ -528,7 +562,7 @@ fn test_dir_exists_and_list_apis() {
     );
 
     let root = FileTreeNode::Directory { files: root_files };
-    let quill = Quill::from_tree(root).unwrap();
+    let quill = QuillSource::from_tree(root).unwrap();
 
     // Test dir_exists
     assert!(quill.dir_exists("assets"));
@@ -620,7 +654,7 @@ main:
     let root = FileTreeNode::Directory { files: root_files };
 
     // Create Quill from tree
-    let quill = Quill::from_tree(root).unwrap();
+    let quill = QuillSource::from_tree(root).unwrap();
 
     // Validate field schemas were parsed from QuillConfig
     assert_eq!(quill.config.main().fields.len(), 3);
@@ -747,7 +781,7 @@ fn test_quill_without_plate_file() {
     let root = FileTreeNode::Directory { files: root_files };
 
     // Create Quill from tree
-    let quill = Quill::from_tree(root).unwrap();
+    let quill = QuillSource::from_tree(root).unwrap();
 
     // Validate that plate is null (will use auto plate)
     assert!(quill.plate.clone().is_none());
@@ -840,7 +874,7 @@ fn test_quill_from_path_rejects_example_traversal() {
 "#;
     fs::write(quill_dir.join("Quill.yaml"), yaml_content).unwrap();
 
-    let result = Quill::from_path(quill_dir);
+    let result = load_from_path(quill_dir);
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
@@ -862,7 +896,7 @@ fn test_quill_from_path_errors_when_explicit_example_missing() {
 "#;
     fs::write(quill_dir.join("Quill.yaml"), yaml_content).unwrap();
 
-    let result = Quill::from_path(quill_dir);
+    let result = load_from_path(quill_dir);
     assert!(result.is_err());
     assert!(result
         .unwrap_err()
@@ -1094,7 +1128,7 @@ typst:
     );
 
     let root = FileTreeNode::Directory { files: root_files };
-    let quill = Quill::from_tree(root).unwrap();
+    let quill = QuillSource::from_tree(root).unwrap();
 
     // Verify metadata includes backend and description
     assert!(quill.metadata.contains_key("backend"));
@@ -1149,7 +1183,7 @@ main:
     );
 
     let root = FileTreeNode::Directory { files: root_files };
-    let quill = Quill::from_tree(root).unwrap();
+    let quill = QuillSource::from_tree(root).unwrap();
 
     // Extract defaults
     let defaults = quill.extract_defaults();
@@ -1782,9 +1816,8 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    // Simulate YAML parsing where numbers are represented as strings
-    let mut fields = std::collections::HashMap::new();
-    fields.insert(
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert(
         "scores".to_string(),
         crate::value::QuillValue::from_json(serde_json::json!([
             {"name": "Math", "value": "95", "active": "true"},
@@ -1792,7 +1825,7 @@ main:
         ])),
     );
 
-    let coerced = config.coerce(&fields).unwrap();
+    let coerced = config.coerce_frontmatter(&frontmatter).unwrap();
     let scores = coerced.get("scores").unwrap();
     let arr = scores.as_array().unwrap();
 
@@ -1828,25 +1861,25 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert(
         "count".to_string(),
         QuillValue::from_json(serde_json::json!("42")),
     );
-    fields.insert(
+    frontmatter.insert(
         "active".to_string(),
         QuillValue::from_json(serde_json::json!("true")),
     );
-    fields.insert(
+    frontmatter.insert(
         "signed_on".to_string(),
         QuillValue::from_json(serde_json::json!("2026-04-13")),
     );
-    fields.insert(
+    frontmatter.insert(
         "created_at".to_string(),
         QuillValue::from_json(serde_json::json!("2026-04-13T20:00:00Z")),
     );
 
-    let coerced = config.coerce(&fields).unwrap();
+    let coerced = config.coerce_frontmatter(&frontmatter).unwrap();
     assert_eq!(coerced.get("count").unwrap().as_i64(), Some(42));
     assert_eq!(coerced.get("active").unwrap().as_bool(), Some(true));
     assert_eq!(
@@ -1875,13 +1908,13 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert(
         "count".to_string(),
         QuillValue::from_json(serde_json::json!("42")),
     );
 
-    let coerced = config.coerce(&fields).unwrap();
+    let coerced = config.coerce_frontmatter(&frontmatter).unwrap();
     assert_eq!(coerced.get("count").unwrap().as_i64(), Some(42));
 }
 
@@ -1901,13 +1934,13 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert(
         "count".to_string(),
         QuillValue::from_json(serde_json::json!("42.5")),
     );
 
-    let error = config.coerce(&fields).unwrap_err();
+    let error = config.coerce_frontmatter(&frontmatter).unwrap_err();
     assert!(matches!(
         error,
         super::CoercionError::Uncoercible { ref path, ref target, .. }
@@ -1938,8 +1971,8 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert(
         "items".to_string(),
         QuillValue::from_json(serde_json::json!([
             {"score": "90", "active": "true"},
@@ -1947,7 +1980,7 @@ main:
         ])),
     );
 
-    let coerced = config.coerce(&fields).unwrap();
+    let coerced = config.coerce_frontmatter(&frontmatter).unwrap();
     let items = coerced.get("items").unwrap().as_array().unwrap();
     let first = items[0].as_object().unwrap();
     let second = items[1].as_object().unwrap();
@@ -1976,19 +2009,19 @@ cards:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
-        "CARDS".to_string(),
-        QuillValue::from_json(serde_json::json!([
-            {"CARD": "indorsement", "score": "100", "active": "false"}
-        ])),
+    let mut card_fields = indexmap::IndexMap::new();
+    card_fields.insert(
+        "score".to_string(),
+        QuillValue::from_json(serde_json::json!("100")),
+    );
+    card_fields.insert(
+        "active".to_string(),
+        QuillValue::from_json(serde_json::json!("false")),
     );
 
-    let coerced = config.coerce(&fields).unwrap();
-    let cards = coerced.get("CARDS").unwrap().as_array().unwrap();
-    let card = cards[0].as_object().unwrap();
-    assert_eq!(card["score"], serde_json::json!(100));
-    assert_eq!(card["active"], serde_json::json!(false));
+    let coerced = config.coerce_card("indorsement", &card_fields).unwrap();
+    assert_eq!(coerced.get("score").unwrap().as_i64(), Some(100));
+    assert_eq!(coerced.get("active").unwrap().as_bool(), Some(false));
 }
 
 #[test]
@@ -2007,13 +2040,13 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert(
         "signed_on".to_string(),
         QuillValue::from_json(serde_json::json!("13-04-2026")),
     );
 
-    let error = config.coerce(&fields).unwrap_err();
+    let error = config.coerce_frontmatter(&frontmatter).unwrap_err();
     assert!(matches!(
         error,
         super::CoercionError::Uncoercible { ref path, ref target, .. }
@@ -2037,13 +2070,13 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let mut fields = HashMap::new();
-    fields.insert(
+    let mut frontmatter = indexmap::IndexMap::new();
+    frontmatter.insert(
         "count".to_string(),
         QuillValue::from_json(serde_json::json!("forty-two")),
     );
 
-    let error = config.coerce(&fields).unwrap_err();
+    let error = config.coerce_frontmatter(&frontmatter).unwrap_err();
     assert!(matches!(
         error,
         super::CoercionError::Uncoercible { ref path, ref target, .. }
@@ -2151,7 +2184,7 @@ main:
 #[test]
 fn public_schema_snapshot_usaf_memo_0_1_0() {
     let quill_path = quillmark_fixtures::resource_path("quills/usaf_memo/0.1.0");
-    let quill = Quill::from_path(quill_path).expect("failed to load usaf_memo fixture");
+    let quill = load_from_path(quill_path).expect("failed to load usaf_memo fixture");
 
     let yaml = quill
         .config

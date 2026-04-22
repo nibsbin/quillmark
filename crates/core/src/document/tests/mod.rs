@@ -1,0 +1,8 @@
+mod ambiguous_strings_tests;
+mod assemble_tests;
+mod edit_tests;
+mod emit_idempotence_tests;
+mod emit_stability_tests;
+mod emit_tests;
+mod lossiness_tests;
+mod number_edge_tests;

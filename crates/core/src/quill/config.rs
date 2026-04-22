@@ -2,6 +2,8 @@
 use std::collections::HashMap;
 use std::error::Error as StdError;
 
+use indexmap::IndexMap;
+
 use serde::{Deserialize, Serialize};
 use time::format_description::well_known::Rfc3339;
 use time::{Date, OffsetDateTime};
@@ -149,16 +151,13 @@ impl QuillConfig {
         })
     }
 
-    /// Coerce document fields to match expected schema types.
-    ///
-    /// Returns an error when a value cannot be coerced to the declared type.
-    pub fn coerce(
+    /// Coerce typed frontmatter fields (IndexMap, no CARDS/BODY keys).
+    pub fn coerce_frontmatter(
         &self,
-        fields: &HashMap<String, QuillValue>,
-    ) -> Result<HashMap<String, QuillValue>, CoercionError> {
-        let mut coerced = HashMap::new();
-
-        for (field_name, field_value) in fields {
+        frontmatter: &IndexMap<String, QuillValue>,
+    ) -> Result<IndexMap<String, QuillValue>, CoercionError> {
+        let mut coerced: IndexMap<String, QuillValue> = IndexMap::new();
+        for (field_name, field_value) in frontmatter {
             if let Some(field_schema) = self.main().fields.get(field_name) {
                 let path = field_name.as_str();
                 coerced.insert(
@@ -169,68 +168,41 @@ impl QuillConfig {
                 coerced.insert(field_name.clone(), field_value.clone());
             }
         }
-
-        if let Some(cards_value) = coerced.get("CARDS") {
-            if let Some(cards_array) = cards_value.as_array() {
-                let coerced_cards = self.coerce_cards_array_strict(cards_array)?;
-                coerced.insert(
-                    "CARDS".to_string(),
-                    QuillValue::from_json(serde_json::Value::Array(coerced_cards)),
-                );
-            } else {
-                return Err(CoercionError::Uncoercible {
-                    path: "CARDS".to_string(),
-                    value: cards_value.as_json().to_string(),
-                    target: "array".to_string(),
-                    reason: "CARDS must be an array".to_string(),
-                });
-            }
-        }
-
         Ok(coerced)
     }
 
-    /// Validate document fields against this configuration.
-    pub fn validate(
+    /// Coerce typed fields for a single card (IndexMap, no CARD/BODY keys).
+    ///
+    /// Returns the input unchanged when the card tag is unknown.
+    pub fn coerce_card(
         &self,
-        fields: &HashMap<String, QuillValue>,
-    ) -> Result<(), Vec<super::validation::ValidationError>> {
-        super::validation::validate_document(self, fields)
+        card_tag: &str,
+        fields: &IndexMap<String, QuillValue>,
+    ) -> Result<IndexMap<String, QuillValue>, CoercionError> {
+        let Some(card_schema) = self.card_definition(card_tag) else {
+            return Ok(fields.clone());
+        };
+        let mut coerced: IndexMap<String, QuillValue> = IndexMap::new();
+        for (field_name, field_value) in fields {
+            if let Some(field_schema) = card_schema.fields.get(field_name) {
+                let path = format!("cards.{card_tag}.{field_name}");
+                coerced.insert(
+                    field_name.clone(),
+                    Self::coerce_value_strict(field_value, field_schema, &path)?,
+                );
+            } else {
+                coerced.insert(field_name.clone(), field_value.clone());
+            }
+        }
+        Ok(coerced)
     }
 
-    fn coerce_cards_array_strict(
+    /// Validate a typed [`crate::document::Document`] against this configuration.
+    pub fn validate_document(
         &self,
-        cards_array: &[serde_json::Value],
-    ) -> Result<Vec<serde_json::Value>, CoercionError> {
-        let mut coerced_cards = Vec::new();
-
-        for (index, card) in cards_array.iter().enumerate() {
-            if let Some(card_obj) = card.as_object() {
-                if let Some(card_type) = card_obj.get("CARD").and_then(|v| v.as_str()) {
-                    if let Some(card_schema) = self.card_definition(card_type) {
-                        let mut coerced_card = serde_json::Map::new();
-                        for (k, v) in card_obj {
-                            if let Some(field_schema) = card_schema.fields.get(k) {
-                                let qv = QuillValue::from_json(v.clone());
-                                let path = format!("cards.{card_type}[{index}].{k}");
-                                coerced_card.insert(
-                                    k.clone(),
-                                    Self::coerce_value_strict(&qv, field_schema, &path)?
-                                        .into_json(),
-                                );
-                            } else {
-                                coerced_card.insert(k.clone(), v.clone());
-                            }
-                        }
-                        coerced_cards.push(serde_json::Value::Object(coerced_card));
-                        continue;
-                    }
-                }
-            }
-            coerced_cards.push(card.clone());
-        }
-
-        Ok(coerced_cards)
+        doc: &crate::document::Document,
+    ) -> Result<(), Vec<super::validation::ValidationError>> {
+        super::validation::validate_typed_document(self, doc)
     }
 
     fn coerce_value_strict(

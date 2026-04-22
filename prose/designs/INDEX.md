@@ -7,7 +7,6 @@
 
 ## Components
 
-- **[PARSE.md](PARSE.md)** - Markdown parsing and Extended YAML Metadata Standard
 - **[MARKDOWN.md](MARKDOWN.md)** - Quillmark Markdown specification (superset of CommonMark)
 - **[QUILL.md](QUILL.md)** - Quill bundle structure and file tree API
 - **[QUILL_VALUE.md](QUILL_VALUE.md)** - Unified value type for YAML/JSON conversions
@@ -15,8 +14,6 @@
 - **[SCHEMAS.md](SCHEMAS.md)** - `QuillConfig` schema model, native validation, and emission overview
 - **[PUBLIC_SCHEMA.md](PUBLIC_SCHEMA.md)** - External YAML schema contract consumed by bindings/integrations
 - **[CARDS.md](CARDS.md)** - Composable cards with unified CARDS array
-- ~~**[SCOPES.md](SCOPES.md)**~~ - *Superseded by CARDS.md*
-- **[TEMPLATE_DRY_RUN.md](TEMPLATE_DRY_RUN.md)** - Dry run validation
 - **[GLUE_METADATA.md](GLUE_METADATA.md)** - Plate data injection
 
 ## Backends
@@ -26,8 +23,8 @@
 ## Bindings
 
 - **[CLI.md](CLI.md)** - Command-line interface
-- **[PYTHON.md](PYTHON.md)** - Python bindings (PyO3)
-- **[WASM.md](WASM.md)** - WebAssembly bindings
+- Python bindings (PyO3): see `crates/bindings/python/` rustdoc
+- WebAssembly bindings: see `crates/bindings/wasm/` rustdoc
 
 ## Infrastructure
 

@@ -1,0 +1,149 @@
+//! Targeted number-edge tests — Phase 4b.
+//!
+//! Per plan §Phase 4 risks: `1e10`, `0x1F`, large integers — confirm
+//! `QuillValue::Number` and the emitter agree on representation.
+//!
+//! See plan §Phase 4 test item 6.
+
+use crate::document::Document;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+fn assert_round_trip(label: &str, src: &str) {
+    let a = Document::from_markdown(src)
+        .unwrap_or_else(|e| panic!("{}: from_markdown failed: {}", label, e));
+    let emitted = a.to_markdown();
+    let b = Document::from_markdown(&emitted)
+        .unwrap_or_else(|e| panic!("{}: re-parse failed: {}\nEmitted:\n{}", label, e, emitted));
+    assert_eq!(
+        a, b,
+        "{}: round-trip produced different Documents.\nEmitted:\n{}",
+        label, emitted
+    );
+}
+
+// ── 1e10 (scientific-notation float) ─────────────────────────────────────────
+
+/// `1e10` bare in YAML parses as the float `10_000_000_000.0`.
+/// After round-trip the number value must be preserved.
+#[test]
+fn number_scientific_notation_round_trip() {
+    let src = "---\nQUILL: q\nbig: 1e10\n---\n";
+    assert_round_trip("1e10", src);
+
+    // The parsed value must be a number (not a string).
+    let doc = Document::from_markdown(src).unwrap();
+    let v = doc.frontmatter().get("big").unwrap();
+    assert!(
+        v.as_f64().is_some(),
+        "1e10 must parse as a number, got {:?}",
+        v
+    );
+}
+
+/// `"1e10"` as a quoted string must round-trip as a string, not a float.
+#[test]
+fn string_that_looks_like_scientific_notation_round_trip() {
+    let src = "---\nQUILL: q\nbig: \"1e10\"\n---\n";
+    assert_round_trip("\"1e10\" string", src);
+
+    let doc = Document::from_markdown(src).unwrap();
+    let v = doc.frontmatter().get("big").unwrap();
+    assert_eq!(
+        v.as_str(),
+        Some("1e10"),
+        "quoted 1e10 must parse as string, got {:?}",
+        v
+    );
+}
+
+// ── 0x1F (hex-like string) ────────────────────────────────────────────────────
+
+/// YAML 1.2 has no hex literal syntax; `0x1F` without quotes parses as a
+/// string.  Confirm it round-trips as a string.
+#[test]
+fn string_hex_like_round_trip() {
+    let src = "---\nQUILL: q\nhex: \"0x1F\"\n---\n";
+    assert_round_trip("0x1F string", src);
+
+    let doc = Document::from_markdown(src).unwrap();
+    let v = doc.frontmatter().get("hex").unwrap();
+    assert_eq!(
+        v.as_str(),
+        Some("0x1F"),
+        "\"0x1F\" must remain a string, got {:?}",
+        v
+    );
+}
+
+// ── Large integer (beyond i32) ────────────────────────────────────────────────
+
+/// An integer beyond `i32::MAX` but within `i64::MAX` must round-trip correctly.
+#[test]
+fn large_integer_round_trip() {
+    let src = "---\nQUILL: q\nbig_int: 9999999999999\n---\n";
+    assert_round_trip("large integer", src);
+
+    let doc = Document::from_markdown(src).unwrap();
+    let v = doc.frontmatter().get("big_int").unwrap();
+    assert_eq!(
+        v.as_i64(),
+        Some(9_999_999_999_999_i64),
+        "9999999999999 must parse as i64, got {:?}",
+        v
+    );
+}
+
+// ── Emitter representation agreement ─────────────────────────────────────────
+
+/// After emit, the numeric representation in the YAML output must be parseable
+/// back to the same `serde_json::Number`.  We test with a representative set.
+#[test]
+fn emitted_number_representation_matches_parse() {
+    struct Case {
+        src_value: &'static str,
+        key: &'static str,
+    }
+
+    let cases = [
+        Case {
+            src_value: "42",
+            key: "count",
+        },
+        Case {
+            src_value: "3.14",
+            key: "pi",
+        },
+        Case {
+            src_value: "0",
+            key: "zero",
+        },
+        Case {
+            src_value: "-7",
+            key: "neg",
+        },
+        Case {
+            src_value: "9999999999999",
+            key: "big",
+        },
+    ];
+
+    for case in &cases {
+        let src = format!("---\nQUILL: q\n{}: {}\n---\n", case.key, case.src_value);
+        let doc = Document::from_markdown(&src).unwrap();
+        let emitted = doc.to_markdown();
+        let doc2 = Document::from_markdown(&emitted).unwrap_or_else(|e| {
+            panic!(
+                "re-parse failed for {}: {}\nEmitted:\n{}",
+                case.src_value, e, emitted
+            )
+        });
+        let v1 = doc.frontmatter().get(case.key).unwrap();
+        let v2 = doc2.frontmatter().get(case.key).unwrap();
+        assert_eq!(
+            v1, v2,
+            "number {} changed representation after emit/re-parse\nEmitted:\n{}",
+            case.src_value, emitted
+        );
+    }
+}

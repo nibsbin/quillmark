@@ -19,6 +19,7 @@ thiserror = { workspace = true }
 glob = { workspace = true }
 unicode-normalization = { workspace = true }
 time = { workspace = true }
+indexmap = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

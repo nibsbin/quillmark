@@ -13,7 +13,7 @@ pip install quillmark
 ## Quick Start
 
 ```python
-from quillmark import Quillmark, ParsedDocument, OutputFormat
+from quillmark import Quillmark, Document, OutputFormat
 
 engine = Quillmark()
 quill = engine.quill_from_path("path/to/quill")
@@ -26,9 +26,15 @@ title: Hello World
 # Hello
 """
 
-parsed = ParsedDocument.from_markdown(markdown)
+parsed = Document.from_markdown(markdown)
 result = quill.render(parsed, OutputFormat.PDF)
 result.artifacts[0].save("output.pdf")
+
+# Round-trip: mutate, emit, re-parse
+parsed.set_field("title", "Updated")
+emitted = parsed.to_markdown()
+reparsed = Document.from_markdown(emitted)
+assert reparsed.frontmatter["title"] == "Updated"
 ```
 
 ## API Overview
@@ -39,25 +45,15 @@ result.artifacts[0].save("output.pdf")
 engine = Quillmark()
 engine.registered_backends()      # ['typst']
 quill = engine.quill_from_path("path/to/quill")
-workflow = engine.workflow(quill) # for dynamic assets/fonts
 ```
 
 ### `Quill`
 
 ```python
 quill = engine.quill_from_path("path")
-result = quill.render(markdown_or_parsed, OutputFormat.PDF)
-```
-
-### `Workflow`
-
-Use workflow when adding dynamic assets/fonts:
-
-```python
-workflow = engine.workflow(quill)
-workflow.add_asset("logo.png", logo_bytes)
-workflow.add_font("Custom.ttf", font_bytes)
-result = workflow.render(parsed, OutputFormat.PDF)
+result = quill.render(parsed, OutputFormat.PDF)
+session = quill.open(parsed)
+quill.dry_run(parsed)
 ```
 
 ## Development

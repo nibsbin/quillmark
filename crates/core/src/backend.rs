@@ -1,7 +1,8 @@
 //! Backend trait for output backends.
 
 use crate::error::RenderError;
-use crate::{OutputFormat, Quill, RenderSession};
+use crate::quill::QuillSource;
+use crate::{OutputFormat, RenderSession};
 
 /// Backend trait for rendering different output formats.
 pub trait Backend: Send + Sync + std::fmt::Debug {
@@ -15,7 +16,7 @@ pub trait Backend: Send + Sync + std::fmt::Debug {
     fn open(
         &self,
         plate_content: &str,
-        quill: &Quill,
+        source: &QuillSource,
         json_data: &serde_json::Value,
     ) -> Result<RenderSession, RenderError>;
 }

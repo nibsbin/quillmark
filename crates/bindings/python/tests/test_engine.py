@@ -1,13 +1,12 @@
 """Tests for Quillmark engine."""
 
-from quillmark import Quill, Quillmark
+from quillmark import Quillmark
 
 
-def test_workflow_from_quill(taro_quill_dir):
-    """Test engine creates workflow from Quill object."""
+def test_quill_metadata_from_engine(taro_quill_dir):
+    """Engine.quill_from_path returns a renderable Quill with backend metadata."""
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
 
-    workflow = engine.workflow(quill)
-    assert quill.name in workflow.quill_ref
-    assert workflow.backend_id == quill.backend
+    assert quill.name in quill.quill_ref
+    assert quill.backend == "typst"

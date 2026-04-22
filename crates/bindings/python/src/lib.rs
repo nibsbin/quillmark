@@ -6,20 +6,20 @@ mod types;
 
 pub use enums::{PyOutputFormat, PySeverity};
 pub use errors::{
-    convert_render_error, CompilationError, ParseError, QuillmarkError, TemplateError,
+    convert_edit_error, convert_render_error, CompilationError, ParseError, PyEditError,
+    QuillmarkError, TemplateError,
 };
 pub use types::{
-    PyArtifact, PyDiagnostic, PyLocation, PyParsedDocument, PyQuill, PyQuillmark, PyRenderResult,
-    PyRenderSession, PyWorkflow,
+    PyArtifact, PyDiagnostic, PyDocument, PyLocation, PyQuill, PyQuillmark, PyRenderResult,
+    PyRenderSession,
 };
 
 #[pymodule]
 fn _quillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
     // Register classes
     m.add_class::<PyQuillmark>()?;
-    m.add_class::<PyWorkflow>()?;
     m.add_class::<PyQuill>()?;
-    m.add_class::<PyParsedDocument>()?;
+    m.add_class::<PyDocument>()?;
     m.add_class::<PyRenderResult>()?;
     m.add_class::<PyRenderSession>()?;
     m.add_class::<PyArtifact>()?;
@@ -35,6 +35,7 @@ fn _quillmark(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("ParseError", m.py().get_type::<ParseError>())?;
     m.add("TemplateError", m.py().get_type::<TemplateError>())?;
     m.add("CompilationError", m.py().get_type::<CompilationError>())?;
+    m.add("EditError", m.py().get_type::<PyEditError>())?;
 
     Ok(())
 }

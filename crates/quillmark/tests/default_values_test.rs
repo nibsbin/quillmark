@@ -1,6 +1,6 @@
 //! # Default Values Tests
 
-use quillmark::{ParsedDocument, Quillmark};
+use quillmark::{Document, Quillmark};
 use std::fs;
 use tempfile::TempDir;
 
@@ -45,12 +45,11 @@ main:
     let quill = engine
         .quill_from_path(&quill_path)
         .expect("quill_from_path failed");
-    let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\ntitle: My Document\n---\n\n# Content\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
-    let result = workflow.dry_run(&parsed);
+    let result = quill.dry_run(&parsed);
     assert!(
         result.is_ok(),
         "Dry run should succeed - optional fields have defaults"
@@ -83,13 +82,12 @@ main:
     let quill = engine
         .quill_from_path(&quill_path)
         .expect("quill_from_path failed");
-    let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown =
         "---\nQUILL: test_quill\ntitle: My Document\nstatus: published\n---\n\n# Content\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
-    let result = workflow.dry_run(&parsed);
+    let result = quill.dry_run(&parsed);
     assert!(
         result.is_ok(),
         "Dry run should succeed with explicit values"
@@ -123,12 +121,11 @@ main:
     let quill = engine
         .quill_from_path(&quill_path)
         .expect("quill_from_path failed");
-    let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\n---\n\n# Content";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
-    let dry_run_result = workflow.dry_run(&parsed);
+    let dry_run_result = quill.dry_run(&parsed);
     assert!(
         dry_run_result.is_ok(),
         "Dry run should pass - fields have defaults"
@@ -162,12 +159,11 @@ main:
     let quill = engine
         .quill_from_path(&quill_path)
         .expect("quill_from_path failed");
-    let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: test_quill\nstatus: published\n---\n\n# Content\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
-    let result = workflow.dry_run(&parsed);
+    let result = quill.dry_run(&parsed);
     assert!(
         result.is_err(),
         "Should fail validation - title is required"
@@ -212,7 +208,7 @@ main:
     let quill = engine
         .quill_from_path(quill_path)
         .expect("quill_from_path failed");
-    let defaults = quill.extract_defaults();
+    let defaults = quill.source().extract_defaults();
 
     assert!(defaults.contains_key("author"));
     assert_eq!(defaults.get("author").unwrap().as_str(), Some("Anonymous"));

@@ -1,6 +1,6 @@
 use wasm_bindgen_test::*;
 
-use quillmark_wasm::{ParsedDocument, Quillmark, RenderOptions};
+use quillmark_wasm::{Document, Quillmark, RenderOptions};
 
 mod common;
 
@@ -20,8 +20,17 @@ const SIMPLE_MARKDOWN: &str = "---\nQUILL: test_quill\ntitle: Hello\n---\n\n# He
 
 #[wasm_bindgen_test]
 fn test_parse_markdown_static() {
-    let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
-    assert_eq!(parsed.quill_ref, "test_quill");
+    let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
+    assert_eq!(doc.quill_ref(), "test_quill");
+}
+
+#[wasm_bindgen_test]
+fn test_document_body_and_warnings() {
+    let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
+    assert_eq!(doc.body(), "\n# Hello\n");
+    // warnings() returns JsValue (array) — just verify it's defined
+    let warnings = doc.warnings();
+    assert!(!warnings.is_undefined());
 }
 
 #[wasm_bindgen_test]
@@ -39,9 +48,9 @@ fn test_render_ref_mismatch_warning() {
     let quill = engine.quill(small_quill_tree()).expect("quill failed");
 
     let mismatch_md = "---\nQUILL: other_quill\ntitle: Mismatch\n---\n\n# Content\n";
-    let parsed = ParsedDocument::from_markdown(mismatch_md).expect("fromMarkdown failed");
+    let doc = Document::from_markdown(mismatch_md).expect("fromMarkdown failed");
     let result = quill
-        .render(parsed, RenderOptions::default())
+        .render(doc, RenderOptions::default())
         .expect("render should succeed despite mismatch");
 
     assert_eq!(result.warnings.len(), 1, "expected exactly one warning");
@@ -53,16 +62,16 @@ fn test_render_ref_mismatch_warning() {
     assert!(!result.artifacts.is_empty(), "artifact must be produced");
 }
 
-/// `quill.render(ParsedDocument, opts)` — render via pre-parsed document.
+/// `quill.render(Document, opts)` — render via pre-parsed document.
 #[wasm_bindgen_test]
-fn test_render_from_parsed_document() {
+fn test_render_from_document() {
     let engine = Quillmark::new();
     let quill = engine.quill(small_quill_tree()).expect("quill failed");
 
-    let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
+    let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     let result = quill
-        .render(parsed, RenderOptions::default())
-        .expect("render from ParsedDocument failed");
+        .render(doc, RenderOptions::default())
+        .expect("render from Document failed");
 
     assert!(
         !result.artifacts.is_empty(),
@@ -75,18 +84,37 @@ fn test_render_from_parsed_document() {
     );
 }
 
-/// `quill.open(ParsedDocument)` returns a render session supporting page_count + render.
+/// `quill.open(Document)` returns a render session supporting page_count + render.
 #[wasm_bindgen_test]
 fn test_open_session_render() {
     let engine = Quillmark::new();
     let quill = engine.quill(small_quill_tree()).expect("quill failed");
 
-    let parsed = ParsedDocument::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
-    let session = quill.open(parsed).expect("open failed");
+    let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
+    let session = quill.open(doc).expect("open failed");
     assert!(session.page_count() > 0, "session should expose page count");
 
     let result = session
         .render(RenderOptions::default())
         .expect("session render failed");
     assert!(!result.artifacts.is_empty(), "should produce artifacts");
+}
+
+/// `toMarkdown` emits canonical Quillmark Markdown and round-trips cleanly.
+#[wasm_bindgen_test]
+fn test_to_markdown_round_trip() {
+    let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
+    let emitted = doc.to_markdown();
+    assert!(
+        !emitted.is_empty(),
+        "toMarkdown must return non-empty output"
+    );
+
+    // Re-parse: the emitted document must parse back cleanly
+    let doc2 = Document::from_markdown(&emitted).expect("re-parse of emitted markdown failed");
+    assert_eq!(
+        doc2.quill_ref(),
+        doc.quill_ref(),
+        "quill_ref must survive round-trip"
+    );
 }

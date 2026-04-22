@@ -2166,6 +2166,7 @@ version = "0.58.0"
 dependencies = [
  "anyhow",
  "cargo-husky",
+ "indexmap",
  "quillmark-core",
  "quillmark-fixtures",
  "quillmark-typst",
@@ -2192,6 +2193,7 @@ name = "quillmark-core"
 version = "0.58.0"
 dependencies = [
  "glob",
+ "indexmap",
  "quillmark-fixtures",
  "serde",
  "serde-saphyr",
@@ -2224,6 +2226,7 @@ name = "quillmark-python"
 version = "0.58.0"
 dependencies = [
  "anyhow",
+ "indexmap",
  "pyo3",
  "quillmark",
  "quillmark-core",
@@ -2259,6 +2262,7 @@ version = "0.58.0"
 dependencies = [
  "console_error_panic_hook",
  "getrandom 0.3.4",
+ "indexmap",
  "js-sys",
  "quillmark",
  "quillmark-core",

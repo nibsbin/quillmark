@@ -1,16 +1,15 @@
 """Tests for rendering workflow."""
 
-from quillmark import OutputFormat, ParsedDocument, Quillmark
+from quillmark import OutputFormat, Document, Quillmark
 
 
 def test_save_artifact(taro_quill_dir, taro_md, tmp_path):
     """Test saving an artifact to file."""
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
-    workflow = engine.workflow(quill)
 
-    parsed = ParsedDocument.from_markdown(taro_md)
-    result = workflow.render(parsed, OutputFormat.PDF)
+    parsed = Document.from_markdown(taro_md)
+    result = quill.render(parsed, OutputFormat.PDF)
 
     output_path = tmp_path / "output.pdf"
     result.artifacts[0].save(str(output_path))
@@ -20,10 +19,10 @@ def test_save_artifact(taro_quill_dir, taro_md, tmp_path):
 
 
 def test_quill_render_from_parsed_document(taro_quill_dir, taro_md):
-    """quill.render(ParsedDocument) accepts a pre-parsed document."""
+    """quill.render(Document) accepts a pre-parsed document."""
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
-    parsed = ParsedDocument.from_markdown(taro_md)
+    parsed = Document.from_markdown(taro_md)
 
     result = quill.render(parsed)
 
@@ -36,7 +35,7 @@ def test_quill_render_with_explicit_format(taro_quill_dir, taro_md):
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
 
-    parsed = ParsedDocument.from_markdown(taro_md)
+    parsed = Document.from_markdown(taro_md)
     result = quill.render(parsed, OutputFormat.SVG)
 
     assert len(result.artifacts) > 0
@@ -44,7 +43,7 @@ def test_quill_render_with_explicit_format(taro_quill_dir, taro_md):
 
 
 def test_quill_render_ref_mismatch_warning(taro_quill_dir):
-    """Rendering a ParsedDocument with a mismatched QUILL ref emits a warning."""
+    """Rendering a Document with a mismatched QUILL ref emits a warning."""
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
 
@@ -57,7 +56,7 @@ def test_quill_render_ref_mismatch_warning(taro_quill_dir):
         "title: Mismatch Test\n"
         "---\n\nContent.\n"
     )
-    parsed = ParsedDocument.from_markdown(mismatch_md)
+    parsed = Document.from_markdown(mismatch_md)
     result = quill.render(parsed)
 
     codes = [w.code for w in result.warnings]
@@ -68,7 +67,7 @@ def test_quill_render_ref_mismatch_warning(taro_quill_dir):
 def test_quill_open_session_page_selection(taro_quill_dir, taro_md):
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
-    parsed = ParsedDocument.from_markdown(taro_md)
+    parsed = Document.from_markdown(taro_md)
 
     session = quill.open(parsed)
     assert session.page_count > 0
@@ -78,28 +77,13 @@ def test_quill_open_session_page_selection(taro_quill_dir, taro_md):
     assert subset.output_format == OutputFormat.SVG
 
 
-def test_engine_workflow_still_works(taro_quill_dir, taro_md):
-    """engine.workflow(quill) remains the correct path for dynamic-asset renders."""
+def test_quill_render_full_document(taro_quill_dir, taro_md):
+    """quill.render(doc) renders successfully."""
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
-    workflow = engine.workflow(quill)
 
-    parsed = ParsedDocument.from_markdown(taro_md)
-    result = workflow.render(parsed, OutputFormat.PDF)
+    parsed = Document.from_markdown(taro_md)
+    result = quill.render(parsed, OutputFormat.PDF)
 
     assert len(result.artifacts) > 0
     assert result.output_format == OutputFormat.PDF
-
-
-def test_workflow_open_session(taro_quill_dir, taro_md):
-    engine = Quillmark()
-    quill = engine.quill_from_path(str(taro_quill_dir))
-    workflow = engine.workflow(quill)
-    parsed = ParsedDocument.from_markdown(taro_md)
-
-    session = workflow.open(parsed)
-    assert session.page_count > 0
-
-    subset = session.render(OutputFormat.SVG, [0])
-    assert len(subset.artifacts) == 1
-    assert subset.output_format == OutputFormat.SVG

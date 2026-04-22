@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-
+use indexmap::IndexMap;
 use time::format_description::well_known::Rfc3339;
 use time::{Date, OffsetDateTime};
 
+use crate::document::Document;
 use crate::quill::formats::DATE_FORMAT;
 use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
 use crate::value::QuillValue;
@@ -37,71 +37,33 @@ pub enum ValidationError {
     MissingCardDiscriminator { path: String },
 }
 
-/// Validate a parsed document against the full config.
+/// Validate a typed [`Document`] (with `IndexMap` frontmatter + typed `Card` list).
 ///
-/// Validates main fields, all card instances, and enforces required fields.
-/// Collects all errors rather than short-circuiting on the first.
-pub fn validate_document(
+/// This is the typed entry point used by `QuillConfig::validate_document`.
+pub fn validate_typed_document(
     config: &QuillConfig,
-    fields: &HashMap<String, QuillValue>,
+    doc: &Document,
 ) -> Result<(), Vec<ValidationError>> {
-    let mut errors = validate_fields_for_card(config.main(), fields, "");
+    let mut errors = validate_fields_for_card_indexmap(config.main(), doc.frontmatter(), "");
 
-    if let Some(cards_value) = fields.get("CARDS") {
-        match cards_value.as_array() {
-            Some(cards) => {
-                for (index, card_value) in cards.iter().enumerate() {
-                    let item_path = index_path("cards", index);
-                    let Some(card_object) = card_value.as_object() else {
-                        errors.push(ValidationError::TypeMismatch {
-                            path: item_path,
-                            expected: "object".to_string(),
-                            actual: json_type_name(card_value).to_string(),
-                        });
-                        continue;
-                    };
+    for (index, card) in doc.cards().iter().enumerate() {
+        let card_name = card.tag();
+        let item_path = format!("cards[{index}]");
 
-                    let Some(card_discriminator) = card_object.get("CARD") else {
-                        errors.push(ValidationError::MissingCardDiscriminator { path: item_path });
-                        continue;
-                    };
+        let Some(card_schema) = config.card_definition(card_name) else {
+            errors.push(ValidationError::UnknownCard {
+                path: item_path,
+                card: card_name.to_string(),
+            });
+            continue;
+        };
 
-                    let Some(card_name) = card_discriminator.as_str() else {
-                        errors.push(ValidationError::TypeMismatch {
-                            path: child_path(&item_path, "CARD"),
-                            expected: "string".to_string(),
-                            actual: json_type_name(card_discriminator).to_string(),
-                        });
-                        continue;
-                    };
-
-                    let Some(card_schema) = config.card_definition(card_name) else {
-                        errors.push(ValidationError::UnknownCard {
-                            path: item_path,
-                            card: card_name.to_string(),
-                        });
-                        continue;
-                    };
-
-                    let mut card_fields = HashMap::new();
-                    for (key, value) in card_object {
-                        card_fields.insert(key.clone(), QuillValue::from_json(value.clone()));
-                    }
-
-                    let card_path = format!("cards.{card_name}[{index}]");
-                    errors.extend(validate_fields_for_card(
-                        card_schema,
-                        &card_fields,
-                        &card_path,
-                    ));
-                }
-            }
-            None => errors.push(ValidationError::TypeMismatch {
-                path: "CARDS".to_string(),
-                expected: "array".to_string(),
-                actual: json_type_name(cards_value.as_json()).to_string(),
-            }),
-        }
+        let card_path = format!("cards.{card_name}[{index}]");
+        errors.extend(validate_fields_for_card_indexmap(
+            card_schema,
+            card.fields(),
+            &card_path,
+        ));
     }
 
     if errors.is_empty() {
@@ -111,9 +73,9 @@ pub fn validate_document(
     }
 }
 
-fn validate_fields_for_card(
+fn validate_fields_for_card_indexmap(
     card: &CardSchema,
-    fields: &HashMap<String, QuillValue>,
+    fields: &IndexMap<String, QuillValue>,
     base_path: &str,
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
@@ -308,7 +270,11 @@ fn index_path(parent: &str, index: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::str::FromStr;
+
     use super::*;
+    use crate::document::{Card, Document};
+    use crate::version::QuillReference;
     use serde_json::json;
 
     fn config_with(main_fields: &str, cards: &str) -> QuillConfig {
@@ -325,8 +291,6 @@ main:
 {cards}
 "#
         );
-        // Use _with_warnings so silently-dropped fields (e.g. unsupported
-        // standalone `type: object`) fail loudly instead of passing vacuously.
         let (config, warnings) = QuillConfig::from_yaml_with_warnings(&yaml).unwrap();
         assert!(
             warnings.is_empty(),
@@ -336,11 +300,40 @@ main:
         config
     }
 
-    fn fields(entries: &[(&str, serde_json::Value)]) -> HashMap<String, QuillValue> {
-        entries
-            .iter()
-            .map(|(k, v)| (k.to_string(), QuillValue::from_json(v.clone())))
-            .collect()
+    fn doc_from_fm(entries: &[(&str, serde_json::Value)]) -> Document {
+        let mut frontmatter = IndexMap::new();
+        for (k, v) in entries {
+            frontmatter.insert(k.to_string(), QuillValue::from_json(v.clone()));
+        }
+        Document::new_internal(
+            QuillReference::from_str("test_quill").unwrap(),
+            frontmatter,
+            String::new(),
+            vec![],
+            vec![],
+        )
+    }
+
+    fn doc_with_typed_cards(fm: &[(&str, serde_json::Value)], cards: Vec<Card>) -> Document {
+        let mut frontmatter = IndexMap::new();
+        for (k, v) in fm {
+            frontmatter.insert(k.to_string(), QuillValue::from_json(v.clone()));
+        }
+        Document::new_internal(
+            QuillReference::from_str("test_quill").unwrap(),
+            frontmatter,
+            String::new(),
+            cards,
+            vec![],
+        )
+    }
+
+    fn typed_card(tag: &str, fields: &[(&str, serde_json::Value)]) -> Card {
+        let mut card_fields = IndexMap::new();
+        for (k, v) in fields {
+            card_fields.insert(k.to_string(), QuillValue::from_json(v.clone()));
+        }
+        Card::new_internal(tag.to_string(), card_fields, String::new())
     }
 
     fn has_error<F>(errors: &[ValidationError], predicate: F) -> bool
@@ -353,15 +346,15 @@ main:
     #[test]
     fn validates_simple_string_field() {
         let config = config_with("    title:\n      type: string\n      required: true", "");
-        let doc = fields(&[("title", json!("Memo"))]);
-        assert!(validate_document(&config, &doc).is_ok());
+        let doc = doc_from_fm(&[("title", json!("Memo"))]);
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
     fn rejects_simple_string_type_mismatch() {
         let config = config_with("    title:\n      type: string", "");
-        let doc = fields(&[("title", json!(9))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
+        let doc = doc_from_fm(&[("title", json!(9))]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| matches!(
             e,
             ValidationError::TypeMismatch { path, expected, actual }
@@ -372,15 +365,15 @@ main:
     #[test]
     fn validates_integer_field_with_integer_value() {
         let config = config_with("    count:\n      type: integer", "");
-        let doc = fields(&[("count", json!(9))]);
-        assert!(validate_document(&config, &doc).is_ok());
+        let doc = doc_from_fm(&[("count", json!(9))]);
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
     fn rejects_integer_field_with_decimal_value() {
         let config = config_with("    count:\n      type: integer", "");
-        let doc = fields(&[("count", json!(9.5))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
+        let doc = doc_from_fm(&[("count", json!(9.5))]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| matches!(
             e,
             ValidationError::TypeMismatch { path, expected, actual }
@@ -394,7 +387,8 @@ main:
             "    memo_for:\n      type: string\n      required: true",
             "",
         );
-        let errors = validate_document(&config, &HashMap::new()).unwrap_err();
+        let doc = doc_from_fm(&[]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| {
             matches!(e, ValidationError::MissingRequired { path } if path == "memo_for")
         }));
@@ -406,8 +400,8 @@ main:
             "    memo_for:\n      type: string\n      required: true",
             "",
         );
-        let doc = fields(&[("memo_for", json!(true))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
+        let doc = doc_from_fm(&[("memo_for", json!(true))]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| matches!(
             e,
             ValidationError::TypeMismatch { path, .. } if path == "memo_for"
@@ -420,8 +414,8 @@ main:
             "    status:\n      type: string\n      enum:\n        - draft\n        - final",
             "",
         );
-        let doc = fields(&[("status", json!("draft"))]);
-        assert!(validate_document(&config, &doc).is_ok());
+        let doc = doc_from_fm(&[("status", json!("draft"))]);
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
@@ -430,8 +424,8 @@ main:
             "    status:\n      type: string\n      enum:\n        - draft\n        - final",
             "",
         );
-        let doc = fields(&[("status", json!("invalid"))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
+        let doc = doc_from_fm(&[("status", json!("invalid"))]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| matches!(
             e,
             ValidationError::EnumViolation { path, value, .. }
@@ -442,15 +436,15 @@ main:
     #[test]
     fn validates_date_format() {
         let config = config_with("    signed_on:\n      type: date", "");
-        let doc = fields(&[("signed_on", json!("2026-04-13"))]);
-        assert!(validate_document(&config, &doc).is_ok());
+        let doc = doc_from_fm(&[("signed_on", json!("2026-04-13"))]);
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
     fn rejects_invalid_date_format() {
         let config = config_with("    signed_on:\n      type: date", "");
-        let doc = fields(&[("signed_on", json!("13-04-2026"))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
+        let doc = doc_from_fm(&[("signed_on", json!("13-04-2026"))]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| {
             matches!(e, ValidationError::FormatViolation { path, format } if path == "signed_on" && format == "date")
         }));
@@ -459,15 +453,15 @@ main:
     #[test]
     fn validates_datetime_format() {
         let config = config_with("    created_at:\n      type: datetime", "");
-        let doc = fields(&[("created_at", json!("2026-04-13T19:24:55Z"))]);
-        assert!(validate_document(&config, &doc).is_ok());
+        let doc = doc_from_fm(&[("created_at", json!("2026-04-13T19:24:55Z"))]);
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
     fn rejects_invalid_datetime_format() {
         let config = config_with("    created_at:\n      type: datetime", "");
-        let doc = fields(&[("created_at", json!("2026-04-13 19:24:55"))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
+        let doc = doc_from_fm(&[("created_at", json!("2026-04-13 19:24:55"))]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| matches!(
             e,
             ValidationError::FormatViolation { path, format }
@@ -478,8 +472,8 @@ main:
     #[test]
     fn markdown_accepts_any_string() {
         let config = config_with("    body:\n      type: markdown", "");
-        let doc = fields(&[("body", json!("# Heading\n\nBody text"))]);
-        assert!(validate_document(&config, &doc).is_ok());
+        let doc = doc_from_fm(&[("body", json!("# Heading\n\nBody text"))]);
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
@@ -488,8 +482,8 @@ main:
             "    tags:\n      type: array\n      items:\n        type: string",
             "",
         );
-        let doc = fields(&[("tags", json!(["a", "b"]))]);
-        assert!(validate_document(&config, &doc).is_ok());
+        let doc = doc_from_fm(&[("tags", json!(["a", "b"]))]);
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
@@ -498,8 +492,8 @@ main:
             "    tags:\n      type: array\n      items:\n        type: string",
             "",
         );
-        let doc = fields(&[("tags", json!(["a", 2]))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
+        let doc = doc_from_fm(&[("tags", json!(["a", 2]))]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| matches!(
             e,
             ValidationError::TypeMismatch { path, .. } if path == "tags[1]"
@@ -512,8 +506,8 @@ main:
             "    recipients:\n      type: array\n      items:\n        type: object\n        properties:\n          name:\n            type: string\n            required: true\n          org:\n            type: string",
             "",
         );
-        let doc = fields(&[("recipients", json!([{ "name": "Sam", "org": "HQ" }]))]);
-        assert!(validate_document(&config, &doc).is_ok());
+        let doc = doc_from_fm(&[("recipients", json!([{ "name": "Sam", "org": "HQ" }]))]);
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
@@ -522,8 +516,8 @@ main:
             "    recipients:\n      type: array\n      items:\n        type: object\n        properties:\n          name:\n            type: string\n            required: true\n          org:\n            type: string",
             "",
         );
-        let doc = fields(&[("recipients", json!([{ "org": "HQ" }]))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
+        let doc = doc_from_fm(&[("recipients", json!([{ "org": "HQ" }]))]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| {
             matches!(e, ValidationError::MissingRequired { path } if path == "recipients[0].name")
         }));
@@ -536,29 +530,13 @@ main:
     // `reports_missing_required_field_in_array_object`.
 
     #[test]
-    fn reports_type_mismatch_for_cards_when_not_array() {
-        let config = config_with(
-            "    title:\n      type: string",
-            "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string",
-        );
-        let doc = fields(&[("CARDS", json!("not-an-array"))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
-        assert!(has_error(&errors, |e| {
-            matches!(
-                e,
-                ValidationError::TypeMismatch { path, expected, actual }
-                if path == "CARDS" && expected == "array" && actual == "string"
-            )
-        }));
-    }
-
-    #[test]
     fn accumulates_multiple_missing_required_errors() {
         let config = config_with(
             "    memo_for:\n      type: string\n      required: true\n    memo_from:\n      type: string\n      required: true",
             "",
         );
-        let errors = validate_document(&config, &HashMap::new()).unwrap_err();
+        let doc = doc_from_fm(&[]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         let missing_paths: Vec<&str> = errors
             .iter()
             .filter_map(|e| match e {
@@ -576,11 +554,14 @@ main:
             "    title:\n      type: string",
             "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true",
         );
-        let doc = fields(&[(
-            "CARDS",
-            json!([{ "CARD": "indorsement", "signature_block": "Signed" }]),
-        )]);
-        assert!(validate_document(&config, &doc).is_ok());
+        let doc = doc_with_typed_cards(
+            &[],
+            vec![typed_card(
+                "indorsement",
+                &[("signature_block", json!("Signed"))],
+            )],
+        );
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
@@ -589,23 +570,10 @@ main:
             "    title:\n      type: string",
             "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string",
         );
-        let doc = fields(&[("CARDS", json!([{ "CARD": "unknown" }]))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
+        let doc = doc_with_typed_cards(&[], vec![typed_card("unknown", &[])]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| {
             matches!(e, ValidationError::UnknownCard { path, card } if path == "cards[0]" && card == "unknown")
-        }));
-    }
-
-    #[test]
-    fn reports_missing_card_discriminator() {
-        let config = config_with(
-            "    title:\n      type: string",
-            "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string",
-        );
-        let doc = fields(&[("CARDS", json!([{ "signature_block": "Signed" }]))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
-        assert!(has_error(&errors, |e| {
-            matches!(e, ValidationError::MissingCardDiscriminator { path } if path == "cards[0]")
         }));
     }
 
@@ -615,14 +583,14 @@ main:
             "    title:\n      type: string",
             "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true",
         );
-        let doc = fields(&[(
-            "CARDS",
-            json!([
-                { "CARD": "indorsement", "signature_block": "A" },
-                { "CARD": "indorsement", "signature_block": "B" }
-            ]),
-        )]);
-        assert!(validate_document(&config, &doc).is_ok());
+        let doc = doc_with_typed_cards(
+            &[],
+            vec![
+                typed_card("indorsement", &[("signature_block", json!("A"))]),
+                typed_card("indorsement", &[("signature_block", json!("B"))]),
+            ],
+        );
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
@@ -631,14 +599,14 @@ main:
             "    title:\n      type: string",
             "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true\n  routing:\n    fields:\n      office:\n        type: string\n        required: true",
         );
-        let doc = fields(&[(
-            "CARDS",
-            json!([
-                { "CARD": "indorsement", "signature_block": "A" },
-                { "CARD": "routing", "office": "HQ" }
-            ]),
-        )]);
-        assert!(validate_document(&config, &doc).is_ok());
+        let doc = doc_with_typed_cards(
+            &[],
+            vec![
+                typed_card("indorsement", &[("signature_block", json!("A"))]),
+                typed_card("routing", &[("office", json!("HQ"))]),
+            ],
+        );
+        assert!(validate_typed_document(&config, &doc).is_ok());
     }
 
     #[test]
@@ -647,8 +615,8 @@ main:
             "    title:\n      type: string",
             "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true",
         );
-        let doc = fields(&[("CARDS", json!([{ "CARD": "indorsement" }]))]);
-        let errors = validate_document(&config, &doc).unwrap_err();
+        let doc = doc_with_typed_cards(&[], vec![typed_card("indorsement", &[])]);
+        let errors = validate_typed_document(&config, &doc).unwrap_err();
         assert!(has_error(&errors, |e| {
             matches!(e, ValidationError::MissingRequired { path } if path == "cards.indorsement[0].signature_block")
         }));

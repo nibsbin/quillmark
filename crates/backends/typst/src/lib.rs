@@ -7,7 +7,7 @@
 //!
 //! The primary entry point is the [`TypstBackend`] struct, which implements the
 //! [`Backend`] trait from `quillmark-core`. Users typically interact with this backend
-//! through the high-level `Workflow` API from the `quillmark` crate.
+//! through the high-level `Quill` API from the `quillmark` crate.
 //!
 //! ## Features
 //!
@@ -17,17 +17,6 @@
 //! - Manages fonts, assets, and packages dynamically
 //! - Thread-safe for concurrent rendering
 //!
-//! ## Example Usage
-//!
-//! ```no_run
-//! use std::sync::Arc;
-//! use quillmark_core::{Backend, Quill};
-//! use quillmark_typst::TypstBackend;
-//!
-//! let _quill = Quill::from_path("path/to/quill")
-//!     .unwrap()
-//!     .with_backend(Arc::new(TypstBackend::default()));
-//! ```
 //! ## Modules
 //!
 //! - [`convert`] - Markdown to Typst conversion utilities
@@ -52,10 +41,27 @@ pub mod fuzz_utils {
 
 use convert::mark_to_typst;
 use quillmark_core::{
-    session::SessionHandle, Backend, Diagnostic, OutputFormat, Quill, QuillValue, RenderError,
-    RenderOptions, RenderResult, RenderSession, Severity,
+    quill::build_transform_schema, session::SessionHandle, Backend, Diagnostic, OutputFormat,
+    QuillSource, QuillValue, RenderError, RenderOptions, RenderResult, RenderSession, Severity,
 };
 use std::collections::HashMap;
+
+/// Return the list of typst packages declared in a quill's Quill.yaml
+/// (`typst.packages`), surfaced here as a metadata reader because this is a
+/// backend-specific concern.
+#[cfg(feature = "native")]
+pub(crate) fn typst_packages(source: &QuillSource) -> Vec<String> {
+    source
+        .metadata
+        .get("typst_packages")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
 
 /// Typst backend implementation for Quillmark.
 #[derive(Debug)]
@@ -107,7 +113,7 @@ impl Backend for TypstBackend {
     fn open(
         &self,
         plate_content: &str,
-        quill: &Quill,
+        source: &QuillSource,
         json_data: &serde_json::Value,
     ) -> Result<RenderSession, RenderError> {
         let fields = json_data.as_object().map_or_else(HashMap::new, |obj| {
@@ -117,7 +123,7 @@ impl Backend for TypstBackend {
         });
 
         let transformed_fields =
-            transform_markdown_fields(&fields, &quill.build_transform_schema());
+            transform_markdown_fields(&fields, &build_transform_schema(&source.config));
         let transformed_json = serde_json::Value::Object(
             transformed_fields
                 .into_iter()
@@ -127,7 +133,7 @@ impl Backend for TypstBackend {
 
         let json_str =
             serde_json::to_string(&transformed_json).unwrap_or_else(|_| "{}".to_string());
-        let document = compile::compile_to_document(quill, plate_content, &json_str)?;
+        let document = compile::compile_to_document(source, plate_content, &json_str)?;
         let page_count = document.pages.len();
         let session = TypstSession {
             document,

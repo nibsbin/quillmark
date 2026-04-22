@@ -1,7 +1,7 @@
 use crate::errors::{CliError, Result};
 use crate::output::{derive_output_path, OutputWriter};
 use clap::Parser;
-use quillmark::{ParsedDocument, Quillmark};
+use quillmark::{Document, Quillmark};
 use quillmark_core::OutputFormat;
 use std::fs;
 use std::path::PathBuf;
@@ -59,7 +59,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     let quill = engine.quill_from_path(args.quill.clone())?;
 
     if args.verbose {
-        println!("Quill loaded: {}", quill.name);
+        println!("Quill loaded: {}", quill.source().name);
     }
 
     // Determine if we have a markdown file or need to use example content
@@ -81,7 +81,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             let markdown = fs::read_to_string(markdown_path)?;
 
             // Parse markdown
-            let output = ParsedDocument::from_markdown_with_warnings(&markdown)?;
+            let output = Document::from_markdown_with_warnings(&markdown)?;
 
             if args.verbose {
                 println!("Markdown parsed successfully");
@@ -89,10 +89,10 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             (output, Some(markdown_path.clone()))
         } else {
             // Get example content
-            let markdown = quill.example.clone().ok_or_else(|| {
+            let markdown = quill.source().example.clone().ok_or_else(|| {
                 CliError::InvalidArgument(format!(
                     "Quill '{}' does not have example content",
-                    quill.name
+                    quill.source().name
                 ))
             })?;
 
@@ -101,7 +101,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             }
 
             // Parse markdown
-            let output = ParsedDocument::from_markdown_with_warnings(&markdown)?;
+            let output = Document::from_markdown_with_warnings(&markdown)?;
 
             if args.verbose {
                 println!("Example markdown parsed successfully");
@@ -111,11 +111,8 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         };
     let (parsed, parse_warnings) = (parse_output.document, parse_output.warnings);
 
-    // Create workflow
-    let workflow = engine.workflow(&quill)?;
-
     if args.verbose {
-        println!("Workflow created for backend: {}", workflow.backend_id());
+        println!("Render-ready quill for backend: {}", quill.backend_id());
     }
 
     // Parse output format
@@ -138,7 +135,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
 
     // Handle output-data
     if let Some(data_path) = args.output_data {
-        let json_data = workflow
+        let json_data = quill
             .compile_data(&parsed)
             .map_err(|e| CliError::Render(e))?;
         let f = std::fs::File::create(&data_path).map_err(|e| {
@@ -163,7 +160,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 
     // Render
-    let mut result = workflow.render(&parsed, Some(output_format))?;
+    let mut result = quill.render(&parsed, Some(output_format))?;
 
     // Merge parse-time warnings into the render result so downstream tooling
     // sees them in a single channel.

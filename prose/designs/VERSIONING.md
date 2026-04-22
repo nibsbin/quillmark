@@ -59,5 +59,4 @@ See [ERROR.md](ERROR.md) for error handling patterns.
 ## Links
 
 - [QUILL.md](QUILL.md) — Quill structure
-- [PARSE.md](PARSE.md) — QUILL tag extraction
 - [ERROR.md](ERROR.md) — error patterns

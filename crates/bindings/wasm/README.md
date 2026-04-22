@@ -26,7 +26,7 @@ npm test
 ## Usage
 
 ```ts
-import { ParsedDocument, Quillmark } from "@quillmark-test/wasm";
+import { Document, Quillmark } from "@quillmark-test/wasm";
 
 const engine = new Quillmark();
 const quill = engine.quill(tree);
@@ -38,7 +38,7 @@ title: My Document
 
 # Hello`;
 
-const parsed = ParsedDocument.fromMarkdown(markdown);
+const parsed = Document.fromMarkdown(markdown);
 const result = quill.render(parsed, { format: "pdf" });
 ```
 
@@ -50,11 +50,15 @@ Create engine.
 ### `engine.quill(tree)`
 Build + validate + attach backend. Returns a render-ready `Quill`.
 
-### `ParsedDocument.fromMarkdown(markdown)`
+### `Document.fromMarkdown(markdown)`
 Parse markdown to parsed document.
 
+### `doc.toMarkdown()`
+Emit canonical Quillmark Markdown. Type-fidelity round-trip safe:
+`Document.fromMarkdown(doc.toMarkdown())` returns a document equal to `doc`.
+
 ### `quill.render(parsed, opts?)`
-Render with a pre-parsed `ParsedDocument`.
+Render with a pre-parsed `Document`.
 
 ### `quill.open(parsed)` + `session.render(opts?)`
 Open once, render all or selected pages (`opts.pages`).

@@ -3,7 +3,7 @@
 use std::fs;
 use tempfile::TempDir;
 
-use quillmark::{OutputFormat, ParsedDocument, Quillmark};
+use quillmark::{Document, OutputFormat, Quillmark};
 
 fn make_quill_dir(temp_dir: &TempDir, name: &str, backend: &str) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join(name);
@@ -31,7 +31,7 @@ fn test_quill_engine_creation() {
 
 #[test]
 #[cfg(feature = "typst")]
-fn test_quill_from_path_and_workflow() {
+fn test_quill_from_path_engine_metadata() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = make_quill_dir(&temp_dir, "my_test_quill", "typst");
 
@@ -39,11 +39,10 @@ fn test_quill_from_path_and_workflow() {
     let quill = engine
         .quill_from_path(quill_path)
         .expect("quill_from_path failed");
-    let workflow = engine.workflow(&quill).expect("workflow failed");
 
-    assert!(workflow.quill_ref().starts_with("my_test_quill@"));
-    assert_eq!(workflow.backend_id(), "typst");
-    assert!(workflow.supported_formats().contains(&OutputFormat::Pdf));
+    assert!(quill.quill_ref().starts_with("my_test_quill@"));
+    assert_eq!(quill.backend_id(), "typst");
+    assert!(quill.supported_formats().contains(&OutputFormat::Pdf));
 }
 
 #[test]
@@ -81,12 +80,11 @@ fn test_quill_engine_end_to_end() {
     let quill = engine
         .quill_from_path(&quill_path)
         .expect("quill_from_path failed");
-    let workflow = engine.workflow(&quill).expect("workflow failed");
 
     let markdown = "---\nQUILL: my_test_quill\ntitle: Test Document\n---\n\n# Introduction\n";
-    let parsed = ParsedDocument::from_markdown(markdown).expect("parse failed");
+    let parsed = Document::from_markdown(markdown).expect("parse failed");
 
-    let result = workflow.dry_run(&parsed);
+    let result = quill.dry_run(&parsed);
     assert!(result.is_ok(), "dry_run failed: {:?}", result);
 }
 
@@ -100,16 +98,8 @@ fn test_quill_render_succeeds_with_engine_loaded_quill() {
     let quill = engine
         .quill_from_path(quill_path)
         .expect("quill_from_path failed");
-    let parsed =
-        ParsedDocument::from_markdown("---\nQUILL: my_quill\n---\n").expect("parse failed");
-    let result = quill.render(
-        parsed,
-        &quillmark_core::RenderOptions {
-            output_format: Some(OutputFormat::Pdf),
-            ppi: None,
-            pages: None,
-        },
-    );
+    let parsed = Document::from_markdown("---\nQUILL: my_quill\n---\n").expect("parse failed");
+    let result = quill.render(&parsed, Some(OutputFormat::Pdf));
 
     if let Err(quillmark::RenderError::EngineCreation { diag }) = &result {
         if diag.message.contains("No fonts found") {

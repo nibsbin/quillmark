@@ -7,7 +7,7 @@
 //! This crate provides the foundational types and traits for Quillmark:
 //!
 //! - **Parsing**: YAML frontmatter extraction with Extended YAML Metadata Standard support
-//! - **Format model**: [`Quill`] type for managing format bundles with in-memory file system
+//! - **Format model**: [`QuillSource`] type for managing format bundles with in-memory file system
 //! - **Backend trait**: Extensible interface for implementing output format backends
 //! - **Error handling**: Structured diagnostics with source location tracking
 //! - **Utilities**: TOML⇄YAML conversion helpers
@@ -15,31 +15,35 @@
 //! ## Quick Start
 //!
 //! ```no_run
-//! use quillmark_core::ParsedDocument;
+//! use quillmark_core::Document;
 //!
 //! // Parse markdown with frontmatter
-//! let markdown = "---\ntitle: Example\n---\n\n# Content";
-//! let doc = ParsedDocument::from_markdown(markdown);
-//!
+//! let markdown = "---\nQUILL: my_quill\ntitle: Example\n---\n\n# Content";
+//! let doc = Document::from_markdown(markdown).unwrap();
+//! let title = doc.frontmatter()
+//!     .get("title")
+//!     .and_then(|v| v.as_str())
+//!     .unwrap_or("Untitled");
+//! assert_eq!(title, "Example");
 //! ```
 //!
 //! ## Architecture
 //!
 //! The crate is organized into modules:
 //!
-//! - [`parse`]: Markdown parsing with YAML frontmatter support
+//! - [`document`]: Markdown parsing with YAML frontmatter support
 //! - [`backend`]: Backend trait for output format implementations
 //! - [`error`]: Structured error handling and diagnostics
 //! - [`types`]: Core rendering types (OutputFormat, Artifact, RenderOptions)
-//! - [`quill`]: Quill format bundle and related types
+//! - [`quill`]: QuillSource bundle and related types
 //!
 //! ## Further Reading
 //!
 //! - [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) - Detailed parsing documentation
 //! - [Examples](https://github.com/nibsbin/quillmark/tree/main/examples) - Working examples
 
-pub mod parse;
-pub use parse::{ParseOutput, ParsedDocument, BODY_FIELD};
+pub mod document;
+pub use document::{Card, Document, EditError, ParseOutput};
 
 pub mod backend;
 pub use backend::Backend;
@@ -56,7 +60,7 @@ pub mod session;
 pub use session::RenderSession;
 
 pub mod quill;
-pub use quill::{FileTreeNode, Quill, QuillIgnore};
+pub use quill::{FileTreeNode, QuillIgnore, QuillSource};
 
 pub mod value;
 pub use value::QuillValue;

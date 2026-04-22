@@ -4,28 +4,29 @@ from ._quillmark import (
     Artifact,
     CompilationError,
     Diagnostic,
+    Document,
+    EditError,
     Location,
-    OutputFormat,  # No underscore prefix!
+    OutputFormat,
     ParseError,
-    ParsedDocument,
     Quill,
     Quillmark,
     QuillmarkError,
     RenderResult,
     RenderSession,
-    Severity,  # No underscore prefix!
+    Severity,
     TemplateError,
-    Workflow,
 )
 
 __all__ = [
     "Artifact",
     "CompilationError",
     "Diagnostic",
+    "Document",
+    "EditError",
     "Location",
     "OutputFormat",
     "ParseError",
-    "ParsedDocument",
     "Quill",
     "Quillmark",
     "QuillmarkError",
@@ -33,7 +34,6 @@ __all__ = [
     "RenderSession",
     "Severity",
     "TemplateError",
-    "Workflow",
 ]
 
 __version__ = "0.1.0"

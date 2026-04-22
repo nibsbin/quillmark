@@ -1,8 +1,7 @@
 # Composable Cards Architecture
 
 > **Status**: Implemented
-> **Related**: [SCHEMAS.md](SCHEMAS.md), [PARSE.md](PARSE.md), [QUILL.md](QUILL.md)
-> ~~[SCOPES.md](SCOPES.md)~~ — Superseded by this document
+> **Related**: [SCHEMAS.md](SCHEMAS.md), [QUILL.md](QUILL.md)
 
 ## Overview
 
@@ -88,4 +87,4 @@ Indorsement body content.
 ## Backend Consumption
 
 - **All backends**: cards are delivered as `data.CARDS`, an array of objects each containing a `CARD` discriminator field, the card's metadata fields, and a `BODY` field with the card's body Markdown.
-- **`Workflow::compile_data()`** returns the fully coerced and validated JSON, including `CARDS`.
+- **`Quill::compile_data()`** returns the fully coerced and validated JSON, including `CARDS`.

@@ -1,7 +1,19 @@
 # Quill Resource File Structure and API
 
 > **Status**: Final Design - Opinionated, No Backward Compatibility
-> **Implementation**: `crates/core/src/quill.rs`
+> **Implementation**: `crates/core/src/quill.rs` (`QuillSource`),
+> `crates/quillmark/src/orchestration/quill.rs` (`Quill`)
+
+## Type split: `QuillSource` vs `Quill`
+
+Two types model a loaded quill:
+
+- **`QuillSource`** (in `quillmark-core`) is the authored input — file bundle,
+  parsed config, and metadata. It does not render.
+- **`Quill`** (in `quillmark`) is the renderable shape — an `Arc<QuillSource>`
+  paired with a resolved backend. Constructed only by the engine.
+
+Bindings expose `Quill` only; `QuillSource` is a Rust-internal type.
 
 ## Internal File Structure
 
@@ -11,7 +23,7 @@ pub enum FileTreeNode {
     Directory { files: HashMap<String, FileTreeNode> },
 }
 
-pub struct Quill {
+pub struct QuillSource {
     pub metadata: HashMap<String, QuillValue>,
     pub name: String,
     pub backend_id: String,
@@ -22,6 +34,11 @@ pub struct Quill {
     pub examples: HashMap<String, Vec<QuillValue>>,
     pub files: FileTreeNode,
 }
+
+pub struct Quill {
+    source: Arc<QuillSource>,
+    backend: Arc<dyn Backend>,
+}
 ```
 
 `metadata` is populated from `Quill.yaml` fields plus computed entries: `backend`, `description`, `version`, `author`, and any `typst_*` keys from the `[typst]` section.
@@ -29,9 +46,10 @@ pub struct Quill {
 ## In-memory Tree Contract (`engine.quill(tree)`)
 
 In-memory construction routes through the engine as `engine.quill(tree)`. The
-core `Quill::from_tree` constructor is internal to `quillmark-core`. Input is
-a `FileTreeNode` directory tree with UTF-8 and binary file contents represented
-as bytes.
+core `QuillSource::from_tree` constructor is the single authoritative in-memory
+entry point; filesystem walking (`engine.quill_from_path`) lives in
+`quillmark` rather than in core. Input is a `FileTreeNode` directory tree
+with UTF-8 and binary file contents represented as bytes.
 
 For JS/WASM consumers this is exposed as `engine.quill(...)` accepting a
 `Map<string, Uint8Array>` (path→bytes). Plain objects are not accepted; only

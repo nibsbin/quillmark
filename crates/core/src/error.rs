@@ -25,59 +25,10 @@
 //! - [`RenderError::CompilationFailed`]: Backend compilation errors
 //! - [`RenderError::FormatNotSupported`]: Requested format not supported
 //! - [`RenderError::UnsupportedBackend`]: Backend not registered
-//! - [`RenderError::DynamicAssetCollision`]: Asset filename collision
-//! - [`RenderError::DynamicFontCollision`]: Font filename collision
 //! - [`RenderError::ValidationFailed`]: Field coercion/validation failure
 //! - [`RenderError::QuillConfig`]: Quill configuration error
-//! - [`RenderError::NoBackend`]: Quill has no backend attached
 //!
 //! ## Examples
-//!
-//! ### Error Handling
-//!
-//! ```no_run
-//! use quillmark_core::{RenderError, error::print_errors};
-//! # use quillmark_core::{RenderResult, OutputFormat};
-//! # struct Workflow;
-//! # impl Workflow {
-//! #     fn render(&self, _: &str, _: Option<()>) -> Result<RenderResult, RenderError> {
-//! #         Ok(RenderResult::new(vec![], OutputFormat::Pdf))
-//! #     }
-//! # }
-//! # let workflow = Workflow;
-//! # let markdown = "";
-//!
-//! match workflow.render(markdown, None) {
-//!     Ok(result) => {
-//!         // Process artifacts
-//!         for artifact in result.artifacts {
-//!             std::fs::write(
-//!                 format!("output.{:?}", artifact.output_format),
-//!                 &artifact.bytes
-//!             )?;
-//!         }
-//!     }
-//!     Err(e) => {
-//!         // Print structured diagnostics
-//!         print_errors(&e);
-//!         
-//!         // Match specific error types
-//!         match e {
-//!             RenderError::CompilationFailed { diags } => {
-//!                 eprintln!("Compilation failed with {} errors:", diags.len());
-//!                 for diag in diags {
-//!                     eprintln!("{}", diag.fmt_pretty());
-//!                 }
-//!             }
-//!             RenderError::InvalidFrontmatter { diag } => {
-//!                 eprintln!("Frontmatter error: {}", diag.message);
-//!             }
-//!             _ => eprintln!("Error: {}", e),
-//!         }
-//!     }
-//! }
-//! # Ok::<(), Box<dyn std::error::Error>>(())
-//! ```
 //!
 //! ### Creating Diagnostics
 //!
@@ -141,7 +92,9 @@ pub const MAX_NESTING_DEPTH: usize = 100;
 
 /// Maximum YAML nesting depth (100 levels)
 /// Prevents stack overflow from deeply nested YAML structures
-pub const MAX_YAML_DEPTH: usize = 100;
+///
+/// Re-exported from [`crate::document::limits::MAX_YAML_DEPTH`].
+pub use crate::document::limits::MAX_YAML_DEPTH;
 
 /// Maximum number of CARD blocks allowed per document
 /// Prevents memory exhaustion from documents with excessive card blocks
@@ -241,7 +194,31 @@ impl Diagnostic {
             source: None,
         }
     }
+}
 
+impl Clone for Diagnostic {
+    /// Clone a `Diagnostic`, dropping the source error chain.
+    ///
+    /// The `source` field holds a boxed `dyn Error` which is not `Clone`;
+    /// the cloned value will have `source: None`. Use `clone_without_source()`
+    /// explicitly if you want to be clear about this loss.
+    fn clone(&self) -> Self {
+        self.clone_without_source()
+    }
+}
+
+impl PartialEq for Diagnostic {
+    /// Two `Diagnostic`s are equal when all fields except `source` are equal.
+    fn eq(&self, other: &Self) -> bool {
+        self.severity == other.severity
+            && self.code == other.code
+            && self.message == other.message
+            && self.primary == other.primary
+            && self.hint == other.hint
+    }
+}
+
+impl Diagnostic {
     /// Get the source chain as a list of error messages
     pub fn source_chain(&self) -> Vec<String> {
         let mut chain = Vec::new();
@@ -307,7 +284,7 @@ impl std::fmt::Display for Diagnostic {
 /// FFI boundaries (e.g., Python, WASM). Unlike `Diagnostic`, it does not
 /// contain the non-serializable `source` field, but instead includes a
 /// flattened `source_chain` for display purposes.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct SerializableDiagnostic {
     /// Error severity level
     pub severity: Severity,
@@ -466,20 +443,6 @@ pub enum RenderError {
         diag: Box<Diagnostic>,
     },
 
-    /// Dynamic asset filename collision
-    #[error("{diag}")]
-    DynamicAssetCollision {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
-    /// Dynamic font filename collision
-    #[error("{diag}")]
-    DynamicFontCollision {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
     /// Validation failed for parsed document
     #[error("{diag}")]
     ValidationFailed {
@@ -490,13 +453,6 @@ pub enum RenderError {
     /// Quill configuration error
     #[error("{diag}")]
     QuillConfig {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
-    /// Quill has no backend attached (created without engine-based construction)
-    #[error("{diag}")]
-    NoBackend {
         /// Diagnostic information
         diag: Box<Diagnostic>,
     },
@@ -511,11 +467,8 @@ impl RenderError {
             | RenderError::InvalidFrontmatter { diag }
             | RenderError::FormatNotSupported { diag }
             | RenderError::UnsupportedBackend { diag }
-            | RenderError::DynamicAssetCollision { diag }
-            | RenderError::DynamicFontCollision { diag }
             | RenderError::ValidationFailed { diag }
-            | RenderError::QuillConfig { diag }
-            | RenderError::NoBackend { diag } => vec![diag.as_ref()],
+            | RenderError::QuillConfig { diag } => vec![diag.as_ref()],
         }
     }
 }

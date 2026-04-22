@@ -7,7 +7,7 @@
 
 Quillmark does not use a template engine for plates. Data flows in two stages:
 
-1. `Workflow::compile_data()` coerces, validates, normalizes, and applies schema defaults to frontmatter, producing a plain JSON object.
+1. `Quill::compile_data()` coerces, validates, normalizes, and applies schema defaults to frontmatter, producing a plain JSON object.
 2. `Backend::open()` receives that JSON and performs any backend-specific field transformations (e.g., converting markdown strings to Typst markup) before compilation.
 
 ### Data Shape
@@ -35,5 +35,4 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
 ## Guarantees
 
 - Plates see no internal shadow keys; `__meta__` is injected by the backend and consumed by the helper package before `data` is exposed
-- Dynamic assets/fonts are injected into the quill file tree before compilation
-- `Workflow::compile_data` returns the pre-transformation JSON (coerced + normalized + defaults); markdown/date conversion occurs inside `Backend::open` and is not separately observable
+- `Quill::compile_data` returns the pre-transformation JSON (coerced + normalized + defaults); markdown/date conversion occurs inside `Backend::open` and is not separately observable
