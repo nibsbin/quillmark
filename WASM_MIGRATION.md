@@ -202,19 +202,18 @@ This takes `&Document`, so the handle survives the call.
 
 ---
 
-## 5. Render options — unchanged shape, one dead field
+## 5. Render options — `assets` field removed
 
-`RenderOptions` is unchanged on the wire:
+`RenderOptions` shape on the wire:
 
 ```ts
-{ format?: "pdf"|"svg"|"png"|"txt", ppi?: number, pages?: number[], assets?: ... }
+{ format?: "pdf"|"svg"|"png"|"txt", ppi?: number, pages?: number[] }
 ```
 
-However, dynamic asset injection was removed from the pipeline in this
-refactor. `RenderOptions.assets` is **still defined in the TypeScript type**
-(`crates/bindings/wasm/src/types.rs:180`) for now, but it is silently dropped
-by the WASM → core conversion (`types.rs:202-210` plumbs only `format`, `ppi`,
-`pages`). Passing `assets` here is a no-op; no error, no warning.
+Dynamic asset injection was removed from the pipeline in this refactor.
+`RenderOptions.assets` was **deleted** from the WASM surface — it is no longer
+part of the TypeScript type and passing it is now a type error at compile
+time (or an unknown-property warning in plain JS).
 
 **Migration:** move any assets or fonts you were injecting through
 `RenderOptions.assets` into the quill tree you pass to `engine.quill(tree)`:
@@ -228,9 +227,7 @@ by the WASM → core conversion (`types.rs:202-210` plumbs only `format`, `ppi`,
   const quill = engine.quill(tree);
 ```
 
-Assets and fonts travel through the file tree only. The `RenderOptions.assets`
-field will likely be removed from the TypeScript surface in a follow-up; do
-not start depending on it.
+Assets and fonts travel through the file tree only.
 
 ---
 
@@ -288,45 +285,20 @@ The following are behaviorally unchanged by this refactor:
 
 ---
 
-## Known gaps and leftovers spotted during this migration
+## Leftovers cleaned up alongside this migration
 
-These are findings from reading the post-refactor tree. None block migration,
-but consumers should know.
+This migration pass also resolved stale references to the removed APIs:
 
-1. **`RenderOptions.assets` is a dead field.** Declared in the WASM types and
-   in the generated TypeScript `.d.ts`, but dropped by the WASM → core
-   conversion. Silently ignored. See `crates/bindings/wasm/src/types.rs:180`
-   and `types.rs:202-210`. Either wire it through or remove it — leaving it
-   as-is is a footgun.
-
-2. **`docs/format-designer/typst-backend.md` still references the removed
-   Python `Workflow` API.** Three call sites (lines ~211, ~218, ~234) show
-   `workflow.render(parsed, OutputFormat.PDF)` etc. The WASM section at line
-   ~245 uses the new `quill.render(parsed, ...)` form. Wording in the Python
-   snippets needs updating to `quill.render(doc, ...)` with the new
-   `Document` type.
-
-3. **`prose/designs/WASM.md` was deleted with no replacement.** The WASM
-   surface no longer has a canonical design doc under `prose/designs/`. The
-   only narrative reference material for WASM consumers is now
-   `crates/bindings/wasm/README.md` and this file.
-
-4. **`prose/schema-rework/` still references the old `ParsedDocument`.**
-   - `prose/schema-rework/00-overview.md:104`
-   - `prose/schema-rework/01-native-validator.md:4,156`
-   - `prose/schema-rework/migrations/wasm-consumers.md:122`
-   These look like planning docs that predate this refactor and were not
-   swept. They are internal design docs, not consumer-facing, but will
-   mislead anyone searching the repo for WASM guidance.
-
-5. **`crates/bindings/python/examples/workflow_demo.py`** — the file name is
-   a leftover from the removed `Workflow` API. The code inside has been
-   updated to use `engine.quill_from_path(...)` / `Document`, but the name
-   is misleading. Python, not WASM, but worth a rename.
-
-6. **No TypeScript-level deprecation for the rename.** Because this was
-   shipped as a pre-release breaking change with no alias, old consumers get
-   a bare `ReferenceError` for `ParsedDocument` rather than a typed
-   deprecation. That's a deliberate choice per the commit message, but it
-   means bundled downstream apps won't get a migration hint at build time —
-   only at runtime.
+- **`RenderOptions.assets`** — deleted from `crates/bindings/wasm/src/types.rs`.
+  The TypeScript type no longer exposes it. Inject assets through the quill
+  tree.
+- **`docs/format-designer/typst-backend.md`** — Python and JS code snippets
+  rerouted from `workflow.render(parsed, …)` to `quill.render(doc, …)`.
+- **`prose/schema-rework/`** — deleted. The plan's success criteria (delete
+  `schema.rs`, drop `jsonschema` crate, remove `SchemaProjection`, expose
+  `FormProjection` through bindings) all landed in the Document refactor, so
+  the planning directory followed the same pattern as the 30+ other landed
+  plans purged by the refactor.
+- **`crates/bindings/python/examples/workflow_demo.py`** → renamed to
+  `quill_demo.py`. Docstring updated to drop the removed `Workflow`
+  terminology.

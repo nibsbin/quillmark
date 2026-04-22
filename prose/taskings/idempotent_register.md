@@ -40,7 +40,7 @@ Semantics: `true` iff a quill is registered under the exact canonical ref `name@
 
 - Changes to selector parsing or resolution inside the engine — leave the existing `QuillReference` / `VersionSelector` behavior alone. Quiver does not rely on it, but other consumers do.
 - Content-mismatch detection on duplicate register (deferred; see §1 rationale).
-- Any change to `render`, `parseMarkdown`, or `get_quill_info` API shape. Quiver rewrites `ParsedDocument.quillRef` to canonical by constructing a new value before calling `render`; no new render overload is needed.
+- Any change to `render`, `parseMarkdown`, or `get_quill_info` API shape. Quiver rewrites `Document.quillRef` to canonical by constructing a new value before calling `render`; no new render overload is needed.
 - Prerelease / build-metadata / semver range support.
 
 ## Test updates

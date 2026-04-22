@@ -175,9 +175,6 @@ pub struct Card {
 pub struct RenderOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<OutputFormat>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[tsify(type = "Record<string, Uint8Array | number[]>")]
-    pub assets: Option<serde_json::Value>,
     /// Pixels per inch for raster output formats (PNG).
     /// Ignored for vector/document formats (PDF, SVG, TXT).
     /// Defaults to 144.0 (2x at 72pt/inch) when omitted.
@@ -192,7 +189,6 @@ impl Default for RenderOptions {
     fn default() -> Self {
         RenderOptions {
             format: Some(OutputFormat::Pdf),
-            assets: None,
             ppi: None,
             pages: None,
         }
@@ -317,7 +313,6 @@ mod tests {
     fn test_render_options_with_format() {
         let options = RenderOptions {
             format: Some(OutputFormat::Pdf),
-            assets: None,
             ppi: None,
             pages: None,
         };
