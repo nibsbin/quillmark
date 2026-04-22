@@ -72,9 +72,6 @@ cargo-husky = { version = "~1", default-features = false, features = [
 # Exclude fixtures from publishing since it's dev-only
 no_individual_tags = true
 
-[workspace.metadata.release]
-allow-branch = ["main"]
-
 [profile.dev]
 opt-level = 0
 debug = true

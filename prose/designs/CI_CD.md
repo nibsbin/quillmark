@@ -26,35 +26,39 @@ Excluded: multi-OS matrix, MSRV, security scanners, coverage, benchmarks.
 
 ## 2) Continuous Delivery (CD)
 
-### Rust Crates (`publish.yml`)
+### Release Preparation (`release-prepare.yml`)
 
-**Trigger**: tag `vX.Y.Z` or manual dispatch.
+**Trigger**: `workflow_dispatch` from GitHub UI with a `bump` input (`patch` or `minor`).
 
-1. Runs `cargo test` matrix (same as CI, fail-fast enabled).
-2. Runs `cargo publish --locked --no-verify` to publish all publishable workspace crates.
-**Auth**: `CARGO_REGISTRY_TOKEN` secret (via `Publish` environment).
+1. Installs `cargo-release` and runs `cargo release version <bump>` to bump all workspace `Cargo.toml` versions and intra-workspace dependencies.
+2. Pushes a `release/vX.Y.Z` branch and opens a PR targeting `main`.
+3. The PR is reviewed and merged through the normal code review process.
 
-### Python Bindings (`publish-python.yml`)
+### Release & Publish (`release.yml`)
 
-**Trigger**: tag `vX.Y.Z` or `py-vX.Y.Z`, or manual dispatch.
+**Trigger**: merged pull request on `main` where the source branch matches `release/*`.
 
-1. Runs pytest via `uv`.
-2. Builds wheels via `maturin-action` for Linux (x86_64, aarch64), Windows (x64), macOS (aarch64) — Python 3.10–3.12 — plus sdist.
-3. Publishes all artifacts to PyPI via `maturin upload`.
-**Auth**: `MATURIN_PYPI_TOKEN` secret (via `Publish` environment).
+**Phase 1 — Release** (runs first):
+1. Extracts version from `Cargo.toml` and validates it matches the branch name.
+2. Creates a git tag `vX.Y.Z` and a GitHub Release.
 
-### WASM Bindings (`publish-wasm.yml`)
+**Phase 2 — Publish** (all run in parallel, after release):
 
-**Trigger**: tag `vX.Y.Z` or `wasm-vX.Y.Z`, or manual dispatch.
+| Target | Registry | Auth |
+|--------|----------|------|
+| Rust crates | crates.io | `CARGO_REGISTRY_TOKEN` secret (via `Publish` environment) |
+| WASM bindings | npm | OIDC Trusted Publisher (`id-token: write`) |
+| Python bindings | PyPI | `MATURIN_PYPI_TOKEN` secret (via `Publish` environment) |
 
-1. Builds via `./scripts/build-wasm.sh` and runs `npm test`.
-2. Publishes `@quillmark/wasm` to npm via `npm publish --provenance` (OIDC Trusted Publisher).
-**Auth**: OIDC `id-token: write` permission; no token secret needed.
+- **Crates**: `cargo publish --locked --no-verify`
+- **WASM**: builds via `./scripts/build-wasm.sh`, runs `npm test`, publishes `@quillmark/wasm` with `--provenance`
+- **Python**: builds wheels via `maturin-action` for Linux (x86_64, aarch64), Windows (x64), macOS (aarch64) — Python 3.10–3.12 — plus sdist, then uploads to PyPI
 
 ---
 
 ## 3) Versioning
 
 - SemVer across all workspace crates and bindings.
-- Version bumps managed locally via `cargo-release` (`release.toml`): bumps, commits (`chore: release X.Y.Z`), and pushes tag `vX.Y.Z`; publishing is delegated entirely to CI.
-- Python and WASM bindings can also be released independently via `py-vX.Y.Z` / `wasm-vX.Y.Z` tags.
+- Version bumps are initiated via GitHub UI (`workflow_dispatch`), executed by `cargo-release` in CI, and gated by PR review before merge.
+- WASM npm package version is derived from the workspace version at build time (`scripts/build-wasm.sh`).
+- Python package version is derived from the workspace Cargo.toml via maturin's `dynamic = ["version"]`.

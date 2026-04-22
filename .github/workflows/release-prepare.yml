@@ -1,0 +1,117 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump type"
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+      prerelease:
+        description: "Create a release candidate (rc) pre-release"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-release
+        run: cargo install cargo-release --locked
+
+      - name: Get current version
+        id: current
+        run: |
+          VERSION=$(cargo metadata --format-version=1 --no-deps \
+            | jq -r '.packages[] | select(.name == "quillmark") | .version')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Current version: $VERSION"
+
+      - name: Bump versions
+        run: |
+          cargo release version ${{ inputs.bump }} \
+            --workspace \
+            --no-confirm \
+            --execute
+
+      - name: Apply pre-release suffix
+        if: inputs.prerelease == true
+        run: |
+          BASE=$(cargo metadata --format-version=1 --no-deps \
+            | jq -r '.packages[] | select(.name == "quillmark") | .version')
+          RC_VERSION="${BASE}-rc.1"
+          echo "Applying pre-release version: $RC_VERSION"
+          cargo release version "$RC_VERSION" \
+            --workspace \
+            --no-confirm \
+            --execute
+
+      - name: Get new version
+        id: next
+        run: |
+          VERSION=$(cargo metadata --format-version=1 --no-deps \
+            | jq -r '.packages[] | select(.name == "quillmark") | .version')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "New version: $VERSION"
+
+      - name: Create release branch and commit
+        run: |
+          VERSION="${{ steps.next.outputs.version }}"
+          BRANCH="release/v${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "chore: bump version to ${VERSION}"
+          git push origin "$BRANCH"
+
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.next.outputs.version }}"
+          PREV="${{ steps.current.outputs.version }}"
+
+          PRERELEASE=${{ inputs.prerelease }}
+          if [ "$PRERELEASE" == "true" ]; then
+            TITLE="release: v${VERSION} (pre-release)"
+            LABEL="⚠️ **Pre-release** — this will be marked as a pre-release on GitHub."
+          else
+            TITLE="release: v${VERSION}"
+            LABEL=""
+          fi
+
+          gh pr create \
+            --base main \
+            --head "release/v${VERSION}" \
+            --title "$TITLE" \
+            --body "## Release v${VERSION}
+
+          Bumps workspace version from \`${PREV}\` → \`${VERSION}\` (${{ inputs.bump }}).
+
+          ${LABEL}
+
+          ### Publish targets
+          - **crates.io** — \`quillmark-core\`, \`quillmark-typst\`, \`quillmark\`
+          - **npm** — \`@quillmark/wasm\`
+          - **PyPI** — \`quillmark\`
+
+          Merging this PR will create a GitHub Release tagged \`v${VERSION}\` and publish all packages."
