@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-Quillmark converts Markdown with YAML frontmatter into output artifacts (PDF, SVG, PNG, TXT). A `Workflow` orchestrates the pipeline; backends do the heavy compilation.
+Quillmark converts Markdown with YAML frontmatter into output artifacts (PDF, SVG, PNG, TXT). A `Quill` (the renderable shape) orchestrates the pipeline; backends do the heavy compilation.
 
 ## Data Flow
 
@@ -16,11 +16,11 @@ Quillmark converts Markdown with YAML frontmatter into output artifacts (PDF, SV
 
 Foundation types and traits. No backend dependencies; backends depend on this crate.
 
-Key exports: `Backend`, `Artifact`, `OutputFormat`, `RenderOptions`, `RenderSession`, `ParsedDocument`, `Quill`, `FileTreeNode`, `QuillIgnore`, `RenderError`, `Diagnostic`, `Severity`, `Location`, `RenderResult`, `QuillValue`, `QuillReference`, `Version`, `VersionSelector`, `BODY_FIELD`.
+Key exports: `Backend`, `Artifact`, `OutputFormat`, `RenderOptions`, `RenderSession`, `ParsedDocument`, `QuillSource`, `FileTreeNode`, `QuillIgnore`, `RenderError`, `Diagnostic`, `Severity`, `Location`, `RenderResult`, `QuillValue`, `QuillReference`, `Version`, `VersionSelector`, `BODY_FIELD`.
 
 ### `quillmark` (orchestration)
 
-High-level API: `Quillmark` (engine), `Workflow` (pipeline), `QuillRef`. Handles parse → normalize → compile, schema coercion, and backend auto-registration.
+High-level API: `Quillmark` (engine), `Quill` (renderable source + backend), `QuillRef`. Handles parse → normalize → compile, schema coercion, and backend auto-registration. Filesystem walking for `engine.quill_from_path` lives here; core is filesystem-agnostic.
 
 ### `backends/quillmark-typst`
 
@@ -49,10 +49,10 @@ Fuzz tests for parsing, templating, and rendering.
 ## Core Interfaces
 
 - **`Quillmark`** — Engine managing registered backends; auto-registers `TypstBackend` when the `typst` feature is enabled
-- **`Workflow`** — Rendering pipeline (parse → normalize → compile); supports `dry_run` validation
-- **`Backend`** — Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open()`
+- **`Quill`** — Renderable shape in `quillmark`: pairs a `QuillSource` with a resolved `Backend`. Exposes `render`, `open`, `dry_run`, `compile_data`
+- **`QuillSource`** — Pure data in `quillmark-core`: file bundle + config + metadata; no render ability
+- **`Backend`** — Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open(plate, &QuillSource, json)`
 - **`RenderSession`** — Opaque handle returned by `Backend::open()`; call `render(opts)` to produce artifacts
-- **`Quill`** — Format bundle (plate + assets/packages/metadata)
 - **`ParsedDocument`** — Frontmatter fields + body from Markdown
 - **`Diagnostic`** — Structured error with severity, code, message, location, hint, source chain
 - **`RenderResult`** — Output artifacts + accumulated warnings
@@ -60,9 +60,9 @@ Fuzz tests for parsing, templating, and rendering.
 ## Data Injection
 
 `Backend::open()` receives:
-- `plate_content` — raw plate string from `Quill.plate` (empty string for plate-less backends)
+- `plate_content` — raw plate string from `QuillSource.plate` (empty string for plate-less backends)
+- `source` — `&QuillSource` with static assets/packages, config, metadata
 - `json_data` — JSON object after coercion, defaults, normalization
-- `quill` — bundle with static assets/packages
 
 See [GLUE_METADATA.md](GLUE_METADATA.md) for the Typst helper package.
 

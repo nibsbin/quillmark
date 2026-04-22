@@ -8,7 +8,9 @@ use typst::utils::LazyHash;
 use typst::{Library, World};
 
 use crate::helper;
-use quillmark_core::Quill;
+#[cfg(feature = "native")]
+use crate::typst_packages;
+use quillmark_core::QuillSource;
 
 /// Typst World implementation for quill-based compilation.
 ///
@@ -27,7 +29,7 @@ pub struct QuillWorld {
 impl QuillWorld {
     /// Create a new QuillWorld from a quill template and Typst content
     pub fn new(
-        quill: &Quill,
+        source: &QuillSource,
         main: &str,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut sources = HashMap::new();
@@ -64,7 +66,7 @@ impl QuillWorld {
         }
 
         // Load fonts from quill assets first (eagerly loaded)
-        let font_data_list = Self::load_fonts_from_quill(quill)?;
+        let font_data_list = Self::load_fonts_from_quill(source)?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
             for font in Font::iter(font_bytes) {
@@ -79,14 +81,14 @@ impl QuillWorld {
         }
 
         // Load assets from quill's in-memory file system
-        Self::load_assets_from_quill(quill, &mut binaries)?;
+        Self::load_assets_from_quill(source, &mut binaries)?;
 
         // Load packages from quill's in-memory file system
-        Self::load_packages_from_quill(quill, &mut sources, &mut binaries)?;
+        Self::load_packages_from_quill(source, &mut sources, &mut binaries)?;
 
         // Download and load external packages from Quill.yaml
         #[cfg(feature = "native")]
-        Self::download_and_load_external_packages(quill, &mut sources, &mut binaries)?;
+        Self::download_and_load_external_packages(source, &mut sources, &mut binaries)?;
 
         // Create main source
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));
@@ -114,11 +116,11 @@ impl QuillWorld {
     /// * `main` - The main Typst content to compile
     /// * `json_data` - JSON string containing document data
     pub fn new_with_data(
-        quill: &Quill,
+        source: &QuillSource,
         main: &str,
         json_data: &str,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        let mut world = Self::new(quill, main)?;
+        let mut world = Self::new(source, main)?;
 
         // Inject the quillmark-helper package
         world.inject_helper_package(json_data);
@@ -154,19 +156,19 @@ impl QuillWorld {
 
     /// Loads fonts from quill's in-memory file system.
     fn load_fonts_from_quill(
-        quill: &Quill,
+        source: &QuillSource,
     ) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
         let mut font_data = Vec::new();
 
         // Look for fonts in assets/fonts/ first
-        let fonts_paths = quill.find_files("assets/fonts/*");
+        let fonts_paths = source.find_files("assets/fonts/*");
         for font_path in fonts_paths {
             if let Some(ext) = font_path.extension() {
                 if matches!(
                     ext.to_string_lossy().to_lowercase().as_str(),
                     "ttf" | "otf" | "woff" | "woff2"
                 ) {
-                    if let Some(contents) = quill.get_file(&font_path) {
+                    if let Some(contents) = source.get_file(&font_path) {
                         font_data.push(contents.to_vec());
                     }
                 }
@@ -174,14 +176,14 @@ impl QuillWorld {
         }
 
         // Also look in packages/*/fonts/ for package fonts
-        let package_font_paths = quill.find_files("packages/**");
+        let package_font_paths = source.find_files("packages/**");
         for font_path in package_font_paths {
             if let Some(ext) = font_path.extension() {
                 if matches!(
                     ext.to_string_lossy().to_lowercase().as_str(),
                     "ttf" | "otf" | "woff" | "woff2"
                 ) {
-                    if let Some(contents) = quill.get_file(&font_path) {
+                    if let Some(contents) = source.get_file(&font_path) {
                         font_data.push(contents.to_vec());
                     }
                 }
@@ -193,14 +195,14 @@ impl QuillWorld {
 
     /// Loads assets from quill's in-memory file system.
     fn load_assets_from_quill(
-        quill: &Quill,
+        source: &QuillSource,
         binaries: &mut HashMap<FileId, Bytes>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get all files that start with "assets/"
-        let asset_paths = quill.find_files("assets/*");
+        let asset_paths = source.find_files("assets/*");
 
         for asset_path in asset_paths {
-            if let Some(contents) = quill.get_file(&asset_path) {
+            if let Some(contents) = source.get_file(&asset_path) {
                 // Create virtual path for the asset
                 let virtual_path = VirtualPath::new(asset_path.to_string_lossy().as_ref());
                 let file_id = FileId::new(None, virtual_path);
@@ -214,14 +216,14 @@ impl QuillWorld {
     /// Downloads and loads external packages from Quill.yaml.
     #[cfg(feature = "native")]
     fn download_and_load_external_packages(
-        quill: &Quill,
+        source: &QuillSource,
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         use typst_kit::download::{Downloader, ProgressSink};
         use typst_kit::package::{PackageStorage, DEFAULT_PACKAGES_SUBDIR};
 
-        let packages_list = quill.typst_packages();
+        let packages_list = typst_packages(source);
         if packages_list.is_empty() {
             return Ok(());
         }
@@ -385,12 +387,12 @@ impl QuillWorld {
 
     /// Loads packages from quill's in-memory file system.
     fn load_packages_from_quill(
-        quill: &Quill,
+        source: &QuillSource,
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get all subdirectories in packages/
-        let package_dirs = quill.list_directories("packages");
+        let package_dirs = source.list_directories("packages");
 
         for package_dir in package_dirs {
             let package_name = package_dir
@@ -401,7 +403,7 @@ impl QuillWorld {
 
             // Look for typst.toml in this package
             let toml_path = package_dir.join("typst.toml");
-            if let Some(toml_contents) = quill.get_file(&toml_path) {
+            if let Some(toml_contents) = source.get_file(&toml_path) {
                 let toml_content = String::from_utf8_lossy(toml_contents);
                 match parse_package_toml(&toml_content) {
                     Ok(package_info) => {
@@ -415,7 +417,7 @@ impl QuillWorld {
 
                         // Load the package files with entrypoint awareness
                         Self::load_package_files_from_quill(
-                            quill,
+                            source,
                             &package_dir,
                             sources,
                             binaries,
@@ -440,7 +442,7 @@ impl QuillWorld {
                 };
 
                 Self::load_package_files_from_quill(
-                    quill,
+                    source,
                     &package_dir,
                     sources,
                     binaries,
@@ -455,7 +457,7 @@ impl QuillWorld {
 
     /// Loads files from a package directory in quill's in-memory file system.
     fn load_package_files_from_quill(
-        quill: &Quill,
+        source: &QuillSource,
         package_dir: &Path,
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
@@ -464,10 +466,10 @@ impl QuillWorld {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Find all files in the package directory
         let package_pattern = format!("{}/*", package_dir.to_string_lossy());
-        let package_files = quill.find_files(&package_pattern);
+        let package_files = source.find_files(&package_pattern);
 
         for file_path in package_files {
-            if let Some(contents) = quill.get_file(&file_path) {
+            if let Some(contents) = source.get_file(&file_path) {
                 // Calculate the relative path within the package
                 let relative_path = file_path.strip_prefix(package_dir).map_err(|_| {
                     format!("Failed to get relative path for {}", file_path.display())
@@ -690,10 +692,31 @@ name = "minimal-package"
 
     #[test]
     fn test_asset_fonts_have_priority() {
-        use std::path::Path;
-        use std::sync::Arc;
+        use std::collections::HashMap;
+        use std::fs;
+        use std::path::{Path, PathBuf};
 
-        use crate::TypstBackend;
+        use quillmark_core::{FileTreeNode, QuillSource};
+
+        fn walk(dir: &Path, base: &Path) -> std::io::Result<FileTreeNode> {
+            let mut files = HashMap::new();
+            for entry in fs::read_dir(dir)? {
+                let entry = entry?;
+                let p: PathBuf = entry.path();
+                let name = p.file_name().unwrap().to_string_lossy().into_owned();
+                if p.is_file() {
+                    files.insert(
+                        name,
+                        FileTreeNode::File {
+                            contents: fs::read(&p)?,
+                        },
+                    );
+                } else if p.is_dir() {
+                    files.insert(name, walk(&p, base)?);
+                }
+            }
+            Ok(FileTreeNode::Directory { files })
+        }
 
         // Use the actual usaf_memo fixture which has real fonts
         let quill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -712,9 +735,9 @@ name = "minimal-package"
             return;
         }
 
-        let quill = Quill::from_path(&quill_path).expect("load quill");
-        let quill = quill.with_backend(Arc::new(TypstBackend::default()));
-        let world = QuillWorld::new(&quill, "// Test").unwrap();
+        let tree = walk(&quill_path, &quill_path).expect("walk fixture");
+        let source = QuillSource::from_tree(tree).expect("load source");
+        let world = QuillWorld::new(&source, "// Test").unwrap();
 
         // Asset fonts should be loaded
         assert!(!world.fonts.is_empty(), "Should have asset fonts loaded");

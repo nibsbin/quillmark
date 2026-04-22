@@ -1,48 +1,17 @@
-//! Quill loading and construction routines.
-use std::collections::HashMap;
+//! QuillSource loading and construction routines.
 use std::error::Error as StdError;
 use std::path::{Component, Path};
 
 use crate::value::QuillValue;
 
-use super::{FileTreeNode, Quill, QuillConfig, QuillIgnore};
+use super::{FileTreeNode, QuillConfig, QuillSource};
 
-impl Quill {
-    /// Create a Quill from a directory path
-    pub fn from_path<P: AsRef<std::path::Path>>(
-        path: P,
-    ) -> Result<Self, Box<dyn StdError + Send + Sync>> {
-        use std::fs;
-
-        let path = path.as_ref();
-
-        // Load .quillignore if it exists
-        let quillignore_path = path.join(".quillignore");
-        let ignore = if quillignore_path.exists() {
-            let ignore_content = fs::read_to_string(&quillignore_path)
-                .map_err(|e| format!("Failed to read .quillignore: {}", e))?;
-            QuillIgnore::from_content(&ignore_content)
-        } else {
-            // Default ignore patterns
-            QuillIgnore::new(vec![
-                ".git/".to_string(),
-                ".gitignore".to_string(),
-                ".quillignore".to_string(),
-                "target/".to_string(),
-                "node_modules/".to_string(),
-            ])
-        };
-
-        // Load all files into a tree structure
-        let root = Self::load_directory_as_tree(path, path, &ignore)?;
-
-        // Create Quill from the file tree
-        Self::from_tree(root)
-    }
-
-    /// Create a Quill from a tree structure
+impl QuillSource {
+    /// Create a QuillSource from a tree structure.
     ///
-    /// This is the authoritative method for creating a Quill from an in-memory file tree.
+    /// This is the authoritative method for creating a QuillSource from an
+    /// in-memory file tree. Filesystem walking belongs upstream (see
+    /// `quillmark::Quillmark::quill_from_path`).
     ///
     /// # Arguments
     ///
@@ -67,26 +36,11 @@ impl Quill {
         // Parse YAML into QuillConfig
         let config = QuillConfig::from_yaml(&quill_yaml_content)?;
 
-        // Construct Quill from QuillConfig
+        // Construct QuillSource from QuillConfig
         Self::from_config(config, root)
     }
 
-    /// Create a Quill from a QuillConfig and file tree
-    ///
-    /// This method constructs a Quill from a parsed QuillConfig and validates
-    /// all file references.
-    ///
-    /// # Arguments
-    ///
-    /// * `config` - The parsed QuillConfig
-    ///   (mutable because resolved `example_markdown` content is attached during load)
-    /// * `root` - The root node of the file tree
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if:
-    /// - The plate file specified in config is not found or not valid UTF-8
-    /// - The example file specified in config is not found or not valid UTF-8
+    /// Create a QuillSource from a QuillConfig and file tree.
     fn from_config(
         mut config: QuillConfig,
         root: FileTreeNode,
@@ -187,11 +141,10 @@ impl Quill {
         let defaults = config.defaults();
         let examples = config.examples();
 
-        let quill = Quill {
+        let source = QuillSource {
             metadata,
             name: config.name.clone(),
             backend_id: config.backend.clone(),
-            resolved_backend: None,
             plate: plate_content,
             example: example_content,
             config,
@@ -200,57 +153,6 @@ impl Quill {
             files: root,
         };
 
-        Ok(quill)
-    }
-
-    /// Recursively load all files from a directory into a tree structure
-    fn load_directory_as_tree(
-        current_dir: &Path,
-        base_dir: &Path,
-        ignore: &QuillIgnore,
-    ) -> Result<FileTreeNode, Box<dyn StdError + Send + Sync>> {
-        use std::fs;
-
-        if !current_dir.exists() {
-            return Ok(FileTreeNode::Directory {
-                files: HashMap::new(),
-            });
-        }
-
-        let mut files = HashMap::new();
-
-        for entry in fs::read_dir(current_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            let relative_path = path
-                .strip_prefix(base_dir)
-                .map_err(|e| format!("Failed to get relative path: {}", e))?
-                .to_path_buf();
-
-            // Check if this path should be ignored
-            if ignore.is_ignored(&relative_path) {
-                continue;
-            }
-
-            // Get the filename
-            let filename = path
-                .file_name()
-                .and_then(|n| n.to_str())
-                .ok_or_else(|| format!("Invalid filename: {}", path.display()))?
-                .to_string();
-
-            if path.is_file() {
-                let contents = fs::read(&path)
-                    .map_err(|e| format!("Failed to read file '{}': {}", path.display(), e))?;
-
-                files.insert(filename, FileTreeNode::File { contents });
-            } else if path.is_dir() {
-                // Recursively process subdirectory
-                let subdir_tree = Self::load_directory_as_tree(&path, base_dir, ignore)?;
-                files.insert(filename, subdir_tree);
-            }
-        }
-
-        Ok(FileTreeNode::Directory { files })
+        Ok(source)
     }
 }

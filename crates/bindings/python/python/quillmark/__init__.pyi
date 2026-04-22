@@ -70,76 +70,12 @@ class Quillmark:
             QuillmarkError: If path doesn't exist, quill is invalid, or backend unavailable
         """
 
-    def workflow(self, quill: Quill) -> Workflow:
-        """Create a workflow for the given quill.
-
-        Args:
-            quill: A Quill object
-
-        Raises:
-            QuillmarkError: If backend unavailable
-        """
-
     def registered_backends(self) -> list[str]:
         """Get list of registered backend IDs."""
 
-class Workflow:
-    """Sealed workflow for executing the render pipeline.
-
-    Supports dynamic asset and font injection at runtime via add_asset/add_font methods.
-    """
-
-    def render(
-        self,
-        doc: Document,
-        format: OutputFormat | None = None
-    ) -> RenderResult:
-        """Render document to artifacts."""
-
-    def open(self, doc: Document) -> RenderSession:
-        """Open an iterative render session for page-selective rendering."""
-
-    def dry_run(self, doc: Document) -> None:
-        """Validate document without compilation."""
-
-    @property
-    def backend_id(self) -> str:
-        """Get backend identifier."""
-
-    @property
-    def supported_formats(self) -> list[OutputFormat]:
-        """Get supported output formats."""
-
-    @property
-    def quill_ref(self) -> str:
-        """Get quill reference (name@version)."""
-
-    def add_asset(self, filename: str, contents: bytes) -> None:
-        """Add a dynamic asset to the workflow."""
-
-    def add_assets(self, assets: list[tuple[str, bytes]]) -> None:
-        """Add multiple dynamic assets at once."""
-
-    def clear_assets(self) -> None:
-        """Clear all dynamic assets from the workflow."""
-
-    def dynamic_asset_names(self) -> list[str]:
-        """Get list of dynamic asset filenames currently in the workflow."""
-
-    def add_font(self, filename: str, contents: bytes) -> None:
-        """Add a dynamic font to the workflow."""
-
-    def add_fonts(self, fonts: list[tuple[str, bytes]]) -> None:
-        """Add multiple dynamic fonts at once."""
-
-    def clear_fonts(self) -> None:
-        """Clear all dynamic fonts from the workflow."""
-
-    def dynamic_font_names(self) -> list[str]:
-        """Get list of dynamic font filenames currently in the workflow."""
-
 class Quill:
-    """Format bundle containing plate content and assets."""
+    """Renderable quill. Couples an on-disk quill bundle with a resolved
+    backend — constructed via :meth:`Quillmark.quill_from_path`."""
 
     @property
     def name(self) -> str:
@@ -177,6 +113,10 @@ class Quill:
     def print_tree(self) -> str:
         """Get a string representation of the quill file tree."""
 
+    @property
+    def quill_ref(self) -> str:
+        """Quill reference (``name@version``)."""
+
     def supported_formats(self) -> list[OutputFormat]:
         """Get supported output formats for this quill's backend."""
 
@@ -197,6 +137,13 @@ class Quill:
 
     def open(self, doc: Document) -> RenderSession:
         """Open an iterative render session for page-selective rendering."""
+
+    def dry_run(self, doc: Document) -> None:
+        """Validate document without running the backend compiler."""
+
+    def project_form(self, doc: Document) -> dict[str, Any]:
+        """Project the document through the quill schema. Returns a plain
+        dict; see the Rust docs on ``FormProjection`` for the shape."""
 
 class Document:
     """Typed in-memory Quillmark document.

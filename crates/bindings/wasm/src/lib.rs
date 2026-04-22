@@ -8,7 +8,7 @@
 //! - [`Quill`] - quill handle for rendering/compiling
 //! - [`engine::Document`] - typed parsed document (`fromMarkdown` static, `toMarkdown` emitter)
 //!
-//! ## Workflow
+//! ## Usage
 //!
 //! 1. Build a render-ready quill with `engine.quill(...)`
 //! 2. Parse markdown via `Document.fromMarkdown(...)`

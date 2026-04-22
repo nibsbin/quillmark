@@ -46,17 +46,16 @@ def test_full_workflow():
     engine = Quillmark()
     taro_dir = QUILLS_PATH / "taro"
     quill = engine.quill_from_path(str(_latest_version(taro_dir)))
-    workflow = engine.workflow(quill)
 
     markdown = "---\nQUILL: taro\nauthor: Test Author\nice_cream: Chocolate\ntitle: Test\n---\n\nContent.\n"
     parsed = Document.from_markdown(markdown)
     assert parsed.quill_ref() == "taro"
 
-    assert "taro" in workflow.quill_ref
-    assert workflow.backend_id == "typst"
-    assert OutputFormat.PDF in workflow.supported_formats
+    assert "taro" in quill.quill_ref
+    assert quill.backend == "typst"
+    assert OutputFormat.PDF in quill.supported_formats()
 
-    result = workflow.render(parsed, OutputFormat.PDF)
+    result = quill.render(parsed, OutputFormat.PDF)
     assert len(result.artifacts) > 0
     assert result.artifacts[0].output_format == OutputFormat.PDF
     assert len(result.artifacts[0].bytes) > 0

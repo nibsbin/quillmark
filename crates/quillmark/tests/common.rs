@@ -32,7 +32,7 @@ pub fn demo(
     } else {
         quills_path(quill_dir)
     };
-    // Default engine flow used by examples: Typst backend, engine-provided quill, Workflow
+    // Default engine flow used by examples: Typst backend via the engine-provided quill.
     let engine = quillmark::Quillmark::new();
     let quill = engine
         .quill_from_path(quill_path.clone())
@@ -40,6 +40,7 @@ pub fn demo(
 
     // Load the markdown template from the quill
     let markdown = quill
+        .source()
         .example
         .as_ref()
         .ok_or("Quill does not have a markdown template")?
@@ -48,10 +49,8 @@ pub fn demo(
     // Parse the markdown once
     let parsed = quillmark::Document::from_markdown(&markdown)?;
 
-    let workflow = engine.workflow(&quill).expect("Failed to load workflow");
-
     // render output
-    let rendered = workflow.render(&parsed, Some(quillmark_core::OutputFormat::Pdf))?;
+    let rendered = quill.render(&parsed, Some(quillmark_core::OutputFormat::Pdf))?;
     let output_bytes = rendered.artifacts[0].bytes.clone();
 
     write_example_output(render_output, &output_bytes)?;

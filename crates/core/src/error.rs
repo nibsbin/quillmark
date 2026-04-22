@@ -27,7 +27,6 @@
 //! - [`RenderError::UnsupportedBackend`]: Backend not registered
 //! - [`RenderError::ValidationFailed`]: Field coercion/validation failure
 //! - [`RenderError::QuillConfig`]: Quill configuration error
-//! - [`RenderError::NoBackend`]: Quill has no backend attached
 //!
 //! ## Examples
 //!
@@ -36,16 +35,16 @@
 //! ```no_run
 //! use quillmark_core::{RenderError, error::print_errors};
 //! # use quillmark_core::{RenderResult, OutputFormat};
-//! # struct Workflow;
-//! # impl Workflow {
+//! # struct Quill;
+//! # impl Quill {
 //! #     fn render(&self, _: &str, _: Option<()>) -> Result<RenderResult, RenderError> {
 //! #         Ok(RenderResult::new(vec![], OutputFormat::Pdf))
 //! #     }
 //! # }
-//! # let workflow = Workflow;
+//! # let quill = Quill;
 //! # let markdown = "";
 //!
-//! match workflow.render(markdown, None) {
+//! match quill.render(markdown, None) {
 //!     Ok(result) => {
 //!         // Process artifacts
 //!         for artifact in result.artifacts {
@@ -503,13 +502,6 @@ pub enum RenderError {
         /// Diagnostic information
         diag: Box<Diagnostic>,
     },
-
-    /// Quill has no backend attached (created without engine-based construction)
-    #[error("{diag}")]
-    NoBackend {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
 }
 
 impl RenderError {
@@ -522,8 +514,7 @@ impl RenderError {
             | RenderError::FormatNotSupported { diag }
             | RenderError::UnsupportedBackend { diag }
             | RenderError::ValidationFailed { diag }
-            | RenderError::QuillConfig { diag }
-            | RenderError::NoBackend { diag } => vec![diag.as_ref()],
+            | RenderError::QuillConfig { diag } => vec![diag.as_ref()],
         }
     }
 }

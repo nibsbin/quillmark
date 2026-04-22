@@ -7,7 +7,7 @@
 //! This crate provides the foundational types and traits for Quillmark:
 //!
 //! - **Parsing**: YAML frontmatter extraction with Extended YAML Metadata Standard support
-//! - **Format model**: [`Quill`] type for managing format bundles with in-memory file system
+//! - **Format model**: [`QuillSource`] type for managing format bundles with in-memory file system
 //! - **Backend trait**: Extensible interface for implementing output format backends
 //! - **Error handling**: Structured diagnostics with source location tracking
 //! - **Utilities**: TOML⇄YAML conversion helpers
@@ -35,7 +35,7 @@
 //! - [`backend`]: Backend trait for output format implementations
 //! - [`error`]: Structured error handling and diagnostics
 //! - [`types`]: Core rendering types (OutputFormat, Artifact, RenderOptions)
-//! - [`quill`]: Quill format bundle and related types
+//! - [`quill`]: QuillSource bundle and related types
 //!
 //! ## Further Reading
 //!
@@ -60,7 +60,7 @@ pub mod session;
 pub use session::RenderSession;
 
 pub mod quill;
-pub use quill::{FileTreeNode, Quill, QuillIgnore};
+pub use quill::{FileTreeNode, QuillIgnore, QuillSource};
 
 pub mod value;
 pub use value::QuillValue;

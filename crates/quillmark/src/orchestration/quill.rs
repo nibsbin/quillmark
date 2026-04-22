@@ -1,27 +1,130 @@
+//! Renderable `Quill` — the engine-constructed composition of a
+//! [`QuillSource`] with a resolved backend.
+
 use indexmap::IndexMap;
-use quillmark_core::{
-    normalize::normalize_document, Backend, Card, Diagnostic, Document, OutputFormat, Quill,
-    QuillValue, RenderError, RenderOptions, RenderResult, RenderSession, Severity,
-};
 use std::sync::Arc;
 
-/// Sealed workflow for rendering Markdown documents. See [module docs](super) for usage patterns.
-pub struct Workflow {
+use quillmark_core::{
+    normalize::normalize_document, Backend, Card, Diagnostic, Document, OutputFormat, QuillSource,
+    QuillValue, RenderError, RenderOptions, RenderResult, RenderSession, Severity,
+};
+
+/// Renderable quill. Composes an [`Arc<QuillSource>`] with a resolved
+/// [`Backend`]. Constructed by the engine; immutable once created.
+#[derive(Clone)]
+pub struct Quill {
+    source: Arc<QuillSource>,
     backend: Arc<dyn Backend>,
-    quill: Quill,
 }
 
 struct PreparedRenderContext {
     json_data: serde_json::Value,
     plate_content: String,
-    prepared_quill: Quill,
 }
 
-impl Workflow {
-    /// Create a new Workflow with the specified backend and quill.
-    pub fn new(backend: Arc<dyn Backend>, quill: Quill) -> Result<Self, RenderError> {
-        // Quills are validated at construction time before workflow creation.
-        Ok(Self { backend, quill })
+impl Quill {
+    /// Construct a Quill from a source and a resolved backend.
+    ///
+    /// Engine-internal; external callers should use
+    /// [`crate::Quillmark::quill`] or [`crate::Quillmark::quill_from_path`].
+    pub(crate) fn new(source: Arc<QuillSource>, backend: Arc<dyn Backend>) -> Self {
+        Self { source, backend }
+    }
+
+    /// The underlying quill source.
+    pub fn source(&self) -> &QuillSource {
+        &self.source
+    }
+
+    /// Shared handle to the underlying source.
+    pub fn source_arc(&self) -> Arc<QuillSource> {
+        Arc::clone(&self.source)
+    }
+
+    /// The resolved backend identifier (e.g. `"typst"`).
+    pub fn backend_id(&self) -> &str {
+        self.backend.id()
+    }
+
+    /// A shared handle to the resolved backend.
+    pub fn backend(&self) -> Arc<dyn Backend> {
+        Arc::clone(&self.backend)
+    }
+
+    /// Supported output formats for this quill's backend.
+    pub fn supported_formats(&self) -> &'static [OutputFormat] {
+        self.backend.supported_formats()
+    }
+
+    /// The quill's declared name.
+    pub fn name(&self) -> &str {
+        &self.source.name
+    }
+
+    /// Quill reference string (`name@version`) for diagnostics.
+    pub fn quill_ref(&self) -> String {
+        let version = self
+            .source
+            .metadata
+            .get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0.0.0");
+        format!("{}@{}", self.source.name, version)
+    }
+
+    /// Render a document to final artifacts.
+    pub fn render(
+        &self,
+        doc: &Document,
+        format: Option<OutputFormat>,
+    ) -> Result<RenderResult, RenderError> {
+        self.render_with_options(doc, format, None)
+    }
+
+    /// Render with explicit pixels-per-inch for raster formats (PNG).
+    ///
+    /// `ppi` is ignored for vector/document formats (PDF, SVG, TXT).
+    /// When `None`, the backend's default is used.
+    pub fn render_with_options(
+        &self,
+        doc: &Document,
+        format: Option<OutputFormat>,
+        ppi: Option<f32>,
+    ) -> Result<RenderResult, RenderError> {
+        let context = self.prepare_render_context(doc)?;
+        let format = if format.is_some() {
+            format
+        } else {
+            let supported = self.backend.supported_formats();
+            if !supported.is_empty() {
+                Some(supported[0])
+            } else {
+                None
+            }
+        };
+
+        let render_opts = RenderOptions {
+            output_format: format,
+            ppi,
+            pages: None,
+        };
+
+        let warning = self.ref_mismatch_warning(doc);
+        let session =
+            self.backend
+                .open(&context.plate_content, &self.source, &context.json_data)?;
+        let session = session.with_warning(warning);
+        session.render(&render_opts)
+    }
+
+    /// Open an iterative render session for this document.
+    pub fn open(&self, doc: &Document) -> Result<RenderSession, RenderError> {
+        let context = self.prepare_render_context(doc)?;
+        let warning = self.ref_mismatch_warning(doc);
+        let session =
+            self.backend
+                .open(&context.plate_content, &self.source, &context.json_data)?;
+        Ok(session.with_warning(warning))
     }
 
     /// Compile a Document to JSON data suitable for the backend.
@@ -31,7 +134,7 @@ impl Workflow {
     pub fn compile_data(&self, doc: &Document) -> Result<serde_json::Value, RenderError> {
         // Coerce frontmatter fields against the schema.
         let coerced_frontmatter = self
-            .quill
+            .source
             .config
             .coerce_frontmatter(doc.frontmatter())
             .map_err(|e| RenderError::ValidationFailed {
@@ -48,7 +151,7 @@ impl Workflow {
         let mut coerced_cards: Vec<Card> = Vec::new();
         for card in doc.cards() {
             let coerced_fields = self
-                .quill
+                .source
                 .config
                 .coerce_card(card.tag(), card.fields())
                 .map_err(|e| RenderError::ValidationFailed {
@@ -111,90 +214,41 @@ impl Workflow {
         Ok(final_doc.to_plate_json())
     }
 
-    pub fn render(
-        &self,
-        doc: &Document,
-        format: Option<OutputFormat>,
-    ) -> Result<RenderResult, RenderError> {
-        self.render_with_options(doc, format, None)
-    }
-
-    /// Open a backend-specific iterative render session.
-    pub fn open(&self, doc: &Document) -> Result<RenderSession, RenderError> {
-        let context = self.prepare_render_context(doc)?;
-        self.backend.open(
-            &context.plate_content,
-            &context.prepared_quill,
-            &context.json_data,
-        )
-    }
-
-    /// Render with explicit pixels-per-inch for raster formats (PNG).
-    ///
-    /// `ppi` is ignored for vector/document formats (PDF, SVG, TXT).
-    /// When `None`, defaults to 144.0 (2x at 72pt/inch).
-    pub fn render_with_options(
-        &self,
-        doc: &Document,
-        format: Option<OutputFormat>,
-        ppi: Option<f32>,
-    ) -> Result<RenderResult, RenderError> {
-        let context = self.prepare_render_context(doc)?;
-        self.render_plate_with_quill_and_data(
-            &context.plate_content,
-            format,
-            ppi,
-            &context.prepared_quill,
-            &context.json_data,
-        )
-    }
-
     fn prepare_render_context(&self, doc: &Document) -> Result<PreparedRenderContext, RenderError> {
         Ok(PreparedRenderContext {
             json_data: self.compile_data(doc)?,
-            plate_content: self.get_plate_content()?.unwrap_or_default(),
-            prepared_quill: self.quill.clone(),
+            plate_content: self.plate_content().unwrap_or_default(),
         })
     }
 
-    /// Internal method to render content with a specific quill and JSON data
-    fn render_plate_with_quill_and_data(
-        &self,
-        content: &str,
-        format: Option<OutputFormat>,
-        ppi: Option<f32>,
-        quill: &Quill,
-        json_data: &serde_json::Value,
-    ) -> Result<RenderResult, RenderError> {
-        let format = if format.is_some() {
-            format
+    fn ref_mismatch_warning(&self, doc: &Document) -> Option<Diagnostic> {
+        let doc_ref = doc.quill_reference().name.as_str();
+        if doc_ref != self.source.name {
+            Some(
+                Diagnostic::new(
+                    Severity::Warning,
+                    format!(
+                        "document declares QUILL '{}' but was rendered with '{}'",
+                        doc_ref, self.source.name
+                    ),
+                )
+                .with_code("quill::ref_mismatch".to_string())
+                .with_hint(
+                    "the QUILL field is informational; ensure you are rendering with the intended quill"
+                        .to_string(),
+                ),
+            )
         } else {
-            let supported = self.backend.supported_formats();
-            if !supported.is_empty() {
-                Some(supported[0])
-            } else {
-                None
-            }
-        };
-
-        let render_opts = RenderOptions {
-            output_format: format,
-            ppi,
-            pages: None,
-        };
-
-        self.backend
-            .open(content, quill, json_data)?
-            .render(&render_opts)
+            None
+        }
     }
 
-    /// Apply frontmatter defaults from QuillConfig.
     fn apply_frontmatter_defaults(
         &self,
         frontmatter: &IndexMap<String, QuillValue>,
     ) -> IndexMap<String, QuillValue> {
         let mut result = frontmatter.clone();
-        for (field_name, default_value) in self.quill.config.defaults() {
+        for (field_name, default_value) in self.source.config.defaults() {
             if !result.contains_key(&field_name) {
                 result.insert(field_name, default_value);
             }
@@ -202,14 +256,13 @@ impl Workflow {
         result
     }
 
-    /// Apply per-card defaults from QuillConfig.
     fn apply_card_defaults(
         &self,
         card_tag: &str,
         fields: &IndexMap<String, QuillValue>,
     ) -> IndexMap<String, QuillValue> {
         let mut result = fields.clone();
-        if let Some(card_defaults) = self.quill.config.card_defaults(card_tag) {
+        if let Some(card_defaults) = self.source.config.card_defaults(card_tag) {
             for (field_name, default_value) in card_defaults {
                 if !result.contains_key(&field_name) {
                     result.insert(field_name, default_value);
@@ -219,18 +272,17 @@ impl Workflow {
         result
     }
 
-    /// Get the plate content directly from the quill.
-    fn get_plate_content(&self) -> Result<Option<String>, RenderError> {
-        match &self.quill.plate {
-            Some(s) if !s.is_empty() => Ok(Some(s.clone())),
-            _ => Ok(None),
+    fn plate_content(&self) -> Option<String> {
+        match &self.source.plate {
+            Some(s) if !s.is_empty() => Some(s.clone()),
+            _ => None,
         }
     }
 
-    /// Perform a dry run validation without backend compilation.
+    /// Perform a dry-run validation without backend compilation.
     pub fn dry_run(&self, doc: &Document) -> Result<(), RenderError> {
         let coerced_frontmatter = self
-            .quill
+            .source
             .config
             .coerce_frontmatter(doc.frontmatter())
             .map_err(|e| RenderError::ValidationFailed {
@@ -246,7 +298,7 @@ impl Workflow {
         let mut coerced_cards: Vec<Card> = Vec::new();
         for card in doc.cards() {
             let coerced_fields = self
-                .quill
+                .source
                 .config
                 .coerce_card(card.tag(), card.fields())
                 .map_err(|e| RenderError::ValidationFailed {
@@ -276,14 +328,13 @@ impl Workflow {
         Ok(())
     }
 
-    /// Validate a Document against the Quill's schema.
+    /// Validate a Document against this quill's schema.
     pub fn validate_schema(&self, doc: &Document) -> Result<(), RenderError> {
         self.validate_document(doc)
     }
 
-    /// Internal validation method.
     fn validate_document(&self, doc: &Document) -> Result<(), RenderError> {
-        match self.quill.config.validate_document(doc) {
+        match self.source.config.validate_document(doc) {
             Ok(_) => Ok(()),
             Err(errors) => {
                 let error_message = errors
@@ -304,30 +355,13 @@ impl Workflow {
             }
         }
     }
+}
 
-    /// Get a reference-counted handle to the backend.
-    pub fn backend(&self) -> Arc<dyn Backend> {
-        Arc::clone(&self.backend)
-    }
-
-    /// Get the backend identifier (e.g., "typst").
-    pub fn backend_id(&self) -> &str {
-        self.backend.id()
-    }
-
-    /// Get the supported output formats for this workflow's backend.
-    pub fn supported_formats(&self) -> &'static [OutputFormat] {
-        self.backend.supported_formats()
-    }
-
-    /// Get the quill reference (name@version) used by this workflow.
-    pub fn quill_ref(&self) -> String {
-        let version = self
-            .quill
-            .metadata
-            .get("version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("0.0.0");
-        format!("{}@{}", self.quill.name, version)
+impl std::fmt::Debug for Quill {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Quill")
+            .field("name", &self.source.name)
+            .field("backend", &self.backend.id())
+            .finish()
     }
 }

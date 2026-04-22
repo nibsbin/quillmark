@@ -154,7 +154,7 @@ pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
     let mut diagnostics: Vec<SerializableDiagnostic> = Vec::new();
 
     // ── Main card projection ──────────────────────────────────────────────
-    let main_schema = quill.config.main();
+    let main_schema = quill.source().config.main();
     let main = project_card(main_schema, doc.frontmatter());
 
     // ── Per-card projections ──────────────────────────────────────────────
@@ -162,7 +162,7 @@ pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
 
     for (index, card) in doc.cards().iter().enumerate() {
         let tag = card.tag();
-        match quill.config.card_definition(tag) {
+        match quill.source().config.card_definition(tag) {
             Some(card_schema) => {
                 cards.push(project_card(card_schema, card.fields()));
             }
@@ -182,7 +182,7 @@ pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
     }
 
     // ── Validation diagnostics ────────────────────────────────────────────
-    if let Err(validation_errors) = quill.config.validate_document(doc) {
+    if let Err(validation_errors) = quill.source().config.validate_document(doc) {
         for err in validation_errors {
             let diag = Diagnostic::new(Severity::Error, err.to_string())
                 .with_code("form::validation_error".to_string());

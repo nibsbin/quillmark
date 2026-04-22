@@ -7,10 +7,9 @@ def test_save_artifact(taro_quill_dir, taro_md, tmp_path):
     """Test saving an artifact to file."""
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
-    workflow = engine.workflow(quill)
 
     parsed = Document.from_markdown(taro_md)
-    result = workflow.render(parsed, OutputFormat.PDF)
+    result = quill.render(parsed, OutputFormat.PDF)
 
     output_path = tmp_path / "output.pdf"
     result.artifacts[0].save(str(output_path))
@@ -78,28 +77,13 @@ def test_quill_open_session_page_selection(taro_quill_dir, taro_md):
     assert subset.output_format == OutputFormat.SVG
 
 
-def test_engine_workflow_still_works(taro_quill_dir, taro_md):
-    """engine.workflow(quill) renders successfully."""
+def test_quill_render_full_document(taro_quill_dir, taro_md):
+    """quill.render(doc) renders successfully."""
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
-    workflow = engine.workflow(quill)
 
     parsed = Document.from_markdown(taro_md)
-    result = workflow.render(parsed, OutputFormat.PDF)
+    result = quill.render(parsed, OutputFormat.PDF)
 
     assert len(result.artifacts) > 0
     assert result.output_format == OutputFormat.PDF
-
-
-def test_workflow_open_session(taro_quill_dir, taro_md):
-    engine = Quillmark()
-    quill = engine.quill_from_path(str(taro_quill_dir))
-    workflow = engine.workflow(quill)
-    parsed = Document.from_markdown(taro_md)
-
-    session = workflow.open(parsed)
-    assert session.page_count > 0
-
-    subset = session.render(OutputFormat.SVG, [0])
-    assert len(subset.artifacts) == 1
-    assert subset.output_format == OutputFormat.SVG

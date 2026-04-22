@@ -1,7 +1,9 @@
 //! # Backend Registration Tests
 
-use quillmark::{Document, OutputFormat, Quill, Quillmark, RenderError};
-use quillmark_core::{session::SessionHandle, Artifact, Backend, RenderOptions, RenderResult};
+use quillmark::{Document, OutputFormat, Quillmark, RenderError};
+use quillmark_core::{
+    session::SessionHandle, Artifact, Backend, QuillSource, RenderOptions, RenderResult,
+};
 use std::fs;
 use tempfile::TempDir;
 
@@ -22,7 +24,7 @@ impl Backend for MockBackend {
     fn open(
         &self,
         plated: &str,
-        _quill: &Quill,
+        _source: &QuillSource,
         _json_data: &serde_json::Value,
     ) -> Result<quillmark::RenderSession, RenderError> {
         Ok(quillmark::RenderSession::new(Box::new(MockSession {
@@ -78,7 +80,7 @@ fn test_register_backend_replaces_existing() {
 }
 
 #[test]
-fn test_workflow_with_custom_backend() {
+fn test_render_with_custom_backend() {
     let mut engine = Quillmark::new();
     engine.register_backend(Box::new(MockBackend { id: "mock-txt" }));
 
@@ -94,15 +96,14 @@ fn test_workflow_with_custom_backend() {
     let quill = engine
         .quill_from_path(&quill_path)
         .expect("quill_from_path failed");
-    let workflow = engine.workflow(&quill).expect("workflow failed");
 
-    assert_eq!(workflow.backend_id(), "mock-txt");
-    assert!(workflow.quill_ref().starts_with("custom_backend_quill@"));
-    assert!(workflow.supported_formats().contains(&OutputFormat::Txt));
+    assert_eq!(quill.backend_id(), "mock-txt");
+    assert!(quill.quill_ref().starts_with("custom_backend_quill@"));
+    assert!(quill.supported_formats().contains(&OutputFormat::Txt));
 
     let markdown = "---\nQUILL: custom_backend_quill\ntitle: Hello Custom Backend\n---\n\n# Test\n";
     let parsed = Document::from_markdown(markdown).expect("parse failed");
-    let result = workflow
+    let result = quill
         .render(&parsed, Some(OutputFormat::Txt))
         .expect("render failed");
 

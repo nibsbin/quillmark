@@ -49,7 +49,7 @@ Quillmark returns structured diagnostics with source context so parse, validatio
 
 Recommended pattern:
 
-1. Validate early (`ParsedDocument.from_markdown`, `workflow.dry_run`).
+1. Validate early (`ParsedDocument.from_markdown`, `quill.dry_run`).
 2. Surface diagnostics directly to users/authoring UIs.
 3. Fail fast on render errors in automated jobs.
 
