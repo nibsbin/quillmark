@@ -30,16 +30,21 @@ with `with_backend` / `backend()` accessors (`render.rs:14,20`) and a
 tells callers to use a different API — `"use engine.quill() or
 engine.quill_from_path() instead"` (`render.rs:53`).
 
-The core `Quill` also carries backend-coupled methods that leak Typst
-specifics into a "backend-agnostic" crate:
-`typst_packages()` (`crates/core/src/quill/query.rs:11`) and
-`build_transform_schema()` (`crates/core/src/quill/render.rs:203`).
+The core `Quill` also carries `typst_packages()`
+(`crates/core/src/quill/query.rs:11`), a backend-specific query that reaches
+into `metadata["typst_packages"]` from a "backend-agnostic" crate.
 
 Dynamic asset/font injection was purged in commit `4dab4be4`, so `Quill` no
 longer has any legitimate reason to hold per-render mutable state. The
 remaining duplication is pure historical accident.
 
 ## Design
+
+**Framing.** `QuillSource` is the authored-input shape — what lives on disk and
+what core parses and validates. `Quill` is the runnable shape — source +
+resolved backend, produced by the engine. Bindings expose only `Quill`;
+`QuillSource` is a Rust-internal type and never crosses the public binding
+surface.
 
 ### Type split
 
@@ -53,14 +58,16 @@ pub struct QuillSource {
 }
 
 impl QuillSource {
-    pub(crate) fn from_tree(tree: FileTreeNode) -> Result<Self, ...>;
+    pub fn from_tree(tree: FileTreeNode) -> Result<Self, ...>;
     pub fn config(&self) -> &QuillConfig;
     pub fn metadata(&self) -> &HashMap<String, QuillValue>;
     pub fn find_files(&self, ...) -> ...;
     pub fn get_file(&self, ...) -> ...;
     pub fn list_directories(&self, ...) -> ...;
     // Gone: resolved_backend, with_backend, backend, render, open,
-    //       compile_data_internal, typst_packages, build_transform_schema
+    //       compile_data_internal, typst_packages
+    // build_transform_schema stays in core but relocates out of render.rs
+    // (see task 4).
 }
 ```
 
@@ -183,19 +190,30 @@ the call site at `crates/backends/typst/src/world.rs:239`.
 Delete `crates/core/src/quill/query.rs` if `typst_packages` is its sole
 contents.
 
-### 4. Move `build_transform_schema` out of core
+### 4. Relocate `build_transform_schema` within core
 
 **From:** `crates/core/src/quill/render.rs:203`
-**To:** `crates/backends/typst/src/` (new module, or extend `convert.rs`)
+**To:** a clearer home inside `quillmark-core` (e.g. alongside `FieldSchema`
+in `crates/core/src/quill/config.rs`, or a new
+`crates/core/src/quill/schema.rs`).
 
-The method converts `FieldSchema` → JSON Schema with
-`contentMediaType: "text/markdown"` tags. The only consumer is the Typst
-backend's field-transform logic (`crates/backends/typst/src/lib.rs:120`).
-Move the function there. It takes `&FieldSchema` (or `&QuillSource`) and
-returns `QuillValue`.
+On re-examination the function is backend-agnostic: it maps the abstract
+`FieldType` enum to JSON Schema with `contentMediaType: "text/markdown"`
+tags — no Typst specifics. It is a core responsibility (schema shape) that
+the Typst backend happens to be the only current consumer of.
 
-If a second backend later needs the same logic, promote it to a helper in
-`quillmark` — not back into core.
+After task 2 deletes the rest of `render.rs`, this function is the only
+thing left in the module. Move it into a file whose name reflects what it
+does (schema construction), then delete `render.rs`. It keeps its signature
+(`&FieldSchema` → `QuillValue`) and the Typst backend's call at
+`crates/backends/typst/src/lib.rs:120` updates to the new path.
+
+Do **not** promote it to `quillmark`: `crates/backends/typst` depends on
+`quillmark-core`, not on `quillmark`, so hoisting this function up the layer
+graph would either invert the dependency or force a calling-convention
+restructure (quillmark precomputing and threading the schema through the
+backend). Neither is warranted today. If a second backend later needs the
+same schema, it imports from core unchanged.
 
 ### 5. Introduce `Quill` in `quillmark`; delete `Workflow`
 
@@ -226,10 +244,9 @@ Remove `Quillmark::workflow` (`crates/quillmark/src/orchestration/engine.rs:99`)
 `engine.quill(tree)` (line 46) currently returns `quillmark_core::Quill` with
 backend attached. After the rename, it should:
 
-1. Call `QuillSource::from_tree(tree)` (now `pub(crate)` in core — expose via
-   a `pub(crate)` helper if the engine crate cannot reach it, or promote
-   `QuillSource::from_tree` to `pub` and rely on the engine as the documented
-   construction path).
+1. Call `QuillSource::from_tree(tree)` (`pub` in core — the engine is the
+   documented construction path, but direct use is allowed for tooling that
+   wants a sourceless inspection of a loaded quill).
 2. Resolve the backend from the source's declared backend id.
 3. Return `Quill { source: Arc::new(source), backend }`.
 
@@ -348,7 +365,8 @@ feature gate.
 - [ ] `rg 'resolved_backend|with_backend|NoBackend' crates/` returns zero hits
 - [ ] `rg 'compile_data_internal' crates/` returns zero hits
 - [ ] `rg 'QuillSource' crates/bindings/` returns zero hits (not exposed)
-- [ ] `rg 'typst_packages|build_transform_schema' crates/core/` returns zero hits
+- [ ] `rg 'typst_packages' crates/core/` returns zero hits
+- [ ] `crates/core/src/quill/render.rs` no longer exists; `build_transform_schema` lives in a schema-oriented module inside core
 - [ ] `Backend::open` signature takes `&QuillSource` (grep `crates/backends/`)
 - [ ] `wasm-pack test --node crates/bindings/wasm` passes
 - [ ] `npm test` inside `crates/bindings/wasm` passes
