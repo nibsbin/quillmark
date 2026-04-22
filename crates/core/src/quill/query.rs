@@ -1,25 +1,9 @@
 //! QuillSource file/query convenience methods.
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-
-use crate::value::QuillValue;
 
 use super::{FileTreeNode, QuillSource};
 
 impl QuillSource {
-    /// Get default values from cached config-derived defaults.
-    ///
-    /// Returns a reference to the pre-computed defaults HashMap that was extracted
-    /// during construction.
-    pub fn extract_defaults(&self) -> &HashMap<String, QuillValue> {
-        &self.defaults
-    }
-
-    /// Get example values from cached config-derived examples.
-    pub fn extract_examples(&self) -> &HashMap<String, Vec<QuillValue>> {
-        &self.examples
-    }
-
     /// Get file contents by path (relative to quill root)
     pub fn get_file<P: AsRef<Path>>(&self, path: P) -> Option<&[u8]> {
         self.files.get_file(path)

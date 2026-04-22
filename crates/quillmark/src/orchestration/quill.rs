@@ -36,19 +36,9 @@ impl Quill {
         &self.source
     }
 
-    /// Shared handle to the underlying source.
-    pub fn source_arc(&self) -> Arc<QuillSource> {
-        Arc::clone(&self.source)
-    }
-
     /// The resolved backend identifier (e.g. `"typst"`).
     pub fn backend_id(&self) -> &str {
         self.backend.id()
-    }
-
-    /// A shared handle to the resolved backend.
-    pub fn backend(&self) -> Arc<dyn Backend> {
-        Arc::clone(&self.backend)
     }
 
     /// Supported output formats for this quill's backend.
@@ -59,17 +49,6 @@ impl Quill {
     /// The quill's declared name.
     pub fn name(&self) -> &str {
         &self.source.name
-    }
-
-    /// Quill reference string (`name@version`) for diagnostics.
-    pub fn quill_ref(&self) -> String {
-        let version = self
-            .source
-            .metadata
-            .get("version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("0.0.0");
-        format!("{}@{}", self.source.name, version)
     }
 
     /// Render a document to final artifacts.
@@ -326,11 +305,6 @@ impl Quill {
         );
         self.validate_document(&coerced_doc)?;
         Ok(())
-    }
-
-    /// Validate a Document against this quill's schema.
-    pub fn validate_schema(&self, doc: &Document) -> Result<(), RenderError> {
-        self.validate_document(doc)
     }
 
     fn validate_document(&self, doc: &Document) -> Result<(), RenderError> {

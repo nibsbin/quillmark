@@ -82,7 +82,13 @@ impl PyQuill {
 
     #[getter]
     fn quill_ref(&self) -> String {
-        self.inner.quill_ref()
+        let source = self.inner.source();
+        let version = source
+            .metadata
+            .get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0.0.0");
+        format!("{}@{}", source.name, version)
     }
 
     #[getter]

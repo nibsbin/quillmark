@@ -11,7 +11,6 @@ use super::Quill;
 /// High-level engine for orchestrating backends and quills.
 pub struct Quillmark {
     backends: HashMap<String, Arc<dyn Backend>>,
-    warnings: Vec<Diagnostic>,
 }
 
 impl Quillmark {
@@ -19,7 +18,6 @@ impl Quillmark {
     pub fn new() -> Self {
         let mut engine = Self {
             backends: HashMap::new(),
-            warnings: Vec::new(),
         };
 
         #[cfg(feature = "typst")]
@@ -34,16 +32,6 @@ impl Quillmark {
     pub fn register_backend(&mut self, backend: Box<dyn Backend>) {
         let id = backend.id().to_string();
         self.backends.insert(id, Arc::from(backend));
-    }
-
-    /// Returns all currently accumulated non-fatal engine warnings.
-    pub fn warnings(&self) -> &[Diagnostic] {
-        &self.warnings
-    }
-
-    /// Drains and returns all currently accumulated non-fatal engine warnings.
-    pub fn take_warnings(&mut self) -> Vec<Diagnostic> {
-        std::mem::take(&mut self.warnings)
     }
 
     /// Build and return a render-ready quill from an in-memory file tree.

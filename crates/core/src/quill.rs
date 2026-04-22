@@ -42,10 +42,6 @@ pub struct QuillSource {
     pub example: Option<String>,
     /// Parsed configuration — the authoritative schema model.
     pub config: QuillConfig,
-    /// Cached default values extracted from config (for performance)
-    pub defaults: HashMap<String, QuillValue>,
-    /// Cached example values extracted from config (for performance)
-    pub examples: HashMap<String, Vec<QuillValue>>,
     /// In-memory file system (tree structure)
     pub files: FileTreeNode,
 }

@@ -13,15 +13,3 @@ mod quill;
 
 pub use engine::Quillmark;
 pub use quill::Quill;
-
-/// Ergonomic reference to a [`Quill`] object.
-pub enum QuillRef<'a> {
-    /// Reference to a borrowed Quill object
-    Object(&'a Quill),
-}
-
-impl<'a> From<&'a Quill> for QuillRef<'a> {
-    fn from(quill: &'a Quill) -> Self {
-        QuillRef::Object(quill)
-    }
-}

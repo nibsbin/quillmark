@@ -137,10 +137,6 @@ impl QuillSource {
 
         config.example_markdown = example_content.clone();
 
-        // Extract and cache defaults and examples from config directly
-        let defaults = config.defaults();
-        let examples = config.examples();
-
         let source = QuillSource {
             metadata,
             name: config.name.clone(),
@@ -148,8 +144,6 @@ impl QuillSource {
             plate: plate_content,
             example: example_content,
             config,
-            defaults,
-            examples,
             files: root,
         };
 

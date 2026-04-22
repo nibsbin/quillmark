@@ -13,7 +13,7 @@ Get started with Quillmark in Python or JavaScript.
     ## Basic Usage
 
     ```python
-    from quillmark import Quillmark, OutputFormat
+    from quillmark import Document, Quillmark, OutputFormat
 
     engine = Quillmark()
     quill = engine.quill_from_path("path/to/quill")
@@ -26,7 +26,8 @@ Get started with Quillmark in Python or JavaScript.
     # Hello World
     """
 
-    result = quill.render(markdown, OutputFormat.PDF)
+    doc = Document.from_markdown(markdown)
+    result = quill.render(doc, OutputFormat.PDF)
 
     with open("output.pdf", "wb") as f:
         f.write(result.artifacts[0].bytes)

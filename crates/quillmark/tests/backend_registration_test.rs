@@ -98,7 +98,7 @@ fn test_render_with_custom_backend() {
         .expect("quill_from_path failed");
 
     assert_eq!(quill.backend_id(), "mock-txt");
-    assert!(quill.quill_ref().starts_with("custom_backend_quill@"));
+    assert_eq!(quill.name(), "custom_backend_quill");
     assert!(quill.supported_formats().contains(&OutputFormat::Txt));
 
     let markdown = "---\nQUILL: custom_backend_quill\ntitle: Hello Custom Backend\n---\n\n# Test\n";
@@ -121,10 +121,3 @@ fn test_register_backend_after_new() {
     assert!(backends.contains(&"added-later"));
 }
 
-#[test]
-fn test_register_backend_emits_no_warnings() {
-    let mut engine = Quillmark::new();
-    engine.register_backend(Box::new(MockBackend { id: "no-warning" }));
-    assert!(engine.warnings().is_empty());
-    assert!(engine.take_warnings().is_empty());
-}

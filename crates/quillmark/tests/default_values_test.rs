@@ -208,7 +208,7 @@ main:
     let quill = engine
         .quill_from_path(quill_path)
         .expect("quill_from_path failed");
-    let defaults = quill.source().extract_defaults();
+    let defaults = quill.source().config.defaults();
 
     assert!(defaults.contains_key("author"));
     assert_eq!(defaults.get("author").unwrap().as_str(), Some("Anonymous"));

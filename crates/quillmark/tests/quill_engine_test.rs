@@ -40,7 +40,7 @@ fn test_quill_from_path_engine_metadata() {
         .quill_from_path(quill_path)
         .expect("quill_from_path failed");
 
-    assert!(quill.quill_ref().starts_with("my_test_quill@"));
+    assert_eq!(quill.name(), "my_test_quill");
     assert_eq!(quill.backend_id(), "typst");
     assert!(quill.supported_formats().contains(&OutputFormat::Pdf));
 }
