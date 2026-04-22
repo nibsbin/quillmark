@@ -41,10 +41,9 @@ pub fn demo(
     // Load the markdown template from the quill
     let markdown = quill
         .source()
-        .example
-        .as_ref()
+        .example()
         .ok_or("Quill does not have a markdown template")?
-        .clone();
+        .to_string();
 
     // Parse the markdown once
     let parsed = quillmark::Document::from_markdown(&markdown)?;

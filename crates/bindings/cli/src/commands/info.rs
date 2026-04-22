@@ -46,7 +46,7 @@ fn print_json(quill: &quillmark::Quill) -> Result<()> {
     let mut info = serde_json::Map::new();
     info.insert(
         "name".to_string(),
-        serde_json::Value::String(source.name.clone()),
+        serde_json::Value::String(source.name().to_string()),
     );
     info.insert(
         "backend".to_string(),
@@ -54,22 +54,23 @@ fn print_json(quill: &quillmark::Quill) -> Result<()> {
     );
 
     // Extract metadata fields: version, author, description
-    if let Some(version) = source.metadata.get("version") {
+    let metadata = source.metadata();
+    if let Some(version) = metadata.get("version") {
         info.insert("version".to_string(), version.as_json().clone());
     }
-    if let Some(author) = source.metadata.get("author") {
+    if let Some(author) = metadata.get("author") {
         info.insert("author".to_string(), author.as_json().clone());
     }
-    if let Some(description) = source.metadata.get("description") {
+    if let Some(description) = metadata.get("description") {
         info.insert("description".to_string(), description.as_json().clone());
     }
 
     // Add counts
     info.insert(
         "field_count".to_string(),
-        serde_json::Value::Number(source.config.main().fields.len().into()),
+        serde_json::Value::Number(source.config().main().fields.len().into()),
     );
-    let card_count = source.config.card_definitions().len();
+    let card_count = source.config().card_definitions().len();
     if card_count > 0 {
         info.insert(
             "card_count".to_string(),
@@ -78,16 +79,16 @@ fn print_json(quill: &quillmark::Quill) -> Result<()> {
     }
     info.insert(
         "has_plate".to_string(),
-        serde_json::Value::Bool(source.plate.is_some()),
+        serde_json::Value::Bool(source.plate().is_some()),
     );
     info.insert(
         "has_example".to_string(),
-        serde_json::Value::Bool(source.example.is_some()),
+        serde_json::Value::Bool(source.example().is_some()),
     );
 
     // Add any additional metadata (excluding the standard fields already included)
     let mut extra_metadata = serde_json::Map::new();
-    for (key, value) in &source.metadata {
+    for (key, value) in metadata {
         if !STANDARD_METADATA_KEYS.contains(&key.as_str()) {
             extra_metadata.insert(key.clone(), value.as_json().clone());
         }
@@ -108,9 +109,11 @@ fn print_json(quill: &quillmark::Quill) -> Result<()> {
 
 fn print_human_readable(quill: &quillmark::Quill) {
     let source = quill.source();
-    println!("Quill: {}", source.name);
+    let metadata = source.metadata();
+    let config = source.config();
+    println!("Quill: {}", source.name());
 
-    if let Some(description) = source.metadata.get("description") {
+    if let Some(description) = metadata.get("description") {
         if let Some(desc_str) = description.as_str() {
             if !desc_str.is_empty() {
                 println!("  Description: {}", desc_str);
@@ -118,13 +121,13 @@ fn print_human_readable(quill: &quillmark::Quill) {
         }
     }
 
-    if let Some(version) = source.metadata.get("version") {
+    if let Some(version) = metadata.get("version") {
         if let Some(ver_str) = version.as_str() {
             println!("  Version:     {}", ver_str);
         }
     }
 
-    if let Some(author) = source.metadata.get("author") {
+    if let Some(author) = metadata.get("author") {
         if let Some(auth_str) = author.as_str() {
             println!("  Author:      {}", auth_str);
         }
@@ -133,22 +136,22 @@ fn print_human_readable(quill: &quillmark::Quill) {
     println!("  Backend:     {}", quill.backend_id());
 
     // Field count from schema properties
-    let field_count = source.config.main().fields.len();
+    let field_count = config.main().fields.len();
     println!("  Fields:      {}", field_count);
 
     // Card count from schema $defs
-    let card_count = source.config.card_definitions().len();
+    let card_count = config.card_definitions().len();
     if card_count > 0 {
         println!("  Cards:       {}", card_count);
     }
 
     // Defaults and examples
-    let defaults_count = source.config.defaults().len();
+    let defaults_count = config.defaults().len();
     if defaults_count > 0 {
         println!("  Defaults:    {}", defaults_count);
     }
 
-    let examples_count = source.config.examples().len();
+    let examples_count = config.examples().len();
     if examples_count > 0 {
         println!("  Examples:    {}", examples_count);
     }
@@ -156,11 +159,11 @@ fn print_human_readable(quill: &quillmark::Quill) {
     // Plate and example
     println!(
         "  Has plate:   {}",
-        if source.plate.is_some() { "yes" } else { "no" }
+        if source.plate().is_some() { "yes" } else { "no" }
     );
     println!(
         "  Has example: {}",
-        if source.example.is_some() {
+        if source.example().is_some() {
             "yes"
         } else {
             "no"
@@ -168,15 +171,14 @@ fn print_human_readable(quill: &quillmark::Quill) {
     );
 
     // Additional metadata
-    let extra_keys: Vec<&String> = source
-        .metadata
+    let extra_keys: Vec<&String> = metadata
         .keys()
         .filter(|k| !STANDARD_METADATA_KEYS.contains(&k.as_str()))
         .collect();
     if !extra_keys.is_empty() {
         println!("  Metadata:");
         for key in extra_keys {
-            if let Some(value) = source.metadata.get(key) {
+            if let Some(value) = metadata.get(key) {
                 println!("    {}: {}", key, format_metadata_value(value));
             }
         }

@@ -60,7 +60,7 @@ impl Quillmark {
     }
 
     fn assemble(&self, source: QuillSource) -> Result<Quill, RenderError> {
-        let backend_id = source.backend_id.as_str();
+        let backend_id = source.backend_id();
         let backend =
             self.backends
                 .get(backend_id)

@@ -57,12 +57,12 @@ pub struct PyQuill {
 impl PyQuill {
     #[getter]
     fn print_tree(&self) -> String {
-        self.inner.source().files.print_tree().clone()
+        self.inner.source().files().print_tree().clone()
     }
 
     #[getter]
     fn name(&self) -> String {
-        self.inner.source().name.clone()
+        self.inner.source().name().to_string()
     }
 
     #[getter]
@@ -72,29 +72,29 @@ impl PyQuill {
 
     #[getter]
     fn plate(&self) -> Option<String> {
-        self.inner.source().plate.clone()
+        self.inner.source().plate().map(str::to_string)
     }
 
     #[getter]
     fn example(&self) -> Option<String> {
-        self.inner.source().example.clone()
+        self.inner.source().example().map(str::to_string)
     }
 
     #[getter]
     fn quill_ref(&self) -> String {
         let source = self.inner.source();
         let version = source
-            .metadata
+            .metadata()
             .get("version")
             .and_then(|v| v.as_str())
             .unwrap_or("0.0.0");
-        format!("{}@{}", source.name, version)
+        format!("{}@{}", source.name(), version)
     }
 
     #[getter]
     fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, value) in &self.inner.source().metadata {
+        for (key, value) in self.inner.source().metadata() {
             dict.set_item(key, quillvalue_to_py(py, value)?)?;
         }
         Ok(dict)
@@ -105,7 +105,7 @@ impl PyQuill {
         let yaml = self
             .inner
             .source()
-            .config
+            .config()
             .public_schema_yaml()
             .map_err(|e| PyValueError::new_err(format!("schema: {}", e)))?;
         Ok(yaml.into_pyobject(py)?.into_any())
@@ -114,7 +114,7 @@ impl PyQuill {
     #[getter]
     fn defaults<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, value) in self.inner.source().config.defaults() {
+        for (key, value) in self.inner.source().config().defaults() {
             dict.set_item(key, quillvalue_to_py(py, &value)?)?;
         }
         Ok(dict)
@@ -123,7 +123,7 @@ impl PyQuill {
     #[getter]
     fn examples<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, values) in self.inner.source().config.examples() {
+        for (key, values) in self.inner.source().config().examples() {
             let py_list = pyo3::types::PyList::empty(py);
             for value in values {
                 py_list.append(quillvalue_to_py(py, &value)?)?;

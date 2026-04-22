@@ -48,7 +48,7 @@ impl Quill {
 
     /// The quill's declared name.
     pub fn name(&self) -> &str {
-        &self.source.name
+        self.source.name()
     }
 
     /// Render a document to final artifacts.
@@ -76,12 +76,9 @@ impl Quill {
     }
 
     fn resolve_options(&self, opts: &RenderOptions) -> RenderOptions {
-        let output_format = opts.output_format.or_else(|| {
-            self.backend
-                .supported_formats()
-                .first()
-                .copied()
-        });
+        let output_format = opts
+            .output_format
+            .or_else(|| self.backend.supported_formats().first().copied());
         RenderOptions {
             output_format,
             ppi: opts.ppi,
@@ -97,7 +94,7 @@ impl Quill {
         // Coerce frontmatter fields against the schema.
         let coerced_frontmatter = self
             .source
-            .config
+            .config()
             .coerce_frontmatter(doc.frontmatter())
             .map_err(|e| RenderError::ValidationFailed {
                 diag: Box::new(
@@ -114,7 +111,7 @@ impl Quill {
         for card in doc.cards() {
             let coerced_fields = self
                 .source
-                .config
+                .config()
                 .coerce_card(card.tag(), card.fields())
                 .map_err(|e| RenderError::ValidationFailed {
                     diag: Box::new(
@@ -185,13 +182,14 @@ impl Quill {
 
     fn ref_mismatch_warning(&self, doc: &Document) -> Option<Diagnostic> {
         let doc_ref = doc.quill_reference().name.as_str();
-        if doc_ref != self.source.name {
+        if doc_ref != self.source.name() {
             Some(
                 Diagnostic::new(
                     Severity::Warning,
                     format!(
                         "document declares QUILL '{}' but was rendered with '{}'",
-                        doc_ref, self.source.name
+                        doc_ref,
+                        self.source.name()
                     ),
                 )
                 .with_code("quill::ref_mismatch".to_string())
@@ -210,7 +208,7 @@ impl Quill {
         frontmatter: &IndexMap<String, QuillValue>,
     ) -> IndexMap<String, QuillValue> {
         let mut result = frontmatter.clone();
-        for (field_name, default_value) in self.source.config.defaults() {
+        for (field_name, default_value) in self.source.config().defaults() {
             if !result.contains_key(&field_name) {
                 result.insert(field_name, default_value);
             }
@@ -224,7 +222,7 @@ impl Quill {
         fields: &IndexMap<String, QuillValue>,
     ) -> IndexMap<String, QuillValue> {
         let mut result = fields.clone();
-        if let Some(card_defaults) = self.source.config.card_defaults(card_tag) {
+        if let Some(card_defaults) = self.source.config().card_defaults(card_tag) {
             for (field_name, default_value) in card_defaults {
                 if !result.contains_key(&field_name) {
                     result.insert(field_name, default_value);
@@ -235,17 +233,17 @@ impl Quill {
     }
 
     fn plate_content(&self) -> Option<String> {
-        match &self.source.plate {
-            Some(s) if !s.is_empty() => Some(s.clone()),
-            _ => None,
-        }
+        self.source
+            .plate()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
     }
 
     /// Perform a dry-run validation without backend compilation.
     pub fn dry_run(&self, doc: &Document) -> Result<(), RenderError> {
         let coerced_frontmatter = self
             .source
-            .config
+            .config()
             .coerce_frontmatter(doc.frontmatter())
             .map_err(|e| RenderError::ValidationFailed {
                 diag: Box::new(
@@ -261,7 +259,7 @@ impl Quill {
         for card in doc.cards() {
             let coerced_fields = self
                 .source
-                .config
+                .config()
                 .coerce_card(card.tag(), card.fields())
                 .map_err(|e| RenderError::ValidationFailed {
                     diag: Box::new(
@@ -291,7 +289,7 @@ impl Quill {
     }
 
     fn validate_document(&self, doc: &Document) -> Result<(), RenderError> {
-        match self.source.config.validate_document(doc) {
+        match self.source.config().validate_document(doc) {
             Ok(_) => Ok(()),
             Err(errors) => {
                 let error_message = errors
@@ -317,7 +315,7 @@ impl Quill {
 impl std::fmt::Debug for Quill {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Quill")
-            .field("name", &self.source.name)
+            .field("name", &self.source.name())
             .field("backend", &self.backend.id())
             .finish()
     }

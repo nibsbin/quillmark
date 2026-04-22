@@ -313,7 +313,7 @@ fn project_form_over_usaf_memo_fixture() {
         .quill_from_path(quill_path)
         .expect("failed to load usaf_memo fixture");
 
-    let example_md = quill.source().example.as_deref().unwrap_or("");
+    let example_md = quill.source().example().unwrap_or("");
     // If the example can't parse, skip gracefully (it uses YAML comments that
     // are valid but the field values may not match the schema exactly).
     let doc = match Document::from_markdown(example_md) {
