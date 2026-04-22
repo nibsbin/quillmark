@@ -57,8 +57,6 @@ pub fn convert_render_error(err: RenderError) -> PyErr {
         RenderError::EngineCreation { diag }
         | RenderError::FormatNotSupported { diag }
         | RenderError::UnsupportedBackend { diag }
-        | RenderError::DynamicAssetCollision { diag }
-        | RenderError::DynamicFontCollision { diag }
         | RenderError::ValidationFailed { diag }
         | RenderError::QuillConfig { diag }
         | RenderError::NoBackend { diag } => {

@@ -35,5 +35,4 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
 ## Guarantees
 
 - Plates see no internal shadow keys; `__meta__` is injected by the backend and consumed by the helper package before `data` is exposed
-- Dynamic assets/fonts are injected into the quill file tree before compilation
 - `Workflow::compile_data` returns the pre-transformation JSON (coerced + normalized + defaults); markdown/date conversion occurs inside `Backend::open` and is not separately observable

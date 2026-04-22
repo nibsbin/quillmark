@@ -46,7 +46,6 @@ nav:
       - Versioning: format-designer/versioning.md
   - Integration:
       - Overview: integration/overview.md
-      - Dynamic Assets: integration/dynamic-assets.md
       - Validation: integration/validation.md
       - Python API: integration/python/api.md
       - JavaScript/WASM API: integration/javascript/api.md

@@ -114,50 +114,6 @@ impl PyWorkflow {
     fn quill_ref(&self) -> String {
         self.inner.quill_ref()
     }
-
-    /// Add a dynamic asset to the workflow.
-    fn add_asset(&mut self, filename: String, contents: Vec<u8>) -> PyResult<()> {
-        self.inner
-            .add_asset(filename, contents)
-            .map_err(convert_render_error)
-    }
-
-    /// Add multiple dynamic assets at once.
-    fn add_assets(&mut self, assets: Vec<(String, Vec<u8>)>) -> PyResult<()> {
-        self.inner.add_assets(assets).map_err(convert_render_error)
-    }
-
-    /// Clear all dynamic assets from the workflow.
-    fn clear_assets(&mut self) {
-        self.inner.clear_assets()
-    }
-
-    /// Get list of dynamic asset filenames currently in the workflow.
-    fn dynamic_asset_names(&self) -> Vec<String> {
-        self.inner.dynamic_asset_names()
-    }
-
-    /// Add a dynamic font to the workflow.
-    fn add_font(&mut self, filename: String, contents: Vec<u8>) -> PyResult<()> {
-        self.inner
-            .add_font(filename, contents)
-            .map_err(convert_render_error)
-    }
-
-    /// Add multiple dynamic fonts at once.
-    fn add_fonts(&mut self, fonts: Vec<(String, Vec<u8>)>) -> PyResult<()> {
-        self.inner.add_fonts(fonts).map_err(convert_render_error)
-    }
-
-    /// Clear all dynamic fonts from the workflow.
-    fn clear_fonts(&mut self) {
-        self.inner.clear_fonts()
-    }
-
-    /// Get list of dynamic font filenames currently in the workflow.
-    fn dynamic_font_names(&self) -> Vec<String> {
-        self.inner.dynamic_font_names()
-    }
 }
 
 // Quill wrapper

@@ -9,7 +9,7 @@ Typst is a modern typesetting system designed as a better alternative to LaTeX. 
 - Converts Markdown to Typst markup via backend `transform_fields`
 - Compiles Typst code to PDF, SVG, or PNG
 - Supports dynamic package loading
-- Handles fonts and assets automatically (including dynamic assets/fonts)
+- Handles fonts and assets automatically
 - Provides JSON data injection via helper package
 
 ## Basic Usage

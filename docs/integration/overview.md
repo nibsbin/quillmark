@@ -34,17 +34,6 @@ Most integrations follow this flow:
     const result = quill.render(parsed, { format: "pdf" });
     ```
 
-## Dynamic Assets and Fonts
-
-Use a `Workflow` when you need runtime asset/font injection:
-
-```python
-workflow = engine.workflow(quill)
-workflow.add_asset("logo.png", logo_bytes)
-workflow.add_font("Custom.ttf", font_bytes)
-result = workflow.render(parsed, OutputFormat.PDF)
-```
-
 ## Output Formats
 
 Quillmark can produce one or more artifacts depending on backend + format:
@@ -68,5 +57,4 @@ Recommended pattern:
 
 - [Python API Reference](python/api.md)
 - [JavaScript/WASM API Reference](javascript/api.md)
-- [Dynamic Assets](dynamic-assets.md)
 - [Validation](validation.md)
