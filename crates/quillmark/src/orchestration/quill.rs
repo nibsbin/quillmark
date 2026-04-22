@@ -52,48 +52,17 @@ impl Quill {
     }
 
     /// Render a document to final artifacts.
+    ///
+    /// Pass `&RenderOptions::default()` for backend defaults (first supported
+    /// format, backend-chosen ppi, all pages).
     pub fn render(
         &self,
         doc: &Document,
-        format: Option<OutputFormat>,
+        opts: &RenderOptions,
     ) -> Result<RenderResult, RenderError> {
-        self.render_with_options(doc, format, None)
-    }
-
-    /// Render with explicit pixels-per-inch for raster formats (PNG).
-    ///
-    /// `ppi` is ignored for vector/document formats (PDF, SVG, TXT).
-    /// When `None`, the backend's default is used.
-    pub fn render_with_options(
-        &self,
-        doc: &Document,
-        format: Option<OutputFormat>,
-        ppi: Option<f32>,
-    ) -> Result<RenderResult, RenderError> {
-        let context = self.prepare_render_context(doc)?;
-        let format = if format.is_some() {
-            format
-        } else {
-            let supported = self.backend.supported_formats();
-            if !supported.is_empty() {
-                Some(supported[0])
-            } else {
-                None
-            }
-        };
-
-        let render_opts = RenderOptions {
-            output_format: format,
-            ppi,
-            pages: None,
-        };
-
-        let warning = self.ref_mismatch_warning(doc);
-        let session =
-            self.backend
-                .open(&context.plate_content, &self.source, &context.json_data)?;
-        let session = session.with_warning(warning);
-        session.render(&render_opts)
+        let session = self.open(doc)?;
+        let resolved = self.resolve_options(opts);
+        session.render(&resolved)
     }
 
     /// Open an iterative render session for this document.
@@ -104,6 +73,20 @@ impl Quill {
             self.backend
                 .open(&context.plate_content, &self.source, &context.json_data)?;
         Ok(session.with_warning(warning))
+    }
+
+    fn resolve_options(&self, opts: &RenderOptions) -> RenderOptions {
+        let output_format = opts.output_format.or_else(|| {
+            self.backend
+                .supported_formats()
+                .first()
+                .copied()
+        });
+        RenderOptions {
+            output_format,
+            ppi: opts.ppi,
+            pages: opts.pages.clone(),
+        }
     }
 
     /// Compile a Document to JSON data suitable for the backend.

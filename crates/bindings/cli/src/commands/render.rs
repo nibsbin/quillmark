@@ -2,7 +2,7 @@ use crate::errors::{CliError, Result};
 use crate::output::{derive_output_path, OutputWriter};
 use clap::Parser;
 use quillmark::{Document, Quillmark};
-use quillmark_core::OutputFormat;
+use quillmark_core::{OutputFormat, RenderOptions};
 use std::fs;
 use std::path::PathBuf;
 
@@ -160,7 +160,13 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     }
 
     // Render
-    let mut result = quill.render(&parsed, Some(output_format))?;
+    let mut result = quill.render(
+        &parsed,
+        &RenderOptions {
+            output_format: Some(output_format),
+            ..Default::default()
+        },
+    )?;
 
     // Merge parse-time warnings into the render result so downstream tooling
     // sees them in a single channel.

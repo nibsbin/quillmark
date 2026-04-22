@@ -148,10 +148,13 @@ impl PyQuill {
         doc: PyRef<'_, PyDocument>,
         format: Option<PyOutputFormat>,
     ) -> PyResult<PyRenderResult> {
-        let rust_format = format.map(OutputFormat::from);
+        let opts = quillmark_core::RenderOptions {
+            output_format: format.map(OutputFormat::from),
+            ..Default::default()
+        };
         let mut result = self
             .inner
-            .render(&doc.inner, rust_format)
+            .render(&doc.inner, &opts)
             .map_err(convert_render_error)?;
         let parse_warnings: Vec<_> = doc
             .parse_warnings

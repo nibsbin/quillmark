@@ -33,7 +33,7 @@ cargo add quillmark
 ## Quick Start (Rust)
 
 ```rust
-use quillmark::{Document, OutputFormat, Quillmark};
+use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};
 
 let engine = Quillmark::new();
 let quill = engine.quill_from_path("path/to/quill")?;
@@ -47,7 +47,13 @@ title: Example
 "#;
 
 let doc = Document::from_markdown(markdown)?;
-let result = quill.render(&doc, Some(OutputFormat::Pdf))?;
+let result = quill.render(
+    &doc,
+    &RenderOptions {
+        output_format: Some(OutputFormat::Pdf),
+        ..Default::default()
+    },
+)?;
 
 let pdf_bytes = &result.artifacts[0].bytes;
 # Ok::<(), quillmark::RenderError>(())

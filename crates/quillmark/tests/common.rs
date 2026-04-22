@@ -50,7 +50,13 @@ pub fn demo(
     let parsed = quillmark::Document::from_markdown(&markdown)?;
 
     // render output
-    let rendered = quill.render(&parsed, Some(quillmark_core::OutputFormat::Pdf))?;
+    let rendered = quill.render(
+        &parsed,
+        &quillmark_core::RenderOptions {
+            output_format: Some(quillmark_core::OutputFormat::Pdf),
+            ..Default::default()
+        },
+    )?;
     let output_bytes = rendered.artifacts[0].bytes.clone();
 
     write_example_output(render_output, &output_bytes)?;

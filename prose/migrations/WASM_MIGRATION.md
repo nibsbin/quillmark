@@ -86,37 +86,22 @@ object — you could spread it, `JSON.stringify` it, and pass the same value to
    and deserialize on every access. If you read them in hot loops, cache the
    value locally.
 
-**b. `quill.render(doc)` and `quill.open(doc)` *consume* the handle.**
-   Both take `Document` by value (`engine.rs:95`, `engine.rs:115`). After the
-   call, the JS reference is moved into Rust and freed; any further access on
-   the old reference throws *"null pointer passed to rust"*. In contrast,
-   `quill.projectForm(doc)` takes `&Document` and leaves the handle usable.
-
-   Old pattern that **stops working**:
+**b. `quill.render(doc)` and `quill.open(doc)` borrow the handle.**
+   Both take `&Document`, so the JS reference remains usable after the call.
+   Render the same parse as many times and as many formats as you like:
    ```js
    const parsed = Document.fromMarkdown(md);
    const pdf = quill.render(parsed, { format: "pdf" });
-   const svg = quill.render(parsed, { format: "svg" }); // ❌ throws
+   const svg = quill.render(parsed, { format: "svg" });
    ```
 
-   Workarounds (pick one):
+   Use `quill.open(doc)` when you want a single compilation that serves
+   multiple page-selective renders:
    ```js
-   // (a) Parse once per render.
-   const pdf = quill.render(Document.fromMarkdown(md), { format: "pdf" });
-   const svg = quill.render(Document.fromMarkdown(md), { format: "svg" });
-
-   // (b) Use quill.open() for multi-format / multi-page output from one parse.
-   const session = quill.open(Document.fromMarkdown(md));
-   const pdf = session.render({ format: "pdf" });
-   const svg = session.render({ format: "svg" });
-   const png = session.render({ format: "png", ppi: 300 });
-
-   // (c) Emit → re-parse if you need a separate handle for a different call.
-   const doc2 = Document.fromMarkdown(doc.toMarkdown());
+   const session = quill.open(parsed);
+   const page1 = session.render({ format: "png", pages: [0], ppi: 300 });
+   const all   = session.render({ format: "pdf" });
    ```
-
-   `quill.open(doc)` itself consumes the handle — the session owns the parse.
-   The session is also the right entrypoint for page-selective rendering.
 
 ---
 
@@ -256,15 +241,14 @@ const quill  = engine.quill(tree);
 const doc = Document.fromMarkdown(md);
 console.log(doc.frontmatter.title, doc.body);
 
-// Option A: one parse per render
-const r1 = quill.render(Document.fromMarkdown(md), { format: "pdf" });
-const r2 = quill.render(Document.fromMarkdown(md), { format: "svg" });
+// Render the same document multiple times
+const r1 = quill.render(doc, { format: "pdf" });
+const r2 = quill.render(doc, { format: "svg" });
 
-// Option B: open a session
-const session = quill.open(Document.fromMarkdown(md));
-const rA = session.render({ format: "pdf" });
-const rB = session.render({ format: "svg" });
-const rC = session.render({ format: "png", ppi: 300, pages: [0, 2] });
+// Or open a session for page-selective output
+const session = quill.open(doc);
+const rPdf = session.render({ format: "pdf" });
+const rPng = session.render({ format: "png", ppi: 300, pages: [0, 2] });
 ```
 
 ---

@@ -104,7 +104,13 @@ fn test_render_with_custom_backend() {
     let markdown = "---\nQUILL: custom_backend_quill\ntitle: Hello Custom Backend\n---\n\n# Test\n";
     let parsed = Document::from_markdown(markdown).expect("parse failed");
     let result = quill
-        .render(&parsed, Some(OutputFormat::Txt))
+        .render(
+            &parsed,
+            &RenderOptions {
+                output_format: Some(OutputFormat::Txt),
+                ..Default::default()
+            },
+        )
         .expect("render failed");
 
     assert!(!result.artifacts.is_empty());
@@ -120,4 +126,3 @@ fn test_register_backend_after_new() {
     assert_eq!(backends.len(), initial_count + 1);
     assert!(backends.contains(&"added-later"));
 }
-
