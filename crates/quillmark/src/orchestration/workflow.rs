@@ -330,5 +330,4 @@ impl Workflow {
             .unwrap_or("0.0.0");
         format!("{}@{}", self.quill.name, version)
     }
-
 }

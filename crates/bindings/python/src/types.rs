@@ -114,7 +114,6 @@ impl PyWorkflow {
     fn quill_ref(&self) -> String {
         self.inner.quill_ref()
     }
-
 }
 
 // Quill wrapper
