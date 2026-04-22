@@ -38,7 +38,7 @@ dev = [
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "quillmark._quillmark"
-include = ["python/quillmark/**/*.py", "python/quillmark/py.typed"]
+include = ["python/quillmark/**/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

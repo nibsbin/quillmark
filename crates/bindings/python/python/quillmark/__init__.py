@@ -7,16 +7,15 @@ from ._quillmark import (
     Document,
     EditError,
     Location,
-    OutputFormat,  # No underscore prefix!
+    OutputFormat,
     ParseError,
     Quill,
     Quillmark,
     QuillmarkError,
     RenderResult,
     RenderSession,
-    Severity,  # No underscore prefix!
+    Severity,
     TemplateError,
-    Workflow,
 )
 
 __all__ = [
@@ -35,7 +34,6 @@ __all__ = [
     "RenderSession",
     "Severity",
     "TemplateError",
-    "Workflow",
 ]
 
 __version__ = "0.1.0"
