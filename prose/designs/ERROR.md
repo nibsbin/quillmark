@@ -20,8 +20,6 @@
 - `CompilationFailed` — backend compilation failed; carries `Vec<Diagnostic>`
 - `FormatNotSupported` — requested output format not supported
 - `UnsupportedBackend` — backend not registered
-- `DynamicAssetCollision` — asset filename collision
-- `DynamicFontCollision` — font filename collision
 - `ValidationFailed` — field coercion/schema validation failure
 - `QuillConfig` — quill configuration error
 - `NoBackend` — quill has no backend attached

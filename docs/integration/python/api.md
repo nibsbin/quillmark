@@ -39,8 +39,7 @@ class Quillmark:
     def quill_from_path(self, path: str | Path) -> Quill:
         """Load a quill and attach backend (render-ready)."""
 
-    def workflow(self, quill: Quill) -> Workflow:
-        """Create workflow for dynamic asset/font injection."""
+    def workflow(self, quill: Quill) -> Workflow: ...
 
     def registered_backends(self) -> list[str]: ...
 ```
@@ -75,16 +74,6 @@ class Quill:
 
 ### `Workflow`
 
-Use when you need runtime assets or fonts:
-
-```python
-workflow = engine.workflow(quill)
-workflow.add_asset("logo.png", logo_bytes)
-workflow.add_font("Custom.ttf", font_bytes)
-workflow.dry_run(parsed)
-result = workflow.render(parsed, OutputFormat.PDF)
-```
-
 ```python
 class Workflow:
     backend_id: str       # property
@@ -95,16 +84,6 @@ class Workflow:
     def open(self, parsed: ParsedDocument) -> RenderSession: ...
     def dry_run(self, parsed: ParsedDocument) -> None:
         """Validate without compiling. Raises QuillmarkError on failure."""
-
-    def add_asset(self, filename: str, contents: bytes) -> None: ...
-    def add_assets(self, assets: list[tuple[str, bytes]]) -> None: ...
-    def clear_assets(self) -> None: ...
-    def dynamic_asset_names(self) -> list[str]: ...
-
-    def add_font(self, filename: str, contents: bytes) -> None: ...
-    def add_fonts(self, fonts: list[tuple[str, bytes]]) -> None: ...
-    def clear_fonts(self) -> None: ...
-    def dynamic_font_names(self) -> list[str]: ...
 ```
 
 ### `RenderSession`

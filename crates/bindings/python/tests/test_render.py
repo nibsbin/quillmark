@@ -79,7 +79,7 @@ def test_quill_open_session_page_selection(taro_quill_dir, taro_md):
 
 
 def test_engine_workflow_still_works(taro_quill_dir, taro_md):
-    """engine.workflow(quill) remains the correct path for dynamic-asset renders."""
+    """engine.workflow(quill) renders successfully."""
     engine = Quillmark()
     quill = engine.quill_from_path(str(taro_quill_dir))
     workflow = engine.workflow(quill)

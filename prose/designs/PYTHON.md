@@ -11,7 +11,7 @@
 ```python
 engine = Quillmark()
 engine.quill_from_path(path)      # → Quill (load quill, attach backend)
-engine.workflow(quill)            # → Workflow (for dynamic asset/font injection)
+engine.workflow(quill)            # → Workflow
 engine.registered_backends()     # → list[str]
 ```
 
@@ -39,15 +39,6 @@ workflow.dry_run(parsed)              # raises on validation failure
 workflow.backend_id                   # property
 workflow.supported_formats            # property
 workflow.quill_ref                    # property
-# Dynamic assets/fonts:
-workflow.add_asset(filename, contents)
-workflow.add_assets(assets)           # assets: list[tuple[str, bytes]]
-workflow.clear_assets()
-workflow.dynamic_asset_names()
-workflow.add_font(filename, contents)
-workflow.add_fonts(fonts)             # fonts: list[tuple[str, bytes]]
-workflow.clear_fonts()
-workflow.dynamic_font_names()
 ```
 
 ### `RenderSession`

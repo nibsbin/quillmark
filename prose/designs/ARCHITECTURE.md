@@ -49,7 +49,7 @@ Fuzz tests for parsing, templating, and rendering.
 ## Core Interfaces
 
 - **`Quillmark`** — Engine managing registered backends; auto-registers `TypstBackend` when the `typst` feature is enabled
-- **`Workflow`** — Rendering pipeline (parse → normalize → compile); supports dynamic asset/font injection and `dry_run` validation
+- **`Workflow`** — Rendering pipeline (parse → normalize → compile); supports `dry_run` validation
 - **`Backend`** — Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open()`
 - **`RenderSession`** — Opaque handle returned by `Backend::open()`; call `render(opts)` to produce artifacts
 - **`Quill`** — Format bundle (plate + assets/packages/metadata)
@@ -62,7 +62,7 @@ Fuzz tests for parsing, templating, and rendering.
 `Backend::open()` receives:
 - `plate_content` — raw plate string from `Quill.plate` (empty string for plate-less backends)
 - `json_data` — JSON object after coercion, defaults, normalization
-- `quill` — bundle with static assets/packages plus any dynamic assets/fonts injected via `Workflow::add_asset` / `add_font`
+- `quill` — bundle with static assets/packages
 
 See [GLUE_METADATA.md](GLUE_METADATA.md) for the Typst helper package.
 

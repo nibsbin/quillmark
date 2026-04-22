@@ -18,7 +18,6 @@ Maintained by [TTQ](https://tonguetoquill.com).
 - **Schema-backed validation**: Strong field coercion and validation via `QuillConfig`
 - **Multiple backends**: Typst backend supports PDF/SVG/PNG output
 - **Structured diagnostics**: Path-aware errors and warnings
-- **Dynamic workflow path**: Add runtime assets/fonts through `Workflow`
 
 ## Documentation
 
@@ -56,19 +55,6 @@ let result = quill.render(
 )?;
 
 let pdf_bytes = &result.artifacts[0].bytes;
-# Ok::<(), quillmark::RenderError>(())
-```
-
-For dynamic asset/font injection at render time:
-
-```rust
-# use quillmark::{Quillmark, ParsedDocument};
-# let engine = Quillmark::new();
-# let quill = engine.quill_from_path("path/to/quill")?;
-let mut workflow = engine.workflow(&quill)?;
-workflow.add_asset("logo.png", vec![0, 1, 2])?;
-let parsed = ParsedDocument::from_markdown("---\nQUILL: my_quill\n---\n# Hello")?;
-let result = workflow.render(&parsed, None)?;
 # Ok::<(), quillmark::RenderError>(())
 ```
 

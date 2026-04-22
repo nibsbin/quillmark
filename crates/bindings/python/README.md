@@ -45,7 +45,7 @@ assert reparsed.frontmatter["title"] == "Updated"
 engine = Quillmark()
 engine.registered_backends()      # ['typst']
 quill = engine.quill_from_path("path/to/quill")
-workflow = engine.workflow(quill) # for dynamic assets/fonts
+workflow = engine.workflow(quill)
 ```
 
 ### `Quill`
@@ -57,12 +57,8 @@ result = quill.render(markdown_or_parsed, OutputFormat.PDF)
 
 ### `Workflow`
 
-Use workflow when adding dynamic assets/fonts:
-
 ```python
 workflow = engine.workflow(quill)
-workflow.add_asset("logo.png", logo_bytes)
-workflow.add_font("Custom.ttf", font_bytes)
 result = workflow.render(parsed, OutputFormat.PDF)
 ```
 

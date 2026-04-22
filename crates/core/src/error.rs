@@ -25,8 +25,6 @@
 //! - [`RenderError::CompilationFailed`]: Backend compilation errors
 //! - [`RenderError::FormatNotSupported`]: Requested format not supported
 //! - [`RenderError::UnsupportedBackend`]: Backend not registered
-//! - [`RenderError::DynamicAssetCollision`]: Asset filename collision
-//! - [`RenderError::DynamicFontCollision`]: Font filename collision
 //! - [`RenderError::ValidationFailed`]: Field coercion/validation failure
 //! - [`RenderError::QuillConfig`]: Quill configuration error
 //! - [`RenderError::NoBackend`]: Quill has no backend attached
@@ -492,20 +490,6 @@ pub enum RenderError {
         diag: Box<Diagnostic>,
     },
 
-    /// Dynamic asset filename collision
-    #[error("{diag}")]
-    DynamicAssetCollision {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
-    /// Dynamic font filename collision
-    #[error("{diag}")]
-    DynamicFontCollision {
-        /// Diagnostic information
-        diag: Box<Diagnostic>,
-    },
-
     /// Validation failed for parsed document
     #[error("{diag}")]
     ValidationFailed {
@@ -537,8 +521,6 @@ impl RenderError {
             | RenderError::InvalidFrontmatter { diag }
             | RenderError::FormatNotSupported { diag }
             | RenderError::UnsupportedBackend { diag }
-            | RenderError::DynamicAssetCollision { diag }
-            | RenderError::DynamicFontCollision { diag }
             | RenderError::ValidationFailed { diag }
             | RenderError::QuillConfig { diag }
             | RenderError::NoBackend { diag } => vec![diag.as_ref()],
