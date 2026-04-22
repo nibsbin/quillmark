@@ -46,19 +46,23 @@ jobs:
 
       - name: Bump versions
         run: |
-          cargo release version ${{ inputs.bump }} \
-            --workspace \
-            --no-confirm \
-            --execute
+          CURRENT="${{ steps.current.outputs.version }}"
 
-      - name: Apply pre-release suffix
-        if: inputs.prerelease == true
-        run: |
-          BASE=$(cargo metadata --format-version=1 --no-deps \
-            | jq -r '.packages[] | select(.name == "quillmark") | .version')
-          RC_VERSION="${BASE}-rc.1"
-          echo "Applying pre-release version: $RC_VERSION"
-          cargo release version "$RC_VERSION" \
+          if [ "${{ inputs.prerelease }}" == "true" ]; then
+            # cargo-release has no "minor-rc" compound bump, so compute the
+            # target version ourselves: bump, then append -rc.1.
+            IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+            if [ "${{ inputs.bump }}" == "minor" ]; then
+              NEXT="${MAJOR}.$((MINOR + 1)).0-rc.1"
+            else
+              NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))-rc.1"
+            fi
+          else
+            NEXT="${{ inputs.bump }}"
+          fi
+
+          echo "Bumping workspace to: $NEXT"
+          cargo release version "$NEXT" \
             --workspace \
             --no-confirm \
             --execute
