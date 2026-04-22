@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Example demonstrating the current quillmark-python workflow API."""
+"""Example demonstrating the quillmark-python Quill render API."""
 
 from pathlib import Path
 from quillmark import Quillmark, Document, OutputFormat

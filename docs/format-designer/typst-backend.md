@@ -208,14 +208,14 @@ The Typst backend supports three output formats:
 ```python
 from quillmark import OutputFormat
 
-result = workflow.render(parsed, OutputFormat.PDF)
+result = quill.render(doc, OutputFormat.PDF)
 pdf_bytes = result.artifacts[0].bytes
 ```
 
 ### SVG
 
 ```python
-result = workflow.render(parsed, OutputFormat.SVG)
+result = quill.render(doc, OutputFormat.SVG)
 svg_bytes = result.artifacts[0].bytes
 ```
 
@@ -231,7 +231,7 @@ PNG renders each page to a raster image. The resolution is controlled via the `p
 from quillmark import OutputFormat
 
 # Default PPI (144 — retina screen preview)
-result = workflow.render(parsed, OutputFormat.PNG)
+result = quill.render(doc, OutputFormat.PNG)
 
 # One artifact per page
 for i, artifact in enumerate(result.artifacts):
@@ -242,10 +242,10 @@ for i, artifact in enumerate(result.artifacts):
 
 ```javascript
 // Default PPI (144 — retina screen preview)
-const result = quill.render(parsed, { format: 'png' });
+const result = quill.render(doc, { format: 'png' });
 
 // Print quality at 300 PPI
-const printResult = quill.render(parsed, { format: 'png', ppi: 300 });
+const printResult = quill.render(doc, { format: 'png', ppi: 300 });
 
 // One artifact per page
 for (const artifact of printResult.artifacts) {
