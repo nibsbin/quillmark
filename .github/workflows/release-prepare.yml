@@ -34,7 +34,9 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-release
-        run: cargo install cargo-release --locked
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-release
 
       - name: Get current version
         id: current
