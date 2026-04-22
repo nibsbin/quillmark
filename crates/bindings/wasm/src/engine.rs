@@ -139,10 +139,10 @@ impl Quill {
     /// at call time. Subsequent edits to `doc` require calling `projectForm`
     /// again.
     ///
-    /// [`FormProjection`]: quillmark_core::FormProjection
+    /// [`FormProjection`]: quillmark::form::FormProjection
     #[wasm_bindgen(js_name = projectForm)]
     pub fn project_form(&self, doc: &Document) -> Result<JsValue, JsValue> {
-        let projection = self.inner.project_form(&doc.inner);
+        let projection = quillmark::form::project_form(&self.inner, &doc.inner);
         let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
         projection.serialize(&serializer).map_err(|e| {
             WasmError::from(format!("projectForm: serialization failed: {e}")).to_js_value()

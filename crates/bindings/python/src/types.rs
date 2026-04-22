@@ -303,7 +303,7 @@ impl PyQuill {
         py: Python<'py>,
         doc: PyRef<'_, PyDocument>,
     ) -> PyResult<Bound<'py, PyDict>> {
-        let projection = self.inner.project_form(&doc.inner);
+        let projection = quillmark::form::project_form(&self.inner, &doc.inner);
 
         // Serialise through serde_json → Python dict to avoid writing bespoke
         // conversion for every nested type (CardSchema, FormFieldValue, etc.).
