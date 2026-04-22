@@ -100,9 +100,12 @@ impl Quill {
         let start = now_ms();
         let parse_warnings = doc.parse_warnings.clone();
         let rust_opts: quillmark_core::RenderOptions = opts.unwrap_or_default().into();
-        let result = self
+        let session = self
             .inner
-            .render_with_options(&doc.inner, rust_opts.output_format, rust_opts.ppi)
+            .open(&doc.inner)
+            .map_err(|e| WasmError::from(e).to_js_value())?;
+        let result = session
+            .render(&rust_opts)
             .map_err(|e| WasmError::from(e).to_js_value())?;
         let mut warnings: Vec<Diagnostic> = parse_warnings.into_iter().map(Into::into).collect();
         warnings.extend(result.warnings.into_iter().map(Into::into));
