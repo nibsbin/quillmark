@@ -100,8 +100,8 @@ impl Document {
         out.push_str(&self.body);
 
         // ── Cards ─────────────────────────────────────────────────────────────
-        // Each card's body already contains the blank line before the next
-        // card fence, so no extra `\n` is injected between cards.
+        // `emit_card` normalises the separator before each fence, so edited
+        // bodies (which may lack a trailing blank line) still round-trip.
         for card in &self.cards {
             emit_card(&mut out, card);
         }
@@ -113,8 +113,11 @@ impl Document {
 // ── Card emission ─────────────────────────────────────────────────────────────
 
 fn emit_card(out: &mut String, card: &Card) {
-    // The preceding body (global or card) already ends with the blank line
-    // before this fence — do not add an extra `\n`.
+    // MARKDOWN.md §3 F2 requires a blank line before each metadata fence.
+    // Parsed bodies typically already end with `\n\n`, but edited bodies
+    // (e.g. `replace_body("x")` with no trailing newline) do not — normalise
+    // here so the emitted markdown round-trips through the parser.
+    ensure_blank_line_before_fence(out);
     out.push_str("---\n");
     out.push_str("CARD: ");
     out.push_str(card.tag());
@@ -129,6 +132,19 @@ fn emit_card(out: &mut String, card: &Card) {
     // Card body: emitted verbatim.  Empty body → nothing after the fence.
     if !card.body().is_empty() {
         out.push_str(card.body());
+    }
+}
+
+/// Ensures `out` ends with a blank line (`"\n\n"`) or is empty — the F2
+/// precondition for the next metadata fence marker.
+fn ensure_blank_line_before_fence(out: &mut String) {
+    if out.is_empty() || out.ends_with("\n\n") {
+        return;
+    }
+    if out.ends_with('\n') {
+        out.push('\n');
+    } else {
+        out.push_str("\n\n");
     }
 }
 

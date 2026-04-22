@@ -22,26 +22,26 @@ pub enum WasmError {
 }
 
 impl WasmError {
-    /// Convert to JsValue for throwing
+    /// Convert to a JS `Error` object for throwing.
+    ///
+    /// The returned value is a real `Error` instance whose `message` is the
+    /// primary diagnostic message. Structured data is attached as a `diagnostic`
+    /// property for callers that need to branch on error codes, severity, etc.
+    ///
+    /// Returning an `Error` (rather than a plain object or `Map`) ensures that
+    /// JavaScript consumers — including Vitest's `toThrow(regex)` matcher —
+    /// see `err instanceof Error === true` and `err.message` populated.
     pub fn to_js_value(&self) -> JsValue {
-        serde_wasm_bindgen::to_value(self)
-            .unwrap_or_else(|_| JsValue::from_str(&format!("{:?}", self)))
-    }
-
-    /// Build a Diagnostic with an explicit error code.
-    /// Use this instead of `WasmError::from(string)` when the call site knows
-    /// a stable code that JS callers can branch on.
-    pub fn with_code(code: &str, message: impl std::fmt::Display) -> Self {
-        WasmError::Diagnostic {
-            diagnostic: SerializableDiagnostic {
-                severity: quillmark_core::Severity::Error,
-                code: Some(code.to_string()),
-                message: message.to_string(),
-                primary: None,
-                hint: None,
-                source_chain: vec![],
-            },
+        let message = match self {
+            WasmError::Diagnostic { diagnostic } => diagnostic.message.clone(),
+            WasmError::MultipleDiagnostics { message, .. } => message.clone(),
+        };
+        let err = js_sys::Error::new(&message);
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        if let Ok(data) = self.serialize(&serializer) {
+            let _ = js_sys::Reflect::set(&err, &JsValue::from_str("diagnostic"), &data);
         }
+        err.into()
     }
 }
 

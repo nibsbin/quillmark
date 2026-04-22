@@ -92,10 +92,14 @@ impl Quillmark {
 impl Quill {
     /// Render a document to final artifacts.
     #[wasm_bindgen(js_name = render)]
-    pub fn render(&self, doc: Document, opts: RenderOptions) -> Result<RenderResult, JsValue> {
+    pub fn render(
+        &self,
+        doc: Document,
+        opts: Option<RenderOptions>,
+    ) -> Result<RenderResult, JsValue> {
         let start = now_ms();
         let parse_warnings = doc.parse_warnings.clone();
-        let rust_opts: quillmark_core::RenderOptions = opts.into();
+        let rust_opts: quillmark_core::RenderOptions = opts.unwrap_or_default().into();
         let result = self
             .inner
             .render_with_options(&doc.inner, rust_opts.output_format, rust_opts.ppi)
@@ -147,7 +151,9 @@ impl Quill {
     #[wasm_bindgen(js_name = projectForm)]
     pub fn project_form(&self, doc: &Document) -> Result<JsValue, JsValue> {
         let projection = quillmark::form::project_form(&self.inner, &doc.inner);
-        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        let serializer = serde_wasm_bindgen::Serializer::new()
+            .serialize_maps_as_objects(true)
+            .serialize_missing_as_null(true);
         projection.serialize(&serializer).map_err(|e| {
             WasmError::from(format!("projectForm: serialization failed: {e}")).to_js_value()
         })
@@ -202,10 +208,13 @@ impl Document {
 
     /// Global Markdown body between frontmatter and the first card.
     ///
+    /// Trailing newlines are stripped — those are structural separators in
+    /// the Markdown wire format, not content the consumer wrote.
+    ///
     /// Empty string when no body is present.
     #[wasm_bindgen(getter, js_name = body)]
     pub fn body(&self) -> String {
-        self.inner.body().to_string()
+        trim_body(self.inner.body())
     }
 
     /// Ordered list of card blocks as JS objects with `tag`, `fields`, and `body`.
@@ -223,7 +232,7 @@ impl Document {
                 serde_json::json!({
                     "tag": card.tag(),
                     "fields": serde_json::Value::Object(fields_map),
-                    "body": card.body(),
+                    "body": trim_body(card.body()),
                 })
             })
             .collect();
@@ -453,10 +462,20 @@ fn card_to_js_value(card: &quillmark_core::Card) -> JsValue {
     let json = serde_json::json!({
         "tag": card.tag(),
         "fields": serde_json::Value::Object(fields_map),
-        "body": card.body(),
+        "body": trim_body(card.body()),
     });
     let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
     json.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
+}
+
+/// Strip trailing line terminators from a body string.
+///
+/// Parsed bodies include a trailing blank line when followed by a card fence
+/// (required by the MARKDOWN.md §3 F2 rule); those characters are structural
+/// separators, not part of what the document author wrote.
+fn trim_body(body: &str) -> String {
+    body.trim_end_matches(|c: char| c == '\n' || c == '\r')
+        .to_string()
 }
 
 fn file_tree_from_js_tree(tree: &JsValue) -> Result<quillmark_core::FileTreeNode, JsValue> {
@@ -530,9 +549,9 @@ impl RenderSession {
 
     /// Render all or selected pages from this session.
     #[wasm_bindgen(js_name = render)]
-    pub fn render(&self, opts: RenderOptions) -> Result<RenderResult, JsValue> {
+    pub fn render(&self, opts: Option<RenderOptions>) -> Result<RenderResult, JsValue> {
         let start = now_ms();
-        let rust_opts: quillmark_core::RenderOptions = opts.into();
+        let rust_opts: quillmark_core::RenderOptions = opts.unwrap_or_default().into();
 
         let result = self
             .inner
