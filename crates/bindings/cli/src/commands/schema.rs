@@ -31,7 +31,7 @@ pub fn execute(args: SchemaArgs) -> Result<()> {
     // Emit public schema contract as YAML
     let schema_yaml = quill
         .source()
-        .config
+        .config()
         .public_schema_yaml()
         .map_err(|e| CliError::InvalidArgument(format!("Failed to serialize schema: {}", e)))?;
 

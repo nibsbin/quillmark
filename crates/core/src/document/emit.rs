@@ -113,11 +113,12 @@ impl Document {
 // ── Card emission ─────────────────────────────────────────────────────────────
 
 fn emit_card(out: &mut String, card: &Card) {
-    // MARKDOWN.md §3 F2 requires a blank line before each metadata fence.
-    // Parsed bodies typically already end with `\n\n`, but edited bodies
-    // (e.g. `replace_body("x")` with no trailing newline) do not — normalise
-    // here so the emitted markdown round-trips through the parser.
-    ensure_blank_line_before_fence(out);
+    // MARKDOWN.md §3 F2 requires a blank line immediately above each metadata
+    // fence. Stored bodies never contain the F2 separator (see `assemble.rs`'s
+    // `strip_f2_separator`), so we always add exactly one `\n` as the F2 blank
+    // before emitting the fence, plus a content line terminator if the body
+    // didn't end in `\n`.
+    ensure_f2_before_fence(out);
     out.push_str("---\n");
     out.push_str("CARD: ");
     out.push_str(card.tag());
@@ -135,17 +136,26 @@ fn emit_card(out: &mut String, card: &Card) {
     }
 }
 
-/// Ensures `out` ends with a blank line (`"\n\n"`) or is empty — the F2
-/// precondition for the next metadata fence marker.
-fn ensure_blank_line_before_fence(out: &mut String) {
-    if out.is_empty() || out.ends_with("\n\n") {
+/// Ensures `out` ends with a `\n\n` suffix suitable for the F2 precondition
+/// of the next metadata fence.
+///
+/// Under the F2-separator-never-stored invariant, stored bodies may end with
+/// their content (no newline), a content line terminator (`\n`), or an
+/// author-intended blank line (`\n\n`, `\n\n\n`, …). In every case we append
+/// exactly one `\n` to produce the F2 blank line. If the body doesn't already
+/// end in `\n`, we also append a line terminator first so content lines are
+/// terminated in the emitted markdown.
+///
+/// Empty `out` satisfies F2 via the "line 1" clause (MARKDOWN.md §3 F2) and
+/// needs no separator.
+fn ensure_f2_before_fence(out: &mut String) {
+    if out.is_empty() {
         return;
     }
-    if out.ends_with('\n') {
+    if !out.ends_with('\n') {
         out.push('\n');
-    } else {
-        out.push_str("\n\n");
     }
+    out.push('\n');
 }
 
 // ── YAML value emission ───────────────────────────────────────────────────────

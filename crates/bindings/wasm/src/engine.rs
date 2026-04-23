@@ -1,11 +1,31 @@
 //! Quillmark WASM Engine - Simplified API
 
 use crate::error::WasmError;
-use crate::types::{Diagnostic, RenderOptions, RenderResult};
+use crate::types::{Card, Diagnostic, RenderOptions, RenderResult};
 use js_sys::{Array, Uint8Array};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
+
+/// TypeScript declaration for the `pushCard` / `insertCard` input shape.
+///
+/// `tag` is required; `fields` and `body` are optional (defaulted by serde).
+/// Emitted via `typescript_custom_section` so it lands in the generated
+/// `.d.ts` without forcing consumers to import a nominal type — the
+/// `unchecked_param_type` attribute on each method references it by name.
+#[wasm_bindgen(typescript_custom_section)]
+const CARD_INPUT_TS: &'static str = r#"
+/**
+ * Input shape for `Document.pushCard` and `Document.insertCard`.
+ *
+ * Only `tag` is required. `fields` defaults to `{}`, `body` to `""`.
+ */
+export interface CardInput {
+    tag: string;
+    fields?: Record<string, unknown>;
+    body?: string;
+}
+"#;
 
 fn now_ms() -> f64 {
     #[cfg(target_arch = "wasm32")]
@@ -81,7 +101,10 @@ impl Quillmark {
     /// `Object.entries` at the boundary; the Rust side sees a single
     /// canonical shape.
     #[wasm_bindgen(js_name = quill)]
-    pub fn quill(&self, tree: JsValue) -> Result<Quill, JsValue> {
+    pub fn quill(
+        &self,
+        #[wasm_bindgen(unchecked_param_type = "Map<string, Uint8Array>")] tree: JsValue,
+    ) -> Result<Quill, JsValue> {
         let root = file_tree_from_js_tree(&tree)?;
         let quill = self
             .inner
@@ -302,7 +325,7 @@ impl Document {
     /// Typed YAML frontmatter fields as a JS object (no QUILL, BODY, or CARDS keys).
     ///
     /// Allocates and serializes on each call — cache locally if read in a hot loop.
-    #[wasm_bindgen(getter, js_name = frontmatter)]
+    #[wasm_bindgen(getter, js_name = frontmatter, unchecked_return_type = "Record<string, unknown>")]
     pub fn frontmatter(&self) -> JsValue {
         let mut map = serde_json::Map::new();
         for (k, v) in self.inner.frontmatter() {
@@ -315,50 +338,37 @@ impl Document {
 
     /// Global Markdown body between frontmatter and the first card.
     ///
-    /// Trailing newlines are stripped — those are structural separators in
-    /// the Markdown wire format, not content the consumer wrote.
+    /// Returned verbatim from core — the F2 structural separator is stripped
+    /// at parse time (see `quillmark_core::document::assemble::strip_f2_separator`),
+    /// so the string here is exactly what the author wrote (or what was set
+    /// via `replaceBody`).
     ///
     /// Empty string when no body is present.
     #[wasm_bindgen(getter, js_name = body)]
     pub fn body(&self) -> String {
-        trim_body(self.inner.body())
+        self.inner.body().to_string()
     }
 
-    /// Ordered list of card blocks as JS objects with `tag`, `fields`, and `body`.
+    /// Ordered list of card blocks as typed `Card` objects.
     ///
     /// Allocates and serializes on each call — cache locally if read in a hot loop.
-    #[wasm_bindgen(getter, js_name = cards)]
+    #[wasm_bindgen(getter, js_name = cards, unchecked_return_type = "Card[]")]
     pub fn cards(&self) -> JsValue {
-        let cards: Vec<serde_json::Value> = self
-            .inner
-            .cards()
-            .iter()
-            .map(|card| {
-                let mut fields_map = serde_json::Map::new();
-                for (k, v) in card.fields() {
-                    fields_map.insert(k.clone(), v.as_json().clone());
-                }
-                serde_json::json!({
-                    "tag": card.tag(),
-                    "fields": serde_json::Value::Object(fields_map),
-                    "body": trim_body(card.body()),
-                })
-            })
-            .collect();
-        let val = serde_json::Value::Array(cards);
+        let cards: Vec<Card> = self.inner.cards().iter().map(Card::from).collect();
         let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-        val.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
+        cards.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
     }
 
-    /// Non-fatal parse-time warnings as a JS array of Diagnostic objects.
+    /// Non-fatal parse-time warnings as an array of typed `Diagnostic` objects.
     ///
     /// Allocates and serializes on each call — cache locally if read in a hot loop.
-    #[wasm_bindgen(getter, js_name = warnings)]
+    #[wasm_bindgen(getter, js_name = warnings, unchecked_return_type = "Diagnostic[]")]
     pub fn warnings(&self) -> JsValue {
         let diags: Vec<Diagnostic> = self
             .parse_warnings
             .iter()
-            .map(|d| d.clone().into())
+            .cloned()
+            .map(Into::into)
             .collect();
         let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
         diags.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
@@ -436,7 +446,10 @@ impl Document {
     ///
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = pushCard)]
-    pub fn push_card(&mut self, card: JsValue) -> Result<(), JsValue> {
+    pub fn push_card(
+        &mut self,
+        #[wasm_bindgen(unchecked_param_type = "CardInput")] card: JsValue,
+    ) -> Result<(), JsValue> {
         let core_card = js_value_to_card(&card)?;
         self.inner
             .push_card(core_card)
@@ -449,7 +462,11 @@ impl Document {
     ///
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = insertCard)]
-    pub fn insert_card(&mut self, index: usize, card: JsValue) -> Result<(), JsValue> {
+    pub fn insert_card(
+        &mut self,
+        index: usize,
+        #[wasm_bindgen(unchecked_param_type = "CardInput")] card: JsValue,
+    ) -> Result<(), JsValue> {
         let core_card = js_value_to_card(&card)?;
         self.inner
             .insert_card(index, core_card)
@@ -459,10 +476,15 @@ impl Document {
     /// Remove the card at `index` and return it, or `undefined` if out of range.
     ///
     /// Mutators never modify `warnings`.
-    #[wasm_bindgen(js_name = removeCard)]
+    #[wasm_bindgen(js_name = removeCard, unchecked_return_type = "Card | undefined")]
     pub fn remove_card(&mut self, index: usize) -> JsValue {
         match self.inner.remove_card(index) {
-            Some(card) => card_to_js_value(&card),
+            Some(core_card) => {
+                let card = Card::from(&core_card);
+                let serializer =
+                    serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+                card.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
+            }
             None => JsValue::UNDEFINED,
         }
     }
@@ -561,32 +583,6 @@ fn js_value_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
     }
     card.set_body(input.body);
     Ok(card)
-}
-
-/// Serialise a [`quillmark_core::Card`] to a JS value
-/// `{ tag: string, fields: object, body: string }`.
-fn card_to_js_value(card: &quillmark_core::Card) -> JsValue {
-    let mut fields_map = serde_json::Map::new();
-    for (k, v) in card.fields() {
-        fields_map.insert(k.clone(), v.as_json().clone());
-    }
-    let json = serde_json::json!({
-        "tag": card.tag(),
-        "fields": serde_json::Value::Object(fields_map),
-        "body": trim_body(card.body()),
-    });
-    let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-    json.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
-}
-
-/// Strip trailing line terminators from a body string.
-///
-/// Parsed bodies include a trailing blank line when followed by a card fence
-/// (required by the MARKDOWN.md §3 F2 rule); those characters are structural
-/// separators, not part of what the document author wrote.
-fn trim_body(body: &str) -> String {
-    body.trim_end_matches(|c: char| c == '\n' || c == '\r')
-        .to_string()
 }
 
 fn file_tree_from_js_tree(tree: &JsValue) -> Result<quillmark_core::FileTreeNode, JsValue> {
