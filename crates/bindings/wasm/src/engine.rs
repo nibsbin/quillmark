@@ -649,10 +649,10 @@ fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
         return Ok(entries);
     }
 
-    Err(WasmError::from(
-        "quill requires a Map<string, Uint8Array> or Record<string, Uint8Array>",
+    Err(
+        WasmError::from("quill requires a Map<string, Uint8Array> or Record<string, Uint8Array>")
+            .to_js_value(),
     )
-    .to_js_value())
 }
 
 fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValue> {

@@ -133,7 +133,9 @@ fn test_quill_from_object_tree() {
     ];
 
     let engine = Quillmark::new();
-    let from_map = engine.quill(common::tree(entries)).expect("Map form failed");
+    let from_map = engine
+        .quill(common::tree(entries))
+        .expect("Map form failed");
     let from_obj = engine
         .quill(common::tree_object(entries))
         .expect("Object form failed");
