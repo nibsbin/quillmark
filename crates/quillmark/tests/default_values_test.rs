@@ -21,7 +21,7 @@ fn test_default_values_applied_via_dry_run() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = create_test_quill(
         &temp_dir,
-        r#"Quill:
+        r#"quill:
   name: "test_quill"
   version: "1.0"
   backend: "typst"
@@ -61,7 +61,7 @@ fn test_default_values_not_overriding_existing_fields() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = create_test_quill(
         &temp_dir,
-        r#"Quill:
+        r#"quill:
   name: "test_quill"
   version: "1.0"
   backend: "typst"
@@ -99,7 +99,7 @@ fn test_validation_with_defaults() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = create_test_quill(
         &temp_dir,
-        r#"Quill:
+        r#"quill:
   name: "test_quill"
   version: "1.0"
   backend: "typst"
@@ -137,7 +137,7 @@ fn test_validation_fails_without_defaults() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = create_test_quill(
         &temp_dir,
-        r#"Quill:
+        r#"quill:
   name: "test_quill"
   version: "1.0"
   backend: "typst"
@@ -183,7 +183,7 @@ fn test_extract_defaults_from_quill() {
     fs::create_dir_all(&quill_path).unwrap();
     fs::write(
         quill_path.join("Quill.yaml"),
-        r#"Quill:
+        r#"quill:
   name: "test_quill"
   version: "1.0"
   backend: "typst"

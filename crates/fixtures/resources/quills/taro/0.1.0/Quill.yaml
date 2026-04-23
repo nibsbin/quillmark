@@ -1,4 +1,4 @@
-Quill:
+quill:
   name: taro
   version: 0.1.0
   backend: typst

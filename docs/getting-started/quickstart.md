@@ -50,7 +50,7 @@ Get started with Quillmark in Python or JavaScript.
     const enc = new TextEncoder();
 
     const quill = engine.quill(new Map([
-      ["Quill.yaml", enc.encode("Quill:\n  name: my_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Demo\n")],
+      ["Quill.yaml", enc.encode("quill:\n  name: my_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Demo\n")],
       ["plate.typ", enc.encode("#import \"@local/quillmark-helper:0.1.0\": data\n#data.BODY\n")],
     ]));
 

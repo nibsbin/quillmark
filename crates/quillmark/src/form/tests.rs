@@ -28,7 +28,7 @@ fn quill_from_yaml(yaml: &str) -> Quill {
 fn project_form_all_fields_present() {
     let quill = quill_from_yaml(
         r#"
-Quill:
+quill:
   name: form_test
   version: "1.0"
   backend: typst
@@ -76,7 +76,7 @@ main:
 fn project_form_missing_field_uses_default() {
     let quill = quill_from_yaml(
         r#"
-Quill:
+quill:
   name: form_defaults_test
   version: "1.0"
   backend: typst
@@ -132,7 +132,7 @@ main:
 fn project_form_unknown_card_tag_drops_card_and_emits_diagnostic() {
     let quill = quill_from_yaml(
         r#"
-Quill:
+quill:
   name: unknown_card_test
   version: "1.0"
   backend: typst
@@ -179,7 +179,7 @@ cards:
 fn project_form_card_field_sources() {
     let quill = quill_from_yaml(
         r#"
-Quill:
+quill:
   name: card_fields_test
   version: "1.0"
   backend: typst
@@ -235,7 +235,7 @@ cards:
 fn project_form_validation_diagnostics_appear() {
     let quill = quill_from_yaml(
         r#"
-Quill:
+quill:
   name: validation_diag_test
   version: "1.0"
   backend: typst
@@ -272,7 +272,7 @@ fn project_form_serializes_cleanly() {
     // Smoke test: serde_json round-trip of FormProjection.
     let quill = quill_from_yaml(
         r#"
-Quill:
+quill:
   name: serial_test
   version: "1.0"
   backend: typst

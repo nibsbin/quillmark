@@ -281,7 +281,7 @@ mod compile_helper_tests {
         root_files.insert(
             "Quill.yaml".to_string(),
             FileTreeNode::File {
-                contents: br#"Quill:
+                contents: br#"quill:
   name: "test_helper_compile"
   version: "1.0"
   backend: "typst"

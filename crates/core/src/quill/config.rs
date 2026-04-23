@@ -611,20 +611,20 @@ impl QuillConfig {
         let quill_yaml_val: serde_json::Value = serde_saphyr::from_str(yaml_content)
             .map_err(|e| format!("Failed to parse Quill.yaml: {}", e))?;
 
-        // Extract [Quill] section (required)
+        // Extract [quill] section (required)
         let quill_section = quill_yaml_val
-            .get("Quill")
-            .ok_or("Missing required 'Quill' section in Quill.yaml")?;
+            .get("quill")
+            .ok_or("Missing required 'quill' section in Quill.yaml")?;
 
         // Extract required fields
         let name = quill_section
             .get("name")
             .and_then(|v| v.as_str())
-            .ok_or("Missing required 'name' field in 'Quill' section")?
+            .ok_or("Missing required 'name' field in 'quill' section")?
             .to_string();
         if !Self::is_valid_quill_name(&name) {
             return Err(format!(
-                "Invalid Quill name '{}': Quill.name must be snake_case (lowercase letters, digits, and underscores only).",
+                "Invalid Quill name '{}': quill.name must be snake_case (lowercase letters, digits, and underscores only).",
                 name
             )
             .into());
@@ -633,23 +633,23 @@ impl QuillConfig {
         let backend = quill_section
             .get("backend")
             .and_then(|v| v.as_str())
-            .ok_or("Missing required 'backend' field in 'Quill' section")?
+            .ok_or("Missing required 'backend' field in 'quill' section")?
             .to_string();
 
         let description = quill_section
             .get("description")
             .and_then(|v| v.as_str())
-            .ok_or("Missing required 'description' field in 'Quill' section")?;
+            .ok_or("Missing required 'description' field in 'quill' section")?;
 
         if description.trim().is_empty() {
-            return Err("'description' field in 'Quill' section cannot be empty".into());
+            return Err("'description' field in 'quill' section cannot be empty".into());
         }
         let description = description.to_string();
 
         // Extract optional fields (now version is required)
         let version_val = quill_section
             .get("version")
-            .ok_or("Missing required 'version' field in 'Quill' section")?;
+            .ok_or("Missing required 'version' field in 'quill' section")?;
 
         // Handle version as string or number (YAML might parse 1.0 as number)
         let version = if let Some(s) = version_val.as_str() {
@@ -692,7 +692,7 @@ impl QuillConfig {
             .cloned()
             .and_then(|v| serde_json::from_value(v).ok());
 
-        // Extract additional metadata from [Quill] section (excluding standard fields)
+        // Extract additional metadata from [quill] section (excluding standard fields)
         let mut metadata = HashMap::new();
         if let Some(table) = quill_section.as_object() {
             for (key, value) in table {

@@ -89,7 +89,7 @@ fn test_render_with_custom_backend() {
     fs::create_dir_all(&quill_path).unwrap();
     fs::write(
         quill_path.join("Quill.yaml"),
-        "Quill:\n  name: \"custom_backend_quill\"\n  version: \"1.0\"\n  backend: \"mock-txt\"\n  plate_file: \"plate.txt\"\n  description: \"Test\"\n",
+        "quill:\n  name: \"custom_backend_quill\"\n  version: \"1.0\"\n  backend: \"mock-txt\"\n  plate_file: \"plate.txt\"\n  description: \"Test\"\n",
     ).unwrap();
     fs::write(quill_path.join("plate.txt"), "Test template: {{ title }}").unwrap();
 

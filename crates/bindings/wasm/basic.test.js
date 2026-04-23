@@ -189,6 +189,29 @@ describe('Quillmark.quill', () => {
     expect(quill).toBeDefined()
   })
 
+  it('should accept a plain object tree (Record<string, Uint8Array>)', () => {
+    const engine = new Quillmark()
+    const mapTree = makeQuill({ name: 'test_quill', plate: TEST_PLATE })
+    const objectTree = Object.fromEntries(mapTree)
+
+    const fromMap = engine.quill(mapTree)
+    const fromObject = engine.quill(objectTree)
+
+    expect(fromMap.backendId).toBe(fromObject.backendId)
+
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const r1 = fromMap.render(doc, { format: 'svg' })
+    const r2 = fromObject.render(doc, { format: 'svg' })
+    expect(r1.artifacts.length).toBe(r2.artifacts.length)
+  })
+
+  it('should reject non-object trees with a clear error', () => {
+    const engine = new Quillmark()
+    expect(() => engine.quill(42)).toThrow()
+    expect(() => engine.quill('string')).toThrow()
+    expect(() => engine.quill(null)).toThrow()
+  })
+
   it('should render markdown to PDF via quill.render(doc) with default opts', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
@@ -534,6 +557,82 @@ describe('quill.open + session.render', () => {
   })
 })
 
+describe('quill.metadata', () => {
+  const META_QUILL_YAML = `quill:
+  name: meta_test_quill
+  version: "0.2.1"
+  backend: typst
+  plate_file: plate.typ
+  description: Metadata test
+
+main:
+  fields:
+    title:
+      type: string
+      description: The title
+`
+
+  it('exposes name, backend, description, version, author, supportedFormats, schema', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(
+      makeQuill({ name: 'meta_test_quill', plate: TEST_PLATE, quillYaml: META_QUILL_YAML }),
+    )
+
+    const meta = quill.metadata
+    expect(meta).toBeDefined()
+    expect(meta.name).toBe('meta_test_quill')
+    expect(meta.backend).toBe('typst')
+    expect(meta.description).toBe('Metadata test')
+    expect(meta.version).toBe('0.2.1')
+    expect(meta.author).toBe('Unknown')
+    expect(Array.isArray(meta.supportedFormats)).toBe(true)
+    expect(meta.supportedFormats.length).toBeGreaterThan(0)
+    expect(meta.schema).toBeDefined()
+    expect(meta.schema.title).toBeDefined()
+  })
+
+  it('is JSON.stringify-able (plain object, not a class)', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(
+      makeQuill({ name: 'meta_test_quill', plate: TEST_PLATE, quillYaml: META_QUILL_YAML }),
+    )
+    const json = JSON.stringify(quill.metadata)
+    expect(typeof json).toBe('string')
+    const parsed = JSON.parse(json)
+    expect(parsed.name).toBe('meta_test_quill')
+  })
+})
+
+describe('Document.clone', () => {
+  it('returns an independent handle', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const clone = doc.clone()
+
+    clone.setField('title', 'Changed')
+
+    expect(doc.frontmatter.title).toBe('Test Document')
+    expect(clone.frontmatter.title).toBe('Changed')
+  })
+
+  it('preserves parse-time warnings on the clone', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const clone = doc.clone()
+
+    expect(clone.warnings.length).toBe(doc.warnings.length)
+  })
+
+  it('produces a clone that renders equivalently to the original', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const clone = doc.clone()
+
+    const r1 = quill.render(doc, { format: 'svg' })
+    const r2 = quill.render(clone, { format: 'svg' })
+    expect(r1.artifacts.length).toBe(r2.artifacts.length)
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Phase 5: quill.projectForm — schema-aware form projection
 // NOTE: These tests cannot run in the devcontainer (no wasm-pack / browser
@@ -542,7 +641,7 @@ describe('quill.open + session.render', () => {
 // ---------------------------------------------------------------------------
 
 describe('quill.projectForm', () => {
-  const QUILL_YAML = `Quill:
+  const QUILL_YAML = `quill:
   name: form_smoke_test
   version: "1.0"
   backend: typst

@@ -66,7 +66,7 @@ Validation rules:
 Required top-level sections: `Quill` (bundle metadata). Optional: `main` (document fields), `cards` (card type definitions), `typst` (backend config).
 
 ```yaml
-Quill:
+quill:
   name: my_quill          # required; snake_case
   backend: typst          # required
   version: "1.0.0"        # required; semver (MAJOR.MINOR.PATCH or MAJOR.MINOR)
