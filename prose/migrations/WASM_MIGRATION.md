@@ -95,6 +95,12 @@ object — you could spread it, `JSON.stringify` it, and pass the same value to
    const svg = quill.render(parsed, { format: "svg" });
    ```
 
+   The `opts` argument is optional. Omitting it uses the quill's default
+   output format (as declared in `Quill.yaml`):
+   ```js
+   const result = quill.render(parsed);  // default format
+   ```
+
    Use `quill.open(doc)` when you want a single compilation that serves
    multiple page-selective renders:
    ```js
@@ -189,11 +195,15 @@ This takes `&Document`, so the handle survives the call.
 
 ## 5. Render options — `assets` field removed
 
-`RenderOptions` shape on the wire:
+`RenderOptions` shape on the wire (all fields optional):
 
 ```ts
 { format?: "pdf"|"svg"|"png"|"txt", ppi?: number, pages?: number[] }
 ```
+
+The entire options object is optional. `quill.render(doc)` and
+`session.render()` both accept `undefined` and fall back to the quill's
+default output format.
 
 Dynamic asset injection was removed from the pipeline in this refactor.
 `RenderOptions.assets` was **deleted** from the WASM surface — it is no longer
@@ -262,7 +272,9 @@ The following are behaviorally unchanged by this refactor:
 - `quill.open(doc)` → `session.pageCount` + `session.render(opts)`.
 - `quill.backendId` getter.
 - `RenderResult` shape: `{ artifacts, warnings, outputFormat, renderTimeMs }`.
-- `Diagnostic` shape: `{ severity, code?, message, location?, hint?, sourceChain }`.
+- `Diagnostic` shape: `{ severity, code?, message, location?, hint?, sourceChain? }`.
+  `severity` is a lowercase string: `"error"`, `"warning"`, or `"note"`.
+  `sourceChain` is absent (not serialised) when empty.
 - QUILL-ref mismatch behaviour: `quill.render(doc)` with a mismatched
   `doc.quillRef` still emits a `quill::ref_mismatch` warning, not an error.
 - npm package name and import path.
@@ -276,6 +288,10 @@ This migration pass also resolved stale references to the removed APIs:
 - **`RenderOptions.assets`** — deleted from `crates/bindings/wasm/src/types.rs`.
   The TypeScript type no longer exposes it. Inject assets through the quill
   tree.
+- **`quill.renderWithOptions`** — this overload never existed on the WASM
+  surface; the Rust `render_with_options` helper it mirrored was collapsed into
+  `render`. `quill.render(doc, opts?)` is the single entry point for both
+  default and custom render options.
 - **`docs/format-designer/typst-backend.md`** — Python and JS code snippets
   rerouted from `workflow.render(parsed, …)` to `quill.render(doc, …)`.
 - **`prose/schema-rework/`** — deleted. The plan's success criteria (delete
