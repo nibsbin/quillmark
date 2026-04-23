@@ -16,6 +16,29 @@ use super::fences::{fence_opener_len, find_metadata_blocks};
 use super::sentinel::extract_sentinels;
 use super::{Card, Document};
 
+/// Strip exactly one F2 structural separator from the tail of a body slice.
+///
+/// The F2 rule (`MARKDOWN.md §3`) requires a blank line immediately above
+/// every metadata fence. When a body is followed by another fence, the raw
+/// slice ends with that blank line's terminator — exactly one `\n` or
+/// `\r\n`. This helper strips that single line ending so stored bodies
+/// contain only authored content. The emitter re-adds the separator on
+/// output via `ensure_blank_line_before_fence`.
+///
+/// Stripping more than one line ending (as the WASM binding's former
+/// `trim_body` did) would silently drop content-meaningful trailing
+/// newlines — e.g. a body that ends with a fenced code block's closing
+/// newline.
+fn strip_f2_separator(body: &str) -> &str {
+    if let Some(rest) = body.strip_suffix("\r\n") {
+        rest
+    } else if let Some(rest) = body.strip_suffix('\n') {
+        rest
+    } else {
+        body
+    }
+}
+
 /// An intermediate representation of one `---…---` metadata block.
 #[derive(Debug)]
 pub(super) struct MetadataBlock {
@@ -184,14 +207,23 @@ pub(super) fn decompose_with_warnings(
 
     // Global body: between end of frontmatter (block 0) and start of the
     // first CARD block (or EOF).
+    //
+    // When a fence follows, the body slice ends with the F2 blank-line
+    // terminator — strip it so stored bodies contain only authored content.
+    // The emitter re-derives the separator on output (see `emit.rs`'s
+    // `ensure_blank_line_before_fence`).
     let body_start = blocks[0].end;
-    let body_end = blocks
-        .iter()
-        .skip(1)
-        .find(|b| b.tag.is_some())
-        .map(|b| b.start)
-        .unwrap_or(markdown.len());
-    let global_body = markdown[body_start..body_end].to_string();
+    let first_card_block = blocks.iter().skip(1).find(|b| b.tag.is_some());
+    let (body_end, body_is_followed_by_fence) = match first_card_block {
+        Some(b) => (b.start, true),
+        None => (markdown.len(), false),
+    };
+    let global_body_raw = &markdown[body_start..body_end];
+    let global_body = if body_is_followed_by_fence {
+        strip_f2_separator(global_body_raw).to_string()
+    } else {
+        global_body_raw.to_string()
+    };
 
     // Parse tagged blocks (CARD blocks) into typed Cards.
     let mut cards: Vec<Card> = Vec::new();
@@ -216,12 +248,18 @@ pub(super) fn decompose_with_warnings(
 
             // Card body: between this block's end and the next block's start (or EOF).
             let card_body_start = block.end;
-            let card_body_end = if idx + 1 < blocks.len() {
+            let has_next_block = idx + 1 < blocks.len();
+            let card_body_end = if has_next_block {
                 blocks[idx + 1].start
             } else {
                 markdown.len()
             };
-            let card_body = markdown[card_body_start..card_body_end].to_string();
+            let card_body_raw = &markdown[card_body_start..card_body_end];
+            let card_body = if has_next_block {
+                strip_f2_separator(card_body_raw).to_string()
+            } else {
+                card_body_raw.to_string()
+            };
 
             cards.push(Card::new_internal(tag_name.clone(), card_fields, card_body));
         }
