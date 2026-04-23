@@ -169,7 +169,13 @@ jobs:
 
       - name: Publish @quillmark/wasm
         working-directory: pkg
-        run: npm publish --access public --provenance
+        run: |
+          VERSION="${{ needs.release.outputs.version }}"
+          if [[ "$VERSION" == *-* ]]; then
+            npm publish --access public --provenance --tag next
+          else
+            npm publish --access public --provenance
+          fi
 
       - name: Summary
         run: echo "✓ @quillmark/wasm v${{ needs.release.outputs.version }} published to npm"
