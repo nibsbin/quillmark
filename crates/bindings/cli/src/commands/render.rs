@@ -89,12 +89,16 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             (output, Some(markdown_path.clone()))
         } else {
             // Get example content
-            let markdown = quill.source().example().map(|s| s.to_string()).ok_or_else(|| {
-                CliError::InvalidArgument(format!(
-                    "Quill '{}' does not have example content",
-                    quill.source().name()
-                ))
-            })?;
+            let markdown = quill
+                .source()
+                .example()
+                .map(|s| s.to_string())
+                .ok_or_else(|| {
+                    CliError::InvalidArgument(format!(
+                        "Quill '{}' does not have example content",
+                        quill.source().name()
+                    ))
+                })?;
 
             if args.verbose {
                 println!("Using example content from quill");
