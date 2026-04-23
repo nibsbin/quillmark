@@ -94,17 +94,17 @@ impl Quill {
     #[wasm_bindgen(js_name = render)]
     pub fn render(
         &self,
-        doc: Document,
+        doc: &Document,
         opts: Option<RenderOptions>,
     ) -> Result<RenderResult, JsValue> {
         let start = now_ms();
-        let parse_warnings = doc.parse_warnings.clone();
         let rust_opts: quillmark_core::RenderOptions = opts.unwrap_or_default().into();
         let result = self
             .inner
-            .render_with_options(&doc.inner, rust_opts.output_format, rust_opts.ppi)
+            .render(&doc.inner, &rust_opts)
             .map_err(|e| WasmError::from(e).to_js_value())?;
-        let mut warnings: Vec<Diagnostic> = parse_warnings.into_iter().map(Into::into).collect();
+        let mut warnings: Vec<Diagnostic> =
+            doc.parse_warnings.iter().cloned().map(Into::into).collect();
         warnings.extend(result.warnings.into_iter().map(Into::into));
         Ok(RenderResult {
             artifacts: result.artifacts.into_iter().map(Into::into).collect(),
@@ -116,7 +116,7 @@ impl Quill {
 
     /// Open an iterative render session for page-selective rendering.
     #[wasm_bindgen(js_name = open)]
-    pub fn open(&self, doc: Document) -> Result<RenderSession, JsValue> {
+    pub fn open(&self, doc: &Document) -> Result<RenderSession, JsValue> {
         let session = self
             .inner
             .open(&doc.inner)

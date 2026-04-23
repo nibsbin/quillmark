@@ -30,24 +30,50 @@ use crate::value::QuillValue;
 /// renderable `Quill` (see `quillmark::Quill`).
 #[derive(Clone)]
 pub struct QuillSource {
-    /// Quill-specific metadata
-    pub metadata: HashMap<String, QuillValue>,
-    /// Name of the quill
-    pub name: String,
-    /// Backend identifier (e.g., "typst")
-    pub backend_id: String,
-    /// Plate template content (optional)
-    pub plate: Option<String>,
-    /// Markdown template content (optional)
-    pub example: Option<String>,
-    /// Parsed configuration — the authoritative schema model.
-    pub config: QuillConfig,
-    /// Cached default values extracted from config (for performance)
-    pub defaults: HashMap<String, QuillValue>,
-    /// Cached example values extracted from config (for performance)
-    pub examples: HashMap<String, Vec<QuillValue>>,
-    /// In-memory file system (tree structure)
-    pub files: FileTreeNode,
+    pub(crate) metadata: HashMap<String, QuillValue>,
+    pub(crate) name: String,
+    pub(crate) backend_id: String,
+    pub(crate) plate: Option<String>,
+    pub(crate) example: Option<String>,
+    pub(crate) config: QuillConfig,
+    pub(crate) files: FileTreeNode,
+}
+
+impl QuillSource {
+    /// The quill's declared name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The backend identifier declared in Quill.yaml (e.g. `"typst"`).
+    pub fn backend_id(&self) -> &str {
+        &self.backend_id
+    }
+
+    /// Quill-specific metadata parsed from Quill.yaml.
+    pub fn metadata(&self) -> &HashMap<String, QuillValue> {
+        &self.metadata
+    }
+
+    /// The plate template content, if the quill declares one.
+    pub fn plate(&self) -> Option<&str> {
+        self.plate.as_deref()
+    }
+
+    /// The example Markdown content, if the quill ships one.
+    pub fn example(&self) -> Option<&str> {
+        self.example.as_deref()
+    }
+
+    /// The parsed schema configuration.
+    pub fn config(&self) -> &QuillConfig {
+        &self.config
+    }
+
+    /// The in-memory file tree for this quill.
+    pub fn files(&self) -> &FileTreeNode {
+        &self.files
+    }
 }
 
 impl std::fmt::Debug for QuillSource {

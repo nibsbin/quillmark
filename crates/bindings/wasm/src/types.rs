@@ -72,7 +72,7 @@ impl From<quillmark_core::Location> for Location {
         Location {
             file: loc.file,
             line: loc.line as usize,
-            column: loc.col as usize,
+            column: loc.column as usize,
         }
     }
 }
@@ -96,14 +96,13 @@ pub struct Diagnostic {
 
 impl From<quillmark_core::Diagnostic> for Diagnostic {
     fn from(diag: quillmark_core::Diagnostic) -> Self {
-        let source_chain = diag.source_chain();
         Diagnostic {
             severity: diag.severity.into(),
             code: diag.code,
             message: diag.message,
-            location: diag.primary.map(|loc| loc.into()),
+            location: diag.location.map(Into::into),
             hint: diag.hint,
-            source_chain,
+            source_chain: diag.source_chain,
         }
     }
 }
@@ -273,7 +272,7 @@ mod tests {
         .with_location(quillmark_core::Location {
             file: "test.typ".to_string(),
             line: 10,
-            col: 5,
+            column: 5,
         })
         .with_hint("This is a hint".to_string());
 
@@ -297,7 +296,7 @@ mod tests {
             "Failed to load template".to_string(),
         )
         .with_code("E002".to_string())
-        .with_source(Box::new(root_error));
+        .with_source(&root_error);
 
         let wasm_diag: Diagnostic = diag.into();
         let json = serde_json::to_string(&wasm_diag).unwrap();
@@ -333,7 +332,7 @@ mod tests {
             .with_location(Location {
                 file: "test.typ".to_string(),
                 line: 10,
-                col: 5,
+                column: 5,
             })
             .with_hint("This is a hint".to_string());
 
@@ -347,7 +346,7 @@ mod tests {
 
         let obj = json.as_object().unwrap();
         assert_eq!(obj.get("type").unwrap().as_str().unwrap(), "diagnostic");
-        assert_eq!(obj.get("severity").unwrap().as_str().unwrap(), "Error");
+        assert_eq!(obj.get("severity").unwrap().as_str().unwrap(), "error");
         assert_eq!(obj.get("code").unwrap().as_str().unwrap(), "E001");
         assert_eq!(
             obj.get("message").unwrap().as_str().unwrap(),
@@ -355,10 +354,10 @@ mod tests {
         );
         assert_eq!(obj.get("hint").unwrap().as_str().unwrap(), "This is a hint");
 
-        let primary = obj.get("primary").unwrap().as_object().unwrap();
-        assert_eq!(primary.get("file").unwrap().as_str().unwrap(), "test.typ");
-        assert_eq!(primary.get("line").unwrap().as_u64().unwrap(), 10);
-        assert_eq!(primary.get("col").unwrap().as_u64().unwrap(), 5);
+        let location = obj.get("location").unwrap().as_object().unwrap();
+        assert_eq!(location.get("file").unwrap().as_str().unwrap(), "test.typ");
+        assert_eq!(location.get("line").unwrap().as_u64().unwrap(), 10);
+        assert_eq!(location.get("column").unwrap().as_u64().unwrap(), 5);
     }
 
     #[test]
@@ -409,7 +408,7 @@ mod tests {
             obj.get("message").unwrap().as_str().unwrap(),
             "Simple error message"
         );
-        assert_eq!(obj.get("severity").unwrap().as_str().unwrap(), "Error");
+        assert_eq!(obj.get("severity").unwrap().as_str().unwrap(), "error");
     }
 
     #[test]

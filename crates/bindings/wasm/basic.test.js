@@ -228,6 +228,18 @@ describe('Quillmark.quill', () => {
     expect(result.artifacts[0].mimeType).toBe('image/svg+xml')
   })
 
+  it('should allow rendering the same Document multiple times', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+
+    const pdf = quill.render(doc, { format: 'pdf' })
+    const svg = quill.render(doc, { format: 'svg' })
+
+    expect(pdf.artifacts[0].mimeType).toBe('application/pdf')
+    expect(svg.artifacts[0].mimeType).toBe('image/svg+xml')
+  })
+
   it('should emit a quill::ref_mismatch warning when Document QUILL differs from quill name', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))

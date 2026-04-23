@@ -6,8 +6,7 @@ use pyo3::types::PyDict; // PyDict
 use pyo3::Bound; // Bound
 
 use quillmark::{
-    Document, Location, OutputFormat, Quill, Quillmark, RenderResult, RenderSession,
-    SerializableDiagnostic,
+    Diagnostic, Document, Location, OutputFormat, Quill, Quillmark, RenderResult, RenderSession,
 };
 use std::path::PathBuf;
 
@@ -57,12 +56,12 @@ pub struct PyQuill {
 impl PyQuill {
     #[getter]
     fn print_tree(&self) -> String {
-        self.inner.source().files.print_tree().clone()
+        self.inner.source().files().print_tree().clone()
     }
 
     #[getter]
     fn name(&self) -> String {
-        self.inner.source().name.clone()
+        self.inner.source().name().to_string()
     }
 
     #[getter]
@@ -72,23 +71,29 @@ impl PyQuill {
 
     #[getter]
     fn plate(&self) -> Option<String> {
-        self.inner.source().plate.clone()
+        self.inner.source().plate().map(str::to_string)
     }
 
     #[getter]
     fn example(&self) -> Option<String> {
-        self.inner.source().example.clone()
+        self.inner.source().example().map(str::to_string)
     }
 
     #[getter]
     fn quill_ref(&self) -> String {
-        self.inner.quill_ref()
+        let source = self.inner.source();
+        let version = source
+            .metadata()
+            .get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("0.0.0");
+        format!("{}@{}", source.name(), version)
     }
 
     #[getter]
     fn metadata<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, value) in &self.inner.source().metadata {
+        for (key, value) in self.inner.source().metadata() {
             dict.set_item(key, quillvalue_to_py(py, value)?)?;
         }
         Ok(dict)
@@ -99,7 +104,7 @@ impl PyQuill {
         let yaml = self
             .inner
             .source()
-            .config
+            .config()
             .public_schema_yaml()
             .map_err(|e| PyValueError::new_err(format!("schema: {}", e)))?;
         Ok(yaml.into_pyobject(py)?.into_any())
@@ -108,7 +113,7 @@ impl PyQuill {
     #[getter]
     fn defaults<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, value) in self.inner.source().config.defaults() {
+        for (key, value) in self.inner.source().config().defaults() {
             dict.set_item(key, quillvalue_to_py(py, &value)?)?;
         }
         Ok(dict)
@@ -117,7 +122,7 @@ impl PyQuill {
     #[getter]
     fn examples<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, values) in self.inner.source().config.examples() {
+        for (key, values) in self.inner.source().config().examples() {
             let py_list = pyo3::types::PyList::empty(py);
             for value in values {
                 py_list.append(quillvalue_to_py(py, &value)?)?;
@@ -142,17 +147,17 @@ impl PyQuill {
         doc: PyRef<'_, PyDocument>,
         format: Option<PyOutputFormat>,
     ) -> PyResult<PyRenderResult> {
-        let rust_format = format.map(OutputFormat::from);
+        let opts = quillmark_core::RenderOptions {
+            output_format: format.map(OutputFormat::from),
+            ..Default::default()
+        };
         let mut result = self
             .inner
-            .render(&doc.inner, rust_format)
+            .render(&doc.inner, &opts)
             .map_err(convert_render_error)?;
-        let parse_warnings: Vec<_> = doc
-            .parse_warnings
-            .iter()
-            .map(|d| d.clone_without_source())
-            .collect();
-        result.warnings.splice(0..0, parse_warnings);
+        result
+            .warnings
+            .splice(0..0, doc.parse_warnings.iter().cloned());
         Ok(PyRenderResult { inner: result })
     }
 
@@ -234,8 +239,9 @@ impl PyDocument {
             let py_err = PyErr::new::<crate::errors::ParseError, _>(e.to_string());
             Python::attach(|py| {
                 if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-                    let diag = e.to_diagnostic();
-                    let py_diag = crate::types::PyDiagnostic { inner: diag.into() };
+                    let py_diag = crate::types::PyDiagnostic {
+                        inner: e.to_diagnostic(),
+                    };
                     let _ = exc.setattr("diagnostic", py_diag);
                 }
             });
@@ -266,7 +272,7 @@ impl PyDocument {
     fn warnings(&self) -> Vec<PyDiagnostic> {
         self.parse_warnings
             .iter()
-            .map(|d| PyDiagnostic { inner: d.into() })
+            .map(|d| PyDiagnostic { inner: d.clone() })
             .collect()
     }
 
@@ -499,7 +505,7 @@ impl PyRenderResult {
         self.inner
             .warnings
             .iter()
-            .map(|d| PyDiagnostic { inner: d.into() })
+            .map(|d| PyDiagnostic { inner: d.clone() })
             .collect()
     }
 
@@ -553,7 +559,7 @@ impl PyArtifact {
 #[pyclass(name = "Diagnostic")]
 #[derive(Clone)]
 pub struct PyDiagnostic {
-    pub(crate) inner: SerializableDiagnostic,
+    pub(crate) inner: Diagnostic,
 }
 
 #[pymethods]
@@ -574,9 +580,9 @@ impl PyDiagnostic {
     }
 
     #[getter]
-    fn primary(&self) -> Option<PyLocation> {
+    fn location(&self) -> Option<PyLocation> {
         self.inner
-            .primary
+            .location
             .as_ref()
             .map(|l| PyLocation { inner: l.clone() })
     }
@@ -612,8 +618,8 @@ impl PyLocation {
     }
 
     #[getter]
-    fn col(&self) -> usize {
-        self.inner.col as usize
+    fn column(&self) -> usize {
+        self.inner.column as usize
     }
 }
 

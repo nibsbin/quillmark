@@ -36,19 +36,9 @@ impl Quill {
         &self.source
     }
 
-    /// Shared handle to the underlying source.
-    pub fn source_arc(&self) -> Arc<QuillSource> {
-        Arc::clone(&self.source)
-    }
-
     /// The resolved backend identifier (e.g. `"typst"`).
     pub fn backend_id(&self) -> &str {
         self.backend.id()
-    }
-
-    /// A shared handle to the resolved backend.
-    pub fn backend(&self) -> Arc<dyn Backend> {
-        Arc::clone(&self.backend)
     }
 
     /// Supported output formats for this quill's backend.
@@ -58,63 +48,21 @@ impl Quill {
 
     /// The quill's declared name.
     pub fn name(&self) -> &str {
-        &self.source.name
-    }
-
-    /// Quill reference string (`name@version`) for diagnostics.
-    pub fn quill_ref(&self) -> String {
-        let version = self
-            .source
-            .metadata
-            .get("version")
-            .and_then(|v| v.as_str())
-            .unwrap_or("0.0.0");
-        format!("{}@{}", self.source.name, version)
+        self.source.name()
     }
 
     /// Render a document to final artifacts.
+    ///
+    /// Pass `&RenderOptions::default()` for backend defaults (first supported
+    /// format, backend-chosen ppi, all pages).
     pub fn render(
         &self,
         doc: &Document,
-        format: Option<OutputFormat>,
+        opts: &RenderOptions,
     ) -> Result<RenderResult, RenderError> {
-        self.render_with_options(doc, format, None)
-    }
-
-    /// Render with explicit pixels-per-inch for raster formats (PNG).
-    ///
-    /// `ppi` is ignored for vector/document formats (PDF, SVG, TXT).
-    /// When `None`, the backend's default is used.
-    pub fn render_with_options(
-        &self,
-        doc: &Document,
-        format: Option<OutputFormat>,
-        ppi: Option<f32>,
-    ) -> Result<RenderResult, RenderError> {
-        let context = self.prepare_render_context(doc)?;
-        let format = if format.is_some() {
-            format
-        } else {
-            let supported = self.backend.supported_formats();
-            if !supported.is_empty() {
-                Some(supported[0])
-            } else {
-                None
-            }
-        };
-
-        let render_opts = RenderOptions {
-            output_format: format,
-            ppi,
-            pages: None,
-        };
-
-        let warning = self.ref_mismatch_warning(doc);
-        let session =
-            self.backend
-                .open(&context.plate_content, &self.source, &context.json_data)?;
-        let session = session.with_warning(warning);
-        session.render(&render_opts)
+        let session = self.open(doc)?;
+        let resolved = self.resolve_options(opts);
+        session.render(&resolved)
     }
 
     /// Open an iterative render session for this document.
@@ -127,6 +75,17 @@ impl Quill {
         Ok(session.with_warning(warning))
     }
 
+    fn resolve_options(&self, opts: &RenderOptions) -> RenderOptions {
+        let output_format = opts
+            .output_format
+            .or_else(|| self.backend.supported_formats().first().copied());
+        RenderOptions {
+            output_format,
+            ppi: opts.ppi,
+            pages: opts.pages.clone(),
+        }
+    }
+
     /// Compile a Document to JSON data suitable for the backend.
     ///
     /// Applies coercion, validation, normalization, and schema defaults, then
@@ -135,7 +94,7 @@ impl Quill {
         // Coerce frontmatter fields against the schema.
         let coerced_frontmatter = self
             .source
-            .config
+            .config()
             .coerce_frontmatter(doc.frontmatter())
             .map_err(|e| RenderError::ValidationFailed {
                 diag: Box::new(
@@ -152,7 +111,7 @@ impl Quill {
         for card in doc.cards() {
             let coerced_fields = self
                 .source
-                .config
+                .config()
                 .coerce_card(card.tag(), card.fields())
                 .map_err(|e| RenderError::ValidationFailed {
                     diag: Box::new(
@@ -223,13 +182,14 @@ impl Quill {
 
     fn ref_mismatch_warning(&self, doc: &Document) -> Option<Diagnostic> {
         let doc_ref = doc.quill_reference().name.as_str();
-        if doc_ref != self.source.name {
+        if doc_ref != self.source.name() {
             Some(
                 Diagnostic::new(
                     Severity::Warning,
                     format!(
                         "document declares QUILL '{}' but was rendered with '{}'",
-                        doc_ref, self.source.name
+                        doc_ref,
+                        self.source.name()
                     ),
                 )
                 .with_code("quill::ref_mismatch".to_string())
@@ -248,7 +208,7 @@ impl Quill {
         frontmatter: &IndexMap<String, QuillValue>,
     ) -> IndexMap<String, QuillValue> {
         let mut result = frontmatter.clone();
-        for (field_name, default_value) in self.source.config.defaults() {
+        for (field_name, default_value) in self.source.config().defaults() {
             if !result.contains_key(&field_name) {
                 result.insert(field_name, default_value);
             }
@@ -262,7 +222,7 @@ impl Quill {
         fields: &IndexMap<String, QuillValue>,
     ) -> IndexMap<String, QuillValue> {
         let mut result = fields.clone();
-        if let Some(card_defaults) = self.source.config.card_defaults(card_tag) {
+        if let Some(card_defaults) = self.source.config().card_defaults(card_tag) {
             for (field_name, default_value) in card_defaults {
                 if !result.contains_key(&field_name) {
                     result.insert(field_name, default_value);
@@ -273,17 +233,17 @@ impl Quill {
     }
 
     fn plate_content(&self) -> Option<String> {
-        match &self.source.plate {
-            Some(s) if !s.is_empty() => Some(s.clone()),
-            _ => None,
-        }
+        self.source
+            .plate()
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
     }
 
     /// Perform a dry-run validation without backend compilation.
     pub fn dry_run(&self, doc: &Document) -> Result<(), RenderError> {
         let coerced_frontmatter = self
             .source
-            .config
+            .config()
             .coerce_frontmatter(doc.frontmatter())
             .map_err(|e| RenderError::ValidationFailed {
                 diag: Box::new(
@@ -299,7 +259,7 @@ impl Quill {
         for card in doc.cards() {
             let coerced_fields = self
                 .source
-                .config
+                .config()
                 .coerce_card(card.tag(), card.fields())
                 .map_err(|e| RenderError::ValidationFailed {
                     diag: Box::new(
@@ -328,13 +288,8 @@ impl Quill {
         Ok(())
     }
 
-    /// Validate a Document against this quill's schema.
-    pub fn validate_schema(&self, doc: &Document) -> Result<(), RenderError> {
-        self.validate_document(doc)
-    }
-
     fn validate_document(&self, doc: &Document) -> Result<(), RenderError> {
-        match self.source.config.validate_document(doc) {
+        match self.source.config().validate_document(doc) {
             Ok(_) => Ok(()),
             Err(errors) => {
                 let error_message = errors
@@ -360,7 +315,7 @@ impl Quill {
 impl std::fmt::Debug for Quill {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Quill")
-            .field("name", &self.source.name)
+            .field("name", &self.source.name())
             .field("backend", &self.backend.id())
             .finish()
     }

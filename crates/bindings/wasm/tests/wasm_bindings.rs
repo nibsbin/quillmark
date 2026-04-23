@@ -51,7 +51,7 @@ fn test_render_ref_mismatch_warning() {
     let mismatch_md = "---\nQUILL: other_quill\ntitle: Mismatch\n---\n\n# Content\n";
     let doc = Document::from_markdown(mismatch_md).expect("fromMarkdown failed");
     let result = quill
-        .render(doc, Some(RenderOptions::default()))
+        .render(&doc, Some(RenderOptions::default()))
         .expect("render should succeed despite mismatch");
 
     assert_eq!(result.warnings.len(), 1, "expected exactly one warning");
@@ -71,7 +71,7 @@ fn test_render_from_document() {
 
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     let result = quill
-        .render(doc, Some(RenderOptions::default()))
+        .render(&doc, Some(RenderOptions::default()))
         .expect("render from Document failed");
 
     assert!(
@@ -92,7 +92,7 @@ fn test_open_session_render() {
     let quill = engine.quill(small_quill_tree()).expect("quill failed");
 
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
-    let session = quill.open(doc).expect("open failed");
+    let session = quill.open(&doc).expect("open failed");
     assert!(session.page_count() > 0, "session should expose page count");
 
     let result = session

@@ -52,7 +52,7 @@ use std::collections::HashMap;
 #[cfg(feature = "native")]
 pub(crate) fn typst_packages(source: &QuillSource) -> Vec<String> {
     source
-        .metadata
+        .metadata()
         .get("typst_packages")
         .and_then(|v| v.as_array())
         .map(|arr| {
@@ -123,7 +123,7 @@ impl Backend for TypstBackend {
         });
 
         let transformed_fields =
-            transform_markdown_fields(&fields, &build_transform_schema(&source.config));
+            transform_markdown_fields(&fields, &build_transform_schema(source.config()));
         let transformed_json = serde_json::Value::Object(
             transformed_fields
                 .into_iter()

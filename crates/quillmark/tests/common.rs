@@ -41,16 +41,21 @@ pub fn demo(
     // Load the markdown template from the quill
     let markdown = quill
         .source()
-        .example
-        .as_ref()
+        .example()
         .ok_or("Quill does not have a markdown template")?
-        .clone();
+        .to_string();
 
     // Parse the markdown once
     let parsed = quillmark::Document::from_markdown(&markdown)?;
 
     // render output
-    let rendered = quill.render(&parsed, Some(quillmark_core::OutputFormat::Pdf))?;
+    let rendered = quill.render(
+        &parsed,
+        &quillmark_core::RenderOptions {
+            output_format: Some(quillmark_core::OutputFormat::Pdf),
+            ..Default::default()
+        },
+    )?;
     let output_bytes = rendered.artifacts[0].bytes.clone();
 
     write_example_output(render_output, &output_bytes)?;

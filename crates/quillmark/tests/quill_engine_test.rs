@@ -3,7 +3,7 @@
 use std::fs;
 use tempfile::TempDir;
 
-use quillmark::{Document, OutputFormat, Quillmark};
+use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};
 
 fn make_quill_dir(temp_dir: &TempDir, name: &str, backend: &str) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join(name);
@@ -40,7 +40,7 @@ fn test_quill_from_path_engine_metadata() {
         .quill_from_path(quill_path)
         .expect("quill_from_path failed");
 
-    assert!(quill.quill_ref().starts_with("my_test_quill@"));
+    assert_eq!(quill.name(), "my_test_quill");
     assert_eq!(quill.backend_id(), "typst");
     assert!(quill.supported_formats().contains(&OutputFormat::Pdf));
 }
@@ -99,7 +99,13 @@ fn test_quill_render_succeeds_with_engine_loaded_quill() {
         .quill_from_path(quill_path)
         .expect("quill_from_path failed");
     let parsed = Document::from_markdown("---\nQUILL: my_quill\n---\n").expect("parse failed");
-    let result = quill.render(&parsed, Some(OutputFormat::Pdf));
+    let result = quill.render(
+        &parsed,
+        &RenderOptions {
+            output_format: Some(OutputFormat::Pdf),
+            ..Default::default()
+        },
+    );
 
     if let Err(quillmark::RenderError::EngineCreation { diag }) = &result {
         if diag.message.contains("No fonts found") {

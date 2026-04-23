@@ -1147,8 +1147,8 @@ typst:
 }
 
 #[test]
-fn test_extract_defaults_method() {
-    // Test the extract_defaults method on Quill
+fn test_config_defaults() {
+    // Test defaults extraction via QuillConfig
     let mut root_files = HashMap::new();
 
     let quill_yaml = r#"
@@ -1186,7 +1186,7 @@ main:
     let quill = QuillSource::from_tree(root).unwrap();
 
     // Extract defaults
-    let defaults = quill.extract_defaults();
+    let defaults = quill.config.defaults();
 
     // Verify only fields with defaults are returned
     assert_eq!(defaults.len(), 2);

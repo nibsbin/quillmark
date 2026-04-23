@@ -33,16 +33,14 @@
 //! # Unknown card tags
 //!
 //! Cards whose tag is not declared in the schema are **dropped** from
-//! `FormProjection.cards`. Each such card produces one [`SerializableDiagnostic`]
+//! `FormProjection.cards`. Each such card produces one [`Diagnostic`]
 //! in `FormProjection.diagnostics` with code `"form::unknown_card_tag"`.
-//!
-//! [`SerializableDiagnostic`]: quillmark_core::SerializableDiagnostic
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use quillmark_core::quill::CardSchema;
-use quillmark_core::{Diagnostic, Document, QuillValue, SerializableDiagnostic, Severity};
+use quillmark_core::{Diagnostic, Document, QuillValue, Severity};
 
 use crate::Quill;
 
@@ -89,10 +87,8 @@ pub struct FormCard {
 /// # Unknown cards
 ///
 /// Document cards whose tag is not declared in the schema are dropped and
-/// each produces a [`SerializableDiagnostic`] with code `"form::unknown_card_tag"` in
+/// each produces a [`Diagnostic`] with code `"form::unknown_card_tag"` in
 /// `diagnostics`.
-///
-/// [`SerializableDiagnostic`]: quillmark_core::SerializableDiagnostic
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FormProjection {
     /// Projection of the main document (frontmatter fields).
@@ -102,15 +98,7 @@ pub struct FormProjection {
     /// Cards with unknown tags are excluded; see `diagnostics`.
     pub cards: Vec<FormCard>,
     /// Diagnostics from unknown card tags and validation.
-    ///
-    /// Uses [`SerializableDiagnostic`] (fully serializable) rather than
-    /// [`Diagnostic`] (non-deserializable due to boxed source chain) so that
-    /// `FormProjection` can be fully round-tripped via `serde_json`,
-    /// `serde_wasm_bindgen`, and `pyo3`.
-    ///
-    /// [`SerializableDiagnostic`]: quillmark_core::SerializableDiagnostic
-    /// [`Diagnostic`]: quillmark_core::Diagnostic
-    pub diagnostics: Vec<SerializableDiagnostic>,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 /// Project a document through a quill's schema.
@@ -128,8 +116,8 @@ pub struct FormProjection {
 ///
 /// **Unknown cards.** Each card in `doc.cards()` whose tag is not declared
 /// in the quill schema is dropped from `FormProjection.cards`. A
-/// [`SerializableDiagnostic`] with code `"form::unknown_card_tag"` is
-/// appended to `FormProjection.diagnostics` for each such card.
+/// [`Diagnostic`] with code `"form::unknown_card_tag"` is appended to
+/// `FormProjection.diagnostics` for each such card.
 ///
 /// **Validation.** `QuillConfig::validate_document` is run over the
 /// document and any resulting errors are converted to diagnostics and
@@ -148,13 +136,11 @@ pub struct FormProjection {
 /// is a lossy transformation and would change the field values visible to
 /// the form editor. Validation diagnostics already inform the consumer when
 /// values are type-mismatched.
-///
-/// [`SerializableDiagnostic`]: quillmark_core::SerializableDiagnostic
 pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
-    let mut diagnostics: Vec<SerializableDiagnostic> = Vec::new();
+    let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
     // ── Main card projection ──────────────────────────────────────────────
-    let main_schema = quill.source().config.main();
+    let main_schema = quill.source().config().main();
     let main = project_card(main_schema, doc.frontmatter());
 
     // ── Per-card projections ──────────────────────────────────────────────
@@ -162,31 +148,33 @@ pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
 
     for (index, card) in doc.cards().iter().enumerate() {
         let tag = card.tag();
-        match quill.source().config.card_definition(tag) {
+        match quill.source().config().card_definition(tag) {
             Some(card_schema) => {
                 cards.push(project_card(card_schema, card.fields()));
             }
             None => {
-                let diag = Diagnostic::new(
-                    Severity::Warning,
-                    format!(
-                        "card at index {index} has unknown tag \"{tag}\"; \
-                         it is not declared in the quill schema and has been \
-                         excluded from the form projection"
-                    ),
-                )
-                .with_code("form::unknown_card_tag".to_string());
-                diagnostics.push(SerializableDiagnostic::from(diag));
+                diagnostics.push(
+                    Diagnostic::new(
+                        Severity::Warning,
+                        format!(
+                            "card at index {index} has unknown tag \"{tag}\"; \
+                             it is not declared in the quill schema and has been \
+                             excluded from the form projection"
+                        ),
+                    )
+                    .with_code("form::unknown_card_tag".to_string()),
+                );
             }
         }
     }
 
     // ── Validation diagnostics ────────────────────────────────────────────
-    if let Err(validation_errors) = quill.source().config.validate_document(doc) {
+    if let Err(validation_errors) = quill.source().config().validate_document(doc) {
         for err in validation_errors {
-            let diag = Diagnostic::new(Severity::Error, err.to_string())
-                .with_code("form::validation_error".to_string());
-            diagnostics.push(SerializableDiagnostic::from(diag));
+            diagnostics.push(
+                Diagnostic::new(Severity::Error, err.to_string())
+                    .with_code("form::validation_error".to_string()),
+            );
         }
     }
 
