@@ -141,10 +141,16 @@ describe('Document.toMarkdown — fromMarkdown → mutate → emit → re-parse'
     expect(typeof emitted).toBe('string')
     expect(emitted.length).toBeGreaterThan(0)
 
-    // Re-parse and assert structure survives
+    // Re-parse and assert structure survives.
+    //
+    // Note on trailing newlines: the global body is followed by a card fence,
+    // so the wire format inserts a line terminator + F2 blank line between
+    // them (`Updated body\n\n---`). On re-parse the F2 blank is stripped but
+    // the terminator stays, so `doc2.body === 'Updated body\n'`. The card
+    // body is at EOF and has no F2 separator, so it survives byte-for-byte.
     const doc2 = Document.fromMarkdown(emitted)
     expect(doc2.frontmatter.title).toBe('New Title')
-    expect(doc2.body).toBe('Updated body')
+    expect(doc2.body).toBe('Updated body\n')
     expect(doc2.cards.length).toBe(originalCardCount + 1)
     expect(doc2.cards[0].tag).toBe('note')
     expect(doc2.cards[0].fields.author).toBe('Alice')
