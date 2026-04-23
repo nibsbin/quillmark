@@ -167,6 +167,20 @@ pub struct Card {
     pub body: String,
 }
 
+impl From<&quillmark_core::Card> for Card {
+    fn from(card: &quillmark_core::Card) -> Self {
+        let mut fields_map = serde_json::Map::new();
+        for (k, v) in card.fields() {
+            fields_map.insert(k.clone(), v.as_json().clone());
+        }
+        Card {
+            tag: card.tag().to_string(),
+            fields: serde_json::Value::Object(fields_map),
+            body: card.body().to_string(),
+        }
+    }
+}
+
 /// Options for rendering
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]

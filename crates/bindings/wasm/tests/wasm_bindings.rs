@@ -27,8 +27,9 @@ fn test_parse_markdown_static() {
 #[wasm_bindgen_test]
 fn test_document_body_and_warnings() {
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
-    // WASM `body` getter strips trailing newlines (structural separator, not content).
-    assert_eq!(doc.body(), "\n# Hello");
+    // Body at EOF: no F2 separator to strip, so trailing content newlines are
+    // preserved verbatim. The WASM binding forwards core's body unchanged.
+    assert_eq!(doc.body(), "\n# Hello\n");
     // warnings() returns JsValue (array) — just verify it's defined
     let warnings = doc.warnings();
     assert!(!warnings.is_undefined());
