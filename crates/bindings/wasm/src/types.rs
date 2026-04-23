@@ -179,7 +179,10 @@ pub struct RenderOptions {
     /// Defaults to 144.0 (2x at 72pt/inch) when omitted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ppi: Option<f32>,
-    /// Optional page indices to render (`undefined` means all pages).
+    /// Optional 0-based page indices to render (e.g., `[0, 2]` for the
+    /// first and third pages). `undefined` renders all pages. **Not
+    /// supported for PDF output** — passing `pages` with `format: "pdf"`
+    /// yields a `FormatNotSupported` error.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pages: Option<Vec<usize>>,
 }

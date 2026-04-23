@@ -263,12 +263,51 @@ const rPng = session.render({ format: "png", ppi: 300, pages: [0, 2] });
 
 ---
 
+## Parse-time requirements that bite silently
+
+These are intentional behaviors but surface as errors consumers did not see in
+0.54. Listed here so migrators do not re-discover them from stack traces.
+
+### `Document.fromMarkdown` now requires `QUILL:` in frontmatter
+
+A top-level `QUILL: <name>` is a **parse-time** requirement on every input
+document. In 0.54, missing-QUILL surfaced at render time; in 0.58+ it fails
+inside `Document.fromMarkdown` with an `InvalidStructure` diagnostic whose
+message is `Missing required QUILL field. Add `QUILL: <name>` to the
+frontmatter`.
+
+Fix: add `QUILL: <name>` to the frontmatter of every document you parse. Test
+fixtures in particular rot silently — a fixture that used to render will now
+throw on parse.
+
+### `Quill.yaml` requires a nested `Quill:` section
+
+Flat top-level keys (`name:`, `backend:`, `description:` at the root) are not
+supported and will not be. Every field lives under the top-level `Quill:`
+mapping:
+
+```yaml
+Quill:
+  name: my_quill           # required, snake_case
+  backend: typst           # required
+  description: My quill    # required, non-empty
+  version: 0.1.0           # required, semver
+  author: Alice            # optional, defaults to "Unknown"
+```
+
+`name`, `backend`, `description`, and `version` are all required — only
+`author` has a default (`"Unknown"`). See
+`crates/core/src/quill/config.rs:615-672` for the full parse.
+
+---
+
 ## Unchanged
 
 The following are behaviorally unchanged by this refactor:
 
 - `new Quillmark()` constructor.
-- `engine.quill(tree)` where `tree` is `Map<string, Uint8Array>`.
+- `engine.quill(tree)` where `tree` is `Map<string, Uint8Array>` or
+  `Record<string, Uint8Array>` (plain object — normalized at the boundary).
 - `quill.open(doc)` → `session.pageCount` + `session.render(opts)`.
 - `quill.backendId` getter.
 - `RenderResult` shape: `{ artifacts, warnings, outputFormat, renderTimeMs }`.
