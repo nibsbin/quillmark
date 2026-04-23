@@ -10,7 +10,7 @@ fn small_quill_tree() -> wasm_bindgen::JsValue {
     common::tree(&[
         (
             "Quill.yaml",
-            b"Quill:\n  name: test_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for WASM bindings\n",
+            b"quill:\n  name: test_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for WASM bindings\n",
         ),
         ("plate.typ", b"= Title\n\nThis is a test."),
     ])
@@ -127,7 +127,7 @@ fn test_quill_from_object_tree() {
     let entries: &[(&str, &[u8])] = &[
         (
             "Quill.yaml",
-            b"Quill:\n  name: test_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for WASM bindings\n",
+            b"quill:\n  name: test_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Test quill for WASM bindings\n",
         ),
         ("plate.typ", b"= Title\n\nThis is a test."),
     ];
@@ -167,7 +167,7 @@ fn test_quill_metadata_snapshot() {
         .quill(common::tree(&[
             (
                 "Quill.yaml",
-                b"Quill:\n  name: meta_quill\n  backend: typst\n  version: \"0.2.1\"\n  plate_file: plate.typ\n  description: Metadata quill\n\nmain:\n  fields:\n    title:\n      type: string\n      description: The title\n",
+                b"quill:\n  name: meta_quill\n  backend: typst\n  version: \"0.2.1\"\n  plate_file: plate.typ\n  description: Metadata quill\n\nmain:\n  fields:\n    title:\n      type: string\n      description: The title\n",
             ),
             ("plate.typ", b"= Title"),
         ]))

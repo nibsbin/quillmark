@@ -4,7 +4,7 @@ use quillmark_core::{normalize::normalize_document, quill::QuillConfig, Document
 fn test_markdown_field_public_schema_emission() {
     let config = QuillConfig::from_yaml(
         r#"
-Quill:
+quill:
   name: markdown_schema
   version: "1.0"
   backend: typst

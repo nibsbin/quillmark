@@ -141,7 +141,7 @@ impl Quill {
     /// output formats as lowercase strings), `schema` (the raw main-card
     /// field schema as parsed from YAML — consumers that need validation
     /// run their own validator against this), and any additional
-    /// unstructured keys declared inside the `Quill:` section.
+    /// unstructured keys declared inside the `quill:` section.
     ///
     /// Equivalent by value for the lifetime of the handle; the quill is
     /// immutable once constructed.
@@ -201,7 +201,7 @@ impl Quill {
         }
         obj.insert("schema".to_string(), serde_json::Value::Object(schema));
 
-        // Unstructured keys declared under `Quill:` (excluding fields already
+        // Unstructured keys declared under `quill:` (excluding fields already
         // surfaced above).
         for (key, value) in source.metadata() {
             if matches!(

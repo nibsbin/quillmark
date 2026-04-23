@@ -17,7 +17,7 @@ Typst is a modern typesetting system designed as a better alternative to LaTeX. 
 Specify `backend: typst` in your `Quill.yaml`:
 
 ```yaml
-Quill:
+quill:
   name: my-typst-quill
   backend: typst
   description: Document format using Typst

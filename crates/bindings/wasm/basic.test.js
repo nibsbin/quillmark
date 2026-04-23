@@ -558,7 +558,7 @@ describe('quill.open + session.render', () => {
 })
 
 describe('quill.metadata', () => {
-  const META_QUILL_YAML = `Quill:
+  const META_QUILL_YAML = `quill:
   name: meta_test_quill
   version: "0.2.1"
   backend: typst
@@ -641,7 +641,7 @@ describe('Document.clone', () => {
 // ---------------------------------------------------------------------------
 
 describe('quill.projectForm', () => {
-  const QUILL_YAML = `Quill:
+  const QUILL_YAML = `quill:
   name: form_smoke_test
   version: "1.0"
   backend: typst

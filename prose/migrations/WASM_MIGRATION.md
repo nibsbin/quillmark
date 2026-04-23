@@ -280,14 +280,14 @@ Fix: add `QUILL: <name>` to the frontmatter of every document you parse. Test
 fixtures in particular rot silently — a fixture that used to render will now
 throw on parse.
 
-### `Quill.yaml` requires a nested `Quill:` section
+### `Quill.yaml` requires a nested `quill:` section
 
 Flat top-level keys (`name:`, `backend:`, `description:` at the root) are not
-supported and will not be. Every field lives under the top-level `Quill:`
-mapping:
+supported and will not be. Every field lives under the top-level `quill:`
+mapping (lowercase — previously capitalized `Quill:`, see note below):
 
 ```yaml
-Quill:
+quill:
   name: my_quill           # required, snake_case
   backend: typst           # required
   description: My quill    # required, non-empty
@@ -298,6 +298,11 @@ Quill:
 `name`, `backend`, `description`, and `version` are all required — only
 `author` has a default (`"Unknown"`). See
 `crates/core/src/quill/config.rs:615-672` for the full parse.
+
+> **Key name is `quill:` (lowercase).** Pre-0.58 drafts used `Quill:` with a
+> capital Q to match the filename; the published 0.58 line uses lowercase
+> `quill:` for YAML-idiom consistency. Capitalized `Quill:` is not accepted —
+> rename the section key in each `Quill.yaml` on migration.
 
 ---
 

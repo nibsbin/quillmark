@@ -12,7 +12,7 @@ fn test_quill_from_tree_versioned() {
     let q1 = engine.quill(common::tree(&[
         (
             "Quill.yaml",
-            b"Quill:\n  name: usaf_memo\n  version: \"0.1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Version 0.1.0\n",
+            b"quill:\n  name: usaf_memo\n  version: \"0.1.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Version 0.1.0\n",
         ),
         ("plate.typ", b"hello 1"),
     ])).unwrap();
@@ -20,7 +20,7 @@ fn test_quill_from_tree_versioned() {
     let q2 = engine.quill(common::tree(&[
         (
             "Quill.yaml",
-            b"Quill:\n  name: usaf_memo\n  version: \"0.2.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Version 0.2.0\n",
+            b"quill:\n  name: usaf_memo\n  version: \"0.2.0\"\n  backend: typst\n  plate_file: plate.typ\n  description: Version 0.2.0\n",
         ),
         ("plate.typ", b"hello 2"),
     ])).unwrap();

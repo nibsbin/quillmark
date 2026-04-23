@@ -280,7 +280,7 @@ mod tests {
     fn config_with(main_fields: &str, cards: &str) -> QuillConfig {
         let yaml = format!(
             r#"
-Quill:
+quill:
   name: native_validation
   backend: typst
   description: Native validator tests

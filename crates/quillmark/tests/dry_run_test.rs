@@ -17,7 +17,7 @@ fn make_test_quill_path(temp_dir: &TempDir, with_required_field: bool) -> std::p
     fs::write(
         quill_path.join("Quill.yaml"),
         format!(
-            "Quill:\n  name: \"test_quill\"\n  version: \"1.0\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test\"\n\n{}",
+            "quill:\n  name: \"test_quill\"\n  version: \"1.0\"\n  backend: \"typst\"\n  plate_file: \"plate.typ\"\n  description: \"Test\"\n\n{}",
             fields_section
         ),
     ).unwrap();

@@ -39,7 +39,7 @@ readonly metadata: {
   example?: string;          // example_file contents (if present)
   supportedFormats: string[];
   schema: unknown;           // raw schema from Quill.yaml; consumer validates
-  // ...other unstructured metadata from the Quill: section
+  // ...other unstructured metadata from the quill: section
 };
 ```
 
@@ -90,7 +90,7 @@ No memoization, no `toJSON()`. Deferred until more consumers hit this.
 The following are intentional behaviors being called out by consumers. No code change; add to the migration guide.
 
 - **`Document.fromMarkdown` now requires `QUILL:` in frontmatter.** Parse-time failure, not render-time. Fix: add `QUILL: <name>` to frontmatter. Note the shift from render-time to parse-time explicitly (test fixtures rot silently).
-- **`Quill.yaml` requires a nested `Quill:` section.** Flat top-level keys were never supported in 0.58+ and will not be. The required fields inside `Quill:` are `name`, `backend`, `description`, `version` (only `author` has a default, `"Unknown"`). See `crates/core/src/quill/config.rs:615-672`.
+- **`Quill.yaml` requires a nested `quill:` section.** Flat top-level keys were never supported in 0.58+ and will not be. The required fields inside `quill:` are `name`, `backend`, `description`, `version` (only `author` has a default, `"Unknown"`). See `crates/core/src/quill/config.rs:615-672`.
 
 ## Out of scope
 

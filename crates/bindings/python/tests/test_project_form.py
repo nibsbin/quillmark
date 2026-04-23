@@ -25,7 +25,7 @@ pytestmark = pytest.mark.skipif(
 # Helpers
 # ---------------------------------------------------------------------------
 
-QUILL_YAML_CONTENT = """Quill:
+QUILL_YAML_CONTENT = """quill:
   name: py_form_smoke
   version: "1.0"
   backend: typst

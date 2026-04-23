@@ -41,7 +41,7 @@ Given versions `[1.0.0, 1.0.1, 1.1.0, 2.0.0, 2.1.0, 2.1.1, 3.0.0]`:
 `version` and `description` are both required:
 
 ```yaml
-Quill:
+quill:
   name: my_format
   version: "2.1.0"
   backend: typst
