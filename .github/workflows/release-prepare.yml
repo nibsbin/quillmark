@@ -50,14 +50,25 @@ jobs:
         run: |
           CURRENT="${{ steps.current.outputs.version }}"
 
+          # A `patch` rc has patch != 0 (e.g. 0.58.2-rc.*), a `minor` rc has
+          # patch == 0 (e.g. 0.59.0-rc.*). This lets us detect when the user's
+          # `bump` input conflicts with the base of the current RC.
           if [ "${{ inputs.prerelease }}" == "true" ]; then
             # cargo-release has no "minor-rc" compound bump, so we compute the
             # target version ourselves.
             if [[ "$CURRENT" == *-rc.* ]]; then
-              # Already on an RC — increment the RC number (e.g. 0.59.0-rc.1 → 0.59.0-rc.2)
               RC_NUM="${CURRENT##*-rc.}"
-              BASE_WITH_RC="${CURRENT%-rc.*}"
-              NEXT="${BASE_WITH_RC}-rc.$((RC_NUM + 1))"
+              BASE="${CURRENT%-rc.*}"
+              IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
+              if [ "${{ inputs.bump }}" == "minor" ] && [ "$PATCH" != "0" ]; then
+                # Escalating from a patch-rc to a new minor-rc
+                # (e.g. 0.58.2-rc.5 → 0.59.0-rc.1).
+                NEXT="${MAJOR}.$((MINOR + 1)).0-rc.1"
+              else
+                # Continuing the current RC cycle
+                # (e.g. 0.59.0-rc.1 → 0.59.0-rc.2).
+                NEXT="${BASE}-rc.$((RC_NUM + 1))"
+              fi
             else
               # Stable version — bump and start at rc.1
               IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
@@ -68,7 +79,23 @@ jobs:
               fi
             fi
           else
-            NEXT="${{ inputs.bump }}"
+            if [[ "$CURRENT" == *-rc.* ]]; then
+              # Finalizing an RC — strip the -rc.N suffix so the release tag
+              # matches the RC base (e.g. 0.58.2-rc.5 → 0.58.2).
+              BASE="${CURRENT%-rc.*}"
+              IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
+              if [ "${{ inputs.bump }}" == "minor" ] && [ "$PATCH" != "0" ]; then
+                echo "::error::Cannot finalize patch-rc $CURRENT with bump=minor. Re-run with bump=patch to finalize, or open a new minor rc first."
+                exit 1
+              fi
+              if [ "${{ inputs.bump }}" == "patch" ] && [ "$PATCH" == "0" ]; then
+                echo "::error::Cannot finalize minor-rc $CURRENT with bump=patch. Re-run with bump=minor to finalize, or open a new patch rc first."
+                exit 1
+              fi
+              NEXT="$BASE"
+            else
+              NEXT="${{ inputs.bump }}"
+            fi
           fi
 
           echo "Bumping workspace to: $NEXT"
