@@ -135,7 +135,10 @@ Body of item 1."#;
 
     let doc = decompose(markdown).unwrap();
 
-    assert_eq!(doc.body(), "\nMain body content.\n\n");
+    // Global body is followed by a CARD fence: F2 separator stripped, so the
+    // trailing `\n\n` from the source becomes a single `\n` (content's line
+    // terminator preserved).
+    assert_eq!(doc.body(), "\nMain body content.\n");
     assert_eq!(
         doc.frontmatter().get("title").unwrap().as_str().unwrap(),
         "Main Document"
@@ -148,6 +151,7 @@ Body of item 1."#;
         card.fields().get("name").unwrap().as_str().unwrap(),
         "Item 1"
     );
+    // Last card body at EOF: no F2 separator to strip.
     assert_eq!(card.body(), "\nBody of item 1.");
 }
 
@@ -221,7 +225,7 @@ Section 2 content."#;
         doc.frontmatter().get("title").unwrap().as_str().unwrap(),
         "Global"
     );
-    assert_eq!(doc.body(), "\nGlobal body.\n\n");
+    assert_eq!(doc.body(), "\nGlobal body.\n");
     assert_eq!(doc.cards().len(), 2);
     assert_eq!(doc.cards()[0].tag(), "sections");
 }
@@ -733,7 +737,7 @@ Section 1 body."#;
     );
     assert_eq!(doc.cards().len(), 1);
     assert_eq!(doc.cards()[0].tag(), "sections");
-    assert_eq!(doc.body(), "\nMain body.\n\n");
+    assert_eq!(doc.body(), "\nMain body.\n");
 }
 
 #[test]
@@ -1570,9 +1574,73 @@ fn test_body_with_leading_newlines() {
 
 #[test]
 fn test_body_with_trailing_newlines() {
+    // Body at EOF: no F2 separator to strip, source's trailing newlines
+    // are preserved verbatim as authored content.
     let markdown = "---\nQUILL: test_quill\ntitle: Test\n---\n\nBody.\n\n\n";
     let doc = decompose(markdown).unwrap();
-    assert!(doc.body().ends_with('\n'));
+    assert_eq!(doc.body(), "\nBody.\n\n\n");
+}
+
+// ── F2 separator stripping: parse-side normalisation ─────────────────────────
+// See `assemble.rs::strip_f2_separator` and `MARKDOWN.md §3 F2`.
+
+#[test]
+fn test_f2_strip_global_body_followed_by_card_lf() {
+    // Global body followed by a CARD fence: the source's tail `\n\n` is
+    // (content line terminator) + (F2 blank line). Strip exactly the F2 `\n`,
+    // leaving `\n` as the content terminator.
+    let markdown = "---\nQUILL: q\n---\n\nbody\n\n---\nCARD: x\n---\n";
+    let doc = decompose(markdown).unwrap();
+    assert_eq!(doc.body(), "\nbody\n");
+}
+
+#[test]
+fn test_f2_strip_global_body_followed_by_card_crlf() {
+    // CRLF line endings: strip exactly one `\r\n` as the F2 separator.
+    let markdown = "---\r\nQUILL: q\r\n---\r\n\r\nbody\r\n\r\n---\r\nCARD: x\r\n---\r\n";
+    let doc = decompose(markdown).unwrap();
+    assert!(
+        doc.body().ends_with('\n') && !doc.body().ends_with("\n\n"),
+        "expected exactly one trailing line ending, got {:?}",
+        doc.body()
+    );
+}
+
+#[test]
+fn test_f2_strip_card_body_followed_by_card() {
+    // First card body is followed by another fence → F2 stripped.
+    // Last card body is at EOF → preserved verbatim.
+    let markdown = "---\nQUILL: q\n---\n\n---\nCARD: a\n---\nfirst\n\n---\nCARD: b\n---\nsecond\n";
+    let doc = decompose(markdown).unwrap();
+    assert_eq!(doc.cards()[0].body(), "first\n");
+    assert_eq!(doc.cards()[1].body(), "second\n");
+}
+
+#[test]
+fn test_f2_strip_preserves_author_blank_lines() {
+    // Author wrote two blank lines after the body. Only the F2 blank (last
+    // `\n`) is stripped; the author's blank line is preserved.
+    let markdown = "---\nQUILL: q\n---\n\nbody\n\n\n---\nCARD: x\n---\n";
+    let doc = decompose(markdown).unwrap();
+    assert_eq!(doc.body(), "\nbody\n\n");
+}
+
+#[test]
+fn test_f2_strip_does_not_overstrip_content_newlines() {
+    // Content-fidelity: a body whose authored content ends with multiple
+    // newlines (e.g. a code block with trailing blank lines) must survive
+    // round-trip. The previous WASM-binding `trim_body` over-stripped this.
+    let markdown = "---\nQUILL: q\n---\n\n```\ncode\n```\n\n\n---\nCARD: x\n---\n";
+    let doc = decompose(markdown).unwrap();
+    let emitted = doc.to_markdown();
+    let reparsed = Document::from_markdown(&emitted).unwrap();
+    assert_eq!(doc.body(), reparsed.body());
+    // Author's blank line after the code block survives.
+    assert!(
+        doc.body().ends_with("```\n\n"),
+        "expected code block + blank line, got {:?}",
+        doc.body()
+    );
 }
 
 #[test]
@@ -1744,7 +1812,7 @@ Conclusion content.
             .unwrap(),
         "Introduction"
     );
-    assert_eq!(doc.cards()[0].body(), "Introduction content.\n\n");
+    assert_eq!(doc.cards()[0].body(), "Introduction content.\n");
     assert_eq!(doc.cards()[1].tag(), "section");
     assert_eq!(
         doc.cards()[1]
@@ -1807,7 +1875,9 @@ Card body here.
 
     assert_eq!(json["QUILL"], "usaf_memo");
     assert_eq!(json["title"], "Test");
-    assert_eq!(json["BODY"], "\nGlobal body.\n\n");
+    // F2 separator stripped on parse; plate `BODY` reflects the same
+    // content-only string as `Document::body()`.
+    assert_eq!(json["BODY"], "\nGlobal body.\n");
 
     let cards = json["CARDS"].as_array().unwrap();
     assert_eq!(cards.len(), 1);
