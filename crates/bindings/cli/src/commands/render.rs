@@ -59,7 +59,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     let quill = engine.quill_from_path(args.quill.clone())?;
 
     if args.verbose {
-        println!("Quill loaded: {}", quill.source().name);
+        println!("Quill loaded: {}", quill.source().name());
     }
 
     // Determine if we have a markdown file or need to use example content
@@ -89,10 +89,10 @@ pub fn execute(args: RenderArgs) -> Result<()> {
             (output, Some(markdown_path.clone()))
         } else {
             // Get example content
-            let markdown = quill.source().example.clone().ok_or_else(|| {
+            let markdown = quill.source().example().map(|s| s.to_string()).ok_or_else(|| {
                 CliError::InvalidArgument(format!(
                     "Quill '{}' does not have example content",
-                    quill.source().name
+                    quill.source().name()
                 ))
             })?;
 
