@@ -7,7 +7,7 @@ Versioning helps format designers evolve Quills safely while keeping document re
 Each Quill must declare a semantic version. Both `version` and `description` are required fields:
 
 ```yaml
-Quill:
+quill:
   name: my_quill
   backend: typst
   description: A professional document format

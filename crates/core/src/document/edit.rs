@@ -5,26 +5,32 @@
 //! ## Invariants
 //!
 //! Every successful mutator call leaves the document in a state that:
-//! - Contains no reserved key in `frontmatter` (`BODY`, `CARDS`, `QUILL`, `CARD`).
-//! - Has every `card.tag` passing `sentinel::is_valid_tag_name`.
+//! - Contains no reserved key in any card's frontmatter (`BODY`, `CARDS`, `QUILL`, `CARD`).
+//! - Has every composable `card.tag()` passing `sentinel::is_valid_tag_name`.
 //! - Can be safely serialized via [`Document::to_plate_json`].
 //!
 //! **Mutators never modify `warnings`.**  Warnings are parse-time observations
 //! and remain stable for the lifetime of the document.
+//!
+//! ## Surface
+//!
+//! After the document-rework, frontmatter and body mutators live on [`Card`]:
+//! `doc.main_mut().set_field(…)`, `doc.main_mut().replace_body(…)`,
+//! `doc.cards_mut()[i].set_field(…)`. [`Document`] keeps only document-level
+//! operations (quill-ref, push/insert/remove/move card).
 
 use unicode_normalization::UnicodeNormalization;
 
 use crate::document::sentinel::is_valid_tag_name;
-use crate::document::{Card, Document};
+use crate::document::{Card, Document, Frontmatter, Sentinel};
 use crate::value::QuillValue;
 use crate::version::QuillReference;
 
 // ── Reserved names ──────────────────────────────────────────────────────────
 
-/// Reserved field names that may not appear in `Document.frontmatter` or
-/// `Card.fields`.  These are the sentinel keys whose presence in user-visible
-/// fields would corrupt the plate wire format or the parser's structural
-/// invariants.
+/// Reserved field names that may not appear in any `Card`'s frontmatter.
+/// These are the sentinel keys whose presence in user-visible fields would
+/// corrupt the plate wire format or the parser's structural invariants.
 pub const RESERVED_NAMES: &[&str] = &["BODY", "CARDS", "QUILL", "CARD"];
 
 /// Returns `true` if `name` is one of the four reserved sentinel names.
@@ -88,51 +94,7 @@ pub enum EditError {
 // ── impl Document ────────────────────────────────────────────────────────────
 
 impl Document {
-    // ── Frontmatter mutators ─────────────────────────────────────────────────
-
-    /// Set a frontmatter field by name.
-    ///
-    /// # Invariants enforced
-    ///
-    /// - `name` must not be one of the reserved sentinel names
-    ///   (`BODY`, `CARDS`, `QUILL`, `CARD`).  Returns [`EditError::ReservedName`].
-    /// - `name` must match `[a-z_][a-z0-9_]*` after NFC normalisation.
-    ///   Returns [`EditError::InvalidFieldName`].
-    ///
-    /// # Validity
-    ///
-    /// After a successful call the document remains valid: `frontmatter`
-    /// contains no reserved key and the value is stored at the correct key.
-    ///
-    /// # Warnings
-    ///
-    /// This method never modifies `warnings`.
-    pub fn set_field(&mut self, name: &str, value: QuillValue) -> Result<(), EditError> {
-        if is_reserved_name(name) {
-            return Err(EditError::ReservedName(name.to_string()));
-        }
-        if !is_valid_field_name(name) {
-            return Err(EditError::InvalidFieldName(name.to_string()));
-        }
-        self.frontmatter.insert(name.to_string(), value);
-        Ok(())
-    }
-
-    /// Remove a frontmatter field by name, returning the value if it existed.
-    ///
-    /// # Invariants enforced
-    ///
-    /// None — reserved names cannot be present in `frontmatter` (the parser
-    /// guarantees this), so passing a reserved name simply returns `None`.
-    ///
-    /// # Warnings
-    ///
-    /// This method never modifies `warnings`.
-    pub fn remove_field(&mut self, name: &str) -> Option<QuillValue> {
-        self.frontmatter.shift_remove(name)
-    }
-
-    /// Replace the QUILL reference.
+    /// Replace the QUILL reference on the main card's sentinel.
     ///
     /// # Invariants enforced
     ///
@@ -143,47 +105,40 @@ impl Document {
     ///
     /// This method never modifies `warnings`.
     pub fn set_quill_ref(&mut self, reference: QuillReference) {
-        self.quill_ref = reference;
-    }
-
-    /// Replace the global Markdown body.
-    ///
-    /// The new body replaces whatever was stored; no structural validation is
-    /// applied (body content is opaque Markdown text).
-    ///
-    /// # Warnings
-    ///
-    /// This method never modifies `warnings`.
-    pub fn replace_body(&mut self, body: impl Into<String>) {
-        self.body = body.into();
+        self.main_mut().replace_sentinel(Sentinel::Main(reference));
     }
 
     // ── Card mutators ────────────────────────────────────────────────────────
 
-    /// Return a mutable reference to the card at `index`, or `None` if out of range.
+    /// Return a mutable reference to the composable card at `index`, or `None`
+    /// if out of range.
     ///
     /// # Warnings
     ///
     /// This method never modifies `warnings`.
     pub fn card_mut(&mut self, index: usize) -> Option<&mut Card> {
-        self.cards.get_mut(index)
+        self.cards_mut().get_mut(index)
     }
 
-    /// Append a card to the end of the card list.
+    /// Append a composable card to the end of the card list.
     ///
-    /// Currently trivial — reserved for future cross-card invariant checks
-    /// (e.g. duplicate-tag detection).  The `Result` return type is API
-    /// future-proofing.
+    /// # Invariants
+    ///
+    /// `card.sentinel()` must be [`Sentinel::Card`]; a main card cannot be
+    /// appended as a composable card. Debug assert.
     ///
     /// # Warnings
     ///
     /// This method never modifies `warnings`.
-    pub fn push_card(&mut self, card: Card) -> Result<(), EditError> {
-        self.cards.push(card);
-        Ok(())
+    pub fn push_card(&mut self, card: Card) {
+        debug_assert!(
+            !card.sentinel().is_main(),
+            "cannot push a Main-sentinel card as a composable card"
+        );
+        self.cards_vec_mut().push(card);
     }
 
-    /// Insert a card at `index`.
+    /// Insert a composable card at `index`.
     ///
     /// # Invariants enforced
     ///
@@ -194,27 +149,31 @@ impl Document {
     ///
     /// This method never modifies `warnings`.
     pub fn insert_card(&mut self, index: usize, card: Card) -> Result<(), EditError> {
-        let len = self.cards.len();
+        debug_assert!(
+            !card.sentinel().is_main(),
+            "cannot insert a Main-sentinel card as a composable card"
+        );
+        let len = self.cards().len();
         if index > len {
             return Err(EditError::IndexOutOfRange { index, len });
         }
-        self.cards.insert(index, card);
+        self.cards_vec_mut().insert(index, card);
         Ok(())
     }
 
-    /// Remove and return the card at `index`, or `None` if out of range.
+    /// Remove and return the composable card at `index`, or `None` if out of range.
     ///
     /// # Warnings
     ///
     /// This method never modifies `warnings`.
     pub fn remove_card(&mut self, index: usize) -> Option<Card> {
-        if index >= self.cards.len() {
+        if index >= self.cards().len() {
             return None;
         }
-        Some(self.cards.remove(index))
+        Some(self.cards_vec_mut().remove(index))
     }
 
-    /// Move the card at `from` to position `to`.
+    /// Move the composable card at `from` to position `to`.
     ///
     /// If `from == to`, this is a no-op and returns `Ok(())`.
     ///
@@ -227,7 +186,7 @@ impl Document {
     ///
     /// This method never modifies `warnings`.
     pub fn move_card(&mut self, from: usize, to: usize) -> Result<(), EditError> {
-        let len = self.cards.len();
+        let len = self.cards().len();
         if from >= len {
             return Err(EditError::IndexOutOfRange { index: from, len });
         }
@@ -237,8 +196,8 @@ impl Document {
         if from == to {
             return Ok(());
         }
-        let card = self.cards.remove(from);
-        self.cards.insert(to, card);
+        let card = self.cards_vec_mut().remove(from);
+        self.cards_vec_mut().insert(to, card);
         Ok(())
     }
 }
@@ -246,7 +205,7 @@ impl Document {
 // ── impl Card ────────────────────────────────────────────────────────────────
 
 impl Card {
-    /// Create a new, empty card with the given tag.
+    /// Create a new, empty composable card with the given tag.
     ///
     /// # Invariants enforced
     ///
@@ -259,14 +218,15 @@ impl Card {
         if !is_valid_tag_name(&tag) {
             return Err(EditError::InvalidTagName(tag));
         }
-        Ok(Card::new_internal(
-            tag,
-            indexmap::IndexMap::new(),
+        Ok(Card::new_with_sentinel(
+            Sentinel::Card(tag),
+            Frontmatter::new(),
             String::new(),
         ))
     }
 
-    /// Set a card field by name.
+    /// Set a frontmatter field by name. Always clears the `!fill` marker for
+    /// that key — the "user filled in" path.
     ///
     /// # Invariants enforced
     ///
@@ -277,8 +237,8 @@ impl Card {
     ///
     /// # Validity
     ///
-    /// After a successful call the card remains valid: `fields` contains no
-    /// reserved key and the value is stored at the correct key.
+    /// After a successful call the card remains valid: `frontmatter`
+    /// contains no reserved key and the value is stored at the correct key.
     ///
     /// # Warnings
     ///
@@ -290,20 +250,42 @@ impl Card {
         if !is_valid_field_name(name) {
             return Err(EditError::InvalidFieldName(name.to_string()));
         }
-        self.fields.insert(name.to_string(), value);
+        self.frontmatter_mut().insert(name.to_string(), value);
         Ok(())
     }
 
-    /// Remove a card field by name, returning the value if it existed.
+    /// Set a frontmatter field AND mark it as a `!fill` placeholder — the
+    /// "reset to placeholder" path. A `Null` value emits as `key: !fill`;
+    /// a scalar or sequence value emits as `key: !fill <value>`.
     ///
-    /// Reserved names cannot be present in `fields` (the parser guarantees
-    /// this), so passing a reserved name simply returns `None`.
+    /// # Invariants enforced
+    ///
+    /// Same as [`Card::set_field`].
+    ///
+    /// # Warnings
+    ///
+    /// Card mutators never modify the parent document's `warnings`.
+    pub fn set_fill(&mut self, name: &str, value: QuillValue) -> Result<(), EditError> {
+        if is_reserved_name(name) {
+            return Err(EditError::ReservedName(name.to_string()));
+        }
+        if !is_valid_field_name(name) {
+            return Err(EditError::InvalidFieldName(name.to_string()));
+        }
+        self.frontmatter_mut().insert_fill(name.to_string(), value);
+        Ok(())
+    }
+
+    /// Remove a frontmatter field by name, returning the value if it existed.
+    ///
+    /// Reserved names cannot be present in the frontmatter (the parser
+    /// guarantees this), so passing a reserved name simply returns `None`.
     ///
     /// # Warnings
     ///
     /// Card mutators never modify the parent document's `warnings`.
     pub fn remove_field(&mut self, name: &str) -> Option<QuillValue> {
-        self.fields.shift_remove(name)
+        self.frontmatter_mut().remove(name)
     }
 
     /// Replace the card's Markdown body.
@@ -311,7 +293,7 @@ impl Card {
     /// # Warnings
     ///
     /// Card mutators never modify the parent document's `warnings`.
-    pub fn set_body(&mut self, body: impl Into<String>) {
-        self.body = body.into();
+    pub fn replace_body(&mut self, body: impl Into<String>) {
+        self.overwrite_body(body.into());
     }
 }

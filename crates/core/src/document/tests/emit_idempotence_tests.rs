@@ -1,10 +1,9 @@
-//! Emit-idempotence corpus tests — Phase 4b.
+//! Emit-idempotence corpus tests
 //!
 //! `doc.to_markdown()` must be a pure function of `doc`: two calls return
 //! byte-equal strings.  These tests run that invariant over the full fixture
 //! corpus.
 //!
-//! See plan §Phase 4 test item 3.
 
 use crate::document::Document;
 

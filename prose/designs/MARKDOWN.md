@@ -56,6 +56,23 @@ optional trailing whitespace). The content between is parsed as YAML.
 - **Reserved keys.** `QUILL`, `CARD`, `BODY`, and `CARDS` are reserved and
   may not appear as user-defined field names. `QUILL` is permitted only in
   the frontmatter; `CARD` is required in every non-frontmatter fence.
+- **YAML comments.** Own-line comments (`# …`) between the fence
+  delimiters are preserved as first-class ordered items and round-trip
+  through `toMarkdown`. Trailing comments on value lines
+  (`key: value  # note`) are normalised to own-line comments on the next
+  line as a canonical-formatting choice — the parser produces a `Field`
+  followed by a `Comment` item and the emitter emits them on separate
+  lines. Comments *inside* nested YAML values (arrays, maps) are dropped
+  silently; a `parse::comments_in_nested_yaml_dropped` warning is emitted
+  on the first occurrence per document.
+- **The `!fill` tag.** `!fill` is the single supported YAML tag; it marks
+  a top-level field as a placeholder awaiting user input and round-trips
+  through emit. `!fill` may be applied to scalars (string, integer,
+  float, bool, null) and sequences; it is rejected on mappings because
+  Quillmark's schema has no top-level `type: object`. Any other custom
+  tag (`!include`, `!env`, …) is dropped with a
+  `parse::unsupported_yaml_tag` warning; the scalar value is kept but
+  the tag does not round-trip.
 
 ## 4. Fence Detection Rules
 

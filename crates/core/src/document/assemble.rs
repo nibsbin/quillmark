@@ -5,16 +5,16 @@
 
 use std::str::FromStr;
 
-use indexmap::IndexMap;
-
 use crate::error::ParseError;
 use crate::value::QuillValue;
 use crate::version::QuillReference;
 use crate::Diagnostic;
 
 use super::fences::{fence_opener_len, find_metadata_blocks};
+use super::frontmatter::{Frontmatter, FrontmatterItem};
+use super::prescan::{prescan_fence_content, PreItem};
 use super::sentinel::extract_sentinels;
-use super::{Card, Document};
+use super::{Card, Document, Sentinel};
 
 /// Strip exactly one F2 structural separator from the tail of a body slice.
 ///
@@ -47,6 +47,10 @@ pub(super) struct MetadataBlock {
     pub(super) yaml_value: Option<serde_json::Value>, // Parsed YAML as JSON (None if empty or parse failed)
     pub(super) tag: Option<String>,                   // Field name from CARD key
     pub(super) quill_ref: Option<String>,             // Quill reference from QUILL key
+    /// Pre-scan items (comments + fill-tagged field keys) in source order.
+    pub(super) pre_items: Vec<PreItem>,
+    /// Pre-scan warnings (nested-comment drops, unknown-tag strips, ...).
+    pub(super) pre_warnings: Vec<Diagnostic>,
 }
 
 /// Creates serde_saphyr Options with security budgets configured.
@@ -84,12 +88,20 @@ pub(super) fn build_block(
         });
     }
 
-    let content = raw_content.trim();
+    // Run the pre-scan to extract top-level comments, `!fill` markers,
+    // and warn on unsupported tags / nested comments.
+    let pre = prescan_fence_content(raw_content);
+
+    if let Some(err) = pre.fill_target_errors.first() {
+        return Err(ParseError::InvalidStructure(err.clone()));
+    }
+
+    let content = pre.cleaned_yaml.trim().to_string();
     let (tag, quill_ref, yaml_value) = if content.is_empty() {
         (None, None, None)
     } else {
         match serde_saphyr::from_str_with_options::<serde_json::Value>(
-            content,
+            &content,
             yaml_parse_options(),
         ) {
             Ok(parsed) => extract_sentinels(parsed, markdown, abs_pos, block_index)?,
@@ -127,6 +139,8 @@ pub(super) fn build_block(
         yaml_value,
         tag,
         quill_ref,
+        pre_items: pre.items,
+        pre_warnings: pre.warnings,
     })
 }
 
@@ -189,20 +203,19 @@ pub(super) fn decompose_with_warnings(
         )
     })?;
 
-    // Build frontmatter IndexMap (YAML content with QUILL stripped).
-    let mut frontmatter: IndexMap<String, QuillValue> = IndexMap::new();
-    match &frontmatter_block.yaml_value {
-        Some(serde_json::Value::Object(mapping)) => {
-            for (key, value) in mapping {
-                frontmatter.insert(key.clone(), QuillValue::from_json(value.clone()));
-            }
-        }
-        Some(serde_json::Value::Null) | None => {}
-        Some(_) => {
-            return Err(ParseError::InvalidStructure(
-                "Invalid YAML frontmatter: expected a mapping".to_string(),
-            ));
-        }
+    // Build frontmatter item list (YAML content with QUILL stripped).
+    //
+    // The pre-scan captured top-level comments and `!fill` markers in source
+    // order; serde_saphyr produced the parsed values. We iterate the pre-scan
+    // order and pull each field's value from the parsed map.
+    let frontmatter = build_frontmatter_from_pre_and_parsed(
+        &frontmatter_block.pre_items,
+        &frontmatter_block.yaml_value,
+    )?;
+    // Surface pre-scan warnings (nested-comment drops, unsupported tags).
+    let mut warnings = warnings;
+    for w in &frontmatter_block.pre_warnings {
+        warnings.push(w.clone());
     }
 
     // Global body: between end of frontmatter (block 0) and start of the
@@ -229,21 +242,18 @@ pub(super) fn decompose_with_warnings(
     let mut cards: Vec<Card> = Vec::new();
     for (idx, block) in blocks.iter().enumerate() {
         if let Some(ref tag_name) = block.tag {
-            // Build the card's typed fields.
-            let mut card_fields: IndexMap<String, QuillValue> = IndexMap::new();
-            match &block.yaml_value {
-                Some(serde_json::Value::Object(mapping)) => {
-                    for (key, value) in mapping {
-                        card_fields.insert(key.clone(), QuillValue::from_json(value.clone()));
-                    }
-                }
-                Some(serde_json::Value::Null) | None => {}
-                Some(_) => {
-                    return Err(crate::error::ParseError::InvalidStructure(format!(
-                        "Invalid YAML in card block '{}': expected a mapping",
-                        tag_name
-                    )));
-                }
+            // Build the card's typed frontmatter from pre-scan + parsed YAML.
+            let card_frontmatter =
+                build_frontmatter_from_pre_and_parsed(&block.pre_items, &block.yaml_value)
+                    .map_err(|e| match e {
+                        ParseError::InvalidStructure(msg) => ParseError::InvalidStructure(format!(
+                            "Invalid YAML in card block '{}': {}",
+                            tag_name, msg
+                        )),
+                        other => other,
+                    })?;
+            for w in &block.pre_warnings {
+                warnings.push(w.clone());
             }
 
             // Card body: between this block's end and the next block's start (or EOF).
@@ -261,7 +271,11 @@ pub(super) fn decompose_with_warnings(
                 card_body_raw.to_string()
             };
 
-            cards.push(Card::new_internal(tag_name.clone(), card_fields, card_body));
+            cards.push(Card::new_with_sentinel(
+                Sentinel::Card(tag_name.clone()),
+                card_frontmatter,
+                card_body,
+            ));
         }
     }
 
@@ -269,7 +283,82 @@ pub(super) fn decompose_with_warnings(
         ParseError::InvalidStructure(format!("Invalid QUILL tag '{}': {}", quill_tag, e))
     })?;
 
-    let doc = Document::new_internal(quill_ref, frontmatter, global_body, cards, warnings.clone());
+    let main = Card::new_with_sentinel(Sentinel::Main(quill_ref), frontmatter, global_body);
+    let doc = Document::from_main_and_cards(main, cards, warnings.clone());
 
     Ok((doc, warnings))
+}
+
+/// Build a [`Frontmatter`] from the pre-scan items and the parsed YAML
+/// mapping (with sentinel keys already stripped).
+///
+/// The pre-scan defined source order for fields and comments; the parsed
+/// YAML defined the typed value for each key. We walk pre-scan order,
+/// pulling each field's value from `parsed`. Any field that the pre-scan
+/// didn't catch (e.g. it used a YAML key form the pre-scan doesn't
+/// recognise — exotic identifier, flow-mapping syntax, etc.) is appended at
+/// the end of the item list in parsed-map order so we never drop values.
+fn build_frontmatter_from_pre_and_parsed(
+    pre_items: &[PreItem],
+    yaml_value: &Option<serde_json::Value>,
+) -> Result<Frontmatter, ParseError> {
+    let mapping = match yaml_value {
+        Some(serde_json::Value::Object(map)) => map.clone(),
+        Some(serde_json::Value::Null) | None => serde_json::Map::new(),
+        Some(_) => {
+            return Err(ParseError::InvalidStructure(
+                "expected a mapping".to_string(),
+            ));
+        }
+    };
+
+    let mut items: Vec<FrontmatterItem> = Vec::new();
+    let mut consumed: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for pre in pre_items {
+        match pre {
+            PreItem::Comment(text) => items.push(FrontmatterItem::comment(text.clone())),
+            PreItem::Field { key, fill } => {
+                // QUILL / CARD sentinel keys are stripped from the parsed
+                // map by `extract_sentinels`; skip them in the item list.
+                if key == "QUILL" || key == "CARD" {
+                    continue;
+                }
+                if let Some(value) = mapping.get(key).cloned() {
+                    // `!fill` applies to scalars and sequences. Mappings
+                    // are rejected because top-level `type: object` is
+                    // unsupported by Quillmark's schema.
+                    if *fill && value.is_object() {
+                        return Err(ParseError::InvalidStructure(format!(
+                            "`!fill` on key `{}` targets a mapping; `!fill` is supported on scalars and sequences only",
+                            key
+                        )));
+                    }
+                    items.push(FrontmatterItem::Field {
+                        key: key.clone(),
+                        value: QuillValue::from_json(value),
+                        fill: *fill,
+                    });
+                    consumed.insert(key.clone());
+                }
+                // If the key isn't in the parsed map, it was dropped by
+                // YAML parsing (shouldn't happen for well-formed input);
+                // silently skip.
+            }
+        }
+    }
+
+    // Append any parsed-map keys that the pre-scan didn't capture.
+    for (key, value) in &mapping {
+        if consumed.contains(key) {
+            continue;
+        }
+        items.push(FrontmatterItem::Field {
+            key: key.clone(),
+            value: QuillValue::from_json(value.clone()),
+            fill: false,
+        });
+    }
+
+    Ok(Frontmatter::from_items(items))
 }

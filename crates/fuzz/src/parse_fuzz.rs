@@ -17,8 +17,8 @@ proptest! {
         match result {
             Ok(doc) => {
                 // If it parsed, we should be able to access the document safely
-                let _ = doc.body();
-                let _ = doc.frontmatter();
+                let _ = doc.main().body();
+                let _ = doc.main().frontmatter();
                 let _ = doc.cards();
             }
             Err(_) => {
@@ -57,7 +57,7 @@ proptest! {
         if let Ok(doc) = result {
             // Tag might create a card
             let _ = doc.cards();
-            let _ = doc.frontmatter();
+            let _ = doc.main().frontmatter();
         }
     }
 
@@ -81,7 +81,7 @@ proptest! {
         let result = Document::from_markdown(&markdown);
         if let Ok(doc) = result {
             // frontmatter has exactly the fields we provided (no BODY or CARDS keys)
-            assert!(doc.frontmatter().len() <= size);
+            assert!(doc.main().frontmatter().len() <= size);
         }
     }
 
@@ -111,7 +111,7 @@ proptest! {
 
         if let Ok(doc) = result {
             // Should be able to retrieve body with special chars
-            let body = doc.body();
+            let body = doc.main().body();
             let _ = body;
         }
     }
@@ -123,7 +123,7 @@ proptest! {
         let result = Document::from_markdown(&markdown);
 
         if let Ok(doc) = result {
-            let _ = doc.body();
+            let _ = doc.main().body();
         }
     }
 
@@ -142,7 +142,7 @@ proptest! {
         let result = Document::from_markdown(&markdown);
         if let Ok(doc) = result {
             // Should handle multiple sections
-            let _ = doc.frontmatter();
+            let _ = doc.main().frontmatter();
             let _ = doc.cards();
         }
     }

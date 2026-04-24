@@ -1,4 +1,4 @@
-//! Parse ∘ Emit ∘ Parse ∘ Emit stability tests — Phase 4b.
+//! Parse ∘ Emit ∘ Parse ∘ Emit stability tests
 //!
 //! Verifies that `emit1 == emit2` where:
 //!
@@ -14,7 +14,6 @@
 //! test: two distinct inputs could parse to equal `Document` values yet emit
 //! differently if there is hidden state or non-determinism in the emitter.
 //!
-//! See plan §Phase 4 test item 4.
 
 use crate::document::Document;
 

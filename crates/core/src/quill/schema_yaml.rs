@@ -168,7 +168,7 @@ mod tests {
     fn emits_minimal_public_schema() {
         let config = config_from_yaml(
             r#"
-Quill:
+quill:
   name: test_schema
   version: "1.0"
   backend: typst
@@ -193,7 +193,7 @@ main:
     fn omits_cards_when_absent() {
         let config = config_from_yaml(
             r#"
-Quill:
+quill:
   name: no_cards
   version: "1.0"
   backend: typst
@@ -214,7 +214,7 @@ main:
     fn emits_integer_field_type() {
         let config = config_from_yaml(
             r#"
-Quill:
+quill:
   name: integer_schema
   version: "1.0"
   backend: typst
@@ -247,7 +247,7 @@ main:
 
         let config = config_from_yaml(
             r#"
-Quill:
+quill:
   name: card_schema
   version: "1.0"
   backend: typst
@@ -284,7 +284,7 @@ cards:
     fn includes_example_when_present() {
         let mut config = config_from_yaml(
             r#"
-Quill:
+quill:
   name: with_example
   version: "1.0"
   backend: typst
@@ -307,7 +307,7 @@ main:
     fn round_trips_as_json_value() {
         let config = config_from_yaml(
             r#"
-Quill:
+quill:
   name: round_trip
   version: "1.0"
   backend: typst

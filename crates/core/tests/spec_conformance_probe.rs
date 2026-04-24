@@ -11,7 +11,7 @@ use quillmark_core::Document;
 fn f2_fence_directly_under_paragraph_is_not_a_fence() {
     let md = "---\nQUILL: t\n---\n\nParagraph text.\n---\n\nAfter.";
     let doc = Document::from_markdown(md).unwrap();
-    let body = doc.body();
+    let body = doc.main().body();
     assert!(
         body.contains("Paragraph text.") && body.contains("---") && body.contains("After."),
         "stray `---` under paragraph must be left to CommonMark, body was: {:?}",
@@ -35,7 +35,12 @@ fn f1_yaml_comment_banners_above_sentinel_are_accepted() {
     let md = "---\n# Essential\n#===========\nQUILL: t\ntitle: T\n---\n\nBody.";
     let doc = Document::from_markdown(md).unwrap();
     assert_eq!(
-        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        doc.main()
+            .frontmatter()
+            .get("title")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "T"
     );
 }
@@ -78,7 +83,7 @@ fn near_miss_sentinel_emits_warning_and_delegates() {
         "near-miss CARD must be delegated, not registered"
     );
     // Body must contain the delegated content.
-    assert!(out.document.body().contains("Card: oops"));
+    assert!(out.document.main().body().contains("Card: oops"));
 }
 
 // §3 — Trailing whitespace on the fence marker must be accepted.
@@ -87,7 +92,12 @@ fn fence_marker_with_trailing_whitespace_is_accepted() {
     let md = "---  \nQUILL: t\ntitle: T\n---\t\n\nBody.";
     let doc = Document::from_markdown(md).unwrap();
     assert_eq!(
-        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        doc.main()
+            .frontmatter()
+            .get("title")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "T"
     );
 }
@@ -139,7 +149,7 @@ fn normalize_body_strips_bidi() {
     let md = "---\nQUILL: t\n---\n\nhi\u{202D}there";
     let doc = Document::from_markdown(md).unwrap();
     let doc = normalize_document(doc).unwrap();
-    assert_eq!(doc.body(), "\nhithere");
+    assert_eq!(doc.main().body(), "\nhithere");
 }
 
 // §7 — YAML scalar bidi NOT stripped.
@@ -149,7 +159,12 @@ fn normalize_yaml_scalar_keeps_bidi() {
     let doc = Document::from_markdown(md).unwrap();
     let doc = normalize_document(doc).unwrap();
     assert_eq!(
-        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        doc.main()
+            .frontmatter()
+            .get("title")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "hi\u{202D}there"
     );
 }
@@ -177,7 +192,7 @@ fn f3_indented_four_spaces_is_not_a_fence() {
         doc.cards().is_empty(),
         "indented `---` must not register as a fence"
     );
-    let body = doc.body();
+    let body = doc.main().body();
     assert!(
         body.contains("    ---") && body.contains("CARD: x"),
         "indented fence content must be delegated to CommonMark, body was: {:?}",
@@ -190,7 +205,7 @@ fn f3_indented_four_spaces_is_not_a_fence() {
 fn f3_three_leading_spaces_is_still_a_fence() {
     let md = "   ---\nQUILL: t\n   ---\n\nBody.";
     let doc = Document::from_markdown(md).unwrap();
-    assert!(doc.body().contains("Body."));
+    assert!(doc.main().body().contains("Body."));
 }
 
 // §4 F3 — Tab indentation disqualifies a line from being a fence marker.
@@ -210,7 +225,7 @@ fn body_crlf_line_endings_are_normalized() {
     let md = "---\nQUILL: t\n---\n\nLine one.\r\nLine two.\r\n";
     let doc = Document::from_markdown(md).unwrap();
     let doc = normalize_document(doc).unwrap();
-    let body = doc.body();
+    let body = doc.main().body();
     assert!(
         !body.contains('\r'),
         "body must not contain bare \\r after normalization, got: {:?}",
@@ -239,7 +254,12 @@ fn utf8_bom_at_start_is_stripped() {
     let md = "\u{FEFF}---\nQUILL: t\ntitle: T\n---\n\nBody.";
     let doc = Document::from_markdown(md).unwrap();
     assert_eq!(
-        doc.frontmatter().get("title").unwrap().as_str().unwrap(),
+        doc.main()
+            .frontmatter()
+            .get("title")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "T"
     );
 }

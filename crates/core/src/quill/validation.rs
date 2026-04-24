@@ -44,24 +44,26 @@ pub fn validate_typed_document(
     config: &QuillConfig,
     doc: &Document,
 ) -> Result<(), Vec<ValidationError>> {
-    let mut errors = validate_fields_for_card_indexmap(config.main(), doc.frontmatter(), "");
+    let main_fields = doc.main().frontmatter().to_index_map();
+    let mut errors = validate_fields_for_card_indexmap(config.main(), &main_fields, "");
 
     for (index, card) in doc.cards().iter().enumerate() {
         let card_name = card.tag();
         let item_path = format!("cards[{index}]");
 
-        let Some(card_schema) = config.card_definition(card_name) else {
+        let Some(card_schema) = config.card_definition(card_name.as_str()) else {
             errors.push(ValidationError::UnknownCard {
                 path: item_path,
-                card: card_name.to_string(),
+                card: card_name,
             });
             continue;
         };
 
         let card_path = format!("cards.{card_name}[{index}]");
+        let card_fields = card.frontmatter().to_index_map();
         errors.extend(validate_fields_for_card_indexmap(
             card_schema,
-            card.fields(),
+            &card_fields,
             &card_path,
         ));
     }
@@ -280,7 +282,7 @@ mod tests {
     fn config_with(main_fields: &str, cards: &str) -> QuillConfig {
         let yaml = format!(
             r#"
-Quill:
+quill:
   name: native_validation
   backend: typst
   description: Native validator tests
@@ -301,39 +303,29 @@ main:
     }
 
     fn doc_from_fm(entries: &[(&str, serde_json::Value)]) -> Document {
-        let mut frontmatter = IndexMap::new();
-        for (k, v) in entries {
-            frontmatter.insert(k.to_string(), QuillValue::from_json(v.clone()));
-        }
-        Document::new_internal(
-            QuillReference::from_str("test_quill").unwrap(),
-            frontmatter,
-            String::new(),
-            vec![],
-            vec![],
-        )
+        doc_with_typed_cards(entries, vec![])
     }
 
     fn doc_with_typed_cards(fm: &[(&str, serde_json::Value)], cards: Vec<Card>) -> Document {
+        use crate::document::{Frontmatter, Sentinel};
         let mut frontmatter = IndexMap::new();
         for (k, v) in fm {
             frontmatter.insert(k.to_string(), QuillValue::from_json(v.clone()));
         }
-        Document::new_internal(
-            QuillReference::from_str("test_quill").unwrap(),
-            frontmatter,
+        let main = Card::new_with_sentinel(
+            Sentinel::Main(QuillReference::from_str("test_quill").unwrap()),
+            Frontmatter::from_index_map(frontmatter),
             String::new(),
-            cards,
-            vec![],
-        )
+        );
+        Document::from_main_and_cards(main, cards, vec![])
     }
 
     fn typed_card(tag: &str, fields: &[(&str, serde_json::Value)]) -> Card {
-        let mut card_fields = IndexMap::new();
+        let mut card = Card::new(tag).unwrap();
         for (k, v) in fields {
-            card_fields.insert(k.to_string(), QuillValue::from_json(v.clone()));
+            card.set_field(k, QuillValue::from_json(v.clone())).unwrap();
         }
-        Card::new_internal(tag.to_string(), card_fields, String::new())
+        card
     }
 
     fn has_error<F>(errors: &[ValidationError], predicate: F) -> bool

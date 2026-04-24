@@ -31,7 +31,10 @@ pub struct RenderOptions {
     /// Ignored for vector/document formats (PDF, SVG, TXT).
     /// Defaults to 144.0 (2x at 72pt/inch) when `None`.
     pub ppi: Option<f32>,
-    /// Optional page indices to render (`None` = all pages).
+    /// Optional 0-based page indices to render (e.g., `vec![0, 2]` for
+    /// the first and third pages). `None` renders all pages. Backends
+    /// that do not support page selection (notably PDF) return a
+    /// `FormatNotSupported` error when this is `Some`.
     pub pages: Option<Vec<usize>>,
 }
 

@@ -7,7 +7,7 @@ Complete reference for authoring `Quill.yaml` configuration files. For a hands-o
 A `Quill.yaml` has these top-level sections:
 
 ```yaml
-Quill:        # Required — format metadata
+quill:        # Required — format metadata
   ...
 
 main:         # Optional — document main card: field schemas and optional ui
@@ -26,11 +26,11 @@ Root-level `fields:` is not supported; define the main document’s field schema
 
 ---
 
-## `Quill` Section
+## `quill` Section
 
-Every Quill.yaml must have a `Quill` section with format metadata.
+Every Quill.yaml must have a `quill` section with format metadata.
 
-`Quill.name` must be `snake_case` (`^[a-z][a-z0-9_]*$`).
+`quill.name` must be `snake_case` (`^[a-z][a-z0-9_]*$`).
 
 | Key              | Type   | Required | Description |
 |------------------|--------|----------|-------------|
@@ -45,7 +45,7 @@ Every Quill.yaml must have a `Quill` section with format metadata.
 | `ui`             | object | no       | Document-level UI metadata |
 
 ```yaml
-Quill:
+quill:
   name: usaf_memo
   version: "0.1"
   backend: typst
@@ -60,7 +60,7 @@ Quill:
 Controls UI behavior for the document root:
 
 ```yaml
-Quill:
+quill:
   name: metadata-only-doc
   # ...
   ui:
@@ -71,7 +71,7 @@ Quill:
 
 ## `main` Section
 
-The main document card holds **frontmatter field schemas** under `main.fields`. Optional `main.ui` sets container-level UI for that card (for example `hide_body`). `Quill.ui` is merged with `main.ui` when building the main card.
+The main document card holds **frontmatter field schemas** under `main.fields`. Optional `main.ui` sets container-level UI for that card (for example `hide_body`). `quill.ui` is merged with `main.ui` when building the main card.
 
 Field order under `main.fields` determines display order in UIs — the first field gets `order: 0`, the second gets `order: 1`, and so on.
 
@@ -397,7 +397,7 @@ Quillmark emits a public schema YAML contract from `QuillConfig`. The output kee
 ## Complete Example
 
 ```yaml
-Quill:
+quill:
   name: project_report
   version: "1.0"
   backend: typst

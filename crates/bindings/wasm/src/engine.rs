@@ -96,7 +96,10 @@ impl Quillmark {
 
     /// Load a quill from a file tree and attach the appropriate backend.
     ///
-    /// The tree must be a `Map<string, Uint8Array>`.
+    /// Accepts either a `Map<string, Uint8Array>` or a plain object
+    /// (`Record<string, Uint8Array>`). Plain objects are walked via
+    /// `Object.entries` at the boundary; the Rust side sees a single
+    /// canonical shape.
     #[wasm_bindgen(js_name = quill)]
     pub fn quill(
         &self,
@@ -151,6 +154,94 @@ impl Quill {
     #[wasm_bindgen(getter, js_name = backendId)]
     pub fn backend_id(&self) -> String {
         self.inner.backend_id().to_string()
+    }
+
+    /// Read-only snapshot of the loaded `Quill.yaml`.
+    ///
+    /// Returns a plain JS object with `name`, `backend`, `description`,
+    /// `version`, `author`, optional `example` (content of the example
+    /// markdown, when the quill ships one), `supportedFormats` (backend's
+    /// output formats as lowercase strings), `schema` (the raw main-card
+    /// field schema as parsed from YAML — consumers that need validation
+    /// run their own validator against this), and any additional
+    /// unstructured keys declared inside the `quill:` section.
+    ///
+    /// Equivalent by value for the lifetime of the handle; the quill is
+    /// immutable once constructed.
+    #[wasm_bindgen(getter, js_name = metadata)]
+    pub fn metadata(&self) -> JsValue {
+        let source = self.inner.source();
+        let config = source.config();
+
+        let mut obj = serde_json::Map::new();
+        obj.insert(
+            "name".to_string(),
+            serde_json::Value::String(config.name.clone()),
+        );
+        obj.insert(
+            "backend".to_string(),
+            serde_json::Value::String(config.backend.clone()),
+        );
+        obj.insert(
+            "description".to_string(),
+            serde_json::Value::String(config.main().description.clone().unwrap_or_default()),
+        );
+        obj.insert(
+            "version".to_string(),
+            serde_json::Value::String(config.version.clone()),
+        );
+        obj.insert(
+            "author".to_string(),
+            serde_json::Value::String(config.author.clone()),
+        );
+        if let Some(example) = source.example() {
+            obj.insert(
+                "example".to_string(),
+                serde_json::Value::String(example.to_string()),
+            );
+        }
+
+        let formats: Vec<serde_json::Value> = self
+            .inner
+            .supported_formats()
+            .iter()
+            .map(|f| {
+                let wasm_format: crate::types::OutputFormat = (*f).into();
+                serde_json::to_value(wasm_format).unwrap_or(serde_json::Value::Null)
+            })
+            .collect();
+        obj.insert(
+            "supportedFormats".to_string(),
+            serde_json::Value::Array(formats),
+        );
+
+        let mut schema = serde_json::Map::new();
+        for (name, field) in &config.main().fields {
+            schema.insert(
+                name.clone(),
+                serde_json::to_value(field).unwrap_or(serde_json::Value::Null),
+            );
+        }
+        obj.insert("schema".to_string(), serde_json::Value::Object(schema));
+
+        // Unstructured keys declared under `quill:` (excluding fields already
+        // surfaced above).
+        for (key, value) in source.metadata() {
+            if matches!(
+                key.as_str(),
+                "name" | "backend" | "description" | "version" | "author"
+            ) {
+                continue;
+            }
+            if obj.contains_key(key) {
+                continue;
+            }
+            obj.insert(key.clone(), value.as_json().clone());
+        }
+
+        let val = serde_json::Value::Object(obj);
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        val.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
     }
 
     /// Project a document through this quill's schema.
@@ -211,38 +302,41 @@ impl Document {
         self.inner.to_markdown()
     }
 
+    /// Return a fresh `Document` handle with the same parse state.
+    ///
+    /// Mutations on the returned handle do not affect the original and
+    /// vice versa. Parse-time warnings are snapshotted alongside the
+    /// document — they describe the original parse, not the edit
+    /// history of either handle.
+    #[wasm_bindgen(js_name = clone)]
+    pub fn clone_doc(&self) -> Document {
+        Document {
+            inner: self.inner.clone(),
+            parse_warnings: self.parse_warnings.clone(),
+        }
+    }
+
     /// The QUILL reference string (e.g. `"usaf_memo@0.1"`).
     #[wasm_bindgen(getter, js_name = quillRef)]
     pub fn quill_ref(&self) -> String {
         self.inner.quill_reference().to_string()
     }
 
-    /// Typed YAML frontmatter fields as a JS object (no QUILL, BODY, or CARDS keys).
-    #[wasm_bindgen(getter, js_name = frontmatter, unchecked_return_type = "Record<string, unknown>")]
-    pub fn frontmatter(&self) -> JsValue {
-        let mut map = serde_json::Map::new();
-        for (k, v) in self.inner.frontmatter() {
-            map.insert(k.clone(), v.as_json().clone());
-        }
-        let val = serde_json::Value::Object(map);
+    /// The document's main (entry) card.
+    ///
+    /// Carries the QUILL sentinel, the document-level frontmatter, and the
+    /// global body. Frontmatter/body reads and mutations go through this
+    /// handle — there are no document-level shortcuts after the rework.
+    ///
+    /// Allocates and serializes on each call — cache locally if read in a hot loop.
+    #[wasm_bindgen(getter, js_name = main, unchecked_return_type = "Card")]
+    pub fn main(&self) -> JsValue {
+        let card = Card::from(self.inner.main());
         let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-        val.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
+        card.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
     }
 
-    /// Global Markdown body between frontmatter and the first card.
-    ///
-    /// Returned verbatim from core — the F2 structural separator is stripped
-    /// at parse time (see `quillmark_core::document::assemble::strip_f2_separator`),
-    /// so the string here is exactly what the author wrote (or what was set
-    /// via `replaceBody`).
-    ///
-    /// Empty string when no body is present.
-    #[wasm_bindgen(getter, js_name = body)]
-    pub fn body(&self) -> String {
-        self.inner.body().to_string()
-    }
-
-    /// Ordered list of card blocks as typed `Card` objects.
+    /// Ordered list of composable card blocks as typed `Card` objects.
     #[wasm_bindgen(getter, js_name = cards, unchecked_return_type = "Card[]")]
     pub fn cards(&self) -> JsValue {
         let cards: Vec<Card> = self.inner.cards().iter().map(Card::from).collect();
@@ -265,7 +359,10 @@ impl Document {
 
     // ── Mutators ──────────────────────────────────────────────────────────────
 
-    /// Set a frontmatter field.
+    /// Update a frontmatter field on the main card.
+    ///
+    /// Convenience method: equivalent to `doc.mainMut().setField(name, value)`.
+    /// Clears any existing `!fill` marker on the field.
     ///
     /// Throws an `Error` whose message includes the `EditError` variant name and
     /// details if `name` is reserved (`BODY`, `CARDS`, `QUILL`, `CARD`) or does
@@ -279,16 +376,35 @@ impl Document {
         })?;
         let qv = quillmark_core::QuillValue::from_json(json);
         self.inner
+            .main_mut()
             .set_field(name, qv)
             .map_err(|e| edit_error_to_js(&e))
     }
 
-    /// Remove a frontmatter field, returning the removed value or `undefined`.
+    /// Update a frontmatter field on the main card AND mark it as `!fill`.
+    ///
+    /// Convenience method: equivalent to `doc.mainMut().setFill(name, value)`.
+    ///
+    /// Throws on invalid name (see [`setField`](Document::set_field)).
+    ///
+    /// Mutators never modify `warnings`.
+    #[wasm_bindgen(js_name = setFill)]
+    pub fn set_fill(&mut self, name: &str, value: JsValue) -> Result<(), JsValue> {
+        let json: serde_json::Value = serde_wasm_bindgen::from_value(value)
+            .map_err(|e| WasmError::from(format!("setFill: invalid value: {}", e)).to_js_value())?;
+        let qv = quillmark_core::QuillValue::from_json(json);
+        self.inner
+            .main_mut()
+            .set_fill(name, qv)
+            .map_err(|e| edit_error_to_js(&e))
+    }
+
+    /// Remove a frontmatter field on the main card, returning the removed value or `undefined`.
     ///
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = removeField)]
     pub fn remove_field(&mut self, name: &str) -> JsValue {
-        match self.inner.remove_field(name) {
+        match self.inner.main_mut().remove_field(name) {
             Some(v) => {
                 let serializer =
                     serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
@@ -318,12 +434,12 @@ impl Document {
         Ok(())
     }
 
-    /// Replace the global Markdown body.
+    /// Replace the main card's body (the global Markdown body).
     ///
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = replaceBody)]
     pub fn replace_body(&mut self, body: &str) {
-        self.inner.replace_body(body);
+        self.inner.main_mut().replace_body(body);
     }
 
     /// Append a card to the end of the card list.
@@ -340,9 +456,8 @@ impl Document {
         #[wasm_bindgen(unchecked_param_type = "CardInput")] card: JsValue,
     ) -> Result<(), JsValue> {
         let core_card = js_value_to_card(&card)?;
-        self.inner
-            .push_card(core_card)
-            .map_err(|e| edit_error_to_js(&e))
+        self.inner.push_card(core_card);
+        Ok(())
     }
 
     /// Insert a card at the given index.
@@ -428,7 +543,7 @@ impl Document {
         let card = self.inner.card_mut(index).ok_or_else(|| {
             edit_error_to_js(&quillmark_core::EditError::IndexOutOfRange { index, len })
         })?;
-        card.set_body(body);
+        card.replace_body(body);
         Ok(())
     }
 }
@@ -470,7 +585,7 @@ fn js_value_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
         let qv = quillmark_core::QuillValue::from_json(v);
         card.set_field(&k, qv).map_err(|e| edit_error_to_js(&e))?;
     }
-    card.set_body(input.body);
+    card.replace_body(input.body);
     Ok(card)
 }
 
@@ -495,31 +610,49 @@ fn file_tree_from_js_tree(tree: &JsValue) -> Result<quillmark_core::FileTreeNode
 }
 
 fn js_tree_entries(tree: &JsValue) -> Result<Vec<(String, JsValue)>, JsValue> {
-    if !tree.is_instance_of::<js_sys::Map>() {
-        return Err(WasmError::from("quill requires a Map<string, Uint8Array>").to_js_value());
+    if tree.is_instance_of::<js_sys::Map>() {
+        let map = tree.clone().unchecked_into::<js_sys::Map>();
+        let iter = js_sys::try_iter(&map.entries())
+            .map_err(|e| {
+                WasmError::from(format!("Failed to iterate Map entries: {:?}", e)).to_js_value()
+            })?
+            .ok_or_else(|| WasmError::from("Map entries are not iterable").to_js_value())?;
+
+        let mut entries: Vec<(String, JsValue)> = Vec::new();
+        for entry in iter {
+            let pair = entry.map_err(|e| {
+                WasmError::from(format!("Failed to read Map entry: {:?}", e)).to_js_value()
+            })?;
+            let pair = Array::from(&pair);
+            let path = pair
+                .get(0)
+                .as_string()
+                .ok_or_else(|| WasmError::from("quill Map key must be a string").to_js_value())?;
+            let value = pair.get(1);
+            entries.push((path, value));
+        }
+        return Ok(entries);
     }
 
-    let map = tree.clone().unchecked_into::<js_sys::Map>();
-    let iter = js_sys::try_iter(&map.entries())
-        .map_err(|e| {
-            WasmError::from(format!("Failed to iterate Map entries: {:?}", e)).to_js_value()
-        })?
-        .ok_or_else(|| WasmError::from("Map entries are not iterable").to_js_value())?;
-
-    let mut entries: Vec<(String, JsValue)> = Vec::new();
-    for entry in iter {
-        let pair = entry.map_err(|e| {
-            WasmError::from(format!("Failed to read Map entry: {:?}", e)).to_js_value()
-        })?;
-        let pair = Array::from(&pair);
-        let path = pair
-            .get(0)
-            .as_string()
-            .ok_or_else(|| WasmError::from("quill Map key must be a string").to_js_value())?;
-        let value = pair.get(1);
-        entries.push((path, value));
+    // Plain object: walk via `Object.entries`.
+    if tree.is_object() && !tree.is_null() {
+        let obj = tree.clone().unchecked_into::<js_sys::Object>();
+        let pairs = js_sys::Object::entries(&obj);
+        let mut entries: Vec<(String, JsValue)> = Vec::with_capacity(pairs.length() as usize);
+        for i in 0..pairs.length() {
+            let pair = Array::from(&pairs.get(i));
+            let path = pair.get(0).as_string().ok_or_else(|| {
+                WasmError::from("quill object key must be a string").to_js_value()
+            })?;
+            entries.push((path, pair.get(1)));
+        }
+        return Ok(entries);
     }
-    Ok(entries)
+
+    Err(
+        WasmError::from("quill requires a Map<string, Uint8Array> or Record<string, Uint8Array>")
+            .to_js_value(),
+    )
 }
 
 fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValue> {

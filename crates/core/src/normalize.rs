@@ -373,8 +373,8 @@ pub fn normalize_field_name(name: &str) -> String {
 ///
 /// 1. **Unicode NFC normalization** — Frontmatter field names are normalized to NFC form.
 /// 2. **Bidi stripping** — Invisible bidirectional control characters are removed from
-///    body regions (`Document::body` and each `Card::body`). YAML field values in
-///    `frontmatter` and `Card::fields` pass through verbatim (spec §7).
+///    body regions (each `Card::body`). YAML field values in every
+///    `Card::frontmatter` pass through verbatim (spec §7).
 /// 3. **HTML comment fence fixing** — Trailing text after `-->` is preserved in body
 ///    regions only.
 ///
@@ -396,38 +396,40 @@ pub fn normalize_field_name(name: &str) -> String {
 pub fn normalize_document(
     doc: crate::document::Document,
 ) -> Result<crate::document::Document, crate::error::ParseError> {
-    use crate::document::Document;
+    use crate::document::{Document, Sentinel};
 
-    // NFC-normalize frontmatter field names; values pass through verbatim.
-    let normalized_frontmatter = normalize_fields(doc.frontmatter().clone());
+    // NFC-normalize main-card field names; values pass through verbatim.
+    let normalized_main_fm_map = normalize_fields(doc.main().frontmatter().to_index_map());
+    let normalized_main_body = normalize_markdown(doc.main().body());
+    let main_sentinel = doc.main().sentinel().clone();
+    let main = Card::new_with_sentinel(
+        main_sentinel,
+        crate::document::Frontmatter::from_index_map(normalized_main_fm_map),
+        normalized_main_body,
+    );
 
-    // Normalize global body (bidi + HTML comment fence repair).
-    let normalized_body = normalize_markdown(doc.body());
-
-    // Normalize each card's body; card fields pass through verbatim.
+    // Normalize each composable card's body; NFC-normalize its field names;
+    // values pass through verbatim.
     let normalized_cards: Vec<Card> = doc
         .cards()
         .iter()
         .map(|card| {
-            // NFC-normalize card field names; values pass through verbatim.
             let normalized_card_fields: IndexMap<String, QuillValue> = card
-                .fields()
+                .frontmatter()
                 .iter()
                 .map(|(k, v)| (normalize_field_name(k), v.clone()))
                 .collect();
             let normalized_card_body = normalize_markdown(card.body());
-            Card::new_internal(
-                card.tag().to_string(),
-                normalized_card_fields,
+            Card::new_with_sentinel(
+                Sentinel::Card(card.tag()),
+                crate::document::Frontmatter::from_index_map(normalized_card_fields),
                 normalized_card_body,
             )
         })
         .collect();
 
-    Ok(Document::new_internal(
-        doc.quill_reference().clone(),
-        normalized_frontmatter,
-        normalized_body,
+    Ok(Document::from_main_and_cards(
+        main,
         normalized_cards,
         doc.warnings().to_vec(),
     ))
@@ -732,6 +734,7 @@ mod tests {
         // Title has chevrons preserved (only bidi stripped on body)
         assert_eq!(
             normalized
+                .main()
                 .frontmatter()
                 .get("title")
                 .unwrap()
@@ -741,7 +744,7 @@ mod tests {
         );
 
         // Body has bidi stripped, chevrons preserved
-        assert_eq!(normalized.body(), "\n<<content>> **bold**");
+        assert_eq!(normalized.main().body(), "\n<<content>> **bold**");
     }
 
     #[test]
@@ -762,7 +765,10 @@ mod tests {
         let normalized_once = super::normalize_document(doc).unwrap();
         let normalized_twice = super::normalize_document(normalized_once.clone()).unwrap();
 
-        assert_eq!(normalized_once.body(), normalized_twice.body());
+        assert_eq!(
+            normalized_once.main().body(),
+            normalized_twice.main().body()
+        );
     }
 
     #[test]
@@ -771,7 +777,7 @@ mod tests {
 
         let doc = Document::from_markdown("---\nQUILL: test\n---\n\nhello\u{202D}world").unwrap();
         let normalized = super::normalize_document(doc).unwrap();
-        assert_eq!(normalized.body(), "\nhelloworld");
+        assert_eq!(normalized.main().body(), "\nhelloworld");
     }
 
     #[test]
@@ -783,6 +789,7 @@ mod tests {
         // Bidi preserved in YAML fields
         assert_eq!(
             normalized
+                .main()
                 .frontmatter()
                 .get("title")
                 .unwrap()
@@ -813,7 +820,7 @@ mod tests {
         let normalized = super::normalize_document(doc).unwrap();
         assert_eq!(
             normalized.cards()[0]
-                .fields()
+                .frontmatter()
                 .get("name")
                 .unwrap()
                 .as_str()
@@ -842,6 +849,6 @@ mod tests {
         let md = "---\nQUILL: test\n---\n\n<!-- note -->Content here";
         let doc = Document::from_markdown(md).unwrap();
         let normalized = super::normalize_document(doc).unwrap();
-        assert_eq!(normalized.body(), "\n<!-- note -->\nContent here");
+        assert_eq!(normalized.main().body(), "\n<!-- note -->\nContent here");
     }
 }

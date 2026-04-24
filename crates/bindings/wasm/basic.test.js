@@ -40,21 +40,21 @@ describe('Document.fromMarkdown', () => {
   it('should expose typed frontmatter (no QUILL/BODY/CARDS)', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
-    expect(doc.frontmatter).toBeDefined()
-    expect(doc.frontmatter instanceof Object).toBe(true)
-    expect(doc.frontmatter.title).toBe('Test Document')
-    expect(doc.frontmatter.author).toBe('Test Author')
+    expect(doc.main.frontmatter).toBeDefined()
+    expect(doc.main.frontmatter instanceof Object).toBe(true)
+    expect(doc.main.frontmatter.title).toBe('Test Document')
+    expect(doc.main.frontmatter.author).toBe('Test Author')
     // QUILL, BODY, CARDS must NOT appear in frontmatter
-    expect(doc.frontmatter.QUILL).toBeUndefined()
-    expect(doc.frontmatter.BODY).toBeUndefined()
-    expect(doc.frontmatter.CARDS).toBeUndefined()
+    expect(doc.main.frontmatter.QUILL).toBeUndefined()
+    expect(doc.main.frontmatter.BODY).toBeUndefined()
+    expect(doc.main.frontmatter.CARDS).toBeUndefined()
   })
 
   it('should expose body as a string', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
-    expect(typeof doc.body).toBe('string')
-    expect(doc.body).toContain('Hello World')
+    expect(typeof doc.main.body).toBe('string')
+    expect(doc.main.body).toContain('Hello World')
   })
 
   it('should expose cards as an array', () => {
@@ -82,7 +82,7 @@ Card body.
 
     expect(doc.cards.length).toBe(1)
     expect(doc.cards[0].tag).toBe('note')
-    expect(doc.cards[0].fields.foo).toBe('bar')
+    expect(doc.cards[0].frontmatter.foo).toBe('bar')
     expect(doc.cards[0].body).toContain('Card body.')
   })
 
@@ -146,14 +146,14 @@ describe('Document.toMarkdown — fromMarkdown → mutate → emit → re-parse'
     // Note on trailing newlines: the global body is followed by a card fence,
     // so the wire format inserts a line terminator + F2 blank line between
     // them (`Updated body\n\n---`). On re-parse the F2 blank is stripped but
-    // the terminator stays, so `doc2.body === 'Updated body\n'`. The card
+    // the terminator stays, so `doc2.main.body === 'Updated body\n'`. The card
     // body is at EOF and has no F2 separator, so it survives byte-for-byte.
     const doc2 = Document.fromMarkdown(emitted)
-    expect(doc2.frontmatter.title).toBe('New Title')
-    expect(doc2.body).toBe('Updated body\n')
+    expect(doc2.main.frontmatter.title).toBe('New Title')
+    expect(doc2.main.body).toBe('Updated body\n')
     expect(doc2.cards.length).toBe(originalCardCount + 1)
     expect(doc2.cards[0].tag).toBe('note')
-    expect(doc2.cards[0].fields.author).toBe('Alice')
+    expect(doc2.cards[0].frontmatter.author).toBe('Alice')
     expect(doc2.cards[0].body).toBe('Hello')
   })
 
@@ -176,15 +176,15 @@ describe('Document.toMarkdown — fromMarkdown → mutate → emit → re-parse'
     const doc2 = Document.fromMarkdown(emitted)
 
     // Every value must survive as a string, not be re-interpreted as bool/null/number
-    expect(doc2.frontmatter.flag_on).toBe('on')
-    expect(doc2.frontmatter.flag_off).toBe('off')
-    expect(doc2.frontmatter.flag_yes).toBe('yes')
-    expect(doc2.frontmatter.flag_no).toBe('no')
-    expect(doc2.frontmatter.str_true).toBe('true')
-    expect(doc2.frontmatter.str_false).toBe('false')
-    expect(doc2.frontmatter.str_null).toBe('null')
-    expect(doc2.frontmatter.octal_str).toBe('01234')
-    expect(doc2.frontmatter.date_str).toBe('2024-01-15')
+    expect(doc2.main.frontmatter.flag_on).toBe('on')
+    expect(doc2.main.frontmatter.flag_off).toBe('off')
+    expect(doc2.main.frontmatter.flag_yes).toBe('yes')
+    expect(doc2.main.frontmatter.flag_no).toBe('no')
+    expect(doc2.main.frontmatter.str_true).toBe('true')
+    expect(doc2.main.frontmatter.str_false).toBe('false')
+    expect(doc2.main.frontmatter.str_null).toBe('null')
+    expect(doc2.main.frontmatter.octal_str).toBe('01234')
+    expect(doc2.main.frontmatter.date_str).toBe('2024-01-15')
   })
 })
 
@@ -193,6 +193,29 @@ describe('Quillmark.quill', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
     expect(quill).toBeDefined()
+  })
+
+  it('should accept a plain object tree (Record<string, Uint8Array>)', () => {
+    const engine = new Quillmark()
+    const mapTree = makeQuill({ name: 'test_quill', plate: TEST_PLATE })
+    const objectTree = Object.fromEntries(mapTree)
+
+    const fromMap = engine.quill(mapTree)
+    const fromObject = engine.quill(objectTree)
+
+    expect(fromMap.backendId).toBe(fromObject.backendId)
+
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const r1 = fromMap.render(doc, { format: 'svg' })
+    const r2 = fromObject.render(doc, { format: 'svg' })
+    expect(r1.artifacts.length).toBe(r2.artifacts.length)
+  })
+
+  it('should reject non-object trees with a clear error', () => {
+    const engine = new Quillmark()
+    expect(() => engine.quill(42)).toThrow()
+    expect(() => engine.quill('string')).toThrow()
+    expect(() => engine.quill(null)).toThrow()
   })
 
   it('should render markdown to PDF via quill.render(doc) with default opts', () => {
@@ -274,13 +297,13 @@ describe('Document editor surface — setField / removeField', () => {
   it('setField inserts a new frontmatter field', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.setField('subtitle', 'A subtitle')
-    expect(doc.frontmatter.subtitle).toBe('A subtitle')
+    expect(doc.main.frontmatter.subtitle).toBe('A subtitle')
   })
 
   it('setField updates an existing field', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.setField('title', 'Updated')
-    expect(doc.frontmatter.title).toBe('Updated')
+    expect(doc.main.frontmatter.title).toBe('Updated')
   })
 
   it('setField throws EditError::ReservedName for BODY', () => {
@@ -312,7 +335,7 @@ describe('Document editor surface — setField / removeField', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     const removed = doc.removeField('title')
     expect(removed).toBe('Test Document')
-    expect(doc.frontmatter.title).toBeUndefined()
+    expect(doc.main.frontmatter.title).toBeUndefined()
   })
 
   it('removeField returns undefined when field absent', () => {
@@ -336,7 +359,7 @@ describe('Document editor surface — setQuillRef / replaceBody', () => {
   it('replaceBody changes the body', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.replaceBody('Brand new body.')
-    expect(doc.body).toBe('Brand new body.')
+    expect(doc.main.body).toBe('Brand new body.')
   })
 })
 
@@ -437,7 +460,7 @@ Card body.
   it('updateCardField sets a field on a card', () => {
     const doc = Document.fromMarkdown(MD_WITH_CARD)
     doc.updateCardField(0, 'content', 'hello')
-    expect(doc.cards[0].fields.content).toBe('hello')
+    expect(doc.cards[0].frontmatter.content).toBe('hello')
   })
 
   it('updateCardField throws EditError::ReservedName for BODY', () => {
@@ -473,15 +496,15 @@ describe('Document editor surface — parse→mutate→read round-trip', () => {
     doc.setQuillRef('updated_quill')
 
     // Assert state
-    expect(doc.frontmatter.author).toBe('Bob')
-    expect(doc.body).toBe('New body text.')
+    expect(doc.main.frontmatter.author).toBe('Bob')
+    expect(doc.main.body).toBe('New body text.')
     expect(doc.cards.length).toBe(1)
     expect(doc.cards[0].tag).toBe('note')
     expect(doc.cards[0].body).toBe('Card content.')
     expect(doc.quillRef).toBe('updated_quill')
 
     // Original title still present
-    expect(doc.frontmatter.title).toBe('Test Document')
+    expect(doc.main.frontmatter.title).toBe('Test Document')
 
     // Warnings untouched
     expect(Array.isArray(doc.warnings)).toBe(true)
@@ -540,6 +563,82 @@ describe('quill.open + session.render', () => {
   })
 })
 
+describe('quill.metadata', () => {
+  const META_QUILL_YAML = `quill:
+  name: meta_test_quill
+  version: "0.2.1"
+  backend: typst
+  plate_file: plate.typ
+  description: Metadata test
+
+main:
+  fields:
+    title:
+      type: string
+      description: The title
+`
+
+  it('exposes name, backend, description, version, author, supportedFormats, schema', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(
+      makeQuill({ name: 'meta_test_quill', plate: TEST_PLATE, quillYaml: META_QUILL_YAML }),
+    )
+
+    const meta = quill.metadata
+    expect(meta).toBeDefined()
+    expect(meta.name).toBe('meta_test_quill')
+    expect(meta.backend).toBe('typst')
+    expect(meta.description).toBe('Metadata test')
+    expect(meta.version).toBe('0.2.1')
+    expect(meta.author).toBe('Unknown')
+    expect(Array.isArray(meta.supportedFormats)).toBe(true)
+    expect(meta.supportedFormats.length).toBeGreaterThan(0)
+    expect(meta.schema).toBeDefined()
+    expect(meta.schema.title).toBeDefined()
+  })
+
+  it('is JSON.stringify-able (plain object, not a class)', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(
+      makeQuill({ name: 'meta_test_quill', plate: TEST_PLATE, quillYaml: META_QUILL_YAML }),
+    )
+    const json = JSON.stringify(quill.metadata)
+    expect(typeof json).toBe('string')
+    const parsed = JSON.parse(json)
+    expect(parsed.name).toBe('meta_test_quill')
+  })
+})
+
+describe('Document.clone', () => {
+  it('returns an independent handle', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const clone = doc.clone()
+
+    clone.setField('title', 'Changed')
+
+    expect(doc.main.frontmatter.title).toBe('Test Document')
+    expect(clone.main.frontmatter.title).toBe('Changed')
+  })
+
+  it('preserves parse-time warnings on the clone', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const clone = doc.clone()
+
+    expect(clone.warnings.length).toBe(doc.warnings.length)
+  })
+
+  it('produces a clone that renders equivalently to the original', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    const clone = doc.clone()
+
+    const r1 = quill.render(doc, { format: 'svg' })
+    const r2 = quill.render(clone, { format: 'svg' })
+    expect(r1.artifacts.length).toBe(r2.artifacts.length)
+  })
+})
+
 // ---------------------------------------------------------------------------
 // Phase 5: quill.projectForm — schema-aware form projection
 // NOTE: These tests cannot run in the devcontainer (no wasm-pack / browser
@@ -548,7 +647,7 @@ describe('quill.open + session.render', () => {
 // ---------------------------------------------------------------------------
 
 describe('quill.projectForm', () => {
-  const QUILL_YAML = `Quill:
+  const QUILL_YAML = `quill:
   name: form_smoke_test
   version: "1.0"
   backend: typst

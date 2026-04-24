@@ -27,8 +27,8 @@
 //!
 //! A `FormProjection` is a **read-only snapshot** of the document at the time
 //! [`project_form`] is called. Subsequent edits to `doc` (e.g. via
-//! [`Document::set_field`]) are not reflected in an existing `FormProjection`;
-//! call `project_form` again to obtain an updated snapshot.
+//! `doc.main_mut().set_field(...)`) are not reflected in an existing
+//! `FormProjection`; call `project_form` again to obtain an updated snapshot.
 //!
 //! # Unknown card tags
 //!
@@ -141,16 +141,18 @@ pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
 
     // ── Main card projection ──────────────────────────────────────────────
     let main_schema = quill.source().config().main();
-    let main = project_card(main_schema, doc.frontmatter());
+    let main_fields = doc.main().frontmatter().to_index_map();
+    let main = project_card(main_schema, &main_fields);
 
     // ── Per-card projections ──────────────────────────────────────────────
     let mut cards: Vec<FormCard> = Vec::new();
 
     for (index, card) in doc.cards().iter().enumerate() {
         let tag = card.tag();
-        match quill.source().config().card_definition(tag) {
+        match quill.source().config().card_definition(&tag) {
             Some(card_schema) => {
-                cards.push(project_card(card_schema, card.fields()));
+                let card_fields = card.frontmatter().to_index_map();
+                cards.push(project_card(card_schema, &card_fields));
             }
             None => {
                 diagnostics.push(

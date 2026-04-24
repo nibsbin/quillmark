@@ -1,15 +1,9 @@
-//! Tests for `Document::to_markdown` — Phase 4a.
+//! Tests for `Document::to_markdown`.
 //!
-//! Coverage in this file:
+//! Coverage:
 //! - Type-fidelity round-trip over the full fixture corpus.
 //! - Stability (emit-twice byte-equal) smoke test.
 //! - Unit tests for targeted value types and edge cases.
-//!
-//! NOT in this file (deferred to 4b/4c):
-//! - Ambiguous-strings regression corpus
-//! - Full emit-idempotence corpus (parse∘emit∘parse∘emit)
-//! - Fuzz target
-//! - Binding wiring (4c)
 
 use crate::document::Document;
 
@@ -313,14 +307,17 @@ fn empty_map_omitted_from_emit() {
         QuillValue::from_json(serde_json::json!("hello")),
     );
 
+    use crate::document::{Card, Frontmatter, Sentinel};
     use crate::version::{QuillReference, VersionSelector};
-    let doc = crate::document::Document::new_internal(
-        QuillReference::new("test".to_string(), VersionSelector::Latest),
-        frontmatter,
+    let main = Card::new_with_sentinel(
+        Sentinel::Main(QuillReference::new(
+            "test".to_string(),
+            VersionSelector::Latest,
+        )),
+        Frontmatter::from_index_map(frontmatter),
         String::new(),
-        vec![],
-        vec![],
     );
+    let doc = crate::document::Document::from_main_and_cards(main, vec![], vec![]);
 
     let md = doc.to_markdown();
     assert!(

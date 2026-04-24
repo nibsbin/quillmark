@@ -9,8 +9,11 @@
 //!
 //! ## Key Types
 //!
-//! - [`Document`]: Typed in-memory Quillmark document — frontmatter, body, and cards.
-//! - [`Card`]: A single `CARD:` block with a tag, typed fields, and a body.
+//! - [`Document`]: Typed in-memory Quillmark document — `main` card plus composable cards.
+//! - [`Card`]: A single metadata fence block, main or composable, with a sentinel,
+//!   typed frontmatter, and a body.
+//! - [`Sentinel`]: Discriminates `QUILL:` main cards from `CARD:` composable cards.
+//! - [`Frontmatter`]: Ordered list of items (fields + comments) parsed from a YAML fence.
 //!
 //! ## Examples
 //!
@@ -31,7 +34,8 @@
 //! "#;
 //!
 //! let doc = Document::from_markdown(markdown).unwrap();
-//! let title = doc.frontmatter()
+//! let title = doc.main()
+//!     .frontmatter()
 //!     .get("title")
 //!     .and_then(|v| v.as_str())
 //!     .unwrap_or("Untitled");
@@ -67,10 +71,7 @@
 //! See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) for
 //! comprehensive documentation of the Extended YAML Metadata Standard.
 
-use indexmap::IndexMap;
-
 use crate::error::ParseError;
-use crate::value::QuillValue;
 use crate::version::QuillReference;
 use crate::Diagnostic;
 
@@ -78,10 +79,16 @@ pub mod assemble;
 pub mod edit;
 pub mod emit;
 pub mod fences;
+pub mod frontmatter;
 pub mod limits;
+pub mod prescan;
 pub mod sentinel;
 
 pub use edit::EditError;
+pub use frontmatter::{Frontmatter, FrontmatterItem};
+
+// Re-export the sentinel type (defined below in this module file).
+// `Sentinel` is exported at the crate root via `lib.rs`.
 
 #[cfg(test)]
 mod tests;
@@ -96,11 +103,47 @@ pub struct ParseOutput {
     pub warnings: Vec<Diagnostic>,
 }
 
-/// A single `CARD:` block parsed from a Quillmark Markdown document.
+/// Discriminator for a [`Card`]'s metadata fence.
 ///
-/// Every card has a `tag` (the value of its `CARD:` sentinel), typed `fields`
-/// (all YAML key-value pairs from the fence body, excluding the `CARD` key
-/// itself), and a `body` (the Markdown text that follows the closing `---`).
+/// The first fence in a Quillmark document carries `QUILL: <ref>` and is the
+/// document-level *main* card; every subsequent fence carries `CARD: <tag>`
+/// and is a composable card. `Sentinel` captures that distinction in the typed
+/// model so every fence is one uniform shape.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Sentinel {
+    /// `QUILL: <ref>` — the document entry card.
+    Main(QuillReference),
+    /// `CARD: <tag>` — a composable card with the given tag.
+    Card(String),
+}
+
+impl Sentinel {
+    /// String form of this sentinel's value: the quill reference for `Main`,
+    /// the tag for `Card`.
+    pub fn as_str(&self) -> String {
+        match self {
+            Sentinel::Main(r) => r.to_string(),
+            Sentinel::Card(t) => t.clone(),
+        }
+    }
+
+    /// Returns `true` if this is a `Main` sentinel.
+    pub fn is_main(&self) -> bool {
+        matches!(self, Sentinel::Main(_))
+    }
+}
+
+/// A single metadata fence parsed from a Quillmark Markdown document.
+///
+/// A `Card` is the uniform shape for both the document entry (main) fence and
+/// composable card fences. `sentinel` distinguishes the two.
+///
+/// Every card has:
+/// - `sentinel` — the `QUILL` reference (for main) or `CARD` tag (for composable).
+/// - `frontmatter` — ordered items parsed from the YAML fence body (with the
+///   sentinel key already removed).
+/// - `body` — the Markdown text that follows the closing fence, up to the next
+///   fence (or EOF).
 ///
 /// ## Card body absence
 ///
@@ -110,30 +153,44 @@ pub struct ParseOutput {
 /// should check `card.body().is_empty()`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Card {
-    tag: String,
-    fields: IndexMap<String, QuillValue>,
+    sentinel: Sentinel,
+    frontmatter: Frontmatter,
     body: String,
 }
 
 impl Card {
-    /// Create a `Card` directly from typed parts.
-    ///
-    /// Used by `assemble.rs`, `normalize.rs`, and the `Quill`.
-    /// Does **not** validate the tag name or field names — callers are
-    /// responsible for providing already-valid data.  For user-facing
-    /// construction use [`Card::new`] (defined in `edit.rs`).
-    pub fn new_internal(tag: String, fields: IndexMap<String, QuillValue>, body: String) -> Self {
-        Self { tag, fields, body }
+    /// Create a `Card` directly from a sentinel, a typed frontmatter, and a
+    /// body. Does **not** validate the sentinel tag or any field names —
+    /// callers are responsible for providing already-valid data. For
+    /// user-facing construction of composable cards use [`Card::new`]
+    /// (defined in `edit.rs`).
+    pub fn new_with_sentinel(sentinel: Sentinel, frontmatter: Frontmatter, body: String) -> Self {
+        Self {
+            sentinel,
+            frontmatter,
+            body,
+        }
     }
 
-    /// The card tag (value of the `CARD:` sentinel).
-    pub fn tag(&self) -> &str {
-        &self.tag
+    /// The sentinel discriminating this card as main or composable.
+    pub fn sentinel(&self) -> &Sentinel {
+        &self.sentinel
     }
 
-    /// Typed fields from this card's YAML fence (excluding the `CARD` key).
-    pub fn fields(&self) -> &IndexMap<String, QuillValue> {
-        &self.fields
+    /// The card tag — the `CARD:` value for composable cards, or the string
+    /// form of the quill reference for main cards.
+    pub fn tag(&self) -> String {
+        self.sentinel.as_str()
+    }
+
+    /// Typed frontmatter (map-keyed view and ordered item list).
+    pub fn frontmatter(&self) -> &Frontmatter {
+        &self.frontmatter
+    }
+
+    /// Mutable access to the frontmatter.
+    pub fn frontmatter_mut(&mut self) -> &mut Frontmatter {
+        &mut self.frontmatter
     }
 
     /// Markdown body that follows this card's closing fence.
@@ -142,48 +199,69 @@ impl Card {
     pub fn body(&self) -> &str {
         &self.body
     }
+
+    /// Returns `true` if this is the document entry (main) card.
+    pub fn is_main(&self) -> bool {
+        self.sentinel.is_main()
+    }
+
+    /// Replace this card's sentinel. Internal helper; public mutators
+    /// ([`Document::set_quill_ref`], the parser) call this.
+    pub(crate) fn replace_sentinel(&mut self, sentinel: Sentinel) {
+        self.sentinel = sentinel;
+    }
+
+    /// Overwrite the body string. Internal helper used by [`Card::replace_body`].
+    pub(crate) fn overwrite_body(&mut self, body: String) {
+        self.body = body;
+    }
 }
 
 /// A fully-parsed, typed in-memory Quillmark document.
 ///
 /// `Document` is the canonical representation of a Quillmark Markdown file.
-/// Markdown is one import format (and will be one export format in Phase 4);
-/// the structured data here is primary.
+/// Markdown is both the import and export format; the structured data here
+/// is primary.
 ///
-/// ## Fields vs. plate wire format
+/// ## Structure
 ///
-/// `Document` stores:
-/// - `frontmatter` — user-visible YAML fields (no `CARDS`, no `BODY` sentinel keys)
-/// - `body` — global Markdown body between the frontmatter fence and the first card
-/// - `cards` — ordered list of `Card` values
+/// - `main` — the entry `Card` (sentinel is `Sentinel::Main(reference)`).
+/// - `cards` — ordered composable cards (each with `Sentinel::Card(tag)`).
 ///
-/// When a backend plate needs the legacy flat JSON shape, call
-/// [`Document::to_plate_json`]. That method is the **only** place in core that
-/// reconstructs `{"QUILL": ..., "CARDS": [...], "BODY": "..."}`.
-#[derive(Debug, Clone, PartialEq)]
+/// Backend plates consume the flat JSON wire shape produced by
+/// [`Document::to_plate_json`]. That method is the **only** place in core
+/// that reconstructs `{"QUILL": ..., "CARDS": [...], "BODY": "..."}`.
+#[derive(Debug, Clone)]
 pub struct Document {
-    quill_ref: QuillReference,
-    frontmatter: IndexMap<String, QuillValue>,
-    body: String,
+    main: Card,
     cards: Vec<Card>,
     warnings: Vec<Diagnostic>,
 }
 
+// Equality is defined over the structural content only — `warnings` are
+// parse-time observations that depend on what the source text happened to
+// contain (near-miss sentinels, dropped nested comments, etc.) and so
+// differ between a source document and its round-tripped emission. Two
+// documents are equal when their `main` and `cards` match.
+impl PartialEq for Document {
+    fn eq(&self, other: &Self) -> bool {
+        self.main == other.main && self.cards == other.cards
+    }
+}
+
 impl Document {
-    /// Create a `Document` directly from typed parts.
+    /// Create a `Document` from a pre-built main `Card` and composable cards.
     ///
-    /// This is used by `assemble.rs`, `normalize.rs`, and the `Quill`.
-    pub fn new_internal(
-        quill_ref: QuillReference,
-        frontmatter: IndexMap<String, QuillValue>,
-        body: String,
-        cards: Vec<Card>,
-        warnings: Vec<Diagnostic>,
-    ) -> Self {
+    /// The caller must guarantee that `main.sentinel` is `Sentinel::Main(_)`
+    /// and every card in `cards` has `sentinel` = `Sentinel::Card(_)`.
+    pub fn from_main_and_cards(main: Card, cards: Vec<Card>, warnings: Vec<Diagnostic>) -> Self {
+        debug_assert!(main.sentinel.is_main(), "main card must be Sentinel::Main");
+        debug_assert!(
+            cards.iter().all(|c| !c.sentinel.is_main()),
+            "composable cards must be Sentinel::Card"
+        );
         Self {
-            quill_ref,
-            frontmatter,
-            body,
+            main,
             cards,
             warnings,
         }
@@ -202,29 +280,42 @@ impl Document {
 
     // ── Accessors ──────────────────────────────────────────────────────────────
 
-    /// The quill reference (`name@version-selector`).
+    /// The document's main (entry) card.
+    pub fn main(&self) -> &Card {
+        &self.main
+    }
+
+    /// Mutable access to the main card.
+    pub fn main_mut(&mut self) -> &mut Card {
+        &mut self.main
+    }
+
+    /// The quill reference (`name@version-selector`) carried by the main card's
+    /// sentinel. Convenience reader over `doc.main().sentinel()`.
     pub fn quill_reference(&self) -> &QuillReference {
-        &self.quill_ref
+        match &self.main.sentinel {
+            Sentinel::Main(r) => r,
+            Sentinel::Card(_) => {
+                unreachable!("main card must carry Sentinel::Main by construction")
+            }
+        }
     }
 
-    /// User-visible YAML frontmatter fields.
-    ///
-    /// Does **not** include the `QUILL`, `CARDS`, or `BODY` sentinel keys;
-    /// those are available via [`Document::quill_reference`], [`Document::cards`], and [`Document::body`].
-    pub fn frontmatter(&self) -> &IndexMap<String, QuillValue> {
-        &self.frontmatter
-    }
-
-    /// Global Markdown body between the frontmatter fence and the first card.
-    ///
-    /// Empty string when no body is present.
-    pub fn body(&self) -> &str {
-        &self.body
-    }
-
-    /// Ordered list of card blocks.
+    /// Ordered list of composable card blocks.
     pub fn cards(&self) -> &[Card] {
         &self.cards
+    }
+
+    /// Mutable access to the composable cards slice.
+    pub fn cards_mut(&mut self) -> &mut [Card] {
+        &mut self.cards
+    }
+
+    /// Internal mutable access to the backing `Vec<Card>`. Used by edit
+    /// operations ([`Document::push_card`], etc.) that need to insert or
+    /// remove elements.
+    pub(crate) fn cards_vec_mut(&mut self) -> &mut Vec<Card> {
+        &mut self.cards
     }
 
     /// Non-fatal warnings collected during parsing.
@@ -261,18 +352,18 @@ impl Document {
         // QUILL first — plate authors expect this at the top.
         map.insert(
             "QUILL".to_string(),
-            serde_json::Value::String(self.quill_ref.to_string()),
+            serde_json::Value::String(self.quill_reference().to_string()),
         );
 
         // Frontmatter fields in insertion order.
-        for (key, value) in &self.frontmatter {
+        for (key, value) in self.main.frontmatter.iter() {
             map.insert(key.clone(), value.as_json().clone());
         }
 
         // Global body.
         map.insert(
             "BODY".to_string(),
-            serde_json::Value::String(self.body.clone()),
+            serde_json::Value::String(self.main.body.clone()),
         );
 
         // Cards array.
@@ -281,11 +372,8 @@ impl Document {
             .iter()
             .map(|card| {
                 let mut card_map = serde_json::Map::new();
-                card_map.insert(
-                    "CARD".to_string(),
-                    serde_json::Value::String(card.tag.clone()),
-                );
-                for (key, value) in &card.fields {
+                card_map.insert("CARD".to_string(), serde_json::Value::String(card.tag()));
+                for (key, value) in card.frontmatter.iter() {
                     card_map.insert(key.clone(), value.as_json().clone());
                 }
                 card_map.insert(

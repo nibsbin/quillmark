@@ -18,7 +18,7 @@ my-quill/
 Create a minimal but complete config:
 
 ```yaml
-Quill:
+quill:
   name: my_quill
   backend: typst
   version: "1.0.0"

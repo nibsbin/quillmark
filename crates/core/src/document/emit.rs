@@ -20,7 +20,8 @@
 
 use serde_json::Value as JsonValue;
 
-use super::{Card, Document};
+use super::frontmatter::FrontmatterItem;
+use super::{Card, Document, Sentinel};
 
 // ── Public entry point ────────────────────────────────────────────────────────
 
@@ -78,32 +79,19 @@ impl Document {
     pub fn to_markdown(&self) -> String {
         let mut out = String::new();
 
-        // ── Frontmatter fence ─────────────────────────────────────────────────
-        out.push_str("---\n");
+        // ── Main card (first fence + global body) ─────────────────────────────
+        emit_card_fence(&mut out, self.main());
+        out.push_str(self.main().body());
 
-        // QUILL first
-        out.push_str("QUILL: ");
-        out.push_str(&self.quill_ref.to_string());
-        out.push('\n');
-
-        // Remaining frontmatter in IndexMap insertion order.
-        for (key, value) in &self.frontmatter {
-            emit_field(&mut out, key, value.as_json(), 0);
-        }
-
-        out.push_str("---\n");
-
-        // ── Global body ───────────────────────────────────────────────────────
-        // The body contains the blank line(s) between the frontmatter fence and
-        // the first card (or EOF).  Emit it verbatim before any cards so the
-        // parser sees the correct document structure on re-parse.
-        out.push_str(&self.body);
-
-        // ── Cards ─────────────────────────────────────────────────────────────
+        // ── Composable cards ──────────────────────────────────────────────────
         // `emit_card` normalises the separator before each fence, so edited
         // bodies (which may lack a trailing blank line) still round-trip.
-        for card in &self.cards {
-            emit_card(&mut out, card);
+        for card in self.cards() {
+            ensure_f2_before_fence(&mut out);
+            emit_card_fence(&mut out, card);
+            if !card.body().is_empty() {
+                out.push_str(card.body());
+            }
         }
 
         out
@@ -112,28 +100,40 @@ impl Document {
 
 // ── Card emission ─────────────────────────────────────────────────────────────
 
-fn emit_card(out: &mut String, card: &Card) {
-    // MARKDOWN.md §3 F2 requires a blank line immediately above each metadata
-    // fence. Stored bodies never contain the F2 separator (see `assemble.rs`'s
-    // `strip_f2_separator`), so we always add exactly one `\n` as the F2 blank
-    // before emitting the fence, plus a content line terminator if the body
-    // didn't end in `\n`.
-    ensure_f2_before_fence(out);
+/// Emit a card's metadata fence (between `---\n` markers), including the
+/// sentinel line and every frontmatter item.
+fn emit_card_fence(out: &mut String, card: &Card) {
     out.push_str("---\n");
-    out.push_str("CARD: ");
-    out.push_str(card.tag());
-    out.push('\n');
 
-    for (key, value) in card.fields() {
-        emit_field(out, key, value.as_json(), 0);
+    // Sentinel line.
+    match card.sentinel() {
+        Sentinel::Main(r) => {
+            out.push_str("QUILL: ");
+            out.push_str(&r.to_string());
+            out.push('\n');
+        }
+        Sentinel::Card(tag) => {
+            out.push_str("CARD: ");
+            out.push_str(tag);
+            out.push('\n');
+        }
+    }
+
+    // Frontmatter items in order.
+    for item in card.frontmatter().items() {
+        match item {
+            FrontmatterItem::Field { key, value, fill } => {
+                emit_field(out, key, value.as_json(), 0, *fill);
+            }
+            FrontmatterItem::Comment { text } => {
+                out.push_str("# ");
+                out.push_str(text);
+                out.push('\n');
+            }
+        }
     }
 
     out.push_str("---\n");
-
-    // Card body: emitted verbatim.  Empty body → nothing after the fence.
-    if !card.body().is_empty() {
-        out.push_str(card.body());
-    }
 }
 
 /// Ensures `out` ends with a `\n\n` suffix suitable for the F2 precondition
@@ -165,7 +165,39 @@ fn ensure_f2_before_fence(out: &mut String) {
 /// - Empty objects are **omitted** (caller skips them).
 /// - Empty arrays emit `key: []\n`.
 /// - All other values follow the block-style rules.
-fn emit_field(out: &mut String, key: &str, value: &JsonValue, indent: usize) {
+/// - When `fill` is `true`, the emitted form is `key: !fill <value>` for
+///   scalars, `key: !fill\n  - …` for non-empty sequences,
+///   `key: !fill []` for empty sequences, and `key: !fill` for null.
+///   Mappings are rejected at parse and never reach this path.
+fn emit_field(out: &mut String, key: &str, value: &JsonValue, indent: usize, fill: bool) {
+    if fill {
+        push_indent(out, indent);
+        out.push_str(key);
+        match value {
+            JsonValue::Null => out.push_str(": !fill\n"),
+            JsonValue::Bool(_) | JsonValue::Number(_) | JsonValue::String(_) => {
+                out.push_str(": !fill ");
+                emit_scalar(out, value);
+                out.push('\n');
+            }
+            JsonValue::Array(items) if items.is_empty() => {
+                out.push_str(": !fill []\n");
+            }
+            JsonValue::Array(items) => {
+                out.push_str(": !fill\n");
+                for item in items {
+                    emit_sequence_item(out, item, indent);
+                }
+            }
+            JsonValue::Object(_) => {
+                // Parser rejects !fill on mappings; recovery path only.
+                out.push_str(": ");
+                emit_scalar(out, value);
+                out.push('\n');
+            }
+        }
+        return;
+    }
     match value {
         JsonValue::Object(map) if map.is_empty() => {
             // Empty object → omit the key entirely.
@@ -176,7 +208,7 @@ fn emit_field(out: &mut String, key: &str, value: &JsonValue, indent: usize) {
             out.push_str(key);
             out.push_str(":\n");
             for (k, v) in map {
-                emit_field(out, k, v, indent + 2);
+                emit_field(out, k, v, indent + 2, false);
             }
         }
         JsonValue::Array(items) if items.is_empty() => {
@@ -221,7 +253,7 @@ fn emit_sequence_item(out: &mut String, value: &JsonValue, base_indent: usize) {
                     emit_field_inline(out, k, v, base_indent + 2);
                     first = false;
                 } else {
-                    emit_field(out, k, v, base_indent + 2);
+                    emit_field(out, k, v, base_indent + 2, false);
                 }
             }
         }
@@ -259,7 +291,7 @@ fn emit_field_inline(out: &mut String, key: &str, value: &JsonValue, child_inden
             out.push_str(key);
             out.push_str(":\n");
             for (k, v) in map {
-                emit_field(out, k, v, child_indent);
+                emit_field(out, k, v, child_indent, false);
             }
         }
         JsonValue::Array(items) if items.is_empty() => {
@@ -386,7 +418,7 @@ mod tests {
     fn empty_object_omitted() {
         let value = QuillValue::from_json(serde_json::json!({}));
         let mut out = String::new();
-        emit_field(&mut out, "empty_map", value.as_json(), 0);
+        emit_field(&mut out, "empty_map", value.as_json(), 0, false);
         assert_eq!(out, ""); // omitted
     }
 
@@ -394,7 +426,31 @@ mod tests {
     fn empty_array_emitted() {
         let value = QuillValue::from_json(serde_json::json!([]));
         let mut out = String::new();
-        emit_field(&mut out, "empty_seq", value.as_json(), 0);
+        emit_field(&mut out, "empty_seq", value.as_json(), 0, false);
         assert_eq!(out, "empty_seq: []\n");
+    }
+
+    #[test]
+    fn fill_null_emits_bare_tag() {
+        let value = QuillValue::from_json(serde_json::Value::Null);
+        let mut out = String::new();
+        emit_field(&mut out, "recipient", value.as_json(), 0, true);
+        assert_eq!(out, "recipient: !fill\n");
+    }
+
+    #[test]
+    fn fill_string_emits_tag_with_value() {
+        let value = QuillValue::from_json(serde_json::json!("placeholder"));
+        let mut out = String::new();
+        emit_field(&mut out, "dept", value.as_json(), 0, true);
+        assert_eq!(out, "dept: !fill \"placeholder\"\n");
+    }
+
+    #[test]
+    fn fill_integer_emits_tag_with_value() {
+        let value = QuillValue::from_json(serde_json::json!(42));
+        let mut out = String::new();
+        emit_field(&mut out, "count", value.as_json(), 0, true);
+        assert_eq!(out, "count: !fill 42\n");
     }
 }

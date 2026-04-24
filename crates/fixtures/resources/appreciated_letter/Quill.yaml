@@ -1,4 +1,4 @@
-Quill:
+quill:
   name: appreciated_letter
   version: "0.1"
   backend: typst

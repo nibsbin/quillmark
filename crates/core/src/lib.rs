@@ -20,7 +20,8 @@
 //! // Parse markdown with frontmatter
 //! let markdown = "---\nQUILL: my_quill\ntitle: Example\n---\n\n# Content";
 //! let doc = Document::from_markdown(markdown).unwrap();
-//! let title = doc.frontmatter()
+//! let title = doc.main()
+//!     .frontmatter()
 //!     .get("title")
 //!     .and_then(|v| v.as_str())
 //!     .unwrap_or("Untitled");
@@ -43,7 +44,9 @@
 //! - [Examples](https://github.com/nibsbin/quillmark/tree/main/examples) - Working examples
 
 pub mod document;
-pub use document::{Card, Document, EditError, ParseOutput};
+pub use document::{
+    Card, Document, EditError, Frontmatter, FrontmatterItem, ParseOutput, Sentinel,
+};
 
 pub mod backend;
 pub use backend::Backend;

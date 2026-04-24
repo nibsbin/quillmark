@@ -18,7 +18,7 @@ def test_quill_from_path_bad_backend(tmp_path):
     quill_dir = tmp_path / "test_quill"
     quill_dir.mkdir()
     (quill_dir / "Quill.yaml").write_text(
-        'Quill:\n  name: "test"\n  version: "1.0"\n  backend: "nonexistent"\n  description: "Test"\n'
+        'quill:\n  name: "test"\n  version: "1.0"\n  backend: "nonexistent"\n  description: "Test"\n'
     )
     engine = Quillmark()
     with pytest.raises(QuillmarkError):

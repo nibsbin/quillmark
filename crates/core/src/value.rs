@@ -206,13 +206,15 @@ mod tests {
     }
 
     #[test]
-    fn test_yaml_custom_tags_ignored() {
-        // User-defined YAML tags should be accepted and ignored
-        // The value should be parsed as if the tag were not present
+    fn test_yaml_custom_tags_ignored_at_value_level() {
+        // At the raw `QuillValue::from_yaml_str` layer, custom YAML tags
+        // (including `!fill`) pass through serde_saphyr which drops the
+        // tag and returns the underlying scalar.  The tag is recovered at
+        // the `Document` layer by `document::prescan`: see
+        // `document::tests::lossiness_tests::custom_tags_lose_tag_but_keep_value`.
         let yaml_str = "memo_from: !fill 2d lt example";
         let quill_val = QuillValue::from_yaml_str(yaml_str).unwrap();
 
-        // The tag !fill should be ignored, value parsed as string
         assert_eq!(
             quill_val.get("memo_from").as_ref().and_then(|v| v.as_str()),
             Some("2d lt example")

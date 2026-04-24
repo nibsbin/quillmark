@@ -6,7 +6,7 @@ export function makeQuill({
   plate = '#import "@local/quillmark-helper:0.1.0": data\n= Test',
   quillYaml,
 } = {}) {
-  const yaml = quillYaml ?? `Quill:
+  const yaml = quillYaml ?? `quill:
   name: ${name}
   version: "${version}"
   backend: typst
