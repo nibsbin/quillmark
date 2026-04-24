@@ -17,13 +17,9 @@ consumers can delete that code.
    comments in the frontmatter data model as first-class ordered items.
 2. [02-fill-typed-marker.md](02-fill-typed-marker.md) — promote `!fill` to
    a typed marker that round-trips on emit. Reject other custom tags.
-3. [03-frontmatter-only-parse.md](03-frontmatter-only-parse.md) — expose a
-   parse entry point that takes a bare YAML fragment and returns the typed
-   frontmatter, without requiring a full `---`-fenced markdown document.
 
 01 and 02 both extend the frontmatter type and should land in sequence
-(02 on top of 01). 03 surfaces the type 01+02 produce through a new
-entry point.
+(02 on top of 01).
 
 ## Explicit non-goals
 
@@ -46,3 +42,9 @@ entry point.
   would imply partial parsing. Downstream editors own their body
   pipeline; when we commit to a markdown AST it will be a separate
   design, not something smuggled in through helpers.
+- **No bare-YAML parse entry point.** Every Quillmark markdown document
+  carries `QUILL`; there is no supported authoring format that lacks
+  it. Consumers with a full document call `Document.fromMarkdown`;
+  consumers with something that isn't a Quillmark document should use a
+  general YAML library, not us. Speculative fragment-parse use cases
+  are YAGNI until a concrete consumer need is named.
