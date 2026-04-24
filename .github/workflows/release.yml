@@ -97,6 +97,9 @@ jobs:
     needs: [release]
     runs-on: ubuntu-latest
     environment: Publish
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -109,10 +112,14 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Authenticate with crates.io (Trusted Publishing)
+        id: crates-auth
+        uses: rust-lang/crates-io-auth-action@v1
+
       - name: Publish workspace crates
         run: cargo publish --locked --no-verify
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.crates-auth.outputs.token }}
 
       - name: Summary
         run: echo "✓ Workspace crates v${{ needs.release.outputs.version }} published to crates.io"
@@ -288,6 +295,8 @@ jobs:
     needs: [release, build-python-linux, build-python-windows, build-python-macos, build-python-sdist]
     runs-on: ubuntu-latest
     environment: Publish
+    permissions:
+      id-token: write
     steps:
       - name: Download artifacts
         uses: actions/download-artifact@v4
@@ -296,13 +305,10 @@ jobs:
           merge-multiple: true
           path: dist/
 
-      - name: Publish to PyPI
-        uses: PyO3/maturin-action@v1
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          command: upload
-          args: --non-interactive --skip-existing dist/*
+          skip-existing: true
 
       - name: Summary
         run: echo "✓ quillmark v${{ needs.release.outputs.version }} published to PyPI"
