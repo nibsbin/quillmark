@@ -1,7 +1,7 @@
 # 02 — `!fill` as a Typed Marker
 
 **Status:** Draft
-**Depends on:** 01 (frontmatter item model)
+**Depends on:** 01 (FrontmatterItem model), 03 (unified Card)
 **Blocks:** nothing
 
 ## Background
@@ -16,8 +16,8 @@ markers.
 
 ## Change
 
-Promote `!fill` to a first-class typed marker on fields; round-trip it on
-emit.
+Promote `!fill` to a first-class typed marker on fields; round-trip it
+on emit.
 
 ```rust
 // Extends the FrontmatterItem::Field variant from tasking 01.
@@ -51,8 +51,7 @@ a use case exists.
 
 Any **other** custom tag (`!include`, `!env`, `!anything`) → reject with
 a parse warning (`unsupported_yaml_tag`) and drop the tag, keeping the
-raw scalar value. This preserves the current "don't fail on unknown
-tags" behaviour but stops silently hiding them.
+raw scalar value.
 
 ### Emitter
 
@@ -62,33 +61,38 @@ tags" behaviour but stops silently hiding them.
 
 ### Data-model surface
 
-- `doc.frontmatter` (the map-keyed getter from tasking 01) continues to
+- `card.frontmatter` (the map-keyed getter from tasking 01) continues to
   return values only. A fill-tagged null field appears as `null` there.
-- `doc.frontmatterItems` exposes `fill: boolean` per item so consumers
+- `card.frontmatterItems` exposes `fill: boolean` per item so consumers
   drive wizard UI off the data model.
 
-### Mutators — two explicit methods
+### Mutators — two explicit methods on `Card`
 
 ```rust
-/// Set a field's value. Always clears the fill marker.
-/// This is the "user filled this in" path.
-fn set_field<V: Into<QuillValue>>(&mut self, key: &str, value: V);
+impl Card {
+    /// Set a field's value. Always clears the fill marker.
+    /// This is the "user filled this in" path.
+    pub fn set_field<V: Into<QuillValue>>(&mut self, key: &str, value: V);
 
-/// Set a field's value AND mark it as fill.
-/// This is the "reset to placeholder" path. Empty value = `key: !fill`.
-fn set_fill<V: Into<QuillValue>>(&mut self, key: &str, value: V);
+    /// Set a field's value AND mark it as fill.
+    /// This is the "reset to placeholder" path. `Null` value = `key: !fill`.
+    pub fn set_fill<V: Into<QuillValue>>(&mut self, key: &str, value: V);
+}
 ```
 
 Two methods, two intents. The common wizard flow ("user typed something,
 clear the placeholder") is the default `set_field`; the rarer reset is
-an explicit `set_fill`. No options struct, no boolean parameter to
+the explicit `set_fill`. No options struct, no boolean parameter to
 forget in JS.
+
+`Document` has no top-level shortcut — callers write
+`doc.main_mut().set_field(…)` per tasking 03.
 
 ### WASM surface
 
 - `FrontmatterItem` TS type gains `fill: boolean`.
-- `Document.setField(key, value)` unchanged signature; clears fill.
-- `Document.setFill(key, value)` new; sets fill=true with the given value.
+- `Card.setField(key, value)` — clears fill.
+- `Card.setFill(key, value)` — sets fill=true with the given value.
 - `frontmatter` record getter unchanged.
 
 ## Validation
@@ -103,17 +107,19 @@ time here. Follow-on tasking may gate render on it.
   warning.
 - `!fill` on maps / sequences. Rejected with a warning.
 - Render-time enforcement of fill state.
+- Document-level mutator shortcuts.
 
 ## Done when
 
 - `!fill` round-trips through `fromMarkdown → toMarkdown` for all scalar
-  types (string, int, float, bool, null).
+  types (string, int, float, bool, null), on main and on composable
+  cards.
 - `lossiness_tests.rs::custom_tags_lose_tag_but_keep_value` is rewritten
   to assert preservation for `!fill` and rejection-with-warning for
   other tags.
 - `cmu_letter` example markdown round-trips byte-identically (modulo
   canonical quoting normalization from unrelated fields).
-- `frontmatterItems` exposes `fill: boolean` and a WASM test exercises
+- `frontmatterItems` exposes `fill: boolean`; a WASM test exercises
   `setField` clearing fill and `setFill` setting it.
 - `MARKDOWN.md` gains a short section documenting `!fill` as the one
   supported custom tag.

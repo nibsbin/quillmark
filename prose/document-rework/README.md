@@ -13,13 +13,18 @@ consumers can delete that code.
 
 ## Taskings
 
-1. [01-frontmatter-comments.md](01-frontmatter-comments.md) — preserve YAML
-   comments in the frontmatter data model as first-class ordered items.
-2. [02-fill-typed-marker.md](02-fill-typed-marker.md) — promote `!fill` to
-   a typed marker that round-trips on emit. Reject other custom tags.
+1. [03-unify-cards.md](03-unify-cards.md) — one `Card` type for both
+   the document entry (QUILL sentinel) and composable cards (CARD
+   sentinel). `Document { main: Card, cards: Vec<Card> }`.
+2. [01-frontmatter-comments.md](01-frontmatter-comments.md) — preserve
+   YAML comments in `Card.frontmatter` as first-class ordered items.
+3. [02-fill-typed-marker.md](02-fill-typed-marker.md) — promote `!fill`
+   to a typed marker on `Field`. Reject other custom tags.
 
-01 and 02 both extend the frontmatter type and should land in sequence
-(02 on top of 01).
+**Implementation order:** 03 → 01 → 02. Numeric prefixes reflect the
+order decisions were made, not the order to implement. 03 restructures
+the data model; 01 rebuilds the frontmatter representation on the
+unified model; 02 layers `!fill` semantics onto the item model from 01.
 
 ## Explicit non-goals
 
@@ -48,3 +53,8 @@ consumers can delete that code.
   consumers with something that isn't a Quillmark document should use a
   general YAML library, not us. Speculative fragment-parse use cases
   are YAGNI until a concrete consumer need is named.
+- **No document-level shortcuts for card mutators.** After 03,
+  frontmatter and body mutations live on `Card`. `Document.setField`
+  and friends are removed; callers write `doc.main_mut().set_field(…)`
+  (or hold a `&mut Card` reference). One surface, no parallel API to
+  keep in sync.
