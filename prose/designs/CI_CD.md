@@ -46,9 +46,9 @@ Excluded: multi-OS matrix, MSRV, security scanners, coverage, benchmarks.
 
 | Target | Registry | Auth |
 |--------|----------|------|
-| Rust crates | crates.io | `CARGO_REGISTRY_TOKEN` secret (via `Publish` environment) |
+| Rust crates | crates.io | OIDC Trusted Publishing via `rust-lang/crates-io-auth-action` (`id-token: write`) |
 | WASM bindings | npm | OIDC Trusted Publisher (`id-token: write`) |
-| Python bindings | PyPI | `MATURIN_PYPI_TOKEN` secret (via `Publish` environment) |
+| Python bindings | PyPI | OIDC Trusted Publishing via `pypa/gh-action-pypi-publish` (`id-token: write`) |
 
 - **Crates**: `cargo publish --locked --no-verify`
 - **WASM**: builds via `./scripts/build-wasm.sh`, runs `npm test`, publishes `@quillmark/wasm` with `--provenance`
