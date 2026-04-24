@@ -328,10 +328,12 @@ impl Document {
     /// global body. Frontmatter/body reads and mutations go through this
     /// handle — there are no document-level shortcuts after the rework.
     ///
-    /// Allocates on each call — cache locally if read in a hot loop.
-    #[wasm_bindgen(getter, js_name = main)]
-    pub fn main(&self) -> Card {
-        Card::from(self.inner.main())
+    /// Allocates and serializes on each call — cache locally if read in a hot loop.
+    #[wasm_bindgen(getter, js_name = main, unchecked_return_type = "Card")]
+    pub fn main(&self) -> JsValue {
+        let card = Card::from(self.inner.main());
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        card.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
     }
 
     /// Ordered list of composable card blocks as typed `Card` objects.

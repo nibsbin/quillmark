@@ -27,8 +27,8 @@
 //!
 //! A `FormProjection` is a **read-only snapshot** of the document at the time
 //! [`project_form`] is called. Subsequent edits to `doc` (e.g. via
-//! [`Document::set_field`]) are not reflected in an existing `FormProjection`;
-//! call `project_form` again to obtain an updated snapshot.
+//! `doc.main_mut().set_field(...)`) are not reflected in an existing
+//! `FormProjection`; call `project_form` again to obtain an updated snapshot.
 //!
 //! # Unknown card tags
 //!

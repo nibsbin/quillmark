@@ -4,7 +4,7 @@
 //! Two features are recovered here:
 //!
 //! 1. **Top-level comments.** YAML comments are dropped by the YAML parser.
-//!    To round-trip them as [`FrontmatterItem::Comment`], we extract them
+//!    To round-trip them as [`super::FrontmatterItem::Comment`], we extract them
 //!    before parsing.
 //!
 //! 2. **`!fill` tags.** Custom YAML tags are accepted and dropped by
