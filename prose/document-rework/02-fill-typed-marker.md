@@ -25,71 +25,95 @@ pub enum FrontmatterItem {
     Field {
         key: String,
         value: QuillValue,
-        fill: bool,              // was !fill-tagged in source
-        trailing_comment: Option<String>,
+        fill: bool,
     },
     Comment(String),
 }
 ```
 
 `fill: bool` is sufficient — a field is either fill-tagged or not. The
-placeholder content lives in `value` (string, empty, or otherwise). No
-separate `Fill(Option<String>)` enum; YAGNI.
+value lives in `value` with its natural YAML type. No separate enum.
 
 ### Parser
 
-- `key: !fill value` → `Field { key, value: QuillValue::from("value"), fill: true, … }`.
-- `key: !fill` (no value) → `Field { key, value: QuillValue::String(""), fill: true, … }`.
-- Any **other** custom tag (`!include`, `!env`, `!anything`) → reject with
-  a parse warning (`unsupported_yaml_tag`) and drop the tag, keeping the
-  raw scalar value. This preserves the current "don't fail on unknown
-  tags" behaviour but stops silently hiding them; consumers can see the
-  warning and decide.
+`!fill` tags **any** scalar. The tagged scalar keeps its parsed YAML
+type:
+
+- `key: !fill "2d lt example"` → `Field { value: String("2d lt example"), fill: true }`.
+- `key: !fill 42`              → `Field { value: Integer(42),            fill: true }`.
+- `key: !fill 3.14`            → `Field { value: Float(3.14),            fill: true }`.
+- `key: !fill true`            → `Field { value: Bool(true),             fill: true }`.
+- `key: !fill`  (no value)     → `Field { value: Null,                   fill: true }`.
+
+Non-scalar `!fill` (tagged map or sequence) is rejected at parse with
+`unsupported_fill_target` — `!fill` on structured values is YAGNI until
+a use case exists.
+
+Any **other** custom tag (`!include`, `!env`, `!anything`) → reject with
+a parse warning (`unsupported_yaml_tag`) and drop the tag, keeping the
+raw scalar value. This preserves the current "don't fail on unknown
+tags" behaviour but stops silently hiding them.
 
 ### Emitter
 
-- `Field { fill: true, value, … }` → `key: !fill <canonical-value>` when
-  `value` is non-empty, or `key: !fill` when `value` is an empty string.
+- `Field { fill: true, value: Null, … }` → `key: !fill`.
+- `Field { fill: true, value: scalar, … }` → `key: !fill <canonical-scalar>`.
 - `Field { fill: false, … }` → unchanged canonical emission.
 
 ### Data-model surface
 
 - `doc.frontmatter` (the map-keyed getter from tasking 01) continues to
-  return values only. A fill-tagged empty field appears as `""` there —
-  consistent with today.
-- `doc.frontmatterItems` (from tasking 01) exposes `fill: true` per item
-  so consumers drive wizard UI off the data model.
-- New mutator `Document::set_fill(key, bool)` toggles the marker without
-  touching the value. `set_field(key, value)` leaves `fill` untouched
-  (preserves the marker through value edits).
+  return values only. A fill-tagged null field appears as `null` there.
+- `doc.frontmatterItems` exposes `fill: boolean` per item so consumers
+  drive wizard UI off the data model.
+
+### Mutators — two explicit methods
+
+```rust
+/// Set a field's value. Always clears the fill marker.
+/// This is the "user filled this in" path.
+fn set_field<V: Into<QuillValue>>(&mut self, key: &str, value: V);
+
+/// Set a field's value AND mark it as fill.
+/// This is the "reset to placeholder" path. Empty value = `key: !fill`.
+fn set_fill<V: Into<QuillValue>>(&mut self, key: &str, value: V);
+```
+
+Two methods, two intents. The common wizard flow ("user typed something,
+clear the placeholder") is the default `set_field`; the rarer reset is
+an explicit `set_fill`. No options struct, no boolean parameter to
+forget in JS.
 
 ### WASM surface
 
 - `FrontmatterItem` TS type gains `fill: boolean`.
-- No changes to the `frontmatter` record getter.
+- `Document.setField(key, value)` unchanged signature; clears fill.
+- `Document.setFill(key, value)` new; sets fill=true with the given value.
+- `frontmatter` record getter unchanged.
 
 ## Validation
 
 Required-field-is-filled validation is **out of scope** for this tasking.
 A `!fill` on a required field will not error at parse or at `projectForm`
-time here. Follow-on tasking may gate render on it; left open by design.
+time here. Follow-on tasking may gate render on it.
 
 ## Non-goals
 
-- Generic custom-tag preservation (`!include`, etc.). Explicitly rejected
-  with a warning.
-- Placeholder text as a distinct concept from value. `!fill with text`
-  and `!fill` differ only by what `value` holds.
+- Generic custom-tag preservation (`!include`, etc.). Rejected with a
+  warning.
+- `!fill` on maps / sequences. Rejected with a warning.
 - Render-time enforcement of fill state.
 
 ## Done when
 
-- `!fill` round-trips through `fromMarkdown → toMarkdown`.
+- `!fill` round-trips through `fromMarkdown → toMarkdown` for all scalar
+  types (string, int, float, bool, null).
 - `lossiness_tests.rs::custom_tags_lose_tag_but_keep_value` is rewritten
   to assert preservation for `!fill` and rejection-with-warning for
   other tags.
 - `cmu_letter` example markdown round-trips byte-identically (modulo
   canonical quoting normalization from unrelated fields).
-- `frontmatterItems` exposes `fill: boolean` and a WASM test exercises it.
+- `frontmatterItems` exposes `fill: boolean` and a WASM test exercises
+  `setField` clearing fill and `setFill` setting it.
 - `MARKDOWN.md` gains a short section documenting `!fill` as the one
   supported custom tag.
