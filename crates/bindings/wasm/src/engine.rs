@@ -458,9 +458,8 @@ impl Document {
         #[wasm_bindgen(unchecked_param_type = "CardInput")] card: JsValue,
     ) -> Result<(), JsValue> {
         let core_card = js_value_to_card(&card)?;
-        self.inner
-            .push_card(core_card)
-            .map_err(|e| edit_error_to_js(&e))
+        self.inner.push_card(core_card);
+        Ok(())
     }
 
     /// Insert a card at the given index.

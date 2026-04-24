@@ -122,10 +122,6 @@ impl Document {
 
     /// Append a composable card to the end of the card list.
     ///
-    /// Currently trivial — reserved for future cross-card invariant checks
-    /// (e.g. duplicate-tag detection).  The `Result` return type is API
-    /// future-proofing.
-    ///
     /// # Invariants
     ///
     /// `card.sentinel()` must be [`Sentinel::Card`]; a main card cannot be
@@ -134,14 +130,12 @@ impl Document {
     /// # Warnings
     ///
     /// This method never modifies `warnings`.
-    pub fn push_card(&mut self, card: Card) -> Result<(), EditError> {
+    pub fn push_card(&mut self, card: Card) {
         debug_assert!(
             !card.sentinel().is_main(),
             "cannot push a Main-sentinel card as a composable card"
         );
-        // Access private field via helper
         self.cards_vec_mut().push(card);
-        Ok(())
     }
 
     /// Insert a composable card at `index`.

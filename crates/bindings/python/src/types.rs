@@ -389,7 +389,8 @@ impl PyDocument {
     /// This method never modifies `warnings`.
     fn push_card(&mut self, card: Bound<'_, PyAny>) -> PyResult<()> {
         let core_card = py_dict_to_card(&card)?;
-        self.inner.push_card(core_card).map_err(convert_edit_error)
+        self.inner.push_card(core_card);
+        Ok(())
     }
 
     /// Insert a card at the given index.
