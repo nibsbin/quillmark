@@ -133,8 +133,10 @@ pub fn prescan_fence_content(content: &str) -> PreScan {
                     out.fill_target_errors.push(err);
                 }
 
-                out.items
-                    .push(PreItem::Field { key: key.clone(), fill });
+                out.items.push(PreItem::Field {
+                    key: key.clone(),
+                    fill,
+                });
 
                 // Rebuild the line without the `!fill` tag (and without
                 // the trailing comment, since that goes on its own
@@ -178,9 +180,7 @@ fn split_key(line: &str) -> Option<(String, String)> {
         return None;
     }
     let mut i = 1;
-    while i < bytes.len()
-        && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_')
-    {
+    while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
         i += 1;
     }
     if i >= bytes.len() || bytes[i] != b':' {
@@ -245,10 +245,7 @@ fn split_trailing_comment(value: &str) -> (String, Option<String>) {
 ///   and drops unknown tags), so callers get a warning only.
 /// - `fill_target_err`: populated when `!fill` is applied to a block
 ///   mapping or sequence (non-scalar). Per tasking 02 that is rejected.
-fn inspect_fill_and_tags(
-    value: &str,
-    key: &str,
-) -> (bool, String, bool, Option<String>) {
+fn inspect_fill_and_tags(value: &str, key: &str) -> (bool, String, bool, Option<String>) {
     let trimmed = value.trim_start();
     let leading_ws_len = value.len() - trimmed.len();
 
@@ -273,8 +270,7 @@ fn inspect_fill_and_tags(
             let rest_trim = rest.trim_start();
             // Flow-mapping / flow-sequence explicitly rejected; `!fill` only
             // applies to plain scalars (or null).
-            let starts_block = rest_trim.starts_with('[')
-                || rest_trim.starts_with('{');
+            let starts_block = rest_trim.starts_with('[') || rest_trim.starts_with('{');
             let err = if starts_block {
                 Some(format!(
                     "`!fill` on key `{}` targets a non-scalar value; only scalars (string, int, float, bool, null) may be tagged `!fill`",

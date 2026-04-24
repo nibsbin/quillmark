@@ -156,11 +156,7 @@ impl Quill {
             .map(|card| {
                 let card_map = card.frontmatter().to_index_map();
                 let fields_with_defaults = self.apply_card_defaults(&card.tag(), &card_map);
-                Card::new_internal(
-                    card.tag(),
-                    fields_with_defaults,
-                    card.body().to_string(),
-                )
+                Card::new_internal(card.tag(), fields_with_defaults, card.body().to_string())
             })
             .collect();
 

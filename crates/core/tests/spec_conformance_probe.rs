@@ -35,7 +35,12 @@ fn f1_yaml_comment_banners_above_sentinel_are_accepted() {
     let md = "---\n# Essential\n#===========\nQUILL: t\ntitle: T\n---\n\nBody.";
     let doc = Document::from_markdown(md).unwrap();
     assert_eq!(
-        doc.main().frontmatter().get("title").unwrap().as_str().unwrap(),
+        doc.main()
+            .frontmatter()
+            .get("title")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "T"
     );
 }
@@ -87,7 +92,12 @@ fn fence_marker_with_trailing_whitespace_is_accepted() {
     let md = "---  \nQUILL: t\ntitle: T\n---\t\n\nBody.";
     let doc = Document::from_markdown(md).unwrap();
     assert_eq!(
-        doc.main().frontmatter().get("title").unwrap().as_str().unwrap(),
+        doc.main()
+            .frontmatter()
+            .get("title")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "T"
     );
 }
@@ -149,7 +159,12 @@ fn normalize_yaml_scalar_keeps_bidi() {
     let doc = Document::from_markdown(md).unwrap();
     let doc = normalize_document(doc).unwrap();
     assert_eq!(
-        doc.main().frontmatter().get("title").unwrap().as_str().unwrap(),
+        doc.main()
+            .frontmatter()
+            .get("title")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "hi\u{202D}there"
     );
 }
@@ -239,7 +254,12 @@ fn utf8_bom_at_start_is_stripped() {
     let md = "\u{FEFF}---\nQUILL: t\ntitle: T\n---\n\nBody.";
     let doc = Document::from_markdown(md).unwrap();
     assert_eq!(
-        doc.main().frontmatter().get("title").unwrap().as_str().unwrap(),
+        doc.main()
+            .frontmatter()
+            .get("title")
+            .unwrap()
+            .as_str()
+            .unwrap(),
         "T"
     );
 }

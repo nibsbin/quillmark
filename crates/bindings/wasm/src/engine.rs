@@ -392,9 +392,8 @@ impl Document {
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = setFill)]
     pub fn set_fill(&mut self, name: &str, value: JsValue) -> Result<(), JsValue> {
-        let json: serde_json::Value = serde_wasm_bindgen::from_value(value).map_err(|e| {
-            WasmError::from(format!("setFill: invalid value: {}", e)).to_js_value()
-        })?;
+        let json: serde_json::Value = serde_wasm_bindgen::from_value(value)
+            .map_err(|e| WasmError::from(format!("setFill: invalid value: {}", e)).to_js_value())?;
         let qv = quillmark_core::QuillValue::from_json(json);
         self.inner
             .main_mut()

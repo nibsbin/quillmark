@@ -399,8 +399,7 @@ pub fn normalize_document(
     use crate::document::{Document, Sentinel};
 
     // NFC-normalize main-card field names; values pass through verbatim.
-    let normalized_main_fm_map =
-        normalize_fields(doc.main().frontmatter().to_index_map());
+    let normalized_main_fm_map = normalize_fields(doc.main().frontmatter().to_index_map());
     let normalized_main_body = normalize_markdown(doc.main().body());
     let main_sentinel = doc.main().sentinel().clone();
     let main = Card::new_with_sentinel(
@@ -765,7 +764,10 @@ mod tests {
         let normalized_once = super::normalize_document(doc).unwrap();
         let normalized_twice = super::normalize_document(normalized_once.clone()).unwrap();
 
-        assert_eq!(normalized_once.main().body(), normalized_twice.main().body());
+        assert_eq!(
+            normalized_once.main().body(),
+            normalized_twice.main().body()
+        );
     }
 
     #[test]

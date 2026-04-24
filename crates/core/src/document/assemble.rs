@@ -243,17 +243,15 @@ pub(super) fn decompose_with_warnings(
     for (idx, block) in blocks.iter().enumerate() {
         if let Some(ref tag_name) = block.tag {
             // Build the card's typed frontmatter from pre-scan + parsed YAML.
-            let card_frontmatter = build_frontmatter_from_pre_and_parsed(
-                &block.pre_items,
-                &block.yaml_value,
-            )
-            .map_err(|e| match e {
-                ParseError::InvalidStructure(msg) => ParseError::InvalidStructure(format!(
-                    "Invalid YAML in card block '{}': {}",
-                    tag_name, msg
-                )),
-                other => other,
-            })?;
+            let card_frontmatter =
+                build_frontmatter_from_pre_and_parsed(&block.pre_items, &block.yaml_value)
+                    .map_err(|e| match e {
+                        ParseError::InvalidStructure(msg) => ParseError::InvalidStructure(format!(
+                            "Invalid YAML in card block '{}': {}",
+                            tag_name, msg
+                        )),
+                        other => other,
+                    })?;
             for w in &block.pre_warnings {
                 warnings.push(w.clone());
             }
@@ -330,9 +328,7 @@ fn build_frontmatter_from_pre_and_parsed(
                     // `!fill` only applies to scalars (string/int/float/
                     // bool/null). Reject tagged maps or sequences per
                     // tasking 02 (`unsupported_fill_target`).
-                    if *fill
-                        && (value.is_array() || value.is_object())
-                    {
+                    if *fill && (value.is_array() || value.is_object()) {
                         return Err(ParseError::InvalidStructure(format!(
                             "`!fill` on key `{}` targets a non-scalar value; only scalars (string, int, float, bool, null) may be tagged `!fill`",
                             key

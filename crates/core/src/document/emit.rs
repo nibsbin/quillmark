@@ -177,9 +177,7 @@ fn emit_field(out: &mut String, key: &str, value: &JsonValue, indent: usize, fil
         out.push_str(key);
         match value {
             JsonValue::Null => out.push_str(": !fill\n"),
-            JsonValue::Bool(_)
-            | JsonValue::Number(_)
-            | JsonValue::String(_) => {
+            JsonValue::Bool(_) | JsonValue::Number(_) | JsonValue::String(_) => {
                 out.push_str(": !fill ");
                 emit_scalar(out, value);
                 out.push('\n');

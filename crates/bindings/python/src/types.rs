@@ -650,10 +650,7 @@ fn card_to_pydict<'py>(
     card: &quillmark_core::Card,
 ) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
-    d.set_item(
-        "sentinel",
-        if card.is_main() { "main" } else { "card" },
-    )?;
+    d.set_item("sentinel", if card.is_main() { "main" } else { "card" })?;
     d.set_item("tag", card.tag())?;
 
     // Map-keyed frontmatter view (values only, no comments).

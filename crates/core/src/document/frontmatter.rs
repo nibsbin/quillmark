@@ -186,11 +186,7 @@ impl Frontmatter {
 
     /// Insert or update a field and mark it as a `!fill` placeholder. Preserves
     /// position for existing keys; appends new keys at the end.
-    pub fn insert_fill(
-        &mut self,
-        key: impl Into<String>,
-        value: QuillValue,
-    ) -> Option<QuillValue> {
+    pub fn insert_fill(&mut self, key: impl Into<String>, value: QuillValue) -> Option<QuillValue> {
         let key = key.into();
         for item in self.items.iter_mut() {
             if let FrontmatterItem::Field {
@@ -217,9 +213,10 @@ impl Frontmatter {
     /// Remove a field by key and return its value. Adjacent comments stay
     /// where they are.
     pub fn remove(&mut self, key: &str) -> Option<QuillValue> {
-        let pos = self.items.iter().position(|item| {
-            matches!(item, FrontmatterItem::Field { key: k, .. } if k == key)
-        })?;
+        let pos = self
+            .items
+            .iter()
+            .position(|item| matches!(item, FrontmatterItem::Field { key: k, .. } if k == key))?;
         match self.items.remove(pos) {
             FrontmatterItem::Field { value, .. } => Some(value),
             FrontmatterItem::Comment { .. } => unreachable!(),
@@ -255,9 +252,7 @@ impl<'a> IntoIterator for &'a Frontmatter {
     >;
 
     fn into_iter(self) -> Self::IntoIter {
-        fn filter<'a>(
-            item: &'a FrontmatterItem,
-        ) -> Option<(&'a String, &'a QuillValue)> {
+        fn filter<'a>(item: &'a FrontmatterItem) -> Option<(&'a String, &'a QuillValue)> {
             match item {
                 FrontmatterItem::Field { key, value, .. } => Some((key, value)),
                 FrontmatterItem::Comment { .. } => None,
@@ -347,7 +342,10 @@ mod tests {
             .collect();
         assert_eq!(
             pairs,
-            vec![("a".to_string(), "1".to_string()), ("b".to_string(), "2".to_string())]
+            vec![
+                ("a".to_string(), "1".to_string()),
+                ("b".to_string(), "2".to_string())
+            ]
         );
     }
 }

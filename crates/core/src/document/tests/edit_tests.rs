@@ -471,11 +471,7 @@ fn test_invariants_after_mutation_sequence() {
     // Every card tag is valid
     for card in doc.cards() {
         let tag = card.tag();
-        assert!(
-            is_valid_tag_name(&tag),
-            "invalid tag '{}' found",
-            tag
-        );
+        assert!(is_valid_tag_name(&tag), "invalid tag '{}' found", tag);
     }
 
     // Can produce plate JSON without panicking

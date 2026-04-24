@@ -14,7 +14,8 @@ use crate::document::Document;
 fn yaml_comments_disappear_on_round_trip() {
     // Legacy name kept for git history; the assertion is now that comments
     // *do* round-trip. See tasking 01.
-    let src = "---\nQUILL: q\n# recipient's full name\nrecipient: Jane\nauthor: Alice\n---\n\nBody.\n";
+    let src =
+        "---\nQUILL: q\n# recipient's full name\nrecipient: Jane\nauthor: Alice\n---\n\nBody.\n";
 
     let doc = Document::from_markdown(src).unwrap();
     let emitted = doc.to_markdown();
@@ -63,7 +64,10 @@ fn trailing_comments_become_own_line_on_round_trip() {
     // And the value is still intact.
     let doc2 = Document::from_markdown(&emitted).unwrap();
     assert_eq!(
-        doc2.main().frontmatter().get("title").and_then(|v| v.as_str()),
+        doc2.main()
+            .frontmatter()
+            .get("title")
+            .and_then(|v| v.as_str()),
         Some("My Document"),
     );
 }
@@ -218,15 +222,24 @@ fn original_quoting_style_is_not_preserved() {
     // Values must survive round-trip.
     let doc2 = Document::from_markdown(&emitted).unwrap();
     assert_eq!(
-        doc2.main().frontmatter().get("single_q").and_then(|v| v.as_str()),
+        doc2.main()
+            .frontmatter()
+            .get("single_q")
+            .and_then(|v| v.as_str()),
         Some("hello")
     );
     assert_eq!(
-        doc2.main().frontmatter().get("unquoted").and_then(|v| v.as_str()),
+        doc2.main()
+            .frontmatter()
+            .get("unquoted")
+            .and_then(|v| v.as_str()),
         Some("world")
     );
     assert_eq!(
-        doc2.main().frontmatter().get("double_q").and_then(|v| v.as_str()),
+        doc2.main()
+            .frontmatter()
+            .get("double_q")
+            .and_then(|v| v.as_str()),
         Some("already")
     );
 }

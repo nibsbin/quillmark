@@ -188,11 +188,7 @@ impl Card {
     }
 
     /// Create a `Card` directly from a sentinel and typed frontmatter.
-    pub fn new_with_sentinel(
-        sentinel: Sentinel,
-        frontmatter: Frontmatter,
-        body: String,
-    ) -> Self {
+    pub fn new_with_sentinel(sentinel: Sentinel, frontmatter: Frontmatter, body: String) -> Self {
         Self {
             sentinel,
             frontmatter,
@@ -310,11 +306,7 @@ impl Document {
     ///
     /// The caller must guarantee that `main.sentinel` is `Sentinel::Main(_)`
     /// and every card in `cards` has `sentinel` = `Sentinel::Card(_)`.
-    pub fn from_main_and_cards(
-        main: Card,
-        cards: Vec<Card>,
-        warnings: Vec<Diagnostic>,
-    ) -> Self {
+    pub fn from_main_and_cards(main: Card, cards: Vec<Card>, warnings: Vec<Diagnostic>) -> Self {
         debug_assert!(main.sentinel.is_main(), "main card must be Sentinel::Main");
         debug_assert!(
             cards.iter().all(|c| !c.sentinel.is_main()),
@@ -455,10 +447,7 @@ impl Document {
             .iter()
             .map(|card| {
                 let mut card_map = serde_json::Map::new();
-                card_map.insert(
-                    "CARD".to_string(),
-                    serde_json::Value::String(card.tag()),
-                );
+                card_map.insert("CARD".to_string(), serde_json::Value::String(card.tag()));
                 for (key, value) in card.frontmatter.iter() {
                     card_map.insert(key.clone(), value.as_json().clone());
                 }
