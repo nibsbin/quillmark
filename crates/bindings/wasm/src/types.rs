@@ -191,9 +191,6 @@ pub struct Card {
     /// Map-keyed view of frontmatter values (no `CARD`/`QUILL` key, comments invisible).
     #[tsify(type = "Record<string, unknown>")]
     pub frontmatter: serde_json::Value,
-    /// Back-compat alias for `frontmatter`. Will be removed in a future release.
-    #[tsify(type = "Record<string, unknown>")]
-    pub fields: serde_json::Value,
     /// Ordered frontmatter item list — fields and comments, in source order.
     #[tsify(type = "FrontmatterItem[]")]
     pub frontmatter_items: Vec<FrontmatterItem>,
@@ -207,8 +204,6 @@ impl From<&quillmark_core::Card> for Card {
         for (k, v) in card.frontmatter().iter() {
             fields_map.insert(k.clone(), v.as_json().clone());
         }
-
-        let frontmatter_value = serde_json::Value::Object(fields_map);
 
         let items: Vec<FrontmatterItem> = card
             .frontmatter()
@@ -233,8 +228,7 @@ impl From<&quillmark_core::Card> for Card {
         Card {
             sentinel: sentinel.to_string(),
             tag: card.tag(),
-            frontmatter: frontmatter_value.clone(),
-            fields: frontmatter_value,
+            frontmatter: serde_json::Value::Object(fields_map),
             frontmatter_items: items,
             body: card.body().to_string(),
         }

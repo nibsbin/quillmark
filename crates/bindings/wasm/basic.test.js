@@ -40,21 +40,21 @@ describe('Document.fromMarkdown', () => {
   it('should expose typed frontmatter (no QUILL/BODY/CARDS)', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
-    expect(doc.frontmatter).toBeDefined()
-    expect(doc.frontmatter instanceof Object).toBe(true)
-    expect(doc.frontmatter.title).toBe('Test Document')
-    expect(doc.frontmatter.author).toBe('Test Author')
+    expect(doc.main.frontmatter).toBeDefined()
+    expect(doc.main.frontmatter instanceof Object).toBe(true)
+    expect(doc.main.frontmatter.title).toBe('Test Document')
+    expect(doc.main.frontmatter.author).toBe('Test Author')
     // QUILL, BODY, CARDS must NOT appear in frontmatter
-    expect(doc.frontmatter.QUILL).toBeUndefined()
-    expect(doc.frontmatter.BODY).toBeUndefined()
-    expect(doc.frontmatter.CARDS).toBeUndefined()
+    expect(doc.main.frontmatter.QUILL).toBeUndefined()
+    expect(doc.main.frontmatter.BODY).toBeUndefined()
+    expect(doc.main.frontmatter.CARDS).toBeUndefined()
   })
 
   it('should expose body as a string', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
-    expect(typeof doc.body).toBe('string')
-    expect(doc.body).toContain('Hello World')
+    expect(typeof doc.main.body).toBe('string')
+    expect(doc.main.body).toContain('Hello World')
   })
 
   it('should expose cards as an array', () => {
@@ -82,7 +82,7 @@ Card body.
 
     expect(doc.cards.length).toBe(1)
     expect(doc.cards[0].tag).toBe('note')
-    expect(doc.cards[0].fields.foo).toBe('bar')
+    expect(doc.cards[0].frontmatter.foo).toBe('bar')
     expect(doc.cards[0].body).toContain('Card body.')
   })
 
@@ -146,14 +146,14 @@ describe('Document.toMarkdown — fromMarkdown → mutate → emit → re-parse'
     // Note on trailing newlines: the global body is followed by a card fence,
     // so the wire format inserts a line terminator + F2 blank line between
     // them (`Updated body\n\n---`). On re-parse the F2 blank is stripped but
-    // the terminator stays, so `doc2.body === 'Updated body\n'`. The card
+    // the terminator stays, so `doc2.main.body === 'Updated body\n'`. The card
     // body is at EOF and has no F2 separator, so it survives byte-for-byte.
     const doc2 = Document.fromMarkdown(emitted)
-    expect(doc2.frontmatter.title).toBe('New Title')
-    expect(doc2.body).toBe('Updated body\n')
+    expect(doc2.main.frontmatter.title).toBe('New Title')
+    expect(doc2.main.body).toBe('Updated body\n')
     expect(doc2.cards.length).toBe(originalCardCount + 1)
     expect(doc2.cards[0].tag).toBe('note')
-    expect(doc2.cards[0].fields.author).toBe('Alice')
+    expect(doc2.cards[0].frontmatter.author).toBe('Alice')
     expect(doc2.cards[0].body).toBe('Hello')
   })
 
@@ -176,15 +176,15 @@ describe('Document.toMarkdown — fromMarkdown → mutate → emit → re-parse'
     const doc2 = Document.fromMarkdown(emitted)
 
     // Every value must survive as a string, not be re-interpreted as bool/null/number
-    expect(doc2.frontmatter.flag_on).toBe('on')
-    expect(doc2.frontmatter.flag_off).toBe('off')
-    expect(doc2.frontmatter.flag_yes).toBe('yes')
-    expect(doc2.frontmatter.flag_no).toBe('no')
-    expect(doc2.frontmatter.str_true).toBe('true')
-    expect(doc2.frontmatter.str_false).toBe('false')
-    expect(doc2.frontmatter.str_null).toBe('null')
-    expect(doc2.frontmatter.octal_str).toBe('01234')
-    expect(doc2.frontmatter.date_str).toBe('2024-01-15')
+    expect(doc2.main.frontmatter.flag_on).toBe('on')
+    expect(doc2.main.frontmatter.flag_off).toBe('off')
+    expect(doc2.main.frontmatter.flag_yes).toBe('yes')
+    expect(doc2.main.frontmatter.flag_no).toBe('no')
+    expect(doc2.main.frontmatter.str_true).toBe('true')
+    expect(doc2.main.frontmatter.str_false).toBe('false')
+    expect(doc2.main.frontmatter.str_null).toBe('null')
+    expect(doc2.main.frontmatter.octal_str).toBe('01234')
+    expect(doc2.main.frontmatter.date_str).toBe('2024-01-15')
   })
 })
 
@@ -297,13 +297,13 @@ describe('Document editor surface — setField / removeField', () => {
   it('setField inserts a new frontmatter field', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.setField('subtitle', 'A subtitle')
-    expect(doc.frontmatter.subtitle).toBe('A subtitle')
+    expect(doc.main.frontmatter.subtitle).toBe('A subtitle')
   })
 
   it('setField updates an existing field', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.setField('title', 'Updated')
-    expect(doc.frontmatter.title).toBe('Updated')
+    expect(doc.main.frontmatter.title).toBe('Updated')
   })
 
   it('setField throws EditError::ReservedName for BODY', () => {
@@ -335,7 +335,7 @@ describe('Document editor surface — setField / removeField', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     const removed = doc.removeField('title')
     expect(removed).toBe('Test Document')
-    expect(doc.frontmatter.title).toBeUndefined()
+    expect(doc.main.frontmatter.title).toBeUndefined()
   })
 
   it('removeField returns undefined when field absent', () => {
@@ -359,7 +359,7 @@ describe('Document editor surface — setQuillRef / replaceBody', () => {
   it('replaceBody changes the body', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.replaceBody('Brand new body.')
-    expect(doc.body).toBe('Brand new body.')
+    expect(doc.main.body).toBe('Brand new body.')
   })
 })
 
@@ -460,7 +460,7 @@ Card body.
   it('updateCardField sets a field on a card', () => {
     const doc = Document.fromMarkdown(MD_WITH_CARD)
     doc.updateCardField(0, 'content', 'hello')
-    expect(doc.cards[0].fields.content).toBe('hello')
+    expect(doc.cards[0].frontmatter.content).toBe('hello')
   })
 
   it('updateCardField throws EditError::ReservedName for BODY', () => {
@@ -496,15 +496,15 @@ describe('Document editor surface — parse→mutate→read round-trip', () => {
     doc.setQuillRef('updated_quill')
 
     // Assert state
-    expect(doc.frontmatter.author).toBe('Bob')
-    expect(doc.body).toBe('New body text.')
+    expect(doc.main.frontmatter.author).toBe('Bob')
+    expect(doc.main.body).toBe('New body text.')
     expect(doc.cards.length).toBe(1)
     expect(doc.cards[0].tag).toBe('note')
     expect(doc.cards[0].body).toBe('Card content.')
     expect(doc.quillRef).toBe('updated_quill')
 
     // Original title still present
-    expect(doc.frontmatter.title).toBe('Test Document')
+    expect(doc.main.frontmatter.title).toBe('Test Document')
 
     // Warnings untouched
     expect(Array.isArray(doc.warnings)).toBe(true)
@@ -616,8 +616,8 @@ describe('Document.clone', () => {
 
     clone.setField('title', 'Changed')
 
-    expect(doc.frontmatter.title).toBe('Test Document')
-    expect(clone.frontmatter.title).toBe('Changed')
+    expect(doc.main.frontmatter.title).toBe('Test Document')
+    expect(clone.main.frontmatter.title).toBe('Changed')
   })
 
   it('preserves parse-time warnings on the clone', () => {

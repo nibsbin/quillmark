@@ -335,8 +335,6 @@ impl Document {
     }
 
     /// Ordered list of composable card blocks as typed `Card` objects.
-    ///
-    /// Allocates and serializes on each call — cache locally if read in a hot loop.
     #[wasm_bindgen(getter, js_name = cards, unchecked_return_type = "Card[]")]
     pub fn cards(&self) -> JsValue {
         let cards: Vec<Card> = self.inner.cards().iter().map(Card::from).collect();
@@ -345,8 +343,6 @@ impl Document {
     }
 
     /// Non-fatal parse-time warnings as an array of typed `Diagnostic` objects.
-    ///
-    /// Allocates and serializes on each call — cache locally if read in a hot loop.
     #[wasm_bindgen(getter, js_name = warnings, unchecked_return_type = "Diagnostic[]")]
     pub fn warnings(&self) -> JsValue {
         let diags: Vec<Diagnostic> = self
