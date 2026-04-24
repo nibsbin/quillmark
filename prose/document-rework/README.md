@@ -20,12 +20,10 @@ consumers can delete that code.
 3. [03-frontmatter-only-parse.md](03-frontmatter-only-parse.md) — expose a
    parse entry point that takes a bare YAML fragment and returns the typed
    frontmatter, without requiring a full `---`-fenced markdown document.
-4. [04-strip-html-comments.md](04-strip-html-comments.md) — expose a pure
-   utility that strips `<!-- … -->` from markdown text.
 
-Order is the dependency order. 01 and 02 both extend the frontmatter type
-and should land in sequence (02 on top of 01). 03 surfaces the type 01+02
-produce through a new entry point. 04 is independent and a ride-along.
+01 and 02 both extend the frontmatter type and should land in sequence
+(02 on top of 01). 03 surfaces the type 01+02 produce through a new
+entry point.
 
 ## Explicit non-goals
 
@@ -41,6 +39,10 @@ produce through a new entry point. 04 is independent and a ride-along.
 - **No comments inside nested YAML values.** Only top-level comments
   round-trip. Nested comments are dropped silently; a parse warning is
   emitted on the first occurrence per document.
-- **No markdown body AST.** The body stays an opaque string. Downstream
-  editors own their own body parsers (e.g. ProseMirror) and don't need
-  quillmark to duplicate that work.
+- **No markdown body AST, and no content-level transformations of the
+  body.** The body stays an opaque string between the frontmatter and
+  the first card fence. We do not walk its markdown structure, and we
+  do not ship utilities (comment strippers, link rewriters, etc.) that
+  would imply partial parsing. Downstream editors own their body
+  pipeline; when we commit to a markdown AST it will be a separate
+  design, not something smuggled in through helpers.
