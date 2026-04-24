@@ -546,7 +546,7 @@ impl Document {
         let card = self.inner.card_mut(index).ok_or_else(|| {
             edit_error_to_js(&quillmark_core::EditError::IndexOutOfRange { index, len })
         })?;
-        card.set_body(body);
+        card.replace_body(body);
         Ok(())
     }
 }
@@ -588,7 +588,7 @@ fn js_value_to_card(value: &JsValue) -> Result<quillmark_core::Card, JsValue> {
         let qv = quillmark_core::QuillValue::from_json(v);
         card.set_field(&k, qv).map_err(|e| edit_error_to_js(&e))?;
     }
-    card.set_body(input.body);
+    card.replace_body(input.body);
     Ok(card)
 }
 

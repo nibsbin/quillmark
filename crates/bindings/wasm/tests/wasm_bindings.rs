@@ -213,7 +213,6 @@ fn test_quill_metadata_snapshot() {
 /// must not affect the original, and parse-time warnings must survive.
 #[wasm_bindgen_test]
 fn test_document_clone_independence() {
-    use js_sys::Reflect;
     use wasm_bindgen::JsValue;
 
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");

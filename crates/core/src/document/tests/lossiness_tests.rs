@@ -1,19 +1,16 @@
 //! Round-trip tests for comments, `!fill`, and custom tags.
 //!
-//! The canonical emitter preserves what taskings 01 and 02 promise:
-//! top-level YAML comments round-trip as own-line comments, `!fill` tags on
-//! scalar fields round-trip, and the original quoting style normalises to
-//! double-quoted (type-fidelity guarantee). This file pins those contracts.
+//! Top-level YAML comments round-trip as own-line comments, `!fill` on
+//! scalars and sequences round-trips, and string quoting is normalised to
+//! double-quoted (the type-fidelity guarantee).
 
 use crate::document::Document;
 
 // ── Category: YAML comments ───────────────────────────────────────────────────
 
-/// Top-level YAML comments survive a round-trip (tasking 01).
+/// Top-level YAML comments survive a round-trip.
 #[test]
-fn yaml_comments_disappear_on_round_trip() {
-    // Legacy name kept for git history; the assertion is now that comments
-    // *do* round-trip. See tasking 01.
+fn top_level_comments_round_trip() {
     let src =
         "---\nQUILL: q\n# recipient's full name\nrecipient: Jane\nauthor: Alice\n---\n\nBody.\n";
 
@@ -42,7 +39,7 @@ fn yaml_comments_disappear_on_round_trip() {
 }
 
 /// Trailing comments on value lines normalise to own-line comments on the
-/// next line (opinionated canonical form per tasking 01).
+/// next line (canonical form).
 #[test]
 fn trailing_comments_become_own_line_on_round_trip() {
     let src = "---\nQUILL: q\ntitle: My Document # this is a comment\n---\n\nBody.\n";
@@ -140,6 +137,80 @@ fn fill_tag_bare_null_round_trip() {
     );
 }
 
+/// `!fill` on a top-level block sequence round-trips, preserving items and
+/// the fill marker.
+#[test]
+fn fill_tag_block_sequence_round_trip() {
+    let src = "---\nQUILL: q\nrecipient: !fill\n  - Dr. Who\n  - 1 TARDIS Lane\n---\n";
+
+    let doc = Document::from_markdown(src).unwrap();
+    let fm = doc.main().frontmatter();
+
+    assert!(fm.is_fill("recipient"));
+    let arr = fm.get("recipient").and_then(|v| v.as_array()).unwrap();
+    assert_eq!(arr.len(), 2);
+    assert_eq!(arr[0].as_str(), Some("Dr. Who"));
+    assert_eq!(arr[1].as_str(), Some("1 TARDIS Lane"));
+
+    let emitted = doc.to_markdown();
+    assert!(
+        emitted.contains("recipient: !fill\n"),
+        "`!fill` on sequence must emit `key: !fill` before the block\nGot:\n{}",
+        emitted
+    );
+
+    let doc2 = Document::from_markdown(&emitted).unwrap();
+    assert!(doc2.main().frontmatter().is_fill("recipient"));
+    assert_eq!(doc2, doc, "full round-trip must be equal");
+}
+
+/// `!fill` on a flow sequence round-trips (normalised to block form).
+#[test]
+fn fill_tag_flow_sequence_round_trip() {
+    let src = "---\nQUILL: q\ntags: !fill [a, b, c]\n---\n";
+    let doc = Document::from_markdown(src).unwrap();
+    let fm = doc.main().frontmatter();
+    assert!(fm.is_fill("tags"));
+    assert_eq!(fm.get("tags").and_then(|v| v.as_array()).map(|a| a.len()), Some(3));
+
+    let emitted = doc.to_markdown();
+    let doc2 = Document::from_markdown(&emitted).unwrap();
+    assert!(doc2.main().frontmatter().is_fill("tags"));
+    assert_eq!(doc2, doc);
+}
+
+/// `!fill` on an empty sequence round-trips as `key: !fill []`.
+#[test]
+fn fill_tag_empty_sequence_round_trip() {
+    let src = "---\nQUILL: q\nitems: !fill []\n---\n";
+    let doc = Document::from_markdown(src).unwrap();
+    let fm = doc.main().frontmatter();
+    assert!(fm.is_fill("items"));
+    assert_eq!(fm.get("items").and_then(|v| v.as_array()).map(|a| a.len()), Some(0));
+
+    let emitted = doc.to_markdown();
+    assert!(
+        emitted.contains("items: !fill []\n"),
+        "empty fill-sequence must round-trip as `key: !fill []`\nGot:\n{}",
+        emitted
+    );
+
+    let doc2 = Document::from_markdown(&emitted).unwrap();
+    assert_eq!(doc2, doc);
+}
+
+/// `!fill` on a top-level mapping is rejected at parse.
+#[test]
+fn fill_tag_mapping_rejected() {
+    let src = "---\nQUILL: q\nx: !fill {a: 1}\n---\n";
+    let err = Document::from_markdown(src).unwrap_err();
+    assert!(
+        err.to_string().contains("!fill") && err.to_string().contains("mapping"),
+        "expected mapping-rejection error; got: {}",
+        err
+    );
+}
+
 /// `!fill` on every supported scalar type round-trips with the correct type.
 #[test]
 fn fill_tag_all_scalar_types_round_trip() {
@@ -183,7 +254,7 @@ fn fill_tag_all_scalar_types_round_trip() {
 /// is not preserved.  All strings are re-emitted double-quoted with JSON-style
 /// escaping, regardless of how they were written in the source.
 ///
-/// This is intentional (proposal §5.4): normalizing to double-quoted style is
+/// This is intentional: normalizing to double-quoted style is
 /// what guarantees type fidelity for ambiguous strings like `on` and `01234`.
 #[test]
 fn original_quoting_style_is_not_preserved() {

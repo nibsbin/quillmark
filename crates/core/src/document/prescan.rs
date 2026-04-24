@@ -45,7 +45,7 @@ pub struct PreScan {
     /// Warnings produced during the scan.
     pub warnings: Vec<Diagnostic>,
     /// Unsupported-fill-target errors. The parser turns these into
-    /// `ParseError::InvalidStructure` rejections per tasking 02.
+    /// `ParseError::InvalidStructure` rejections (`!fill` on mappings).
     pub fill_target_errors: Vec<String>,
 }
 
@@ -79,10 +79,8 @@ pub fn prescan_fence_content(content: &str) -> PreScan {
             if is_top_level {
                 // Preserve the comment text (without the leading `#` and
                 // one optional space).
-                let mut text = &trimmed[1..];
-                if text.starts_with(' ') {
-                    text = &text[1..];
-                }
+                let without_hash = &trimmed[1..];
+                let text = without_hash.strip_prefix(' ').unwrap_or(without_hash);
                 out.items.push(PreItem::Comment(text.to_string()));
                 // Don't emit any line into the cleaned YAML — serde_saphyr
                 // ignores comments but omitting the line avoids any
@@ -145,10 +143,8 @@ pub fn prescan_fence_content(content: &str) -> PreScan {
                 cleaned_lines.push(cleaned);
 
                 if let Some(c) = trailing_comment {
-                    let mut text = c.trim_start_matches('#');
-                    if text.starts_with(' ') {
-                        text = &text[1..];
-                    }
+                    let stripped = c.trim_start_matches('#');
+                    let text = stripped.strip_prefix(' ').unwrap_or(stripped);
                     out.items.push(PreItem::Comment(text.to_string()));
                 }
 
@@ -243,8 +239,10 @@ fn split_trailing_comment(value: &str) -> (String, Option<String>) {
 /// - `had_other_tag`: `true` when a non-`!fill` `!tag` was found at the
 ///   start of the value. The tag is *not* stripped (serde_saphyr tolerates
 ///   and drops unknown tags), so callers get a warning only.
-/// - `fill_target_err`: populated when `!fill` is applied to a block
-///   mapping or sequence (non-scalar). Per tasking 02 that is rejected.
+/// - `fill_target_err`: populated when `!fill` is applied to a mapping
+///   (flow `{...}` or block form). `!fill` on mappings is rejected because
+///   top-level `type: object` is not a supported schema type in Quillmark;
+///   `!fill` on scalars and sequences is allowed.
 fn inspect_fill_and_tags(value: &str, key: &str) -> (bool, String, bool, Option<String>) {
     let trimmed = value.trim_start();
     let leading_ws_len = value.len() - trimmed.len();
@@ -254,10 +252,14 @@ fn inspect_fill_and_tags(value: &str, key: &str) -> (bool, String, bool, Option<
         return (false, value.to_string(), false, None);
     }
 
-    // `!fill` alone on the line (bare tag, no value) → null placeholder.
+    // `!fill` alone on the line (bare tag, no value) → placeholder. The
+    // value may be null (no continuation) or a block sequence on the
+    // following indented lines. serde_saphyr produces the actual value.
     if trimmed == "!fill" {
         // Replace the tag with nothing; leave the leading whitespace so the
-        // line shape is preserved (serde_saphyr treats `key: ` as null).
+        // line shape is preserved (serde_saphyr treats `key: ` as null,
+        // and if a block sequence follows on indented lines, it parses as
+        // a sequence).
         let reconstructed = value[..leading_ws_len].to_string();
         return (true, reconstructed, false, None);
     }
@@ -268,12 +270,12 @@ fn inspect_fill_and_tags(value: &str, key: &str) -> (bool, String, bool, Option<
         // it's `!fillwhatever` which is a non-`!fill` tag.
         if rest.starts_with(' ') || rest.starts_with('\t') || rest.is_empty() {
             let rest_trim = rest.trim_start();
-            // Flow-mapping / flow-sequence explicitly rejected; `!fill` only
-            // applies to plain scalars (or null).
-            let starts_block = rest_trim.starts_with('[') || rest_trim.starts_with('{');
-            let err = if starts_block {
+            // Reject flow-mappings (`!fill {...}`); top-level `type: object`
+            // isn't supported by the schema. Flow sequences (`!fill [...]`)
+            // and scalars are allowed.
+            let err = if rest_trim.starts_with('{') {
                 Some(format!(
-                    "`!fill` on key `{}` targets a non-scalar value; only scalars (string, int, float, bool, null) may be tagged `!fill`",
+                    "`!fill` on key `{}` targets a mapping; `!fill` is supported on scalars and sequences only",
                     key
                 ))
             } else {
@@ -396,12 +398,29 @@ mod tests {
     }
 
     #[test]
-    fn fill_on_flow_sequence_errors() {
+    fn fill_on_flow_sequence_allowed() {
         let input = "x: !fill [1, 2]\n";
         let out = prescan_fence_content(input);
         assert!(
+            out.fill_target_errors.is_empty(),
+            "expected no error; !fill on sequences is supported"
+        );
+        assert_eq!(
+            out.items,
+            vec![PreItem::Field {
+                key: "x".to_string(),
+                fill: true,
+            }]
+        );
+    }
+
+    #[test]
+    fn fill_on_flow_mapping_errors() {
+        let input = "x: !fill {a: 1}\n";
+        let out = prescan_fence_content(input);
+        assert!(
             !out.fill_target_errors.is_empty(),
-            "expected unsupported_fill_target error"
+            "expected error; !fill on mappings is rejected"
         );
     }
 }

@@ -1,4 +1,4 @@
-//! Unit tests for the document editor surface (Phase 3).
+//! Unit tests for the document editor surface.
 
 use crate::document::edit::{is_reserved_name, is_valid_field_name, EditError, RESERVED_NAMES};
 use crate::document::sentinel::is_valid_tag_name;
@@ -293,7 +293,7 @@ fn test_document_card_mut() {
     let mut doc = make_doc_with_cards();
     {
         let card = doc.card_mut(0).unwrap();
-        card.set_body("Updated card body.");
+        card.replace_body("Updated card body.");
     }
     assert_eq!(doc.cards()[0].body(), "Updated card body.");
 }
@@ -413,7 +413,7 @@ fn test_card_remove_field_absent() {
 #[test]
 fn test_card_set_body() {
     let mut card = Card::new("note").unwrap();
-    card.set_body("Card body text.");
+    card.replace_body("Card body text.");
     assert_eq!(card.body(), "Card body text.");
 }
 

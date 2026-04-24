@@ -66,12 +66,13 @@ optional trailing whitespace). The content between is parsed as YAML.
   silently; a `parse::comments_in_nested_yaml_dropped` warning is emitted
   on the first occurrence per document.
 - **The `!fill` tag.** `!fill` is the single supported YAML tag; it marks
-  a top-level scalar field as a placeholder awaiting user input and
-  round-trips through emit. `!fill` may only be applied to scalars
-  (string, integer, float, bool, null); `!fill` on a block map or
-  sequence is rejected at parse. Any other custom tag (`!include`,
-  `!env`, …) is dropped with a `parse::unsupported_yaml_tag` warning;
-  the scalar value is kept but the tag does not round-trip.
+  a top-level field as a placeholder awaiting user input and round-trips
+  through emit. `!fill` may be applied to scalars (string, integer,
+  float, bool, null) and sequences; it is rejected on mappings because
+  Quillmark's schema has no top-level `type: object`. Any other custom
+  tag (`!include`, `!env`, …) is dropped with a
+  `parse::unsupported_yaml_tag` warning; the scalar value is kept but
+  the tag does not round-trip.
 
 ## 4. Fence Detection Rules
 

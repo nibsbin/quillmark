@@ -1,9 +1,7 @@
-//! Targeted number-edge tests — Phase 4b.
+//! Targeted number-edge tests
 //!
-//! Per plan §Phase 4 risks: `1e10`, `0x1F`, large integers — confirm
 //! `QuillValue::Number` and the emitter agree on representation.
 //!
-//! See plan §Phase 4 test item 6.
 
 use crate::document::Document;
 

@@ -460,7 +460,7 @@ impl PyDocument {
         let card = self.inner.card_mut(index).ok_or_else(|| {
             convert_edit_error(quillmark_core::EditError::IndexOutOfRange { index, len })
         })?;
-        card.set_body(body);
+        card.replace_body(body);
         Ok(())
     }
 }
@@ -801,7 +801,7 @@ fn py_dict_to_card(value: &Bound<'_, PyAny>) -> PyResult<quillmark_core::Card> {
 
     if let Some(body_val) = dict.get_item("body")? {
         let body: String = body_val.extract()?;
-        card.set_body(body);
+        card.replace_body(body);
     }
 
     Ok(card)

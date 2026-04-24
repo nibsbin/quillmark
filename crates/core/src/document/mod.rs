@@ -71,10 +71,7 @@
 //! See [PARSE.md](https://github.com/nibsbin/quillmark/blob/main/designs/PARSE.md) for
 //! comprehensive documentation of the Extended YAML Metadata Standard.
 
-use indexmap::IndexMap;
-
 use crate::error::ParseError;
-use crate::value::QuillValue;
 use crate::version::QuillReference;
 use crate::Diagnostic;
 
@@ -121,17 +118,6 @@ pub enum Sentinel {
 }
 
 impl Sentinel {
-    /// Construct the `QUILL:` variant.
-    pub fn main(reference: QuillReference) -> Self {
-        Sentinel::Main(reference)
-    }
-
-    /// Construct the `CARD:` variant. The tag is not validated here; use
-    /// [`Card::new`] or the parser for validation.
-    pub fn card(tag: impl Into<String>) -> Self {
-        Sentinel::Card(tag.into())
-    }
-
     /// String form of this sentinel's value: the quill reference for `Main`,
     /// the tag for `Card`.
     pub fn as_str(&self) -> String {
@@ -173,21 +159,11 @@ pub struct Card {
 }
 
 impl Card {
-    /// Create a `Card` directly from typed parts.
-    ///
-    /// Used by `assemble.rs`, `normalize.rs`, and the `Quill`.
-    /// Does **not** validate the tag name or field names — callers are
-    /// responsible for providing already-valid data.  For user-facing
-    /// construction use [`Card::new`] (defined in `edit.rs`).
-    pub fn new_internal(tag: String, fields: IndexMap<String, QuillValue>, body: String) -> Self {
-        Self {
-            sentinel: Sentinel::Card(tag),
-            frontmatter: Frontmatter::from_index_map(fields),
-            body,
-        }
-    }
-
-    /// Create a `Card` directly from a sentinel and typed frontmatter.
+    /// Create a `Card` directly from a sentinel, a typed frontmatter, and a
+    /// body. Does **not** validate the sentinel tag or any field names —
+    /// callers are responsible for providing already-valid data. For
+    /// user-facing construction of composable cards use [`Card::new`]
+    /// (defined in `edit.rs`).
     pub fn new_with_sentinel(sentinel: Sentinel, frontmatter: Frontmatter, body: String) -> Self {
         Self {
             sentinel,
@@ -229,12 +205,6 @@ impl Card {
         self.sentinel.is_main()
     }
 
-    /// Deprecated: use `card.frontmatter()` instead.
-    #[doc(hidden)]
-    pub fn fields(&self) -> &Frontmatter {
-        &self.frontmatter
-    }
-
     /// Replace this card's sentinel. Internal helper; public mutators
     /// ([`Document::set_quill_ref`], the parser) call this.
     pub(crate) fn replace_sentinel(&mut self, sentinel: Sentinel) {
@@ -250,17 +220,17 @@ impl Card {
 /// A fully-parsed, typed in-memory Quillmark document.
 ///
 /// `Document` is the canonical representation of a Quillmark Markdown file.
-/// Markdown is one import format (and will be one export format in Phase 4);
-/// the structured data here is primary.
+/// Markdown is both the import and export format; the structured data here
+/// is primary.
 ///
 /// ## Structure
 ///
 /// - `main` — the entry `Card` (sentinel is `Sentinel::Main(reference)`).
 /// - `cards` — ordered composable cards (each with `Sentinel::Card(tag)`).
 ///
-/// When a backend plate needs the legacy flat JSON shape, call
-/// [`Document::to_plate_json`]. That method is the **only** place in core that
-/// reconstructs `{"QUILL": ..., "CARDS": [...], "BODY": "..."}`.
+/// Backend plates consume the flat JSON wire shape produced by
+/// [`Document::to_plate_json`]. That method is the **only** place in core
+/// that reconstructs `{"QUILL": ..., "CARDS": [...], "BODY": "..."}`.
 #[derive(Debug, Clone)]
 pub struct Document {
     main: Card,
@@ -280,28 +250,6 @@ impl PartialEq for Document {
 }
 
 impl Document {
-    /// Create a `Document` directly from typed parts.
-    ///
-    /// This is used by `assemble.rs`, `normalize.rs`, and the `Quill`.
-    pub fn new_internal(
-        quill_ref: QuillReference,
-        frontmatter: IndexMap<String, QuillValue>,
-        body: String,
-        cards: Vec<Card>,
-        warnings: Vec<Diagnostic>,
-    ) -> Self {
-        let main = Card::new_with_sentinel(
-            Sentinel::Main(quill_ref),
-            Frontmatter::from_index_map(frontmatter),
-            body,
-        );
-        Self {
-            main,
-            cards,
-            warnings,
-        }
-    }
-
     /// Create a `Document` from a pre-built main `Card` and composable cards.
     ///
     /// The caller must guarantee that `main.sentinel` is `Sentinel::Main(_)`
@@ -373,29 +321,6 @@ impl Document {
     /// Non-fatal warnings collected during parsing.
     pub fn warnings(&self) -> &[Diagnostic] {
         &self.warnings
-    }
-
-    // ── Back-compat shims ──────────────────────────────────────────────────
-    //
-    // These `#[doc(hidden)]` shortcuts forward to `self.main()`. The typed
-    // model is now `Document { main: Card, cards: Vec<Card> }`; all
-    // frontmatter/body reads and mutations live on `Card`. These shims keep
-    // existing internal call sites compiling during migration and will be
-    // removed once every caller has been updated.
-
-    /// Deprecated: use `doc.main().frontmatter()` instead.
-    ///
-    /// Exposes the main card's [`Frontmatter`], which supports `get`,
-    /// `contains_key`, `iter`, `keys`, and item-level iteration.
-    #[doc(hidden)]
-    pub fn frontmatter(&self) -> &Frontmatter {
-        self.main.frontmatter()
-    }
-
-    /// Deprecated: use `doc.main().body()` instead.
-    #[doc(hidden)]
-    pub fn body(&self) -> &str {
-        self.main.body()
     }
 
     // ── Wire format ────────────────────────────────────────────────────────────

@@ -165,14 +165,12 @@ fn ensure_f2_before_fence(out: &mut String) {
 /// - Empty objects are **omitted** (caller skips them).
 /// - Empty arrays emit `key: []\n`.
 /// - All other values follow the block-style rules.
-/// - When `fill` is `true`, the emitted form is `key: !fill <value>` (scalar)
-///   or `key: !fill` (null value). `!fill` only applies to scalar fields at
-///   the top level of a card's frontmatter; nested recursion always passes
-///   `fill = false`.
+/// - When `fill` is `true`, the emitted form is `key: !fill <value>` for
+///   scalars, `key: !fill\n  - …` for non-empty sequences,
+///   `key: !fill []` for empty sequences, and `key: !fill` for null.
+///   Mappings are rejected at parse and never reach this path.
 fn emit_field(out: &mut String, key: &str, value: &JsonValue, indent: usize, fill: bool) {
     if fill {
-        // !fill applies only to scalar values (incl. null). Non-scalar fill
-        // targets are rejected at parse time (tasking 02).
         push_indent(out, indent);
         out.push_str(key);
         match value {
@@ -182,10 +180,17 @@ fn emit_field(out: &mut String, key: &str, value: &JsonValue, indent: usize, fil
                 emit_scalar(out, value);
                 out.push('\n');
             }
-            JsonValue::Array(_) | JsonValue::Object(_) => {
-                // Shouldn't happen — parser rejects !fill on non-scalars —
-                // but emit verbatim scalar recovery if someone constructs
-                // this state directly.
+            JsonValue::Array(items) if items.is_empty() => {
+                out.push_str(": !fill []\n");
+            }
+            JsonValue::Array(items) => {
+                out.push_str(": !fill\n");
+                for item in items {
+                    emit_sequence_item(out, item, indent);
+                }
+            }
+            JsonValue::Object(_) => {
+                // Parser rejects !fill on mappings; recovery path only.
                 out.push_str(": ");
                 emit_scalar(out, value);
                 out.push('\n');

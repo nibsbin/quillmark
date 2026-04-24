@@ -373,8 +373,8 @@ pub fn normalize_field_name(name: &str) -> String {
 ///
 /// 1. **Unicode NFC normalization** — Frontmatter field names are normalized to NFC form.
 /// 2. **Bidi stripping** — Invisible bidirectional control characters are removed from
-///    body regions (`Document::body` and each `Card::body`). YAML field values in
-///    `frontmatter` and `Card::fields` pass through verbatim (spec §7).
+///    body regions (each `Card::body`). YAML field values in every
+///    `Card::frontmatter` pass through verbatim (spec §7).
 /// 3. **HTML comment fence fixing** — Trailing text after `-->` is preserved in body
 ///    regions only.
 ///
@@ -734,7 +734,7 @@ mod tests {
         // Title has chevrons preserved (only bidi stripped on body)
         assert_eq!(
             normalized
-                .frontmatter()
+                .main().frontmatter()
                 .get("title")
                 .unwrap()
                 .as_str()
@@ -788,7 +788,7 @@ mod tests {
         // Bidi preserved in YAML fields
         assert_eq!(
             normalized
-                .frontmatter()
+                .main().frontmatter()
                 .get("title")
                 .unwrap()
                 .as_str()
@@ -818,7 +818,7 @@ mod tests {
         let normalized = super::normalize_document(doc).unwrap();
         assert_eq!(
             normalized.cards()[0]
-                .fields()
+                .frontmatter()
                 .get("name")
                 .unwrap()
                 .as_str()

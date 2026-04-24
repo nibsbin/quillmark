@@ -5,8 +5,9 @@ use indexmap::IndexMap;
 use std::sync::Arc;
 
 use quillmark_core::{
-    normalize::normalize_document, Backend, Card, Diagnostic, Document, OutputFormat, QuillSource,
-    QuillValue, RenderError, RenderOptions, RenderResult, RenderSession, Severity,
+    normalize::normalize_document, Backend, Card, Diagnostic, Document, Frontmatter, OutputFormat,
+    QuillSource, QuillValue, RenderError, RenderOptions, RenderResult, RenderSession, Sentinel,
+    Severity,
 };
 
 /// Renderable quill. Composes an [`Arc<QuillSource>`] with a resolved
@@ -125,20 +126,20 @@ impl Quill {
                             ),
                     ),
                 })?;
-            coerced_cards.push(Card::new_internal(
-                card.tag(),
-                coerced_fields,
+            coerced_cards.push(Card::new_with_sentinel(
+                Sentinel::Card(card.tag()),
+                Frontmatter::from_index_map(coerced_fields),
                 card.body().to_string(),
             ));
         }
 
-        let coerced_doc = Document::new_internal(
-            doc.quill_reference().clone(),
-            coerced_frontmatter,
+        let coerced_main = Card::new_with_sentinel(
+            Sentinel::Main(doc.quill_reference().clone()),
+            Frontmatter::from_index_map(coerced_frontmatter),
             doc.main().body().to_string(),
-            coerced_cards,
-            doc.warnings().to_vec(),
         );
+        let coerced_doc =
+            Document::from_main_and_cards(coerced_main, coerced_cards, doc.warnings().to_vec());
 
         self.validate_document(&coerced_doc)?;
 
@@ -156,15 +157,22 @@ impl Quill {
             .map(|card| {
                 let card_map = card.frontmatter().to_index_map();
                 let fields_with_defaults = self.apply_card_defaults(&card.tag(), &card_map);
-                Card::new_internal(card.tag(), fields_with_defaults, card.body().to_string())
+                Card::new_with_sentinel(
+                    Sentinel::Card(card.tag()),
+                    Frontmatter::from_index_map(fields_with_defaults),
+                    card.body().to_string(),
+                )
             })
             .collect();
 
         // Rebuild document with defaults applied.
-        let final_doc = Document::new_internal(
-            normalized.quill_reference().clone(),
-            frontmatter_with_defaults,
+        let final_main = Card::new_with_sentinel(
+            Sentinel::Main(normalized.quill_reference().clone()),
+            Frontmatter::from_index_map(frontmatter_with_defaults),
             normalized.main().body().to_string(),
+        );
+        let final_doc = Document::from_main_and_cards(
+            final_main,
             cards_with_defaults,
             normalized.warnings().to_vec(),
         );
@@ -273,19 +281,19 @@ impl Quill {
                             ),
                     ),
                 })?;
-            coerced_cards.push(Card::new_internal(
-                card.tag(),
-                coerced_fields,
+            coerced_cards.push(Card::new_with_sentinel(
+                Sentinel::Card(card.tag()),
+                Frontmatter::from_index_map(coerced_fields),
                 card.body().to_string(),
             ));
         }
-        let coerced_doc = Document::new_internal(
-            doc.quill_reference().clone(),
-            coerced_frontmatter,
+        let coerced_main = Card::new_with_sentinel(
+            Sentinel::Main(doc.quill_reference().clone()),
+            Frontmatter::from_index_map(coerced_frontmatter),
             doc.main().body().to_string(),
-            coerced_cards,
-            doc.warnings().to_vec(),
         );
+        let coerced_doc =
+            Document::from_main_and_cards(coerced_main, coerced_cards, doc.warnings().to_vec());
         self.validate_document(&coerced_doc)?;
         Ok(())
     }

@@ -303,31 +303,21 @@ main:
     }
 
     fn doc_from_fm(entries: &[(&str, serde_json::Value)]) -> Document {
-        let mut frontmatter = IndexMap::new();
-        for (k, v) in entries {
-            frontmatter.insert(k.to_string(), QuillValue::from_json(v.clone()));
-        }
-        Document::new_internal(
-            QuillReference::from_str("test_quill").unwrap(),
-            frontmatter,
-            String::new(),
-            vec![],
-            vec![],
-        )
+        doc_with_typed_cards(entries, vec![])
     }
 
     fn doc_with_typed_cards(fm: &[(&str, serde_json::Value)], cards: Vec<Card>) -> Document {
+        use crate::document::{Frontmatter, Sentinel};
         let mut frontmatter = IndexMap::new();
         for (k, v) in fm {
             frontmatter.insert(k.to_string(), QuillValue::from_json(v.clone()));
         }
-        Document::new_internal(
-            QuillReference::from_str("test_quill").unwrap(),
-            frontmatter,
+        let main = Card::new_with_sentinel(
+            Sentinel::Main(QuillReference::from_str("test_quill").unwrap()),
+            Frontmatter::from_index_map(frontmatter),
             String::new(),
-            cards,
-            vec![],
-        )
+        );
+        Document::from_main_and_cards(main, cards, vec![])
     }
 
     fn typed_card(tag: &str, fields: &[(&str, serde_json::Value)]) -> Card {

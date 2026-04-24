@@ -209,14 +209,14 @@ Second item body."#;
     let card1 = &doc.cards()[0];
     assert_eq!(card1.tag(), "items");
     assert_eq!(
-        card1.fields().get("name").unwrap().as_str().unwrap(),
+        card1.frontmatter().get("name").unwrap().as_str().unwrap(),
         "Item 1"
     );
 
     let card2 = &doc.cards()[1];
     assert_eq!(card2.tag(), "items");
     assert_eq!(
-        card2.fields().get("name").unwrap().as_str().unwrap(),
+        card2.frontmatter().get("name").unwrap().as_str().unwrap(),
         "Item 2"
     );
 }
@@ -546,14 +546,14 @@ Section 1 body"#;
     let card0 = &doc.cards()[0];
     assert_eq!(card0.tag(), "items");
     assert_eq!(
-        card0.fields().get("name").unwrap().as_str().unwrap(),
+        card0.frontmatter().get("name").unwrap().as_str().unwrap(),
         "Item 1"
     );
 
     let card1 = &doc.cards()[1];
     assert_eq!(card1.tag(), "sections");
     assert_eq!(
-        card1.fields().get("title").unwrap().as_str().unwrap(),
+        card1.frontmatter().get("title").unwrap().as_str().unwrap(),
         "Section 1"
     );
 }
@@ -681,7 +681,7 @@ rating: 4
     assert_eq!(doc.cards()[0].tag(), "products");
     assert_eq!(
         doc.cards()[0]
-            .fields()
+            .frontmatter()
             .get("name")
             .unwrap()
             .as_str()
@@ -690,7 +690,7 @@ rating: 4
     );
     assert_eq!(
         doc.cards()[0]
-            .fields()
+            .frontmatter()
             .get("price")
             .unwrap()
             .as_f64()
@@ -701,7 +701,7 @@ rating: 4
     assert_eq!(doc.cards()[1].tag(), "products");
     assert_eq!(
         doc.cards()[1]
-            .fields()
+            .frontmatter()
             .get("name")
             .unwrap()
             .as_str()
@@ -713,7 +713,7 @@ rating: 4
     assert_eq!(doc.cards()[2].tag(), "reviews");
     assert_eq!(
         doc.cards()[2]
-            .fields()
+            .frontmatter()
             .get("product")
             .unwrap()
             .as_str()
@@ -722,7 +722,7 @@ rating: 4
     );
     assert_eq!(
         doc.cards()[2]
-            .fields()
+            .frontmatter()
             .get("rating")
             .unwrap()
             .as_i64()
@@ -808,7 +808,7 @@ QUILL: second
         .iter()
         .any(|w| w.code.as_deref() == Some("parse::near_miss_sentinel")
             && w.message.contains("QUILL")));
-    assert!(output.document.body().contains("QUILL: second"));
+    assert!(output.document.main().body().contains("QUILL: second"));
 }
 
 #[test]
@@ -1120,7 +1120,7 @@ fn test_extended_metadata_demo_file() {
     assert_eq!(doc.cards()[0].tag(), "features");
     assert_eq!(
         doc.cards()[0]
-            .fields()
+            .frontmatter()
             .get("name")
             .unwrap()
             .as_str()
@@ -1265,7 +1265,7 @@ Use <<card body>> here."#;
     assert_eq!(items[0].as_str().unwrap(), "<<first>>");
     assert_eq!(items[1].as_str().unwrap(), "<<second>>");
     let metadata = doc
-        .frontmatter()
+        .main().frontmatter()
         .get("metadata")
         .unwrap()
         .as_object()
@@ -1495,7 +1495,7 @@ description: |
 Body."#;
     let doc = decompose(markdown).unwrap();
     let desc = doc
-        .frontmatter()
+        .main().frontmatter()
         .get("description")
         .unwrap()
         .as_str()
@@ -1517,7 +1517,7 @@ description: >
 Body."#;
     let doc = decompose(markdown).unwrap();
     let desc = doc
-        .frontmatter()
+        .main().frontmatter()
         .get("description")
         .unwrap()
         .as_str()
@@ -1577,7 +1577,7 @@ config:
 Body."#;
     let doc = decompose(markdown).unwrap();
     let config = doc
-        .frontmatter()
+        .main().frontmatter()
         .get("config")
         .unwrap()
         .as_object()
@@ -1810,7 +1810,7 @@ fn test_f2_strip_does_not_overstrip_content_newlines() {
     let doc = decompose(markdown).unwrap();
     let emitted = doc.to_markdown();
     let reparsed = Document::from_markdown(&emitted).unwrap();
-    assert_eq!(doc.main().body(), reparsed.body());
+    assert_eq!(doc.main().body(), reparsed.main().body());
     // Author's blank line after the code block survives.
     assert!(
         doc.main().body().ends_with("```\n\n"),
@@ -1926,7 +1926,7 @@ Body
     assert_eq!(doc.cards()[0].tag(), "my_card");
     assert_eq!(
         doc.cards()[0]
-            .fields()
+            .frontmatter()
             .get("title")
             .unwrap()
             .as_str()
@@ -2014,7 +2014,7 @@ Conclusion content.
     assert_eq!(doc.cards()[0].tag(), "section");
     assert_eq!(
         doc.cards()[0]
-            .fields()
+            .frontmatter()
             .get("heading")
             .unwrap()
             .as_str()
@@ -2025,7 +2025,7 @@ Conclusion content.
     assert_eq!(doc.cards()[1].tag(), "section");
     assert_eq!(
         doc.cards()[1]
-            .fields()
+            .frontmatter()
             .get("heading")
             .unwrap()
             .as_str()

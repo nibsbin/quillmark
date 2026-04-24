@@ -232,7 +232,7 @@ impl Card {
     }
 
     /// Set a frontmatter field by name. Always clears the `!fill` marker for
-    /// that key (per tasking 02, this is the "user filled in" path).
+    /// that key — the "user filled in" path.
     ///
     /// # Invariants enforced
     ///
@@ -260,9 +260,9 @@ impl Card {
         Ok(())
     }
 
-    /// Set a frontmatter field AND mark it as a `!fill` placeholder (per
-    /// tasking 02, this is the "reset to placeholder" path). A `Null` value
-    /// emits as `key: !fill`; a scalar value emits as `key: !fill <value>`.
+    /// Set a frontmatter field AND mark it as a `!fill` placeholder — the
+    /// "reset to placeholder" path. A `Null` value emits as `key: !fill`;
+    /// a scalar or sequence value emits as `key: !fill <value>`.
     ///
     /// # Invariants enforced
     ///
@@ -301,11 +301,5 @@ impl Card {
     /// Card mutators never modify the parent document's `warnings`.
     pub fn replace_body(&mut self, body: impl Into<String>) {
         self.overwrite_body(body.into());
-    }
-
-    /// Deprecated alias for [`Card::replace_body`]; kept to ease migration.
-    #[doc(hidden)]
-    pub fn set_body(&mut self, body: impl Into<String>) {
-        self.replace_body(body);
     }
 }

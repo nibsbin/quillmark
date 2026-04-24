@@ -83,7 +83,7 @@ fn near_miss_sentinel_emits_warning_and_delegates() {
         "near-miss CARD must be delegated, not registered"
     );
     // Body must contain the delegated content.
-    assert!(out.document.body().contains("Card: oops"));
+    assert!(out.document.main().body().contains("Card: oops"));
 }
 
 // §3 — Trailing whitespace on the fence marker must be accepted.

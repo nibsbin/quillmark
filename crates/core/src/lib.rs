@@ -20,7 +20,8 @@
 //! // Parse markdown with frontmatter
 //! let markdown = "---\nQUILL: my_quill\ntitle: Example\n---\n\n# Content";
 //! let doc = Document::from_markdown(markdown).unwrap();
-//! let title = doc.frontmatter()
+//! let title = doc.main()
+//!     .frontmatter()
 //!     .get("title")
 //!     .and_then(|v| v.as_str())
 //!     .unwrap_or("Untitled");

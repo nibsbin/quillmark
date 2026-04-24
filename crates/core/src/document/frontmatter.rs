@@ -25,7 +25,7 @@ pub enum FrontmatterItem {
         key: String,
         value: QuillValue,
         /// `true` when the field was written as `key: !fill <value>` or
-        /// `key: !fill` in source. See tasking 02.
+        /// `key: !fill` in source.
         #[serde(default)]
         fill: bool,
     },
@@ -44,34 +44,9 @@ impl FrontmatterItem {
         }
     }
 
-    /// Build a fill-tagged field entry.
-    pub fn fill_field(key: impl Into<String>, value: QuillValue) -> Self {
-        FrontmatterItem::Field {
-            key: key.into(),
-            value,
-            fill: true,
-        }
-    }
-
     /// Build a comment item.
     pub fn comment(text: impl Into<String>) -> Self {
         FrontmatterItem::Comment { text: text.into() }
-    }
-
-    /// Returns `Some((key, value, fill))` if this is a field, else `None`.
-    pub fn as_field(&self) -> Option<(&str, &QuillValue, bool)> {
-        match self {
-            FrontmatterItem::Field { key, value, fill } => Some((key.as_str(), value, *fill)),
-            FrontmatterItem::Comment { .. } => None,
-        }
-    }
-
-    /// Returns `Some(text)` if this is a comment, else `None`.
-    pub fn as_comment(&self) -> Option<&str> {
-        match self {
-            FrontmatterItem::Comment { text } => Some(text),
-            FrontmatterItem::Field { .. } => None,
-        }
     }
 }
 
@@ -108,11 +83,6 @@ impl Frontmatter {
     /// Ordered iterator over raw items (including comments).
     pub fn items(&self) -> &[FrontmatterItem] {
         &self.items
-    }
-
-    /// Mutable access to the ordered item list.
-    pub fn items_mut(&mut self) -> &mut Vec<FrontmatterItem> {
-        &mut self.items
     }
 
     /// Iterator over `(key, value)` pairs, skipping comments. Preserves order.
@@ -323,7 +293,10 @@ mod tests {
         let comments: Vec<&str> = fm
             .items()
             .iter()
-            .filter_map(FrontmatterItem::as_comment)
+            .filter_map(|item| match item {
+                FrontmatterItem::Comment { text } => Some(text.as_str()),
+                FrontmatterItem::Field { .. } => None,
+            })
             .collect();
         assert_eq!(comments, vec!["header", "mid"]);
     }

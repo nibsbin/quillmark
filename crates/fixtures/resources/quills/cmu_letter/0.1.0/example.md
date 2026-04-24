@@ -5,11 +5,11 @@ address:
   - 5000 Forbes Avenue
   - Pittsburgh, PA 15213-3890
 url: cmu.edu
-recipient:
+recipient: !fill
   - Dr. Heinz Doofenshmirtz
   - 9297 Polly Parkway
   - City, Virginia 46231
-signature_block:
+signature_block: !fill
   - Phineas Flynn
   - Masters Student
 ---

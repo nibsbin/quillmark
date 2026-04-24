@@ -325,12 +325,12 @@ fn build_frontmatter_from_pre_and_parsed(
                     continue;
                 }
                 if let Some(value) = mapping.get(key).cloned() {
-                    // `!fill` only applies to scalars (string/int/float/
-                    // bool/null). Reject tagged maps or sequences per
-                    // tasking 02 (`unsupported_fill_target`).
-                    if *fill && (value.is_array() || value.is_object()) {
+                    // `!fill` applies to scalars and sequences. Mappings
+                    // are rejected because top-level `type: object` is
+                    // unsupported by Quillmark's schema.
+                    if *fill && value.is_object() {
                         return Err(ParseError::InvalidStructure(format!(
-                            "`!fill` on key `{}` targets a non-scalar value; only scalars (string, int, float, bool, null) may be tagged `!fill`",
+                            "`!fill` on key `{}` targets a mapping; `!fill` is supported on scalars and sequences only",
                             key
                         )));
                     }
