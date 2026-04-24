@@ -24,11 +24,22 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     steps:
+      # Use a GitHub App token so the branch push and PR creation trigger
+      # downstream workflows (CI). Events from the default GITHUB_TOKEN are
+      # suppressed by GitHub to prevent recursive runs, which leaves release
+      # PRs without checks.
+      - name: Generate tagger token
+        id: tagger
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TAGGER_APP_ID }}
+          private-key: ${{ secrets.TAGGER_PRIVATE_KEY }}
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.tagger.outputs.token }}
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -126,7 +137,7 @@ jobs:
 
       - name: Open pull request
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.tagger.outputs.token }}
         run: |
           VERSION="${{ steps.next.outputs.version }}"
           PREV="${{ steps.current.outputs.version }}"
