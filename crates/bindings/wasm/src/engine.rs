@@ -322,34 +322,19 @@ impl Document {
         self.inner.quill_reference().to_string()
     }
 
-    /// Typed YAML frontmatter fields as a JS object (no QUILL, BODY, or CARDS keys).
+    /// The document's main (entry) card.
     ///
-    /// Allocates and serializes on each call — cache locally if read in a hot loop.
-    #[wasm_bindgen(getter, js_name = frontmatter, unchecked_return_type = "Record<string, unknown>")]
-    pub fn frontmatter(&self) -> JsValue {
-        let mut map = serde_json::Map::new();
-        for (k, v) in self.inner.frontmatter() {
-            map.insert(k.clone(), v.as_json().clone());
-        }
-        let val = serde_json::Value::Object(map);
-        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-        val.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
+    /// Carries the QUILL sentinel, the document-level frontmatter, and the
+    /// global body. Frontmatter/body reads and mutations go through this
+    /// handle — there are no document-level shortcuts after the rework.
+    ///
+    /// Allocates on each call — cache locally if read in a hot loop.
+    #[wasm_bindgen(getter, js_name = main)]
+    pub fn main(&self) -> Card {
+        Card::from(self.inner.main())
     }
 
-    /// Global Markdown body between frontmatter and the first card.
-    ///
-    /// Returned verbatim from core — the F2 structural separator is stripped
-    /// at parse time (see `quillmark_core::document::assemble::strip_f2_separator`),
-    /// so the string here is exactly what the author wrote (or what was set
-    /// via `replaceBody`).
-    ///
-    /// Empty string when no body is present.
-    #[wasm_bindgen(getter, js_name = body)]
-    pub fn body(&self) -> String {
-        self.inner.body().to_string()
-    }
-
-    /// Ordered list of card blocks as typed `Card` objects.
+    /// Ordered list of composable card blocks as typed `Card` objects.
     ///
     /// Allocates and serializes on each call — cache locally if read in a hot loop.
     #[wasm_bindgen(getter, js_name = cards, unchecked_return_type = "Card[]")]
@@ -376,7 +361,10 @@ impl Document {
 
     // ── Mutators ──────────────────────────────────────────────────────────────
 
-    /// Set a frontmatter field.
+    /// Update a frontmatter field on the main card.
+    ///
+    /// Convenience method: equivalent to `doc.mainMut().setField(name, value)`.
+    /// Clears any existing `!fill` marker on the field.
     ///
     /// Throws an `Error` whose message includes the `EditError` variant name and
     /// details if `name` is reserved (`BODY`, `CARDS`, `QUILL`, `CARD`) or does
@@ -390,16 +378,36 @@ impl Document {
         })?;
         let qv = quillmark_core::QuillValue::from_json(json);
         self.inner
+            .main_mut()
             .set_field(name, qv)
             .map_err(|e| edit_error_to_js(&e))
     }
 
-    /// Remove a frontmatter field, returning the removed value or `undefined`.
+    /// Update a frontmatter field on the main card AND mark it as `!fill`.
+    ///
+    /// Convenience method: equivalent to `doc.mainMut().setFill(name, value)`.
+    ///
+    /// Throws on invalid name (see [`setField`](Document::set_field)).
+    ///
+    /// Mutators never modify `warnings`.
+    #[wasm_bindgen(js_name = setFill)]
+    pub fn set_fill(&mut self, name: &str, value: JsValue) -> Result<(), JsValue> {
+        let json: serde_json::Value = serde_wasm_bindgen::from_value(value).map_err(|e| {
+            WasmError::from(format!("setFill: invalid value: {}", e)).to_js_value()
+        })?;
+        let qv = quillmark_core::QuillValue::from_json(json);
+        self.inner
+            .main_mut()
+            .set_fill(name, qv)
+            .map_err(|e| edit_error_to_js(&e))
+    }
+
+    /// Remove a frontmatter field on the main card, returning the removed value or `undefined`.
     ///
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = removeField)]
     pub fn remove_field(&mut self, name: &str) -> JsValue {
-        match self.inner.remove_field(name) {
+        match self.inner.main_mut().remove_field(name) {
             Some(v) => {
                 let serializer =
                     serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
@@ -429,12 +437,12 @@ impl Document {
         Ok(())
     }
 
-    /// Replace the global Markdown body.
+    /// Replace the main card's body (the global Markdown body).
     ///
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = replaceBody)]
     pub fn replace_body(&mut self, body: &str) {
-        self.inner.replace_body(body);
+        self.inner.main_mut().replace_body(body);
     }
 
     /// Append a card to the end of the card list.

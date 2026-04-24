@@ -39,7 +39,7 @@ fn test_markdown_field_normalization() {
 
     // Normalize
     let normalized = normalize_document(doc).expect("Failed to normalize document");
-    let fm = normalized.frontmatter();
+    let fm = normalized.main().frontmatter();
 
     // Both fields pass through unchanged (no stripping on YAML fields)
     assert_eq!(
@@ -57,5 +57,5 @@ fn test_normalize_document_body_is_str_not_option() {
     // body() now returns &str (not Option<&str>)
     let doc = Document::from_markdown("---\nQUILL: t\n---\n\nHello body.").unwrap();
     let normalized = normalize_document(doc).unwrap();
-    assert!(normalized.body().contains("Hello body."));
+    assert!(normalized.main().body().contains("Hello body."));
 }

@@ -151,18 +151,52 @@ pub struct RenderResult {
     pub render_time_ms: f64,
 }
 
+/// A single frontmatter item — either a field or an own-line comment.
+///
+/// Exposed via `Card.frontmatterItems`.
+#[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
+#[tsify(into_wasm_abi, from_wasm_abi)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum FrontmatterItem {
+    Field {
+        key: String,
+        #[tsify(type = "unknown")]
+        value: serde_json::Value,
+        /// `true` when the field was written as `key: !fill <value>` in
+        /// source or was marked via `Card.setFill()`.
+        #[serde(default)]
+        fill: bool,
+    },
+    Comment {
+        text: String,
+    },
+}
+
 /// A single card block parsed from a Quillmark Markdown document.
 ///
-/// Exposed as a plain JS object via the `Document.cards` getter.
+/// Exposed as a plain JS object via `Document.main`, `Document.cards`, etc.
+/// Carries a sentinel that distinguishes the document entry (main) card from
+/// composable cards, a `tag` string (the QUILL reference or CARD tag), typed
+/// frontmatter (map view under `frontmatter`, ordered item list under
+/// `frontmatterItems`), and the body.
 #[derive(Debug, Clone, Serialize, Deserialize, Tsify)]
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub struct Card {
-    /// The CARD sentinel value (e.g. `"indorsement"`).
+    /// `"main"` for the document entry (QUILL) card; `"card"` for composable cards.
+    pub sentinel: String,
+    /// The CARD sentinel value (e.g. `"indorsement"`) or the QUILL reference
+    /// string for the main card.
     pub tag: String,
-    /// Typed YAML fields from the card fence (no `CARD` key).
+    /// Map-keyed view of frontmatter values (no `CARD`/`QUILL` key, comments invisible).
+    #[tsify(type = "Record<string, unknown>")]
+    pub frontmatter: serde_json::Value,
+    /// Back-compat alias for `frontmatter`. Will be removed in a future release.
     #[tsify(type = "Record<string, unknown>")]
     pub fields: serde_json::Value,
+    /// Ordered frontmatter item list — fields and comments, in source order.
+    #[tsify(type = "FrontmatterItem[]")]
+    pub frontmatter_items: Vec<FrontmatterItem>,
     /// Markdown body after the card's closing `---`. Empty string when absent.
     pub body: String,
 }
@@ -170,12 +204,38 @@ pub struct Card {
 impl From<&quillmark_core::Card> for Card {
     fn from(card: &quillmark_core::Card) -> Self {
         let mut fields_map = serde_json::Map::new();
-        for (k, v) in card.fields() {
+        for (k, v) in card.frontmatter().iter() {
             fields_map.insert(k.clone(), v.as_json().clone());
         }
+
+        let frontmatter_value = serde_json::Value::Object(fields_map);
+
+        let items: Vec<FrontmatterItem> = card
+            .frontmatter()
+            .items()
+            .iter()
+            .map(|item| match item {
+                quillmark_core::FrontmatterItem::Field { key, value, fill } => {
+                    FrontmatterItem::Field {
+                        key: key.clone(),
+                        value: value.as_json().clone(),
+                        fill: *fill,
+                    }
+                }
+                quillmark_core::FrontmatterItem::Comment { text } => {
+                    FrontmatterItem::Comment { text: text.clone() }
+                }
+            })
+            .collect();
+
+        let sentinel = if card.is_main() { "main" } else { "card" };
+
         Card {
-            tag: card.tag().to_string(),
-            fields: serde_json::Value::Object(fields_map),
+            sentinel: sentinel.to_string(),
+            tag: card.tag(),
+            frontmatter: frontmatter_value.clone(),
+            fields: frontmatter_value,
+            frontmatter_items: items,
             body: card.body().to_string(),
         }
     }

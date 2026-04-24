@@ -29,7 +29,7 @@ fn test_document_body_and_warnings() {
     let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
     // Body at EOF: no F2 separator to strip, so trailing content newlines are
     // preserved verbatim. The WASM binding forwards core's body unchanged.
-    assert_eq!(doc.body(), "\n# Hello\n");
+    assert_eq!(doc.main().body, "\n# Hello\n");
     // warnings() returns JsValue (array) — just verify it's defined
     let warnings = doc.warnings();
     assert!(!warnings.is_undefined());
@@ -224,22 +224,16 @@ fn test_document_clone_independence() {
         .set_field("title", JsValue::from_str("Changed"))
         .expect("setField on clone");
 
-    let original_fm = doc.frontmatter();
-    let clone_fm = clone.frontmatter();
+    let original_fm = doc.main().frontmatter;
+    let clone_fm = clone.main().frontmatter;
 
     assert_eq!(
-        Reflect::get(&original_fm, &JsValue::from_str("title"))
-            .unwrap()
-            .as_string()
-            .as_deref(),
+        original_fm.get("title").and_then(|v| v.as_str()),
         Some("Hello"),
         "original frontmatter must be untouched after clone mutation"
     );
     assert_eq!(
-        Reflect::get(&clone_fm, &JsValue::from_str("title"))
-            .unwrap()
-            .as_string()
-            .as_deref(),
+        clone_fm.get("title").and_then(|v| v.as_str()),
         Some("Changed"),
         "clone frontmatter must reflect the mutation"
     );

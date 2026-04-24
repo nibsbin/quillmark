@@ -91,11 +91,12 @@ impl Quill {
     /// Applies coercion, validation, normalization, and schema defaults, then
     /// calls [`Document::to_plate_json`] to produce the wire format.
     pub fn compile_data(&self, doc: &Document) -> Result<serde_json::Value, RenderError> {
-        // Coerce frontmatter fields against the schema.
+        // Coerce main-card frontmatter fields against the schema.
+        let main_fields_map = doc.main().frontmatter().to_index_map();
         let coerced_frontmatter = self
             .source
             .config()
-            .coerce_frontmatter(doc.frontmatter())
+            .coerce_frontmatter(&main_fields_map)
             .map_err(|e| RenderError::ValidationFailed {
                 diag: Box::new(
                     Diagnostic::new(Severity::Error, e.to_string())
@@ -109,10 +110,11 @@ impl Quill {
         // Coerce card fields against per-card schemas.
         let mut coerced_cards: Vec<Card> = Vec::new();
         for card in doc.cards() {
+            let card_fields_map = card.frontmatter().to_index_map();
             let coerced_fields = self
                 .source
                 .config()
-                .coerce_card(card.tag(), card.fields())
+                .coerce_card(&card.tag(), &card_fields_map)
                 .map_err(|e| RenderError::ValidationFailed {
                     diag: Box::new(
                         Diagnostic::new(Severity::Error, e.to_string())
@@ -124,7 +126,7 @@ impl Quill {
                     ),
                 })?;
             coerced_cards.push(Card::new_internal(
-                card.tag().to_string(),
+                card.tag(),
                 coerced_fields,
                 card.body().to_string(),
             ));
@@ -133,7 +135,7 @@ impl Quill {
         let coerced_doc = Document::new_internal(
             doc.quill_reference().clone(),
             coerced_frontmatter,
-            doc.body().to_string(),
+            doc.main().body().to_string(),
             coerced_cards,
             doc.warnings().to_vec(),
         );
@@ -144,16 +146,18 @@ impl Quill {
         let normalized = normalize_document(coerced_doc)?;
 
         // Apply schema defaults to frontmatter.
-        let frontmatter_with_defaults = self.apply_frontmatter_defaults(normalized.frontmatter());
+        let normalized_main_map = normalized.main().frontmatter().to_index_map();
+        let frontmatter_with_defaults = self.apply_frontmatter_defaults(&normalized_main_map);
 
         // Apply per-card defaults.
         let cards_with_defaults: Vec<Card> = normalized
             .cards()
             .iter()
             .map(|card| {
-                let fields_with_defaults = self.apply_card_defaults(card.tag(), card.fields());
+                let card_map = card.frontmatter().to_index_map();
+                let fields_with_defaults = self.apply_card_defaults(&card.tag(), &card_map);
                 Card::new_internal(
-                    card.tag().to_string(),
+                    card.tag(),
                     fields_with_defaults,
                     card.body().to_string(),
                 )
@@ -164,7 +168,7 @@ impl Quill {
         let final_doc = Document::new_internal(
             normalized.quill_reference().clone(),
             frontmatter_with_defaults,
-            normalized.body().to_string(),
+            normalized.main().body().to_string(),
             cards_with_defaults,
             normalized.warnings().to_vec(),
         );
@@ -241,10 +245,11 @@ impl Quill {
 
     /// Perform a dry-run validation without backend compilation.
     pub fn dry_run(&self, doc: &Document) -> Result<(), RenderError> {
+        let main_fields_map = doc.main().frontmatter().to_index_map();
         let coerced_frontmatter = self
             .source
             .config()
-            .coerce_frontmatter(doc.frontmatter())
+            .coerce_frontmatter(&main_fields_map)
             .map_err(|e| RenderError::ValidationFailed {
                 diag: Box::new(
                     Diagnostic::new(Severity::Error, e.to_string())
@@ -257,10 +262,11 @@ impl Quill {
             })?;
         let mut coerced_cards: Vec<Card> = Vec::new();
         for card in doc.cards() {
+            let card_fields_map = card.frontmatter().to_index_map();
             let coerced_fields = self
                 .source
                 .config()
-                .coerce_card(card.tag(), card.fields())
+                .coerce_card(&card.tag(), &card_fields_map)
                 .map_err(|e| RenderError::ValidationFailed {
                     diag: Box::new(
                         Diagnostic::new(Severity::Error, e.to_string())
@@ -272,7 +278,7 @@ impl Quill {
                     ),
                 })?;
             coerced_cards.push(Card::new_internal(
-                card.tag().to_string(),
+                card.tag(),
                 coerced_fields,
                 card.body().to_string(),
             ));
@@ -280,7 +286,7 @@ impl Quill {
         let coerced_doc = Document::new_internal(
             doc.quill_reference().clone(),
             coerced_frontmatter,
-            doc.body().to_string(),
+            doc.main().body().to_string(),
             coerced_cards,
             doc.warnings().to_vec(),
         );
