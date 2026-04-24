@@ -734,7 +734,8 @@ mod tests {
         // Title has chevrons preserved (only bidi stripped on body)
         assert_eq!(
             normalized
-                .main().frontmatter()
+                .main()
+                .frontmatter()
                 .get("title")
                 .unwrap()
                 .as_str()
@@ -788,7 +789,8 @@ mod tests {
         // Bidi preserved in YAML fields
         assert_eq!(
             normalized
-                .main().frontmatter()
+                .main()
+                .frontmatter()
                 .get("title")
                 .unwrap()
                 .as_str()

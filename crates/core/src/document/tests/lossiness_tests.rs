@@ -171,7 +171,10 @@ fn fill_tag_flow_sequence_round_trip() {
     let doc = Document::from_markdown(src).unwrap();
     let fm = doc.main().frontmatter();
     assert!(fm.is_fill("tags"));
-    assert_eq!(fm.get("tags").and_then(|v| v.as_array()).map(|a| a.len()), Some(3));
+    assert_eq!(
+        fm.get("tags").and_then(|v| v.as_array()).map(|a| a.len()),
+        Some(3)
+    );
 
     let emitted = doc.to_markdown();
     let doc2 = Document::from_markdown(&emitted).unwrap();
@@ -186,7 +189,10 @@ fn fill_tag_empty_sequence_round_trip() {
     let doc = Document::from_markdown(src).unwrap();
     let fm = doc.main().frontmatter();
     assert!(fm.is_fill("items"));
-    assert_eq!(fm.get("items").and_then(|v| v.as_array()).map(|a| a.len()), Some(0));
+    assert_eq!(
+        fm.get("items").and_then(|v| v.as_array()).map(|a| a.len()),
+        Some(0)
+    );
 
     let emitted = doc.to_markdown();
     assert!(

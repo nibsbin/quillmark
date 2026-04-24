@@ -1265,7 +1265,8 @@ Use <<card body>> here."#;
     assert_eq!(items[0].as_str().unwrap(), "<<first>>");
     assert_eq!(items[1].as_str().unwrap(), "<<second>>");
     let metadata = doc
-        .main().frontmatter()
+        .main()
+        .frontmatter()
         .get("metadata")
         .unwrap()
         .as_object()
@@ -1495,7 +1496,8 @@ description: |
 Body."#;
     let doc = decompose(markdown).unwrap();
     let desc = doc
-        .main().frontmatter()
+        .main()
+        .frontmatter()
         .get("description")
         .unwrap()
         .as_str()
@@ -1517,7 +1519,8 @@ description: >
 Body."#;
     let doc = decompose(markdown).unwrap();
     let desc = doc
-        .main().frontmatter()
+        .main()
+        .frontmatter()
         .get("description")
         .unwrap()
         .as_str()
@@ -1577,7 +1580,8 @@ config:
 Body."#;
     let doc = decompose(markdown).unwrap();
     let config = doc
-        .main().frontmatter()
+        .main()
+        .frontmatter()
         .get("config")
         .unwrap()
         .as_object()
