@@ -1,5 +1,5 @@
 //! Quill configuration parsing and normalization.
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::error::Error as StdError;
 
 use indexmap::IndexMap;
@@ -76,6 +76,44 @@ impl QuillConfig {
     /// Returns a named card-type schema by name.
     pub fn card_type(&self, name: &str) -> Option<&CardSchema> {
         self.card_types.iter().find(|card| card.name == name)
+    }
+
+    /// Public schema contract as a JSON value.
+    ///
+    /// The single source of truth for what consumers (form UIs, MCP tools,
+    /// LLM repair loops) see. Top-level keys: `name`, `main`, optional
+    /// `card_types` (map keyed by card name), and optional `example`.
+    /// `main` and each card under `card_types` serialize their `FieldSchema`
+    /// children via the structs' own serde attributes; the wire format here
+    /// is therefore pinned by those attributes plus this projection.
+    pub fn public_schema(&self) -> serde_json::Value {
+        let mut obj = serde_json::Map::new();
+        obj.insert(
+            "name".to_string(),
+            serde_json::Value::String(self.name.clone()),
+        );
+        obj.insert(
+            "main".to_string(),
+            serde_json::to_value(&self.main).unwrap_or(serde_json::Value::Null),
+        );
+        if !self.card_types.is_empty() {
+            let card_types: BTreeMap<String, &CardSchema> = self
+                .card_types
+                .iter()
+                .map(|card| (card.name.clone(), card))
+                .collect();
+            obj.insert(
+                "card_types".to_string(),
+                serde_json::to_value(&card_types).unwrap_or(serde_json::Value::Null),
+            );
+        }
+        if let Some(example) = &self.example_markdown {
+            obj.insert(
+                "example".to_string(),
+                serde_json::Value::String(example.clone()),
+            );
+        }
+        serde_json::Value::Object(obj)
     }
 
     /// Extract default values from the main card's field schemas.
@@ -473,8 +511,8 @@ impl QuillConfig {
         key_order: &[String],
         context: &str,
         warnings: &mut Vec<Diagnostic>,
-    ) -> Result<HashMap<String, FieldSchema>, Box<dyn StdError + Send + Sync>> {
-        let mut fields = HashMap::new();
+    ) -> Result<BTreeMap<String, FieldSchema>, Box<dyn StdError + Send + Sync>> {
+        let mut fields = BTreeMap::new();
         let mut fallback_counter = 0;
 
         for (field_name, field_value) in fields_map {
@@ -732,13 +770,13 @@ impl QuillConfig {
                         &mut warnings,
                     )?
                 } else {
-                    HashMap::new()
+                    BTreeMap::new()
                 }
             } else {
-                HashMap::new()
+                BTreeMap::new()
             }
         } else {
-            HashMap::new()
+            BTreeMap::new()
         };
 
         // Extract main.ui (optional)
@@ -789,9 +827,9 @@ impl QuillConfig {
                         &mut warnings,
                     )?
                 } else if let Some(_toml_fields) = &card_def.fields {
-                    HashMap::new()
+                    BTreeMap::new()
                 } else {
-                    HashMap::new()
+                    BTreeMap::new()
                 };
 
                 let card_schema = CardSchema {

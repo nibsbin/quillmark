@@ -2193,14 +2193,27 @@ fn public_schema_snapshot_usaf_memo_0_1_0() {
 
     let expected_path =
         quillmark_fixtures::resource_path("quills/usaf_memo/0.1.0/__golden__/public_schema.yaml");
-    let expected = fs::read_to_string(expected_path).expect("failed to read golden public schema");
 
+    if std::env::var("UPDATE_GOLDEN").is_ok() {
+        fs::write(&expected_path, &yaml).expect("failed to update golden public schema");
+    }
+
+    let expected = fs::read_to_string(&expected_path).expect("failed to read golden public schema");
     assert_eq!(yaml, expected, "public schema snapshot changed");
 
     let parsed: serde_json::Value =
         serde_saphyr::from_str(&yaml).expect("schema yaml should parse");
     assert!(parsed.get("name").is_some());
-    assert!(parsed.get("fields").is_some());
+    assert!(parsed.get("main").is_some());
+    assert!(
+        parsed.get("main").and_then(|v| v.get("fields")).is_some(),
+        "main.fields should be present"
+    );
     assert!(parsed.get("card_types").is_some());
     assert!(parsed.get("CARDS").is_none());
+
+    // public_schema() (the JSON value) must agree with the YAML round-trip;
+    // they are two encodings of the same source of truth.
+    let value = quill.config.public_schema();
+    assert_eq!(value, parsed);
 }

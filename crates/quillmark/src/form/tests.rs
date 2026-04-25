@@ -296,7 +296,16 @@ main:
     let back: FormProjection =
         serde_json::from_str(&json).expect("FormProjection must deserialize");
 
-    assert_eq!(proj, back, "round-trip must be identity");
+    // Name fields on CardSchema / FieldSchema are intentionally skipped on the
+    // wire (the map key carries them), so round-trip identity does not hold for
+    // those. Compare structural content instead.
+    assert_eq!(proj.main.values, back.main.values);
+    assert_eq!(proj.cards, back.cards);
+    assert_eq!(proj.diagnostics, back.diagnostics);
+    assert_eq!(
+        proj.main.schema.fields.keys().collect::<Vec<_>>(),
+        back.main.schema.fields.keys().collect::<Vec<_>>()
+    );
     assert!(
         json.contains("title"),
         "serialized JSON should contain field name"

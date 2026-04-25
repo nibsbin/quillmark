@@ -47,11 +47,16 @@ Validation is implemented by a native walker over `QuillConfig` in `quill/valida
 
 ## Public schema emission
 
-External schema contract is emitted by `QuillConfig::public_schema_yaml()`.
+External schema contract is the value returned by `QuillConfig::public_schema()`.
+`QuillConfig::public_schema_yaml()` is a convenience wrapper that YAML-encodes
+the same value; the wasm `quill.metadata.schema` getter returns the same value
+as JSON.
 
-- Output is YAML text
-- Shape is a subset projection of `Quill.yaml`
-- Includes `name`, `description`, optional `example`, `fields`, and `cards`
-- Preserves `ui` hints as `ui:` (no renaming)
-
-See `PUBLIC_SCHEMA.md` for the output contract.
+The wire format is pinned by serde attributes on `FieldSchema`, `CardSchema`,
+`UiFieldSchema`, and `UiContainerSchema` directly — there is no parallel
+"public" mirror struct. Top-level keys: `name`, `main`, optional `card_types`
+(map keyed by card name), optional `example`. `main` and each entry in
+`card_types` share the same `CardSchema` shape: `fields` (map keyed by field
+name), optional `title`, `description`, `ui`. Each `FieldSchema` includes
+`type`, optional `title`/`description`/`default`/`examples`/`ui`/`enum`/
+`properties`/`items`, and optional `required` (omitted when false).
