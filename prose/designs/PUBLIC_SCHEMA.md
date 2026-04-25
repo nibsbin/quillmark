@@ -74,9 +74,9 @@ Projection is by exclusion:
 
 ## Who exposes it
 
-- **Python** (`crates/bindings/python/`): `quill.schema` property returns YAML string. See PYTHON.md.
+- **Python** (`crates/bindings/python/`): `quill.schema` property returns YAML string.
 - **CLI** (`crates/bindings/cli/`): `quillmark schema <path>` subcommand prints or writes the YAML.
-- **WASM** (`crates/bindings/wasm/`): the WASM `Quill` class does **not** currently expose a schema getter. See WASM.md.
+- **WASM** (`crates/bindings/wasm/`): the WASM `Quill` class does **not** currently expose a schema getter.
 
 ## Why YAML text (not JSON object)
 

@@ -18,7 +18,7 @@ Options:
 - `-o, --output <FILE>` — output file path (default: derived from input filename)
 - `-f, --format <FORMAT>` — `pdf`, `svg`, `png`, or `txt` (default: `pdf`)
 - `--stdout` — write output to stdout
-- `--output-data <FILE>` — write compiled JSON data to file
+- `--output-data <DATA_FILE>` — write compiled JSON data to file
 - `-v, --verbose` — detailed processing output
 - `--quiet` — suppress non-error output
 
