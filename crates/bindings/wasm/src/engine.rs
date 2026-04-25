@@ -156,21 +156,23 @@ impl Quill {
         self.inner.backend_id().to_string()
     }
 
-    /// Read-only snapshot of the loaded `Quill.yaml`.
+    /// Read-only snapshot of the loaded quill's engine info and declared schema.
     ///
-    /// Returns a plain JS object with `name`, `backend`, `description`,
-    /// `version`, `author`, optional `example` (content of the example
-    /// markdown, when the quill ships one), `supportedFormats` (backend's
-    /// output formats as lowercase strings), `schema` (mirrors Quill.yaml:
-    /// `schema.main` is the main entry-point card and `schema.cardTypes`
-    /// is a map of the other composable card types keyed by name — both
-    /// are shaped the same way, with `fields`, optional `title`,
-    /// `description`, and `ui`; consumers surfacing a card-type picker
-    /// iterate `Object.keys(schema.cardTypes)`), and any additional
-    /// unstructured keys declared inside the `quill:` section.
+    /// Returns a plain JS object with:
+    /// - `schema` — the quill's public schema contract, identical to
+    ///   `QuillConfig::public_schema()`. Top-level keys: `name`, `main`,
+    ///   optional `card_types` (map keyed by card name, omitted when empty),
+    ///   optional `example`. `main` and each card under `card_types` share
+    ///   the same shape: `fields` (map keyed by field name), optional
+    ///   `title`, `description`, `ui`.
+    /// - `backend`, `version`, `author` — quill identity declared in
+    ///   `Quill.yaml`'s `quill:` section.
+    /// - `supportedFormats` — output formats the backend produces, as
+    ///   lowercase strings.
+    /// - Any additional unstructured keys declared under `quill:`.
     ///
     /// Consumers that need validation run their own validator against
-    /// this raw schema.
+    /// `metadata.schema`.
     ///
     /// Equivalent by value for the lifetime of the handle; the quill is
     /// immutable once constructed.
@@ -180,17 +182,10 @@ impl Quill {
         let config = source.config();
 
         let mut obj = serde_json::Map::new();
-        obj.insert(
-            "name".to_string(),
-            serde_json::Value::String(config.name.clone()),
-        );
+        obj.insert("schema".to_string(), config.public_schema());
         obj.insert(
             "backend".to_string(),
             serde_json::Value::String(config.backend.clone()),
-        );
-        obj.insert(
-            "description".to_string(),
-            serde_json::Value::String(config.main.description.clone().unwrap_or_default()),
         );
         obj.insert(
             "version".to_string(),
@@ -200,12 +195,6 @@ impl Quill {
             "author".to_string(),
             serde_json::Value::String(config.author.clone()),
         );
-        if let Some(example) = source.example() {
-            obj.insert(
-                "example".to_string(),
-                serde_json::Value::String(example.to_string()),
-            );
-        }
 
         let formats: Vec<serde_json::Value> = self
             .inner
@@ -221,26 +210,8 @@ impl Quill {
             serde_json::Value::Array(formats),
         );
 
-        let mut schema = serde_json::Map::new();
-        schema.insert(
-            "main".to_string(),
-            serde_json::to_value(&config.main).unwrap_or(serde_json::Value::Null),
-        );
-        let mut card_types = serde_json::Map::new();
-        for card in &config.card_types {
-            card_types.insert(
-                card.name.clone(),
-                serde_json::to_value(card).unwrap_or(serde_json::Value::Null),
-            );
-        }
-        schema.insert(
-            "cardTypes".to_string(),
-            serde_json::Value::Object(card_types),
-        );
-        obj.insert("schema".to_string(), serde_json::Value::Object(schema));
-
         // Unstructured keys declared under `quill:` (excluding fields already
-        // surfaced above).
+        // surfaced above or now living under `schema`).
         for (key, value) in source.metadata() {
             if matches!(
                 key.as_str(),

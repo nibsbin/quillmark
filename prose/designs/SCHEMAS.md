@@ -9,8 +9,8 @@
 Schema authoring lives in `Quill.yaml` under:
 
 - `main.fields`
-- `card_types.<card_name>.fields`
-- optional `ui` hints on fields/card_types/main
+- `cards.<card_name>.fields`
+- optional `ui` hints on fields/cards/main
 
 Supported field types:
 
@@ -28,18 +28,18 @@ Supported field types:
 
 ## Type coercion
 
-`QuillConfig::coerce_frontmatter` and `QuillConfig::coerce_card` run before validation.
+`QuillConfig::coerce(&HashMap<String, QuillValue>)` runs before validation.
 
-- `coerce_frontmatter(&IndexMap<String, QuillValue>)` — coerces main-card frontmatter fields; returns `Result<IndexMap<String, QuillValue>, CoercionError>`
-- `coerce_card(card_tag, &IndexMap<String, QuillValue>)` — coerces a single card's fields against the matching card-type schema; returns the input unchanged when the tag is unknown
-- Both fail fast (`Err`) on the first value that cannot be coerced
+- Returns `Result<HashMap<String, QuillValue>, CoercionError>`
+- Coerces top-level fields and card fields in `CARDS` to their declared types
+- Fails fast (`Err`) on the first value that cannot be coerced
 - Coercion rules per type: array wrapping, boolean from string/int/float, number/integer from string, string/markdown pass-through, date/datetime format validation, object property recursion
 
 ## Native validation
 
 Validation is implemented by a native walker over `QuillConfig` in `quill/validation.rs`.
 
-- Entry point: `QuillConfig::validate_document(&Document)` (dispatches to `validate_typed_document`)
+- Entry point: `QuillConfig::validate(&HashMap<String, QuillValue>)` (dispatches to `validate_document`)
 - Returns `Result<(), Vec<ValidationError>>`
 - Collects all errors (does not short-circuit)
 - Emits path-aware errors for top-level fields and card fields
@@ -47,11 +47,16 @@ Validation is implemented by a native walker over `QuillConfig` in `quill/valida
 
 ## Public schema emission
 
-External schema contract is emitted by `QuillConfig::public_schema_yaml()`.
+External schema contract is the value returned by `QuillConfig::public_schema()`.
+`QuillConfig::public_schema_yaml()` is a convenience wrapper that YAML-encodes
+the same value; the wasm `quill.metadata.schema` getter returns the same value
+as JSON.
 
-- Output is YAML text
-- Shape is a subset projection of `Quill.yaml`
-- Includes `name`, `description`, optional `example`, `fields`, and `card_types`
-- Preserves `ui` hints as `ui:` (no renaming)
-
-See `PUBLIC_SCHEMA.md` for the output contract.
+The wire format is pinned by serde attributes on `FieldSchema`, `CardSchema`,
+`UiFieldSchema`, and `UiContainerSchema` directly — there is no parallel
+"public" mirror struct. Top-level keys: `name`, `main`, optional `card_types`
+(map keyed by card name), optional `example`. `main` and each entry in
+`card_types` share the same `CardSchema` shape: `fields` (map keyed by field
+name), optional `title`, `description`, `ui`. Each `FieldSchema` includes
+`type`, optional `title`/`description`/`default`/`examples`/`ui`/`enum`/
+`properties`/`items`, and optional `required` (omitted when false).

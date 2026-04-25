@@ -23,7 +23,8 @@ main:
 
     assert_eq!(
         value
-            .get("fields")
+            .get("main")
+            .and_then(|v| v.get("fields"))
             .and_then(|v| v.get("description"))
             .and_then(|v| v.get("type"))
             .and_then(|v| v.as_str()),

@@ -155,10 +155,11 @@ fn test_quill_from_object_tree() {
     assert_eq!(r_map.artifacts.len(), r_obj.artifacts.len());
 }
 
-/// `quill.metadata` exposes the snapshot of `Quill.yaml` expected by
-/// downstream consumers: `name`, `backend`, `description`, `version`,
-/// `supportedFormats`, and the raw `schema` mirroring Quill.yaml's
-/// `main:` and `card_types:` sections.
+/// `quill.metadata` exposes the snapshot expected by downstream consumers:
+/// engine info (`backend`, `version`, `author`, `supportedFormats`) at the
+/// top level, and the quill's declared contract under `schema` (mirroring
+/// `QuillConfig::public_schema()`: `name`, `main`, `card_types`, optional
+/// `example`).
 #[wasm_bindgen_test]
 fn test_quill_metadata_snapshot() {
     use js_sys::Reflect;
@@ -180,12 +181,8 @@ fn test_quill_metadata_snapshot() {
 
     let get = |key: &str| -> JsValue { Reflect::get(&meta, &JsValue::from_str(key)).unwrap() };
 
-    assert_eq!(get("name").as_string().as_deref(), Some("meta_quill"));
+    // Engine / quill identity lives at the top level.
     assert_eq!(get("backend").as_string().as_deref(), Some("typst"));
-    assert_eq!(
-        get("description").as_string().as_deref(),
-        Some("Metadata quill")
-    );
     assert_eq!(get("version").as_string().as_deref(), Some("0.2.1"));
     // `author` defaults to "Unknown" when the YAML omits it.
     assert_eq!(get("author").as_string().as_deref(), Some("Unknown"));
@@ -201,12 +198,29 @@ fn test_quill_metadata_snapshot() {
         "supportedFormats must be non-empty"
     );
 
-    // schema mirrors Quill.yaml: { main: CardSchema, cardTypes: { [name]: CardSchema } }
+    // The quill's declared contract lives under metadata.schema. Same shape
+    // as QuillConfig::public_schema() in Rust: { name, main, card_types,
+    // example? }.
     let schema = get("schema");
     assert!(schema.is_object(), "schema must be an object");
 
-    let main = Reflect::get(&schema, &JsValue::from_str("main")).unwrap();
+    let schema_get =
+        |key: &str| -> JsValue { Reflect::get(&schema, &JsValue::from_str(key)).unwrap() };
+
+    assert_eq!(
+        schema_get("name").as_string().as_deref(),
+        Some("meta_quill")
+    );
+
+    let main = schema_get("main");
     assert!(main.is_object(), "schema.main must be present");
+    assert_eq!(
+        Reflect::get(&main, &JsValue::from_str("description"))
+            .unwrap()
+            .as_string()
+            .as_deref(),
+        Some("Metadata quill")
+    );
     let main_fields = Reflect::get(&main, &JsValue::from_str("fields")).unwrap();
     assert!(
         main_fields.is_object(),
@@ -218,19 +232,22 @@ fn test_quill_metadata_snapshot() {
         "schema.main.fields.title must be present from Quill.yaml"
     );
 
-    // Named card-types live under schema.cardTypes (does NOT include main).
-    let card_types = Reflect::get(&schema, &JsValue::from_str("cardTypes")).unwrap();
-    assert!(card_types.is_object(), "schema.cardTypes must be an object");
+    // Named card-types live under schema.card_types (does NOT include main).
+    let card_types = schema_get("card_types");
+    assert!(
+        card_types.is_object(),
+        "schema.card_types must be an object"
+    );
     assert!(
         Reflect::get(&card_types, &JsValue::from_str("main"))
             .unwrap()
             .is_undefined(),
-        "schema.cardTypes must NOT contain the main card"
+        "schema.card_types must NOT contain the main card"
     );
     let indorsement = Reflect::get(&card_types, &JsValue::from_str("indorsement")).unwrap();
     assert!(
         indorsement.is_object(),
-        "schema.cardTypes.indorsement must be present"
+        "schema.card_types.indorsement must be present"
     );
     let indorsement_fields = Reflect::get(&indorsement, &JsValue::from_str("fields")).unwrap();
     assert!(

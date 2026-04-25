@@ -67,7 +67,7 @@ card_types:
         required: true
 ```
 
-Public schema is emitted from `QuillConfig::public_schema_yaml()` and keeps the same `card_types.<name>.fields` shape as `Quill.yaml`. The `card_types` key is omitted entirely when no named card-types are defined.
+Public schema is emitted from `QuillConfig::public_schema()` (and its YAML wrapper `public_schema_yaml()`) and keeps the same `card_types.<name>.fields` shape as `Quill.yaml`. The `card_types` key is omitted entirely when no named card-types are defined.
 
 ## Markdown Syntax
 

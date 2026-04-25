@@ -585,7 +585,7 @@ card_types:
         type: string
 `
 
-  it('exposes name, backend, description, version, author, supportedFormats, schema', () => {
+  it('exposes engine info at top level and the quill contract under schema', () => {
     const engine = new Quillmark()
     const quill = engine.quill(
       makeQuill({ name: 'meta_test_quill', plate: TEST_PLATE, quillYaml: META_QUILL_YAML }),
@@ -593,23 +593,27 @@ card_types:
 
     const meta = quill.metadata
     expect(meta).toBeDefined()
-    expect(meta.name).toBe('meta_test_quill')
+    // Engine / quill identity lives at the top level.
     expect(meta.backend).toBe('typst')
-    expect(meta.description).toBe('Metadata test')
     expect(meta.version).toBe('0.2.1')
     expect(meta.author).toBe('Unknown')
     expect(Array.isArray(meta.supportedFormats)).toBe(true)
     expect(meta.supportedFormats.length).toBeGreaterThan(0)
 
-    // schema mirrors Quill.yaml: { main: CardSchema, cardTypes: { [name]: CardSchema } }
+    // The quill's declared contract lives under metadata.schema. Its shape is
+    // identical to QuillConfig::public_schema() in Rust: { name, main,
+    // card_types, example? }. main and each card under card_types share the
+    // same shape.
     expect(meta.schema).toBeDefined()
+    expect(meta.schema.name).toBe('meta_test_quill')
     expect(meta.schema.main).toBeDefined()
+    expect(meta.schema.main.description).toBe('Metadata test')
     expect(meta.schema.main.fields.title).toBeDefined()
-    expect(meta.schema.cardTypes).toBeDefined()
-    // schema.cardTypes holds the OTHER composable card types — main is not duplicated here
-    expect(meta.schema.cardTypes.main).toBeUndefined()
-    expect(meta.schema.cardTypes.indorsement).toBeDefined()
-    expect(meta.schema.cardTypes.indorsement.fields.signature_block).toBeDefined()
+    expect(meta.schema.card_types).toBeDefined()
+    // card_types holds the OTHER composable card types — main is not duplicated here
+    expect(meta.schema.card_types.main).toBeUndefined()
+    expect(meta.schema.card_types.indorsement).toBeDefined()
+    expect(meta.schema.card_types.indorsement.fields.signature_block).toBeDefined()
   })
 
   it('is JSON.stringify-able (plain object, not a class)', () => {
@@ -620,7 +624,7 @@ card_types:
     const json = JSON.stringify(quill.metadata)
     expect(typeof json).toBe('string')
     const parsed = JSON.parse(json)
-    expect(parsed.name).toBe('meta_test_quill')
+    expect(parsed.schema.name).toBe('meta_test_quill')
   })
 })
 

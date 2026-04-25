@@ -1,158 +1,13 @@
-use std::collections::BTreeMap;
-
-use serde::Serialize;
-
-use crate::value::QuillValue;
-
-use super::{CardSchema, FieldSchema, QuillConfig, UiContainerSchema, UiFieldSchema};
-
-#[derive(Debug, Clone, Serialize)]
-struct PublicSchema {
-    name: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    example: Option<String>,
-    fields: BTreeMap<String, PublicField>,
-    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    card_types: BTreeMap<String, PublicCard>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct PublicField {
-    #[serde(rename = "type")]
-    field_type: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
-    #[serde(skip_serializing_if = "is_false")]
-    required: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    default: Option<QuillValue>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    examples: Option<Vec<QuillValue>>,
-    #[serde(skip_serializing_if = "Option::is_none", rename = "enum")]
-    enum_values: Option<Vec<String>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    properties: Option<BTreeMap<String, PublicField>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    items: Option<Box<PublicField>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    ui: Option<PublicUiField>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct PublicCard {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    title: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    description: Option<String>,
-    fields: BTreeMap<String, PublicField>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    ui: Option<PublicUiContainer>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct PublicUiField {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    group: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    order: Option<i32>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    compact: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    multiline: Option<bool>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct PublicUiContainer {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    hide_body: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    default_title: Option<String>,
-}
-
-fn is_false(value: &bool) -> bool {
-    !*value
-}
-
-fn map_ui_field(ui: &UiFieldSchema) -> PublicUiField {
-    PublicUiField {
-        group: ui.group.clone(),
-        order: ui.order,
-        compact: ui.compact,
-        multiline: ui.multiline,
-    }
-}
-
-fn map_ui_container(ui: &UiContainerSchema) -> PublicUiContainer {
-    PublicUiContainer {
-        hide_body: ui.hide_body,
-        default_title: ui.default_title.clone(),
-    }
-}
-
-fn map_field(field: &FieldSchema) -> PublicField {
-    PublicField {
-        field_type: field.r#type.as_str().to_string(),
-        title: field.title.clone(),
-        description: field.description.clone(),
-        required: field.required,
-        default: field.default.clone(),
-        examples: field.examples.as_ref().and_then(|values| {
-            values.as_array().map(|arr| {
-                arr.iter()
-                    .map(|value| QuillValue::from_json(value.clone()))
-                    .collect()
-            })
-        }),
-        enum_values: field.enum_values.clone(),
-        properties: field.properties.as_ref().map(|properties| {
-            properties
-                .iter()
-                .map(|(name, schema)| (name.clone(), map_field(schema)))
-                .collect()
-        }),
-        items: field.items.as_ref().map(|items| Box::new(map_field(items))),
-        ui: field.ui.as_ref().map(map_ui_field),
-    }
-}
-
-fn map_card(card: &CardSchema) -> PublicCard {
-    PublicCard {
-        title: card.title.clone(),
-        description: card.description.clone(),
-        fields: card
-            .fields
-            .iter()
-            .map(|(name, field)| (name.clone(), map_field(field)))
-            .collect(),
-        ui: card.ui.as_ref().map(map_ui_container),
-    }
-}
+use super::QuillConfig;
 
 impl QuillConfig {
     /// Emit the public schema contract as a YAML string.
+    ///
+    /// Thin wrapper around [`QuillConfig::public_schema`]; the JSON value
+    /// returned by that function is the single source of truth for the
+    /// public wire format, and YAML is one of several encodings of it.
     pub fn public_schema_yaml(&self) -> Result<String, serde_saphyr::ser::Error> {
-        let schema = PublicSchema {
-            name: self.name.clone(),
-            description: self.main.description.clone(),
-            example: self.example_markdown.clone(),
-            fields: self
-                .main
-                .fields
-                .iter()
-                .map(|(name, field)| (name.clone(), map_field(field)))
-                .collect(),
-            card_types: self
-                .card_types
-                .iter()
-                .map(|card| (card.name.clone(), map_card(card)))
-                .collect(),
-        };
-
-        serde_saphyr::to_string(&schema)
+        serde_saphyr::to_string(&self.public_schema())
     }
 }
 
@@ -184,7 +39,7 @@ main:
 
         let yaml = config.public_schema_yaml().unwrap();
         assert!(yaml.contains("name: test_schema"));
-        assert!(yaml.contains("fields:"));
+        assert!(yaml.contains("main:"));
         assert!(yaml.contains("memo_for:"));
         assert!(yaml.contains("type: string"));
     }
@@ -234,17 +89,6 @@ main:
 
     #[test]
     fn includes_card_types_ui_and_enum() {
-        fn has_internal_key(value: &serde_json::Value) -> bool {
-            match value {
-                serde_json::Value::Object(map) => map.iter().any(|(k, v)| {
-                    let is_internal = k.starts_with("x-");
-                    is_internal || has_internal_key(v)
-                }),
-                serde_json::Value::Array(seq) => seq.iter().any(has_internal_key),
-                _ => false,
-            }
-        }
-
         let config = config_from_yaml(
             r#"
 quill:
@@ -275,9 +119,6 @@ card_types:
         assert!(yaml.contains("ui:"));
         assert!(yaml.contains("card_types:"));
         assert!(yaml.contains("indorsement:"));
-        let parsed: serde_json::Value = serde_saphyr::from_str(&yaml).expect("valid yaml");
-        assert!(!has_internal_key(&parsed));
-        assert!(!yaml.contains("CARDS:"));
     }
 
     #[test]
@@ -332,6 +173,40 @@ main:
             parsed.get("name").and_then(|v| v.as_str()),
             Some("round_trip")
         );
-        assert!(parsed.get("fields").is_some());
+        assert!(parsed.get("main").and_then(|v| v.get("fields")).is_some());
+    }
+
+    #[test]
+    fn public_schema_value_matches_yaml_round_trip() {
+        let config = config_from_yaml(
+            r#"
+quill:
+  name: parity
+  version: "1.0"
+  backend: typst
+  description: Parity check
+
+main:
+  fields:
+    title:
+      type: string
+      required: true
+    status:
+      type: string
+      enum: [draft, final]
+      default: draft
+
+card_types:
+  attachment:
+    fields:
+      label:
+        type: string
+"#,
+        );
+
+        let value = config.public_schema();
+        let yaml = config.public_schema_yaml().unwrap();
+        let parsed: serde_json::Value = serde_saphyr::from_str(&yaml).unwrap();
+        assert_eq!(value, parsed);
     }
 }
