@@ -2206,10 +2206,7 @@ fn public_schema_snapshot_usaf_memo_0_1_0() {
     assert!(parsed.get("name").is_some());
     assert!(parsed.get("main").is_some());
     assert!(
-        parsed
-            .get("main")
-            .and_then(|v| v.get("fields"))
-            .is_some(),
+        parsed.get("main").and_then(|v| v.get("fields")).is_some(),
         "main.fields should be present"
     );
     assert!(parsed.get("card_types").is_some());
