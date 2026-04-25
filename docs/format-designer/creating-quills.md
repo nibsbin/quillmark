@@ -67,7 +67,7 @@ Create a document that matches the fields you defined:
 
 ```markdown
 ---
-QUILL: my-quill
+QUILL: my_quill
 sender: Jane Doe
 recipient: John Smith
 date: 2026-01-15
@@ -81,14 +81,14 @@ Thank you for your time.
 From the same directory, render the document:
 
 ```bash
-quillmark render example.md
+quillmark render ./my-quill example.md
 ```
 
 For command options and output controls, see the [CLI Reference](../cli/reference.md).
 
 ## 6. Next steps
 
-- [Quill.yaml Reference](quill-yaml-reference.md) — full field types, UI hints, `cards`, `typst` section
+- [Quill.yaml Reference](quill-yaml-reference.md) — full field types, UI hints, `card_types`, `typst` section
 - [Typst Backend](typst-backend.md) — data access patterns, CARDS iteration, helper package
 - [Quill Versioning](versioning.md)
 

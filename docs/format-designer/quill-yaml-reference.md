@@ -339,7 +339,7 @@ With the above, a UI rendering a list of `entry` cards can title each instance (
 
 ### Using Cards in Markdown
 
-Cards appear as fenced sections in the document body:
+Cards appear as additional `---`-delimited metadata blocks in the document body, each declaring a `CARD:` directive:
 
 ```markdown
 ---
@@ -350,24 +350,26 @@ subject: Example
 
 Main memo body text here.
 
-~~~indorsement
+---
+CARD: indorsement
 from: ORG/SYMBOL
 for: RECIPIENT/SYMBOL
 signature_block:
   - JANE A. DOE, Colonel, USAF
   - Commander
-~~~
+---
 
 Body of the first endorsement.
 
-~~~indorsement
+---
+CARD: indorsement
 from: ANOTHER/ORG
 for: FINAL/RECIPIENT
 format: informal
 signature_block:
   - JOHN B. SMITH, Lt Col, USAF
   - Deputy Commander
-~~~
+---
 
 Body of the second endorsement.
 ```
@@ -472,4 +474,4 @@ card_types:
 
 - [Creating Quills](creating-quills.md) — hands-on tutorial
 - [Markdown Syntax](../authoring/markdown-syntax.md) — document authoring syntax
-- [Validation](../integration/validation.md) — validating documents against schemas
+- [CLI Reference](../cli/reference.md) — validating quills with the `validate` command

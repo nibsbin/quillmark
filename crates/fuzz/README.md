@@ -15,16 +15,17 @@ cargo test --package quillmark-fuzz
 Or from the `quillmark-fuzz` directory:
 
 ```bash
-cd quillmark-fuzz
+cd crates/fuzz
 cargo test
 ```
 
 Run a specific test module:
 
 ```bash
-cargo test --package quillmark-fuzz --test convert_fuzz
-cargo test --package quillmark-fuzz --test filter_fuzz
-cargo test --package quillmark-fuzz --test parse_fuzz
+cargo test --package quillmark-fuzz convert_fuzz
+cargo test --package quillmark-fuzz filter_fuzz
+cargo test --package quillmark-fuzz parse_fuzz
+cargo test --package quillmark-fuzz emit_roundtrip_fuzz
 ```
 
 **Note:** This crate is excluded from `default-members` to avoid running expensive fuzzing tests on every `cargo test`. Use `cargo test --workspace` to run all tests including fuzzing. This crate uses `proptest` for property-based testing, not `cargo-fuzz`.
@@ -71,9 +72,10 @@ YAML frontmatter security:
 cargo test --package quillmark-fuzz --all-features
 
 # Run specific test module
-cargo test --package quillmark-fuzz --test convert_fuzz
-cargo test --package quillmark-fuzz --test filter_fuzz
-cargo test --package quillmark-fuzz --test parse_fuzz
+cargo test --package quillmark-fuzz convert_fuzz
+cargo test --package quillmark-fuzz filter_fuzz
+cargo test --package quillmark-fuzz parse_fuzz
+cargo test --package quillmark-fuzz emit_roundtrip_fuzz
 ```
 
 ## Security Properties Validated
@@ -88,9 +90,10 @@ The fuzzing tests validate critical security properties:
 
 ## Architecture
 
-The fuzzing tests are organized into three modules:
+The fuzzing tests are organized into four modules:
 
 - `convert_fuzz.rs` - Tests for markdown to Typst conversion and escaping functions
+- `emit_roundtrip_fuzz.rs` - Round-trip stability tests (parse → emit → re-parse)
 - `filter_fuzz.rs` - Tests for filter input validation and injection safety
 - `parse_fuzz.rs` - Tests for YAML frontmatter and markdown parsing
 

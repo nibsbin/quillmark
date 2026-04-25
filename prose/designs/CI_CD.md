@@ -2,7 +2,7 @@
 
 **Status**: Implemented
 
-Published crates: `quillmark-core`, `backends/quillmark-typst`, `quillmark`.
+Published crates: `quillmark-core`, `backends/quillmark-typst`, `quillmark`, `bindings/quillmark-cli`.
 
 Not published: `quillmark-fixtures`, `quillmark-fuzz`, `bindings/quillmark-python`, `bindings/quillmark-wasm`.
 

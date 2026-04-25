@@ -30,8 +30,6 @@ pub struct QuillSource {
     pub plate: Option<String>,
     pub example: Option<String>,
     pub config: QuillConfig,
-    pub defaults: HashMap<String, QuillValue>,
-    pub examples: HashMap<String, Vec<QuillValue>>,
     pub files: FileTreeNode,
 }
 
@@ -63,7 +61,7 @@ Validation rules:
 
 ## `Quill.yaml` Structure
 
-Required top-level sections: `Quill` (bundle metadata). Optional: `main` (document fields), `cards` (card type definitions), `typst` (backend config).
+Required top-level sections: `Quill` (bundle metadata). Optional: `main` (document fields), `card_types` (card type definitions), `typst` (backend config).
 
 ```yaml
 quill:
@@ -101,13 +99,13 @@ typst:
 Field names must be `snake_case`. Capitalized keys (e.g. `BODY`, `CARDS`, `CARD`) are reserved by the engine. Standalone `object` fields are not supported; use `array` with `items: {type: object, properties: {...}}` instead.
 
 Metadata resolution:
-- `name`, `backend`, `version`, `description`, `author` are required/defaulted struct fields in `QuillConfig`
+- `name`, `backend`, `version`, `author` are direct struct fields on `QuillConfig`; `description` is stored in `QuillConfig.main.description` (required non-empty in the `quill:` section)
 - `metadata` on `Quill` stores `backend`, `description`, `version`, `author`, any extra `Quill.*` keys, and `typst_*` keys from the `[typst]` section
 - `example_file` also accepts the alias `example` in YAML
 
 ## File Ignore Rules
 
-When loading from disk, `Quill::from_path` respects a `.quillignore` file at the bundle root. If absent, default patterns apply: `.git/`, `.gitignore`, `.quillignore`, `target/`, `node_modules/`.
+When loading from disk, `Quillmark::quill_from_path` respects a `.quillignore` file at the bundle root. If absent, default patterns apply: `.git/`, `.gitignore`, `.quillignore`, `target/`, `node_modules/`.
 
 ## API
 

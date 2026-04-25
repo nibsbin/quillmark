@@ -38,19 +38,19 @@ Get started with Quillmark in Python or JavaScript.
     ## Installation
 
     ```bash
-    npm install @quillmark-test/wasm
+    npm install @quillmark/wasm
     ```
 
     ## Basic Usage
 
     ```javascript
-    import { Document, Quillmark } from "@quillmark-test/wasm";
+    import { Document, Quillmark } from "@quillmark/wasm";
 
     const engine = new Quillmark();
     const enc = new TextEncoder();
 
     const quill = engine.quill(new Map([
-      ["Quill.yaml", enc.encode("quill:\n  name: my_quill\n  backend: typst\n  plate_file: plate.typ\n  description: Demo\n")],
+      ["Quill.yaml", enc.encode("quill:\n  name: my_quill\n  backend: typst\n  version: \"1.0.0\"\n  description: Demo\n  plate_file: plate.typ\n")],
       ["plate.typ", enc.encode("#import \"@local/quillmark-helper:0.1.0\": data\n#data.BODY\n")],
     ]));
 

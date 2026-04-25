@@ -18,7 +18,8 @@ Specify `backend: typst` in your `Quill.yaml`:
 
 ```yaml
 quill:
-  name: my-typst-quill
+  name: my_typst_quill
+  version: "1.0.0"
   backend: typst
   description: Document format using Typst
   plate_file: plate.typ
@@ -37,7 +38,7 @@ Typst plate files are pure Typst code that access document data via a helper pac
 
 #set document(title: data.at("title", default: "Untitled"))
 
-#data.at("body", default: "")
+#data.at("BODY", default: "")
 ```
 
 ## Data Access
@@ -52,7 +53,7 @@ Quillmark injects your document's frontmatter as JSON data via the `@local/quill
 
 The helper provides:
 - `data` - Dictionary containing all frontmatter fields, with markdown fields automatically converted to Typst content objects
-- Date fields declared with `format: date` are automatically converted to Typst `datetime` values
+- Date fields declared with `type: date` are automatically converted to Typst `datetime` values
 
 ### Accessing Fields
 
@@ -93,7 +94,7 @@ Use Typst's `in` operator to check for optional fields:
 The document body (Markdown content after frontmatter) is stored in `data.BODY`. Markdown fields are automatically converted to Typst content objects by the helper package, so you can use them directly:
 
 ```typst
-#data.at("body", default: "")
+#data.at("BODY", default: "")
 ```
 
 ### Date Fields
@@ -344,7 +345,7 @@ Errors include:
 
 Dear #data.recipient,
 
-#data.at("body", default: "")
+#data.at("BODY", default: "")
 
 Sincerely,
 
@@ -366,7 +367,7 @@ Sincerely,
   #text(size: 12pt)[#data.author]
 ]
 
-#data.at("body", default: "")
+#data.at("BODY", default: "")
 ```
 
 ## Best Practices

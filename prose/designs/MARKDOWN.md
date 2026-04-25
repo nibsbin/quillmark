@@ -277,4 +277,3 @@ Parse errors include:
 - [GitHub Flavored Markdown](https://github.github.com/gfm/) (pipe tables,
   strikethrough)
 - [`CARDS.md`](./CARDS.md) — downstream card-handling semantics
-- [`PARSE.md`](./PARSE.md) — parser implementation notes
