@@ -161,6 +161,7 @@ pub struct FieldSchema {
     /// Whether this field is required (fields are optional by default)
     pub required: bool,
     /// Enum values for string fields (restricts valid values)
+    #[serde(rename = "enum")]
     pub enum_values: Option<Vec<String>>,
     /// Properties for dict/object types (nested field schemas)
     pub properties: Option<HashMap<String, Box<FieldSchema>>>,
