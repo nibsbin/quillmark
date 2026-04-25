@@ -161,10 +161,16 @@ impl Quill {
     /// Returns a plain JS object with `name`, `backend`, `description`,
     /// `version`, `author`, optional `example` (content of the example
     /// markdown, when the quill ships one), `supportedFormats` (backend's
-    /// output formats as lowercase strings), `schema` (the raw main-card
-    /// field schema as parsed from YAML — consumers that need validation
-    /// run their own validator against this), and any additional
+    /// output formats as lowercase strings), `schema` (mirrors Quill.yaml:
+    /// `schema.main` is the main entry-point card and `schema.cardTypes`
+    /// is a map of the other composable card types keyed by name — both
+    /// are shaped the same way, with `fields`, optional `title`,
+    /// `description`, and `ui`; consumers surfacing a card-type picker
+    /// iterate `Object.keys(schema.cardTypes)`), and any additional
     /// unstructured keys declared inside the `quill:` section.
+    ///
+    /// Consumers that need validation run their own validator against
+    /// this raw schema.
     ///
     /// Equivalent by value for the lifetime of the handle; the quill is
     /// immutable once constructed.
@@ -184,7 +190,7 @@ impl Quill {
         );
         obj.insert(
             "description".to_string(),
-            serde_json::Value::String(config.main().description.clone().unwrap_or_default()),
+            serde_json::Value::String(config.main.description.clone().unwrap_or_default()),
         );
         obj.insert(
             "version".to_string(),
@@ -216,12 +222,21 @@ impl Quill {
         );
 
         let mut schema = serde_json::Map::new();
-        for (name, field) in &config.main().fields {
-            schema.insert(
-                name.clone(),
-                serde_json::to_value(field).unwrap_or(serde_json::Value::Null),
+        schema.insert(
+            "main".to_string(),
+            serde_json::to_value(&config.main).unwrap_or(serde_json::Value::Null),
+        );
+        let mut card_types = serde_json::Map::new();
+        for card in &config.card_types {
+            card_types.insert(
+                card.name.clone(),
+                serde_json::to_value(card).unwrap_or(serde_json::Value::Null),
             );
         }
+        schema.insert(
+            "cardTypes".to_string(),
+            serde_json::Value::Object(card_types),
+        );
         obj.insert("schema".to_string(), serde_json::Value::Object(schema));
 
         // Unstructured keys declared under `quill:` (excluding fields already

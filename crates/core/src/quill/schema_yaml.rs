@@ -15,7 +15,7 @@ struct PublicSchema {
     example: Option<String>,
     fields: BTreeMap<String, PublicField>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
-    cards: BTreeMap<String, PublicCard>,
+    card_types: BTreeMap<String, PublicCard>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -137,16 +137,16 @@ impl QuillConfig {
     pub fn public_schema_yaml(&self) -> Result<String, serde_saphyr::ser::Error> {
         let schema = PublicSchema {
             name: self.name.clone(),
-            description: self.main().description.clone(),
+            description: self.main.description.clone(),
             example: self.example_markdown.clone(),
             fields: self
-                .main()
+                .main
                 .fields
                 .iter()
                 .map(|(name, field)| (name.clone(), map_field(field)))
                 .collect(),
-            cards: self
-                .card_definitions()
+            card_types: self
+                .card_types
                 .iter()
                 .map(|card| (card.name.clone(), map_card(card)))
                 .collect(),
@@ -190,14 +190,14 @@ main:
     }
 
     #[test]
-    fn omits_cards_when_absent() {
+    fn omits_card_types_when_absent() {
         let config = config_from_yaml(
             r#"
 quill:
-  name: no_cards
+  name: no_card_types
   version: "1.0"
   backend: typst
-  description: No cards
+  description: No card types
 
 main:
   fields:
@@ -207,7 +207,7 @@ main:
         );
 
         let yaml = config.public_schema_yaml().unwrap();
-        assert!(!yaml.contains("cards:"));
+        assert!(!yaml.contains("card_types:"));
     }
 
     #[test]
@@ -233,7 +233,7 @@ main:
     }
 
     #[test]
-    fn includes_cards_ui_and_enum() {
+    fn includes_card_types_ui_and_enum() {
         fn has_internal_key(value: &serde_json::Value) -> bool {
             match value {
                 serde_json::Value::Object(map) => map.iter().any(|(k, v)| {
@@ -261,7 +261,7 @@ main:
       ui:
         group: Meta
 
-cards:
+card_types:
   indorsement:
     title: Indorsement
     fields:
@@ -273,7 +273,7 @@ cards:
         let yaml = config.public_schema_yaml().unwrap();
         assert!(yaml.contains("enum:"));
         assert!(yaml.contains("ui:"));
-        assert!(yaml.contains("cards:"));
+        assert!(yaml.contains("card_types:"));
         assert!(yaml.contains("indorsement:"));
         let parsed: serde_json::Value = serde_saphyr::from_str(&yaml).expect("valid yaml");
         assert!(!has_internal_key(&parsed));

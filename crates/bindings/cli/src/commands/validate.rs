@@ -126,18 +126,18 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
     if args.verbose {
         println!("  Quill name: {}", config.name);
         println!("  Backend: {}", config.backend);
-        println!("  Fields: {}", config.main().fields.len());
-        println!("  Cards: {}", config.card_definitions().len());
+        println!("  Fields: {}", config.main.fields.len());
+        println!("  Cards: {}", config.card_types.len());
     }
 
     // Step 2: Validate file references
     validate_file_references(&args.quill_path, &config, &mut result);
 
     // Step 3: Validate field schemas including defaults
-    validate_field_schemas(&config.main().fields, &mut result, "field");
+    validate_field_schemas(&config.main.fields, &mut result, "field");
 
-    // Step 4: Validate card schemas
-    for card_schema in config.card_definitions() {
+    // Step 4: Validate card-type schemas
+    for card_schema in &config.card_types {
         validate_card_schema(&card_schema.name, card_schema, &mut result);
     }
 
@@ -377,7 +377,7 @@ fn validate_defaults_against_schema(
 
     for (field_name, default_value) in &defaults {
         // Look up field type in config
-        if let Some(field_schema) = config.main().fields.get(field_name) {
+        if let Some(field_schema) = config.main.fields.get(field_name) {
             if let Some(type_mismatch) = check_type_mismatch(&field_schema.r#type, default_value) {
                 result.add_error(format!(
                     "extracted default for '{}' {}, expected '{}'",

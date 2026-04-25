@@ -143,7 +143,7 @@ main:
     title:
       type: string
 
-cards:
+card_types:
   known_card:
     fields:
       note:
@@ -190,7 +190,7 @@ main:
     title:
       type: string
 
-cards:
+card_types:
   indorsement:
     fields:
       signature_block:

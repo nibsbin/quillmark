@@ -57,7 +57,7 @@ impl QuillSource {
         metadata.insert(
             "description".to_string(),
             QuillValue::from_json(serde_json::Value::String(
-                config.main().description.clone().unwrap_or_default(),
+                config.main.description.clone().unwrap_or_default(),
             )),
         );
 

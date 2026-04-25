@@ -576,6 +576,13 @@ main:
     title:
       type: string
       description: The title
+
+card_types:
+  indorsement:
+    title: Indorsement
+    fields:
+      signature_block:
+        type: string
 `
 
   it('exposes name, backend, description, version, author, supportedFormats, schema', () => {
@@ -593,8 +600,16 @@ main:
     expect(meta.author).toBe('Unknown')
     expect(Array.isArray(meta.supportedFormats)).toBe(true)
     expect(meta.supportedFormats.length).toBeGreaterThan(0)
+
+    // schema mirrors Quill.yaml: { main: CardSchema, cardTypes: { [name]: CardSchema } }
     expect(meta.schema).toBeDefined()
-    expect(meta.schema.title).toBeDefined()
+    expect(meta.schema.main).toBeDefined()
+    expect(meta.schema.main.fields.title).toBeDefined()
+    expect(meta.schema.cardTypes).toBeDefined()
+    // schema.cardTypes holds the OTHER composable card types — main is not duplicated here
+    expect(meta.schema.cardTypes.main).toBeUndefined()
+    expect(meta.schema.cardTypes.indorsement).toBeDefined()
+    expect(meta.schema.cardTypes.indorsement.fields.signature_block).toBeDefined()
   })
 
   it('is JSON.stringify-able (plain object, not a class)', () => {

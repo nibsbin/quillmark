@@ -45,13 +45,17 @@ pub fn validate_typed_document(
     doc: &Document,
 ) -> Result<(), Vec<ValidationError>> {
     let main_fields = doc.main().frontmatter().to_index_map();
-    let mut errors = validate_fields_for_card_indexmap(config.main(), &main_fields, "");
+    let mut errors = validate_fields_for_card_indexmap(&config.main, &main_fields, "");
 
     for (index, card) in doc.cards().iter().enumerate() {
         let card_name = card.tag();
         let item_path = format!("cards[{index}]");
+        // NOTE: `cards[N]` is the document-instance-side path (the cards
+        // array on a Document). Card-type definitions live under
+        // `card_types:` in Quill.yaml, but instances on a document are
+        // still a `cards` list.
 
-        let Some(card_schema) = config.card_definition(card_name.as_str()) else {
+        let Some(card_schema) = config.card_type(card_name.as_str()) else {
             errors.push(ValidationError::UnknownCard {
                 path: item_path,
                 card: card_name,
@@ -544,7 +548,7 @@ main:
     fn validates_card_with_valid_discriminator() {
         let config = config_with(
             "    title:\n      type: string",
-            "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true",
+            "card_types:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true",
         );
         let doc = doc_with_typed_cards(
             &[],
@@ -560,7 +564,7 @@ main:
     fn rejects_unknown_card_discriminator() {
         let config = config_with(
             "    title:\n      type: string",
-            "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string",
+            "card_types:\n  indorsement:\n    fields:\n      signature_block:\n        type: string",
         );
         let doc = doc_with_typed_cards(&[], vec![typed_card("unknown", &[])]);
         let errors = validate_typed_document(&config, &doc).unwrap_err();
@@ -573,7 +577,7 @@ main:
     fn validates_multiple_card_instances_same_type() {
         let config = config_with(
             "    title:\n      type: string",
-            "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true",
+            "card_types:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true",
         );
         let doc = doc_with_typed_cards(
             &[],
@@ -589,7 +593,7 @@ main:
     fn validates_multiple_card_types_mixed() {
         let config = config_with(
             "    title:\n      type: string",
-            "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true\n  routing:\n    fields:\n      office:\n        type: string\n        required: true",
+            "card_types:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true\n  routing:\n    fields:\n      office:\n        type: string\n        required: true",
         );
         let doc = doc_with_typed_cards(
             &[],
@@ -605,7 +609,7 @@ main:
     fn reports_card_field_paths_with_card_name_and_index() {
         let config = config_with(
             "    title:\n      type: string",
-            "cards:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true",
+            "card_types:\n  indorsement:\n    fields:\n      signature_block:\n        type: string\n        required: true",
         );
         let doc = doc_with_typed_cards(&[], vec![typed_card("indorsement", &[])]);
         let errors = validate_typed_document(&config, &doc).unwrap_err();

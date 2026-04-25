@@ -19,8 +19,11 @@ use super::{CardSchema, FieldSchema, FieldType, UiContainerSchema, UiFieldSchema
 pub struct QuillConfig {
     /// Quill package name
     pub name: String,
-    /// Ordered card schemas where index 0 is always the main card.
-    pub cards: Vec<CardSchema>,
+    /// The entry-point card schema (parsed from the Quill.yaml `main:` section).
+    pub main: CardSchema,
+    /// Named, composable card-type schemas (parsed from the Quill.yaml
+    /// `card_types:` section). Does not include `main`.
+    pub card_types: Vec<CardSchema>,
     /// Backend to use for rendering (e.g., "typst", "html")
     pub backend: String,
     /// Version of the Quillmark spec
@@ -62,35 +65,23 @@ pub enum CoercionError {
 }
 
 impl QuillConfig {
-    /// Returns the main document card schema (`cards[0]`).
-    pub fn main(&self) -> &CardSchema {
-        &self.cards[0]
-    }
-
-    /// Returns all named card definitions (everything except main).
-    pub fn card_definitions(&self) -> &[CardSchema] {
-        &self.cards[1..]
-    }
-
-    /// Returns named card definitions as a map keyed by card name.
-    pub fn card_definitions_map(&self) -> HashMap<String, CardSchema> {
-        self.card_definitions()
+    /// Returns the named card-type schemas as a map keyed by card name.
+    pub fn card_types_map(&self) -> HashMap<String, CardSchema> {
+        self.card_types
             .iter()
             .map(|card| (card.name.clone(), card.clone()))
             .collect()
     }
 
-    /// Returns a named card definition by name.
-    pub fn card_definition(&self, name: &str) -> Option<&CardSchema> {
-        self.card_definitions()
-            .iter()
-            .find(|card| card.name == name)
+    /// Returns a named card-type schema by name.
+    pub fn card_type(&self, name: &str) -> Option<&CardSchema> {
+        self.card_types.iter().find(|card| card.name == name)
     }
 
-    /// Extract default values from the main field schemas.
+    /// Extract default values from the main card's field schemas.
     pub fn defaults(&self) -> HashMap<String, QuillValue> {
         let mut defaults = HashMap::new();
-        for (field_name, field_schema) in &self.main().fields {
+        for (field_name, field_schema) in &self.main.fields {
             if let Some(ref default_value) = field_schema.default {
                 defaults.insert(field_name.clone(), default_value.clone());
             }
@@ -98,10 +89,10 @@ impl QuillConfig {
         defaults
     }
 
-    /// Extract example values from the main field schemas.
+    /// Extract example values from the main card's field schemas.
     pub fn examples(&self) -> HashMap<String, Vec<QuillValue>> {
         let mut examples = HashMap::new();
-        for (field_name, field_schema) in &self.main().fields {
+        for (field_name, field_schema) in &self.main.fields {
             if let Some(ref examples_value) = field_schema.examples {
                 if let Some(examples_array) = examples_value.as_array() {
                     let examples_vec: Vec<QuillValue> = examples_array
@@ -117,9 +108,9 @@ impl QuillConfig {
         examples
     }
 
-    /// Extract default values for a specific card definition.
-    pub fn card_defaults(&self, card_name: &str) -> Option<HashMap<String, QuillValue>> {
-        self.card_definition(card_name).map(|card| {
+    /// Extract default values for a specific card-type.
+    pub fn card_type_defaults(&self, card_name: &str) -> Option<HashMap<String, QuillValue>> {
+        self.card_type(card_name).map(|card| {
             let mut defaults = HashMap::new();
             for (field_name, field_schema) in &card.fields {
                 if let Some(default) = &field_schema.default {
@@ -130,9 +121,9 @@ impl QuillConfig {
         })
     }
 
-    /// Extract example values for a specific card definition.
-    pub fn card_examples(&self, card_name: &str) -> Option<HashMap<String, Vec<QuillValue>>> {
-        self.card_definition(card_name).map(|card| {
+    /// Extract example values for a specific card-type.
+    pub fn card_type_examples(&self, card_name: &str) -> Option<HashMap<String, Vec<QuillValue>>> {
+        self.card_type(card_name).map(|card| {
             let mut examples = HashMap::new();
             for (field_name, field_schema) in &card.fields {
                 if let Some(examples_value) = &field_schema.examples {
@@ -158,7 +149,7 @@ impl QuillConfig {
     ) -> Result<IndexMap<String, QuillValue>, CoercionError> {
         let mut coerced: IndexMap<String, QuillValue> = IndexMap::new();
         for (field_name, field_value) in frontmatter {
-            if let Some(field_schema) = self.main().fields.get(field_name) {
+            if let Some(field_schema) = self.main.fields.get(field_name) {
                 let path = field_name.as_str();
                 coerced.insert(
                     field_name.clone(),
@@ -179,13 +170,13 @@ impl QuillConfig {
         card_tag: &str,
         fields: &IndexMap<String, QuillValue>,
     ) -> Result<IndexMap<String, QuillValue>, CoercionError> {
-        let Some(card_schema) = self.card_definition(card_tag) else {
+        let Some(card_schema) = self.card_type(card_tag) else {
             return Ok(fields.clone());
         };
         let mut coerced: IndexMap<String, QuillValue> = IndexMap::new();
         for (field_name, field_value) in fields {
             if let Some(field_schema) = card_schema.fields.get(field_name) {
-                let path = format!("cards.{card_tag}.{field_name}");
+                let path = format!("card_types.{card_tag}.{field_name}");
                 coerced.insert(
                     field_name.clone(),
                     Self::coerce_value_strict(field_value, field_schema, &path)?,
@@ -756,25 +747,26 @@ impl QuillConfig {
             .cloned()
             .and_then(|v| serde_json::from_value(v).ok());
 
-        // Main card is always first.
-        let mut cards: Vec<CardSchema> = vec![CardSchema {
+        // The main entry-point card.
+        let main = CardSchema {
             name: "main".to_string(),
             title: Some("main".to_string()),
             description: Some(description),
             fields,
             ui: main_ui.or(ui_section),
-        }];
+        };
 
-        // Extract [cards] section (optional)
-        if let Some(cards_val) = quill_yaml_val.get("cards") {
-            let cards_table = cards_val
+        // Extract [card_types] section (optional)
+        let mut card_types: Vec<CardSchema> = Vec::new();
+        if let Some(card_types_val) = quill_yaml_val.get("card_types") {
+            let card_types_table = card_types_val
                 .as_object()
-                .ok_or("'cards' section must be an object")?;
+                .ok_or("'card_types' section must be an object")?;
 
-            for (card_name, card_value) in cards_table {
+            for (card_name, card_value) in card_types_table {
                 if !Self::is_valid_card_identifier(card_name) {
                     return Err(format!(
-                        "Invalid card name '{}': card names must match [a-z_][a-z0-9_]* (lowercase letters, digits, and underscores only).",
+                        "Invalid card-type name '{}': names must match [a-z_][a-z0-9_]* (lowercase letters, digits, and underscores only).",
                         card_name
                     )
                     .into());
@@ -782,7 +774,7 @@ impl QuillConfig {
 
                 // Parse card basic info using serde
                 let card_def: CardSchemaDef = serde_json::from_value(card_value.clone())
-                    .map_err(|e| format!("Failed to parse card '{}': {}", card_name, e))?;
+                    .map_err(|e| format!("Failed to parse card_type '{}': {}", card_name, e))?;
 
                 // Parse card fields
                 let card_fields = if let Some(card_fields_table) =
@@ -793,7 +785,7 @@ impl QuillConfig {
                     Self::parse_fields_with_order(
                         card_fields_table,
                         &card_field_order,
-                        &format!("card '{}' field", card_name),
+                        &format!("card_type '{}' field", card_name),
                         &mut warnings,
                     )?
                 } else if let Some(_toml_fields) = &card_def.fields {
@@ -810,14 +802,15 @@ impl QuillConfig {
                     ui: card_def.ui,
                 };
 
-                cards.push(card_schema);
+                card_types.push(card_schema);
             }
         }
 
         Ok((
             QuillConfig {
                 name,
-                cards,
+                main,
+                card_types,
                 backend,
                 version,
                 author,

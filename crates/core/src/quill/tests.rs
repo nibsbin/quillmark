@@ -657,27 +657,27 @@ main:
     let quill = QuillSource::from_tree(root).unwrap();
 
     // Validate field schemas were parsed from QuillConfig
-    assert_eq!(quill.config.main().fields.len(), 3);
-    assert!(quill.config.main().fields.contains_key("author"));
-    assert!(quill.config.main().fields.contains_key("ice_cream"));
-    assert!(quill.config.main().fields.contains_key("title"));
+    assert_eq!(quill.config.main.fields.len(), 3);
+    assert!(quill.config.main.fields.contains_key("author"));
+    assert!(quill.config.main.fields.contains_key("ice_cream"));
+    assert!(quill.config.main.fields.contains_key("title"));
 
     // Verify author field schema
-    let author_schema = quill.config.main().fields.get("author").unwrap();
+    let author_schema = quill.config.main.fields.get("author").unwrap();
     assert_eq!(
         author_schema.description.as_deref(),
         Some("Author of document")
     );
 
     // Verify ice_cream field schema (no required field, should default to false)
-    let ice_cream_schema = quill.config.main().fields.get("ice_cream").unwrap();
+    let ice_cream_schema = quill.config.main.fields.get("ice_cream").unwrap();
     assert_eq!(
         ice_cream_schema.description.as_deref(),
         Some("favorite ice cream flavor")
     );
 
     // Verify title field schema
-    let title_schema = quill.config.main().fields.get("title").unwrap();
+    let title_schema = quill.config.main.fields.get("title").unwrap();
     assert_eq!(
         title_schema.description.as_deref(),
         Some("title of document")
@@ -819,10 +819,10 @@ main:
 
     // Verify required fields
     assert_eq!(config.name, "test_config");
-    assert_eq!(config.main().name, "main");
+    assert_eq!(config.main.name, "main");
     assert_eq!(config.backend, "typst");
     assert_eq!(
-        config.main().description,
+        config.main.description,
         Some("Test configuration parsing".to_string())
     );
 
@@ -836,11 +836,11 @@ main:
     assert!(config.typst_config.contains_key("packages"));
 
     // Verify field schemas
-    assert_eq!(config.main().fields.len(), 2);
-    assert!(config.main().fields.contains_key("title"));
-    assert!(config.main().fields.contains_key("author"));
+    assert_eq!(config.main.fields.len(), 2);
+    assert!(config.main.fields.contains_key("title"));
+    assert!(config.main.fields.contains_key("author"));
 
-    let title_field = &config.main().fields["title"];
+    let title_field = &config.main.fields["title"];
     assert_eq!(title_field.description, Some("Document title".to_string()));
     assert_eq!(title_field.r#type, FieldType::String);
 }
@@ -1023,7 +1023,7 @@ quill:
   backend: typst
   description: Bad card name
 
-cards:
+card_types:
   BadCard:
     fields:
       title:
@@ -1046,7 +1046,7 @@ quill:
   backend: typst
   description: Leading underscore card name
 
-cards:
+card_types:
   _private_card:
     fields:
       title:
@@ -1088,7 +1088,7 @@ quill:
   backend: typst
   description: Bad card field key
 
-cards:
+card_types:
   profile:
     fields:
       DisplayName:
@@ -1248,7 +1248,7 @@ quill:
   backend: typst
   description: Card defaults and examples
 
-cards:
+card_types:
   indorsement:
     fields:
       signature_block:
@@ -1262,21 +1262,21 @@ cards:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    let card_defaults = config.card_defaults("indorsement").unwrap();
+    let card_defaults = config.card_type_defaults("indorsement").unwrap();
     assert_eq!(card_defaults.len(), 1);
     assert_eq!(
         card_defaults.get("signature_block").unwrap().as_str(),
         Some("Commander")
     );
 
-    let card_examples = config.card_examples("indorsement").unwrap();
+    let card_examples = config.card_type_examples("indorsement").unwrap();
     assert_eq!(card_examples.len(), 1);
     let signature_examples = card_examples.get("signature_block").unwrap();
     assert_eq!(signature_examples.len(), 1);
     assert_eq!(signature_examples[0].as_str(), Some("Col Smith"));
 
-    assert!(config.card_defaults("unknown").is_none());
-    assert!(config.card_examples("unknown").is_none());
+    assert!(config.card_type_defaults("unknown").is_none());
+    assert!(config.card_type_examples("unknown").is_none());
 }
 
 #[test]
@@ -1311,20 +1311,20 @@ main:
     // Check that fields have correct order based on TOML position
     // Order is automatically generated based on field position
 
-    let first = config.main().fields.get("first").unwrap();
+    let first = config.main.fields.get("first").unwrap();
     assert_eq!(first.ui.as_ref().unwrap().order, Some(0));
 
-    let second = config.main().fields.get("second").unwrap();
+    let second = config.main.fields.get("second").unwrap();
     assert_eq!(second.ui.as_ref().unwrap().order, Some(1));
 
-    let third = config.main().fields.get("third").unwrap();
+    let third = config.main.fields.get("third").unwrap();
     assert_eq!(third.ui.as_ref().unwrap().order, Some(2));
     assert_eq!(
         third.ui.as_ref().unwrap().group,
         Some("Test Group".to_string())
     );
 
-    let fourth = config.main().fields.get("fourth").unwrap();
+    let fourth = config.main.fields.get("fourth").unwrap();
     assert_eq!(fourth.ui.as_ref().unwrap().order, Some(3));
 }
 
@@ -1348,7 +1348,7 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    let author_field = &config.main().fields["author"];
+    let author_field = &config.main.fields["author"];
     let ui = author_field.ui.as_ref().unwrap();
     assert_eq!(ui.group, Some("Author Info".to_string()));
     assert_eq!(ui.order, Some(0)); // First field should have order 0
@@ -1418,7 +1418,7 @@ quill:
   backend: typst
   description: Test [cards.X.fields.Y] syntax
 
-cards:
+card_types:
   endorsements:
     title: Endorsements
     description: Chain of endorsements
@@ -1437,9 +1437,9 @@ cards:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    // Verify the card was parsed into config.cards
-    assert!(config.card_definition("endorsements").is_some());
-    let card = config.card_definition("endorsements").unwrap();
+    // Verify the card-type was parsed into config.card_types
+    assert!(config.card_type("endorsements").is_some());
+    let card = config.card_type("endorsements").unwrap();
 
     assert_eq!(card.name, "endorsements");
     assert_eq!(card.title, Some("Endorsements".to_string()));
@@ -1502,7 +1502,7 @@ main:
       description: Regular field
       type: string
 
-cards:
+card_types:
   indorsements:
     title: Routing Indorsements
     description: Chain of endorsements
@@ -1516,13 +1516,13 @@ cards:
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
     // Check regular field
-    assert!(config.main().fields.contains_key("regular"));
-    let regular = config.main().fields.get("regular").unwrap();
+    assert!(config.main.fields.contains_key("regular"));
+    let regular = config.main.fields.get("regular").unwrap();
     assert_eq!(regular.r#type, FieldType::String);
 
-    // Check card is in config.cards (not config.main().fields)
-    assert!(config.card_definition("indorsements").is_some());
-    let card = config.card_definition("indorsements").unwrap();
+    // Check card-type is in config.card_types (not config.main.fields)
+    assert!(config.card_type("indorsements").is_some());
+    let card = config.card_type("indorsements").unwrap();
     assert_eq!(card.title, Some("Routing Indorsements".to_string()));
     assert_eq!(card.description, Some("Chain of endorsements".to_string()));
     assert!(card.fields.contains_key("name"));
@@ -1538,13 +1538,13 @@ quill:
   backend: typst
   description: Test cards without fields
 
-cards:
+card_types:
   myscope:
     description: My scope
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let card = config.card_definition("myscope").unwrap();
+    let card = config.card_type("myscope").unwrap();
     assert_eq!(card.name, "myscope");
     assert_eq!(card.description, Some("My scope".to_string()));
     assert!(card.fields.is_empty());
@@ -1566,7 +1566,7 @@ main:
       description: Field
       type: string
 
-cards:
+card_types:
   conflict:
     description: Card
 "#;
@@ -1581,8 +1581,8 @@ cards:
     assert!(result.is_ok());
 
     let config = result.unwrap();
-    assert!(config.main().fields.contains_key("conflict"));
-    assert!(config.card_definition("conflict").is_some());
+    assert!(config.main.fields.contains_key("conflict"));
+    assert!(config.card_type("conflict").is_some());
 }
 
 #[test]
@@ -1604,7 +1604,7 @@ main:
       type: string
       description: Zero
 
-cards:
+card_types:
   second:
     description: Second
     fields:
@@ -1615,9 +1615,9 @@ cards:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    let first = config.main().fields.get("first").unwrap();
-    let zero = config.main().fields.get("zero").unwrap();
-    let second = config.card_definition("second").unwrap();
+    let first = config.main.fields.get("first").unwrap();
+    let zero = config.main.fields.get("zero").unwrap();
+    let second = config.card_type("second").unwrap();
 
     // Check field ordering
     let ord_first = first.ui.as_ref().unwrap().order.unwrap();
@@ -1645,7 +1645,7 @@ quill:
   backend: typst
   description: Test card field order
 
-cards:
+card_types:
   mycard:
     description: Test card
     fields:
@@ -1658,7 +1658,7 @@ cards:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let card = config.card_definition("mycard").unwrap();
+    let card = config.card_type("mycard").unwrap();
 
     let z_first = card.fields.get("z_first").unwrap();
     let a_second = card.fields.get("a_second").unwrap();
@@ -1700,7 +1700,7 @@ main:
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
     // Check array with items
-    let list_field = config.main().fields.get("my_list").unwrap();
+    let list_field = config.main.fields.get("my_list").unwrap();
     assert_eq!(list_field.r#type, FieldType::Array);
     assert!(list_field.items.is_some());
 
@@ -1740,8 +1740,8 @@ main:
     let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();
 
     // Standalone object field should be skipped
-    assert!(config.main().fields.contains_key("valid_field"));
-    assert!(!config.main().fields.contains_key("address"));
+    assert!(config.main.fields.contains_key("valid_field"));
+    assert!(!config.main.fields.contains_key("address"));
 
     // A warning should be emitted
     assert_eq!(warnings.len(), 1);
@@ -1780,7 +1780,7 @@ main:
 
     let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();
 
-    assert!(!config.main().fields.contains_key("rows"));
+    assert!(!config.main.fields.contains_key("rows"));
     assert_eq!(warnings.len(), 1);
     assert_eq!(warnings[0].severity, Severity::Warning);
     assert_eq!(
@@ -1999,7 +1999,7 @@ quill:
   backend: typst
   description: Coerce cards
 
-cards:
+card_types:
   indorsement:
     fields:
       score:
@@ -2107,11 +2107,11 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    let summary = config.main().fields.get("summary").unwrap();
+    let summary = config.main.fields.get("summary").unwrap();
     assert_eq!(summary.r#type, FieldType::Markdown);
     assert_eq!(summary.ui.as_ref().unwrap().multiline, Some(true));
 
-    let notes = config.main().fields.get("notes").unwrap();
+    let notes = config.main.fields.get("notes").unwrap();
     assert_eq!(notes.r#type, FieldType::Markdown);
     assert_eq!(notes.ui.as_ref().unwrap().multiline, None);
 }
@@ -2139,11 +2139,11 @@ main:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    let address = config.main().fields.get("address").unwrap();
+    let address = config.main.fields.get("address").unwrap();
     assert_eq!(address.r#type, FieldType::String);
     assert_eq!(address.ui.as_ref().unwrap().multiline, Some(true));
 
-    let name = config.main().fields.get("name").unwrap();
+    let name = config.main.fields.get("name").unwrap();
     assert_eq!(name.r#type, FieldType::String);
     assert!(name.ui.as_ref().map_or(true, |ui| ui.multiline.is_none()));
 }
@@ -2168,8 +2168,8 @@ main:
 
     let (config, warnings) = QuillConfig::from_yaml_with_warnings(yaml_content).unwrap();
 
-    assert!(config.main().fields.contains_key("valid_field"));
-    assert!(!config.main().fields.contains_key("broken_field"));
+    assert!(config.main.fields.contains_key("valid_field"));
+    assert!(!config.main.fields.contains_key("broken_field"));
     assert_eq!(warnings.len(), 1);
     assert_eq!(warnings[0].severity, Severity::Warning);
     assert_eq!(
@@ -2201,6 +2201,6 @@ fn public_schema_snapshot_usaf_memo_0_1_0() {
         serde_saphyr::from_str(&yaml).expect("schema yaml should parse");
     assert!(parsed.get("name").is_some());
     assert!(parsed.get("fields").is_some());
-    assert!(parsed.get("cards").is_some());
+    assert!(parsed.get("card_types").is_some());
     assert!(parsed.get("CARDS").is_none());
 }
