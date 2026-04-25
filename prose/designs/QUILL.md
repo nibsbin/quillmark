@@ -105,7 +105,7 @@ Metadata resolution:
 
 ## File Ignore Rules
 
-When loading from disk, `Quill::from_path` respects a `.quillignore` file at the bundle root. If absent, default patterns apply: `.git/`, `.gitignore`, `.quillignore`, `target/`, `node_modules/`.
+When loading from disk, `Quillmark::quill_from_path` respects a `.quillignore` file at the bundle root. If absent, default patterns apply: `.git/`, `.gitignore`, `.quillignore`, `target/`, `node_modules/`.
 
 ## API
 
