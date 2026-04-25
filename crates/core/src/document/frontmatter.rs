@@ -14,6 +14,7 @@
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
+use super::prescan::NestedComment;
 use crate::value::QuillValue;
 
 /// One entry in a [`Frontmatter`]: a field or a comment line.
@@ -51,15 +52,24 @@ impl FrontmatterItem {
 }
 
 /// Ordered list of frontmatter items with map-keyed convenience accessors.
+///
+/// Top-level YAML comments live in `items` as [`FrontmatterItem::Comment`].
+/// Comments inside nested mappings/sequences live in `nested_comments`,
+/// keyed by structural path; the emitter re-injects them at the matching
+/// position when serialising the value tree.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Frontmatter {
     items: Vec<FrontmatterItem>,
+    nested_comments: Vec<NestedComment>,
 }
 
 impl Frontmatter {
     /// Create an empty `Frontmatter`.
     pub fn new() -> Self {
-        Self { items: Vec::new() }
+        Self {
+            items: Vec::new(),
+            nested_comments: Vec::new(),
+        }
     }
 
     /// Build from an `IndexMap` of fields (no comments, no fill markers).
@@ -72,12 +82,36 @@ impl Frontmatter {
                 fill: false,
             })
             .collect();
-        Self { items }
+        Self {
+            items,
+            nested_comments: Vec::new(),
+        }
     }
 
     /// Build from a pre-computed item list.
     pub fn from_items(items: Vec<FrontmatterItem>) -> Self {
-        Self { items }
+        Self {
+            items,
+            nested_comments: Vec::new(),
+        }
+    }
+
+    /// Build from a pre-computed item list and a set of nested comments.
+    pub fn from_items_with_nested(
+        items: Vec<FrontmatterItem>,
+        nested_comments: Vec<NestedComment>,
+    ) -> Self {
+        Self {
+            items,
+            nested_comments,
+        }
+    }
+
+    /// Comments captured inside nested mappings/sequences. The emitter
+    /// re-injects these at the matching position when serialising the
+    /// value tree.
+    pub fn nested_comments(&self) -> &[NestedComment] {
+        &self.nested_comments
     }
 
     /// Ordered iterator over raw items (including comments).

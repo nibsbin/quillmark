@@ -240,9 +240,9 @@ pub struct Document {
 
 // Equality is defined over the structural content only — `warnings` are
 // parse-time observations that depend on what the source text happened to
-// contain (near-miss sentinels, dropped nested comments, etc.) and so
-// differ between a source document and its round-tripped emission. Two
-// documents are equal when their `main` and `cards` match.
+// contain (near-miss sentinels, unsupported tag drops, etc.) and so differ
+// between a source document and its round-tripped emission. Two documents
+// are equal when their `main` and `cards` match.
 impl PartialEq for Document {
     fn eq(&self, other: &Self) -> bool {
         self.main == other.main && self.cards == other.cards

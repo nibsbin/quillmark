@@ -62,9 +62,10 @@ optional trailing whitespace). The content between is parsed as YAML.
   (`key: value  # note`) are normalised to own-line comments on the next
   line as a canonical-formatting choice — the parser produces a `Field`
   followed by a `Comment` item and the emitter emits them on separate
-  lines. Comments *inside* nested YAML values (arrays, maps) are dropped
-  silently; a `parse::comments_in_nested_yaml_dropped` warning is emitted
-  on the first occurrence per document.
+  lines. Comments *inside* nested YAML values (arrays, maps) are also
+  preserved: the pre-scan captures each nested comment with a structural
+  path (key/index sequence) and the emitter re-injects it at the matching
+  position when serialising the value tree.
 - **The `!fill` tag.** `!fill` is the single supported YAML tag; it marks
   a top-level field as a placeholder awaiting user input and round-trips
   through emit. `!fill` may be applied to scalars (string, integer,

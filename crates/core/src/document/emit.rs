@@ -21,6 +21,7 @@
 use serde_json::Value as JsonValue;
 
 use super::frontmatter::FrontmatterItem;
+use super::prescan::{CommentPathSegment, NestedComment};
 use super::{Card, Document, Sentinel};
 
 // ── Public entry point ────────────────────────────────────────────────────────
@@ -120,10 +121,12 @@ fn emit_card_fence(out: &mut String, card: &Card) {
     }
 
     // Frontmatter items in order.
+    let nested = card.frontmatter().nested_comments();
     for item in card.frontmatter().items() {
         match item {
             FrontmatterItem::Field { key, value, fill } => {
-                emit_field(out, key, value.as_json(), 0, *fill);
+                let path = vec![CommentPathSegment::Key(key.clone())];
+                emit_field(out, key, value.as_json(), 0, *fill, &path, nested);
             }
             FrontmatterItem::Comment { text } => {
                 out.push_str("# ");
@@ -160,7 +163,30 @@ fn ensure_f2_before_fence(out: &mut String) {
 
 // ── YAML value emission ───────────────────────────────────────────────────────
 
+/// Emit comments captured at `path` whose `position` matches `position`,
+/// each as a `# text` line indented by `indent` spaces.
+fn emit_pending_comments(
+    out: &mut String,
+    path: &[CommentPathSegment],
+    position: usize,
+    indent: usize,
+    nested: &[NestedComment],
+) {
+    for c in nested {
+        if c.position == position && c.container_path.as_slice() == path {
+            push_indent(out, indent);
+            out.push_str("# ");
+            out.push_str(&c.text);
+            out.push('\n');
+        }
+    }
+}
+
 /// Emit a `key: <value>\n` pair at `indent` spaces.
+///
+/// `path` is the path to *this* field (parent path + this key). It's used as
+/// the *container* path when recursing into the value: nested comments
+/// captured at this path are interleaved between the value's children.
 ///
 /// - Empty objects are **omitted** (caller skips them).
 /// - Empty arrays emit `key: []\n`.
@@ -169,7 +195,15 @@ fn ensure_f2_before_fence(out: &mut String) {
 ///   scalars, `key: !fill\n  - …` for non-empty sequences,
 ///   `key: !fill []` for empty sequences, and `key: !fill` for null.
 ///   Mappings are rejected at parse and never reach this path.
-fn emit_field(out: &mut String, key: &str, value: &JsonValue, indent: usize, fill: bool) {
+fn emit_field(
+    out: &mut String,
+    key: &str,
+    value: &JsonValue,
+    indent: usize,
+    fill: bool,
+    path: &[CommentPathSegment],
+    nested: &[NestedComment],
+) {
     if fill {
         push_indent(out, indent);
         out.push_str(key);
@@ -185,9 +219,7 @@ fn emit_field(out: &mut String, key: &str, value: &JsonValue, indent: usize, fil
             }
             JsonValue::Array(items) => {
                 out.push_str(": !fill\n");
-                for item in items {
-                    emit_sequence_item(out, item, indent);
-                }
+                emit_sequence_children(out, items, indent + 2, path, nested);
             }
             JsonValue::Object(_) => {
                 // Parser rejects !fill on mappings; recovery path only.
@@ -207,9 +239,7 @@ fn emit_field(out: &mut String, key: &str, value: &JsonValue, indent: usize, fil
             push_indent(out, indent);
             out.push_str(key);
             out.push_str(":\n");
-            for (k, v) in map {
-                emit_field(out, k, v, indent + 2, false);
-            }
+            emit_mapping_children(out, map, indent + 2, path, nested);
         }
         JsonValue::Array(items) if items.is_empty() => {
             push_indent(out, indent);
@@ -220,9 +250,7 @@ fn emit_field(out: &mut String, key: &str, value: &JsonValue, indent: usize, fil
             push_indent(out, indent);
             out.push_str(key);
             out.push_str(":\n");
-            for item in items {
-                emit_sequence_item(out, item, indent);
-            }
+            emit_sequence_children(out, items, indent + 2, path, nested);
         }
         _ => {
             push_indent(out, indent);
@@ -234,8 +262,57 @@ fn emit_field(out: &mut String, key: &str, value: &JsonValue, indent: usize, fil
     }
 }
 
+/// Emit the children of a mapping value with comment interleaving.
+///
+/// `child_indent` is the indent at which each child key sits; nested
+/// comments inside this mapping are emitted at the same indent. `path` is
+/// the path to the mapping container (its key in the parent).
+fn emit_mapping_children(
+    out: &mut String,
+    map: &serde_json::Map<String, JsonValue>,
+    child_indent: usize,
+    path: &[CommentPathSegment],
+    nested: &[NestedComment],
+) {
+    for (i, (k, v)) in map.iter().enumerate() {
+        emit_pending_comments(out, path, i, child_indent, nested);
+        let mut child_path = path.to_vec();
+        child_path.push(CommentPathSegment::Key(k.clone()));
+        emit_field(out, k, v, child_indent, false, &child_path, nested);
+    }
+    emit_pending_comments(out, path, map.len(), child_indent, nested);
+}
+
+/// Emit the children of a sequence value with comment interleaving.
+///
+/// `base_indent` is the indent at which each `- ` sits; nested comments
+/// inside this sequence are emitted at the same indent.
+fn emit_sequence_children(
+    out: &mut String,
+    items: &[JsonValue],
+    base_indent: usize,
+    path: &[CommentPathSegment],
+    nested: &[NestedComment],
+) {
+    for (i, item) in items.iter().enumerate() {
+        emit_pending_comments(out, path, i, base_indent, nested);
+        let mut child_path = path.to_vec();
+        child_path.push(CommentPathSegment::Index(i));
+        emit_sequence_item(out, item, base_indent, &child_path, nested);
+    }
+    emit_pending_comments(out, path, items.len(), base_indent, nested);
+}
+
 /// Emit a single `- <value>\n` sequence item at `base_indent` spaces.
-fn emit_sequence_item(out: &mut String, value: &JsonValue, base_indent: usize) {
+///
+/// `path` is the path to *this* item (parent path + item index).
+fn emit_sequence_item(
+    out: &mut String,
+    value: &JsonValue,
+    base_indent: usize,
+    path: &[CommentPathSegment],
+    nested: &[NestedComment],
+) {
     match value {
         JsonValue::Object(map) if map.is_empty() => {
             // Empty nested object in a sequence: emit as `- {}`
@@ -245,17 +322,28 @@ fn emit_sequence_item(out: &mut String, value: &JsonValue, base_indent: usize) {
         JsonValue::Object(map) => {
             // Block mapping inside a sequence.
             // First key on same line as `- `, subsequent keys indented by 2.
+            // Comments inside this mapping use this item's path as the
+            // container. There is no slot to emit a "before-first-key"
+            // comment naturally, so we emit them as a leading line above
+            // the `- ` prefix at the same indent.
+            emit_pending_comments(out, path, 0, base_indent, nested);
             let mut first = true;
-            for (k, v) in map {
+            for (i, (k, v)) in map.iter().enumerate() {
+                if !first {
+                    emit_pending_comments(out, path, i, base_indent + 2, nested);
+                }
+                let mut child_path = path.to_vec();
+                child_path.push(CommentPathSegment::Key(k.clone()));
                 if first {
                     push_indent(out, base_indent);
                     out.push_str("- ");
-                    emit_field_inline(out, k, v, base_indent + 2);
+                    emit_field_inline(out, k, v, base_indent + 2, &child_path, nested);
                     first = false;
                 } else {
-                    emit_field(out, k, v, base_indent + 2, false);
+                    emit_field(out, k, v, base_indent + 2, false, &child_path, nested);
                 }
             }
+            emit_pending_comments(out, path, map.len(), base_indent + 2, nested);
         }
         JsonValue::Array(inner) if inner.is_empty() => {
             push_indent(out, base_indent);
@@ -265,9 +353,7 @@ fn emit_sequence_item(out: &mut String, value: &JsonValue, base_indent: usize) {
             // Nested sequence: emit `- ` for first item, then recurse.
             push_indent(out, base_indent);
             out.push_str("-\n");
-            for item in inner {
-                emit_sequence_item(out, item, base_indent + 2);
-            }
+            emit_sequence_children(out, inner, base_indent + 2, path, nested);
         }
         _ => {
             push_indent(out, base_indent);
@@ -280,7 +366,14 @@ fn emit_sequence_item(out: &mut String, value: &JsonValue, base_indent: usize) {
 
 /// Emit a `key: <value>\n` pair where the key is already on a `- ` line.
 /// The key/value go on the same line as the `- ` prefix (caller already wrote it).
-fn emit_field_inline(out: &mut String, key: &str, value: &JsonValue, child_indent: usize) {
+fn emit_field_inline(
+    out: &mut String,
+    key: &str,
+    value: &JsonValue,
+    child_indent: usize,
+    path: &[CommentPathSegment],
+    nested: &[NestedComment],
+) {
     match value {
         JsonValue::Object(map) if map.is_empty() => {
             // key: {}
@@ -290,9 +383,7 @@ fn emit_field_inline(out: &mut String, key: &str, value: &JsonValue, child_inden
         JsonValue::Object(map) => {
             out.push_str(key);
             out.push_str(":\n");
-            for (k, v) in map {
-                emit_field(out, k, v, child_indent, false);
-            }
+            emit_mapping_children(out, map, child_indent, path, nested);
         }
         JsonValue::Array(items) if items.is_empty() => {
             out.push_str(key);
@@ -301,9 +392,7 @@ fn emit_field_inline(out: &mut String, key: &str, value: &JsonValue, child_inden
         JsonValue::Array(items) => {
             out.push_str(key);
             out.push_str(":\n");
-            for item in items {
-                emit_sequence_item(out, item, child_indent);
-            }
+            emit_sequence_children(out, items, child_indent + 2, path, nested);
         }
         _ => {
             out.push_str(key);
@@ -414,11 +503,23 @@ mod tests {
         assert_eq!(s, "\"\\u0001\\u001F\"");
     }
 
+    fn p(key: &str) -> Vec<CommentPathSegment> {
+        vec![CommentPathSegment::Key(key.to_string())]
+    }
+
     #[test]
     fn empty_object_omitted() {
         let value = QuillValue::from_json(serde_json::json!({}));
         let mut out = String::new();
-        emit_field(&mut out, "empty_map", value.as_json(), 0, false);
+        emit_field(
+            &mut out,
+            "empty_map",
+            value.as_json(),
+            0,
+            false,
+            &p("empty_map"),
+            &[],
+        );
         assert_eq!(out, ""); // omitted
     }
 
@@ -426,7 +527,15 @@ mod tests {
     fn empty_array_emitted() {
         let value = QuillValue::from_json(serde_json::json!([]));
         let mut out = String::new();
-        emit_field(&mut out, "empty_seq", value.as_json(), 0, false);
+        emit_field(
+            &mut out,
+            "empty_seq",
+            value.as_json(),
+            0,
+            false,
+            &p("empty_seq"),
+            &[],
+        );
         assert_eq!(out, "empty_seq: []\n");
     }
 
@@ -434,7 +543,15 @@ mod tests {
     fn fill_null_emits_bare_tag() {
         let value = QuillValue::from_json(serde_json::Value::Null);
         let mut out = String::new();
-        emit_field(&mut out, "recipient", value.as_json(), 0, true);
+        emit_field(
+            &mut out,
+            "recipient",
+            value.as_json(),
+            0,
+            true,
+            &p("recipient"),
+            &[],
+        );
         assert_eq!(out, "recipient: !fill\n");
     }
 
@@ -442,7 +559,7 @@ mod tests {
     fn fill_string_emits_tag_with_value() {
         let value = QuillValue::from_json(serde_json::json!("placeholder"));
         let mut out = String::new();
-        emit_field(&mut out, "dept", value.as_json(), 0, true);
+        emit_field(&mut out, "dept", value.as_json(), 0, true, &p("dept"), &[]);
         assert_eq!(out, "dept: !fill \"placeholder\"\n");
     }
 
@@ -450,7 +567,15 @@ mod tests {
     fn fill_integer_emits_tag_with_value() {
         let value = QuillValue::from_json(serde_json::json!(42));
         let mut out = String::new();
-        emit_field(&mut out, "count", value.as_json(), 0, true);
+        emit_field(
+            &mut out,
+            "count",
+            value.as_json(),
+            0,
+            true,
+            &p("count"),
+            &[],
+        );
         assert_eq!(out, "count: !fill 42\n");
     }
 }
