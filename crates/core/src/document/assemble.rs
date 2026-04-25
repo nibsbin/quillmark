@@ -12,7 +12,7 @@ use crate::Diagnostic;
 
 use super::fences::{fence_opener_len, find_metadata_blocks};
 use super::frontmatter::{Frontmatter, FrontmatterItem};
-use super::prescan::{prescan_fence_content, PreItem};
+use super::prescan::{prescan_fence_content, NestedComment, PreItem};
 use super::sentinel::extract_sentinels;
 use super::{Card, Document, Sentinel};
 
@@ -49,7 +49,9 @@ pub(super) struct MetadataBlock {
     pub(super) quill_ref: Option<String>,             // Quill reference from QUILL key
     /// Pre-scan items (comments + fill-tagged field keys) in source order.
     pub(super) pre_items: Vec<PreItem>,
-    /// Pre-scan warnings (nested-comment drops, unknown-tag strips, ...).
+    /// Pre-scan nested comments (with structural paths).
+    pub(super) pre_nested_comments: Vec<NestedComment>,
+    /// Pre-scan warnings (unknown-tag strips, ...).
     pub(super) pre_warnings: Vec<Diagnostic>,
 }
 
@@ -140,6 +142,7 @@ pub(super) fn build_block(
         tag,
         quill_ref,
         pre_items: pre.items,
+        pre_nested_comments: pre.nested_comments,
         pre_warnings: pre.warnings,
     })
 }
@@ -210,6 +213,7 @@ pub(super) fn decompose_with_warnings(
     // order and pull each field's value from the parsed map.
     let frontmatter = build_frontmatter_from_pre_and_parsed(
         &frontmatter_block.pre_items,
+        &frontmatter_block.pre_nested_comments,
         &frontmatter_block.yaml_value,
     )?;
     // Surface pre-scan warnings (nested-comment drops, unsupported tags).
@@ -243,15 +247,18 @@ pub(super) fn decompose_with_warnings(
     for (idx, block) in blocks.iter().enumerate() {
         if let Some(ref tag_name) = block.tag {
             // Build the card's typed frontmatter from pre-scan + parsed YAML.
-            let card_frontmatter =
-                build_frontmatter_from_pre_and_parsed(&block.pre_items, &block.yaml_value)
-                    .map_err(|e| match e {
-                        ParseError::InvalidStructure(msg) => ParseError::InvalidStructure(format!(
-                            "Invalid YAML in card block '{}': {}",
-                            tag_name, msg
-                        )),
-                        other => other,
-                    })?;
+            let card_frontmatter = build_frontmatter_from_pre_and_parsed(
+                &block.pre_items,
+                &block.pre_nested_comments,
+                &block.yaml_value,
+            )
+            .map_err(|e| match e {
+                ParseError::InvalidStructure(msg) => ParseError::InvalidStructure(format!(
+                    "Invalid YAML in card block '{}': {}",
+                    tag_name, msg
+                )),
+                other => other,
+            })?;
             for w in &block.pre_warnings {
                 warnings.push(w.clone());
             }
@@ -300,6 +307,7 @@ pub(super) fn decompose_with_warnings(
 /// the end of the item list in parsed-map order so we never drop values.
 fn build_frontmatter_from_pre_and_parsed(
     pre_items: &[PreItem],
+    pre_nested_comments: &[NestedComment],
     yaml_value: &Option<serde_json::Value>,
 ) -> Result<Frontmatter, ParseError> {
     let mapping = match yaml_value {
@@ -360,5 +368,8 @@ fn build_frontmatter_from_pre_and_parsed(
         });
     }
 
-    Ok(Frontmatter::from_items(items))
+    Ok(Frontmatter::from_items_with_nested(
+        items,
+        pre_nested_comments.to_vec(),
+    ))
 }

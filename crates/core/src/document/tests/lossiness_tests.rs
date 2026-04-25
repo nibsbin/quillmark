@@ -321,26 +321,87 @@ fn original_quoting_style_is_not_preserved() {
     );
 }
 
-// ── Category: Nested comments dropped ────────────────────────────────────────
+// ── Category: Nested comments round-trip ─────────────────────────────────────
 
+/// Comments inside nested sequences round-trip at the matching position.
 #[test]
-fn nested_yaml_comments_dropped_with_warning() {
-    let src = "---\nQUILL: q\nitems:\n  # nested\n  - a\n  - b\n---\n";
+fn nested_sequence_comments_round_trip() {
+    let src = "---\nQUILL: q\nitems:\n  # before-first\n  - a\n  # between\n  - b\n  # after-last\n---\n";
 
     let out = Document::from_markdown_with_warnings(src).unwrap();
     assert!(
-        out.warnings
+        !out
+            .warnings
             .iter()
             .any(|w| w.code.as_deref() == Some("parse::comments_in_nested_yaml_dropped")),
-        "expected comments_in_nested_yaml_dropped warning; got: {:?}",
-        out.warnings
+        "no dropped-comment warning expected; nested comments are now preserved"
     );
 
-    // And the nested comment must not appear on emit.
     let emitted = out.document.to_markdown();
     assert!(
-        !emitted.contains("# nested"),
-        "nested comments are dropped silently\nGot:\n{}",
+        emitted.contains("# before-first"),
+        "leading nested comment must round-trip\nGot:\n{}",
+        emitted
+    );
+    assert!(
+        emitted.contains("# between"),
+        "between-items nested comment must round-trip\nGot:\n{}",
+        emitted
+    );
+    assert!(
+        emitted.contains("# after-last"),
+        "trailing nested comment must round-trip\nGot:\n{}",
+        emitted
+    );
+
+    // Round-trip is idempotent across repeated parse/emit cycles.
+    let doc2 = Document::from_markdown(&emitted).unwrap();
+    let emitted2 = doc2.to_markdown();
+    assert_eq!(emitted, emitted2, "round-trip must be idempotent");
+}
+
+/// Comments inside nested mappings round-trip at the matching position.
+#[test]
+fn nested_mapping_comments_round_trip() {
+    let src = "---\nQUILL: q\nouter:\n  # leading\n  inner: 1\n  # trailing\n---\n";
+
+    let doc = Document::from_markdown(src).unwrap();
+    let emitted = doc.to_markdown();
+    assert!(
+        emitted.contains("# leading"),
+        "leading nested mapping comment must round-trip\nGot:\n{}",
+        emitted
+    );
+    assert!(
+        emitted.contains("# trailing"),
+        "trailing nested mapping comment must round-trip\nGot:\n{}",
+        emitted
+    );
+
+    // Re-parse and idempotency.
+    let doc2 = Document::from_markdown(&emitted).unwrap();
+    let emitted2 = doc2.to_markdown();
+    assert_eq!(emitted, emitted2);
+}
+
+/// Trailing comments on nested sequence items become own-line comments at
+/// the next position on round-trip (canonical form, mirroring the
+/// top-level rule).
+#[test]
+fn trailing_nested_comments_become_own_line() {
+    let src = "---\nQUILL: q\nitems:\n  - a # inline\n  - b\n---\n";
+
+    let doc = Document::from_markdown(src).unwrap();
+    let emitted = doc.to_markdown();
+    assert!(
+        emitted.contains("# inline"),
+        "trailing nested comment must survive\nGot:\n{}",
+        emitted
+    );
+    // It must land on its own line, not on the item line.
+    assert!(
+        !emitted.contains("\"a\" # inline"),
+        "trailing nested comment must normalise to own-line\nGot:\n{}",
         emitted
     );
 }

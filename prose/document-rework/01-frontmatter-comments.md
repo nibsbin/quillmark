@@ -55,9 +55,14 @@ scan is fine.
   a deliberate canonical-formatting choice (opinionated layout beats two
   code paths). The parser produces a `Field` followed by a `Comment`
   item.
-- Comments *inside* nested values (arrays, maps) are dropped silently.
-  Emit one `comments_in_nested_yaml_dropped` warning per document the
-  first time this is encountered.
+- Comments *inside* nested values (arrays, maps) are captured during the
+  pre-scan with a structural path (a sequence of map keys / sequence
+  indices) and an ordinal locating them within their immediate container.
+  They are stored on `Frontmatter` separately from the top-level
+  `FrontmatterItem` list and re-injected at the matching position by the
+  emitter when the value tree is serialised. Trailing comments on nested
+  sequence items and nested mapping keys are normalised to own-line on
+  round-trip (mirroring the top-level rule).
 - Banner comments above the F1 sentinel line (already tolerated by
   MARKDOWN.md §4 F1) land in the item list in source order.
 
@@ -91,7 +96,6 @@ Both accessors are available on `doc.main` and on each element of
 
 ## Non-goals
 
-- Nested-value comments.
 - Blank-line preservation.
 - Trailing-comment round-trip as trailing (they become own-line).
 - Comment-editing mutators.
