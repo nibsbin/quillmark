@@ -38,14 +38,25 @@ readonly metadata: {
   author: string;
   example?: string;          // example_file contents (if present)
   supportedFormats: string[];
-  schema: unknown;           // raw schema from Quill.yaml; consumer validates
+  schema: {
+    main: CardSchema;        // main entry-point card
+    cards: Record<string, CardSchema>;  // other composable cards (excludes main)
+  };
   // ...other unstructured metadata from the quill: section
 };
+
+interface CardSchema {
+  name: string;
+  title?: string;
+  description?: string;
+  fields: Record<string, FieldSchema>;
+  ui?: UiContainerSchema;
+}
 ```
 
 Snapshot at `Quill` construction time, not live. One marshalling hop.
 
-The `schema` field ships raw (as parsed from YAML). The engine deliberately no longer owns schema validation in WASM; consumers that need it run their own validator against `metadata.schema`. This is consistent with the "schema APIs are no longer engine-level in WASM" note and gives consumers a supported path forward instead of regex-parsing the bytes themselves.
+`schema` mirrors Quill.yaml's structure: `schema.main` is the main entry-point card and `schema.cards` is a map of the other composable cards keyed by name. Both are shaped the same way — `main` is a card too, just the one the document instantiates. This gives consumers a supported path to surface a card-type picker (iterate `Object.keys(metadata.schema.cards)`) without regex-parsing `Quill.yaml` themselves. The engine deliberately no longer owns schema validation in WASM; consumers that need it run their own validator against `metadata.schema`.
 
 ### 3. Add `Document.clone()`
 
