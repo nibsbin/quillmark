@@ -44,7 +44,7 @@ title: Document Title
 | `format@2.1` | Latest 2.1.x |
 | `format@2.1.0` | Exact version 2.1.0 |
 
-Quill names must match `[a-z_][a-z0-9_]*` (lowercase letters, digits, and underscores; starts with a letter or underscore).
+Quill names must match `[a-z][a-z0-9_]*` (lowercase letters, digits, and underscores; must start with a lowercase letter).
 
 ## Frontmatter Data Types
 

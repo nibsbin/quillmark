@@ -38,13 +38,13 @@ Get started with Quillmark in Python or JavaScript.
     ## Installation
 
     ```bash
-    npm install @quillmark-test/wasm
+    npm install @quillmark/wasm
     ```
 
     ## Basic Usage
 
     ```javascript
-    import { Document, Quillmark } from "@quillmark-test/wasm";
+    import { Document, Quillmark } from "@quillmark/wasm";
 
     const engine = new Quillmark();
     const enc = new TextEncoder();

@@ -57,13 +57,13 @@ Each document must declare its target format in top-level frontmatter using `QUI
 
 ```markdown
 ---
-QUILL: my-custom-format
+QUILL: my_custom_format
 title: My First Document
 author: Jane Doe
 ---
 ```
 
-If `QUILL` is missing, parsing fails with `ParseError::InvalidStructure`.
+If `QUILL` is missing, parsing fails. Quill names must be `snake_case` (`[a-z][a-z0-9_]*`); hyphens are not allowed.
 
 ## The Rendering Pipeline
 
@@ -84,7 +84,7 @@ Think of Quillmark as a factory:
 - **Input**: Raw materials (Markdown content + metadata)
 - **Quill**: The format that shapes the output
 - **Backend**: The manufacturing process
-- **Output**: Finished products (PDF, SVG, filled forms)
+- **Output**: Finished artifacts (PDF, SVG, PNG)
 
 Different Quills can produce completely different outputs from the same input, just as different molds produce different shapes.
 

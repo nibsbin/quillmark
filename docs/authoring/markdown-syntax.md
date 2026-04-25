@@ -1,6 +1,6 @@
 # Markdown Syntax
 
-Quillmark supports a subset of CommonMark for document body content. The sections below cover what is supported; anything not listed (blockquotes, images, thematic breaks, raw HTML, math) is silently dropped.
+Quillmark supports a subset of CommonMark for document body content. The sections below cover what is supported; anything not listed (blockquotes, thematic breaks, raw HTML, math) is silently dropped.
 
 ## Your First Document
 
@@ -70,6 +70,14 @@ Ordered lists:
 [Link text](https://example.com)
 ```
 
+## Images
+
+```markdown
+![Alt text](path/to/image.png)
+```
+
+The image source can be a path relative to the Quill bundle or an absolute path the backend can resolve. Alt text is currently ignored.
+
 ## Code Blocks
 
 ````markdown
@@ -103,7 +111,6 @@ First line<br>Second line
 The following are silently dropped and will not appear in rendered output:
 
 - Blockquotes (`>`)
-- Images (`![alt](src)`)
 - Thematic breaks (`***`, `___`)
 - Raw HTML (other than `<br>`)
 - Math and footnotes
