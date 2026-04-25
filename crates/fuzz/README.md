@@ -22,9 +22,10 @@ cargo test
 Run a specific test module:
 
 ```bash
-cargo test --package quillmark-fuzz --test convert_fuzz
-cargo test --package quillmark-fuzz --test filter_fuzz
-cargo test --package quillmark-fuzz --test parse_fuzz
+cargo test --package quillmark-fuzz convert_fuzz
+cargo test --package quillmark-fuzz filter_fuzz
+cargo test --package quillmark-fuzz parse_fuzz
+cargo test --package quillmark-fuzz emit_roundtrip_fuzz
 ```
 
 **Note:** This crate is excluded from `default-members` to avoid running expensive fuzzing tests on every `cargo test`. Use `cargo test --workspace` to run all tests including fuzzing. This crate uses `proptest` for property-based testing, not `cargo-fuzz`.
@@ -71,9 +72,10 @@ YAML frontmatter security:
 cargo test --package quillmark-fuzz --all-features
 
 # Run specific test module
-cargo test --package quillmark-fuzz --test convert_fuzz
-cargo test --package quillmark-fuzz --test filter_fuzz
-cargo test --package quillmark-fuzz --test parse_fuzz
+cargo test --package quillmark-fuzz convert_fuzz
+cargo test --package quillmark-fuzz filter_fuzz
+cargo test --package quillmark-fuzz parse_fuzz
+cargo test --package quillmark-fuzz emit_roundtrip_fuzz
 ```
 
 ## Security Properties Validated

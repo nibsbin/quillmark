@@ -75,6 +75,7 @@ cargo run --example taro
 - **crates/bindings/python** - Python bindings
 - **crates/bindings/wasm** - WebAssembly bindings
 - **crates/bindings/cli** - Command-line interface
+- **crates/fixtures** - Test fixtures and sample Quill templates
 
 ## License
 
