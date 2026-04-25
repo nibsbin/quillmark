@@ -122,10 +122,7 @@ impl QuillConfig {
     }
 
     /// Extract example values for a specific card-type.
-    pub fn card_type_examples(
-        &self,
-        card_name: &str,
-    ) -> Option<HashMap<String, Vec<QuillValue>>> {
+    pub fn card_type_examples(&self, card_name: &str) -> Option<HashMap<String, Vec<QuillValue>>> {
         self.card_type(card_name).map(|card| {
             let mut examples = HashMap::new();
             for (field_name, field_schema) in &card.fields {

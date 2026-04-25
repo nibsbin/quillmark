@@ -208,7 +208,10 @@ fn test_quill_metadata_snapshot() {
     let main = Reflect::get(&schema, &JsValue::from_str("main")).unwrap();
     assert!(main.is_object(), "schema.main must be present");
     let main_fields = Reflect::get(&main, &JsValue::from_str("fields")).unwrap();
-    assert!(main_fields.is_object(), "schema.main.fields must be an object");
+    assert!(
+        main_fields.is_object(),
+        "schema.main.fields must be an object"
+    );
     let title_field = Reflect::get(&main_fields, &JsValue::from_str("title")).unwrap();
     assert!(
         title_field.is_object(),
