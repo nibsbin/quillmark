@@ -15,7 +15,7 @@ cargo test --package quillmark-fuzz
 Or from the `quillmark-fuzz` directory:
 
 ```bash
-cd quillmark-fuzz
+cd crates/fuzz
 cargo test
 ```
 
@@ -90,9 +90,10 @@ The fuzzing tests validate critical security properties:
 
 ## Architecture
 
-The fuzzing tests are organized into three modules:
+The fuzzing tests are organized into four modules:
 
 - `convert_fuzz.rs` - Tests for markdown to Typst conversion and escaping functions
+- `emit_roundtrip_fuzz.rs` - Round-trip stability tests (parse → emit → re-parse)
 - `filter_fuzz.rs` - Tests for filter input validation and injection safety
 - `parse_fuzz.rs` - Tests for YAML frontmatter and markdown parsing
 

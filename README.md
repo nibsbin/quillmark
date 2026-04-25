@@ -76,6 +76,7 @@ cargo run --example taro
 - **crates/bindings/wasm** - WebAssembly bindings
 - **crates/bindings/cli** - Command-line interface
 - **crates/fixtures** - Test fixtures and sample Quill templates
+- **crates/fuzz** - Property-based fuzzing tests
 
 ## License
 

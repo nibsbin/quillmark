@@ -1,33 +1,21 @@
-# @quillmark-test/fixtures
+# quillmark-fixtures
 
 Test fixtures and sample Quill templates for [Quillmark](https://github.com/nibsbin/quillmark).
 
 ## Overview
 
-This package contains sample Quill templates and markdown files used for testing and examples in the Quillmark ecosystem. It's designed to be used by JavaScript/TypeScript applications that work with Quillmark.
+This crate contains sample Quill templates and markdown files used for testing and examples in the Quillmark ecosystem. It provides helper functions for accessing fixture paths programmatically in Rust projects.
 
 ## Usage
 
-This package has no entrypoint and simply bundles the `resources/` directory. You can access the fixture files directly:
+Add the crate as a dev-dependency and use the provided helper functions to access fixture paths:
 
-```javascript
-// Using in Node.js
-import { readFileSync } from 'fs';
-import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
+```rust
+// Access a resource file by name
+let sample_md = quillmark_fixtures::resource_path("sample.md");
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const fixturesPath = join(__dirname, 'node_modules/@quillmark-test/fixtures/resources');
-
-// Access a fixture file
-const sampleMd = readFileSync(join(fixturesPath, 'sample.md'), 'utf-8');
-```
-
-```javascript
-// In browser with bundler
-// Import the path and fetch the resource
-const response = await fetch('node_modules/@quillmark-test/fixtures/resources/sample.md');
-const sampleMd = await response.text();
+// Access a versioned quill template (resolves to the latest version automatically)
+let usaf_memo = quillmark_fixtures::quills_path("usaf_memo");
 ```
 
 ## Available Resources
@@ -49,10 +37,6 @@ The package includes:
   - `extended_metadata_demo.md` - Extended metadata examples
   - `appreciated_letter/appreciated_letter.md` - Example content for the appreciated_letter template
   - `*.md` - Various markdown test files
-
-## Rust Crate
-
-This package is also available as a Rust crate `quillmark-fixtures` for use in Rust projects. The Rust crate provides helper functions for accessing fixture paths programmatically.
 
 ## License
 

@@ -41,7 +41,7 @@ All card blocks are collected into the `CARDS` array.
 - Card names must match `[a-z_][a-z0-9_]*`.
 - `BODY` and `CARDS` are reserved names.
 - `QUILL` cannot appear in card blocks.
-- Use `***` or `___` for horizontal rules in body content; `---` is reserved for metadata delimiters.
+- `---` is reserved for metadata delimiters and cannot be used as a thematic break in body content.
 - Invalid card-name examples: `BadCard`, `my-card`, `2nd_card`.
 
 ## Card Body Content

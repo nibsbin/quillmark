@@ -19,7 +19,7 @@ A format-first Markdown rendering system that converts Markdown with YAML frontm
   → [Creating Quills](format-designer/creating-quills.md)
 
 - **Integrating into an app?** You use Quillmark via Python or JavaScript.  
-  → [Integration Overview](integration/overview.md)
+  → [Quickstart](getting-started/quickstart.md)
 
 - **Using the CLI?** You render and validate from the command line.  
   → [CLI Reference](cli/reference.md)

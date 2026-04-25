@@ -113,7 +113,7 @@ for: ORG2/SYMBOL
 Indorsement body text here.
 ```
 
-See [CARDS.md](../../prose/designs/CARDS.md) for the full card architecture.
+See [Cards](cards.md) for details on card syntax and usage.
 
 ## Validation
 
