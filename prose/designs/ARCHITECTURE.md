@@ -16,11 +16,11 @@ Quillmark converts Markdown with YAML frontmatter into output artifacts (PDF, SV
 
 Foundation types and traits. No backend dependencies; backends depend on this crate.
 
-Key exports: `Backend`, `Artifact`, `OutputFormat`, `RenderOptions`, `RenderSession`, `Document`, `QuillSource`, `FileTreeNode`, `QuillIgnore`, `RenderError`, `Diagnostic`, `Severity`, `Location`, `RenderResult`, `QuillValue`, `QuillReference`, `Version`, `VersionSelector`, `BODY_FIELD`.
+Key exports: `Backend`, `Artifact`, `OutputFormat`, `RenderOptions`, `RenderSession`, `Document`, `QuillSource`, `FileTreeNode`, `QuillIgnore`, `RenderError`, `Diagnostic`, `Severity`, `Location`, `RenderResult`, `QuillValue`, `QuillReference`, `Version`, `VersionSelector`.
 
 ### `quillmark` (orchestration)
 
-High-level API: `Quillmark` (engine), `Quill` (renderable source + backend), `QuillRef`. Handles parse → normalize → compile, schema coercion, and backend auto-registration. Filesystem walking for `engine.quill_from_path` lives here; core is filesystem-agnostic.
+High-level API: `Quillmark` (engine), `Quill` (renderable source + backend). Handles parse → normalize → compile, schema coercion, and backend auto-registration. Filesystem walking for `engine.quill_from_path` lives here; core is filesystem-agnostic.
 
 ### `backends/quillmark-typst`
 
@@ -32,7 +32,7 @@ PyO3 bindings published as `quillmark` on PyPI.
 
 ### `bindings/quillmark-wasm`
 
-wasm-bindgen bindings published as `@quillmark-test/wasm`. Supports bundler, Node.js, and web targets.
+wasm-bindgen bindings published as `@quillmark/wasm`. Supports bundler and Node.js targets.
 
 ### `bindings/quillmark-cli`
 

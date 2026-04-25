@@ -30,8 +30,6 @@ pub struct QuillSource {
     pub plate: Option<String>,
     pub example: Option<String>,
     pub config: QuillConfig,
-    pub defaults: HashMap<String, QuillValue>,
-    pub examples: HashMap<String, Vec<QuillValue>>,
     pub files: FileTreeNode,
 }
 
@@ -63,7 +61,7 @@ Validation rules:
 
 ## `Quill.yaml` Structure
 
-Required top-level sections: `Quill` (bundle metadata). Optional: `main` (document fields), `cards` (card type definitions), `typst` (backend config).
+Required top-level sections: `Quill` (bundle metadata). Optional: `main` (document fields), `card_types` (card type definitions), `typst` (backend config).
 
 ```yaml
 quill:

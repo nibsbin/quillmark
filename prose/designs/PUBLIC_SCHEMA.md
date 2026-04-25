@@ -12,7 +12,7 @@ A YAML subset projection of `Quill.yaml`:
 - `description`
 - optional `example`
 - `fields`
-- `cards`
+- `card_types`
 
 ## Intended consumers
 
@@ -22,7 +22,7 @@ A YAML subset projection of `Quill.yaml`:
 
 ## Shape
 
-Top-level keys: `name`, `description` (optional), `example` (optional), `fields`, `cards` (omitted when empty).
+Top-level keys: `name`, `description` (optional), `example` (optional), `fields`, `card_types` (omitted when empty).
 
 Each field includes: `type`, `title` (optional), `description` (optional), `required` (omitted when false), `default` (optional), `examples` (optional list), `enum` (optional), `properties` (optional, for `object` fields), `items` (optional, for `array` fields), `ui` (optional).
 
