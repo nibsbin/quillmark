@@ -191,8 +191,7 @@ pub fn prescan_fence_content(content: &str) -> PreScan {
             let after_dash_full = if trimmed == "-" { "" } else { &trimmed[2..] };
             let (after_dash, trailing_comment) = split_trailing_comment(after_dash_full);
             let after_dash_trimmed = after_dash.trim_start();
-            let inline_indent_offset =
-                indent + 2 + (after_dash.len() - after_dash_trimmed.len());
+            let inline_indent_offset = indent + 2 + (after_dash.len() - after_dash_trimmed.len());
 
             if after_dash_trimmed.is_empty() {
                 // No inline value. Children, if any, will appear on the
@@ -680,8 +679,7 @@ mod tests {
             ]
         );
         assert!(
-            !out
-                .warnings
+            !out.warnings
                 .iter()
                 .any(|w| w.code.as_deref() == Some("parse::comments_in_nested_yaml_dropped")),
             "no dropped-comment warning expected; nested comments are now preserved"

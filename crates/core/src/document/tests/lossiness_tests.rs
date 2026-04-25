@@ -326,12 +326,12 @@ fn original_quoting_style_is_not_preserved() {
 /// Comments inside nested sequences round-trip at the matching position.
 #[test]
 fn nested_sequence_comments_round_trip() {
-    let src = "---\nQUILL: q\nitems:\n  # before-first\n  - a\n  # between\n  - b\n  # after-last\n---\n";
+    let src =
+        "---\nQUILL: q\nitems:\n  # before-first\n  - a\n  # between\n  - b\n  # after-last\n---\n";
 
     let out = Document::from_markdown_with_warnings(src).unwrap();
     assert!(
-        !out
-            .warnings
+        !out.warnings
             .iter()
             .any(|w| w.code.as_deref() == Some("parse::comments_in_nested_yaml_dropped")),
         "no dropped-comment warning expected; nested comments are now preserved"

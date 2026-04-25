@@ -559,15 +559,7 @@ mod tests {
     fn fill_string_emits_tag_with_value() {
         let value = QuillValue::from_json(serde_json::json!("placeholder"));
         let mut out = String::new();
-        emit_field(
-            &mut out,
-            "dept",
-            value.as_json(),
-            0,
-            true,
-            &p("dept"),
-            &[],
-        );
+        emit_field(&mut out, "dept", value.as_json(), 0, true, &p("dept"), &[]);
         assert_eq!(out, "dept: !fill \"placeholder\"\n");
     }
 
