@@ -98,7 +98,7 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
     }
 
     let mut properties = serde_json::Map::new();
-    for (name, field) in &config.main().fields {
+    for (name, field) in &config.main.fields {
         properties.insert(name.clone(), field_to_schema(field));
     }
     properties.insert(
@@ -107,7 +107,7 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
     );
 
     let mut defs = serde_json::Map::new();
-    for card in config.card_definitions() {
+    for card in &config.card_types {
         let mut card_properties = serde_json::Map::new();
         for (name, field) in &card.fields {
             card_properties.insert(name.clone(), field_to_schema(field));

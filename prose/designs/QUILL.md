@@ -84,7 +84,7 @@ main:
       type: integer
       description: Whole-number count
 
-cards:
+card_types:
   quote:
     title: Quote block
     description: A single pull quote
