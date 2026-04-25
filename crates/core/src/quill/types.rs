@@ -1,9 +1,13 @@
 //! Quill schema and core type definitions.
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
 use crate::value::QuillValue;
+
+fn is_false(value: &bool) -> bool {
+    !*value
+}
 /// Semantic constants for field schema keys used in parsing and JSON Schema generation.
 /// Using constants provides IDE support (find references, autocomplete) and ensures
 /// consistency between parsing and output.
@@ -49,13 +53,17 @@ pub mod ui_key {
 #[serde(deny_unknown_fields)]
 pub struct UiFieldSchema {
     /// Group name for organizing fields (e.g., "Personal Info", "Preferences")
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
     /// Order of the field in the UI (automatically generated based on field position in Quill.yaml)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub order: Option<i32>,
     /// Compact rendering hint: when true, the UI should render this field in a compact style
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub compact: Option<bool>,
     /// Multi-line text box hint: when true, the UI should start with a larger text box.
     /// Valid on `string` fields (plain text with newlines preserved) and `markdown` fields.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub multiline: Option<bool>,
 }
 
@@ -63,25 +71,32 @@ pub struct UiFieldSchema {
 #[serde(deny_unknown_fields)]
 pub struct UiContainerSchema {
     /// Whether to hide the body editor for this element (metadata only)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub hide_body: Option<bool>,
     /// Template for generating a default per-instance title in UI consumers.
     /// Uses `{field_name}` tokens interpolated with live field values.
     /// Example: `"{name}"`
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub default_title: Option<String>,
 }
 
 /// Schema definition for a card type (composable content blocks)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct CardSchema {
-    /// Card type name (e.g., "indorsements")
+    /// Card type name (e.g., "indorsements"). The map key carries this on the
+    /// wire; skipped during serialization to avoid duplication.
+    #[serde(skip_serializing, default)]
     pub name: String,
     /// Short label for the card type
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// Detailed description of this card type
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// List of fields in the card
-    pub fields: HashMap<String, FieldSchema>,
+    pub fields: BTreeMap<String, FieldSchema>,
     /// UI layout hints
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub ui: Option<UiContainerSchema>,
 }
 
@@ -145,27 +160,38 @@ impl FieldType {
 /// Schema definition for a template field
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FieldSchema {
+    /// Field name. The map key carries this on the wire; skipped during
+    /// serialization to avoid duplication.
+    #[serde(skip_serializing, default)]
     pub name: String,
     /// Short label for the field (used in JSON Schema title)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
     /// Field type (required)
     pub r#type: FieldType,
     /// Detailed description of the field (used in JSON Schema description)
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     /// Default value for the field
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<QuillValue>,
     /// Example values for the field
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub examples: Option<QuillValue>,
     /// UI layout hints
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub ui: Option<UiFieldSchema>,
     /// Whether this field is required (fields are optional by default)
+    #[serde(default, skip_serializing_if = "is_false")]
     pub required: bool,
     /// Enum values for string fields (restricts valid values)
-    #[serde(rename = "enum")]
+    #[serde(rename = "enum", skip_serializing_if = "Option::is_none")]
     pub enum_values: Option<Vec<String>>,
     /// Properties for dict/object types (nested field schemas)
-    pub properties: Option<HashMap<String, Box<FieldSchema>>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub properties: Option<BTreeMap<String, Box<FieldSchema>>>,
     /// Item schema for array types
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub items: Option<Box<FieldSchema>>,
 }
 
@@ -236,7 +262,7 @@ impl FieldSchema {
             required: def.required,
             enum_values: def.enum_values,
             properties: if let Some(props) = def.properties {
-                let mut p = HashMap::new();
+                let mut p = BTreeMap::new();
                 for (key, value) in props {
                     p.insert(
                         key.clone(),
