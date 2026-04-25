@@ -230,7 +230,7 @@ impl Quill {
         fields: &IndexMap<String, QuillValue>,
     ) -> IndexMap<String, QuillValue> {
         let mut result = fields.clone();
-        if let Some(card_defaults) = self.source.config().card_defaults(card_tag) {
+        if let Some(card_defaults) = self.source.config().card_type_defaults(card_tag) {
             for (field_name, default_value) in card_defaults {
                 if !result.contains_key(&field_name) {
                     result.insert(field_name, default_value);

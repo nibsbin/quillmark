@@ -40,7 +40,7 @@ readonly metadata: {
   supportedFormats: string[];
   schema: {
     main: CardSchema;        // main entry-point card
-    cards: Record<string, CardSchema>;  // other composable cards (excludes main)
+    cardTypes: Record<string, CardSchema>;  // additional composable card types (excludes main)
   };
   // ...other unstructured metadata from the quill: section
 };
@@ -56,7 +56,7 @@ interface CardSchema {
 
 Snapshot at `Quill` construction time, not live. One marshalling hop.
 
-`schema` mirrors Quill.yaml's structure: `schema.main` is the main entry-point card and `schema.cards` is a map of the other composable cards keyed by name. Both are shaped the same way — `main` is a card too, just the one the document instantiates. This gives consumers a supported path to surface a card-type picker (iterate `Object.keys(metadata.schema.cards)`) without regex-parsing `Quill.yaml` themselves. The engine deliberately no longer owns schema validation in WASM; consumers that need it run their own validator against `metadata.schema`.
+`schema` mirrors Quill.yaml's structure: `schema.main` is the main entry-point card (parsed from the YAML `main:` section) and `schema.cardTypes` is a map of the additional composable card types (parsed from `card_types:`), keyed by name. Both `schema.main` and the entries under `schema.cardTypes` are shaped the same way — `main` is a card too, just the one the document instantiates. This gives consumers a supported path to surface a card-type picker (iterate `Object.keys(metadata.schema.cardTypes)`) without regex-parsing `Quill.yaml` themselves. The engine deliberately no longer owns schema validation in WASM; consumers that need it run their own validator against `metadata.schema`.
 
 ### 3. Add `Document.clone()`
 
@@ -105,7 +105,7 @@ The following are intentional behaviors being called out by consumers. No code c
 
 ## Out of scope
 
-- Flattening `Quill.yaml` back to top-level keys. The nested shape is deliberate (room for sibling sections like `typst:`, `cards:`, `main:`).
+- Flattening `Quill.yaml` back to top-level keys. The nested shape is deliberate (room for sibling sections like `typst:`, `card_types:`, `main:`).
 - Making `description` optional. It is required by design.
 - `Document.toJSON()` — deferred. No clear need from the current feedback.
 - A `Document.fromMarkdown(md, { quill: name })` overload that injects `QUILL:` — deferred. Possible future ergonomic win; not required by the current feedback.

@@ -50,7 +50,7 @@ fields:
     type: string
     enum: [draft, final]
     default: draft
-cards:
+card_types:
   indorsement:
     title: Routing Indorsement
     description: Routing chain metadata.

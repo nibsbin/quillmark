@@ -140,7 +140,7 @@ pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
     // ── Main card projection ──────────────────────────────────────────────
-    let main_schema = quill.source().config().main();
+    let main_schema = &quill.source().config().main;
     let main_fields = doc.main().frontmatter().to_index_map();
     let main = project_card(main_schema, &main_fields);
 
@@ -149,7 +149,7 @@ pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
 
     for (index, card) in doc.cards().iter().enumerate() {
         let tag = card.tag();
-        match quill.source().config().card_definition(&tag) {
+        match quill.source().config().card_type(&tag) {
             Some(card_schema) => {
                 let card_fields = card.frontmatter().to_index_map();
                 cards.push(project_card(card_schema, &card_fields));

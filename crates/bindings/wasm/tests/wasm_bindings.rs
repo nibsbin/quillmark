@@ -158,7 +158,7 @@ fn test_quill_from_object_tree() {
 /// `quill.metadata` exposes the snapshot of `Quill.yaml` expected by
 /// downstream consumers: `name`, `backend`, `description`, `version`,
 /// `supportedFormats`, and the raw `schema` mirroring Quill.yaml's
-/// `main:` and `cards:` sections.
+/// `main:` and `card_types:` sections.
 #[wasm_bindgen_test]
 fn test_quill_metadata_snapshot() {
     use js_sys::Reflect;
@@ -169,7 +169,7 @@ fn test_quill_metadata_snapshot() {
         .quill(common::tree(&[
             (
                 "Quill.yaml",
-                b"quill:\n  name: meta_quill\n  backend: typst\n  version: \"0.2.1\"\n  plate_file: plate.typ\n  description: Metadata quill\n\nmain:\n  fields:\n    title:\n      type: string\n      description: The title\n\ncards:\n  indorsement:\n    title: Indorsement\n    fields:\n      signature_block:\n        type: string\n",
+                b"quill:\n  name: meta_quill\n  backend: typst\n  version: \"0.2.1\"\n  plate_file: plate.typ\n  description: Metadata quill\n\nmain:\n  fields:\n    title:\n      type: string\n      description: The title\n\ncard_types:\n  indorsement:\n    title: Indorsement\n    fields:\n      signature_block:\n        type: string\n",
             ),
             ("plate.typ", b"= Title"),
         ]))
@@ -201,7 +201,7 @@ fn test_quill_metadata_snapshot() {
         "supportedFormats must be non-empty"
     );
 
-    // schema mirrors Quill.yaml: { main: CardSchema, cards: { [name]: CardSchema } }
+    // schema mirrors Quill.yaml: { main: CardSchema, cardTypes: { [name]: CardSchema } }
     let schema = get("schema");
     assert!(schema.is_object(), "schema must be an object");
 
@@ -215,30 +215,30 @@ fn test_quill_metadata_snapshot() {
         "schema.main.fields.title must be present from Quill.yaml"
     );
 
-    // Named cards live under schema.cards (does NOT include main).
-    let cards = Reflect::get(&schema, &JsValue::from_str("cards")).unwrap();
-    assert!(cards.is_object(), "schema.cards must be an object");
+    // Named card-types live under schema.cardTypes (does NOT include main).
+    let card_types = Reflect::get(&schema, &JsValue::from_str("cardTypes")).unwrap();
+    assert!(card_types.is_object(), "schema.cardTypes must be an object");
     assert!(
-        Reflect::get(&cards, &JsValue::from_str("main"))
+        Reflect::get(&card_types, &JsValue::from_str("main"))
             .unwrap()
             .is_undefined(),
-        "schema.cards must NOT contain the main card"
+        "schema.cardTypes must NOT contain the main card"
     );
-    let indorsement = Reflect::get(&cards, &JsValue::from_str("indorsement")).unwrap();
+    let indorsement = Reflect::get(&card_types, &JsValue::from_str("indorsement")).unwrap();
     assert!(
         indorsement.is_object(),
-        "schema.cards.indorsement must be present"
+        "schema.cardTypes.indorsement must be present"
     );
     let indorsement_fields = Reflect::get(&indorsement, &JsValue::from_str("fields")).unwrap();
     assert!(
         indorsement_fields.is_object(),
-        "named card entries are CardSchema-shaped (have `fields`)"
+        "named card-type entries are CardSchema-shaped (have `fields`)"
     );
     let signature_block =
         Reflect::get(&indorsement_fields, &JsValue::from_str("signature_block")).unwrap();
     assert!(
         signature_block.is_object(),
-        "card field must round-trip from Quill.yaml"
+        "card-type field must round-trip from Quill.yaml"
     );
 }
 

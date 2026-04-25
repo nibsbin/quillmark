@@ -211,7 +211,7 @@ fields:
     ui:
       group: Letterhead
       order: 6
-cards:
+card_types:
   indorsement:
     title: Routing indorsement
     description: >-

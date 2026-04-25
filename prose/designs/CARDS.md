@@ -19,16 +19,16 @@ pub struct CardSchema {
 }
 ```
 
-`QuillConfig` stores `cards: Vec<CardSchema>` where index 0 is always the **main** card (document-level fields). Named card definitions start at index 1 and are accessed via `card_definitions()` / `card_definition(name)`.
+`QuillConfig` exposes the entry-point card as `main: CardSchema` and the additional named card-types as `card_types: Vec<CardSchema>`. Look up a named card-type by name via `card_type(name)` or get a name-keyed map via `card_types_map()`.
 
 ## Quill.yaml Configuration
 
 ```yaml
 main:
   fields:
-    # ... document-level fields ...
+    # ... main-card fields ...
 
-cards:
+card_types:
   indorsement:
     title: Routing Indorsement
     description: Chain of routing endorsements for multi-level correspondence.
@@ -53,7 +53,7 @@ cards:
 ## Public Schema YAML Output
 
 ```yaml
-cards:
+card_types:
   indorsement:
     title: Routing Indorsement
     description: Chain of routing endorsements for multi-level correspondence.
@@ -67,7 +67,7 @@ cards:
         required: true
 ```
 
-Public schema is emitted from `QuillConfig::public_schema_yaml()` and keeps the same `cards.<name>.fields` shape as `Quill.yaml`. The `cards` key is omitted entirely when no named cards are defined.
+Public schema is emitted from `QuillConfig::public_schema_yaml()` and keeps the same `card_types.<name>.fields` shape as `Quill.yaml`. The `card_types` key is omitted entirely when no named card-types are defined.
 
 ## Markdown Syntax
 

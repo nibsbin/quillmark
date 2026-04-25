@@ -10,12 +10,12 @@ A `Quill.yaml` has these top-level sections:
 quill:        # Required — format metadata
   ...
 
-main:         # Optional — document main card: field schemas and optional ui
+main:         # Optional — main entry-point card: field schemas and optional ui
   fields:
     ...
   ui:         # optional container hints (e.g. hide_body)
 
-cards:        # Optional — composable content block types
+card_types:   # Optional — additional composable card types
   ...
 
 typst:        # Optional — backend-specific configuration
@@ -255,15 +255,15 @@ main:
 
 ---
 
-## `cards` Section
+## `card_types` Section
 
-Cards define composable, repeatable content blocks. A document can have zero or more instances of each card type, interleaved with body content.
+`card_types` define composable, repeatable content blocks (the *types* — a document can then carry zero or more *instances* of each type, interleaved with body content). Each entry is shaped exactly like `main:` (`fields`, optional `title`, `description`, `ui`); think of `main:` as the single mandatory card-type for the document body, and `card_types:` as the library of additional types that may attach to it.
 
-Card type names (the keys under `cards`) must match `[a-z_][a-z0-9_]*` (leading underscore is allowed).
+Card-type names (the keys under `card_types`) must match `[a-z_][a-z0-9_]*` (leading underscore is allowed).
 
 ```yaml
-cards:
-  indorsement:                    # Card type name
+card_types:
+  indorsement:                    # Card-type name
     title: Routing indorsement    # Display label
     description: Chain of routing endorsements.
     fields:
@@ -277,7 +277,7 @@ cards:
         default: standard
 ```
 
-Invalid card names include:
+Invalid card-type names include:
 
 - `BadCard` (uppercase letters)
 - `my-card` (hyphen)
@@ -302,7 +302,7 @@ Invalid card names include:
 #### `hide_body`
 
 ```yaml
-cards:
+card_types:
   metadata_block:
     title: Metadata
     ui:
@@ -317,7 +317,7 @@ cards:
 A template string that UI consumers interpolate with field values to produce a human-readable title for each card instance. Uses `{field_name}` tokens referencing fields in the same card.
 
 ```yaml
-cards:
+card_types:
   entry:
     title: Card Title
     ui:
@@ -451,7 +451,7 @@ main:
       ui:
         group: Financials
 
-cards:
+card_types:
   milestone:
     title: Milestone
     description: A project milestone with target date and status.
