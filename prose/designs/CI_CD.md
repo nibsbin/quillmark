@@ -28,19 +28,20 @@ Excluded: multi-OS matrix, MSRV, security scanners, coverage, benchmarks.
 
 ### Release Preparation (`release-prepare.yml`)
 
-**Trigger**: `workflow_dispatch` from GitHub UI with a `bump` input (`patch` or `minor`).
+**Trigger**: `workflow_dispatch` from GitHub UI with a `bump` input (`patch` or `minor`) and an optional `prerelease` flag.
 
 1. Installs `cargo-release` and runs `cargo release version <bump>` to bump all workspace `Cargo.toml` versions and intra-workspace dependencies.
-2. Pushes a `release/vX.Y.Z` branch and opens a PR targeting `main`.
-3. The PR is reviewed and merged through the normal code review process.
+2. Commits the bump directly to `main` and atomically pushes the `vX.Y.Z` tag alongside it.
+
+The push uses a GitHub App token so the resulting tag fires the release workflow (events from the default `GITHUB_TOKEN` are suppressed by GitHub).
 
 ### Release & Publish (`release.yml`)
 
-**Trigger**: merged pull request on `main` where the source branch matches `release/*`.
+**Trigger**: push of a `v*` tag.
 
 **Phase 1 — Release** (runs first):
-1. Extracts version from `Cargo.toml` and validates it matches the branch name.
-2. Creates a git tag `vX.Y.Z` and a GitHub Release.
+1. Extracts the version from the tag name and validates it matches the workspace `Cargo.toml`.
+2. Creates a GitHub Release for the tag (marked as a pre-release for `-rc` versions).
 
 **Phase 2 — Publish** (all run in parallel, after release):
 
@@ -59,6 +60,6 @@ Excluded: multi-OS matrix, MSRV, security scanners, coverage, benchmarks.
 ## 3) Versioning
 
 - SemVer across all workspace crates and bindings.
-- Version bumps are initiated via GitHub UI (`workflow_dispatch`), executed by `cargo-release` in CI, and gated by PR review before merge.
+- Version bumps are initiated via GitHub UI (`workflow_dispatch`) and executed by `cargo-release` in CI, which commits directly to `main` and pushes the `vX.Y.Z` tag.
 - WASM npm package version is derived from the workspace version at build time (`scripts/build-wasm.sh`).
 - Python package version is derived from the workspace Cargo.toml via maturin's `dynamic = ["version"]`.
