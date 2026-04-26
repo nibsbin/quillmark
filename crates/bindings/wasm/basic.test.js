@@ -122,9 +122,9 @@ This document has no QUILL tag.`
   })
 
   it('attaches err.diagnostics as a non-empty array on thrown errors', () => {
-    // The wasm bindings normalise all thrown errors to a flat
-    // { message, diagnostics[] } shape regardless of whether the underlying
-    // failure produced one diagnostic or many.
+    // Thrown errors normalise to a flat { message, diagnostics[] } shape
+    // regardless of whether the underlying failure produced one diagnostic
+    // or many.
     try {
       Document.fromMarkdown('')
       throw new Error('fromMarkdown should have thrown')
@@ -134,8 +134,6 @@ This document has no QUILL tag.`
       expect(err.diagnostics[0]).toHaveProperty('message')
       expect(err.diagnostics[0]).toHaveProperty('severity')
       expect(err.message).toMatch(/Empty markdown input/)
-      // The pre-0.62 .diagnostic (singular) wrapper is gone.
-      expect(err.diagnostic).toBeUndefined()
     }
   })
 })

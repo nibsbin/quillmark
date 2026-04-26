@@ -351,8 +351,8 @@ impl PyDocument {
     /// Remove a frontmatter field from the main card, returning the value or `None`.
     ///
     /// Raises `quillmark.EditError` if `name` is reserved (`BODY`, `CARDS`,
-    /// `QUILL`, `CARD`) or does not match `[a-z_][a-z0-9_]*`. Validation is
-    /// symmetric with `set_field`.
+    /// `QUILL`, `CARD`) or does not match `[a-z_][a-z0-9_]*`. Absence of an
+    /// otherwise-valid name returns `None`.
     ///
     /// This method never modifies `warnings`.
     fn remove_field<'py>(&mut self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {

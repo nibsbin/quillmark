@@ -41,7 +41,7 @@ boundary.
 surface Rust variant names like `"ReservedName"`
 (`crates/bindings/wasm/src/engine.rs:571-577`). No exported enum, no
 constants, no stability guarantee. Consumers that key behavior off
-`error.diagnostic.code` are one refactor away from breaking. Ship a
+`err.diagnostics[0].code` are one refactor away from breaking. Ship a
 `DiagnosticCode` enum in the .d.ts and document the set as part of the
 public API.
 

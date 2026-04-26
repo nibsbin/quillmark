@@ -328,9 +328,6 @@ impl Card {
     /// - `name` must match `[a-z_][a-z0-9_]*` after NFC normalisation.
     ///   Returns [`EditError::InvalidFieldName`].
     ///
-    /// Validation is symmetric with [`Card::set_field`]: passing a name that
-    /// could never have been stored (reserved or invalid) is treated as a
-    /// programmer error and throws, rather than silently returning `None`.
     /// Absence of an otherwise-valid name returns `Ok(None)`.
     ///
     /// # Warnings

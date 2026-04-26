@@ -13,11 +13,11 @@ use wasm_bindgen::prelude::*;
 /// { message: string, diagnostics: Diagnostic[] }
 /// ```
 ///
-/// `diagnostics` is always a non-empty array. Single-diagnostic errors
-/// produce length 1; compilation failures produce length N. The thrown JS
-/// `Error` has its `.message` set to `message` and a `.diagnostics` property
-/// attached carrying the array. The pre-0.62 `.diagnostic` (singular) shape
-/// is gone — read `err.diagnostics[0]` for the primary diagnostic instead.
+/// `diagnostics` is always a non-empty array — length 1 for
+/// single-diagnostic errors, length N for compilation failures. The thrown
+/// JS `Error` has its `.message` set to `message` and a `.diagnostics`
+/// property attached carrying the array. Read `err.diagnostics[0]` for the
+/// primary diagnostic.
 #[derive(Debug, Clone)]
 pub struct WasmError {
     pub message: String,

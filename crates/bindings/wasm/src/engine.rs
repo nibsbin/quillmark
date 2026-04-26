@@ -387,11 +387,10 @@ impl Document {
 
     /// Remove a frontmatter field on the main card, returning the removed value or `undefined`.
     ///
-    /// Throws an `Error` whose message includes the `EditError` variant name and
-    /// details if `name` is reserved (`BODY`, `CARDS`, `QUILL`, `CARD`) or does
-    /// not match `[a-z_][a-z0-9_]*`. Validation is symmetric with `setField`:
-    /// names that could never have been stored are programmer errors and
-    /// throw, rather than silently returning `undefined`.
+    /// Throws an `Error` whose message includes the `EditError` variant name
+    /// and details if `name` is reserved (`BODY`, `CARDS`, `QUILL`, `CARD`)
+    /// or does not match `[a-z_][a-z0-9_]*`. Absence of an otherwise-valid
+    /// name returns `undefined`.
     ///
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = removeField)]
@@ -551,8 +550,7 @@ impl Document {
     /// removed value or `undefined` if the field was absent.
     ///
     /// Throws if `index` is out of range, `name` is reserved, or `name` does
-    /// not match `[a-z_][a-z0-9_]*`. Validation is symmetric with
-    /// `updateCardField`.
+    /// not match `[a-z_][a-z0-9_]*`.
     ///
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = removeCardField)]

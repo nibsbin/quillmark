@@ -63,9 +63,22 @@ Render with a pre-parsed `Document`.
 ### `quill.open(parsed)` + `session.render(opts?)`
 Open once, render all or selected pages (`opts.pages`).
 
+### Errors
+
+Every method that can fail throws a JS `Error` with a flat shape:
+
+```ts
+{ message: string, diagnostics: Diagnostic[] }
+```
+
+`diagnostics` is always non-empty — length 1 for most failures, length N for
+backend compilation errors. Read `err.diagnostics[0]` for the primary
+diagnostic; iterate the array for compilation failures.
+
 ## Notes
 
-- Parsed markdown requires top-level `QUILL` in frontmatter.
+- Parsed markdown requires top-level `QUILL` in frontmatter. Empty input
+  surfaces a dedicated "Empty markdown input cannot be parsed" message.
 - QUILL mismatch during `quill.render(parsed)` is a warning (`quill::ref_mismatch`), not an error.
 - Output schema APIs are no longer engine-level in WASM.
 
