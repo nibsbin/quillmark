@@ -180,6 +180,17 @@ pub(super) fn decompose_with_warnings(
     // first line no longer matches `---`.
     let markdown = markdown.strip_prefix('\u{FEFF}').unwrap_or(markdown);
 
+    // Empty / whitespace-only input gets a tailored message. The default
+    // missing-QUILL error reads as if the user supplied a partial document
+    // missing only QUILL, which is misleading when there's no document at all.
+    if markdown.trim().is_empty() {
+        return Err(crate::error::ParseError::InvalidStructure(
+            "Empty markdown input cannot be parsed as a Quillmark Document. \
+             Provide at least a QUILL frontmatter field: `QUILL: <name>`."
+                .to_string(),
+        ));
+    }
+
     // Check input size limit
     if markdown.len() > crate::error::MAX_INPUT_SIZE {
         return Err(crate::error::ParseError::InputTooLarge {

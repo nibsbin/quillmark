@@ -127,13 +127,24 @@ invariants and throws `EditError` (as a JS `Error` whose message starts with
 | `insertCard(index, { tag, fields?, body? })`  | Insert at `0..=cards.length`               |
 | `removeCard(index)`                           | Remove and return the card (or `undefined`)|
 | `moveCard(from, to)`                          | Reorder                                    |
+| `setCardTag(index, newTag)`                   | Rename a card's tag in place               |
 | `updateCardField(index, name, value)`         | Convenience: edit a card's field           |
+| `removeCardField(index, name)`                | Remove a card's frontmatter field          |
 | `updateCardBody(index, body)`                 | Convenience: replace a card's body         |
 
 `EditError` variants surfaced to JS: `ReservedName`, `InvalidFieldName`,
 `InvalidTagName`, `IndexOutOfRange`. Reserved frontmatter field names are
 `BODY`, `CARDS`, `QUILL`, `CARD`. Field names must match `[a-z_][a-z0-9_]*`
 (NFC); tag names must match the tag grammar from the parser.
+
+`removeField` and `removeCardField` validate `name` symmetrically with
+`setField` / `updateCardField`: passing a reserved or syntactically invalid
+name throws (`ReservedName` / `InvalidFieldName`) rather than silently
+returning `undefined`. Absence of an otherwise-valid name returns `undefined`.
+
+`setCardTag` is a structural primitive: it mutates only the sentinel, leaving
+the card's frontmatter and body untouched. Schema-aware migration (clearing
+orphan fields, applying new defaults) is the caller's responsibility.
 
 Mutators never modify `doc.warnings`; warnings remain a frozen record of the
 original parse.
@@ -275,6 +286,10 @@ document. In 0.54, missing-QUILL surfaced at render time; in 0.58+ it fails
 inside `Document.fromMarkdown` with an `InvalidStructure` diagnostic whose
 message is `Missing required QUILL field. Add `QUILL: <name>` to the
 frontmatter`.
+
+Empty / whitespace-only inputs surface a dedicated message instead:
+`Empty markdown input cannot be parsed as a Quillmark Document. Provide at
+least a QUILL frontmatter field: `QUILL: <name>`.`.
 
 Fix: add `QUILL: <name>` to the frontmatter of every document you parse. Test
 fixtures in particular rot silently — a fixture that used to render will now

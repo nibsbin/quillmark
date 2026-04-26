@@ -120,6 +120,22 @@ This document has no QUILL tag.`
       Document.fromMarkdown(markdownWithoutQuill)
     }).toThrow()
   })
+
+  it('attaches err.diagnostics as a non-empty array on thrown errors', () => {
+    // Thrown errors normalise to a flat { message, diagnostics[] } shape
+    // regardless of whether the underlying failure produced one diagnostic
+    // or many.
+    try {
+      Document.fromMarkdown('')
+      throw new Error('fromMarkdown should have thrown')
+    } catch (err) {
+      expect(Array.isArray(err.diagnostics)).toBe(true)
+      expect(err.diagnostics.length).toBeGreaterThanOrEqual(1)
+      expect(err.diagnostics[0]).toHaveProperty('message')
+      expect(err.diagnostics[0]).toHaveProperty('severity')
+      expect(err.message).toMatch(/Empty markdown input/)
+    }
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -345,6 +361,23 @@ describe('Document editor surface — setField / removeField', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     expect(doc.removeField('nonexistent')).toBeUndefined()
   })
+
+  it('removeField throws EditError::ReservedName for QUILL', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(() => doc.removeField('QUILL')).toThrow(/ReservedName/)
+  })
+
+  it('removeField throws EditError::ReservedName for BODY/CARDS/CARD', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    for (const reserved of ['BODY', 'CARDS', 'CARD']) {
+      expect(() => doc.removeField(reserved)).toThrow(/ReservedName/)
+    }
+  })
+
+  it('removeField throws EditError::InvalidFieldName for uppercase name', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(() => doc.removeField('Title')).toThrow(/InvalidFieldName/)
+  })
 })
 
 describe('Document editor surface — setQuillRef / replaceBody', () => {
@@ -442,6 +475,26 @@ Card two.
   it('moveCard throws IndexOutOfRange on out-of-range index', () => {
     const doc = Document.fromMarkdown(MD_WITH_CARDS) // 2 cards
     expect(() => doc.moveCard(5, 0)).toThrow(/IndexOutOfRange/)
+  })
+
+  it('setCardTag renames the tag in place', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARDS)
+    doc.setCardTag(0, 'annotation')
+    expect(doc.cards[0].tag).toBe('annotation')
+    // Frontmatter preserved across rename.
+    expect(doc.cards[0].frontmatter).toBeDefined()
+  })
+
+  it('setCardTag throws InvalidTagName for empty/uppercase/dashed tags', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARDS)
+    for (const bad of ['', 'BadTag', 'with-dash']) {
+      expect(() => doc.setCardTag(0, bad)).toThrow(/InvalidTagName/)
+    }
+  })
+
+  it('setCardTag throws IndexOutOfRange when index >= len', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARDS) // 2 cards
+    expect(() => doc.setCardTag(5, 'annotation')).toThrow(/IndexOutOfRange/)
   })
 })
 

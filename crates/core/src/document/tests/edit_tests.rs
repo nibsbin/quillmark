@@ -188,7 +188,7 @@ fn test_document_set_field_updates_existing() {
 #[test]
 fn test_document_remove_field_existing() {
     let mut doc = make_doc();
-    let removed = doc.main_mut().remove_field("title");
+    let removed = doc.main_mut().remove_field("title").unwrap();
     assert_eq!(removed.unwrap().as_str(), Some("Hello"));
     assert!(doc.main().frontmatter().get("title").is_none());
 }
@@ -196,16 +196,30 @@ fn test_document_remove_field_existing() {
 #[test]
 fn test_document_remove_field_absent() {
     let mut doc = make_doc();
-    let removed = doc.main_mut().remove_field("nonexistent");
+    let removed = doc.main_mut().remove_field("nonexistent").unwrap();
     assert!(removed.is_none());
 }
 
 #[test]
-fn test_document_remove_field_reserved_returns_none() {
-    // Reserved names can't be in frontmatter; remove must return None.
+fn test_document_remove_field_reserved_throws() {
+    // Symmetric with set_field: reserved names are programmer errors and
+    // throw, rather than silently returning None.
     let mut doc = make_doc();
-    let removed = doc.main_mut().remove_field("BODY");
-    assert!(removed.is_none());
+    for reserved in ["BODY", "CARDS", "QUILL", "CARD"] {
+        match doc.main_mut().remove_field(reserved) {
+            Err(EditError::ReservedName(name)) => assert_eq!(name, reserved),
+            other => panic!("expected ReservedName for {reserved}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn test_document_remove_field_invalid_name_throws() {
+    let mut doc = make_doc();
+    match doc.main_mut().remove_field("Bad-Name") {
+        Err(EditError::InvalidFieldName(name)) => assert_eq!(name, "Bad-Name"),
+        other => panic!("expected InvalidFieldName, got {other:?}"),
+    }
 }
 
 // ── Document::set_quill_ref ──────────────────────────────────────────────────
@@ -348,6 +362,55 @@ fn test_move_card_to_out_of_range() {
     assert_eq!(result, Err(EditError::IndexOutOfRange { index: len, len }));
 }
 
+// ── Document::set_card_tag ───────────────────────────────────────────────────
+
+#[test]
+fn test_set_card_tag_renames_in_place() {
+    let mut doc = make_doc_with_cards(); // note(0) with field foo=bar, summary(1)
+    doc.set_card_tag(0, "annotation").unwrap();
+    // Sentinel changed.
+    assert_eq!(doc.cards()[0].tag(), "annotation");
+    // Frontmatter and body untouched.
+    assert_eq!(
+        doc.cards()[0].frontmatter().get("foo").unwrap().as_str(),
+        Some("bar")
+    );
+    // Other cards untouched.
+    assert_eq!(doc.cards()[1].tag(), "summary");
+}
+
+#[test]
+fn test_set_card_tag_rejects_invalid_tag() {
+    let mut doc = make_doc_with_cards();
+    for bad in ["", "Bad", "with-dash", "1leading_digit"] {
+        match doc.set_card_tag(0, bad) {
+            Err(EditError::InvalidTagName(t)) => assert_eq!(t, bad),
+            other => panic!("expected InvalidTagName for {bad:?}, got {other:?}"),
+        }
+    }
+    // Original tag preserved on failure.
+    assert_eq!(doc.cards()[0].tag(), "note");
+}
+
+#[test]
+fn test_set_card_tag_index_out_of_range() {
+    let mut doc = make_doc_with_cards();
+    let len = doc.cards().len();
+    let result = doc.set_card_tag(len, "annotation");
+    assert_eq!(result, Err(EditError::IndexOutOfRange { index: len, len }));
+}
+
+#[test]
+fn test_set_card_tag_round_trips_via_markdown() {
+    // Verify that renaming a card and re-emitting markdown produces a doc
+    // that re-parses with the new tag.
+    let mut doc = make_doc_with_cards();
+    doc.set_card_tag(0, "annotation").unwrap();
+    let md = doc.to_markdown();
+    let reparsed = crate::Document::from_markdown(&md).unwrap();
+    assert_eq!(reparsed.cards()[0].tag(), "annotation");
+}
+
 // ── Card::new ────────────────────────────────────────────────────────────────
 
 #[test]
@@ -397,7 +460,7 @@ fn test_card_remove_field_existing() {
     let mut doc = make_doc_with_cards();
     // doc.cards()[0] is "note" with field "foo" = "bar"
     let card = doc.card_mut(0).unwrap();
-    let removed = card.remove_field("foo");
+    let removed = card.remove_field("foo").unwrap();
     assert_eq!(removed.unwrap().as_str(), Some("bar"));
     assert!(card.frontmatter().get("foo").is_none());
 }
@@ -405,7 +468,27 @@ fn test_card_remove_field_existing() {
 #[test]
 fn test_card_remove_field_absent() {
     let mut card = Card::new("note").unwrap();
-    assert!(card.remove_field("nonexistent").is_none());
+    assert!(card.remove_field("nonexistent").unwrap().is_none());
+}
+
+#[test]
+fn test_card_remove_field_reserved_throws() {
+    let mut card = Card::new("note").unwrap();
+    for reserved in ["BODY", "CARDS", "QUILL", "CARD"] {
+        match card.remove_field(reserved) {
+            Err(EditError::ReservedName(name)) => assert_eq!(name, reserved),
+            other => panic!("expected ReservedName for {reserved}, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn test_card_remove_field_invalid_name_throws() {
+    let mut card = Card::new("note").unwrap();
+    match card.remove_field("Bad-Name") {
+        Err(EditError::InvalidFieldName(name)) => assert_eq!(name, "Bad-Name"),
+        other => panic!("expected InvalidFieldName, got {other:?}"),
+    }
 }
 
 // ── Card::set_body ───────────────────────────────────────────────────────────
@@ -455,7 +538,7 @@ fn test_invariants_after_mutation_sequence() {
     doc.main_mut().replace_body("Updated body.");
 
     // 7. Remove a frontmatter field
-    doc.main_mut().remove_field("version");
+    doc.main_mut().remove_field("version").unwrap();
 
     // --- Assertions ---
 
