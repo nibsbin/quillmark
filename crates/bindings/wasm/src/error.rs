@@ -1,45 +1,42 @@
 //! Error handling utilities for WASM bindings
 
+use crate::types::Diagnostic as WasmDiagnostic;
 use quillmark_core::{Diagnostic, ParseError, RenderError, Severity};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 /// Serializable error for JavaScript consumption.
 ///
-/// Shape matches the success-path [`quillmark_core::Diagnostic`] so JS
-/// consumers can use a single renderer for both thrown errors and warnings
-/// in `RenderResult.warnings`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", tag = "type")]
-pub enum WasmError {
-    /// Single diagnostic error
-    Diagnostic {
-        #[serde(flatten)]
-        diagnostic: Diagnostic,
-    },
-    /// Multiple diagnostics (e.g., compilation errors)
-    MultipleDiagnostics {
-        message: String,
-        diagnostics: Vec<Diagnostic>,
-    },
+/// Single uniform shape regardless of underlying error variant:
+///
+/// ```text
+/// { message: string, diagnostics: Diagnostic[] }
+/// ```
+///
+/// `diagnostics` is always a non-empty array. Single-diagnostic errors
+/// produce length 1; compilation failures produce length N. The thrown JS
+/// `Error` has its `.message` set to `message` and a `.diagnostics` property
+/// attached carrying the array. The pre-0.62 `.diagnostic` (singular) shape
+/// is gone — read `err.diagnostics[0]` for the primary diagnostic instead.
+#[derive(Debug, Clone)]
+pub struct WasmError {
+    pub message: String,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 impl WasmError {
     /// Convert to a JS `Error` object for throwing.
     ///
-    /// Returns a real `Error` whose `.message` is the primary diagnostic
-    /// message. Structured data is attached as a `.diagnostic` property for
-    /// callers that need to branch on codes, severity, etc. The shape
-    /// mirrors the diagnostics in `result.warnings`.
+    /// Returns a real `Error` whose `.message` is `self.message` and whose
+    /// `.diagnostics` property is an array of diagnostic objects matching
+    /// the shape used in `RenderResult.warnings`.
     pub fn to_js_value(&self) -> JsValue {
-        let message = match self {
-            WasmError::Diagnostic { diagnostic } => diagnostic.message.clone(),
-            WasmError::MultipleDiagnostics { message, .. } => message.clone(),
-        };
-        let err = js_sys::Error::new(&message);
+        let err = js_sys::Error::new(&self.message);
         let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
-        if let Ok(data) = self.serialize(&serializer) {
-            let _ = js_sys::Reflect::set(&err, &JsValue::from_str("diagnostic"), &data);
+        let wasm_diags: Vec<WasmDiagnostic> =
+            self.diagnostics.iter().cloned().map(Into::into).collect();
+        if let Ok(data) = wasm_diags.serialize(&serializer) {
+            let _ = js_sys::Reflect::set(&err, &JsValue::from_str("diagnostics"), &data);
         }
         err.into()
     }
@@ -47,8 +44,10 @@ impl WasmError {
 
 impl From<ParseError> for WasmError {
     fn from(error: ParseError) -> Self {
-        WasmError::Diagnostic {
-            diagnostic: error.to_diagnostic(),
+        let diag = error.to_diagnostic();
+        WasmError {
+            message: diag.message.clone(),
+            diagnostics: vec![diag],
         }
     }
 }
@@ -56,7 +55,7 @@ impl From<ParseError> for WasmError {
 impl From<RenderError> for WasmError {
     fn from(error: RenderError) -> Self {
         match error {
-            RenderError::CompilationFailed { diags } => WasmError::MultipleDiagnostics {
+            RenderError::CompilationFailed { diags } => WasmError {
                 message: format!("Compilation failed with {} error(s)", diags.len()),
                 diagnostics: diags,
             },
@@ -66,7 +65,10 @@ impl From<RenderError> for WasmError {
                     .first()
                     .map(|d| (*d).clone())
                     .unwrap_or_else(|| Diagnostic::new(Severity::Error, error.to_string()));
-                WasmError::Diagnostic { diagnostic }
+                WasmError {
+                    message: diagnostic.message.clone(),
+                    diagnostics: vec![diagnostic],
+                }
             }
         }
     }
@@ -74,8 +76,9 @@ impl From<RenderError> for WasmError {
 
 impl From<String> for WasmError {
     fn from(message: String) -> Self {
-        WasmError::Diagnostic {
-            diagnostic: Diagnostic::new(Severity::Error, message),
+        WasmError {
+            message: message.clone(),
+            diagnostics: vec![Diagnostic::new(Severity::Error, message)],
         }
     }
 }
@@ -98,12 +101,33 @@ mod tests {
         };
         let wasm_err: WasmError = err.into();
 
-        match wasm_err {
-            WasmError::Diagnostic { diagnostic } => {
-                assert_eq!(diagnostic.code.as_deref(), Some("parse::input_too_large"));
-                assert!(diagnostic.message.contains("Input too large"));
-            }
-            _ => panic!("Expected Diagnostic variant"),
-        }
+        assert_eq!(wasm_err.diagnostics.len(), 1);
+        let diag = &wasm_err.diagnostics[0];
+        assert_eq!(diag.code.as_deref(), Some("parse::input_too_large"));
+        assert!(diag.message.contains("Input too large"));
+        assert_eq!(wasm_err.message, diag.message);
+    }
+
+    #[test]
+    fn test_compilation_failed_carries_all_diagnostics() {
+        let diag1 = Diagnostic::new(Severity::Error, "Error 1".to_string());
+        let diag2 = Diagnostic::new(Severity::Error, "Error 2".to_string());
+        let render_err = RenderError::CompilationFailed {
+            diags: vec![diag1, diag2],
+        };
+        let wasm_err: WasmError = render_err.into();
+
+        assert_eq!(wasm_err.diagnostics.len(), 2);
+        assert_eq!(wasm_err.diagnostics[0].message, "Error 1");
+        assert_eq!(wasm_err.diagnostics[1].message, "Error 2");
+        assert!(wasm_err.message.contains("2"));
+    }
+
+    #[test]
+    fn test_string_conversion_yields_single_diagnostic() {
+        let wasm_err: WasmError = "Simple error".into();
+        assert_eq!(wasm_err.message, "Simple error");
+        assert_eq!(wasm_err.diagnostics.len(), 1);
+        assert_eq!(wasm_err.diagnostics[0].message, "Simple error");
     }
 }

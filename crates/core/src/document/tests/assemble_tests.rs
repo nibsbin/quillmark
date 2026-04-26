@@ -14,6 +14,20 @@ fn test_no_frontmatter() {
 }
 
 #[test]
+fn test_empty_input_dedicated_error() {
+    // Empty input should not surface the generic "Missing required QUILL"
+    // message — that misleadingly suggests a partial document. Both the
+    // truly-empty and whitespace-only cases get the dedicated message.
+    for input in ["", "   ", "\n\n\t\n"] {
+        let err = decompose(input).unwrap_err().to_string();
+        assert!(
+            err.contains("Empty markdown input"),
+            "expected dedicated empty-input message for {input:?}, got: {err}"
+        );
+    }
+}
+
+#[test]
 fn test_with_frontmatter() {
     let markdown = r#"---
 QUILL: test_quill
@@ -1352,11 +1366,12 @@ fn test_unmatched_chevrons_preserved() {
 
 // Robustness tests
 
-/// Inputs with no parseable QUILL frontmatter must all fail with "Missing
-/// required QUILL field". Covers empty, whitespace-only, lone/quad dashes.
+/// Inputs with no parseable QUILL frontmatter must fail with "Missing
+/// required QUILL field". Empty / whitespace-only inputs get a dedicated
+/// "Empty markdown input" message instead — see `test_empty_input_dedicated_error`.
 #[test]
 fn test_missing_quill_field() {
-    for input in ["", "   \n\n   \t", "---", "----\ntitle: Test\n----\n\nBody"] {
+    for input in ["---", "----\ntitle: Test\n----\n\nBody"] {
         let err = decompose(input).unwrap_err().to_string();
         assert!(
             err.contains("Missing required QUILL field"),

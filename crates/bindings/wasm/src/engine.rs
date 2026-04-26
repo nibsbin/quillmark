@@ -387,10 +387,21 @@ impl Document {
 
     /// Remove a frontmatter field on the main card, returning the removed value or `undefined`.
     ///
+    /// Throws an `Error` whose message includes the `EditError` variant name and
+    /// details if `name` is reserved (`BODY`, `CARDS`, `QUILL`, `CARD`) or does
+    /// not match `[a-z_][a-z0-9_]*`. Validation is symmetric with `setField`:
+    /// names that could never have been stored are programmer errors and
+    /// throw, rather than silently returning `undefined`.
+    ///
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = removeField)]
-    pub fn remove_field(&mut self, name: &str) -> JsValue {
-        match self.inner.main_mut().remove_field(name) {
+    pub fn remove_field(&mut self, name: &str) -> Result<JsValue, JsValue> {
+        let removed = self
+            .inner
+            .main_mut()
+            .remove_field(name)
+            .map_err(|e| edit_error_to_js(&e))?;
+        Ok(match removed {
             Some(v) => {
                 let serializer =
                     serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
@@ -399,7 +410,7 @@ impl Document {
                     .unwrap_or(JsValue::UNDEFINED)
             }
             None => JsValue::UNDEFINED,
-        }
+        })
     }
 
     /// Replace the QUILL reference string.
@@ -492,6 +503,24 @@ impl Document {
             .map_err(|e| edit_error_to_js(&e))
     }
 
+    /// Replace the tag of the composable card at `index`.
+    ///
+    /// Mutates only the sentinel — the card's frontmatter and body are
+    /// untouched. Schema-aware migration (clearing orphan fields, applying
+    /// new defaults) is the caller's responsibility; `setCardTag` is a
+    /// structural primitive.
+    ///
+    /// Throws if `index` is out of range or if `newTag` does not match
+    /// `[a-z_][a-z0-9_]*`.
+    ///
+    /// Mutators never modify `warnings`.
+    #[wasm_bindgen(js_name = setCardTag)]
+    pub fn set_card_tag(&mut self, index: usize, new_tag: &str) -> Result<(), JsValue> {
+        self.inner
+            .set_card_tag(index, new_tag)
+            .map_err(|e| edit_error_to_js(&e))
+    }
+
     /// Update a field on the card at `index`.
     ///
     /// Convenience method: equivalent to `doc.card_mut(index)?.set_field(name, value)`.
@@ -521,7 +550,9 @@ impl Document {
     /// Remove a frontmatter field on the card at `index`, returning the
     /// removed value or `undefined` if the field was absent.
     ///
-    /// Throws if `index` is out of range.
+    /// Throws if `index` is out of range, `name` is reserved, or `name` does
+    /// not match `[a-z_][a-z0-9_]*`. Validation is symmetric with
+    /// `updateCardField`.
     ///
     /// Mutators never modify `warnings`.
     #[wasm_bindgen(js_name = removeCardField)]
@@ -530,7 +561,8 @@ impl Document {
         let card = self.inner.card_mut(index).ok_or_else(|| {
             edit_error_to_js(&quillmark_core::EditError::IndexOutOfRange { index, len })
         })?;
-        Ok(match card.remove_field(name) {
+        let removed = card.remove_field(name).map_err(|e| edit_error_to_js(&e))?;
+        Ok(match removed {
             Some(v) => {
                 let serializer =
                     serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);

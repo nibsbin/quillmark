@@ -173,6 +173,49 @@ impl Document {
         Some(self.cards_vec_mut().remove(index))
     }
 
+    /// Replace the tag (sentinel) of the composable card at `index`.
+    ///
+    /// **Field-bag semantics.** This mutates only the sentinel; the card's
+    /// frontmatter and body are untouched. After the call:
+    ///
+    /// - Fields valid under both old and new schemas round-trip unchanged.
+    /// - Fields only in the old schema linger in the bag (silently ignored
+    ///   by `project_form` and `validate_document`, but still emitted by
+    ///   `to_markdown()`).
+    /// - Fields only in the new schema are absent — surfaced as `Default`
+    ///   or `Missing` by `project_form`, and `MissingRequired` by
+    ///   `validate_document`.
+    ///
+    /// Schema-aware migration (clearing orphans, applying defaults, etc.) is
+    /// the caller's responsibility — `set_card_tag` is a structural primitive.
+    ///
+    /// # Invariants enforced
+    ///
+    /// - `index` must be in `0..len`. Out of range returns
+    ///   [`EditError::IndexOutOfRange`].
+    /// - `new_tag` must match `[a-z_][a-z0-9_]*`. Invalid tags return
+    ///   [`EditError::InvalidTagName`].
+    ///
+    /// # Warnings
+    ///
+    /// This method never modifies `warnings`.
+    pub fn set_card_tag(
+        &mut self,
+        index: usize,
+        new_tag: impl Into<String>,
+    ) -> Result<(), EditError> {
+        let new_tag = new_tag.into();
+        if !is_valid_tag_name(&new_tag) {
+            return Err(EditError::InvalidTagName(new_tag));
+        }
+        let len = self.cards().len();
+        let card = self
+            .card_mut(index)
+            .ok_or(EditError::IndexOutOfRange { index, len })?;
+        card.replace_sentinel(Sentinel::Card(new_tag));
+        Ok(())
+    }
+
     /// Move the composable card at `from` to position `to`.
     ///
     /// If `from == to`, this is a no-op and returns `Ok(())`.
@@ -278,14 +321,29 @@ impl Card {
 
     /// Remove a frontmatter field by name, returning the value if it existed.
     ///
-    /// Reserved names cannot be present in the frontmatter (the parser
-    /// guarantees this), so passing a reserved name simply returns `None`.
+    /// # Invariants enforced
+    ///
+    /// - `name` must not be one of the reserved sentinel names.
+    ///   Returns [`EditError::ReservedName`].
+    /// - `name` must match `[a-z_][a-z0-9_]*` after NFC normalisation.
+    ///   Returns [`EditError::InvalidFieldName`].
+    ///
+    /// Validation is symmetric with [`Card::set_field`]: passing a name that
+    /// could never have been stored (reserved or invalid) is treated as a
+    /// programmer error and throws, rather than silently returning `None`.
+    /// Absence of an otherwise-valid name returns `Ok(None)`.
     ///
     /// # Warnings
     ///
     /// Card mutators never modify the parent document's `warnings`.
-    pub fn remove_field(&mut self, name: &str) -> Option<QuillValue> {
-        self.frontmatter_mut().remove(name)
+    pub fn remove_field(&mut self, name: &str) -> Result<Option<QuillValue>, EditError> {
+        if is_reserved_name(name) {
+            return Err(EditError::ReservedName(name.to_string()));
+        }
+        if !is_valid_field_name(name) {
+            return Err(EditError::InvalidFieldName(name.to_string()));
+        }
+        Ok(self.frontmatter_mut().remove(name))
     }
 
     /// Replace the card's Markdown body.

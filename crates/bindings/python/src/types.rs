@@ -350,9 +350,18 @@ impl PyDocument {
 
     /// Remove a frontmatter field from the main card, returning the value or `None`.
     ///
+    /// Raises `quillmark.EditError` if `name` is reserved (`BODY`, `CARDS`,
+    /// `QUILL`, `CARD`) or does not match `[a-z_][a-z0-9_]*`. Validation is
+    /// symmetric with `set_field`.
+    ///
     /// This method never modifies `warnings`.
     fn remove_field<'py>(&mut self, py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
-        match self.inner.main_mut().remove_field(name) {
+        match self
+            .inner
+            .main_mut()
+            .remove_field(name)
+            .map_err(convert_edit_error)?
+        {
             Some(v) => quillvalue_to_py(py, &v),
             None => py.None().into_bound_py_any(py),
         }
@@ -428,6 +437,23 @@ impl PyDocument {
     fn move_card(&mut self, from_idx: usize, to_idx: usize) -> PyResult<()> {
         self.inner
             .move_card(from_idx, to_idx)
+            .map_err(convert_edit_error)
+    }
+
+    /// Replace the tag of the composable card at `index`.
+    ///
+    /// Mutates only the sentinel — the card's frontmatter and body are
+    /// untouched. Schema-aware migration (clearing orphan fields, applying
+    /// new defaults) is the caller's responsibility; `set_card_tag` is a
+    /// structural primitive.
+    ///
+    /// Raises `quillmark.EditError` if `index` is out of range or `new_tag`
+    /// does not match `[a-z_][a-z0-9_]*`.
+    ///
+    /// This method never modifies `warnings`.
+    fn set_card_tag(&mut self, index: usize, new_tag: &str) -> PyResult<()> {
+        self.inner
+            .set_card_tag(index, new_tag)
             .map_err(convert_edit_error)
     }
 

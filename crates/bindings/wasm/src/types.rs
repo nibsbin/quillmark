@@ -416,23 +416,16 @@ mod tests {
         };
         let wasm_err: WasmError = render_err.into();
 
-        let json = serde_json::to_value(&wasm_err).unwrap();
-        assert!(json.is_object());
-
-        let obj = json.as_object().unwrap();
-        assert_eq!(obj.get("type").unwrap().as_str().unwrap(), "diagnostic");
-        assert_eq!(obj.get("severity").unwrap().as_str().unwrap(), "error");
-        assert_eq!(obj.get("code").unwrap().as_str().unwrap(), "E001");
-        assert_eq!(
-            obj.get("message").unwrap().as_str().unwrap(),
-            "Test error message"
-        );
-        assert_eq!(obj.get("hint").unwrap().as_str().unwrap(), "This is a hint");
-
-        let location = obj.get("location").unwrap().as_object().unwrap();
-        assert_eq!(location.get("file").unwrap().as_str().unwrap(), "test.typ");
-        assert_eq!(location.get("line").unwrap().as_u64().unwrap(), 10);
-        assert_eq!(location.get("column").unwrap().as_u64().unwrap(), 5);
+        assert_eq!(wasm_err.message, "Test error message");
+        assert_eq!(wasm_err.diagnostics.len(), 1);
+        let d = &wasm_err.diagnostics[0];
+        assert_eq!(d.code.as_deref(), Some("E001"));
+        assert_eq!(d.message, "Test error message");
+        assert_eq!(d.hint.as_deref(), Some("This is a hint"));
+        let loc = d.location.as_ref().unwrap();
+        assert_eq!(loc.file, "test.typ");
+        assert_eq!(loc.line, 10);
+        assert_eq!(loc.column, 5);
     }
 
     #[test]
@@ -448,24 +441,10 @@ mod tests {
         };
         let wasm_err: WasmError = render_err.into();
 
-        let json = serde_json::to_value(&wasm_err).unwrap();
-        assert!(json.is_object());
-
-        let obj = json.as_object().unwrap();
-        assert_eq!(
-            obj.get("type").unwrap().as_str().unwrap(),
-            "multipleDiagnostics"
-        );
-        assert!(obj.get("message").unwrap().as_str().unwrap().contains("2"));
-
-        let diagnostics = obj.get("diagnostics").unwrap().as_array().unwrap();
-        assert_eq!(diagnostics.len(), 2);
-
-        let first_diag = diagnostics[0].as_object().unwrap();
-        assert_eq!(
-            first_diag.get("message").unwrap().as_str().unwrap(),
-            "Error 1"
-        );
+        assert_eq!(wasm_err.diagnostics.len(), 2);
+        assert_eq!(wasm_err.diagnostics[0].message, "Error 1");
+        assert_eq!(wasm_err.diagnostics[1].message, "Error 2");
+        assert!(wasm_err.message.contains("2"));
     }
 
     #[test]
@@ -473,17 +452,9 @@ mod tests {
         use crate::error::WasmError;
 
         let wasm_err: WasmError = "Simple error message".into();
-
-        let json = serde_json::to_value(&wasm_err).unwrap();
-        assert!(json.is_object());
-
-        let obj = json.as_object().unwrap();
-        assert_eq!(obj.get("type").unwrap().as_str().unwrap(), "diagnostic");
-        assert_eq!(
-            obj.get("message").unwrap().as_str().unwrap(),
-            "Simple error message"
-        );
-        assert_eq!(obj.get("severity").unwrap().as_str().unwrap(), "error");
+        assert_eq!(wasm_err.message, "Simple error message");
+        assert_eq!(wasm_err.diagnostics.len(), 1);
+        assert_eq!(wasm_err.diagnostics[0].message, "Simple error message");
     }
 
     #[test]
