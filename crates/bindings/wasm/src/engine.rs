@@ -518,6 +518,30 @@ impl Document {
         card.set_field(name, qv).map_err(|e| edit_error_to_js(&e))
     }
 
+    /// Remove a frontmatter field on the card at `index`, returning the
+    /// removed value or `undefined` if the field was absent.
+    ///
+    /// Throws if `index` is out of range.
+    ///
+    /// Mutators never modify `warnings`.
+    #[wasm_bindgen(js_name = removeCardField)]
+    pub fn remove_card_field(&mut self, index: usize, name: &str) -> Result<JsValue, JsValue> {
+        let len = self.inner.cards().len();
+        let card = self.inner.card_mut(index).ok_or_else(|| {
+            edit_error_to_js(&quillmark_core::EditError::IndexOutOfRange { index, len })
+        })?;
+        Ok(match card.remove_field(name) {
+            Some(v) => {
+                let serializer =
+                    serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+                v.as_json()
+                    .serialize(&serializer)
+                    .unwrap_or(JsValue::UNDEFINED)
+            }
+            None => JsValue::UNDEFINED,
+        })
+    }
+
     /// Replace the body of the card at `index`.
     ///
     /// Throws if `index` is out of range.

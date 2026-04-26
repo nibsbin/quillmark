@@ -476,6 +476,23 @@ Card body.
     expect(() => doc.updateCardField(0, 'title', 'x')).toThrow(/IndexOutOfRange/)
   })
 
+  it('removeCardField returns the removed value and deletes the key', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARD)
+    const removed = doc.removeCardField(0, 'foo')
+    expect(removed).toBe('bar')
+    expect('foo' in doc.cards[0].frontmatter).toBe(false)
+  })
+
+  it('removeCardField returns undefined when field absent', () => {
+    const doc = Document.fromMarkdown(MD_WITH_CARD)
+    expect(doc.removeCardField(0, 'nonexistent')).toBeUndefined()
+  })
+
+  it('removeCardField throws IndexOutOfRange when card absent', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN) // 0 cards
+    expect(() => doc.removeCardField(0, 'foo')).toThrow(/IndexOutOfRange/)
+  })
+
   it('updateCardBody replaces card body', () => {
     const doc = Document.fromMarkdown(MD_WITH_CARD)
     doc.updateCardBody(0, 'New card body.')
