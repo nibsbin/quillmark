@@ -1,5 +1,6 @@
 //! Type definitions for the WASM API
 
+
 use serde::{Deserialize, Serialize};
 use tsify::Tsify;
 use wasm_bindgen::prelude::*;
