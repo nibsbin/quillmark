@@ -65,14 +65,6 @@ pub enum CoercionError {
 }
 
 impl QuillConfig {
-    /// Returns the named card-type schemas as a map keyed by card name.
-    pub fn card_types_map(&self) -> HashMap<String, CardSchema> {
-        self.card_types
-            .iter()
-            .map(|card| (card.name.clone(), card.clone()))
-            .collect()
-    }
-
     /// Returns a named card-type schema by name.
     pub fn card_type(&self, name: &str) -> Option<&CardSchema> {
         self.card_types.iter().find(|card| card.name == name)

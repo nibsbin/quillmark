@@ -14,7 +14,7 @@
 //!
 //! ## Surface
 //!
-//! After the document-rework, frontmatter and body mutators live on [`Card`]:
+//! Frontmatter and body mutators live on [`Card`]:
 //! `doc.main_mut().set_field(…)`, `doc.main_mut().replace_body(…)`,
 //! `doc.cards_mut()[i].set_field(…)`. [`Document`] keeps only document-level
 //! operations (quill-ref, push/insert/remove/move card).

@@ -209,7 +209,6 @@ struct FieldSchemaDef {
     #[serde(rename = "enum")]
     pub enum_values: Option<Vec<String>>,
     // Nested schema support
-    // Nested schema support
     pub properties: Option<serde_json::Map<String, serde_json::Value>>,
     pub items: Option<serde_json::Value>,
 }

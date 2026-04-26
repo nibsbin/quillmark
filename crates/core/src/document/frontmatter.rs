@@ -31,7 +31,7 @@ pub enum FrontmatterItem {
         fill: bool,
     },
     /// An own-line YAML comment. Text excludes the leading `#` and one
-    /// optional space, per the frontmatter-comments tasking.
+    /// optional space.
     Comment { text: String },
 }
 

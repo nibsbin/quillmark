@@ -6,12 +6,12 @@ item is a known gap, not a planned change — capture only, no commitment.
 ## 1. Standalone validator on the wasm surface
 
 Today the only path to "is this document valid against this quill?" is
-`quill.projectForm(doc)`, which walks the full schema and returns a
+`quill.form(doc)`, which walks the full schema and returns a
 projection snapshot whose diagnostics array is the actual signal
 (`crates/quillmark/src/form.rs:167,178`). The Rust core already has
 `QuillConfig::validate_document` (`crates/core/src/quill/validation.rs`); it
 just isn't `#[wasm_bindgen]`-exposed. MCP-style consumers that want to gate a
-render on validity have to call `projectForm` for its side effects. Expose a
+render on validity have to call `form` for its side effects. Expose a
 `quill.validate(doc) -> Diagnostic[]`.
 
 ## 2. Stringly-typed field types in the schema payload
@@ -30,7 +30,7 @@ schema payload, or document that consumers must hand-write the TS interface.
 require the value to deserialize as `serde_json::Value`. They never consult
 the field's declared `type` or `enum`. A form input that submits the string
 `"42"` for an `integer` field is silently accepted; the type mismatch
-surfaces only at the next `projectForm` call. A `setField` that returned
+surfaces only at the next `form` call. A `setField` that returned
 per-field diagnostics on the spot would close the loop at the input
 boundary.
 
