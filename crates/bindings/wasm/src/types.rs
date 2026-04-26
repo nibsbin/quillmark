@@ -113,6 +113,10 @@ impl From<quillmark_core::Diagnostic> for Diagnostic {
 #[serde(rename_all = "camelCase")]
 pub struct Artifact {
     pub format: OutputFormat,
+    /// Serialized via `serde_bytes` so `serde_wasm_bindgen` emits a real
+    /// `Uint8Array` at the boundary instead of a `number[]`. Without this
+    /// annotation, the declared `Uint8Array` type would silently lie.
+    #[serde(with = "serde_bytes")]
     #[tsify(type = "Uint8Array")]
     pub bytes: Vec<u8>,
     pub mime_type: String,

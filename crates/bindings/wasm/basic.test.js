@@ -228,6 +228,9 @@ describe('Quillmark.quill', () => {
     expect(result).toBeDefined()
     expect(result.artifacts).toBeDefined()
     expect(result.artifacts.length).toBeGreaterThan(0)
+    // The declared TS type is Uint8Array — assert the runtime matches so
+    // consumers don't need to defensively coerce `new Uint8Array(bytes)`.
+    expect(result.artifacts[0].bytes).toBeInstanceOf(Uint8Array)
     expect(result.artifacts[0].bytes.length).toBeGreaterThan(0)
     expect(result.artifacts[0].mimeType).toBe('application/pdf')
   })

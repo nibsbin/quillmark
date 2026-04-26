@@ -86,6 +86,44 @@ fn test_render_from_document() {
     );
 }
 
+/// Artifact bytes must cross the WASM boundary as a real `Uint8Array`, not a
+/// `number[]`. The declared TS type is `Uint8Array`; this guards against the
+/// type silently lying when serde's default `Vec<u8>` serializer reverts to
+/// `Array<number>`.
+#[wasm_bindgen_test]
+fn test_artifact_bytes_is_uint8array() {
+    use serde::Serialize;
+    use wasm_bindgen::{JsCast, JsValue};
+
+    let engine = Quillmark::new();
+    let quill = engine.quill(small_quill_tree()).expect("quill failed");
+    let doc = Document::from_markdown(SIMPLE_MARKDOWN).expect("fromMarkdown failed");
+    let result = quill
+        .render(&doc, Some(RenderOptions::default()))
+        .expect("render failed");
+    assert!(!result.artifacts.is_empty(), "should produce artifacts");
+
+    // Round-trip the RenderResult through the same serializer Tsify uses for
+    // `into_wasm_abi`. The boundary representation is what JS consumers see.
+    let serializer = serde_wasm_bindgen::Serializer::new();
+    let js_result = result
+        .serialize(&serializer)
+        .expect("RenderResult serialization");
+    let artifacts = js_sys::Reflect::get(&js_result, &JsValue::from_str("artifacts"))
+        .expect("artifacts present");
+    let arr = js_sys::Array::from(&artifacts);
+    assert!(arr.length() > 0, "artifacts array non-empty");
+
+    let first = arr.get(0);
+    let bytes = js_sys::Reflect::get(&first, &JsValue::from_str("bytes")).expect("bytes present");
+    assert!(
+        bytes.is_instance_of::<js_sys::Uint8Array>(),
+        "artifact.bytes must be a Uint8Array at the WASM boundary, not a number[]"
+    );
+    let typed = bytes.unchecked_into::<js_sys::Uint8Array>();
+    assert!(typed.length() > 0, "Uint8Array has bytes");
+}
+
 /// `quill.open(Document)` returns a render session supporting page_count + render.
 #[wasm_bindgen_test]
 fn test_open_session_render() {
