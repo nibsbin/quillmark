@@ -1,4 +1,4 @@
-//! Tests for [`project_form`].
+//! Tests for [`Quill::form`], [`Quill::blank_main`], and [`Quill::blank_card`].
 
 use std::collections::HashMap;
 
@@ -7,7 +7,7 @@ use quillmark_core::Document;
 
 use crate::{Quill, Quillmark};
 
-use super::{project_form, FormFieldSource, FormProjection};
+use super::{Form, FormFieldSource};
 
 /// Build a minimal [`Quill`] from inline YAML with no filesystem dependencies.
 fn quill_from_yaml(yaml: &str) -> Quill {
@@ -25,14 +25,14 @@ fn quill_from_yaml(yaml: &str) -> Quill {
 }
 
 #[test]
-fn project_form_all_fields_present() {
+fn form_all_fields_present() {
     let quill = quill_from_yaml(
         r#"
 quill:
   name: form_test
   version: "1.0"
   backend: typst
-  description: Form projection test
+  description: Form view test
 
 main:
   fields:
@@ -47,19 +47,19 @@ main:
     let md = "---\nQUILL: form_test\ntitle: \"My Title\"\nstatus: \"final\"\n---\n";
     let doc = Document::from_markdown(md).unwrap();
 
-    let proj = project_form(&quill, &doc);
+    let form = quill.form(&doc);
 
-    assert!(proj.diagnostics.is_empty(), "no diagnostics expected");
-    assert!(proj.cards.is_empty(), "no cards expected");
+    assert!(form.diagnostics.is_empty(), "no diagnostics expected");
+    assert!(form.cards.is_empty(), "no cards expected");
 
-    let title_fv = proj.main.values.get("title").expect("title field");
+    let title_fv = form.main.values.get("title").expect("title field");
     assert_eq!(title_fv.source, FormFieldSource::Document);
     assert_eq!(
         title_fv.value.as_ref().and_then(|v| v.as_str()),
         Some("My Title")
     );
 
-    let status_fv = proj.main.values.get("status").expect("status field");
+    let status_fv = form.main.values.get("status").expect("status field");
     assert_eq!(status_fv.source, FormFieldSource::Document);
     assert_eq!(
         status_fv.value.as_ref().and_then(|v| v.as_str()),
@@ -73,7 +73,7 @@ main:
 }
 
 #[test]
-fn project_form_missing_field_uses_default() {
+fn form_missing_field_uses_default() {
     let quill = quill_from_yaml(
         r#"
 quill:
@@ -102,16 +102,16 @@ main:
     let md = "---\nQUILL: form_defaults_test\n---\n";
     let doc = Document::from_markdown(md).unwrap();
 
-    let proj = project_form(&quill, &doc);
+    let form = quill.form(&doc);
 
     // `title` is required and missing → validation diagnostic
     assert!(
-        proj.diagnostics.iter().any(|d| d.message.contains("title")),
+        form.diagnostics.iter().any(|d| d.message.contains("title")),
         "expected validation diagnostic for required 'title'; got: {:?}",
-        proj.diagnostics
+        form.diagnostics
     );
 
-    let status_fv = proj.main.values.get("status").expect("status field");
+    let status_fv = form.main.values.get("status").expect("status field");
     assert_eq!(status_fv.source, FormFieldSource::Default);
     assert!(
         status_fv.value.is_none(),
@@ -122,14 +122,14 @@ main:
         Some("draft")
     );
 
-    let notes_fv = proj.main.values.get("notes").expect("notes field");
+    let notes_fv = form.main.values.get("notes").expect("notes field");
     assert_eq!(notes_fv.source, FormFieldSource::Missing);
     assert!(notes_fv.value.is_none());
     assert!(notes_fv.default.is_none());
 }
 
 #[test]
-fn project_form_unknown_card_tag_drops_card_and_emits_diagnostic() {
+fn form_unknown_card_tag_drops_card_and_emits_diagnostic() {
     let quill = quill_from_yaml(
         r#"
 quill:
@@ -156,14 +156,14 @@ card_types:
               ---\nCARD: ghost_card\nnote: \"B\"\n---\n";
     let doc = Document::from_markdown(md).unwrap();
 
-    let proj = project_form(&quill, &doc);
+    let form = quill.form(&doc);
 
     // Only the known card appears in cards
-    assert_eq!(proj.cards.len(), 1, "only known_card should be projected");
-    assert_eq!(proj.cards[0].schema.name, "known_card");
+    assert_eq!(form.cards.len(), 1, "only known_card should be projected");
+    assert_eq!(form.cards[0].schema.name, "known_card");
 
     // A diagnostic for ghost_card
-    let unknown_diag = proj
+    let unknown_diag = form
         .diagnostics
         .iter()
         .find(|d| d.code.as_deref() == Some("form::unknown_card_tag"))
@@ -176,7 +176,7 @@ card_types:
 }
 
 #[test]
-fn project_form_card_field_sources() {
+fn form_card_field_sources() {
     let quill = quill_from_yaml(
         r#"
 quill:
@@ -209,9 +209,9 @@ card_types:
               ---\nCARD: indorsement\nsignature_block: \"Col Smith\"\n---\n";
     let doc = Document::from_markdown(md).unwrap();
 
-    let proj = project_form(&quill, &doc);
-    assert_eq!(proj.cards.len(), 1);
-    let card = &proj.cards[0];
+    let form = quill.form(&doc);
+    assert_eq!(form.cards.len(), 1);
+    let card = &form.cards[0];
 
     let sig = card.values.get("signature_block").expect("signature_block");
     assert_eq!(sig.source, FormFieldSource::Document);
@@ -232,7 +232,7 @@ card_types:
 }
 
 #[test]
-fn project_form_validation_diagnostics_appear() {
+fn form_validation_diagnostics_appear() {
     let quill = quill_from_yaml(
         r#"
 quill:
@@ -253,9 +253,9 @@ main:
     let md = "---\nQUILL: validation_diag_test\ncount: \"not-a-number\"\n---\n";
     let doc = Document::from_markdown(md).unwrap();
 
-    let proj = project_form(&quill, &doc);
+    let form = quill.form(&doc);
 
-    let val_diag = proj
+    let val_diag = form
         .diagnostics
         .iter()
         .find(|d| d.code.as_deref() == Some("form::validation_error"))
@@ -268,8 +268,8 @@ main:
 }
 
 #[test]
-fn project_form_serializes_cleanly() {
-    // Smoke test: serde_json round-trip of FormProjection.
+fn form_serializes_cleanly() {
+    // Smoke test: serde_json round-trip of Form.
     let quill = quill_from_yaml(
         r#"
 quill:
@@ -290,20 +290,19 @@ main:
 
     let md = "---\nQUILL: serial_test\ntitle: \"Hello\"\n---\n";
     let doc = Document::from_markdown(md).unwrap();
-    let proj = project_form(&quill, &doc);
+    let form = quill.form(&doc);
 
-    let json = serde_json::to_string(&proj).expect("FormProjection must serialize");
-    let back: FormProjection =
-        serde_json::from_str(&json).expect("FormProjection must deserialize");
+    let json = serde_json::to_string(&form).expect("Form must serialize");
+    let back: Form = serde_json::from_str(&json).expect("Form must deserialize");
 
     // Name fields on CardSchema / FieldSchema are intentionally skipped on the
     // wire (the map key carries them), so round-trip identity does not hold for
     // those. Compare structural content instead.
-    assert_eq!(proj.main.values, back.main.values);
-    assert_eq!(proj.cards, back.cards);
-    assert_eq!(proj.diagnostics, back.diagnostics);
+    assert_eq!(form.main.values, back.main.values);
+    assert_eq!(form.cards, back.cards);
+    assert_eq!(form.diagnostics, back.diagnostics);
     assert_eq!(
-        proj.main.schema.fields.keys().collect::<Vec<_>>(),
+        form.main.schema.fields.keys().collect::<Vec<_>>(),
         back.main.schema.fields.keys().collect::<Vec<_>>()
     );
     assert!(
@@ -313,8 +312,8 @@ main:
 }
 
 #[test]
-fn project_form_over_usaf_memo_fixture() {
-    // Integration test: load the usaf_memo fixture quill and project the
+fn form_over_usaf_memo_fixture() {
+    // Integration test: load the usaf_memo fixture quill and view the
     // bundled example.  Checks that every required field gets a deterministic
     // FormFieldSource and no projection panics.
     let quill_path = quillmark_fixtures::resource_path("quills/usaf_memo/0.1.0");
@@ -330,16 +329,16 @@ fn project_form_over_usaf_memo_fixture() {
         Err(_) => return,
     };
 
-    let proj = project_form(&quill, &doc);
+    let form = quill.form(&doc);
 
-    // Projection must produce a FormCard for main with at least the required fields.
+    // The form must produce a FormCard for main with at least the required fields.
     assert!(
-        !proj.main.values.is_empty(),
-        "main card projection should have fields"
+        !form.main.values.is_empty(),
+        "main card view should have fields"
     );
 
     // Every field value must have a deterministic source.
-    for (name, fv) in &proj.main.values {
+    for (name, fv) in &form.main.values {
         match fv.source {
             FormFieldSource::Document => {
                 assert!(
@@ -371,6 +370,113 @@ fn project_form_over_usaf_memo_fixture() {
     }
 
     // Serialization must not panic.
-    let json = serde_json::to_string(&proj).expect("projection must serialize");
+    let json = serde_json::to_string(&form).expect("form must serialize");
     assert!(!json.is_empty());
+}
+
+// ── blank_main / blank_card ─────────────────────────────────────────────────
+
+#[test]
+fn blank_main_has_default_or_missing_sources() {
+    let quill = quill_from_yaml(
+        r#"
+quill:
+  name: blank_main_test
+  version: "1.0"
+  backend: typst
+  description: Blank main test
+
+main:
+  fields:
+    title:
+      type: string
+      default: Untitled
+    count:
+      type: integer
+"#,
+    );
+
+    let blank = quill.blank_main();
+
+    let title = blank.values.get("title").expect("title field");
+    assert_eq!(title.source, FormFieldSource::Default);
+    assert!(title.value.is_none());
+    assert_eq!(
+        title.default.as_ref().and_then(|v| v.as_str()),
+        Some("Untitled")
+    );
+
+    let count = blank.values.get("count").expect("count field");
+    assert_eq!(count.source, FormFieldSource::Missing);
+    assert!(count.value.is_none());
+    assert!(count.default.is_none());
+}
+
+#[test]
+fn blank_card_returns_form_card_for_known_type() {
+    let quill = quill_from_yaml(
+        r#"
+quill:
+  name: blank_card_test
+  version: "1.0"
+  backend: typst
+  description: Blank card test
+
+main:
+  fields:
+    title:
+      type: string
+
+card_types:
+  indorsement:
+    fields:
+      office:
+        type: string
+        default: HQ
+      from:
+        type: string
+"#,
+    );
+
+    let blank = quill
+        .blank_card("indorsement")
+        .expect("known card type should yield a FormCard");
+
+    assert_eq!(blank.schema.name, "indorsement");
+
+    let office = blank.values.get("office").expect("office field");
+    assert_eq!(office.source, FormFieldSource::Default);
+    assert!(office.value.is_none());
+    assert_eq!(office.default.as_ref().and_then(|v| v.as_str()), Some("HQ"));
+
+    let from = blank.values.get("from").expect("from field");
+    assert_eq!(from.source, FormFieldSource::Missing);
+    assert!(from.value.is_none());
+    assert!(from.default.is_none());
+}
+
+#[test]
+fn blank_card_returns_none_for_unknown_type() {
+    let quill = quill_from_yaml(
+        r#"
+quill:
+  name: blank_unknown_test
+  version: "1.0"
+  backend: typst
+  description: Blank unknown card test
+
+main:
+  fields:
+    title:
+      type: string
+
+card_types:
+  known:
+    fields:
+      x:
+        type: string
+"#,
+    );
+
+    assert!(quill.blank_card("does_not_exist").is_none());
 }

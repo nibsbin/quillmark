@@ -732,18 +732,18 @@ describe('Document.clone', () => {
 })
 
 // ---------------------------------------------------------------------------
-// Phase 5: quill.projectForm — schema-aware form projection
+// quill.form / blank_main / blank_card — schema-aware form view
 // NOTE: These tests cannot run in the devcontainer (no wasm-pack / browser
 //       runtime available).  They are written to run in CI where the WASM
 //       bundle is built by wasm-pack and loaded into a vitest/jsdom context.
 // ---------------------------------------------------------------------------
 
-describe('quill.projectForm', () => {
+describe('quill.form', () => {
   const QUILL_YAML = `quill:
   name: form_smoke_test
   version: "1.0"
   backend: typst
-  description: Smoke test for projectForm
+  description: Smoke test for form
 
 main:
   fields:
@@ -752,6 +752,15 @@ main:
       default: "Untitled"
     count:
       type: integer
+
+card_types:
+  note:
+    fields:
+      body:
+        type: string
+        default: "TBD"
+      tag:
+        type: string
 `
 
   const MD_WITH_TITLE = `---
@@ -760,29 +769,29 @@ title: "Hello"
 ---
 `
 
-  it('projectForm returns a plain object with main, cards, diagnostics', () => {
+  it('form returns a plain object with main, cards, diagnostics', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'form_smoke_test', quillYaml: QUILL_YAML }))
     const doc = Document.fromMarkdown(MD_WITH_TITLE)
 
-    const projection = quill.projectForm(doc)
+    const form = quill.form(doc)
 
-    expect(typeof projection).toBe('object')
-    expect(projection).not.toBeNull()
-    expect('main' in projection).toBe(true)
-    expect('cards' in projection).toBe(true)
-    expect('diagnostics' in projection).toBe(true)
-    expect(Array.isArray(projection.cards)).toBe(true)
-    expect(Array.isArray(projection.diagnostics)).toBe(true)
+    expect(typeof form).toBe('object')
+    expect(form).not.toBeNull()
+    expect('main' in form).toBe(true)
+    expect('cards' in form).toBe(true)
+    expect('diagnostics' in form).toBe(true)
+    expect(Array.isArray(form.cards)).toBe(true)
+    expect(Array.isArray(form.diagnostics)).toBe(true)
   })
 
-  it('projectForm main.values has correct sources', () => {
+  it('form main.values has correct sources', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'form_smoke_test', quillYaml: QUILL_YAML }))
     const doc = Document.fromMarkdown(MD_WITH_TITLE)
 
-    const projection = quill.projectForm(doc)
-    const values = projection.main.values
+    const form = quill.form(doc)
+    const values = form.main.values
 
     // title is present in doc → source: document
     expect(values.title).toBeDefined()
@@ -795,17 +804,54 @@ title: "Hello"
     expect(values.count.value).toBeNull()
   })
 
-  it('projectForm result is JSON.stringify-able and round-trips', () => {
+  it('form result is JSON.stringify-able and round-trips', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'form_smoke_test', quillYaml: QUILL_YAML }))
     const doc = Document.fromMarkdown(MD_WITH_TITLE)
 
-    const projection = quill.projectForm(doc)
-    const json = JSON.stringify(projection)
+    const form = quill.form(doc)
+    const json = JSON.stringify(form)
     expect(typeof json).toBe('string')
     expect(json.length).toBeGreaterThan(0)
 
     const parsed = JSON.parse(json)
     expect(parsed.main.values.title.source).toBe('document')
+  })
+
+  it('blankMain returns a card with no document values', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(makeQuill({ name: 'form_smoke_test', quillYaml: QUILL_YAML }))
+
+    const blank = quill.blankMain()
+
+    expect(typeof blank).toBe('object')
+    expect(blank).not.toBeNull()
+    // title has a default
+    expect(blank.values.title.source).toBe('default')
+    expect(blank.values.title.value).toBeNull()
+    expect(blank.values.title.default).toBe('Untitled')
+    // count has no default
+    expect(blank.values.count.source).toBe('missing')
+    expect(blank.values.count.value).toBeNull()
+    expect(blank.values.count.default).toBeNull()
+  })
+
+  it('blankCard returns a card for a known type', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(makeQuill({ name: 'form_smoke_test', quillYaml: QUILL_YAML }))
+
+    const blank = quill.blankCard('note')
+
+    expect(blank).not.toBeNull()
+    expect(blank.values.body.source).toBe('default')
+    expect(blank.values.body.default).toBe('TBD')
+    expect(blank.values.tag.source).toBe('missing')
+  })
+
+  it('blankCard returns null for an unknown type', () => {
+    const engine = new Quillmark()
+    const quill = engine.quill(makeQuill({ name: 'form_smoke_test', quillYaml: QUILL_YAML }))
+
+    expect(quill.blankCard('does_not_exist')).toBeNull()
   })
 })

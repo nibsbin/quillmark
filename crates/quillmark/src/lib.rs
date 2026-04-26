@@ -30,7 +30,7 @@ pub mod form;
 pub mod orchestration;
 
 // Re-export commonly-used form types at the crate root
-pub use form::{FormCard, FormFieldSource, FormFieldValue, FormProjection};
+pub use form::{Form, FormCard, FormFieldSource, FormFieldValue};
 
 // Re-export types from orchestration module
 pub use orchestration::{Quill, Quillmark};

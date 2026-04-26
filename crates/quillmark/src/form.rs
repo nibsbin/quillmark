@@ -1,40 +1,47 @@
-//! Schema-aware form projection for form editors.
+//! Schema-aware form views for form editors.
 //!
-//! This module provides [`FormProjection`] — a read-only snapshot of a
-//! [`Document`] through its [`Quill`] schema. For each schema-declared field
-//! the projection records the current value, the schema default, and the
-//! source of the effective value.
+//! This module provides [`Form`] — a read-only snapshot of a [`Document`]
+//! viewed through its [`Quill`] schema — and [`FormCard`], the per-card view.
+//! For each schema-declared field the view records the current value, the
+//! schema default, and the source of the effective value.
 //!
-//! # Usage
+//! # Entry points
+//!
+//! Consumers reach this module through methods on [`Quill`]:
 //!
 //! ```rust,no_run
 //! # use quillmark::{Quill, Document};
-//! # use quillmark::form::{project_form, FormFieldSource};
+//! # use quillmark::form::FormFieldSource;
 //! # fn example(quill: &Quill, doc: &Document) {
-//! let projection = project_form(quill, doc);
+//! let form = quill.form(doc);
 //!
-//! for (name, fv) in &projection.main.values {
+//! for (name, fv) in &form.main.values {
 //!     match fv.source {
 //!         FormFieldSource::Document => println!("{name}: {:?}", fv.value),
 //!         FormFieldSource::Default  => println!("{name}: (default) {:?}", fv.default),
 //!         FormFieldSource::Missing  => println!("{name}: MISSING"),
 //!     }
 //! }
+//!
+//! // A blank form for a fresh card the user is about to add:
+//! if let Some(blank) = quill.blank_card("indorsement") {
+//!     // render `blank.values`...
+//!     # let _ = blank;
+//! }
 //! # }
 //! ```
 //!
-//! # Re-projection after editing
+//! # Snapshot semantics
 //!
-//! A `FormProjection` is a **read-only snapshot** of the document at the time
-//! [`project_form`] is called. Subsequent edits to `doc` (e.g. via
-//! `doc.main_mut().set_field(...)`) are not reflected in an existing
-//! `FormProjection`; call `project_form` again to obtain an updated snapshot.
+//! A [`Form`] (or [`FormCard`]) is a read-only snapshot built at the moment
+//! the call returned. Subsequent edits to the document are not reflected;
+//! call `quill.form(doc)` again to obtain an updated snapshot.
 //!
 //! # Unknown card tags
 //!
-//! Cards whose tag is not declared in the schema are **dropped** from
-//! `FormProjection.cards`. Each such card produces one [`Diagnostic`]
-//! in `FormProjection.diagnostics` with code `"form::unknown_card_tag"`.
+//! Cards whose tag is not declared in the schema are dropped from
+//! [`Form::cards`]. Each such card produces one [`Diagnostic`] in
+//! [`Form::diagnostics`] with code `"form::unknown_card_tag"`.
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -44,7 +51,7 @@ use quillmark_core::{Diagnostic, Document, QuillValue, Severity};
 
 use crate::Quill;
 
-/// Source of a field's effective value in a form projection.
+/// Source of a field's effective value in a form view.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum FormFieldSource {
@@ -56,7 +63,7 @@ pub enum FormFieldSource {
     Missing,
 }
 
-/// A single field's projection within a [`FormCard`].
+/// A single field's view within a [`FormCard`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FormFieldValue {
     /// Current value from the document, if present.
@@ -67,86 +74,79 @@ pub struct FormFieldValue {
     pub source: FormFieldSource,
 }
 
-/// A card projected through its schema — either the main document card or a
+/// A card viewed through its schema — either the main document card or a
 /// named card block.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FormCard {
     /// The schema that governs this card.
     pub schema: CardSchema,
-    /// Projection of each schema-declared field.
+    /// View of each schema-declared field.
     ///
-    /// Keys follow `IndexMap` insertion order (schema field definition order).
+    /// Keys follow `IndexMap` insertion order: schema field definition order,
+    /// stably re-sorted by `ui.order` when present.
     pub values: IndexMap<String, FormFieldValue>,
 }
 
-/// Read-only snapshot of a [`Document`] projected through a [`Quill`]'s schema.
+impl FormCard {
+    /// A blank form card for `schema` — no document values supplied. Every
+    /// declared field's source is [`FormFieldSource::Default`] (when the
+    /// schema declares a default) or [`FormFieldSource::Missing`].
+    ///
+    /// This is the "user is about to add a new card" view. Reach it through
+    /// [`Quill::blank_card`] or [`Quill::blank_main`] when you have a tag in
+    /// hand instead of a [`CardSchema`].
+    pub fn blank(schema: &CardSchema) -> Self {
+        project_card(schema, &IndexMap::new())
+    }
+}
+
+/// Read-only snapshot of a [`Document`] viewed through a [`Quill`]'s schema.
 ///
-/// Produced by [`project_form`]. Subsequent edits to the document are **not**
-/// reflected here — call `project_form` again after editing.
+/// Produced by [`Quill::form`]. Subsequent edits to the document are **not**
+/// reflected here — call `quill.form(doc)` again after editing.
 ///
 /// # Unknown cards
 ///
 /// Document cards whose tag is not declared in the schema are dropped and
 /// each produces a [`Diagnostic`] with code `"form::unknown_card_tag"` in
-/// `diagnostics`.
+/// [`Form::diagnostics`].
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct FormProjection {
-    /// Projection of the main document (frontmatter fields).
+pub struct Form {
+    /// View of the main document card (frontmatter fields).
     pub main: FormCard,
-    /// Projections of each recognised card, in document order.
+    /// View of each recognised card, in document order.
     ///
-    /// Cards with unknown tags are excluded; see `diagnostics`.
+    /// Cards with unknown tags are excluded; see [`Form::diagnostics`].
     pub cards: Vec<FormCard>,
     /// Diagnostics from unknown card tags and validation.
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// Project a document through a quill's schema.
-///
-/// Returns a [`FormProjection`] — a read-only snapshot of the document's
-/// fields mapped against the schema. For each schema-declared field the
-/// projection records:
-///
-/// - [`FormFieldSource::Document`] — value present in the document.
-/// - [`FormFieldSource::Default`] — value absent; schema default used.
-/// - [`FormFieldSource::Missing`] — value absent; no schema default.
-///
-/// **Snapshot semantics.** Subsequent edits to `doc` are not reflected;
-/// call `project_form` again after editing.
-///
-/// **Unknown cards.** Each card in `doc.cards()` whose tag is not declared
-/// in the quill schema is dropped from `FormProjection.cards`. A
-/// [`Diagnostic`] with code `"form::unknown_card_tag"` is appended to
-/// `FormProjection.diagnostics` for each such card.
-///
-/// **Validation.** `QuillConfig::validate_document` is run over the
-/// document and any resulting errors are converted to diagnostics and
-/// appended to `FormProjection.diagnostics`. This is purely additive —
-/// the projection itself is never modified by validation failures.
-///
-/// # Composing existing functions
-///
-/// This function composes:
-/// - `QuillConfig::main` — to obtain the main card schema.
-/// - `QuillConfig::card_definition` — to look up card schemas by tag.
+// ── Internal projection ─────────────────────────────────────────────────────
+//
+// `project_card`, `build_form`, and `blank_card_for_tag` are the internal
+// machinery used by `Quill::form`, `Quill::blank_main`, and
+// `Quill::blank_card`. They are **deliberately not public**: consumers
+// reach the form module through methods on `Quill`, never by holding a
+// `CardSchema` and a field map directly.
+
+/// Build the [`Form`] for a document. Composes:
+/// - `QuillConfig::main` — the main card schema.
+/// - `QuillConfig::card_type` — to look up card schemas by tag.
 /// - `QuillConfig::validate_document` — to gather validation diagnostics.
 ///
-/// Coercion (`coerce_frontmatter` / `coerce_card`) is **not** applied here
-/// because `project_form` is a projection of the document as-is; coercion
-/// is a lossy transformation and would change the field values visible to
-/// the form editor. Validation diagnostics already inform the consumer when
-/// values are type-mismatched.
-pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
+/// Coercion (`coerce_frontmatter` / `coerce_card`) is **not** applied here:
+/// the form view is the document as-is so the editor sees what the user typed.
+/// Validation diagnostics already inform the consumer when values are
+/// type-mismatched.
+pub(crate) fn build_form(quill: &Quill, doc: &Document) -> Form {
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
-    // ── Main card projection ──────────────────────────────────────────────
     let main_schema = &quill.source().config().main;
     let main_fields = doc.main().frontmatter().to_index_map();
     let main = project_card(main_schema, &main_fields);
 
-    // ── Per-card projections ──────────────────────────────────────────────
     let mut cards: Vec<FormCard> = Vec::new();
-
     for (index, card) in doc.cards().iter().enumerate() {
         let tag = card.tag();
         match quill.source().config().card_type(&tag) {
@@ -161,7 +161,7 @@ pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
                         format!(
                             "card at index {index} has unknown tag \"{tag}\"; \
                              it is not declared in the quill schema and has been \
-                             excluded from the form projection"
+                             excluded from the form view"
                         ),
                     )
                     .with_code("form::unknown_card_tag".to_string()),
@@ -170,7 +170,6 @@ pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
         }
     }
 
-    // ── Validation diagnostics ────────────────────────────────────────────
     if let Err(validation_errors) = quill.source().config().validate_document(doc) {
         for err in validation_errors {
             diagnostics.push(
@@ -180,14 +179,22 @@ pub fn project_form(quill: &Quill, doc: &Document) -> FormProjection {
         }
     }
 
-    FormProjection {
+    Form {
         main,
         cards,
         diagnostics,
     }
 }
 
-// ── Private helpers ───────────────────────────────────────────────────────────
+/// Build a blank [`FormCard`] for a card type by tag, or `None` if the tag
+/// isn't declared in the quill's schema.
+pub(crate) fn blank_card_for_tag(quill: &Quill, card_type: &str) -> Option<FormCard> {
+    quill
+        .source()
+        .config()
+        .card_type(card_type)
+        .map(FormCard::blank)
+}
 
 /// Build a [`FormCard`] by walking each schema-declared field and looking up
 /// its value in `fields`.
