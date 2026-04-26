@@ -230,10 +230,10 @@ impl Quill {
         val.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
     }
 
-    /// Project a document through this quill's schema.
+    /// The schema-aware form view of `doc`.
     ///
     /// Returns a plain JS object (not a class) that is immediately
-    /// `JSON.stringify`-able. The shape mirrors [`FormProjection`]:
+    /// `JSON.stringify`-able. The shape mirrors [`Form`]:
     ///
     /// ```json
     /// {
@@ -244,19 +244,57 @@ impl Quill {
     /// ```
     ///
     /// **Snapshot semantics.** This is a read-only snapshot of the document
-    /// at call time. Subsequent edits to `doc` require calling `projectForm`
-    /// again.
+    /// at call time. Subsequent edits to `doc` require calling `form` again.
     ///
-    /// [`FormProjection`]: quillmark::form::FormProjection
-    #[wasm_bindgen(js_name = projectForm)]
-    pub fn project_form(&self, doc: &Document) -> Result<JsValue, JsValue> {
-        let projection = quillmark::form::project_form(&self.inner, &doc.inner);
+    /// [`Form`]: quillmark::form::Form
+    #[wasm_bindgen(js_name = form)]
+    pub fn form(&self, doc: &Document) -> Result<JsValue, JsValue> {
+        let form = self.inner.form(&doc.inner);
         let serializer = serde_wasm_bindgen::Serializer::new()
             .serialize_maps_as_objects(true)
             .serialize_missing_as_null(true);
-        projection.serialize(&serializer).map_err(|e| {
-            WasmError::from(format!("projectForm: serialization failed: {e}")).to_js_value()
+        form.serialize(&serializer)
+            .map_err(|e| WasmError::from(format!("form: serialization failed: {e}")).to_js_value())
+    }
+
+    /// A blank form for the main card — no document values supplied.
+    ///
+    /// Returns a plain JS object with the same shape as one entry in
+    /// [`Form::main`]. Every declared field's `source` is `"default"` (when
+    /// the schema declares a default) or `"missing"`.
+    ///
+    /// [`Form::main`]: quillmark::form::Form::main
+    #[wasm_bindgen(js_name = blankMain)]
+    pub fn blank_main(&self) -> Result<JsValue, JsValue> {
+        let card = self.inner.blank_main();
+        let serializer = serde_wasm_bindgen::Serializer::new()
+            .serialize_maps_as_objects(true)
+            .serialize_missing_as_null(true);
+        card.serialize(&serializer).map_err(|e| {
+            WasmError::from(format!("blankMain: serialization failed: {e}")).to_js_value()
         })
+    }
+
+    /// A blank form for a card of the given type — no document values supplied.
+    ///
+    /// Returns `null` if `cardType` is not declared in this quill's schema.
+    /// Otherwise returns a plain JS object shaped like a single entry in
+    /// [`Form::cards`].
+    ///
+    /// [`Form::cards`]: quillmark::form::Form::cards
+    #[wasm_bindgen(js_name = blankCard)]
+    pub fn blank_card(&self, card_type: &str) -> Result<JsValue, JsValue> {
+        match self.inner.blank_card(card_type) {
+            Some(card) => {
+                let serializer = serde_wasm_bindgen::Serializer::new()
+                    .serialize_maps_as_objects(true)
+                    .serialize_missing_as_null(true);
+                card.serialize(&serializer).map_err(|e| {
+                    WasmError::from(format!("blankCard: serialization failed: {e}")).to_js_value()
+                })
+            }
+            None => Ok(JsValue::NULL),
+        }
     }
 }
 

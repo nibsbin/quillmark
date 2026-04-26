@@ -10,6 +10,8 @@ use quillmark_core::{
     Severity,
 };
 
+use crate::form::{self, Form, FormCard};
+
 /// Renderable quill. Composes an [`Arc<QuillSource>`] with a resolved
 /// [`Backend`]. Constructed by the engine; immutable once created.
 #[derive(Clone)]
@@ -245,6 +247,44 @@ impl Quill {
             .plate()
             .filter(|s| !s.is_empty())
             .map(str::to_string)
+    }
+
+    /// The schema-aware form view of `doc` — the whole-document snapshot
+    /// rendered through this quill's schema.
+    ///
+    /// For each schema-declared field on the main card and on every
+    /// recognised card, the returned [`Form`] records the current value, the
+    /// schema default, and a [`form::FormFieldSource`] label.
+    ///
+    /// **Snapshot semantics.** The result is a read-only snapshot — re-call
+    /// after editing `doc`.
+    ///
+    /// **Unknown card tags** are dropped from [`Form::cards`] and surface as
+    /// `form::unknown_card_tag` diagnostics. Validation errors are appended
+    /// as `form::validation_error` diagnostics; the view itself is never
+    /// altered or filtered by validation failures.
+    pub fn form(&self, doc: &Document) -> Form {
+        form::build_form(self, doc)
+    }
+
+    /// A blank form for the main card — no document values supplied. Every
+    /// declared field's source is [`form::FormFieldSource::Default`] (when
+    /// the schema declares a default) or [`form::FormFieldSource::Missing`].
+    ///
+    /// Useful as a starting state for a fresh document, or for previewing the
+    /// main-card form without a document in hand.
+    pub fn blank_main(&self) -> FormCard {
+        FormCard::blank(&self.source.config().main)
+    }
+
+    /// A blank form for a card of the given type — no document values
+    /// supplied. Returns `None` if `card_type` is not declared in the
+    /// quill's schema.
+    ///
+    /// This is the "user is about to add a new card" view: the UI can render
+    /// the form before the card is committed to the document.
+    pub fn blank_card(&self, card_type: &str) -> Option<FormCard> {
+        form::blank_card_for_tag(self, card_type)
     }
 
     /// Perform a dry-run validation without backend compilation.

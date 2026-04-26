@@ -180,10 +180,10 @@ impl Document {
     ///
     /// - Fields valid under both old and new schemas round-trip unchanged.
     /// - Fields only in the old schema linger in the bag (silently ignored
-    ///   by `project_form` and `validate_document`, but still emitted by
+    ///   by `Quill::form` and `validate_document`, but still emitted by
     ///   `to_markdown()`).
     /// - Fields only in the new schema are absent — surfaced as `Default`
-    ///   or `Missing` by `project_form`, and `MissingRequired` by
+    ///   or `Missing` by `Quill::form`, and `MissingRequired` by
     ///   `validate_document`.
     ///
     /// Schema-aware migration (clearing orphans, applying defaults, etc.) is

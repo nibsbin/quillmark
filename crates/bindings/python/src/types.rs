@@ -173,7 +173,7 @@ impl PyQuill {
         self.inner.dry_run(&doc.inner).map_err(convert_render_error)
     }
 
-    /// Project a document through this quill's schema.
+    /// The schema-aware form view of `doc`.
     ///
     /// Returns a dict with keys `main`, `cards`, and `diagnostics`:
     ///
@@ -186,32 +186,69 @@ impl PyQuill {
     /// - `default`: the schema default value, or `None` if none declared
     /// - `source`: one of `"document"`, `"default"`, or `"missing"`
     ///
-    /// This is a **read-only snapshot**. Call `project_form` again after any
-    /// edits to the document to obtain an updated projection.
+    /// This is a **read-only snapshot**. Call `form` again after any edits
+    /// to the document to obtain an updated view.
     ///
     /// Cards with unknown tags are excluded from `cards`; each produces a
     /// diagnostic with code `"form::unknown_card_tag"`.
-    fn project_form<'py>(
+    fn form<'py>(
         &self,
         py: Python<'py>,
         doc: PyRef<'_, PyDocument>,
     ) -> PyResult<Bound<'py, PyDict>> {
-        let projection = quillmark::form::project_form(&self.inner, &doc.inner);
+        let form = self.inner.form(&doc.inner);
 
         // Serialise through serde_json → Python dict to avoid writing bespoke
         // conversion for every nested type (CardSchema, FormFieldValue, etc.).
-        let json_value = serde_json::to_value(&projection).map_err(|e| {
+        let json_value = serde_json::to_value(&form).map_err(|e| {
             PyErr::new::<pyo3::exceptions::PyValueError, _>(format!(
-                "project_form: serialization failed: {e}"
+                "form: serialization failed: {e}"
             ))
         })?;
         let py_obj = json_to_py(py, &json_value)?;
         let dict = py_obj.downcast::<PyDict>().map_err(|_| {
-            PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "project_form: expected object at top level",
-            )
+            PyErr::new::<pyo3::exceptions::PyValueError, _>("form: expected object at top level")
         })?;
         Ok(dict.clone())
+    }
+
+    /// A blank form for the main card — no document values supplied.
+    ///
+    /// Returns a dict shaped like one entry in `form()['main']`. Every
+    /// declared field's `source` is `"default"` (when the schema declares a
+    /// default) or `"missing"`.
+    fn blank_main<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        let card = self.inner.blank_main();
+        let json_value = serde_json::to_value(&card).map_err(|e| {
+            PyErr::new::<PyValueError, _>(format!("blank_main: serialization failed: {e}"))
+        })?;
+        let py_obj = json_to_py(py, &json_value)?;
+        let dict = py_obj.downcast::<PyDict>().map_err(|_| {
+            PyErr::new::<PyValueError, _>("blank_main: expected object at top level")
+        })?;
+        Ok(dict.clone())
+    }
+
+    /// A blank form for a card of the given type — no document values supplied.
+    ///
+    /// Returns `None` if `card_type` is not declared in this quill's schema.
+    /// Otherwise returns a dict shaped like a single entry in `form()['cards']`.
+    fn blank_card<'py>(
+        &self,
+        py: Python<'py>,
+        card_type: &str,
+    ) -> PyResult<Option<Bound<'py, PyDict>>> {
+        let Some(card) = self.inner.blank_card(card_type) else {
+            return Ok(None);
+        };
+        let json_value = serde_json::to_value(&card).map_err(|e| {
+            PyErr::new::<PyValueError, _>(format!("blank_card: serialization failed: {e}"))
+        })?;
+        let py_obj = json_to_py(py, &json_value)?;
+        let dict = py_obj.downcast::<PyDict>().map_err(|_| {
+            PyErr::new::<PyValueError, _>("blank_card: expected object at top level")
+        })?;
+        Ok(Some(dict.clone()))
     }
 }
 
