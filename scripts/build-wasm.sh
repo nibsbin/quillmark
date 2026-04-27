@@ -23,13 +23,20 @@ cargo build \
     --manifest-path crates/bindings/wasm/Cargo.toml
 
 # Step 2: Generate JS bindings with wasm-bindgen
+#
+# `--weak-refs` opts into FinalizationRegistry-based auto-free for
+# wasm-bindgen handles. `.free()` is still emitted as an eager hook for
+# callers that want deterministic teardown; opting in just ensures dropped
+# handles eventually get reclaimed without manual `.free()` discipline.
+# Requires Node 14.6+ / all current evergreen browsers.
 echo "Generating JS bindings for bundler..."
 mkdir -p pkg/bundler
 wasm-bindgen \
     target/wasm32-unknown-unknown/wasm-release/quillmark_wasm.wasm \
     --out-dir pkg/bundler \
     --out-name wasm \
-    --target bundler
+    --target bundler \
+    --weak-refs
 
 echo "Generating JS bindings for nodejs..."
 mkdir -p pkg/node-esm
@@ -37,7 +44,8 @@ wasm-bindgen \
     target/wasm32-unknown-unknown/wasm-release/quillmark_wasm.wasm \
     --out-dir pkg/node-esm \
     --out-name wasm \
-    --target experimental-nodejs-module
+    --target experimental-nodejs-module \
+    --weak-refs
 
 # Step 3: Extract version from Cargo.toml
 VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "quillmark-wasm") | .version')

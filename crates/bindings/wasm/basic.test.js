@@ -496,6 +496,59 @@ Card two.
     const doc = Document.fromMarkdown(MD_WITH_CARDS) // 2 cards
     expect(() => doc.setCardTag(5, 'annotation')).toThrow(/IndexOutOfRange/)
   })
+
+  it('cardCount reports composable card count without allocating', () => {
+    const empty = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(empty.cardCount).toBe(0)
+
+    const two = Document.fromMarkdown(MD_WITH_CARDS)
+    expect(two.cardCount).toBe(2)
+    two.pushCard({ tag: 'extra' })
+    expect(two.cardCount).toBe(3)
+    two.removeCard(0)
+    expect(two.cardCount).toBe(2)
+  })
+})
+
+describe('Document.equals', () => {
+  it('returns true for identical documents', () => {
+    const a = Document.fromMarkdown(TEST_MARKDOWN)
+    const b = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(a.equals(b)).toBe(true)
+  })
+
+  it('returns true for clones', () => {
+    const a = Document.fromMarkdown(TEST_MARKDOWN)
+    const b = a.clone()
+    expect(a.equals(b)).toBe(true)
+  })
+
+  it('returns false after a frontmatter mutation', () => {
+    const a = Document.fromMarkdown(TEST_MARKDOWN)
+    const b = Document.fromMarkdown(TEST_MARKDOWN)
+    b.setField('title', 'Different')
+    expect(a.equals(b)).toBe(false)
+  })
+
+  it('returns false after a body mutation', () => {
+    const a = Document.fromMarkdown(TEST_MARKDOWN)
+    const b = Document.fromMarkdown(TEST_MARKDOWN)
+    b.replaceBody('Different body')
+    expect(a.equals(b)).toBe(false)
+  })
+
+  it('returns false after pushing a card', () => {
+    const a = Document.fromMarkdown(TEST_MARKDOWN)
+    const b = Document.fromMarkdown(TEST_MARKDOWN)
+    b.pushCard({ tag: 'note' })
+    expect(a.equals(b)).toBe(false)
+  })
+
+  it('survives round-trip through toMarkdown / fromMarkdown', () => {
+    const a = Document.fromMarkdown(TEST_MARKDOWN)
+    const b = Document.fromMarkdown(a.toMarkdown())
+    expect(a.equals(b)).toBe(true)
+  })
 })
 
 describe('Document editor surface — updateCardField / updateCardBody', () => {

@@ -32,7 +32,7 @@ PyO3 bindings published as `quillmark` on PyPI.
 
 ### `bindings/quillmark-wasm`
 
-wasm-bindgen bindings published as `@quillmark/wasm`. Supports bundler and Node.js targets.
+wasm-bindgen bindings published as `@quillmark/wasm`. Supports bundler and Node.js targets. Builds with `--weak-refs` so wasm-bindgen handles are reclaimed by `FinalizationRegistry`; `.free()` remains as the eager teardown hook. Requires Node 14.6+ / current evergreen browsers.
 
 ### `bindings/quillmark-cli`
 

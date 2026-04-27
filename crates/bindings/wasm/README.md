@@ -11,8 +11,11 @@ Use Quillmark in browsers/Node.js with explicit in-memory trees (`Map<string, Ui
 ## Build
 
 ```bash
-wasm-pack build --target bundler --scope quillmark
+bash scripts/build-wasm.sh
 ```
+
+The script builds for `bundler` and `experimental-nodejs-module` targets with
+`--weak-refs` enabled (see [Lifecycle](#lifecycle)).
 
 ## Test
 
@@ -51,11 +54,30 @@ Create engine.
 Build + validate + attach backend. Returns a render-ready `Quill`.
 
 ### `Document.fromMarkdown(markdown)`
-Parse markdown to parsed document.
+Parse markdown to a parsed document. Throws a JS `Error` (with `.diagnostics`
+attached, see [Errors](#errors)) on any parse failure, including missing
+`QUILL`, malformed YAML, and inputs over the 10 MB `parse::input_too_large`
+limit.
 
 ### `doc.toMarkdown()`
 Emit canonical Quillmark Markdown. Type-fidelity round-trip safe:
-`Document.fromMarkdown(doc.toMarkdown())` returns a document equal to `doc`.
+`Document.fromMarkdown(doc.toMarkdown())` returns a document equal to `doc`
+under [`doc.equals`](#docequalsother). The output is **not** guaranteed
+byte-equal to the original source — YAML quoting, key ordering, and
+whitespace are normalised. Use `equals` (not string comparison) to test
+semantic equality.
+
+### `doc.equals(other)`
+Structural equality between two `Document` handles. Compares `main` and
+`cards` by value; parse-time `warnings` are intentionally excluded.
+
+Use this to debounce upstream prop updates: keep the last parsed `Document`
+and compare instead of re-parsing on every keystroke.
+
+### `doc.cardCount`
+O(1) getter for the number of composable cards (excluding the main card).
+Use this to validate indices before calling card mutators (`removeCard`,
+`updateCardField`, etc.) without allocating the full `cards` array.
 
 ### `quill.render(parsed, opts?)`
 Render with a pre-parsed `Document`.
@@ -65,15 +87,36 @@ Open once, render all or selected pages (`opts.pages`).
 
 ### Errors
 
-Every method that can fail throws a JS `Error` with a flat shape:
+Every method that can fail throws a JS `Error` with `.diagnostics` attached:
 
 ```ts
 { message: string, diagnostics: Diagnostic[] }
 ```
 
 `diagnostics` is always non-empty — length 1 for most failures, length N for
-backend compilation errors. Read `err.diagnostics[0]` for the primary
-diagnostic; iterate the array for compilation failures.
+backend compilation errors. `message` is derived from `diagnostics`
+(`diagnostics[0].message` for single-diagnostic errors; an aggregate
+`"<N> error(s): <first.message>"` summary for compilation failures).
+
+Read `err.diagnostics[0]` for the primary diagnostic; iterate the array for
+compilation failures. The same shape applies to every throw site:
+
+- `Document.fromMarkdown` — parse errors (missing `QUILL`, YAML errors,
+  `parse::input_too_large` for inputs > 10 MB).
+- `Document` mutators (`setField`, `updateCardField`, etc.) — `EditError`
+  variants (`ReservedName`, `InvalidFieldName`, `InvalidTagName`,
+  `IndexOutOfRange`) appear in `diagnostics[0].message` with the
+  `[EditError::<Variant>]` prefix.
+- `quill.render` / `session.render` — backend compilation failures and
+  validation errors.
+
+### Lifecycle
+
+The wasm bindings are built with `--weak-refs`, so dropped `Document`,
+`Quill`, and `RenderSession` handles are reclaimed by `FinalizationRegistry`
+without manual `.free()` discipline. `.free()` is still emitted as an eager
+teardown hook for callers that want deterministic release. Requires
+Node 14.6+ / current evergreen browsers (all supported targets).
 
 ## Notes
 

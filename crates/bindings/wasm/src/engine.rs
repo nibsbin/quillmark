@@ -368,6 +368,28 @@ impl Document {
         cards.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
     }
 
+    /// Number of composable cards (excludes the main card).
+    ///
+    /// O(1). Use this to validate indices before calling card mutators
+    /// instead of allocating the full `cards` array.
+    #[wasm_bindgen(getter, js_name = cardCount)]
+    pub fn card_count(&self) -> usize {
+        self.inner.cards().len()
+    }
+
+    /// Structural equality against another `Document`.
+    ///
+    /// Compares `main` and `cards` by value (matching core's [`PartialEq`]).
+    /// Parse-time `warnings` are intentionally excluded — they describe the
+    /// source text, not the document's content.
+    ///
+    /// Use this to debounce upstream prop updates: keep the last parsed
+    /// `Document` and compare instead of re-parsing on every keystroke.
+    #[wasm_bindgen(js_name = equals)]
+    pub fn equals(&self, other: &Document) -> bool {
+        self.inner == other.inner
+    }
+
     /// Non-fatal parse-time warnings as an array of typed `Diagnostic` objects.
     #[wasm_bindgen(getter, js_name = warnings, unchecked_return_type = "Diagnostic[]")]
     pub fn warnings(&self) -> JsValue {

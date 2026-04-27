@@ -418,7 +418,7 @@ mod tests {
         };
         let wasm_err: WasmError = render_err.into();
 
-        assert_eq!(wasm_err.message, "Test error message");
+        assert_eq!(wasm_err.message(), "Test error message");
         assert_eq!(wasm_err.diagnostics.len(), 1);
         let d = &wasm_err.diagnostics[0];
         assert_eq!(d.code.as_deref(), Some("E001"));
@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(wasm_err.diagnostics.len(), 2);
         assert_eq!(wasm_err.diagnostics[0].message, "Error 1");
         assert_eq!(wasm_err.diagnostics[1].message, "Error 2");
-        assert!(wasm_err.message.contains("2"));
+        assert!(wasm_err.message().contains("2"));
     }
 
     #[test]
@@ -454,7 +454,7 @@ mod tests {
         use crate::error::WasmError;
 
         let wasm_err: WasmError = "Simple error message".into();
-        assert_eq!(wasm_err.message, "Simple error message");
+        assert_eq!(wasm_err.message(), "Simple error message");
         assert_eq!(wasm_err.diagnostics.len(), 1);
         assert_eq!(wasm_err.diagnostics[0].message, "Simple error message");
     }
