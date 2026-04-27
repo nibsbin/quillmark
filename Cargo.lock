@@ -2156,7 +2156,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark"
-version = "0.64.0"
+version = "0.65.0"
 dependencies = [
  "indexmap",
  "quillmark-core",
@@ -2170,7 +2170,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-cli"
-version = "0.64.0"
+version = "0.65.0"
 dependencies = [
  "clap",
  "quillmark",
@@ -2181,7 +2181,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-core"
-version = "0.64.0"
+version = "0.65.0"
 dependencies = [
  "glob",
  "indexmap",
@@ -2197,14 +2197,14 @@ dependencies = [
 
 [[package]]
 name = "quillmark-fixtures"
-version = "0.64.0"
+version = "0.65.0"
 dependencies = [
  "quillmark",
 ]
 
 [[package]]
 name = "quillmark-fuzz"
-version = "0.64.0"
+version = "0.65.0"
 dependencies = [
  "proptest",
  "quillmark-core",
@@ -2213,7 +2213,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-python"
-version = "0.64.0"
+version = "0.65.0"
 dependencies = [
  "pyo3",
  "quillmark",
@@ -2224,7 +2224,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-typst"
-version = "0.64.0"
+version = "0.65.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -2246,7 +2246,7 @@ dependencies = [
 
 [[package]]
 name = "quillmark-wasm"
-version = "0.64.0"
+version = "0.65.0"
 dependencies = [
  "console_error_panic_hook",
  "js-sys",
