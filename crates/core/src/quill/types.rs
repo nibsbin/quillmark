@@ -106,9 +106,7 @@ impl CardSchema {
     pub fn defaults(&self) -> HashMap<String, QuillValue> {
         self.fields
             .iter()
-            .filter_map(|(name, field)| {
-                field.default.as_ref().map(|v| (name.clone(), v.clone()))
-            })
+            .filter_map(|(name, field)| field.default.as_ref().map(|v| (name.clone(), v.clone())))
             .collect()
     }
 
