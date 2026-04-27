@@ -1,7 +1,8 @@
 name: Release
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches: [main]
 
 env:
@@ -13,10 +14,10 @@ env:
 jobs:
   # ──────────────────────────────────────────────
   # Prepare: tag the release commit and cut a GitHub Release
-  # Only runs on commits made by the prepare-release workflow.
+  # Only runs when a release PR (release/vX.Y.Z) is merged to main.
   # ──────────────────────────────────────────────
   prepare:
-    if: startsWith(github.event.head_commit.message, 'chore(release): v')
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
