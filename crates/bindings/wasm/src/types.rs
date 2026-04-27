@@ -252,9 +252,11 @@ pub struct RenderOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ppi: Option<f32>,
     /// Optional 0-based page indices to render (e.g., `[0, 2]` for the
-    /// first and third pages). `undefined` renders all pages. **Not
-    /// supported for PDF output** — passing `pages` with `format: "pdf"`
-    /// yields a `FormatNotSupported` error.
+    /// first and third pages). `undefined` renders all pages. Any index
+    /// `>= pageCount` causes the render to throw — read
+    /// `RenderSession.pageCount` first if validation is needed.
+    /// **Not supported for PDF output** — passing `pages` with
+    /// `format: "pdf"` yields a `FormatNotSupported` error.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pages: Option<Vec<usize>>,
 }
