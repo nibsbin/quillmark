@@ -65,14 +65,6 @@ pub enum CoercionError {
 }
 
 impl QuillConfig {
-    /// Returns the named card-type schemas as a map keyed by card name.
-    pub fn card_types_map(&self) -> HashMap<String, CardSchema> {
-        self.card_types
-            .iter()
-            .map(|card| (card.name.clone(), card.clone()))
-            .collect()
-    }
-
     /// Returns a named card-type schema by name.
     pub fn card_type(&self, name: &str) -> Option<&CardSchema> {
         self.card_types.iter().find(|card| card.name == name)
@@ -114,70 +106,6 @@ impl QuillConfig {
             );
         }
         serde_json::Value::Object(obj)
-    }
-
-    /// Extract default values from the main card's field schemas.
-    pub fn defaults(&self) -> HashMap<String, QuillValue> {
-        let mut defaults = HashMap::new();
-        for (field_name, field_schema) in &self.main.fields {
-            if let Some(ref default_value) = field_schema.default {
-                defaults.insert(field_name.clone(), default_value.clone());
-            }
-        }
-        defaults
-    }
-
-    /// Extract example values from the main card's field schemas.
-    pub fn examples(&self) -> HashMap<String, Vec<QuillValue>> {
-        let mut examples = HashMap::new();
-        for (field_name, field_schema) in &self.main.fields {
-            if let Some(ref examples_value) = field_schema.examples {
-                if let Some(examples_array) = examples_value.as_array() {
-                    let examples_vec: Vec<QuillValue> = examples_array
-                        .iter()
-                        .map(|v| QuillValue::from_json(v.clone()))
-                        .collect();
-                    if !examples_vec.is_empty() {
-                        examples.insert(field_name.clone(), examples_vec);
-                    }
-                }
-            }
-        }
-        examples
-    }
-
-    /// Extract default values for a specific card-type.
-    pub fn card_type_defaults(&self, card_name: &str) -> Option<HashMap<String, QuillValue>> {
-        self.card_type(card_name).map(|card| {
-            let mut defaults = HashMap::new();
-            for (field_name, field_schema) in &card.fields {
-                if let Some(default) = &field_schema.default {
-                    defaults.insert(field_name.clone(), default.clone());
-                }
-            }
-            defaults
-        })
-    }
-
-    /// Extract example values for a specific card-type.
-    pub fn card_type_examples(&self, card_name: &str) -> Option<HashMap<String, Vec<QuillValue>>> {
-        self.card_type(card_name).map(|card| {
-            let mut examples = HashMap::new();
-            for (field_name, field_schema) in &card.fields {
-                if let Some(examples_value) = &field_schema.examples {
-                    if let Some(examples_array) = examples_value.as_array() {
-                        let examples_vec: Vec<QuillValue> = examples_array
-                            .iter()
-                            .map(|v| QuillValue::from_json(v.clone()))
-                            .collect();
-                        if !examples_vec.is_empty() {
-                            examples.insert(field_name.clone(), examples_vec);
-                        }
-                    }
-                }
-            }
-            examples
-        })
     }
 
     /// Coerce typed frontmatter fields (IndexMap, no CARDS/BODY keys).

@@ -113,7 +113,7 @@ impl PyQuill {
     #[getter]
     fn defaults<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, value) in self.inner.source().config().defaults() {
+        for (key, value) in self.inner.source().config().main.defaults() {
             dict.set_item(key, quillvalue_to_py(py, &value)?)?;
         }
         Ok(dict)
@@ -122,7 +122,7 @@ impl PyQuill {
     #[getter]
     fn examples<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
         let dict = PyDict::new(py);
-        for (key, values) in self.inner.source().config().examples() {
+        for (key, values) in self.inner.source().config().main.examples() {
             let py_list = pyo3::types::PyList::empty(py);
             for value in values {
                 py_list.append(quillvalue_to_py(py, &value)?)?;

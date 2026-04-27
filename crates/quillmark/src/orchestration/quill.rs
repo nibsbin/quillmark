@@ -218,7 +218,7 @@ impl Quill {
         frontmatter: &IndexMap<String, QuillValue>,
     ) -> IndexMap<String, QuillValue> {
         let mut result = frontmatter.clone();
-        for (field_name, default_value) in self.source.config().defaults() {
+        for (field_name, default_value) in self.source.config().main.defaults() {
             if !result.contains_key(&field_name) {
                 result.insert(field_name, default_value);
             }
@@ -232,8 +232,8 @@ impl Quill {
         fields: &IndexMap<String, QuillValue>,
     ) -> IndexMap<String, QuillValue> {
         let mut result = fields.clone();
-        if let Some(card_defaults) = self.source.config().card_type_defaults(card_tag) {
-            for (field_name, default_value) in card_defaults {
+        if let Some(card) = self.source.config().card_type(card_tag) {
+            for (field_name, default_value) in card.defaults() {
                 if !result.contains_key(&field_name) {
                     result.insert(field_name, default_value);
                 }

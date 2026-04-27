@@ -183,10 +183,10 @@ back to `.md` on disk.
 
 ---
 
-## 4. New: `quill.projectForm(doc)`
+## 4. New: `quill.form(doc)` and blank constructors
 
-Schema-aware projection for form editors. Returns a plain JSON-ready object
-(not a class) with the shape:
+Schema-aware projection for form editors. `quill.form(doc)` returns a plain
+JSON-ready object (not a class) with the shape:
 
 ```ts
 {
@@ -198,9 +198,20 @@ Schema-aware projection for form editors. Returns a plain JSON-ready object
 
 Each `FieldSource` carries the value plus a discriminator
 (`Document | Default | Missing`). It is a **snapshot** — subsequent mutations
-on `doc` require calling `projectForm` again.
+on `doc` require calling `form` again.
 
 This takes `&Document`, so the handle survives the call.
+
+For "new document" flows there is no parsed `Document` yet, so use the blank
+constructors:
+
+- `quill.blankMain()` — returns a `{ schema, values }` projection for the
+  main card with every field defaulted (or `Missing`).
+- `quill.blankCard(tag)` — same shape for a named card-type, or `undefined`
+  when the tag is not declared in the quill.
+
+These return the same per-card object shape as entries in `form(doc).cards`
+/ `form(doc).main`, so a UI that renders one can render the others.
 
 ---
 

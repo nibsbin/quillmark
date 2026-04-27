@@ -1,5 +1,5 @@
 //! Quill schema and core type definitions.
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use serde::{Deserialize, Serialize};
 
@@ -98,6 +98,34 @@ pub struct CardSchema {
     /// UI layout hints
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ui: Option<UiContainerSchema>,
+}
+
+impl CardSchema {
+    /// Default values declared on this card's fields, keyed by field name.
+    /// Fields with no `default` are omitted.
+    pub fn defaults(&self) -> HashMap<String, QuillValue> {
+        self.fields
+            .iter()
+            .filter_map(|(name, field)| field.default.as_ref().map(|v| (name.clone(), v.clone())))
+            .collect()
+    }
+
+    /// Example values declared on this card's fields, keyed by field name.
+    /// Fields with no `examples` (or with an empty/non-array `examples`) are
+    /// omitted.
+    pub fn examples(&self) -> HashMap<String, Vec<QuillValue>> {
+        self.fields
+            .iter()
+            .filter_map(|(name, field)| {
+                let array = field.examples.as_ref()?.as_array()?;
+                let values: Vec<QuillValue> = array
+                    .iter()
+                    .map(|v| QuillValue::from_json(v.clone()))
+                    .collect();
+                (!values.is_empty()).then_some((name.clone(), values))
+            })
+            .collect()
+    }
 }
 
 /// Field type hint enum for type-safe field type definitions
@@ -208,7 +236,6 @@ struct FieldSchemaDef {
     pub required: bool,
     #[serde(rename = "enum")]
     pub enum_values: Option<Vec<String>>,
-    // Nested schema support
     // Nested schema support
     pub properties: Option<serde_json::Map<String, serde_json::Value>>,
     pub items: Option<serde_json::Value>,
