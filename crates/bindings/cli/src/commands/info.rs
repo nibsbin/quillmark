@@ -146,12 +146,12 @@ fn print_human_readable(quill: &quillmark::Quill) {
     }
 
     // Defaults and examples
-    let defaults_count = config.defaults().len();
+    let defaults_count = config.main.defaults().len();
     if defaults_count > 0 {
         println!("  Defaults:    {}", defaults_count);
     }
 
-    let examples_count = config.examples().len();
+    let examples_count = config.main.examples().len();
     if examples_count > 0 {
         println!("  Examples:    {}", examples_count);
     }

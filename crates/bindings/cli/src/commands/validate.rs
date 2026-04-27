@@ -149,7 +149,7 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
                 println!("  Schema generated successfully");
                 println!(
                     "  Defaults extracted: {}",
-                    quill.source().config().defaults().len()
+                    quill.source().config().main.defaults().len()
                 );
             }
 
@@ -373,7 +373,7 @@ fn validate_defaults_against_schema(
     config: &QuillConfig,
     result: &mut ValidationResult,
 ) {
-    let defaults = quill.source().config().defaults();
+    let defaults = quill.source().config().main.defaults();
 
     for (field_name, default_value) in &defaults {
         // Look up field type in config

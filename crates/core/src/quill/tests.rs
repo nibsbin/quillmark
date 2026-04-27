@@ -1186,7 +1186,7 @@ main:
     let quill = QuillSource::from_tree(root).unwrap();
 
     // Extract defaults
-    let defaults = quill.config.defaults();
+    let defaults = quill.config.main.defaults();
 
     // Verify only fields with defaults are returned
     assert_eq!(defaults.len(), 2);
@@ -1224,8 +1224,8 @@ main:
 "#;
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
-    let defaults = config.defaults();
-    let examples = config.examples();
+    let defaults = config.main.defaults();
+    let examples = config.main.examples();
 
     assert_eq!(defaults.len(), 2);
     assert_eq!(defaults.get("author").unwrap().as_str(), Some("Anonymous"));
@@ -1262,21 +1262,21 @@ card_types:
 
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
-    let card_defaults = config.card_type_defaults("indorsement").unwrap();
+    let card = config.card_type("indorsement").unwrap();
+    let card_defaults = card.defaults();
     assert_eq!(card_defaults.len(), 1);
     assert_eq!(
         card_defaults.get("signature_block").unwrap().as_str(),
         Some("Commander")
     );
 
-    let card_examples = config.card_type_examples("indorsement").unwrap();
+    let card_examples = card.examples();
     assert_eq!(card_examples.len(), 1);
     let signature_examples = card_examples.get("signature_block").unwrap();
     assert_eq!(signature_examples.len(), 1);
     assert_eq!(signature_examples[0].as_str(), Some("Col Smith"));
 
-    assert!(config.card_type_defaults("unknown").is_none());
-    assert!(config.card_type_examples("unknown").is_none());
+    assert!(config.card_type("unknown").is_none());
 }
 
 #[test]
