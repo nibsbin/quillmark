@@ -1,16 +1,8 @@
 name: Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      bump:
-        description: Version bump type
-        required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
+  push:
+    branches: [main]
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,9 +12,11 @@ env:
 
 jobs:
   # ──────────────────────────────────────────────
-  # Prepare: bump versions, commit to main, tag, cut GitHub Release
+  # Prepare: tag the release commit and cut a GitHub Release
+  # Only runs on commits made by the prepare-release workflow.
   # ──────────────────────────────────────────────
   prepare:
+    if: startsWith(github.event.head_commit.message, 'chore(release): v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -34,46 +28,20 @@ jobs:
           fetch-depth: 0
           ref: main
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install cargo-release
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-release
-
-      - name: Compute next version
+      - name: Read workspace version
         id: version
         run: |
-          CURRENT=$(cargo metadata --format-version=1 --no-deps \
+          NEXT=$(cargo metadata --format-version=1 --no-deps \
             | jq -r '.packages[] | select(.name == "quillmark") | .version')
-          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-
-          case "${{ inputs.bump }}" in
-            major) NEXT="$((MAJOR + 1)).0.0" ;;
-            minor) NEXT="${MAJOR}.$((MINOR + 1)).0" ;;
-            patch) NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
-          esac
-
           echo "next=$NEXT" >> "$GITHUB_OUTPUT"
-          echo "Bumping $CURRENT → $NEXT"
+          echo "Releasing v${NEXT}"
 
-      - name: Bump workspace versions
-        run: |
-          cargo release version "${{ steps.version.outputs.next }}" \
-            --workspace \
-            --no-confirm \
-            --execute
-
-      - name: Commit, tag, and push
+      - name: Tag and push
         run: |
           VERSION="${{ steps.version.outputs.next }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -m "chore(release): v${VERSION}"
           git tag -a "v${VERSION}" -m "Release v${VERSION}"
-          git push origin main
           git push origin "v${VERSION}"
 
       - name: Create GitHub Release

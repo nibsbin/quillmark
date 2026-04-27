@@ -1,0 +1,85 @@
+name: Prepare Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump type
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # App token is required so CI runs on the bot-opened PR.
+      # PRs opened with the default GITHUB_TOKEN do not trigger workflow events.
+      - name: Generate token
+        id: app
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TAGGER_APP_ID }}
+          private-key: ${{ secrets.TAGGER_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-release
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-release
+
+      - name: Compute next version
+        id: version
+        run: |
+          CURRENT=$(cargo metadata --format-version=1 --no-deps \
+            | jq -r '.packages[] | select(.name == "quillmark") | .version')
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+
+          case "${{ inputs.bump }}" in
+            major) NEXT="$((MAJOR + 1)).0.0" ;;
+            minor) NEXT="${MAJOR}.$((MINOR + 1)).0" ;;
+            patch) NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+          esac
+
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Bumping $CURRENT → $NEXT"
+
+      - name: Bump workspace versions
+        run: |
+          cargo release version "${{ steps.version.outputs.next }}" \
+            --workspace \
+            --no-confirm \
+            --execute
+
+      - name: Push branch and open PR
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.next }}"
+          BRANCH="release/v${VERSION}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add -A
+          git commit -m "chore(release): v${VERSION}"
+          git push -u origin "$BRANCH"
+
+          gh pr create \
+            --title "chore(release): v${VERSION}" \
+            --body "Automated version bump to \`v${VERSION}\`. Merging this PR will tag and publish the release." \
+            --base main \
+            --head "$BRANCH"
