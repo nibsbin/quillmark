@@ -1,0 +1,53 @@
+name: Tag Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  tag:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/') && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Generate tagger token
+        id: tagger
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.TAGGER_APP_ID }}
+          private-key: ${{ secrets.TAGGER_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ steps.tagger.outputs.token }}
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(cargo metadata --format-version=1 --no-deps \
+            | jq -r '.packages[] | select(.name == "quillmark") | .version')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Tagging v${VERSION}"
+
+      - name: Validate branch matches version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          EXPECTED="release/v${VERSION}"
+          ACTUAL="${{ github.event.pull_request.head.ref }}"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::Branch/version mismatch: expected '$EXPECTED' but got '$ACTUAL'"
+            exit 1
+          fi
+
+      - name: Tag and push
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${VERSION}" -m "Release v${VERSION}"
+          git push origin "v${VERSION}"

@@ -4,28 +4,24 @@ on:
   workflow_dispatch:
     inputs:
       bump:
-        description: "Version bump type"
+        description: Version bump type
         required: true
         type: choice
         options:
           - patch
           - minor
-      prerelease:
-        description: "Create a release candidate (rc) pre-release"
-        required: false
-        type: boolean
-        default: false
-
-permissions:
-  contents: write
+          - major
 
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
-      # Use a GitHub App token so the push to main and the v* tag trigger
-      # the release workflow. Pushes signed with the default GITHUB_TOKEN
-      # don't fire downstream workflow events.
+      # Use a GitHub App token so the eventual tag push (from release-tag.yml)
+      # triggers the release workflow. Pushes signed with the default
+      # GITHUB_TOKEN don't fire downstream workflow events.
       - name: Generate tagger token
         id: tagger
         uses: actions/create-github-app-token@v1
@@ -33,11 +29,9 @@ jobs:
           app-id: ${{ secrets.TAGGER_APP_ID }}
           private-key: ${{ secrets.TAGGER_PRIVATE_KEY }}
 
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main
           token: ${{ steps.tagger.outputs.token }}
 
       - name: Setup Rust toolchain
@@ -48,105 +42,58 @@ jobs:
         with:
           tool: cargo-release
 
-      - name: Get current version
-        id: current
+      - name: Compute next version
+        id: version
         run: |
-          VERSION=$(cargo metadata --format-version=1 --no-deps \
+          CURRENT=$(cargo metadata --format-version=1 --no-deps \
             | jq -r '.packages[] | select(.name == "quillmark") | .version')
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Current version: $VERSION"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
 
-      - name: Bump versions
+          case "${{ inputs.bump }}" in
+            major) NEXT="$((MAJOR + 1)).0.0" ;;
+            minor) NEXT="${MAJOR}.$((MINOR + 1)).0" ;;
+            patch) NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))" ;;
+          esac
+
+          echo "next=$NEXT" >> "$GITHUB_OUTPUT"
+          echo "Bumping $CURRENT → $NEXT"
+
+      - name: Check for existing release branch
         run: |
-          CURRENT="${{ steps.current.outputs.version }}"
-
-          # A `patch` rc has patch != 0 (e.g. 0.58.2-rc.*), a `minor` rc has
-          # patch == 0 (e.g. 0.59.0-rc.*). This lets us detect when the user's
-          # `bump` input conflicts with the base of the current RC.
-          if [ "${{ inputs.prerelease }}" == "true" ]; then
-            # cargo-release has no "minor-rc" compound bump, so we compute the
-            # target version ourselves.
-            if [[ "$CURRENT" == *-rc.* ]]; then
-              RC_NUM="${CURRENT##*-rc.}"
-              BASE="${CURRENT%-rc.*}"
-              IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
-              if [ "${{ inputs.bump }}" == "minor" ] && [ "$PATCH" != "0" ]; then
-                # Escalating from a patch-rc to a new minor-rc
-                # (e.g. 0.58.2-rc.5 → 0.59.0-rc.1).
-                NEXT="${MAJOR}.$((MINOR + 1)).0-rc.1"
-              else
-                # Continuing the current RC cycle
-                # (e.g. 0.59.0-rc.1 → 0.59.0-rc.2).
-                NEXT="${BASE}-rc.$((RC_NUM + 1))"
-              fi
-            else
-              # Stable version — bump and start at rc.1
-              IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
-              if [ "${{ inputs.bump }}" == "minor" ]; then
-                NEXT="${MAJOR}.$((MINOR + 1)).0-rc.1"
-              else
-                NEXT="${MAJOR}.${MINOR}.$((PATCH + 1))-rc.1"
-              fi
-            fi
-          else
-            if [[ "$CURRENT" == *-rc.* ]]; then
-              # Finalizing an RC — strip the -rc.N suffix so the release tag
-              # matches the RC base (e.g. 0.58.2-rc.5 → 0.58.2).
-              BASE="${CURRENT%-rc.*}"
-              IFS='.' read -r MAJOR MINOR PATCH <<< "$BASE"
-              if [ "${{ inputs.bump }}" == "minor" ] && [ "$PATCH" != "0" ]; then
-                echo "::error::Cannot finalize patch-rc $CURRENT with bump=minor. Re-run with bump=patch to finalize, or open a new minor rc first."
-                exit 1
-              fi
-              if [ "${{ inputs.bump }}" == "patch" ] && [ "$PATCH" == "0" ]; then
-                echo "::error::Cannot finalize minor-rc $CURRENT with bump=patch. Re-run with bump=minor to finalize, or open a new patch rc first."
-                exit 1
-              fi
-              NEXT="$BASE"
-            else
-              NEXT="${{ inputs.bump }}"
-            fi
+          BRANCH="release/v${{ steps.version.outputs.next }}"
+          if git ls-remote --exit-code origin "refs/heads/$BRANCH" 2>/dev/null; then
+            echo "::error::Branch $BRANCH already exists. A release may be in progress."
+            exit 1
           fi
 
-          echo "Bumping workspace to: $NEXT"
-          cargo release version "$NEXT" \
+      - name: Bump workspace versions
+        run: |
+          cargo release version "${{ steps.version.outputs.next }}" \
             --workspace \
             --no-confirm \
             --execute
 
-      - name: Get new version
-        id: next
+      - name: Create release branch and push
         run: |
-          VERSION=$(cargo metadata --format-version=1 --no-deps \
-            | jq -r '.packages[] | select(.name == "quillmark") | .version')
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "New version: $VERSION"
-
-      - name: Commit and tag on main
-        run: |
-          VERSION="${{ steps.next.outputs.version }}"
-          TAG="v${VERSION}"
+          VERSION="${{ steps.version.outputs.next }}"
+          BRANCH="release/v${VERSION}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add -A
-          git commit -m "chore: bump version to ${VERSION}"
-          git tag -a "$TAG" -m "Release ${TAG}"
+          git commit -m "chore(release): v${VERSION}"
+          git push -u origin "$BRANCH"
 
-          # Atomic push of the bump commit + tag. Retry once with a rebase
-          # in case main moved during the run.
-          for attempt in 1 2; do
-            if git push --atomic origin main "refs/tags/${TAG}"; then
-              echo "Pushed ${TAG} and main"
-              exit 0
-            fi
-            if [ "$attempt" -eq 2 ]; then
-              echo "::error::Failed to push release commit and tag after retry."
-              exit 1
-            fi
-            echo "Push rejected; rebasing on origin/main and retrying"
-            git fetch origin main
-            git tag -d "$TAG"
-            git rebase origin/main
-            git tag -a "$TAG" -m "Release ${TAG}"
-          done
+      - name: Open pull request
+        env:
+          GH_TOKEN: ${{ steps.tagger.outputs.token }}
+        run: |
+          VERSION="${{ steps.version.outputs.next }}"
+          BRANCH="release/v${VERSION}"
+
+          gh pr create \
+            --title "chore(release): v${VERSION}" \
+            --body "Automated version bump to \`v${VERSION}\`. Merging this PR will tag and publish the release." \
+            --base main \
+            --head "$BRANCH"
