@@ -32,9 +32,11 @@ pub struct RenderOptions {
     /// Defaults to 144.0 (2x at 72pt/inch) when `None`.
     pub ppi: Option<f32>,
     /// Optional 0-based page indices to render (e.g., `vec![0, 2]` for
-    /// the first and third pages). `None` renders all pages. Backends
-    /// that do not support page selection (notably PDF) return a
-    /// `FormatNotSupported` error when this is `Some`.
+    /// the first and third pages). `None` renders all pages. Any index
+    /// `>= page_count` causes a `ValidationFailed` error — call
+    /// `RenderSession::page_count()` first if validation is needed.
+    /// Backends that do not support page selection (notably PDF) return
+    /// a `FormatNotSupported` error when this is `Some`.
     pub pages: Option<Vec<usize>>,
 }
 

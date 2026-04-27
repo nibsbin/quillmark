@@ -611,17 +611,16 @@ describe('quill.open + session.render', () => {
     expect(subset.artifacts[0].mimeType).toBe('image/png')
   })
 
-  it('should warn and skip out-of-bounds page indices', () => {
+  it('should throw on out-of-bounds page indices', () => {
     const engine = new Quillmark()
     const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     const session = quill.open(doc)
     const oob = session.pageCount + 10
 
-    const result = session.render({ format: 'png', ppi: 80, pages: [0, oob] })
-    expect(result.artifacts.length).toBe(1)
-    expect(result.warnings.length).toBeGreaterThan(0)
-    expect(result.warnings[0].message).toContain('out of bounds')
+    expect(() => {
+      session.render({ format: 'png', ppi: 80, pages: [0, oob] })
+    }).toThrow(/out of bounds/)
   })
 
   it('should error when requesting page selection with PDF', () => {
