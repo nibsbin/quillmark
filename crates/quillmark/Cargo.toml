@@ -16,7 +16,6 @@ quillmark-typst = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-anyhow = { workspace = true }
 indexmap = { workspace = true }
 
 [dev-dependencies]
@@ -24,8 +23,6 @@ tempfile = { workspace = true }
 quillmark-typst = { workspace = true }
 quillmark-fixtures = { workspace = true }
 serde_json = { workspace = true }
-# host cargo husky dev dep
-cargo-husky = { workspace = true }
 
 [features]
 default = ["typst"]

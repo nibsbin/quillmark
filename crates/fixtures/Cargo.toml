@@ -10,4 +10,3 @@ publish = false  # Don't publish test fixtures to crates.io
 
 [dependencies]
 quillmark = { workspace = true }
-quillmark-typst = { workspace = true }
