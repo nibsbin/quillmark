@@ -22,6 +22,5 @@ clap = { version = "~4.5", features = ["derive"] }
 quillmark = { workspace = true }
 quillmark-typst = { workspace = true, default-features = false, features = ["embed-default-font"] }
 quillmark-core = { workspace = true }
-anyhow = { workspace = true}
 serde_json = { workspace = true }
 

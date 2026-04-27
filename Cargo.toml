@@ -64,10 +64,6 @@ tempfile = "~3.23"
 proptest = "~1.5"
 quillmark-fixtures = { path = "crates/fixtures" }
 
-cargo-husky = { version = "~1", default-features = false, features = [
-    "user-hooks",
-] }
-
 [workspace.metadata.workspaces]
 # Exclude fixtures from publishing since it's dev-only
 no_individual_tags = true
