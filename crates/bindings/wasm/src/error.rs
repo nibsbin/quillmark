@@ -7,31 +7,41 @@ use wasm_bindgen::prelude::*;
 
 /// Serializable error for JavaScript consumption.
 ///
-/// Single uniform shape regardless of underlying error variant:
+/// Single uniform shape regardless of underlying error variant: a non-empty
+/// list of [`Diagnostic`]s. The thrown JS `Error`'s `.message` is derived
+/// from `diagnostics` (`diagnostics[0].message` for single-diagnostic
+/// errors, an aggregate `"… N error(s)"` summary for compilation failures),
+/// and a `.diagnostics` property carries the full array.
 ///
-/// ```text
-/// { message: string, diagnostics: Diagnostic[] }
-/// ```
-///
-/// `diagnostics` is always a non-empty array — length 1 for
-/// single-diagnostic errors, length N for compilation failures. The thrown
-/// JS `Error` has its `.message` set to `message` and a `.diagnostics`
-/// property attached carrying the array. Read `err.diagnostics[0]` for the
-/// primary diagnostic.
+/// Read `err.diagnostics[0]` for the primary diagnostic; iterate the array
+/// for backend compilation failures.
 #[derive(Debug, Clone)]
 pub struct WasmError {
-    pub message: String,
     pub diagnostics: Vec<Diagnostic>,
 }
 
 impl WasmError {
+    /// Display message for the JS `Error` constructor.
+    ///
+    /// For single-diagnostic errors this is the diagnostic's `message`. For
+    /// multi-diagnostic errors (backend compilation) this is an aggregate
+    /// `"… N error(s)"` summary; callers should iterate `diagnostics` for
+    /// the per-error details.
+    pub fn message(&self) -> String {
+        match self.diagnostics.len() {
+            0 => "Unknown error".to_string(),
+            1 => self.diagnostics[0].message.clone(),
+            n => format!("{} error(s): {}", n, self.diagnostics[0].message),
+        }
+    }
+
     /// Convert to a JS `Error` object for throwing.
     ///
-    /// Returns a real `Error` whose `.message` is `self.message` and whose
-    /// `.diagnostics` property is an array of diagnostic objects matching
-    /// the shape used in `RenderResult.warnings`.
+    /// Returns a real `Error` whose `.message` is [`WasmError::message`] and
+    /// whose `.diagnostics` property is an array of diagnostic objects
+    /// matching the shape used in `RenderResult.warnings`.
     pub fn to_js_value(&self) -> JsValue {
-        let err = js_sys::Error::new(&self.message);
+        let err = js_sys::Error::new(&self.message());
         let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
         let wasm_diags: Vec<WasmDiagnostic> =
             self.diagnostics.iter().cloned().map(Into::into).collect();
@@ -44,10 +54,8 @@ impl WasmError {
 
 impl From<ParseError> for WasmError {
     fn from(error: ParseError) -> Self {
-        let diag = error.to_diagnostic();
         WasmError {
-            message: diag.message.clone(),
-            diagnostics: vec![diag],
+            diagnostics: vec![error.to_diagnostic()],
         }
     }
 }
@@ -55,10 +63,7 @@ impl From<ParseError> for WasmError {
 impl From<RenderError> for WasmError {
     fn from(error: RenderError) -> Self {
         match error {
-            RenderError::CompilationFailed { diags } => WasmError {
-                message: format!("Compilation failed with {} error(s)", diags.len()),
-                diagnostics: diags,
-            },
+            RenderError::CompilationFailed { diags } => WasmError { diagnostics: diags },
             _ => {
                 let diagnostic = error
                     .diagnostics()
@@ -66,7 +71,6 @@ impl From<RenderError> for WasmError {
                     .map(|d| (*d).clone())
                     .unwrap_or_else(|| Diagnostic::new(Severity::Error, error.to_string()));
                 WasmError {
-                    message: diagnostic.message.clone(),
                     diagnostics: vec![diagnostic],
                 }
             }
@@ -77,7 +81,6 @@ impl From<RenderError> for WasmError {
 impl From<String> for WasmError {
     fn from(message: String) -> Self {
         WasmError {
-            message: message.clone(),
             diagnostics: vec![Diagnostic::new(Severity::Error, message)],
         }
     }
@@ -105,7 +108,7 @@ mod tests {
         let diag = &wasm_err.diagnostics[0];
         assert_eq!(diag.code.as_deref(), Some("parse::input_too_large"));
         assert!(diag.message.contains("Input too large"));
-        assert_eq!(wasm_err.message, diag.message);
+        assert_eq!(wasm_err.message(), diag.message);
     }
 
     #[test]
@@ -120,13 +123,15 @@ mod tests {
         assert_eq!(wasm_err.diagnostics.len(), 2);
         assert_eq!(wasm_err.diagnostics[0].message, "Error 1");
         assert_eq!(wasm_err.diagnostics[1].message, "Error 2");
-        assert!(wasm_err.message.contains("2"));
+        let summary = wasm_err.message();
+        assert!(summary.contains("2"));
+        assert!(summary.contains("Error 1"));
     }
 
     #[test]
     fn test_string_conversion_yields_single_diagnostic() {
         let wasm_err: WasmError = "Simple error".into();
-        assert_eq!(wasm_err.message, "Simple error");
+        assert_eq!(wasm_err.message(), "Simple error");
         assert_eq!(wasm_err.diagnostics.len(), 1);
         assert_eq!(wasm_err.diagnostics[0].message, "Simple error");
     }

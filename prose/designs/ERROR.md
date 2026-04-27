@@ -28,7 +28,7 @@
 Python and WASM bindings delegate to core types:
 
 - **Python**: `PyDiagnostic` wraps `Diagnostic`. `RenderError` is mapped to typed Python exceptions: `CompilationError` (carries a `diagnostics` list), `ParseError` (frontmatter errors), and `QuillmarkError` (all other variants) — each with an attached `diagnostic` attribute. Base hierarchy: `QuillmarkError → PyException`.
-- **WASM**: `WasmError` is a flat `{ message, diagnostics: Vec<Diagnostic> }`. The thrown JS `Error` has `.message` and a `.diagnostics` array attached (always non-empty — length 1 for single-diagnostic errors, length N for compilation failures). Same shape regardless of underlying variant; consumers read `err.diagnostics[0]` for the primary diagnostic.
+- **WASM**: `WasmError` carries a single `diagnostics: Vec<Diagnostic>` (always non-empty). The thrown JS `Error` has a `.diagnostics` array attached and a `.message` derived from `diagnostics`: `diagnostics[0].message` for single-diagnostic errors, an aggregate `"<N> error(s): <first.message>"` summary for backend compilation failures. Same shape regardless of underlying variant; consumers read `err.diagnostics[0]` for the primary diagnostic and iterate `err.diagnostics` for compilation errors. Parse failures (`Document.fromMarkdown`) carry the same shape — including the `parse::input_too_large` diagnostic for inputs over `MAX_INPUT_SIZE` (10 MB) and the various `EditError::*` variants for post-parse mutators.
 
 ## Backend Error Mapping
 
