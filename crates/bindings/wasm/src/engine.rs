@@ -165,8 +165,11 @@ impl Quill {
     ///   optional `example`. `main` and each card under `card_types` share
     ///   the same shape: `fields` (map keyed by field name), optional
     ///   `title`, `description`, `ui`.
-    /// - `backend`, `version`, `author` — quill identity declared in
-    ///   `Quill.yaml`'s `quill:` section.
+    /// - `backend`, `version`, `author`, `description` — quill identity
+    ///   declared in `Quill.yaml`'s `quill:` section. `description` describes
+    ///   the quill itself; if the author also declared `main.description` (the
+    ///   schema description of the entry-point card), it lives at
+    ///   `schema.main.description` and is independent.
     /// - `supportedFormats` — output formats the backend produces, as
     ///   lowercase strings.
     /// - Any additional unstructured keys declared under `quill:`.
@@ -194,6 +197,10 @@ impl Quill {
         obj.insert(
             "author".to_string(),
             serde_json::Value::String(config.author.clone()),
+        );
+        obj.insert(
+            "description".to_string(),
+            serde_json::Value::String(config.description.clone()),
         );
 
         let formats: Vec<serde_json::Value> = self

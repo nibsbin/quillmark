@@ -99,7 +99,7 @@ typst:
 Field names must be `snake_case`. Capitalized keys (e.g. `BODY`, `CARDS`, `CARD`) are reserved by the engine. Standalone `object` fields are not supported; use `array` with `items: {type: object, properties: {...}}` instead.
 
 Metadata resolution:
-- `name`, `backend`, `version`, `author` are direct struct fields on `QuillConfig`; `description` is stored in `QuillConfig.main.description` (required non-empty in the `quill:` section)
+- `name`, `description`, `backend`, `version`, `author` are direct struct fields on `QuillConfig`. `description` (required, non-empty in the `quill:` section) describes the quill itself; it is independent of `QuillConfig.main.description`, which is the optional schema description authored under `main:` like any other card type.
 - `metadata` on `Quill` stores `backend`, `description`, `version`, `author`, any extra `Quill.*` keys, and `typst_*` keys from the `[typst]` section
 - `example_file` also accepts the alias `example` in YAML
 

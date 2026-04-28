@@ -36,7 +36,7 @@ Every Quill.yaml must have a `quill` section with format metadata.
 |------------------|--------|----------|-------------|
 | `name`           | string | yes      | Unique identifier for the Quill |
 | `backend`        | string | yes      | Rendering backend (e.g. `typst`) |
-| `description`    | string | yes      | Human-readable description (non-empty) |
+| `description`    | string | yes      | Human-readable description of the quill itself (non-empty). Independent of `main.description`, which is the optional schema description authored under `main:`. |
 | `version`        | string | yes      | Semantic version (`MAJOR.MINOR` or `MAJOR.MINOR.PATCH`) |
 | `author`         | string | no       | Creator of the Quill (defaults to `"Unknown"`) |
 | `plate_file`     | string | no       | Path to the plate file |
@@ -71,7 +71,7 @@ quill:
 
 ## `main` Section
 
-The main document card holds **frontmatter field schemas** under `main.fields`. Optional `main.ui` sets container-level UI for that card (for example `hide_body`). `quill.ui` is merged with `main.ui` when building the main card.
+The main document card holds **frontmatter field schemas** under `main.fields`. Optional `main.title` and `main.description` describe the schema itself (independent of `quill.description`, which describes the quill package). Optional `main.ui` sets container-level UI for that card (for example `hide_body`). `quill.ui` is merged with `main.ui` when building the main card.
 
 Field order under `main.fields` determines display order in UIs — the first field gets `order: 0`, the second gets `order: 1`, and so on.
 

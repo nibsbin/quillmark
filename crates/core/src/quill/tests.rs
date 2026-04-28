@@ -821,10 +821,10 @@ main:
     assert_eq!(config.name, "test_config");
     assert_eq!(config.main.name, "main");
     assert_eq!(config.backend, "typst");
-    assert_eq!(
-        config.main.description,
-        Some("Test configuration parsing".to_string())
-    );
+    assert_eq!(config.description, "Test configuration parsing");
+    // `main.description` is independent of `quill.description`; this fixture
+    // does not declare one under `main:`, so it stays absent.
+    assert_eq!(config.main.description, None);
 
     // Verify optional fields
     assert_eq!(config.version, "1.0");
