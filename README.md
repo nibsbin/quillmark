@@ -9,7 +9,6 @@
 A format-first Markdown rendering system that converts Markdown with YAML frontmatter into PDF, SVG, PNG, and other output formats.
 
 Maintained by [TTQ](https://tonguetoquill.com).
-We're inspired to make useful things. Give us a star if you find this useful!
 
 **UNDER DEVELOPMENT**
 
@@ -78,6 +77,10 @@ cargo run --example taro
 - **crates/bindings/cli** - Command-line interface
 - **crates/fixtures** - Test fixtures and sample Quill templates
 - **crates/fuzz** - Property-based fuzzing tests
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) to help with development. We're dedicated to making useful things. Give us a star if you find this useful!
 
 ## License
 
