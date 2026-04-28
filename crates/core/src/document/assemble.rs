@@ -184,7 +184,7 @@ pub(super) fn decompose_with_warnings(
     // missing-QUILL error reads as if the user supplied a partial document
     // missing only QUILL, which is misleading when there's no document at all.
     if markdown.trim().is_empty() {
-        return Err(crate::error::ParseError::InvalidStructure(
+        return Err(crate::error::ParseError::EmptyInput(
             "Empty markdown input cannot be parsed as a Quillmark Document. \
              Provide at least a QUILL frontmatter field: `QUILL: <name>`."
                 .to_string(),
@@ -204,7 +204,7 @@ pub(super) fn decompose_with_warnings(
     let (blocks, warnings, first_fence_issue) = find_metadata_blocks(markdown)?;
 
     if blocks.is_empty() {
-        return Err(crate::error::ParseError::InvalidStructure(
+        return Err(crate::error::ParseError::MissingQuillField(
             missing_quill_message(first_fence_issue),
         ));
     }
@@ -212,7 +212,7 @@ pub(super) fn decompose_with_warnings(
     // Block 0 is always the QUILL frontmatter (F1 guarantee).
     let frontmatter_block = &blocks[0];
     let quill_tag = frontmatter_block.quill_ref.clone().ok_or_else(|| {
-        ParseError::InvalidStructure(
+        ParseError::MissingQuillField(
             "Missing required QUILL field. Add `QUILL: <name>` to the frontmatter.".to_string(),
         )
     })?;
