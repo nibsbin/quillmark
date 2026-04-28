@@ -1,7 +1,6 @@
 name: usaf_memo
 main:
   title: main
-  description: Typesetted USAF Official Memorandum
   fields:
     attachments:
       title: List of attachments

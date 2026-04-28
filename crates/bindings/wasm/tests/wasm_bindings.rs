@@ -208,7 +208,7 @@ fn test_quill_metadata_snapshot() {
         .quill(common::tree(&[
             (
                 "Quill.yaml",
-                b"quill:\n  name: meta_quill\n  backend: typst\n  version: \"0.2.1\"\n  plate_file: plate.typ\n  description: Metadata quill\n\nmain:\n  fields:\n    title:\n      type: string\n      description: The title\n\ncard_types:\n  indorsement:\n    title: Indorsement\n    fields:\n      signature_block:\n        type: string\n",
+                b"quill:\n  name: meta_quill\n  backend: typst\n  version: \"0.2.1\"\n  plate_file: plate.typ\n  description: Metadata quill\n\nmain:\n  description: The main card schema\n  fields:\n    title:\n      type: string\n      description: The title\n\ncard_types:\n  indorsement:\n    title: Indorsement\n    fields:\n      signature_block:\n        type: string\n",
             ),
             ("plate.typ", b"= Title"),
         ]))
@@ -224,6 +224,12 @@ fn test_quill_metadata_snapshot() {
     assert_eq!(get("version").as_string().as_deref(), Some("0.2.1"));
     // `author` defaults to "Unknown" when the YAML omits it.
     assert_eq!(get("author").as_string().as_deref(), Some("Unknown"));
+    // The quill's own description is surfaced at the top level, distinct from
+    // any schema description authored under `main:`.
+    assert_eq!(
+        get("description").as_string().as_deref(),
+        Some("Metadata quill")
+    );
 
     let formats = get("supportedFormats");
     assert!(
@@ -252,12 +258,14 @@ fn test_quill_metadata_snapshot() {
 
     let main = schema_get("main");
     assert!(main.is_object(), "schema.main must be present");
+    // `schema.main.description` is the schema description authored under
+    // `main:`; it is independent of the quill's own description above.
     assert_eq!(
         Reflect::get(&main, &JsValue::from_str("description"))
             .unwrap()
             .as_string()
             .as_deref(),
-        Some("Metadata quill")
+        Some("The main card schema")
     );
     let main_fields = Reflect::get(&main, &JsValue::from_str("fields")).unwrap();
     assert!(

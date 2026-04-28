@@ -19,6 +19,10 @@ use super::{CardSchema, FieldSchema, FieldType, UiContainerSchema, UiFieldSchema
 pub struct QuillConfig {
     /// Quill package name
     pub name: String,
+    /// Human-readable description of the quill itself (parsed from
+    /// `quill.description`). Distinct from `main.description`, which describes
+    /// the main card's schema.
+    pub description: String,
     /// The entry-point card schema (parsed from the Quill.yaml `main:` section).
     pub main: CardSchema,
     /// Named, composable card-type schemas (parsed from the Quill.yaml
@@ -713,11 +717,25 @@ impl QuillConfig {
             .cloned()
             .and_then(|v| serde_json::from_value(v).ok());
 
+        // Extract main.title (optional, authored under `main:` like any other card type).
+        let main_title = main_obj_opt
+            .and_then(|main_obj| main_obj.get("title"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string())
+            .or_else(|| Some("main".to_string()));
+
+        // Extract main.description (optional, authored under `main:` like any
+        // other card type). This is independent of `quill.description`.
+        let main_description = main_obj_opt
+            .and_then(|main_obj| main_obj.get("description"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+
         // The main entry-point card.
         let main = CardSchema {
             name: "main".to_string(),
-            title: Some("main".to_string()),
-            description: Some(description),
+            title: main_title,
+            description: main_description,
             fields,
             ui: main_ui.or(ui_section),
         };
@@ -775,6 +793,7 @@ impl QuillConfig {
         Ok((
             QuillConfig {
                 name,
+                description,
                 main,
                 card_types,
                 backend,

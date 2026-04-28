@@ -697,6 +697,7 @@ describe('quill.metadata', () => {
   description: Metadata test
 
 main:
+  description: The main card schema
   fields:
     title:
       type: string
@@ -722,6 +723,9 @@ card_types:
     expect(meta.backend).toBe('typst')
     expect(meta.version).toBe('0.2.1')
     expect(meta.author).toBe('Unknown')
+    // The quill's own description is surfaced at the top level, distinct
+    // from any schema description authored under `main:`.
+    expect(meta.description).toBe('Metadata test')
     expect(Array.isArray(meta.supportedFormats)).toBe(true)
     expect(meta.supportedFormats.length).toBeGreaterThan(0)
 
@@ -732,7 +736,9 @@ card_types:
     expect(meta.schema).toBeDefined()
     expect(meta.schema.name).toBe('meta_test_quill')
     expect(meta.schema.main).toBeDefined()
-    expect(meta.schema.main.description).toBe('Metadata test')
+    // schema.main.description is the schema's own description, authored
+    // under `main:`, independent of meta.description above.
+    expect(meta.schema.main.description).toBe('The main card schema')
     expect(meta.schema.main.fields.title).toBeDefined()
     expect(meta.schema.card_types).toBeDefined()
     // card_types holds the OTHER composable card types — main is not duplicated here
