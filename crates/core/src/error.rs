@@ -257,6 +257,20 @@ pub enum ParseError {
     #[error("Invalid YAML structure: {0}")]
     InvalidStructure(String),
 
+    /// Markdown input was empty or whitespace-only.
+    ///
+    /// Emitted as code `parse::empty_input` so consumers can pattern-match
+    /// without inspecting the message text.
+    #[error("{0}")]
+    EmptyInput(String),
+
+    /// Frontmatter is missing the required `QUILL:` field.
+    ///
+    /// Emitted as code `parse::missing_quill_field` so consumers can
+    /// pattern-match without inspecting the message text.
+    #[error("{0}")]
+    MissingQuillField(String),
+
     /// YAML parsing error with location context
     #[error("YAML error at line {line}: {message}")]
     YamlErrorWithLocation {
@@ -284,6 +298,10 @@ impl ParseError {
             .with_code("parse::input_too_large".to_string()),
             ParseError::InvalidStructure(msg) => Diagnostic::new(Severity::Error, msg.clone())
                 .with_code("parse::invalid_structure".to_string()),
+            ParseError::EmptyInput(msg) => Diagnostic::new(Severity::Error, msg.clone())
+                .with_code("parse::empty_input".to_string()),
+            ParseError::MissingQuillField(msg) => Diagnostic::new(Severity::Error, msg.clone())
+                .with_code("parse::missing_quill_field".to_string()),
             ParseError::YamlErrorWithLocation {
                 message,
                 line,

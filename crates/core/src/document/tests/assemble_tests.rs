@@ -28,6 +28,45 @@ fn test_empty_input_dedicated_error() {
 }
 
 #[test]
+fn test_empty_input_diagnostic_code() {
+    // Empty / whitespace-only inputs surface a stable code consumers can
+    // pattern-match without inspecting the message text.
+    for input in ["", "   ", "\n\n\t\n"] {
+        let err = decompose(input).unwrap_err();
+        let diag = err.to_diagnostic();
+        assert_eq!(
+            diag.code.as_deref(),
+            Some("parse::empty_input"),
+            "expected parse::empty_input for {input:?}, got: {:?}",
+            diag.code
+        );
+    }
+}
+
+#[test]
+fn test_missing_quill_field_diagnostic_code() {
+    // All "missing QUILL" sub-cases — no fences, wrong-cased key, mis-ordered
+    // key, empty fence — share the dedicated `parse::missing_quill_field`
+    // code so consumers don't have to regex the message text.
+    let cases = [
+        "# Hello World\n\nNo frontmatter here.",
+        "---\nquill: foo\n---\n\nbody",
+        "---\ntitle: Foo\nQUILL: bar\n---\n\nbody",
+        "---\n   \n---\n\n# Hello",
+    ];
+    for input in cases {
+        let err = decompose(input).unwrap_err();
+        let diag = err.to_diagnostic();
+        assert_eq!(
+            diag.code.as_deref(),
+            Some("parse::missing_quill_field"),
+            "expected parse::missing_quill_field for {input:?}, got: {:?}",
+            diag.code
+        );
+    }
+}
+
+#[test]
 fn test_with_frontmatter() {
     let markdown = r#"---
 QUILL: test_quill
