@@ -9,6 +9,7 @@
 A format-first Markdown rendering system that converts Markdown with YAML frontmatter into PDF, SVG, PNG, and other output formats.
 
 Maintained by [TTQ](https://tonguetoquill.com).
+We're inspired to make useful things. Give us a star if you find this useful!
 
 **UNDER DEVELOPMENT**
 
