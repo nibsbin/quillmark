@@ -112,6 +112,10 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
         for (name, field) in &card.fields {
             card_properties.insert(name.clone(), field_to_schema(field));
         }
+        card_properties.insert(
+            "BODY".to_string(),
+            serde_json::json!({ "type": "string", "contentMediaType": "text/markdown" }),
+        );
         defs.insert(
             format!("{}_card", card.name),
             serde_json::json!({
@@ -127,3 +131,61 @@ pub fn build_transform_schema(config: &QuillConfig) -> QuillValue {
         "$defs": defs,
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn build_from_yaml(yaml: &str) -> QuillValue {
+        let config = QuillConfig::from_yaml(yaml).expect("yaml parses");
+        build_transform_schema(&config)
+    }
+
+    #[test]
+    fn injects_body_as_markdown_for_main_and_each_card_type() {
+        let yaml = r#"
+quill:
+  name: example
+  version: 0.1.0
+  backend: typst
+  description: example
+
+main:
+  fields:
+    title:
+      type: string
+
+card_types:
+  indorsement:
+    title: Indorsement
+    fields:
+      signature_block:
+        type: string
+  note:
+    title: Note
+    fields:
+      author:
+        type: string
+"#;
+
+        let schema = build_from_yaml(yaml);
+        let json = schema.as_json();
+
+        let main_body = &json["properties"]["BODY"];
+        assert_eq!(main_body["type"], "string");
+        assert_eq!(main_body["contentMediaType"], "text/markdown");
+
+        for def_name in ["indorsement_card", "note_card"] {
+            let card_body = &json["$defs"][def_name]["properties"]["BODY"];
+            assert_eq!(
+                card_body["type"], "string",
+                "{def_name} BODY type should be string"
+            );
+            assert_eq!(
+                card_body["contentMediaType"], "text/markdown",
+                "{def_name} BODY should be markdown"
+            );
+        }
+    }
+}
+
