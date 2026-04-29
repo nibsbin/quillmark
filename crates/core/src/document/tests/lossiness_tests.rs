@@ -235,7 +235,9 @@ fn fill_tag_all_scalar_types_round_trip() {
 
     assert_eq!(fm.get("s").and_then(|v| v.as_str()), Some("hello"));
     assert_eq!(fm.get("i").and_then(|v| v.as_i64()), Some(42));
-    assert_eq!(fm.get("f").and_then(|v| v.as_f64()), Some(3.14));
+    #[allow(clippy::approx_constant)]
+    let expected_f = 3.14;
+    assert_eq!(fm.get("f").and_then(|v| v.as_f64()), Some(expected_f));
     assert_eq!(fm.get("b").and_then(|v| v.as_bool()), Some(true));
     assert!(fm.get("n").map(|v| v.is_null()).unwrap_or(false));
 
