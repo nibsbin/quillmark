@@ -448,6 +448,22 @@ impl QuillConfig {
         let mut fallback_counter = 0;
 
         for (field_name, field_value) in fields_map {
+            // Reserved sentinel names (BODY, CARDS, QUILL, CARD) are implicitly
+            // available on every card and must not be declared as schema fields.
+            if crate::document::edit::is_reserved_name(field_name) {
+                warnings.push(
+                    Diagnostic::new(
+                        Severity::Warning,
+                        format!(
+                            "Reserved field name '{}' in {}: '{}' is a built-in sentinel and cannot be declared as a schema field; it will be ignored.",
+                            field_name, context, field_name
+                        ),
+                    )
+                    .with_code("quill::reserved_field_name".to_string()),
+                );
+                continue;
+            }
+
             if !Self::is_snake_case_identifier(field_name) {
                 return Err(format!(
                     "Invalid {} '{}': field keys must be snake_case (lowercase letters, digits, and underscores only), and capitalized field keys are reserved.",

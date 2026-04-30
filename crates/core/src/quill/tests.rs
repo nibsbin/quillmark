@@ -1103,6 +1103,40 @@ card_types:
 }
 
 #[test]
+fn test_quill_config_warns_on_reserved_card_field_keys() {
+    // BODY and other reserved sentinel names in card_type field definitions
+    // should produce a warning and be skipped, not cause a hard error.
+    let yaml = r#"
+quill:
+  name: reserved_field_test
+  version: "1.0"
+  backend: typst
+  description: Reserved field test
+
+card_types:
+  indorsement:
+    fields:
+      BODY:
+        type: string
+      signature_block:
+        type: string
+"#;
+
+    let result = QuillConfig::from_yaml_with_warnings(yaml);
+    assert!(result.is_ok(), "Expected Ok, got: {:?}", result.err());
+    let (config, warnings) = result.unwrap();
+    // BODY should be skipped — only signature_block should appear
+    let indorsement = config.card_type("indorsement").expect("indorsement card type");
+    assert!(!indorsement.fields.contains_key("BODY"), "BODY should not be in parsed fields");
+    assert!(indorsement.fields.contains_key("signature_block"), "signature_block should be present");
+    // A warning should have been emitted for BODY
+    assert!(
+        warnings.iter().any(|w| w.message.contains("BODY")),
+        "Expected a warning about BODY, got: {:?}", warnings
+    );
+}
+
+#[test]
 fn test_quill_from_config_metadata() {
     // Test that QuillConfig metadata flows through to Quill
     let mut root_files = HashMap::new();
