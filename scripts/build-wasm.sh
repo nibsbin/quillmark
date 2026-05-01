@@ -12,6 +12,12 @@ if ! command -v wasm-bindgen &> /dev/null; then
     exit 1
 fi
 
+if ! command -v wasm-opt &> /dev/null; then
+    echo "wasm-opt not found. Install it via:"
+    echo "  cargo install wasm-opt    # or apt install binaryen / brew install binaryen"
+    exit 1
+fi
+
 echo ""
 echo "Building for targets: bundler, nodejs (optimized for size)"
 
@@ -47,6 +53,32 @@ wasm-bindgen \
     --target experimental-nodejs-module \
     --weak-refs
 
+# Step 2.5: Run wasm-opt for additional size reduction.
+#
+# `-Oz`            — optimize aggressively for size
+# `--strip-debug`  — drop DWARF (already stripped via profile, but defensive)
+# `--strip-producers` / `--vacuum` — drop the producers section and unused items
+# The `--enable-*` flags must match the post-MVP features rustc emits at
+# wasm-release; without them, the validator rejects e.g. `i32.extend16_s`.
+WASM_OPT_FLAGS=(
+    -Oz
+    --strip-debug
+    --strip-producers
+    --vacuum
+    --enable-sign-ext
+    --enable-bulk-memory
+    --enable-mutable-globals
+    --enable-nontrapping-float-to-int
+    --enable-reference-types
+)
+for target in pkg/bundler pkg/node-esm; do
+    if [ -f "$target/wasm_bg.wasm" ]; then
+        echo "Running wasm-opt on $target/wasm_bg.wasm..."
+        wasm-opt "${WASM_OPT_FLAGS[@]}" "$target/wasm_bg.wasm" -o "$target/wasm_bg.wasm.opt"
+        mv "$target/wasm_bg.wasm.opt" "$target/wasm_bg.wasm"
+    fi
+done
+
 # Step 3: Extract version from Cargo.toml
 VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "quillmark-wasm") | .version')
 
@@ -78,12 +110,19 @@ echo "WASM build complete!"
 echo "Output directory: pkg/"
 echo "Package version: $VERSION"
 
-# Show sizes
-if [ -f "pkg/bundler/wasm_bg.wasm" ]; then
-    SIZE=$(du -h pkg/bundler/wasm_bg.wasm | cut -f1)
-    echo "WASM size (bundler): $SIZE"
-fi
-if [ -f "pkg/node-esm/wasm_bg.wasm" ]; then
-    SIZE=$(du -h pkg/node-esm/wasm_bg.wasm | cut -f1)
-    echo "WASM size (nodejs): $SIZE"
-fi
+# Show sizes (raw, gzip, brotli — transport size is what matters for delivery).
+report_size() {
+    local label="$1" file="$2"
+    [ -f "$file" ] || return 0
+    local raw gz br
+    raw=$(du -h "$file" | cut -f1)
+    gz=$(gzip -9 -c "$file" 2>/dev/null | wc -c | awk '{printf "%.1fM", $1/1048576}')
+    if command -v brotli &> /dev/null; then
+        br=$(brotli -9 -c "$file" 2>/dev/null | wc -c | awk '{printf "%.1fM", $1/1048576}')
+        echo "WASM size ($label): raw=$raw gzip=$gz brotli=$br"
+    else
+        echo "WASM size ($label): raw=$raw gzip=$gz"
+    fi
+}
+report_size "bundler" pkg/bundler/wasm_bg.wasm
+report_size "nodejs"  pkg/node-esm/wasm_bg.wasm
