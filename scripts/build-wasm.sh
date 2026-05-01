@@ -12,12 +12,6 @@ if ! command -v wasm-bindgen &> /dev/null; then
     exit 1
 fi
 
-if ! command -v wasm-opt &> /dev/null; then
-    echo "wasm-opt not found. Install it via:"
-    echo "  cargo install wasm-opt    # or apt install binaryen / brew install binaryen"
-    exit 1
-fi
-
 echo ""
 echo "Building for targets: bundler, nodejs (optimized for size)"
 
@@ -53,31 +47,10 @@ wasm-bindgen \
     --target experimental-nodejs-module \
     --weak-refs
 
-# Step 2.5: Run wasm-opt for additional size reduction.
-#
-# `-Oz`            — optimize aggressively for size
-# `--strip-debug`  — drop DWARF (already stripped via profile, but defensive)
-# `--strip-producers` / `--vacuum` — drop the producers section and unused items
-# The `--enable-*` flags must match the post-MVP features rustc emits at
-# wasm-release; without them, the validator rejects e.g. `i32.extend16_s`.
-WASM_OPT_FLAGS=(
-    -Oz
-    --strip-debug
-    --strip-producers
-    --vacuum
-    --enable-sign-ext
-    --enable-bulk-memory
-    --enable-mutable-globals
-    --enable-nontrapping-float-to-int
-    --enable-reference-types
-)
-for target in pkg/bundler pkg/node-esm; do
-    if [ -f "$target/wasm_bg.wasm" ]; then
-        echo "Running wasm-opt on $target/wasm_bg.wasm..."
-        wasm-opt "${WASM_OPT_FLAGS[@]}" "$target/wasm_bg.wasm" -o "$target/wasm_bg.wasm.opt"
-        mv "$target/wasm_bg.wasm.opt" "$target/wasm_bg.wasm"
-    fi
-done
+# Note: a wasm-opt -Oz pass was tried and removed. With the current
+# `wasm-release` profile (opt-level=z, fat LTO, codegen-units=1,
+# panic=abort, strip=true) it saves only ~15 KB raw / ~10 KB gzipped
+# (<0.1%) — not worth the build dependency or the extra build time.
 
 # Step 3: Extract version from Cargo.toml
 VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "quillmark-wasm") | .version')

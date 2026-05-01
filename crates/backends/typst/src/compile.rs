@@ -256,4 +256,3 @@ pub fn render_document_pages(
         }),
     }
 }
-
