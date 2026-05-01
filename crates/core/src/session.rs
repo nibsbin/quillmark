@@ -40,6 +40,16 @@ impl RenderSession {
         self.inner.page_count()
     }
 
+    /// Snapshot of session-level warnings attached at `Backend::open` time.
+    ///
+    /// Empty when the backend produced none. These are also appended to
+    /// [`RenderResult::warnings`] on each [`RenderSession::render`] call;
+    /// this accessor surfaces them to consumers (e.g. canvas previews) that
+    /// don't go through `render()`.
+    pub fn warnings(&self) -> Vec<Diagnostic> {
+        self.warning.iter().cloned().collect()
+    }
+
     pub fn render(&self, opts: &RenderOptions) -> Result<RenderResult, RenderError> {
         let mut result = self.inner.render(opts)?;
         if let Some(warning) = &self.warning {

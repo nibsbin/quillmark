@@ -30,21 +30,31 @@ pub fn page_size_pt(
 /// round(pageWidthPt * scale)` and `canvas.height == round(pageHeightPt *
 /// scale)` before invoking. The painter writes the rendered pixmap at origin
 /// `(0, 0)`.
+///
+/// `backend_id` is the resolved backend identifier and is included in the
+/// error message when the session was opened by a backend without a canvas
+/// painter — keeping the failure self-explanatory in the browser console.
 pub fn paint(
     session: &quillmark_core::RenderSession,
     ctx: &CanvasRenderingContext2d,
     page: usize,
     scale: f32,
+    backend_id: &str,
 ) -> Result<(), JsValue> {
     let typst_session = quillmark_typst::typst_session_of(session).ok_or_else(|| {
-        WasmError::from("paint: backend does not support canvas preview").to_js_value()
+        WasmError::from(format!(
+            "paint: backend '{}' does not support canvas preview",
+            backend_id
+        ))
+        .to_js_value()
     })?;
 
     let (width, height, mut rgba) = typst_session.render_rgba(page, scale).ok_or_else(|| {
         WasmError::from(format!(
-            "paint: page index {} out of range (pageCount={})",
+            "paint: page index {} out of range (pageCount={}, backend='{}')",
             page,
-            session.page_count()
+            session.page_count(),
+            backend_id,
         ))
         .to_js_value()
     })?;

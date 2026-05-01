@@ -58,6 +58,7 @@ pub struct Quill {
 #[wasm_bindgen]
 pub struct RenderSession {
     inner: quillmark_core::RenderSession,
+    backend_id: String,
 }
 
 /// Typed in-memory Quillmark document.
@@ -147,7 +148,10 @@ impl Quill {
             .inner
             .open(&doc.inner)
             .map_err(|e| WasmError::from(e).to_js_value())?;
-        Ok(RenderSession { inner: session })
+        Ok(RenderSession {
+            inner: session,
+            backend_id: self.inner.backend_id().to_string(),
+        })
     }
 
     /// The resolved backend identifier (e.g. `"typst"`).
@@ -794,9 +798,38 @@ export interface PageSize {
 #[wasm_bindgen]
 impl RenderSession {
     /// Number of pages in this render session.
+    ///
+    /// Stable for the lifetime of the session — the underlying compiled
+    /// document is an immutable snapshot.
     #[wasm_bindgen(getter, js_name = pageCount)]
     pub fn page_count(&self) -> usize {
         self.inner.page_count()
+    }
+
+    /// The backend that produced this session (e.g. `"typst"`).
+    #[wasm_bindgen(getter, js_name = backendId)]
+    pub fn backend_id(&self) -> String {
+        self.backend_id.clone()
+    }
+
+    /// Session-level warnings attached at `quill.open(...)` time.
+    ///
+    /// Snapshot of any non-fatal diagnostics emitted while opening the
+    /// session (e.g. version compatibility shims). Stable across the
+    /// session's lifetime. These are also appended to
+    /// [`RenderResult.warnings`] on every `render()` call; the accessor
+    /// surfaces them to canvas-preview consumers that don't go through
+    /// `render()`.
+    #[wasm_bindgen(getter, js_name = warnings, unchecked_return_type = "Diagnostic[]")]
+    pub fn warnings(&self) -> JsValue {
+        let diags: Vec<Diagnostic> = self
+            .inner
+            .warnings()
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        diags.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
     }
 
     /// Render all or selected pages from this session.
@@ -818,7 +851,11 @@ impl RenderSession {
         })
     }
 
-    /// Page dimensions in Typst points.
+    /// Page dimensions in Typst points (1 pt = 1/72 inch).
+    ///
+    /// Stable for a given `page` across the session's lifetime — the
+    /// compiled document is an immutable snapshot, so callers can cache
+    /// results.
     ///
     /// Throws if the underlying backend has no canvas painter (i.e. is not
     /// the Typst backend) or if `page` is out of range.
@@ -826,8 +863,10 @@ impl RenderSession {
     pub fn page_size(&self, page: usize) -> Result<JsValue, JsValue> {
         let (w, h) = crate::canvas::page_size_pt(&self.inner, page).ok_or_else(|| {
             WasmError::from(format!(
-                "pageSize: page {} out of range or backend has no canvas painter",
-                page
+                "pageSize: page {} out of range (pageCount={}) or backend '{}' has no canvas painter",
+                page,
+                self.inner.page_count(),
+                self.backend_id,
             ))
             .to_js_value()
         })?;
@@ -839,21 +878,32 @@ impl RenderSession {
 
     /// Paint `page` into a 2D canvas context.
     ///
-    /// `scale` multiplies Typst's natural 72 ppi (so `scale = devicePixelRatio
-    /// * userZoom`). The caller must size `ctx.canvas` so that
-    /// `canvas.width === round(widthPt * scale)` and `canvas.height ===
-    /// round(heightPt * scale)`. The painter writes into the backing store at
-    /// origin `(0, 0)`.
+    /// `scale` multiplies Typst's natural 72 ppi (1 pt → 1 device pixel at
+    /// `scale = 1`). Typical usage:
+    /// `scale = (window.devicePixelRatio || 1) * userZoom`.
     ///
-    /// Throws if the backend does not support canvas preview, or if `page`
-    /// is out of range.
+    /// The caller must size `ctx.canvas` so that
+    /// `canvas.width === round(widthPt * scale)` and `canvas.height ===
+    /// round(heightPt * scale)` *before* calling `paint`. Setting
+    /// `canvas.width` / `canvas.height` clears the backing store, which is
+    /// the recommended way to handle page-to-page transitions; if you
+    /// reuse a canvas without resizing, call
+    /// `ctx.clearRect(0, 0, canvas.width, canvas.height)` first to avoid
+    /// stale pixels showing through transparent regions.
+    ///
+    /// `paint` writes into the backing store at origin `(0, 0)` and does
+    /// not clear outside the rendered region.
+    ///
+    /// Throws if the backend does not support canvas preview (the message
+    /// includes the resolved `backendId` for debugging), or if `page` is
+    /// out of range.
     #[wasm_bindgen(js_name = paint)]
     pub fn paint(
         &self,
         ctx: &web_sys::CanvasRenderingContext2d,
         page: usize,
-        scale: Option<f32>,
+        scale: f32,
     ) -> Result<(), JsValue> {
-        crate::canvas::paint(&self.inner, ctx, page, scale.unwrap_or(1.0))
+        crate::canvas::paint(&self.inner, ctx, page, scale, &self.backend_id)
     }
 }
