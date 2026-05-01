@@ -47,6 +47,11 @@ wasm-bindgen \
     --target experimental-nodejs-module \
     --weak-refs
 
+# Note: a wasm-opt -Oz pass was tried and removed. With the current
+# `wasm-release` profile (opt-level=z, fat LTO, codegen-units=1,
+# panic=abort, strip=true) it saves only ~15 KB raw / ~10 KB gzipped
+# (<0.1%) — not worth the build dependency or the extra build time.
+
 # Step 3: Extract version from Cargo.toml
 VERSION=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "quillmark-wasm") | .version')
 
@@ -78,12 +83,19 @@ echo "WASM build complete!"
 echo "Output directory: pkg/"
 echo "Package version: $VERSION"
 
-# Show sizes
-if [ -f "pkg/bundler/wasm_bg.wasm" ]; then
-    SIZE=$(du -h pkg/bundler/wasm_bg.wasm | cut -f1)
-    echo "WASM size (bundler): $SIZE"
-fi
-if [ -f "pkg/node-esm/wasm_bg.wasm" ]; then
-    SIZE=$(du -h pkg/node-esm/wasm_bg.wasm | cut -f1)
-    echo "WASM size (nodejs): $SIZE"
-fi
+# Show sizes (raw, gzip, brotli — transport size is what matters for delivery).
+report_size() {
+    local label="$1" file="$2"
+    [ -f "$file" ] || return 0
+    local raw gz br
+    raw=$(du -h "$file" | cut -f1)
+    gz=$(gzip -9 -c "$file" 2>/dev/null | wc -c | awk '{printf "%.1fM", $1/1048576}')
+    if command -v brotli &> /dev/null; then
+        br=$(brotli -9 -c "$file" 2>/dev/null | wc -c | awk '{printf "%.1fM", $1/1048576}')
+        echo "WASM size ($label): raw=$raw gzip=$gz brotli=$br"
+    else
+        echo "WASM size ($label): raw=$raw gzip=$gz"
+    fi
+}
+report_size "bundler" pkg/bundler/wasm_bg.wasm
+report_size "nodejs"  pkg/node-esm/wasm_bg.wasm
