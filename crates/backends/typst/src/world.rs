@@ -8,8 +8,6 @@ use typst::utils::LazyHash;
 use typst::{Library, World};
 
 use crate::helper;
-#[cfg(feature = "native")]
-use crate::typst_packages;
 use quillmark_core::QuillSource;
 
 /// Typst World implementation for quill-based compilation.
@@ -39,33 +37,9 @@ impl QuillWorld {
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
 
-        // Optionally include an embedded default font (compile-time feature)
-        // When enabled, this embedded font is registered BEFORE any quill asset fonts
-        // so it acts as a stable fallback across platforms.
-        #[cfg(feature = "embed-default-font")]
-        {
-            fn load_embedded(byte_array: &[u8], book: &mut FontBook, fonts: &mut Vec<Font>) {
-                let bytes = Bytes::new(byte_array.to_vec());
-                for font in Font::iter(bytes) {
-                    book.push(font.info().clone());
-                    fonts.push(font);
-                }
-            }
-            // The font file should be placed at `quillmark-typst/assets/RobotoCondensed-VariableFont_wght.ttf`
-            // and included in the crate via include_bytes! at compile time.
-            const ROBOTO_BYTES: &[u8] =
-                include_bytes!("../assets/RobotoCondensed-VariableFont_wght.ttf");
-            load_embedded(ROBOTO_BYTES, &mut book, &mut fonts);
-
-            const DEJAVU_SANS_MONO_BYTES: &[u8] = include_bytes!("../assets/DejaVuSansMono.ttf");
-            load_embedded(DEJAVU_SANS_MONO_BYTES, &mut book, &mut fonts);
-
-            const DEJAVU_SANS_MONO_BOLD_BYTES: &[u8] =
-                include_bytes!("../assets/DejaVuSansMono-Bold.ttf");
-            load_embedded(DEJAVU_SANS_MONO_BOLD_BYTES, &mut book, &mut fonts);
-        }
-
-        // Load fonts from quill assets first (eagerly loaded)
+        // Load fonts from quill assets first (eagerly loaded).
+        // Quills are responsible for shipping any fonts they need — there is
+        // no embedded fallback.
         let font_data_list = Self::load_fonts_from_quill(source)?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
@@ -83,12 +57,10 @@ impl QuillWorld {
         // Load assets from quill's in-memory file system
         Self::load_assets_from_quill(source, &mut binaries)?;
 
-        // Load packages from quill's in-memory file system
+        // Load packages from quill's in-memory file system. Quillmark does
+        // not download external packages — every package a quill imports
+        // must be vendored under `packages/` in the quill tree.
         Self::load_packages_from_quill(source, &mut sources, &mut binaries)?;
-
-        // Download and load external packages from Quill.yaml
-        #[cfg(feature = "native")]
-        Self::download_and_load_external_packages(source, &mut sources, &mut binaries)?;
 
         // Create main source
         let main_id = FileId::new(None, VirtualPath::new("main.typ"));
@@ -207,178 +179,6 @@ impl QuillWorld {
                 let virtual_path = VirtualPath::new(asset_path.to_string_lossy().as_ref());
                 let file_id = FileId::new(None, virtual_path);
                 binaries.insert(file_id, Bytes::new(contents.to_vec()));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Downloads and loads external packages from Quill.yaml.
-    #[cfg(feature = "native")]
-    fn download_and_load_external_packages(
-        source: &QuillSource,
-        sources: &mut HashMap<FileId, Source>,
-        binaries: &mut HashMap<FileId, Bytes>,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        use typst_kit::download::{Downloader, ProgressSink};
-        use typst_kit::package::{PackageStorage, DEFAULT_PACKAGES_SUBDIR};
-
-        let packages_list = typst_packages(source);
-        if packages_list.is_empty() {
-            return Ok(());
-        }
-
-        // Create a package storage for downloading packages
-        let downloader = Downloader::new("quillmark/0.1.0");
-        let cache_dir = dirs::cache_dir().map(|d| d.join(DEFAULT_PACKAGES_SUBDIR));
-        let data_dir = dirs::data_dir().map(|d| d.join(DEFAULT_PACKAGES_SUBDIR));
-
-        let storage = PackageStorage::new(cache_dir, data_dir, downloader);
-
-        // Parse and download each package
-        for package_str in packages_list {
-            // Parse package spec from string (e.g., "@local/bubble:0.2.2")
-            match package_str.parse::<PackageSpec>() {
-                Ok(spec) => {
-                    // Download/prepare the package
-                    let mut progress = ProgressSink;
-                    match storage.prepare_package(&spec, &mut progress) {
-                        Ok(package_dir) => {
-                            // Load the package files from the downloaded directory
-                            Self::load_package_from_filesystem(
-                                &package_dir,
-                                sources,
-                                binaries,
-                                spec,
-                            )?;
-                        }
-                        Err(e) => {
-                            eprintln!("Warning: Failed to download package {}: {}", package_str, e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!(
-                        "Warning: Failed to parse package spec '{}': {}",
-                        package_str, e
-                    );
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Loads a package from the filesystem (for downloaded packages).
-    #[cfg(feature = "native")]
-    fn load_package_from_filesystem(
-        package_dir: &Path,
-        sources: &mut HashMap<FileId, Source>,
-        binaries: &mut HashMap<FileId, Bytes>,
-        spec: PackageSpec,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        use std::fs;
-
-        // Read typst.toml to get package info
-        let toml_path = package_dir.join("typst.toml");
-        let entrypoint = if toml_path.exists() {
-            let toml_content = fs::read_to_string(&toml_path)?;
-            match parse_package_toml(&toml_content) {
-                Ok(info) => info.entrypoint,
-                Err(_) => "lib.typ".to_string(),
-            }
-        } else {
-            "lib.typ".to_string()
-        };
-
-        // Recursively load all files from the package directory
-        Self::load_package_files_recursive(package_dir, package_dir, sources, binaries, &spec)?;
-
-        // Verify entrypoint exists
-        let entrypoint_path = VirtualPath::new(&entrypoint);
-        let entrypoint_file_id = FileId::new(Some(spec.clone()), entrypoint_path);
-
-        if !sources.contains_key(&entrypoint_file_id) {
-            eprintln!(
-                "Warning: Entrypoint {} not found for package {}:{}",
-                entrypoint, spec.name, spec.version
-            );
-        }
-
-        Ok(())
-    }
-
-    /// Recursively loads files from a package directory.
-    #[cfg(feature = "native")]
-    fn load_package_files_recursive(
-        current_dir: &Path,
-        package_root: &Path,
-        sources: &mut HashMap<FileId, Source>,
-        binaries: &mut HashMap<FileId, Bytes>,
-        spec: &PackageSpec,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        use std::fs;
-
-        // Canonicalize package root once for symlink-safe path comparison
-        let canonical_root = package_root.canonicalize().map_err(|e| {
-            format!(
-                "Failed to canonicalize package root {}: {}",
-                package_root.display(),
-                e
-            )
-        })?;
-
-        for entry in fs::read_dir(current_dir)? {
-            let entry = entry?;
-            let path = entry.path();
-
-            // Resolve symlinks: canonicalize the path and verify it is still
-            // under the package root to prevent path-traversal via symlinks.
-            let canonical_path = path.canonicalize().map_err(|e| {
-                format!(
-                    "Failed to canonicalize path for security validation {}: {}",
-                    path.display(),
-                    e
-                )
-            })?;
-            if !canonical_path.starts_with(&canonical_root) {
-                eprintln!(
-                    "Warning: Skipping {} (resolves to {} which is outside package root)",
-                    path.display(),
-                    canonical_path.display()
-                );
-                continue;
-            }
-
-            if canonical_path.is_file() {
-                // Calculate relative path from package root
-                let relative_path = path
-                    .strip_prefix(package_root)
-                    .map_err(|e| format!("Failed to strip prefix: {}", e))?;
-
-                let virtual_path = VirtualPath::new(relative_path.to_string_lossy().as_ref());
-                let file_id = FileId::new(Some(spec.clone()), virtual_path);
-
-                // Load file contents
-                let contents = fs::read(&canonical_path)?;
-
-                // Determine if it's a source or binary file
-                if let Some(ext) = path.extension() {
-                    if ext == "typ" {
-                        // Source file
-                        let text = String::from_utf8_lossy(&contents).to_string();
-                        sources.insert(file_id, Source::new(file_id, text));
-                    } else {
-                        // Binary file
-                        binaries.insert(file_id, Bytes::new(contents));
-                    }
-                } else {
-                    // No extension, treat as binary
-                    binaries.insert(file_id, Bytes::new(contents));
-                }
-            } else if canonical_path.is_dir() {
-                // Recursively process subdirectories
-                Self::load_package_files_recursive(&path, package_root, sources, binaries, spec)?;
             }
         }
 

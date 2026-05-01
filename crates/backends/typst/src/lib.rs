@@ -46,23 +46,6 @@ use quillmark_core::{
 };
 use std::collections::HashMap;
 
-/// Return the list of typst packages declared in a quill's Quill.yaml
-/// (`typst.packages`), surfaced here as a metadata reader because this is a
-/// backend-specific concern.
-#[cfg(feature = "native")]
-pub(crate) fn typst_packages(source: &QuillSource) -> Vec<String> {
-    source
-        .metadata()
-        .get("typst_packages")
-        .and_then(|v| v.as_array())
-        .map(|arr| {
-            arr.iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
 /// Typst backend implementation for Quillmark.
 #[derive(Debug)]
 pub struct TypstBackend;
