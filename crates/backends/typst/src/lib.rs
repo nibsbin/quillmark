@@ -44,6 +44,7 @@ use quillmark_core::{
     quill::build_transform_schema, session::SessionHandle, Backend, Diagnostic, OutputFormat,
     QuillSource, QuillValue, RenderError, RenderOptions, RenderResult, RenderSession, Severity,
 };
+use std::any::Any;
 use std::collections::HashMap;
 
 /// Return the list of typst packages declared in a quill's Quill.yaml
@@ -70,10 +71,49 @@ pub struct TypstBackend;
 const SUPPORTED_FORMATS: &[OutputFormat] =
     &[OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Png];
 
+/// Typst-specific render session.
+///
+/// Holds the cached `PagedDocument` produced by [`Backend::open`] and exposes
+/// Typst-only operations (page geometry, raster rendering) used by the WASM
+/// canvas painter. Reach this from a [`RenderSession`] via
+/// [`typst_session_of`].
 #[derive(Debug)]
-struct TypstSession {
+pub struct TypstSession {
     document: typst::layout::PagedDocument,
     page_count: usize,
+}
+
+impl TypstSession {
+    /// Page dimensions in Typst points (1 pt = 1/72 inch).
+    ///
+    /// Returns `None` if `page` is out of range.
+    pub fn page_size_pt(&self, page: usize) -> Option<(f32, f32)> {
+        let frame = &self.document.pages.get(page)?.frame;
+        let size = frame.size();
+        Some((size.x.to_pt() as f32, size.y.to_pt() as f32))
+    }
+
+    /// Render `page` to a non-premultiplied RGBA8 buffer at `scale`× the
+    /// natural 72 ppi (i.e. `scale = 1` → 1 device pixel per Typst pt).
+    ///
+    /// Returns `(width_px, height_px, rgba)`. The buffer is `width_px *
+    /// height_px * 4` bytes, row-major, ready to hand to `ImageData` or any
+    /// other RGBA consumer. Returns `None` if `page` is out of range.
+    pub fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
+        let p = self.document.pages.get(page)?;
+        let pixmap = typst_render::render(p, scale);
+        let width = pixmap.width();
+        let height = pixmap.height();
+        let mut rgba = Vec::with_capacity((width as usize) * (height as usize) * 4);
+        for px in pixmap.pixels() {
+            let c = px.demultiply();
+            rgba.push(c.red());
+            rgba.push(c.green());
+            rgba.push(c.blue());
+            rgba.push(c.alpha());
+        }
+        Some((width, height, rgba))
+    }
 }
 
 impl SessionHandle for TypstSession {
@@ -99,6 +139,20 @@ impl SessionHandle for TypstSession {
     fn page_count(&self) -> usize {
         self.page_count
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+/// Borrow the [`TypstSession`] underlying a [`RenderSession`], if the session
+/// was opened by the Typst backend.
+///
+/// Returns `None` for any other backend. Bindings that need Typst-only
+/// capabilities (canvas paint, page geometry) call this to access them
+/// without forcing core to know about backend specifics.
+pub fn typst_session_of(session: &RenderSession) -> Option<&TypstSession> {
+    session.handle().as_any().downcast_ref::<TypstSession>()
 }
 
 impl Backend for TypstBackend {

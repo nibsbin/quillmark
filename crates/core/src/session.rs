@@ -1,9 +1,12 @@
+use std::any::Any;
+
 use crate::{Diagnostic, RenderError, RenderOptions, RenderResult};
 
 #[doc(hidden)]
-pub trait SessionHandle: Send + Sync {
+pub trait SessionHandle: Any + Send + Sync {
     fn render(&self, opts: &RenderOptions) -> Result<RenderResult, RenderError>;
     fn page_count(&self) -> usize;
+    fn as_any(&self) -> &dyn Any;
 }
 
 /// Opaque, backend-backed iterative render session.
@@ -19,6 +22,11 @@ impl RenderSession {
             inner,
             warning: None,
         }
+    }
+
+    #[doc(hidden)]
+    pub fn handle(&self) -> &dyn SessionHandle {
+        &*self.inner
     }
 
     /// Attach a non-fatal warning to this session. The warning is appended to

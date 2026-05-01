@@ -775,6 +775,22 @@ fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValu
     Ok(bytes.to_vec())
 }
 
+/// TypeScript declaration for the page-size record returned by
+/// `RenderSession.pageSize`.
+#[wasm_bindgen(typescript_custom_section)]
+const PAGE_SIZE_TS: &'static str = r#"
+/**
+ * Page dimensions in Typst points (1 pt = 1/72 inch).
+ *
+ * Returned by `RenderSession.pageSize`. Use these to size a canvas backing
+ * store (`widthPt * scale × heightPt * scale`) before calling `paint`.
+ */
+export interface PageSize {
+    widthPt: number;
+    heightPt: number;
+}
+"#;
+
 #[wasm_bindgen]
 impl RenderSession {
     /// Number of pages in this render session.
@@ -800,5 +816,44 @@ impl RenderSession {
             output_format: result.output_format.into(),
             render_time_ms: now_ms() - start,
         })
+    }
+
+    /// Page dimensions in Typst points.
+    ///
+    /// Throws if the underlying backend has no canvas painter (i.e. is not
+    /// the Typst backend) or if `page` is out of range.
+    #[wasm_bindgen(js_name = pageSize, unchecked_return_type = "PageSize")]
+    pub fn page_size(&self, page: usize) -> Result<JsValue, JsValue> {
+        let (w, h) = crate::canvas::page_size_pt(&self.inner, page).ok_or_else(|| {
+            WasmError::from(format!(
+                "pageSize: page {} out of range or backend has no canvas painter",
+                page
+            ))
+            .to_js_value()
+        })?;
+        let obj = js_sys::Object::new();
+        js_sys::Reflect::set(&obj, &JsValue::from_str("widthPt"), &JsValue::from_f64(w as f64))?;
+        js_sys::Reflect::set(&obj, &JsValue::from_str("heightPt"), &JsValue::from_f64(h as f64))?;
+        Ok(obj.into())
+    }
+
+    /// Paint `page` into a 2D canvas context.
+    ///
+    /// `scale` multiplies Typst's natural 72 ppi (so `scale = devicePixelRatio
+    /// * userZoom`). The caller must size `ctx.canvas` so that
+    /// `canvas.width === round(widthPt * scale)` and `canvas.height ===
+    /// round(heightPt * scale)`. The painter writes into the backing store at
+    /// origin `(0, 0)`.
+    ///
+    /// Throws if the backend does not support canvas preview, or if `page`
+    /// is out of range.
+    #[wasm_bindgen(js_name = paint)]
+    pub fn paint(
+        &self,
+        ctx: &web_sys::CanvasRenderingContext2d,
+        page: usize,
+        scale: Option<f32>,
+    ) -> Result<(), JsValue> {
+        crate::canvas::paint(&self.inner, ctx, page, scale.unwrap_or(1.0))
     }
 }
