@@ -85,6 +85,48 @@ Render with a pre-parsed `Document`.
 ### `quill.open(parsed)` + `session.render(opts?)`
 Open once, render all or selected pages (`opts.pages`).
 
+The session also exposes `pageCount`, `backendId`, `warnings` (snapshot of
+session-level diagnostics attached at `open` time), `pageSize(page)`, and
+`paint(ctx, page, scale)` for canvas previews. See below.
+
+### Canvas Preview (Typst only)
+
+`session.paint(ctx, page, scale)` rasterizes a page directly into a
+`CanvasRenderingContext2D`, skipping PNG/SVG byte round-trips. Pair with
+`session.pageSize(page)` to size the canvas:
+
+```ts
+const dpr = window.devicePixelRatio || 1;
+const userZoom = 1;                              // your zoom UI
+const scale = dpr * userZoom;                    // multiplier on 72 ppi
+
+const { widthPt, heightPt } = session.pageSize(0);
+// Reassigning canvas.width/height clears the backing store, which is what
+// you want between pages. If you reuse the same canvas at the same size
+// (e.g. repaint after a zoom that didn't change scale), call
+// ctx.clearRect(0, 0, canvas.width, canvas.height) before paint instead.
+canvas.width  = Math.round(widthPt  * scale);    // device px
+canvas.height = Math.round(heightPt * scale);
+canvas.style.width  = `${widthPt  * userZoom}px`;
+canvas.style.height = `${heightPt * userZoom}px`;
+
+session.paint(canvas.getContext("2d"), 0, scale);
+```
+
+- `scale` is a multiplier on Typst's natural 72 ppi (1 pt → 1 device
+  pixel at `scale = 1`). Always include `devicePixelRatio` for crisp
+  output.
+- `pageCount` and `pageSize(page)` are stable for the session's
+  lifetime (immutable snapshot) — cache them.
+- Setting `canvas.width` / `canvas.height` clears the backing store; if
+  you reuse a canvas without resizing, call `clearRect` before `paint`.
+- Currently main-thread only: `paint` accepts `CanvasRenderingContext2D`,
+  not `OffscreenCanvasRenderingContext2D`. Worker support is on the
+  follow-up list.
+- Backend support: Typst only. Calling `paint` on a session opened by
+  any other backend throws an error that includes the resolved
+  `backendId`.
+
 ### Errors
 
 Every method that can fail throws a JS `Error` with `.diagnostics` attached:

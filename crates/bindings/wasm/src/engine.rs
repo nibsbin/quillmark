@@ -58,6 +58,7 @@ pub struct Quill {
 #[wasm_bindgen]
 pub struct RenderSession {
     inner: quillmark_core::RenderSession,
+    backend_id: String,
 }
 
 /// Typed in-memory Quillmark document.
@@ -147,7 +148,10 @@ impl Quill {
             .inner
             .open(&doc.inner)
             .map_err(|e| WasmError::from(e).to_js_value())?;
-        Ok(RenderSession { inner: session })
+        Ok(RenderSession {
+            inner: session,
+            backend_id: self.inner.backend_id().to_string(),
+        })
     }
 
     /// The resolved backend identifier (e.g. `"typst"`).
@@ -775,12 +779,58 @@ fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValu
     Ok(bytes.to_vec())
 }
 
+/// TypeScript declaration for the page-size record returned by
+/// `RenderSession.pageSize`.
+#[wasm_bindgen(typescript_custom_section)]
+const PAGE_SIZE_TS: &'static str = r#"
+/**
+ * Page dimensions in Typst points (1 pt = 1/72 inch).
+ *
+ * Returned by `RenderSession.pageSize`. Use these to size a canvas backing
+ * store (`widthPt * scale × heightPt * scale`) before calling `paint`.
+ */
+export interface PageSize {
+    widthPt: number;
+    heightPt: number;
+}
+"#;
+
 #[wasm_bindgen]
 impl RenderSession {
     /// Number of pages in this render session.
+    ///
+    /// Stable for the lifetime of the session — the underlying compiled
+    /// document is an immutable snapshot.
     #[wasm_bindgen(getter, js_name = pageCount)]
     pub fn page_count(&self) -> usize {
         self.inner.page_count()
+    }
+
+    /// The backend that produced this session (e.g. `"typst"`).
+    #[wasm_bindgen(getter, js_name = backendId)]
+    pub fn backend_id(&self) -> String {
+        self.backend_id.clone()
+    }
+
+    /// Session-level warnings attached at `quill.open(...)` time.
+    ///
+    /// Snapshot of any non-fatal diagnostics emitted while opening the
+    /// session (e.g. version compatibility shims). Stable across the
+    /// session's lifetime. These are also appended to
+    /// [`RenderResult.warnings`] on every `render()` call; the accessor
+    /// surfaces them to canvas-preview consumers that don't go through
+    /// `render()`.
+    #[wasm_bindgen(getter, js_name = warnings, unchecked_return_type = "Diagnostic[]")]
+    pub fn warnings(&self) -> JsValue {
+        let diags: Vec<Diagnostic> = self
+            .inner
+            .warnings()
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect();
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        diags.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
     }
 
     /// Render all or selected pages from this session.
@@ -801,4 +851,100 @@ impl RenderSession {
             render_time_ms: now_ms() - start,
         })
     }
+
+    /// Page dimensions in Typst points (1 pt = 1/72 inch).
+    ///
+    /// Stable for a given `page` across the session's lifetime — the
+    /// compiled document is an immutable snapshot, so callers can cache
+    /// results.
+    ///
+    /// Throws if the underlying backend has no canvas painter (i.e. is not
+    /// the Typst backend) or if `page` is out of range.
+    #[wasm_bindgen(js_name = pageSize, unchecked_return_type = "PageSize")]
+    pub fn page_size(&self, page: usize) -> Result<JsValue, JsValue> {
+        let typst = self.typst_session("pageSize")?;
+        let (width_pt, height_pt) = typst
+            .page_size_pt(page)
+            .ok_or_else(|| self.page_oob_error("pageSize", page))?;
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        PageSize {
+            width_pt,
+            height_pt,
+        }
+        .serialize(&serializer)
+        .map_err(|e| WasmError::from(format!("pageSize: serialization failed: {e}")).to_js_value())
+    }
+
+    /// Paint `page` into a 2D canvas context.
+    ///
+    /// `scale` multiplies Typst's natural 72 ppi (1 pt → 1 device pixel at
+    /// `scale = 1`). Typical usage:
+    /// `scale = (window.devicePixelRatio || 1) * userZoom`.
+    ///
+    /// The caller must size `ctx.canvas` so that
+    /// `canvas.width === round(widthPt * scale)` and `canvas.height ===
+    /// round(heightPt * scale)` *before* calling `paint`. Setting
+    /// `canvas.width` / `canvas.height` clears the backing store, which is
+    /// the recommended way to handle page-to-page transitions; if you
+    /// reuse a canvas without resizing, call
+    /// `ctx.clearRect(0, 0, canvas.width, canvas.height)` first to avoid
+    /// stale pixels showing through transparent regions.
+    ///
+    /// `paint` writes into the backing store at origin `(0, 0)` and does
+    /// not clear outside the rendered region.
+    ///
+    /// Throws if the backend does not support canvas preview (the message
+    /// includes the resolved `backendId` for debugging), or if `page` is
+    /// out of range.
+    #[wasm_bindgen(js_name = paint)]
+    pub fn paint(
+        &self,
+        ctx: &web_sys::CanvasRenderingContext2d,
+        page: usize,
+        scale: f32,
+    ) -> Result<(), JsValue> {
+        let typst = self.typst_session("paint")?;
+        let (width, height, mut rgba) = typst
+            .render_rgba(page, scale)
+            .ok_or_else(|| self.page_oob_error("paint", page))?;
+        let img = web_sys::ImageData::new_with_u8_clamped_array_and_sh(
+            wasm_bindgen::Clamped(rgba.as_mut_slice()),
+            width,
+            height,
+        )
+        .map_err(|e| {
+            WasmError::from(format!("paint: ImageData construction failed: {:?}", e)).to_js_value()
+        })?;
+        ctx.put_image_data(&img, 0.0, 0.0)
+    }
+}
+
+impl RenderSession {
+    /// Borrow the Typst backend's typed session, or build a JS error citing
+    /// `op` (the public method name) and the resolved `backendId`.
+    fn typst_session(&self, op: &str) -> Result<&quillmark_typst::TypstSession, JsValue> {
+        quillmark_typst::typst_session_of(&self.inner).ok_or_else(|| {
+            WasmError::from(format!(
+                "{op}: backend '{}' has no canvas painter",
+                self.backend_id
+            ))
+            .to_js_value()
+        })
+    }
+
+    fn page_oob_error(&self, op: &str, page: usize) -> JsValue {
+        WasmError::from(format!(
+            "{op}: page index {page} out of range (pageCount={})",
+            self.inner.page_count()
+        ))
+        .to_js_value()
+    }
+}
+
+#[derive(Serialize)]
+struct PageSize {
+    #[serde(rename = "widthPt")]
+    width_pt: f32,
+    #[serde(rename = "heightPt")]
+    height_pt: f32,
 }
