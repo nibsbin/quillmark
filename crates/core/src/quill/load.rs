@@ -71,9 +71,9 @@ impl QuillSource {
             QuillValue::from_json(serde_json::Value::String(config.version.clone())),
         );
 
-        // Add typst config to metadata with typst_ prefix
-        for (key, value) in &config.typst_config {
-            metadata.insert(format!("typst_{}", key), value.clone());
+        // Expose backend-specific config to metadata under `<backend>_<key>`.
+        for (key, value) in &config.backend_config {
+            metadata.insert(format!("{}_{}", config.backend, key), value.clone());
         }
 
         // Read the plate content from plate file (if specified)
