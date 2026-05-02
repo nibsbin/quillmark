@@ -43,9 +43,10 @@ pub struct QuillConfig {
     /// Additional unstructured metadata
     #[serde(flatten)]
     pub metadata: HashMap<String, QuillValue>,
-    /// Typst specific configuration
+    /// Backend-specific configuration parsed from the top-level YAML section
+    /// whose key matches `backend` (e.g. `[typst]`, `[html]`).
     #[serde(default)]
-    pub typst_config: HashMap<String, QuillValue>,
+    pub backend_config: HashMap<String, QuillValue>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -673,12 +674,12 @@ impl QuillConfig {
             }
         }
 
-        // Extract [typst] section (optional)
-        let mut typst_config = HashMap::new();
-        if let Some(typst_val) = quill_yaml_val.get("typst") {
-            if let Some(table) = typst_val.as_object() {
+        // Extract optional backend-specific section (keyed by `quill.backend`).
+        let mut backend_config = HashMap::new();
+        if let Some(section_val) = quill_yaml_val.get(&backend) {
+            if let Some(table) = section_val.as_object() {
                 for (key, value) in table {
-                    typst_config.insert(key.clone(), QuillValue::from_json(value.clone()));
+                    backend_config.insert(key.clone(), QuillValue::from_json(value.clone()));
                 }
             }
         }
@@ -803,7 +804,7 @@ impl QuillConfig {
                 example_markdown: None,
                 plate_file,
                 metadata,
-                typst_config,
+                backend_config,
             },
             warnings,
         ))

@@ -832,8 +832,8 @@ main:
     assert_eq!(config.plate_file, Some("plate.typ".to_string()));
     assert_eq!(config.example_file, Some("example.md".to_string()));
 
-    // Verify typst config
-    assert!(config.typst_config.contains_key("packages"));
+    // Verify backend-specific config (parsed from the [typst] section).
+    assert!(config.backend_config.contains_key("packages"));
 
     // Verify field schemas
     assert_eq!(config.main.fields.len(), 2);

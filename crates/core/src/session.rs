@@ -32,9 +32,8 @@ impl RenderSession {
     /// Borrow the underlying [`SessionHandle`] for typed-side-channel access.
     ///
     /// Bindings call this and downcast via [`SessionHandle::as_any`] to reach
-    /// backend-specific surfaces (e.g. `quillmark_typst::typst_session_of`
-    /// for canvas preview). Intentionally `#[doc(hidden)]` — the shape of
-    /// this accessor is not part of the stable public API.
+    /// backend-specific surfaces. Intentionally `#[doc(hidden)]` — the shape
+    /// of this accessor is not part of the stable public API.
     #[doc(hidden)]
     pub fn handle(&self) -> &dyn SessionHandle {
         &*self.inner
