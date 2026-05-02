@@ -96,15 +96,6 @@ function openSession() {
   return openQuill().open(Document.fromMarkdown(TEST_MARKDOWN))
 }
 
-/** Build a fake context already sized to fit page `page` at `scale`. */
-function ctxForPage(session, page, scale, CtxCtor = FakeCanvasRenderingContext2D) {
-  const { widthPt, heightPt } = session.pageSize(page)
-  const ctx = new CtxCtor()
-  ctx.canvas.width = Math.round(widthPt * scale)
-  ctx.canvas.height = Math.round(heightPt * scale)
-  return ctx
-}
-
 describe('RenderSession canvas preview', () => {
   it('exposes pageCount, backendId, supportsCanvas, warnings, and pageSize on a Typst session', () => {
     const quill = openQuill()
@@ -121,20 +112,34 @@ describe('RenderSession canvas preview', () => {
     expect(size.heightPt).toBeGreaterThan(0)
   })
 
-  it('paints a page with the expected backing-store dimensions and non-trivial pixel content', () => {
+  it('paint sizes the canvas backing store and returns layout + pixel dimensions', () => {
     const session = openSession()
-    const scale = 1.5
-    const ctx = ctxForPage(session, 0, scale)
     const { widthPt, heightPt } = session.pageSize(0)
+    const layoutScale = 1
+    const densityScale = 1.5
 
-    expect(() => session.paint(ctx, 0, scale)).not.toThrow()
+    const ctx = new FakeCanvasRenderingContext2D()
+    const result = session.paint(ctx, 0, { layoutScale, densityScale })
+
+    // Layout dimensions reflect layoutScale only — independent of density.
+    expect(result.layoutWidth).toBeCloseTo(widthPt * layoutScale, 4)
+    expect(result.layoutHeight).toBeCloseTo(heightPt * layoutScale, 4)
+
+    // Pixel dimensions reflect layoutScale * densityScale, rounded.
+    expect(result.pixelWidth).toBe(Math.round(widthPt * layoutScale * densityScale))
+    expect(result.pixelHeight).toBe(Math.round(heightPt * layoutScale * densityScale))
+
+    // Painter owns canvas.width/height — they must equal the reported
+    // pixel dimensions.
+    expect(ctx.canvas.width).toBe(result.pixelWidth)
+    expect(ctx.canvas.height).toBe(result.pixelHeight)
 
     expect(ctx.calls).toHaveLength(1)
     const call = ctx.calls[0]
     expect(call.dx).toBe(0)
     expect(call.dy).toBe(0)
-    expect(call.width).toBe(Math.round(widthPt * scale))
-    expect(call.height).toBe(Math.round(heightPt * scale))
+    expect(call.width).toBe(result.pixelWidth)
+    expect(call.height).toBe(result.pixelHeight)
     expect(call.data.length).toBe(call.width * call.height * 4)
 
     // Pixel-content sanity. The test plate renders a title heading, so the
@@ -153,33 +158,65 @@ describe('RenderSession canvas preview', () => {
     expect(opaquePixels).toBeGreaterThan(0)
   })
 
-  it('also paints into an OffscreenCanvasRenderingContext2D', () => {
+  it('paint defaults layoutScale and densityScale to 1 when opts are omitted', () => {
     const session = openSession()
-    const scale = 1
-    const ctx = ctxForPage(session, 0, scale, FakeOffscreenCanvasRenderingContext2D)
-    expect(() => session.paint(ctx, 0, scale)).not.toThrow()
-    expect(ctx.calls).toHaveLength(1)
+    const { widthPt, heightPt } = session.pageSize(0)
+
+    const ctx = new FakeCanvasRenderingContext2D()
+    const result = session.paint(ctx, 0)
+
+    expect(result.layoutWidth).toBeCloseTo(widthPt, 4)
+    expect(result.layoutHeight).toBeCloseTo(heightPt, 4)
+    expect(result.pixelWidth).toBe(Math.round(widthPt))
+    expect(result.pixelHeight).toBe(Math.round(heightPt))
   })
 
-  it('throws on canvas/scale dimension mismatch instead of silently clipping', () => {
+  it('also paints into an OffscreenCanvasRenderingContext2D', () => {
     const session = openSession()
-    const scale = 1
-    const ctx = ctxForPage(session, 0, scale)
-    // Sabotage the height after sizing — a common foot-gun is forgetting to
-    // resize when the user changes zoom.
-    ctx.canvas.height -= 10
+    const ctx = new FakeOffscreenCanvasRenderingContext2D()
+    const result = session.paint(ctx, 0, { densityScale: 2 })
 
-    expect(() => session.paint(ctx, 0, scale)).toThrow(/canvas size mismatch/)
-    expect(ctx.calls).toHaveLength(0)
+    expect(ctx.calls).toHaveLength(1)
+    expect(ctx.canvas.width).toBe(result.pixelWidth)
+    expect(ctx.canvas.height).toBe(result.pixelHeight)
+  })
+
+  it('paint clamps backing-store dimensions to the safe maximum', () => {
+    const session = openSession()
+    const { widthPt, heightPt } = session.pageSize(0)
+    const longest = Math.max(widthPt, heightPt)
+    // Pick a densityScale that drives the longest backing dimension well
+    // past the 16384-px clamp threshold.
+    const densityScale = (16384 / longest) * 4
+
+    const ctx = new FakeCanvasRenderingContext2D()
+    const result = session.paint(ctx, 0, { densityScale })
+
+    // Backing dimensions clamp at 16384 on the longer side.
+    expect(Math.max(result.pixelWidth, result.pixelHeight)).toBeLessThanOrEqual(16384)
+    // Layout dimensions are independent of the clamp.
+    expect(result.layoutWidth).toBeCloseTo(widthPt, 4)
+    expect(result.layoutHeight).toBeCloseTo(heightPt, 4)
+    // Detect-clamp contract: pixelWidth < round(layoutWidth * densityScale).
+    expect(result.pixelWidth).toBeLessThan(Math.round(result.layoutWidth * densityScale))
+  })
+
+  it('paint throws on non-finite or non-positive layoutScale / densityScale', () => {
+    const session = openSession()
+    const ctx = new FakeCanvasRenderingContext2D()
+    expect(() => session.paint(ctx, 0, { layoutScale: 0 })).toThrow(/layoutScale/)
+    expect(() => session.paint(ctx, 0, { layoutScale: -1 })).toThrow(/layoutScale/)
+    expect(() => session.paint(ctx, 0, { layoutScale: Number.NaN })).toThrow(/layoutScale/)
+    expect(() => session.paint(ctx, 0, { densityScale: 0 })).toThrow(/densityScale/)
+    expect(() =>
+      session.paint(ctx, 0, { densityScale: Number.POSITIVE_INFINITY }),
+    ).toThrow(/densityScale/)
   })
 
   it('throws an out-of-range error when paint is called with a bad page index', () => {
     const session = openSession()
-    // For OOB we never reach the size validation — a 1×1 canvas is fine.
     const ctx = new FakeCanvasRenderingContext2D()
-    ctx.canvas.width = 1
-    ctx.canvas.height = 1
-    expect(() => session.paint(ctx, session.pageCount + 5, 1)).toThrow(
+    expect(() => session.paint(ctx, session.pageCount + 5)).toThrow(
       /out of range.*pageCount=/,
     )
   })
