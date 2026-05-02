@@ -180,13 +180,6 @@ reports the actual backing dimensions in the result.
   off-screen previews); the cost of the silent default is one missed
   `densityScale` ⇒ blurry retina, the benefit is a usable
   `paint(ctx, page)` for the simple case.
-- **Names are context-neutral, not CSS-specific.** Earlier drafts used
-  `cssScale` / `dpr` / `cssWidth` / `cssHeight`. `dpr` was misleading —
-  consumers fold zoom + pinch into it, not just `devicePixelRatio`. And
-  `cssWidth` lies for `OffscreenCanvasRenderingContext2D`, which has no
-  CSS layout box. `layoutScale` / `densityScale` / `layoutWidth` /
-  `layoutHeight` / `pixelWidth` / `pixelHeight` are honest in both
-  contexts and symmetric in style.
 - **Painter owns `canvas.width` / `canvas.height`; consumer owns
   `canvas.style.*`.** Earlier API pushed backing-store math onto every
   consumer ("size your canvas like X before calling paint"). That made
