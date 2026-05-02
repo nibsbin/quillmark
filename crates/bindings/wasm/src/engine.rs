@@ -954,7 +954,9 @@ impl RenderSession {
     #[wasm_bindgen(js_name = paint)]
     pub fn paint(
         &self,
-        #[wasm_bindgen(unchecked_param_type = "CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D")]
+        #[wasm_bindgen(
+            unchecked_param_type = "CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D"
+        )]
         ctx: JsValue,
         page: usize,
         scale: f32,
