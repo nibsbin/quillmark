@@ -55,6 +55,19 @@ pub struct Quill {
     inner: quillmark::Quill,
 }
 
+/// An iterative render handle backed by an immutable compiled snapshot.
+///
+/// Created via [`Quill::open`]. Holds the compiled output so that
+/// [`RenderSession::render`], [`RenderSession::paint`], and
+/// [`RenderSession::page_size`] can be called repeatedly without
+/// recompiling.
+///
+/// **Empty documents.** A document that compiles to zero pages still
+/// produces a valid session (`pageCount === 0`). Iterating
+/// `0..pageCount` is then a no-op; calling `paint(ctx, 0, scale)` or
+/// `pageSize(0)` throws `"... page index 0 out of range
+/// (pageCount=0)"`. Hosts that surface "no pages to preview" UI should
+/// branch on `pageCount === 0` rather than on a thrown error.
 #[wasm_bindgen]
 pub struct RenderSession {
     inner: quillmark_core::RenderSession,
@@ -158,6 +171,20 @@ impl Quill {
     #[wasm_bindgen(getter, js_name = backendId)]
     pub fn backend_id(&self) -> String {
         self.inner.backend_id().to_string()
+    }
+
+    /// Whether this quill's backend supports canvas preview.
+    ///
+    /// `true` iff `RenderSession.paint` and `RenderSession.pageSize` will
+    /// succeed for sessions opened by this quill. Use this as a precondition
+    /// probe before mounting a canvas-based preview UI; the throw on `paint`
+    /// remains the enforcement contract.
+    ///
+    /// Equivalent to checking `backendId === "typst"` today, but consumers
+    /// shouldn't have to hardcode our backend allowlist.
+    #[wasm_bindgen(getter, js_name = supportsCanvas)]
+    pub fn supports_canvas(&self) -> bool {
+        self.inner.backend_id() == "typst"
     }
 
     /// Read-only snapshot of the loaded quill's engine info and declared schema.
@@ -807,9 +834,22 @@ impl RenderSession {
     }
 
     /// The backend that produced this session (e.g. `"typst"`).
+    ///
+    /// Equal to the `backendId` of the [`Quill`] that opened this session
+    /// (sessions inherit their quill's backend), so checking either is fine.
     #[wasm_bindgen(getter, js_name = backendId)]
     pub fn backend_id(&self) -> String {
         self.backend_id.clone()
+    }
+
+    /// Whether this session's backend supports canvas preview.
+    ///
+    /// `true` iff [`paint`](Self::paint) and [`page_size`](Self::page_size)
+    /// will succeed. Equal to `Quill.supportsCanvas` for the quill that
+    /// opened this session.
+    #[wasm_bindgen(getter, js_name = supportsCanvas)]
+    pub fn supports_canvas(&self) -> bool {
+        quillmark_typst::typst_session_of(&self.inner).is_some()
     }
 
     /// Session-level warnings attached at `quill.open(...)` time.
@@ -877,6 +917,11 @@ impl RenderSession {
 
     /// Paint `page` into a 2D canvas context.
     ///
+    /// Accepts either a `CanvasRenderingContext2D` (main thread) or an
+    /// `OffscreenCanvasRenderingContext2D` (Worker / off-DOM rasterization).
+    /// Both dispatch to the same Rust rasterizer; the dispatch happens at
+    /// the JS boundary so neither context type is privileged.
+    ///
     /// `scale` multiplies Typst's natural 72 ppi (1 pt → 1 device pixel at
     /// `scale = 1`). Typical usage:
     /// `scale = (window.devicePixelRatio || 1) * userZoom`.
@@ -893,13 +938,21 @@ impl RenderSession {
     /// `paint` writes into the backing store at origin `(0, 0)` and does
     /// not clear outside the rendered region.
     ///
-    /// Throws if the backend does not support canvas preview (the message
-    /// includes the resolved `backendId` for debugging), or if `page` is
-    /// out of range.
+    /// Throws when:
+    /// - the backend does not support canvas preview (message includes the
+    ///   resolved `backendId`),
+    /// - `page` is out of range,
+    /// - `ctx` is neither `CanvasRenderingContext2D` nor
+    ///   `OffscreenCanvasRenderingContext2D`,
+    /// - `ctx.canvas.width`/`height` does not match
+    ///   `round(widthPt * scale) × round(heightPt * scale)` (silent clipping
+    ///   is the surprise we'd rather throw on than ship a "almost right"
+    ///   render).
     #[wasm_bindgen(js_name = paint)]
     pub fn paint(
         &self,
-        ctx: &web_sys::CanvasRenderingContext2d,
+        #[wasm_bindgen(unchecked_param_type = "CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D")]
+        ctx: JsValue,
         page: usize,
         scale: f32,
     ) -> Result<(), JsValue> {
@@ -907,6 +960,9 @@ impl RenderSession {
         let (width, height, mut rgba) = typst
             .render_rgba(page, scale)
             .ok_or_else(|| self.page_oob_error("paint", page))?;
+
+        validate_canvas_size(&ctx, width, height)?;
+
         let img = web_sys::ImageData::new_with_u8_clamped_array_and_sh(
             wasm_bindgen::Clamped(rgba.as_mut_slice()),
             width,
@@ -915,7 +971,19 @@ impl RenderSession {
         .map_err(|e| {
             WasmError::from(format!("paint: ImageData construction failed: {:?}", e)).to_js_value()
         })?;
-        ctx.put_image_data(&img, 0.0, 0.0)
+
+        if ctx.is_instance_of::<web_sys::CanvasRenderingContext2d>() {
+            let ctx_2d = ctx.unchecked_into::<web_sys::CanvasRenderingContext2d>();
+            ctx_2d.put_image_data(&img, 0.0, 0.0)
+        } else if ctx.is_instance_of::<web_sys::OffscreenCanvasRenderingContext2d>() {
+            let ctx_off = ctx.unchecked_into::<web_sys::OffscreenCanvasRenderingContext2d>();
+            ctx_off.put_image_data(&img, 0.0, 0.0)
+        } else {
+            Err(WasmError::from(
+                "paint: ctx must be CanvasRenderingContext2D or OffscreenCanvasRenderingContext2D",
+            )
+            .to_js_value())
+        }
     }
 }
 
@@ -939,6 +1007,44 @@ impl RenderSession {
         ))
         .to_js_value()
     }
+}
+
+/// Read `ctx.canvas.width` / `ctx.canvas.height` and assert they match the
+/// rasterized buffer dimensions. Uses `Reflect::get` so the same code path
+/// works for both `CanvasRenderingContext2D` (whose `canvas` is an
+/// `HTMLCanvasElement`) and `OffscreenCanvasRenderingContext2D` (whose
+/// `canvas` is an `OffscreenCanvas`); both expose numeric `width`/`height`.
+///
+/// A mismatch silently clips on `putImageData`, which produces "almost
+/// right" output that's painful to diagnose downstream — failing loudly
+/// here is the diagnostic value the consumer asked for.
+fn validate_canvas_size(ctx: &JsValue, expected_w: u32, expected_h: u32) -> Result<(), JsValue> {
+    let canvas = js_sys::Reflect::get(ctx, &JsValue::from_str("canvas")).map_err(|_| {
+        WasmError::from(
+            "paint: ctx has no 'canvas' property — ctx must be a 2D rendering context",
+        )
+        .to_js_value()
+    })?;
+    let read_dim = |key: &str| -> Option<u32> {
+        js_sys::Reflect::get(&canvas, &JsValue::from_str(key))
+            .ok()
+            .and_then(|v| v.as_f64())
+            .map(|n| n as u32)
+    };
+    let actual_w = read_dim("width");
+    let actual_h = read_dim("height");
+    if actual_w != Some(expected_w) || actual_h != Some(expected_h) {
+        let fmt = |v: Option<u32>| v.map(|n| n.to_string()).unwrap_or_else(|| "?".into());
+        return Err(WasmError::from(format!(
+            "paint: canvas size mismatch — expected {}×{} (round(widthPt × scale) × round(heightPt × scale)), got {}×{}. Set canvas.width and canvas.height before calling paint.",
+            expected_w,
+            expected_h,
+            fmt(actual_w),
+            fmt(actual_h),
+        ))
+        .to_js_value());
+    }
+    Ok(())
 }
 
 #[derive(Serialize)]

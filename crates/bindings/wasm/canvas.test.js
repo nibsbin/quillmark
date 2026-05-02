@@ -5,6 +5,7 @@
  * minimum needed for wasm-bindgen's `instanceof` checks to pass:
  *
  *   - `globalThis.CanvasRenderingContext2D`
+ *   - `globalThis.OffscreenCanvasRenderingContext2D`
  *   - `globalThis.ImageData`
  *
  * The polyfill captures `putImageData` calls into a buffer so the test can
@@ -42,9 +43,32 @@ class FakeCanvasRenderingContext2D {
   }
 }
 
+// In real browsers, OffscreenCanvasRenderingContext2D and
+// CanvasRenderingContext2D do NOT share an inheritance chain — they're
+// siblings. Defining the polyfill as an independent class (not a subclass)
+// ensures the Rust-side `instanceof` dispatch actually exercises the
+// second branch, instead of matching `CanvasRenderingContext2D` via
+// inheritance.
+class FakeOffscreenCanvasRenderingContext2D {
+  constructor() {
+    this.calls = []
+    this.canvas = { width: 0, height: 0 }
+  }
+  putImageData(img, dx, dy) {
+    this.calls.push({
+      width: img.width,
+      height: img.height,
+      data: new Uint8ClampedArray(img.data),
+      dx,
+      dy,
+    })
+  }
+}
+
 beforeAll(() => {
   globalThis.ImageData = FakeImageData
   globalThis.CanvasRenderingContext2D = FakeCanvasRenderingContext2D
+  globalThis.OffscreenCanvasRenderingContext2D = FakeOffscreenCanvasRenderingContext2D
 })
 
 const { Quillmark, Document } = await import('@quillmark-wasm')
@@ -63,17 +87,33 @@ const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
 
 #data.BODY`
 
-function openSession() {
+function openQuill() {
   const engine = new Quillmark()
-  const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-  return quill.open(Document.fromMarkdown(TEST_MARKDOWN))
+  return engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
+}
+
+function openSession() {
+  return openQuill().open(Document.fromMarkdown(TEST_MARKDOWN))
+}
+
+/** Build a fake context already sized to fit page `page` at `scale`. */
+function ctxForPage(session, page, scale, CtxCtor = FakeCanvasRenderingContext2D) {
+  const { widthPt, heightPt } = session.pageSize(page)
+  const ctx = new CtxCtor()
+  ctx.canvas.width = Math.round(widthPt * scale)
+  ctx.canvas.height = Math.round(heightPt * scale)
+  return ctx
 }
 
 describe('RenderSession canvas preview', () => {
-  it('exposes pageCount, backendId, warnings, and pageSize on a Typst session', () => {
-    const session = openSession()
+  it('exposes pageCount, backendId, supportsCanvas, warnings, and pageSize on a Typst session', () => {
+    const quill = openQuill()
+    expect(quill.supportsCanvas).toBe(true)
+
+    const session = quill.open(Document.fromMarkdown(TEST_MARKDOWN))
     expect(session.pageCount).toBeGreaterThan(0)
     expect(session.backendId).toBe('typst')
+    expect(session.supportsCanvas).toBe(true)
     expect(Array.isArray(session.warnings)).toBe(true)
 
     const size = session.pageSize(0)
@@ -83,10 +123,10 @@ describe('RenderSession canvas preview', () => {
 
   it('paints a page with the expected backing-store dimensions and non-trivial pixel content', () => {
     const session = openSession()
-    const { widthPt, heightPt } = session.pageSize(0)
     const scale = 1.5
+    const ctx = ctxForPage(session, 0, scale)
+    const { widthPt, heightPt } = session.pageSize(0)
 
-    const ctx = new FakeCanvasRenderingContext2D()
     expect(() => session.paint(ctx, 0, scale)).not.toThrow()
 
     expect(ctx.calls).toHaveLength(1)
@@ -113,9 +153,32 @@ describe('RenderSession canvas preview', () => {
     expect(opaquePixels).toBeGreaterThan(0)
   })
 
+  it('also paints into an OffscreenCanvasRenderingContext2D', () => {
+    const session = openSession()
+    const scale = 1
+    const ctx = ctxForPage(session, 0, scale, FakeOffscreenCanvasRenderingContext2D)
+    expect(() => session.paint(ctx, 0, scale)).not.toThrow()
+    expect(ctx.calls).toHaveLength(1)
+  })
+
+  it('throws on canvas/scale dimension mismatch instead of silently clipping', () => {
+    const session = openSession()
+    const scale = 1
+    const ctx = ctxForPage(session, 0, scale)
+    // Sabotage the height after sizing — a common foot-gun is forgetting to
+    // resize when the user changes zoom.
+    ctx.canvas.height -= 10
+
+    expect(() => session.paint(ctx, 0, scale)).toThrow(/canvas size mismatch/)
+    expect(ctx.calls).toHaveLength(0)
+  })
+
   it('throws an out-of-range error when paint is called with a bad page index', () => {
     const session = openSession()
+    // For OOB we never reach the size validation — a 1×1 canvas is fine.
     const ctx = new FakeCanvasRenderingContext2D()
+    ctx.canvas.width = 1
+    ctx.canvas.height = 1
     expect(() => session.paint(ctx, session.pageCount + 5, 1)).toThrow(
       /out of range.*pageCount=/,
     )
