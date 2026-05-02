@@ -175,11 +175,12 @@ crates/
 └── bindings/wasm/
     ├── Cargo.toml                   extended  — web-sys features
     │                                            (CanvasRenderingContext2d,
-    │                                             HtmlCanvasElement,
     │                                             ImageData)
-    ├── src/canvas.rs                NEW       — paint adapter
     └── src/engine.rs                extended  — paint, pageSize,
                                                   backendId, warnings
+                                                  (calls typst_session_of
+                                                  directly; no separate
+                                                  adapter file)
 ```
 
 ## Future work (not in V1)

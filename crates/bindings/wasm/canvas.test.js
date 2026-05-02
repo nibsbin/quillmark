@@ -9,9 +9,9 @@
  *
  * The polyfill captures `putImageData` calls into a buffer so the test can
  * assert that `paint` actually invoked the context with sensibly-sized
- * pixels. This is not a pixel-correctness check — that needs a real browser
- * test — but it prevents the rasterizer path from regressing silently
- * (e.g. broken downcast, mis-sized buffer, panics).
+ * pixels and non-empty pixel content. Pixel-perfect correctness needs a
+ * real browser test; this catches regressions like broken downcast,
+ * mis-sized buffer, swapped channels, missing demultiply, or panics.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest'
@@ -63,30 +63,26 @@ const TEST_PLATE = `#import "@local/quillmark-helper:0.1.0": data
 
 #data.BODY`
 
+function openSession() {
+  const engine = new Quillmark()
+  const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
+  return quill.open(Document.fromMarkdown(TEST_MARKDOWN))
+}
+
 describe('RenderSession canvas preview', () => {
   it('exposes pageCount, backendId, warnings, and pageSize on a Typst session', () => {
-    const engine = new Quillmark()
-    const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-
-    const session = quill.open(doc)
+    const session = openSession()
     expect(session.pageCount).toBeGreaterThan(0)
     expect(session.backendId).toBe('typst')
     expect(Array.isArray(session.warnings)).toBe(true)
 
     const size = session.pageSize(0)
-    expect(typeof size.widthPt).toBe('number')
-    expect(typeof size.heightPt).toBe('number')
     expect(size.widthPt).toBeGreaterThan(0)
     expect(size.heightPt).toBeGreaterThan(0)
   })
 
-  it('paints a page into a fake 2D context with the expected backing-store dimensions', () => {
-    const engine = new Quillmark()
-    const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-
-    const session = quill.open(doc)
+  it('paints a page with the expected backing-store dimensions and non-trivial pixel content', () => {
+    const session = openSession()
     const { widthPt, heightPt } = session.pageSize(0)
     const scale = 1.5
 
@@ -99,53 +95,29 @@ describe('RenderSession canvas preview', () => {
     expect(call.dy).toBe(0)
     expect(call.width).toBe(Math.round(widthPt * scale))
     expect(call.height).toBe(Math.round(heightPt * scale))
-    // RGBA8: 4 bytes per pixel
     expect(call.data.length).toBe(call.width * call.height * 4)
 
-    // Pixel-level sanity: the test plate renders the title heading, so the
-    // rasterized buffer must contain at least one non-white, non-transparent
-    // pixel. Catches regressions where paint writes an all-zero or all-white
-    // buffer (broken downcast, swapped channels, skipped demultiply, etc.).
+    // Pixel-content sanity. The test plate renders a title heading, so the
+    // rasterized buffer must contain non-white pixels (visible glyph ink)
+    // *and* opaque pixels (page background). A regression that wrote zeros,
+    // swapped channels, or skipped demultiply would fail at least one of
+    // these.
     let inkPixels = 0
+    let opaquePixels = 0
     for (let i = 0; i < call.data.length; i += 4) {
-      const r = call.data[i]
-      const g = call.data[i + 1]
-      const b = call.data[i + 2]
-      const a = call.data[i + 3]
+      const [r, g, b, a] = [call.data[i], call.data[i + 1], call.data[i + 2], call.data[i + 3]]
       if (a > 0 && (r < 250 || g < 250 || b < 250)) inkPixels++
+      if (a === 255) opaquePixels++
     }
     expect(inkPixels).toBeGreaterThan(0)
-
-    // Alpha channel should be non-trivial — for an opaque-page render we
-    // expect mostly opaque pixels. A buffer of all-zero alpha would indicate
-    // a missing/broken demultiply step.
-    let opaquePixels = 0
-    for (let i = 3; i < call.data.length; i += 4) {
-      if (call.data[i] === 255) opaquePixels++
-    }
     expect(opaquePixels).toBeGreaterThan(0)
   })
 
-  it('throws when paint is called with an out-of-range page index', () => {
-    const engine = new Quillmark()
-    const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-
-    const session = quill.open(doc)
+  it('throws an out-of-range error when paint is called with a bad page index', () => {
+    const session = openSession()
     const ctx = new FakeCanvasRenderingContext2D()
-    const oob = session.pageCount + 5
-
-    expect(() => session.paint(ctx, oob, 1)).toThrow(/out of range/)
-  })
-
-  it('reports the resolved backendId in the out-of-range error message', () => {
-    const engine = new Quillmark()
-    const quill = engine.quill(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-
-    const session = quill.open(doc)
-    const ctx = new FakeCanvasRenderingContext2D()
-
-    expect(() => session.paint(ctx, session.pageCount + 1, 1)).toThrow(/typst/)
+    expect(() => session.paint(ctx, session.pageCount + 5, 1)).toThrow(
+      /out of range.*pageCount=/,
+    )
   })
 })

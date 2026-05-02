@@ -29,7 +29,6 @@
 
 use wasm_bindgen::prelude::*;
 
-mod canvas;
 mod engine;
 mod error;
 mod types;

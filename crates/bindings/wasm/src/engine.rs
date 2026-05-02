@@ -862,11 +862,17 @@ impl RenderSession {
     /// the Typst backend) or if `page` is out of range.
     #[wasm_bindgen(js_name = pageSize, unchecked_return_type = "PageSize")]
     pub fn page_size(&self, page: usize) -> Result<JsValue, JsValue> {
-        let (w, h) = crate::canvas::page_size_pt(&self.inner, page, &self.backend_id, self.inner.page_count())?;
-        let obj = js_sys::Object::new();
-        js_sys::Reflect::set(&obj, &JsValue::from_str("widthPt"), &JsValue::from_f64(w as f64))?;
-        js_sys::Reflect::set(&obj, &JsValue::from_str("heightPt"), &JsValue::from_f64(h as f64))?;
-        Ok(obj.into())
+        let typst = self.typst_session("pageSize")?;
+        let (width_pt, height_pt) = typst
+            .page_size_pt(page)
+            .ok_or_else(|| self.page_oob_error("pageSize", page))?;
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        PageSize {
+            width_pt,
+            height_pt,
+        }
+        .serialize(&serializer)
+        .map_err(|e| WasmError::from(format!("pageSize: serialization failed: {e}")).to_js_value())
     }
 
     /// Paint `page` into a 2D canvas context.
@@ -897,6 +903,48 @@ impl RenderSession {
         page: usize,
         scale: f32,
     ) -> Result<(), JsValue> {
-        crate::canvas::paint(&self.inner, ctx, page, scale, &self.backend_id)
+        let typst = self.typst_session("paint")?;
+        let (width, height, mut rgba) = typst
+            .render_rgba(page, scale)
+            .ok_or_else(|| self.page_oob_error("paint", page))?;
+        let img = web_sys::ImageData::new_with_u8_clamped_array_and_sh(
+            wasm_bindgen::Clamped(rgba.as_mut_slice()),
+            width,
+            height,
+        )
+        .map_err(|e| {
+            WasmError::from(format!("paint: ImageData construction failed: {:?}", e)).to_js_value()
+        })?;
+        ctx.put_image_data(&img, 0.0, 0.0)
     }
+}
+
+impl RenderSession {
+    /// Borrow the Typst backend's typed session, or build a JS error citing
+    /// `op` (the public method name) and the resolved `backendId`.
+    fn typst_session(&self, op: &str) -> Result<&quillmark_typst::TypstSession, JsValue> {
+        quillmark_typst::typst_session_of(&self.inner).ok_or_else(|| {
+            WasmError::from(format!(
+                "{op}: backend '{}' has no canvas painter",
+                self.backend_id
+            ))
+            .to_js_value()
+        })
+    }
+
+    fn page_oob_error(&self, op: &str, page: usize) -> JsValue {
+        WasmError::from(format!(
+            "{op}: page index {page} out of range (pageCount={})",
+            self.inner.page_count()
+        ))
+        .to_js_value()
+    }
+}
+
+#[derive(Serialize)]
+struct PageSize {
+    #[serde(rename = "widthPt")]
+    width_pt: f32,
+    #[serde(rename = "heightPt")]
+    height_pt: f32,
 }
