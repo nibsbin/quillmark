@@ -825,7 +825,8 @@ impl RenderSession {
         let diags: Vec<Diagnostic> = self
             .inner
             .warnings()
-            .into_iter()
+            .iter()
+            .cloned()
             .map(Into::into)
             .collect();
         let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
@@ -861,15 +862,7 @@ impl RenderSession {
     /// the Typst backend) or if `page` is out of range.
     #[wasm_bindgen(js_name = pageSize, unchecked_return_type = "PageSize")]
     pub fn page_size(&self, page: usize) -> Result<JsValue, JsValue> {
-        let (w, h) = crate::canvas::page_size_pt(&self.inner, page).ok_or_else(|| {
-            WasmError::from(format!(
-                "pageSize: page {} out of range (pageCount={}) or backend '{}' has no canvas painter",
-                page,
-                self.inner.page_count(),
-                self.backend_id,
-            ))
-            .to_js_value()
-        })?;
+        let (w, h) = crate::canvas::page_size_pt(&self.inner, page, &self.backend_id, self.inner.page_count())?;
         let obj = js_sys::Object::new();
         js_sys::Reflect::set(&obj, &JsValue::from_str("widthPt"), &JsValue::from_f64(w as f64))?;
         js_sys::Reflect::set(&obj, &JsValue::from_str("heightPt"), &JsValue::from_f64(h as f64))?;

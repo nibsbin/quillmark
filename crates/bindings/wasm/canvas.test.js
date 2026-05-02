@@ -30,10 +30,12 @@ class FakeCanvasRenderingContext2D {
     this.canvas = { width: 0, height: 0 }
   }
   putImageData(img, dx, dy) {
+    // Copy the byte view so the test can inspect pixels even if Rust later
+    // reuses the underlying buffer.
     this.calls.push({
       width: img.width,
       height: img.height,
-      bytes: img.data.length,
+      data: new Uint8ClampedArray(img.data),
       dx,
       dy,
     })
@@ -98,7 +100,30 @@ describe('RenderSession canvas preview', () => {
     expect(call.width).toBe(Math.round(widthPt * scale))
     expect(call.height).toBe(Math.round(heightPt * scale))
     // RGBA8: 4 bytes per pixel
-    expect(call.bytes).toBe(call.width * call.height * 4)
+    expect(call.data.length).toBe(call.width * call.height * 4)
+
+    // Pixel-level sanity: the test plate renders the title heading, so the
+    // rasterized buffer must contain at least one non-white, non-transparent
+    // pixel. Catches regressions where paint writes an all-zero or all-white
+    // buffer (broken downcast, swapped channels, skipped demultiply, etc.).
+    let inkPixels = 0
+    for (let i = 0; i < call.data.length; i += 4) {
+      const r = call.data[i]
+      const g = call.data[i + 1]
+      const b = call.data[i + 2]
+      const a = call.data[i + 3]
+      if (a > 0 && (r < 250 || g < 250 || b < 250)) inkPixels++
+    }
+    expect(inkPixels).toBeGreaterThan(0)
+
+    // Alpha channel should be non-trivial — for an opaque-page render we
+    // expect mostly opaque pixels. A buffer of all-zero alpha would indicate
+    // a missing/broken demultiply step.
+    let opaquePixels = 0
+    for (let i = 3; i < call.data.length; i += 4) {
+      if (call.data[i] === 255) opaquePixels++
+    }
+    expect(opaquePixels).toBeGreaterThan(0)
   })
 
   it('throws when paint is called with an out-of-range page index', () => {

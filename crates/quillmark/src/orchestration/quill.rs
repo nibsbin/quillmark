@@ -71,11 +71,11 @@ impl Quill {
     /// Open an iterative render session for this document.
     pub fn open(&self, doc: &Document) -> Result<RenderSession, RenderError> {
         let context = self.prepare_render_context(doc)?;
-        let warning = self.ref_mismatch_warning(doc);
+        let warnings: Vec<_> = self.ref_mismatch_warning(doc).into_iter().collect();
         let session =
             self.backend
                 .open(&context.plate_content, &self.source, &context.json_data)?;
-        Ok(session.with_warning(warning))
+        Ok(session.with_warnings(warnings))
     }
 
     fn resolve_options(&self, opts: &RenderOptions) -> RenderOptions {

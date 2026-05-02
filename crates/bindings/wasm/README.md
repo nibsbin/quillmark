@@ -101,6 +101,10 @@ const userZoom = 1;                              // your zoom UI
 const scale = dpr * userZoom;                    // multiplier on 72 ppi
 
 const { widthPt, heightPt } = session.pageSize(0);
+// Reassigning canvas.width/height clears the backing store, which is what
+// you want between pages. If you reuse the same canvas at the same size
+// (e.g. repaint after a zoom that didn't change scale), call
+// ctx.clearRect(0, 0, canvas.width, canvas.height) before paint instead.
 canvas.width  = Math.round(widthPt  * scale);    // device px
 canvas.height = Math.round(heightPt * scale);
 canvas.style.width  = `${widthPt  * userZoom}px`;

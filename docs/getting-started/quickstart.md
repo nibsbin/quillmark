@@ -93,7 +93,9 @@ Get started with Quillmark in Python or JavaScript.
 
       const { widthPt, heightPt } = session.pageSize(page);
 
-      // Backing store (device pixels). Setting width/height clears the canvas.
+      // Backing store (device pixels). Reassigning width/height clears the
+      // canvas. If you ever reuse the same canvas at the same size (e.g.
+      // repaint without a scale change), call clearRect before paint instead.
       canvas.width  = Math.round(widthPt  * scale);
       canvas.height = Math.round(heightPt * scale);
 

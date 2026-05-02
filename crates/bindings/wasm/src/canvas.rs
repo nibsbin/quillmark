@@ -14,13 +14,29 @@ use crate::error::WasmError;
 
 /// Page dimensions in Typst points (1 pt = 1/72 inch).
 ///
-/// Returns `None` if the session was not opened by the Typst backend, or if
-/// `page` is out of range.
+/// Returns a typed JS error distinguishing the two failure modes:
+///   - the session has no canvas painter (non-Typst backend), or
+///   - `page` is out of range for this session.
 pub fn page_size_pt(
     session: &quillmark_core::RenderSession,
     page: usize,
-) -> Option<(f32, f32)> {
-    quillmark_typst::typst_session_of(session)?.page_size_pt(page)
+    backend_id: &str,
+    page_count: usize,
+) -> Result<(f32, f32), JsValue> {
+    let typst_session = quillmark_typst::typst_session_of(session).ok_or_else(|| {
+        WasmError::from(format!(
+            "pageSize: backend '{}' has no canvas painter",
+            backend_id
+        ))
+        .to_js_value()
+    })?;
+    typst_session.page_size_pt(page).ok_or_else(|| {
+        WasmError::from(format!(
+            "pageSize: page index {} out of range (pageCount={})",
+            page, page_count,
+        ))
+        .to_js_value()
+    })
 }
 
 /// Paint `page` into `ctx`, filling the canvas backing store at `scale`× the
