@@ -79,15 +79,29 @@ O(1) getter for the number of composable cards (excluding the main card).
 Use this to validate indices before calling card mutators (`removeCard`,
 `updateCardField`, etc.) without allocating the full `cards` array.
 
+### `quill.render(parsed, opts?)` vs. `quill.open(parsed)`
+
+Use **`Quill.render`** for one-shot exports (PDF/SVG/PNG) — compiles, emits
+artifacts, done. Use **`RenderSession`** (returned by `Quill.open`) for
+reactive previews where you'll paint or re-emit pages multiple times: the
+session retains the compiled snapshot so subsequent `paint` / `render`
+calls skip recompilation. Don't open a session per export.
+
 ### `quill.render(parsed, opts?)`
 Render with a pre-parsed `Document`.
 
 ### `quill.open(parsed)` + `session.render(opts?)`
 Open once, render all or selected pages (`opts.pages`).
 
-The session also exposes `pageCount`, `backendId`, `warnings` (snapshot of
-session-level diagnostics attached at `open` time), `pageSize(page)`, and
-`paint(ctx, page, scale)` for canvas previews. See below.
+The session also exposes `pageCount`, `backendId`, `supportsCanvas`,
+`warnings` (snapshot of session-level diagnostics attached at `open` time),
+`pageSize(page)`, and `paint(ctx, page, scale)` for canvas previews. See
+below.
+
+A document that compiles to zero pages still produces a valid session
+(`pageCount === 0`); `paint(ctx, 0, scale)` and `pageSize(0)` then throw
+`page index 0 out of range (pageCount=0)`. Branch on `pageCount === 0` to
+render a "no pages to preview" UI without relying on the throw.
 
 ### Canvas Preview (Typst only)
 
@@ -120,12 +134,19 @@ session.paint(canvas.getContext("2d"), 0, scale);
   lifetime (immutable snapshot) — cache them.
 - Setting `canvas.width` / `canvas.height` clears the backing store; if
   you reuse a canvas without resizing, call `clearRect` before `paint`.
-- Currently main-thread only: `paint` accepts `CanvasRenderingContext2D`,
-  not `OffscreenCanvasRenderingContext2D`. Worker support is on the
-  follow-up list.
-- Backend support: Typst only. Calling `paint` on a session opened by
-  any other backend throws an error that includes the resolved
-  `backendId`.
+- `paint` validates `ctx.canvas.{width,height}` against
+  `round(widthPt * scale) × round(heightPt * scale)` and throws on
+  mismatch. `putImageData` would otherwise silently clip — the throw is
+  the diagnostic.
+- `paint` accepts both `CanvasRenderingContext2D` (main thread) and
+  `OffscreenCanvasRenderingContext2D` (Workers, off-DOM rasterization,
+  `node-canvas` test setups). Note that loading the WASM module inside a
+  Worker is the host's responsibility.
+- Backend support: gated by `supportsCanvas`. Probe upfront with
+  `quill.supportsCanvas` (or `session.supportsCanvas`) before mounting a
+  canvas-based UI; the throw on `paint` / `pageSize` remains the
+  enforcement contract and includes the resolved `backendId` for
+  debugging.
 
 ### Errors
 
@@ -159,6 +180,22 @@ The wasm bindings are built with `--weak-refs`, so dropped `Document`,
 without manual `.free()` discipline. `.free()` is still emitted as an eager
 teardown hook for callers that want deterministic release. Requires
 Node 14.6+ / current evergreen browsers (all supported targets).
+
+For environments where `using` (the [explicit resource management][erm]
+proposal) hasn't landed, use an explicit `try` / `finally`:
+
+```ts
+const session = quill.open(doc);
+try {
+  for (let p = 0; p < session.pageCount; p++) {
+    session.paint(ctx, p, scale);
+  }
+} finally {
+  session.free();
+}
+```
+
+[erm]: https://github.com/tc39/proposal-explicit-resource-management
 
 ## Notes
 
