@@ -191,7 +191,7 @@ proposal) hasn't landed, use an explicit `try` / `finally`:
 const session = quill.open(doc);
 try {
   for (let p = 0; p < session.pageCount; p++) {
-    session.paint(ctx, p, scale);
+    session.paint(ctx, p);
   }
 } finally {
   session.free();

@@ -218,22 +218,21 @@ crates/
 └── bindings/wasm/
     ├── Cargo.toml                   extended  — web-sys features
     │                                            (CanvasRenderingContext2d,
-    │                                             ImageData)
+    │                                             HtmlCanvasElement,
+    │                                             ImageData,
+    │                                             OffscreenCanvas,
+    │                                             OffscreenCanvasRenderingContext2d)
     └── src/engine.rs                extended  — paint, pageSize,
-                                                  backendId, warnings
-                                                  (calls typst_session_of
-                                                  directly; no separate
-                                                  adapter file)
+                                                  backendId, supportsCanvas,
+                                                  warnings; CanvasCtx enum
+                                                  dispatches OnScreen vs
+                                                  OffScreen contexts (calls
+                                                  typst_session_of directly;
+                                                  no separate adapter file)
 ```
 
 ## Future work (not in V1)
 
-- **OffscreenCanvas / Worker support.** The current painter accepts only
-  `CanvasRenderingContext2d`. Multi-page documents will jank typing on
-  the host thread. Add `OffscreenCanvas` features and an overload taking
-  `OffscreenCanvasRenderingContext2d`, or document the main-thread-only
-  constraint loudly so consumers route pixels through `postMessage` if
-  they want a worker.
 - **Direct `CanvasRenderingContext2d` adapter.** V1 allocates an RGBA
   `Vec<u8>` per repaint. A direct path that hands tiny_skia's pixmap to
   the canvas (or a typed-array view backed by linear memory) would
