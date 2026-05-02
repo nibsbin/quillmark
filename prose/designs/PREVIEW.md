@@ -81,17 +81,36 @@ pub fn typst_session_of(s: &RenderSession) -> Option<&TypstSession>;
 class RenderSession {
   readonly pageCount: number;
   readonly backendId: string;
+  readonly supportsCanvas: boolean;
   readonly warnings: Diagnostic[];
 
   render(opts?: RenderOptions): RenderResult;
-  pageSize(page: number): PageSize;     // { widthPt, heightPt } in pt
-  paint(ctx: CanvasRenderingContext2D, page: number, scale: number): void;
+  pageSize(page: number): PageSize;     // { widthPt, heightPt } in pt; report-only
+  paint(
+    ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+    page: number,
+    opts?: PaintOptions,
+  ): PaintResult;
+}
+
+interface PaintOptions {
+  layoutScale?: number;   // layout px per Typst pt; layout decision; default 1
+  densityScale?: number;  // backing-store density multiplier; default 1
+}
+
+interface PaintResult {
+  layoutWidth: number;    // canvas.style.width target; independent of densityScale
+  layoutHeight: number;
+  pixelWidth: number;     // canvas.width the painter wrote (clamped at 16384)
+  pixelHeight: number;
 }
 ```
 
-`scale` multiplies Typst's natural 72 ppi (1 pt → 1 device pixel at
-`scale = 1`). Caller computes `scale = devicePixelRatio * userZoom` and
-sizes the canvas before calling `paint`.
+The painter owns `canvas.width` / `canvas.height` — it sizes the backing
+store on every call. Consumers own `canvas.style.*` (or layout) and read
+`layoutWidth` / `layoutHeight` from the result. `layoutScale * densityScale`
+is the effective rasterization scale; the painter clamps `densityScale`
+if the largest backing dimension would exceed 16384 px.
 
 ## Architecture
 
@@ -117,21 +136,22 @@ byte-identical.
 
 ```js
 const session = quill.open(doc);              // compiles once, caches PagedDocument
-const dpr = window.devicePixelRatio || 1;
-const scale = dpr * userZoom;                 // userZoom is a UI control
-const { widthPt, heightPt } = session.pageSize(page);
+const densityScale = (window.devicePixelRatio || 1) * userZoom;  // userZoom is a UI control
 
-canvas.width  = Math.round(widthPt  * scale); // backing store, device px
-canvas.height = Math.round(heightPt * scale);
-canvas.style.width  = `${widthPt  * userZoom}px`;  // CSS box, layout px
-canvas.style.height = `${heightPt * userZoom}px`;
+const result = session.paint(canvas.getContext('2d'), page, {
+  layoutScale: 1,                             // layout px per Typst pt
+  densityScale,                               // includes devicePixelRatio + zoom
+});
 
-session.paint(canvas.getContext('2d'), page, scale);
+canvas.style.width  = `${result.layoutWidth}px`;   // CSS box, layout px
+canvas.style.height = `${result.layoutHeight}px`;
 ```
 
-Setting `canvas.width` / `canvas.height` clears the backing store, which
-is the recommended way to handle page-to-page transitions. If a consumer
-reuses a canvas without resizing, `clearRect` first.
+Each `paint` call resets the backing store (writing `canvas.width`
+clears it), so paint is always a full repaint. Consumers don't call
+`clearRect`. If `layoutScale * densityScale` would push either dimension
+past 16384 px, the painter clamps `densityScale` proportionally and
+reports the actual backing dimensions in the result.
 
 ## Decisions and rationale
 
@@ -150,12 +170,28 @@ reuses a canvas without resizing, `clearRect` first.
   Typst-only and WASM-only; pushing it through a generic core trait would
   force every backend to implement or stub it and would drag `web-sys`
   toward `core`. The downcast is the standard escape hatch.
-- **`scale` is a multiplier on 72 ppi, not a ppi value.** Matches how
-  canvas/DPR consumers think (`scale = dpr * zoom`), and makes
-  `scale = 1` the natural "1 pt = 1 device pixel" baseline.
-- **Required `scale` (not optional).** Real consumers always compute it
-  from `devicePixelRatio`. A default of `1.0` would produce non-retina
-  output by accident. Forcing the parameter is better DX.
+- **`layoutScale` and `densityScale` separated, both optional.** A
+  single scalar conflated layout (how big on screen) with sharpness
+  (how many backing pixels). The split mirrors how editor consumers
+  think about it — `layoutScale` is a layout decision, `densityScale`
+  is a sharpness decision they fold `devicePixelRatio` + zoom +
+  `visualViewport.scale` into. Both default to 1 because the painter
+  alone cannot know the consumer's DPR (e.g. SSR contexts, tests,
+  off-screen previews); the cost of the silent default is one missed
+  `densityScale` ⇒ blurry retina, the benefit is a usable
+  `paint(ctx, page)` for the simple case.
+- **Painter owns `canvas.width` / `canvas.height`; consumer owns
+  `canvas.style.*`.** Earlier API pushed backing-store math onto every
+  consumer ("size your canvas like X before calling paint"). That made
+  `devicePixelRatio` and the rounding rule callable-side state, which
+  means every consumer has to get them right. Folding the math into the
+  painter eliminates a class of "blurry on retina" bugs and lets the
+  painter clamp at the 16384-px browser limit centrally.
+- **Hard 16384-px backing-store clamp.** Real browser limits vary
+  (Chrome/Firefox ~32k, Safari 16k, lower on memory-constrained mobile);
+  16384 is the floor that works everywhere. `PaintResult` reports the
+  actual backing dimensions, so a consumer that cares can detect the
+  clamp and surface "max zoom reached" UI.
 - **Unpremultiplied RGBA on the wire.** `tiny_skia` produces premultiplied
   alpha; `ImageData` expects non-premultiplied. We unpremultiply pixel-by-
   pixel before constructing `ImageData`. One allocation per repaint;
@@ -175,22 +211,21 @@ crates/
 └── bindings/wasm/
     ├── Cargo.toml                   extended  — web-sys features
     │                                            (CanvasRenderingContext2d,
-    │                                             ImageData)
+    │                                             HtmlCanvasElement,
+    │                                             ImageData,
+    │                                             OffscreenCanvas,
+    │                                             OffscreenCanvasRenderingContext2d)
     └── src/engine.rs                extended  — paint, pageSize,
-                                                  backendId, warnings
-                                                  (calls typst_session_of
-                                                  directly; no separate
-                                                  adapter file)
+                                                  backendId, supportsCanvas,
+                                                  warnings; CanvasCtx enum
+                                                  dispatches OnScreen vs
+                                                  OffScreen contexts (calls
+                                                  typst_session_of directly;
+                                                  no separate adapter file)
 ```
 
 ## Future work (not in V1)
 
-- **OffscreenCanvas / Worker support.** The current painter accepts only
-  `CanvasRenderingContext2d`. Multi-page documents will jank typing on
-  the host thread. Add `OffscreenCanvas` features and an overload taking
-  `OffscreenCanvasRenderingContext2d`, or document the main-thread-only
-  constraint loudly so consumers route pixels through `postMessage` if
-  they want a worker.
 - **Direct `CanvasRenderingContext2d` adapter.** V1 allocates an RGBA
   `Vec<u8>` per repaint. A direct path that hands tiny_skia's pixmap to
   the canvas (or a typed-array view backed by linear memory) would

@@ -33,6 +33,16 @@ export interface CardInput {
 /// ever ships, replace this with a richer check.
 const CANVAS_BACKEND_ID: &str = "typst";
 
+/// Maximum backing-store dimension the painter will produce, in device
+/// pixels per side. Real browser limits vary (~32k on Chrome/Firefox,
+/// 16k on Safari, lower on memory-constrained devices); 16384 is the
+/// floor that works everywhere we ship to. When a requested
+/// `layoutScale * densityScale` would exceed this, the painter clamps
+/// `densityScale` proportionally and surfaces the actual backing
+/// dimensions in the returned `PaintResult` so consumers can detect the
+/// clamp.
+const MAX_BACKING_DIMENSION: u32 = 16384;
+
 fn now_ms() -> f64 {
     #[cfg(target_arch = "wasm32")]
     {
@@ -70,7 +80,7 @@ pub struct Quill {
 ///
 /// **Empty documents.** A document that compiles to zero pages still
 /// produces a valid session (`pageCount === 0`). Iterating
-/// `0..pageCount` is then a no-op; calling `paint(ctx, 0, scale)` or
+/// `0..pageCount` is then a no-op; calling `paint(ctx, 0)` or
 /// `pageSize(0)` throws `"... page index 0 out of range
 /// (pageCount=0)"`. Hosts that surface "no pages to preview" UI should
 /// branch on `pageCount === 0` rather than on a thrown error.
@@ -809,19 +819,83 @@ fn js_bytes_for_tree_entry(path: &str, value: JsValue) -> Result<Vec<u8>, JsValu
     Ok(bytes.to_vec())
 }
 
-/// TypeScript declaration for the page-size record returned by
-/// `RenderSession.pageSize`.
+/// TypeScript declarations for the canvas-preview surface.
+///
+/// `paint` is the single source of truth for canvas backing-store sizing —
+/// consumers do not multiply by `devicePixelRatio` themselves and do not
+/// write to `canvas.width` / `canvas.height` directly. They supply layout
+/// (`layoutScale`) and density (`densityScale`) inputs separately; the
+/// painter folds them into the rasterization scale, sizes the backing
+/// store, and reports what it picked.
 #[wasm_bindgen(typescript_custom_section)]
-const PAGE_SIZE_TS: &'static str = r#"
+const CANVAS_PREVIEW_TS: &'static str = r#"
 /**
  * Page dimensions in Typst points (1 pt = 1/72 inch).
  *
- * Returned by `RenderSession.pageSize`. Use these to size a canvas backing
- * store (`widthPt * scale × heightPt * scale`) before calling `paint`.
+ * Report-only: the painter sizes the canvas itself based on
+ * `PaintOptions`. `pageSize` is exposed for callers that need page
+ * geometry up-front (e.g. to lay out a scrollable list of canvases
+ * before any pixels are rendered).
  */
 export interface PageSize {
     widthPt: number;
     heightPt: number;
+}
+
+/**
+ * Inputs to `RenderSession.paint`. Both fields are optional and default
+ * to `1`.
+ *
+ * - `layoutScale` — layout-space pixels per Typst point. For on-screen
+ *   canvases this is CSS pixels per pt; the page's layout-pixel size is
+ *   `widthPt * layoutScale × heightPt * layoutScale`. The painter
+ *   surfaces these dimensions as `layoutWidth` / `layoutHeight` so
+ *   consumers can drive `canvas.style.*` (or any layout system).
+ * - `densityScale` — backing-store density multiplier. Fold
+ *   `window.devicePixelRatio`, in-app zoom, and `visualViewport.scale`
+ *   (pinch-zoom) into a single value here. Defaults to `1`, which
+ *   produces a non-retina backing store — pass `window.devicePixelRatio`
+ *   for crisp output on high-DPI displays.
+ *
+ * The effective rasterization scale is `layoutScale * densityScale`.
+ * Both must be finite and `> 0`. For `OffscreenCanvasRenderingContext2D`
+ * the two collapse to a single scalar; folding everything into
+ * `densityScale` is the simplest convention.
+ */
+export interface PaintOptions {
+    layoutScale?: number;
+    densityScale?: number;
+}
+
+/**
+ * Returned by `RenderSession.paint`.
+ *
+ * - `layoutWidth` / `layoutHeight` — layout-pixel dimensions of the
+ *   canvas's display box. For on-screen canvases this is CSS pixels:
+ *   set `canvas.style.width = layoutWidth + "px"` and
+ *   `canvas.style.height = layoutHeight + "px"` (or feed these into
+ *   your layout system). Independent of `densityScale`.
+ * - `pixelWidth` / `pixelHeight` — integer backing-store pixel
+ *   dimensions the painter wrote to `canvas.width` / `canvas.height`.
+ *   Equal to `round(layoutWidth * densityScale)` ×
+ *   `round(layoutHeight * densityScale)` *unless* the requested backing
+ *   exceeded the painter's safe maximum (16384 px per side), in which
+ *   case `densityScale` was clamped to fit. Detect clamping via
+ *   `pixelWidth < round(layoutWidth * densityScale)`.
+ *
+ * The painter owns `canvas.width` / `canvas.height`; consumers must not
+ * write to them. The painter does **not** touch `canvas.style.*`;
+ * consumers own layout.
+ *
+ * For `OffscreenCanvasRenderingContext2D` (Worker rasterization, no
+ * DOM), `layoutWidth` / `layoutHeight` are informational — there's no
+ * CSS layout box to apply them to.
+ */
+export interface PaintResult {
+    layoutWidth: number;
+    layoutHeight: number;
+    pixelWidth: number;
+    pixelHeight: number;
 }
 "#;
 
@@ -897,6 +971,11 @@ impl RenderSession {
 
     /// Page dimensions in Typst points (1 pt = 1/72 inch).
     ///
+    /// Report-only: the painter sizes the canvas itself based on
+    /// `PaintOptions`. Exposed for consumers that need page geometry
+    /// up-front (e.g. to lay out a scrollable list of canvases before
+    /// any pixels are rendered).
+    ///
     /// Stable for a given `page` across the session's lifetime — the
     /// compiled document is an immutable snapshot, so callers can cache
     /// results.
@@ -925,21 +1004,27 @@ impl RenderSession {
     /// Both dispatch to the same Rust rasterizer; the dispatch happens at
     /// the JS boundary so neither context type is privileged.
     ///
-    /// `scale` multiplies Typst's natural 72 ppi (1 pt → 1 device pixel at
-    /// `scale = 1`). Typical usage:
-    /// `scale = (window.devicePixelRatio || 1) * userZoom`.
+    /// The painter owns `canvas.width` / `canvas.height` and writes them
+    /// itself; consumers must not. The painter does not touch
+    /// `canvas.style.*` — that's layout, owned by the consumer (see
+    /// `PaintResult.layoutWidth` / `layoutHeight`).
     ///
-    /// The caller must size `ctx.canvas` so that
-    /// `canvas.width === round(widthPt * scale)` and `canvas.height ===
-    /// round(heightPt * scale)` *before* calling `paint`. Setting
-    /// `canvas.width` / `canvas.height` clears the backing store, which is
-    /// the recommended way to handle page-to-page transitions; if you
-    /// reuse a canvas without resizing, call
-    /// `ctx.clearRect(0, 0, canvas.width, canvas.height)` first to avoid
-    /// stale pixels showing through transparent regions.
+    /// `opts.layoutScale` (default 1.0) is layout-space pixels per Typst
+    /// point and determines the canvas's display-box size. `opts.densityScale`
+    /// (default 1.0) is the rasterization density multiplier the consumer
+    /// folds `window.devicePixelRatio`, in-app zoom, and
+    /// `visualViewport.scale` (pinch-zoom) into. The effective
+    /// rasterization scale is `layoutScale * densityScale`.
     ///
-    /// `paint` writes into the backing store at origin `(0, 0)` and does
-    /// not clear outside the rendered region.
+    /// If `layoutScale * densityScale` would exceed the safe backing-store
+    /// maximum (16384 px per side), `densityScale` is clamped
+    /// proportionally so the largest dimension fits. The actual
+    /// backing-store dimensions are reported in the returned
+    /// `PaintResult` — compare against
+    /// `round(layoutWidth * densityScale)` to detect clamping.
+    ///
+    /// Each call resets the backing store (`paint` is always a full
+    /// repaint). Consumers do not need to call `clearRect`.
     ///
     /// Throws when:
     /// - the backend does not support canvas preview (message includes the
@@ -947,11 +1032,8 @@ impl RenderSession {
     /// - `page` is out of range,
     /// - `ctx` is neither `CanvasRenderingContext2D` nor
     ///   `OffscreenCanvasRenderingContext2D`,
-    /// - `ctx.canvas.width`/`height` does not match
-    ///   `round(widthPt * scale) × round(heightPt * scale)` (silent clipping
-    ///   is the surprise we'd rather throw on than ship a "almost right"
-    ///   render).
-    #[wasm_bindgen(js_name = paint)]
+    /// - `opts.layoutScale` or `opts.densityScale` is non-finite or `<= 0`.
+    #[wasm_bindgen(js_name = paint, unchecked_return_type = "PaintResult")]
     pub fn paint(
         &self,
         #[wasm_bindgen(
@@ -959,40 +1041,82 @@ impl RenderSession {
         )]
         ctx: JsValue,
         page: usize,
-        scale: f32,
-    ) -> Result<(), JsValue> {
+        #[wasm_bindgen(unchecked_param_type = "PaintOptions | undefined")] opts: JsValue,
+    ) -> Result<JsValue, JsValue> {
         let typst = self.typst_session("paint")?;
         let canvas_ctx = CanvasCtx::from_js(&ctx)?;
 
-        // Compute expected dimensions from page geometry first so we can
-        // fail-fast on a mis-sized canvas without paying for rasterization.
         let (width_pt, height_pt) = typst
             .page_size_pt(page)
             .ok_or_else(|| self.page_oob_error("paint", page))?;
-        let expected_w = (width_pt * scale).round() as u32;
-        let expected_h = (height_pt * scale).round() as u32;
 
-        let (actual_w, actual_h) = canvas_ctx.canvas_dims();
-        if (actual_w, actual_h) != (expected_w, expected_h) {
-            return Err(WasmError::from(format!(
-                "paint: canvas size mismatch — expected {}×{} (round(widthPt × scale) × round(heightPt × scale)), got {}×{}. Set canvas.width and canvas.height before calling paint.",
-                expected_w, expected_h, actual_w, actual_h,
-            ))
+        let opts: PaintOptions = if opts.is_undefined() || opts.is_null() {
+            PaintOptions::default()
+        } else {
+            serde_wasm_bindgen::from_value(opts).map_err(|e| {
+                WasmError::from(format!("paint: invalid options: {e}")).to_js_value()
+            })?
+        };
+
+        let layout_scale = opts.layout_scale.unwrap_or(1.0);
+        let requested_density = opts.density_scale.unwrap_or(1.0);
+
+        if !layout_scale.is_finite() || layout_scale <= 0.0 {
+            return Err(WasmError::from(
+                "paint: layoutScale must be a finite number greater than 0",
+            )
+            .to_js_value());
+        }
+        if !requested_density.is_finite() || requested_density <= 0.0 {
+            return Err(WasmError::from(
+                "paint: densityScale must be a finite number greater than 0",
+            )
             .to_js_value());
         }
 
-        let (rw, rh, mut rgba) = typst
-            .render_rgba(page, scale)
+        let layout_width = (width_pt as f64) * (layout_scale as f64);
+        let layout_height = (height_pt as f64) * (layout_scale as f64);
+
+        let desired_w = (layout_width * requested_density as f64).round();
+        let desired_h = (layout_height * requested_density as f64).round();
+        let max_dim = desired_w.max(desired_h);
+
+        let effective_density = if max_dim > MAX_BACKING_DIMENSION as f64 {
+            (requested_density as f64) * (MAX_BACKING_DIMENSION as f64 / max_dim)
+        } else {
+            requested_density as f64
+        };
+
+        let render_scale = (layout_scale as f64) * effective_density;
+
+        let (pixel_w, pixel_h, mut rgba) = typst
+            .render_rgba(page, render_scale as f32)
             .ok_or_else(|| self.page_oob_error("paint", page))?;
+
+        // The painter owns canvas.width/height. Setting these clears the
+        // backing store automatically — no clearRect needed.
+        canvas_ctx.set_canvas_dims(pixel_w, pixel_h)?;
+
         let img = web_sys::ImageData::new_with_u8_clamped_array_and_sh(
             wasm_bindgen::Clamped(rgba.as_mut_slice()),
-            rw,
-            rh,
+            pixel_w,
+            pixel_h,
         )
         .map_err(|e| {
             WasmError::from(format!("paint: ImageData construction failed: {:?}", e)).to_js_value()
         })?;
-        canvas_ctx.put_image_data(&img)
+        canvas_ctx.put_image_data(&img)?;
+
+        let result = PaintResult {
+            layout_width,
+            layout_height,
+            pixel_width: pixel_w,
+            pixel_height: pixel_h,
+        };
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        result
+            .serialize(&serializer)
+            .map_err(|e| WasmError::from(format!("paint: serialization failed: {e}")).to_js_value())
     }
 }
 
@@ -1020,7 +1144,7 @@ impl RenderSession {
 
 /// Adapter unifying `CanvasRenderingContext2D` and
 /// `OffscreenCanvasRenderingContext2D` behind one Rust shape so `paint`
-/// can validate dimensions and emit pixels without repeating the
+/// can size the backing store and emit pixels without repeating the
 /// downcast.
 enum CanvasCtx<'a> {
     OnScreen(&'a web_sys::CanvasRenderingContext2d),
@@ -1041,22 +1165,27 @@ impl<'a> CanvasCtx<'a> {
         .to_js_value())
     }
 
-    /// `(canvas.width, canvas.height)` in device pixels. Both backing
-    /// canvas types expose numeric width/height; the typed web-sys
-    /// accessors here fall back to `0` if the field is absent, which is
-    /// indistinguishable from a deliberately zero-sized canvas — fine
-    /// for our validation since either way the mismatch error fires.
-    fn canvas_dims(&self) -> (u32, u32) {
+    /// Set `canvas.width` and `canvas.height`. Writing to either is
+    /// specified to clear the backing store, which is exactly the
+    /// contract `paint` wants on each call (full repaint, no stale
+    /// pixels in transparent regions).
+    fn set_canvas_dims(&self, width: u32, height: u32) -> Result<(), JsValue> {
         match self {
-            Self::OnScreen(c) => match c.canvas() {
-                Some(canvas) => (canvas.width(), canvas.height()),
-                None => (0, 0),
-            },
+            Self::OnScreen(c) => {
+                let canvas = c.canvas().ok_or_else(|| {
+                    WasmError::from("paint: rendering context has no associated <canvas> element")
+                        .to_js_value()
+                })?;
+                canvas.set_width(width);
+                canvas.set_height(height);
+            }
             Self::OffScreen(c) => {
                 let canvas = c.canvas();
-                (canvas.width(), canvas.height())
+                canvas.set_width(width);
+                canvas.set_height(height);
             }
         }
+        Ok(())
     }
 
     fn put_image_data(&self, img: &web_sys::ImageData) -> Result<(), JsValue> {
@@ -1073,4 +1202,22 @@ struct PageSize {
     width_pt: f32,
     #[serde(rename = "heightPt")]
     height_pt: f32,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct PaintOptions {
+    #[serde(default)]
+    layout_scale: Option<f32>,
+    #[serde(default)]
+    density_scale: Option<f32>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PaintResult {
+    layout_width: f64,
+    layout_height: f64,
+    pixel_width: u32,
+    pixel_height: u32,
 }

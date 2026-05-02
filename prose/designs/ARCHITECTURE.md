@@ -34,7 +34,7 @@ PyO3 bindings published as `quillmark` on PyPI.
 
 wasm-bindgen bindings published as `@quillmark/wasm`. Supports bundler and Node.js targets. Builds with `--weak-refs` so wasm-bindgen handles are reclaimed by `FinalizationRegistry`; `.free()` remains as the eager teardown hook. Requires Node 14.6+ / current evergreen browsers.
 
-In addition to the byte-output verbs (`Quill.render`, `RenderSession.render`), exposes a Typst-only **canvas preview** path on `RenderSession`: `pageCount`, `pageSize(page)`, `paint(ctx, page, scale)`, plus `backendId` and `warnings`. The painter rasterizes pages directly from the cached `PagedDocument` into a `CanvasRenderingContext2d`, skipping PNG/SVG round-trips. See [PREVIEW.md](PREVIEW.md).
+In addition to the byte-output verbs (`Quill.render`, `RenderSession.render`), exposes a Typst-only **canvas preview** path on `RenderSession`: `pageCount`, `pageSize(page)`, `paint(ctx, page, opts?)`, plus `backendId`, `supportsCanvas`, and `warnings`. The painter rasterizes pages directly from the cached `PagedDocument` into a `CanvasRenderingContext2D` or `OffscreenCanvasRenderingContext2D`, sizes the canvas backing store itself, and returns the chosen layout/pixel dimensions. Skips PNG/SVG round-trips. See [PREVIEW.md](PREVIEW.md).
 
 ### `bindings/quillmark-cli`
 

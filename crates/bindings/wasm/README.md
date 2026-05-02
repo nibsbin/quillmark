@@ -95,53 +95,56 @@ Open once, render all or selected pages (`opts.pages`).
 
 The session also exposes `pageCount`, `backendId`, `supportsCanvas`,
 `warnings` (snapshot of session-level diagnostics attached at `open` time),
-`pageSize(page)`, and `paint(ctx, page, scale)` for canvas previews. See
+`pageSize(page)`, and `paint(ctx, page, opts?)` for canvas previews. See
 below.
 
 A document that compiles to zero pages still produces a valid session
-(`pageCount === 0`); `paint(ctx, 0, scale)` and `pageSize(0)` then throw
+(`pageCount === 0`); `paint(ctx, 0)` and `pageSize(0)` then throw
 `page index 0 out of range (pageCount=0)`. Branch on `pageCount === 0` to
 render a "no pages to preview" UI without relying on the throw.
 
 ### Canvas Preview (Typst only)
 
-`session.paint(ctx, page, scale)` rasterizes a page directly into a
-`CanvasRenderingContext2D`, skipping PNG/SVG byte round-trips. Pair with
-`session.pageSize(page)` to size the canvas:
+`session.paint(ctx, page, opts?)` rasterizes a page directly into a
+`CanvasRenderingContext2D` (main thread) or
+`OffscreenCanvasRenderingContext2D` (Worker), skipping PNG/SVG byte
+round-trips.
+
+The painter owns `canvas.width` / `canvas.height` — it sizes the backing
+store itself. Consumers own `canvas.style.*` (or the layout system that
+sets them) and read `layoutWidth` / `layoutHeight` from the returned
+`PaintResult`.
 
 ```ts
-const dpr = window.devicePixelRatio || 1;
-const userZoom = 1;                              // your zoom UI
-const scale = dpr * userZoom;                    // multiplier on 72 ppi
+const result = session.paint(canvas.getContext("2d"), 0, {
+  layoutScale: 1,                            // layout px per Typst pt
+  densityScale: window.devicePixelRatio,     // backing-store density
+});
 
-const { widthPt, heightPt } = session.pageSize(0);
-// Reassigning canvas.width/height clears the backing store, which is what
-// you want between pages. If you reuse the same canvas at the same size
-// (e.g. repaint after a zoom that didn't change scale), call
-// ctx.clearRect(0, 0, canvas.width, canvas.height) before paint instead.
-canvas.width  = Math.round(widthPt  * scale);    // device px
-canvas.height = Math.round(heightPt * scale);
-canvas.style.width  = `${widthPt  * userZoom}px`;
-canvas.style.height = `${heightPt * userZoom}px`;
-
-session.paint(canvas.getContext("2d"), 0, scale);
+canvas.style.width  = `${result.layoutWidth}px`;
+canvas.style.height = `${result.layoutHeight}px`;
 ```
 
-- `scale` is a multiplier on Typst's natural 72 ppi (1 pt → 1 device
-  pixel at `scale = 1`). Always include `devicePixelRatio` for crisp
-  output.
+- `layoutScale` (default 1) sets the canvas's display-box size:
+  `layoutWidth = widthPt * layoutScale`. For on-screen canvases this is
+  CSS pixels per Typst point. Defaults to 1 (one CSS pixel per pt).
+- `densityScale` (default 1) is the backing-store density multiplier.
+  Fold `window.devicePixelRatio`, in-app zoom, and `visualViewport.scale`
+  (pinch-zoom) into a single value here. Pass `devicePixelRatio` for
+  crisp output on high-DPI displays.
+- The effective rasterization scale is `layoutScale * densityScale`. If
+  that would exceed the safe maximum (16384 px per side), `densityScale`
+  is clamped proportionally; compare `result.pixelWidth` against
+  `Math.round(result.layoutWidth * densityScale)` to detect.
+- `paint` is always a full repaint — setting the backing-store width /
+  height clears it. No `clearRect` required.
 - `pageCount` and `pageSize(page)` are stable for the session's
   lifetime (immutable snapshot) — cache them.
-- Setting `canvas.width` / `canvas.height` clears the backing store; if
-  you reuse a canvas without resizing, call `clearRect` before `paint`.
-- `paint` validates `ctx.canvas.{width,height}` against
-  `round(widthPt * scale) × round(heightPt * scale)` and throws on
-  mismatch. `putImageData` would otherwise silently clip — the throw is
-  the diagnostic.
-- `paint` accepts both `CanvasRenderingContext2D` (main thread) and
-  `OffscreenCanvasRenderingContext2D` (Workers, off-DOM rasterization,
-  `node-canvas` test setups). Note that loading the WASM module inside a
-  Worker is the host's responsibility.
+- Worker support: pass an `OffscreenCanvasRenderingContext2D` and the
+  same call signature works. `layoutWidth` / `layoutHeight` are
+  informational in that mode (no CSS layout box); fold everything into
+  `densityScale`. Loading the WASM module inside a Worker is the host's
+  responsibility.
 - Backend support: gated by `supportsCanvas`. Probe upfront with
   `quill.supportsCanvas` (or `session.supportsCanvas`) before mounting a
   canvas-based UI; the throw on `paint` / `pageSize` remains the
@@ -188,7 +191,7 @@ proposal) hasn't landed, use an explicit `try` / `finally`:
 const session = quill.open(doc);
 try {
   for (let p = 0; p < session.pageCount; p++) {
-    session.paint(ctx, p, scale);
+    session.paint(ctx, p);
   }
 } finally {
   session.free();

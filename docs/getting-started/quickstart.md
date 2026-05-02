@@ -88,22 +88,17 @@ Get started with Quillmark in Python or JavaScript.
     for (const w of session.warnings) console.warn(w.message);
 
     function renderPage(canvas, page, userZoom = 1) {
-      const dpr = window.devicePixelRatio || 1;
-      const scale = dpr * userZoom;                    // multiplier on 72 ppi
+      const densityScale = (window.devicePixelRatio || 1) * userZoom;
 
-      const { widthPt, heightPt } = session.pageSize(page);
+      // Painter sizes canvas.width/height itself; consumer reads back the
+      // layout dimensions to drive layout.
+      const result = session.paint(canvas.getContext("2d"), page, {
+        layoutScale: 1,
+        densityScale,
+      });
 
-      // Backing store (device pixels). Reassigning width/height clears the
-      // canvas. If you ever reuse the same canvas at the same size (e.g.
-      // repaint without a scale change), call clearRect before paint instead.
-      canvas.width  = Math.round(widthPt  * scale);
-      canvas.height = Math.round(heightPt * scale);
-
-      // CSS box (layout pixels) — independent of DPR.
-      canvas.style.width  = `${widthPt  * userZoom}px`;
-      canvas.style.height = `${heightPt * userZoom}px`;
-
-      session.paint(canvas.getContext("2d"), page, scale);
+      canvas.style.width  = `${result.layoutWidth}px`;
+      canvas.style.height = `${result.layoutHeight}px`;
     }
 
     for (let p = 0; p < session.pageCount; p++) {
@@ -116,22 +111,28 @@ Get started with Quillmark in Python or JavaScript.
 
     ### Notes
 
-    - **`scale` is a multiplier on 72 ppi**, not a ppi value. `scale = 1`
-      gives 1 device pixel per Typst point. Always include
-      `devicePixelRatio` so retina displays are crisp.
+    - **`layoutScale` vs `densityScale`.** `layoutScale` is layout-space
+      pixels per Typst point — a layout decision (how big does the page
+      look on screen). `densityScale` is the backing-store density
+      multiplier — a sharpness decision. Fold `window.devicePixelRatio`,
+      any in-app zoom level, and `visualViewport.scale` (pinch-zoom) into
+      one `densityScale` value. Both default to `1`.
+    - **Painter owns backing store.** Don't write to `canvas.width` /
+      `canvas.height` yourself — the painter does it on every call. Don't
+      call `clearRect` either; setting the backing-store size clears it.
+    - **Consumer owns layout.** The painter doesn't touch
+      `canvas.style.*`. Use `result.layoutWidth` / `result.layoutHeight`
+      to size the canvas's display box.
+    - **Backing-store clamp.** If `layoutScale * densityScale` would push
+      either dimension past 16384 px, the painter clamps `densityScale`
+      to fit and the result reflects what it actually wrote. Detect via
+      `result.pixelWidth < Math.round(result.layoutWidth * densityScale)`.
     - **`pageCount` and `pageSize(page)` are stable** for the lifetime of a
       session — the underlying compiled document is an immutable snapshot.
       Cache them.
-    - **Canvas reuse.** Setting `canvas.width` / `canvas.height` clears the
-      backing store. If you reuse a canvas without resizing (same page,
-      same scale, repaint), call
-      `ctx.clearRect(0, 0, canvas.width, canvas.height)` before `paint` to
-      avoid stale pixels in transparent regions.
-    - **Worker rendering.** The painter currently accepts only
-      `CanvasRenderingContext2D` and runs on the main thread. For
-      multi-page documents this can jank typing in an editor; route the
-      paint loop through `requestIdleCallback` or coalesce to the visible
-      viewport.
+    - **Worker rendering.** Pass an `OffscreenCanvasRenderingContext2D`
+      to the same `paint` call to rasterize off the main thread. Loading
+      the WASM module inside the Worker is the host's responsibility.
     - **No text selection / find-in-page.** Canvas pixels are opaque to the
       DOM. If you need accessibility or text selection in the preview,
       keep an SVG/PDF export path alongside.
