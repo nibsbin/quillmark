@@ -13,7 +13,7 @@ if ! command -v wasm-bindgen &> /dev/null; then
 fi
 
 echo ""
-echo "Building for targets: bundler, nodejs (optimized for size)"
+echo "Building for target: bundler (optimized for size)"
 
 # Step 1: Build WASM binary with cargo
 echo "Building WASM binary..."
@@ -36,15 +36,6 @@ wasm-bindgen \
     --out-dir pkg/bundler \
     --out-name wasm \
     --target bundler \
-    --weak-refs
-
-echo "Generating JS bindings for nodejs..."
-mkdir -p pkg/node-esm
-wasm-bindgen \
-    target/wasm32-unknown-unknown/wasm-release/quillmark_wasm.wasm \
-    --out-dir pkg/node-esm \
-    --out-name wasm \
-    --target experimental-nodejs-module \
     --weak-refs
 
 # Note: a wasm-opt -Oz pass was tried and removed. With the current
@@ -98,4 +89,3 @@ report_size() {
     fi
 }
 report_size "bundler" pkg/bundler/wasm_bg.wasm
-report_size "nodejs"  pkg/node-esm/wasm_bg.wasm
