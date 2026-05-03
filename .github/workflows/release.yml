@@ -124,6 +124,17 @@ jobs:
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
 
+      - name: Restore WASM build cache
+        id: wasm-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            target/wasm32-unknown-unknown/wasm-release
+            pkg
+          key: wasm-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'crates/**/*.rs') }}
+          restore-keys: |
+            wasm-${{ runner.os }}-
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -131,11 +142,13 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - name: Install wasm-bindgen-cli
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
         uses: taiki-e/install-action@v2
         with:
           tool: wasm-bindgen-cli@0.2.118
 
       - name: Build WASM packages
+        if: steps.wasm-cache.outputs.cache-hit != 'true'
         run: ./scripts/build-wasm.sh
 
       - name: Install npm test dependencies
