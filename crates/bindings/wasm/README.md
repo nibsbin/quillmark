@@ -79,6 +79,50 @@ O(1) getter for the number of composable cards (excluding the main card).
 Use this to validate indices before calling card mutators (`removeCard`,
 `updateCardField`, etc.) without allocating the full `cards` array.
 
+### `quill.form(doc)`
+
+Returns a schema-aware form view of `doc` as a plain, `JSON.stringify`-able JS
+object. Shape:
+
+```ts
+{
+  main:  { schema: {...}, values: { [field]: {...} } },
+  cards: [ ... ],
+  diagnostics: Diagnostic[]
+}
+```
+
+`diagnostics` collects both schema-validation errors (required fields missing,
+type mismatches, enum violations, format violations — code
+`form::validation_error`) and unknown card-tag warnings (code
+`form::unknown_card_tag`). An empty array means the document is valid against
+the quill schema. This call does **not** invoke the backend and produces no
+rendered output.
+
+**Snapshot semantics.** The result reflects `doc` at call time; call `form`
+again after any mutation.
+
+### Validation without rendering
+
+For use cases that need to validate markdown content without producing any
+rendered output (e.g. an MCP server that checks an agent's document before
+forwarding it):
+
+```ts
+// 1. Parse — throws on malformed markdown / missing QUILL sentinel.
+const doc = Document.fromMarkdown(markdown);
+
+// 2. Validate against the quill schema — no render invoked.
+const form = quill.form(doc);
+const errors = form.diagnostics.filter(d => d.severity === "error");
+if (errors.length > 0) {
+  // surface errors[0].message (or iterate) without ever rendering
+}
+```
+
+Parse warnings (non-fatal issues flagged during step 1, e.g. near-miss
+sentinel lints) are available on the document itself via `doc.warnings`.
+
 ### `quill.render(parsed, opts?)` vs. `quill.open(parsed)`
 
 Use **`Quill.render`** for one-shot exports (PDF/SVG/PNG) — compiles, emits
