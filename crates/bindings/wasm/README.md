@@ -79,6 +79,18 @@ O(1) getter for the number of composable cards (excluding the main card).
 Use this to validate indices before calling card mutators (`removeCard`,
 `updateCardField`, etc.) without allocating the full `cards` array.
 
+### `quill.form(doc)`
+
+Returns `{ main, cards, diagnostics }` — a schema-aware snapshot of `doc`
+without invoking the backend. `diagnostics` contains validation errors and
+warnings; an empty array means the document is valid. Useful for validating
+content without rendering:
+
+```ts
+const form = quill.form(Document.fromMarkdown(markdown));
+const errors = form.diagnostics.filter(d => d.severity === "error");
+```
+
 ### `quill.render(parsed, opts?)` vs. `quill.open(parsed)`
 
 Use **`Quill.render`** for one-shot exports (PDF/SVG/PNG) — compiles, emits
