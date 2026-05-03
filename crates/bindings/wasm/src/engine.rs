@@ -7,6 +7,119 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use wasm_bindgen::prelude::*;
 
+/// TypeScript declarations for the quill metadata surface and form view.
+///
+/// Emitted via `typescript_custom_section` so the types land in the generated
+/// `.d.ts` as a single source of truth. Consumers can import these directly
+/// rather than redeclaring the shape locally.
+#[wasm_bindgen(typescript_custom_section)]
+const METADATA_FORM_TS: &'static str = r#"
+/** UI layout hints for a single field. */
+export interface QuillFieldUi {
+    group?: string;
+    order?: number;
+    compact?: boolean;
+    multiline?: boolean;
+}
+
+/** UI layout hints for a card (main or named card type). */
+export interface QuillCardUi {
+    hide_body?: boolean;
+    default_title?: string;
+}
+
+/** Schema entry for a single field declared in a quill's `Quill.yaml`. */
+export interface QuillFieldSchema {
+    type: "string" | "number" | "integer" | "boolean" | "array" | "object" | "date" | "datetime" | "markdown";
+    title?: string;
+    description?: string;
+    default?: unknown;
+    examples?: unknown;
+    required?: boolean;
+    enum?: string[];
+    ui?: QuillFieldUi;
+    properties?: Record<string, QuillFieldSchema>;
+    items?: QuillFieldSchema;
+}
+
+/** Schema entry for the main card or a named card type. */
+export interface QuillCardSchema {
+    title?: string;
+    description?: string;
+    fields: Record<string, QuillFieldSchema>;
+    ui?: QuillCardUi;
+}
+
+/**
+ * Public schema contract returned as `QuillMetadata.schema`.
+ *
+ * Identical to `QuillConfig::public_schema()` on the Rust side.
+ */
+export interface QuillSchema {
+    name: string;
+    main: QuillCardSchema;
+    /** Present only when the quill declares at least one named card type. */
+    card_types?: Record<string, QuillCardSchema>;
+    /** The quill's bundled example document, if declared. */
+    example?: string;
+}
+
+/**
+ * Read-only snapshot of the loaded quill's engine info and declared schema.
+ * Returned by `Quill.metadata`.
+ *
+ * Well-known keys are strongly typed; any additional keys declared under
+ * `quill:` in `Quill.yaml` appear as `unknown`.
+ */
+export interface QuillMetadata {
+    schema: QuillSchema;
+    backend: string;
+    version: string;
+    author: string;
+    description: string;
+    supportedFormats: OutputFormat[];
+    [key: string]: unknown;
+}
+
+/** Source of a field's effective value in a form view. */
+export type FormFieldSource = "document" | "default" | "missing";
+
+/**
+ * A single field's view within a `FormCard`.
+ *
+ * - `value` — the document-supplied value (`null` when absent).
+ * - `default` — the schema default (`null` when no default is declared).
+ * - `source` — where the effective value comes from.
+ */
+export interface FormFieldValue {
+    value: unknown;
+    default: unknown;
+    source: FormFieldSource;
+}
+
+/**
+ * A card viewed through its schema, as returned by `Quill.form`,
+ * `Quill.blankMain`, and `Quill.blankCard`.
+ */
+export interface FormCard {
+    schema: QuillCardSchema;
+    values: Record<string, FormFieldValue>;
+}
+
+/**
+ * Schema-aware form view of a document, returned by `Quill.form`.
+ *
+ * - `main` — the main card viewed through the quill's main schema.
+ * - `cards` — composable card blocks, in document order (unknown tags excluded).
+ * - `diagnostics` — diagnostics from unknown card tags and validation.
+ */
+export interface Form {
+    main: FormCard;
+    cards: FormCard[];
+    diagnostics: Diagnostic[];
+}
+"#;
+
 /// TypeScript declaration for the `pushCard` / `insertCard` input shape.
 ///
 /// `tag` is required; `fields` and `body` are optional (defaulted by serde).
@@ -223,7 +336,7 @@ impl Quill {
     ///
     /// Equivalent by value for the lifetime of the handle; the quill is
     /// immutable once constructed.
-    #[wasm_bindgen(getter, js_name = metadata)]
+    #[wasm_bindgen(getter, js_name = metadata, unchecked_return_type = "QuillMetadata")]
     pub fn metadata(&self) -> JsValue {
         let source = self.inner.source();
         let config = source.config();
@@ -298,7 +411,7 @@ impl Quill {
     /// at call time. Subsequent edits to `doc` require calling `form` again.
     ///
     /// [`Form`]: quillmark::form::Form
-    #[wasm_bindgen(js_name = form)]
+    #[wasm_bindgen(js_name = form, unchecked_return_type = "Form")]
     pub fn form(&self, doc: &Document) -> Result<JsValue, JsValue> {
         let form = self.inner.form(&doc.inner);
         let serializer = serde_wasm_bindgen::Serializer::new()
@@ -315,7 +428,7 @@ impl Quill {
     /// the schema declares a default) or `"missing"`.
     ///
     /// [`Form::main`]: quillmark::form::Form::main
-    #[wasm_bindgen(js_name = blankMain)]
+    #[wasm_bindgen(js_name = blankMain, unchecked_return_type = "FormCard")]
     pub fn blank_main(&self) -> Result<JsValue, JsValue> {
         let card = self.inner.blank_main();
         let serializer = serde_wasm_bindgen::Serializer::new()
@@ -333,7 +446,7 @@ impl Quill {
     /// [`Form::cards`].
     ///
     /// [`Form::cards`]: quillmark::form::Form::cards
-    #[wasm_bindgen(js_name = blankCard)]
+    #[wasm_bindgen(js_name = blankCard, unchecked_return_type = "FormCard | null")]
     pub fn blank_card(&self, card_type: &str) -> Result<JsValue, JsValue> {
         match self.inner.blank_card(card_type) {
             Some(card) => {
