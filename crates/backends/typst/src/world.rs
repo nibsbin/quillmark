@@ -10,6 +10,10 @@ use typst::{Library, World};
 use crate::helper;
 use quillmark_core::QuillSource;
 
+static FALLBACK_REGULAR: &[u8] = include_bytes!("fonts/Figtree-Regular.ttf");
+static FALLBACK_BOLD: &[u8] = include_bytes!("fonts/Figtree-Bold.ttf");
+static FALLBACK_ITALIC: &[u8] = include_bytes!("fonts/Figtree-Italic.ttf");
+
 /// Typst World implementation for quill-based compilation.
 ///
 /// Implements the Typst `World` trait to provide dynamic package loading,
@@ -37,9 +41,7 @@ impl QuillWorld {
         let mut book = FontBook::new();
         let mut fonts = Vec::new();
 
-        // Load fonts from quill assets first (eagerly loaded).
-        // Quills are responsible for shipping any fonts they need — there is
-        // no embedded fallback.
+        // Load fonts from quill assets (eagerly loaded).
         let font_data_list = Self::load_fonts_from_quill(source)?;
         for font_data in font_data_list {
             let font_bytes = Bytes::new(font_data);
@@ -49,9 +51,15 @@ impl QuillWorld {
             }
         }
 
-        // Error if no fonts available
+        // Fall back to the embedded Figtree faces when the quill ships no fonts.
         if fonts.is_empty() {
-            return Err(format!("No fonts found: asset_faces={}", fonts.len()).into());
+            for data in [FALLBACK_REGULAR, FALLBACK_BOLD, FALLBACK_ITALIC] {
+                let font_bytes = Bytes::new(data.to_vec());
+                for font in Font::iter(font_bytes) {
+                    book.push(font.info().clone());
+                    fonts.push(font);
+                }
+            }
         }
 
         // Load assets from quill's in-memory file system
