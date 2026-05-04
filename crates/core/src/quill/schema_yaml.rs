@@ -1,13 +1,14 @@
 use super::QuillConfig;
 
 impl QuillConfig {
-    /// Emit the public schema contract as a YAML string.
-    ///
-    /// Thin wrapper around [`QuillConfig::public_schema`]; the JSON value
-    /// returned by that function is the single source of truth for the
-    /// public wire format, and YAML is one of several encodings of it.
-    pub fn public_schema_yaml(&self) -> Result<String, serde_saphyr::ser::Error> {
-        serde_saphyr::to_string(&self.public_schema())
+    /// YAML encoding of [`QuillConfig::schema`] (structural schema, no ui).
+    pub fn schema_yaml(&self) -> Result<String, serde_saphyr::ser::Error> {
+        serde_saphyr::to_string(&self.schema())
+    }
+
+    /// YAML encoding of [`QuillConfig::form_schema`] (schema + ui hints).
+    pub fn form_schema_yaml(&self) -> Result<String, serde_saphyr::ser::Error> {
+        serde_saphyr::to_string(&self.form_schema())
     }
 }
 
@@ -20,7 +21,7 @@ mod tests {
     }
 
     #[test]
-    fn emits_minimal_public_schema() {
+    fn emits_minimal_schema() {
         let config = config_from_yaml(
             r#"
 quill:
@@ -37,11 +38,12 @@ main:
 "#,
         );
 
-        let yaml = config.public_schema_yaml().unwrap();
-        assert!(yaml.contains("name: test_schema"));
+        let yaml = config.schema_yaml().unwrap();
         assert!(yaml.contains("main:"));
         assert!(yaml.contains("memo_for:"));
         assert!(yaml.contains("type: string"));
+        assert!(!yaml.contains("ref:"));
+        assert!(!yaml.contains("example:"));
     }
 
     #[test]
@@ -61,7 +63,7 @@ main:
 "#,
         );
 
-        let yaml = config.public_schema_yaml().unwrap();
+        let yaml = config.schema_yaml().unwrap();
         assert!(!yaml.contains("card_types:"));
     }
 
@@ -82,13 +84,13 @@ main:
 "#,
         );
 
-        let yaml = config.public_schema_yaml().unwrap();
+        let yaml = config.schema_yaml().unwrap();
         assert!(yaml.contains("page_count:"));
         assert!(yaml.contains("type: integer"));
     }
 
     #[test]
-    fn includes_card_types_ui_and_enum() {
+    fn schema_strips_ui_form_schema_keeps_it() {
         let config = config_from_yaml(
             r#"
 quill:
@@ -114,15 +116,19 @@ card_types:
 "#,
         );
 
-        let yaml = config.public_schema_yaml().unwrap();
-        assert!(yaml.contains("enum:"));
-        assert!(yaml.contains("ui:"));
-        assert!(yaml.contains("card_types:"));
-        assert!(yaml.contains("indorsement:"));
+        let clean = config.schema_yaml().unwrap();
+        assert!(clean.contains("enum:"));
+        assert!(clean.contains("card_types:"));
+        assert!(clean.contains("indorsement:"));
+        assert!(!clean.contains("ui:"));
+
+        let form = config.form_schema_yaml().unwrap();
+        assert!(form.contains("ui:"));
+        assert!(form.contains("group: Meta"));
     }
 
     #[test]
-    fn includes_example_when_present() {
+    fn omits_example_from_schema() {
         let mut config = config_from_yaml(
             r#"
 quill:
@@ -139,9 +145,10 @@ main:
         );
         config.example_markdown = Some("---\nQUILL: test\n---\n\n# Heading".to_string());
 
-        let yaml = config.public_schema_yaml().unwrap();
-        assert!(yaml.contains("example:"));
-        assert!(yaml.contains("QUILL: test"));
+        let yaml = config.schema_yaml().unwrap();
+        assert!(!yaml.contains("example:"));
+        let form = config.form_schema_yaml().unwrap();
+        assert!(!form.contains("example:"));
     }
 
     #[test]
@@ -167,17 +174,14 @@ main:
 "#,
         );
 
-        let yaml = config.public_schema_yaml().unwrap();
+        let yaml = config.schema_yaml().unwrap();
         let parsed: serde_json::Value = serde_saphyr::from_str(&yaml).unwrap();
-        assert_eq!(
-            parsed.get("name").and_then(|v| v.as_str()),
-            Some("round_trip")
-        );
+        assert!(parsed.get("ref").is_none());
         assert!(parsed.get("main").and_then(|v| v.get("fields")).is_some());
     }
 
     #[test]
-    fn public_schema_value_matches_yaml_round_trip() {
+    fn schema_value_matches_yaml_round_trip() {
         let config = config_from_yaml(
             r#"
 quill:
@@ -204,9 +208,14 @@ card_types:
 "#,
         );
 
-        let value = config.public_schema();
-        let yaml = config.public_schema_yaml().unwrap();
+        let value = config.schema();
+        let yaml = config.schema_yaml().unwrap();
         let parsed: serde_json::Value = serde_saphyr::from_str(&yaml).unwrap();
         assert_eq!(value, parsed);
+
+        let form_value = config.form_schema();
+        let form_yaml = config.form_schema_yaml().unwrap();
+        let form_parsed: serde_json::Value = serde_saphyr::from_str(&form_yaml).unwrap();
+        assert_eq!(form_value, form_parsed);
     }
 }
