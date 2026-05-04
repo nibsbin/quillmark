@@ -17,6 +17,12 @@
 //! When `Quillmark::new()` is called, only backends with enabled features
 //! are registered automatically.
 //!
+//! ## Airmark Deployment Constraints
+//!
+//! The airmark deployment MUST NOT expose MCP or ephemeral endpoints.
+//! Quillmark has no MCP server implementation — no `mcp` or `ephemeral`
+//! backend exists in the feature set. The tests below assert this invariant.
+//!
 //! ## Test Strategy
 //!
 //! Tests use conditional compilation to verify correct behavior:
@@ -55,5 +61,23 @@ fn test_typst_backend_not_registered() {
         backends.len(),
         0,
         "No backends should be registered when all features are disabled"
+    );
+}
+
+#[test]
+fn test_no_mcp_or_ephemeral_backends() {
+    // Airmark deployment must never expose MCP or ephemeral endpoints.
+    // Neither backend type exists in quillmark's feature set; this test
+    // guards against accidental future additions.
+    let engine = Quillmark::new();
+    let backends = engine.registered_backends();
+
+    assert!(
+        !backends.contains(&"mcp"),
+        "MCP backend must not be registered in any deployment"
+    );
+    assert!(
+        !backends.contains(&"ephemeral"),
+        "Ephemeral backend must not be registered in any deployment"
     );
 }
