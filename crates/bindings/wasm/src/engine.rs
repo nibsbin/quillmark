@@ -57,6 +57,10 @@ export interface QuillCardSchema {
  */
 export interface QuillSchema {
     name: string;
+    /** Semver version of this quill. */
+    version: string;
+    /** Canonical reference string (`name@version`) — the value authors write in the `QUILL:` field. */
+    ref: string;
     main: QuillCardSchema;
     /** Present only when the quill declares at least one named card type. */
     card_types?: Record<string, QuillCardSchema>;
@@ -317,7 +321,8 @@ impl Quill {
     ///
     /// Returns a plain JS object with:
     /// - `schema` — the quill's public schema contract, identical to
-    ///   `QuillConfig::public_schema()`. Top-level keys: `name`, `main`,
+    ///   `QuillConfig::public_schema()`. Top-level keys: `name`, `version`,
+    ///   `ref` (`name@version` — the string authors write in `QUILL:`), `main`,
     ///   optional `card_types` (map keyed by card name, omitted when empty),
     ///   optional `example`. `main` and each card under `card_types` share
     ///   the same shape: `fields` (map keyed by field name), optional

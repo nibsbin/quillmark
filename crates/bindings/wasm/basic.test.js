@@ -730,11 +730,13 @@ card_types:
     expect(meta.supportedFormats.length).toBeGreaterThan(0)
 
     // The quill's declared contract lives under metadata.schema. Its shape is
-    // identical to QuillConfig::public_schema() in Rust: { name, main,
-    // card_types, example? }. main and each card under card_types share the
-    // same shape.
+    // identical to QuillConfig::public_schema() in Rust: { name, version, ref,
+    // main, card_types, example? }. main and each card under card_types share
+    // the same shape.
     expect(meta.schema).toBeDefined()
     expect(meta.schema.name).toBe('meta_test_quill')
+    expect(meta.schema.version).toBe('0.2.1')
+    expect(meta.schema.ref).toBe('meta_test_quill@0.2.1')
     expect(meta.schema.main).toBeDefined()
     // schema.main.description is the schema's own description, authored
     // under `main:`, independent of meta.description above.

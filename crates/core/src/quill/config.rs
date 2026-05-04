@@ -78,16 +78,26 @@ impl QuillConfig {
     /// Public schema contract as a JSON value.
     ///
     /// The single source of truth for what consumers (form UIs, MCP tools,
-    /// LLM repair loops) see. Top-level keys: `name`, `main`, optional
-    /// `card_types` (map keyed by card name), and optional `example`.
-    /// `main` and each card under `card_types` serialize their `FieldSchema`
-    /// children via the structs' own serde attributes; the wire format here
-    /// is therefore pinned by those attributes plus this projection.
+    /// LLM repair loops) see. Top-level keys: `name`, `version`, `ref`
+    /// (`name@version` — the string authors write in the `QUILL:` field),
+    /// `main`, optional `card_types` (map keyed by card name), and optional
+    /// `example`. `main` and each card under `card_types` serialize their
+    /// `FieldSchema` children via the structs' own serde attributes; the wire
+    /// format here is therefore pinned by those attributes plus this
+    /// projection.
     pub fn public_schema(&self) -> serde_json::Value {
         let mut obj = serde_json::Map::new();
         obj.insert(
             "name".to_string(),
             serde_json::Value::String(self.name.clone()),
+        );
+        obj.insert(
+            "version".to_string(),
+            serde_json::Value::String(self.version.clone()),
+        );
+        obj.insert(
+            "ref".to_string(),
+            serde_json::Value::String(format!("{}@{}", self.name, self.version)),
         );
         obj.insert(
             "main".to_string(),
