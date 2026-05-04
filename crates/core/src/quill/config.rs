@@ -85,35 +85,53 @@ impl QuillConfig {
     /// `FieldSchema` children via the structs' own serde attributes; the wire
     /// format here is therefore pinned by those attributes plus this
     /// projection.
+    ///
+    /// Each `main.fields` map is prefixed with a required `QUILL` entry
+    /// whose `const` value is the canonical ref (`name@version`). Each card
+    /// type's `fields` map is prefixed with a required `CARD` entry whose
+    /// `const` value is the card type name. These sentinels let LLM
+    /// consumers know exactly which values to write when composing documents.
     pub fn public_schema(&self) -> serde_json::Value {
+        let canonical_ref = format!("{}@{}", self.name, self.version);
+
         let mut obj = serde_json::Map::new();
         obj.insert(
-            "name".to_string(),
-            serde_json::Value::String(self.name.clone()),
-        );
-        obj.insert(
-            "version".to_string(),
-            serde_json::Value::String(self.version.clone()),
-        );
-        obj.insert(
             "ref".to_string(),
-            serde_json::Value::String(format!("{}@{}", self.name, self.version)),
+            serde_json::Value::String(canonical_ref.clone()),
         );
-        obj.insert(
-            "main".to_string(),
-            serde_json::to_value(&self.main).unwrap_or(serde_json::Value::Null),
+
+        let mut main_value =
+            serde_json::to_value(&self.main).unwrap_or(serde_json::Value::Null);
+        Self::prepend_sentinel_field(
+            &mut main_value,
+            "QUILL",
+            &canonical_ref,
+            "Canonical quill reference. Must be exactly this value as the QUILL: sentinel in the document frontmatter.",
         );
+        obj.insert("main".to_string(), main_value);
+
         if !self.card_types.is_empty() {
-            let card_types: BTreeMap<String, &CardSchema> = self
+            let card_types: BTreeMap<String, serde_json::Value> = self
                 .card_types
                 .iter()
-                .map(|card| (card.name.clone(), card))
+                .map(|card| {
+                    let mut card_value =
+                        serde_json::to_value(card).unwrap_or(serde_json::Value::Null);
+                    Self::prepend_sentinel_field(
+                        &mut card_value,
+                        "CARD",
+                        &card.name,
+                        "Card type name. Must be exactly this value as the CARD: sentinel in the card frontmatter.",
+                    );
+                    (card.name.clone(), card_value)
+                })
                 .collect();
             obj.insert(
                 "card_types".to_string(),
                 serde_json::to_value(&card_types).unwrap_or(serde_json::Value::Null),
             );
         }
+
         if let Some(example) = &self.example_markdown {
             obj.insert(
                 "example".to_string(),
@@ -121,6 +139,28 @@ impl QuillConfig {
             );
         }
         serde_json::Value::Object(obj)
+    }
+
+    /// Prepend a sentinel field (QUILL or CARD) with a `const` value into
+    /// the `fields` object of a serialised card schema value so that it
+    /// appears first and LLM consumers encounter it before other fields.
+    fn prepend_sentinel_field(
+        card_value: &mut serde_json::Value,
+        key: &str,
+        const_value: &str,
+        description: &str,
+    ) {
+        let sentinel = serde_json::json!({
+            "type": "string",
+            "const": const_value,
+            "description": description,
+            "required": true
+        });
+        if let Some(serde_json::Value::Object(fields)) = card_value.get_mut("fields") {
+            let existing = std::mem::take(fields);
+            fields.insert(key.to_string(), sentinel);
+            fields.extend(existing);
+        }
     }
 
     /// Coerce typed frontmatter fields (IndexMap, no CARDS/BODY keys).

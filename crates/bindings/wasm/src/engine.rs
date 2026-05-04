@@ -56,9 +56,6 @@ export interface QuillCardSchema {
  * Identical to `QuillConfig::public_schema()` on the Rust side.
  */
 export interface QuillSchema {
-    name: string;
-    /** Semver version of this quill. */
-    version: string;
     /** Canonical reference string (`name@version`) — the value authors write in the `QUILL:` field. */
     ref: string;
     main: QuillCardSchema;

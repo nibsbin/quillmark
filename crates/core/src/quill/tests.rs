@@ -2203,7 +2203,7 @@ fn public_schema_snapshot_usaf_memo_0_1_0() {
 
     let parsed: serde_json::Value =
         serde_saphyr::from_str(&yaml).expect("schema yaml should parse");
-    assert!(parsed.get("name").is_some());
+    assert!(parsed.get("ref").is_some());
     assert!(parsed.get("main").is_some());
     assert!(
         parsed.get("main").and_then(|v| v.get("fields")).is_some(),

@@ -38,7 +38,7 @@ main:
         );
 
         let yaml = config.public_schema_yaml().unwrap();
-        assert!(yaml.contains("name: test_schema"));
+        assert!(yaml.contains("ref: test_schema@"));
         assert!(yaml.contains("main:"));
         assert!(yaml.contains("memo_for:"));
         assert!(yaml.contains("type: string"));
@@ -170,8 +170,8 @@ main:
         let yaml = config.public_schema_yaml().unwrap();
         let parsed: serde_json::Value = serde_saphyr::from_str(&yaml).unwrap();
         assert_eq!(
-            parsed.get("name").and_then(|v| v.as_str()),
-            Some("round_trip")
+            parsed.get("ref").and_then(|v| v.as_str()),
+            Some("round_trip@1.0")
         );
         assert!(parsed.get("main").and_then(|v| v.get("fields")).is_some());
     }
