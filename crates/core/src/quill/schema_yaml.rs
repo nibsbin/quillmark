@@ -38,10 +38,11 @@ main:
         );
 
         let yaml = config.public_schema_yaml().unwrap();
-        assert!(yaml.contains("ref: test_schema@"));
         assert!(yaml.contains("main:"));
         assert!(yaml.contains("memo_for:"));
         assert!(yaml.contains("type: string"));
+        assert!(!yaml.contains("ref:"));
+        assert!(!yaml.contains("example:"));
     }
 
     #[test]
@@ -122,7 +123,7 @@ card_types:
     }
 
     #[test]
-    fn includes_example_when_present() {
+    fn omits_example_from_schema() {
         let mut config = config_from_yaml(
             r#"
 quill:
@@ -140,8 +141,7 @@ main:
         config.example_markdown = Some("---\nQUILL: test\n---\n\n# Heading".to_string());
 
         let yaml = config.public_schema_yaml().unwrap();
-        assert!(yaml.contains("example:"));
-        assert!(yaml.contains("QUILL: test"));
+        assert!(!yaml.contains("example:"));
     }
 
     #[test]
@@ -169,10 +169,7 @@ main:
 
         let yaml = config.public_schema_yaml().unwrap();
         let parsed: serde_json::Value = serde_saphyr::from_str(&yaml).unwrap();
-        assert_eq!(
-            parsed.get("ref").and_then(|v| v.as_str()),
-            Some("round_trip@1.0")
-        );
+        assert!(parsed.get("ref").is_none());
         assert!(parsed.get("main").and_then(|v| v.get("fields")).is_some());
     }
 

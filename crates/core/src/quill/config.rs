@@ -77,11 +77,8 @@ impl QuillConfig {
 
     /// Public schema contract as a JSON value.
     ///
-    /// The single source of truth for what consumers (form UIs, MCP tools,
-    /// LLM repair loops) see. Top-level keys: `name`, `version`, `ref`
-    /// (`name@version` — the string authors write in the `QUILL:` field),
-    /// `main`, optional `card_types` (map keyed by card name), and optional
-    /// `example`. `main` and each card under `card_types` serialize their
+    /// Top-level keys: `main`, and optional `card_types` (map keyed by card
+    /// name). `main` and each card under `card_types` serialize their
     /// `FieldSchema` children via the structs' own serde attributes; the wire
     /// format here is therefore pinned by those attributes plus this
     /// projection.
@@ -91,14 +88,14 @@ impl QuillConfig {
     /// type's `fields` map is prefixed with a required `CARD` entry whose
     /// `const` value is the card type name. These sentinels let LLM
     /// consumers know exactly which values to write when composing documents.
+    ///
+    /// Identity fields (`name`, `version`, `ref`) and `example` are
+    /// intentionally omitted — they live on the parent `QuillMetadata`
+    /// object and consumers can opt in to including the example separately.
     pub fn public_schema(&self) -> serde_json::Value {
         let canonical_ref = format!("{}@{}", self.name, self.version);
 
         let mut obj = serde_json::Map::new();
-        obj.insert(
-            "ref".to_string(),
-            serde_json::Value::String(canonical_ref.clone()),
-        );
 
         let mut main_value =
             serde_json::to_value(&self.main).unwrap_or(serde_json::Value::Null);
@@ -132,12 +129,6 @@ impl QuillConfig {
             );
         }
 
-        if let Some(example) = &self.example_markdown {
-            obj.insert(
-                "example".to_string(),
-                serde_json::Value::String(example.clone()),
-            );
-        }
         serde_json::Value::Object(obj)
     }
 

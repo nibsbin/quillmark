@@ -2203,13 +2203,14 @@ fn public_schema_snapshot_usaf_memo_0_1_0() {
 
     let parsed: serde_json::Value =
         serde_saphyr::from_str(&yaml).expect("schema yaml should parse");
-    assert!(parsed.get("ref").is_some());
     assert!(parsed.get("main").is_some());
     assert!(
         parsed.get("main").and_then(|v| v.get("fields")).is_some(),
         "main.fields should be present"
     );
     assert!(parsed.get("card_types").is_some());
+    assert!(parsed.get("ref").is_none());
+    assert!(parsed.get("example").is_none());
     assert!(parsed.get("CARDS").is_none());
 
     // public_schema() (the JSON value) must agree with the YAML round-trip;

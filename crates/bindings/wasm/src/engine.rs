@@ -53,16 +53,15 @@ export interface QuillCardSchema {
 /**
  * Public schema contract returned as `QuillMetadata.schema`.
  *
- * Identical to `QuillConfig::public_schema()` on the Rust side.
+ * Contains only the fields needed for document composition. Identity fields
+ * (`name`, `version`, `ref`) live on the parent `QuillMetadata` object.
+ * The example document is available separately via `Quill.example` so
+ * consumers can choose whether to include it in an LLM prompt.
  */
 export interface QuillSchema {
-    /** Canonical reference string (`name@version`) — the value authors write in the `QUILL:` field. */
-    ref: string;
     main: QuillCardSchema;
     /** Present only when the quill declares at least one named card type. */
     card_types?: Record<string, QuillCardSchema>;
-    /** The quill's bundled example document, if declared. */
-    example?: string;
 }
 
 /**
@@ -312,6 +311,15 @@ impl Quill {
     #[wasm_bindgen(getter, js_name = supportsCanvas)]
     pub fn supports_canvas(&self) -> bool {
         self.inner.backend_id() == CANVAS_BACKEND_ID
+    }
+
+    /// The quill's bundled example document, or `undefined` if none was declared.
+    ///
+    /// Not included in `metadata.schema` so consumers can decide whether to
+    /// inject it into an LLM prompt. Stable for the lifetime of the handle.
+    #[wasm_bindgen(getter, js_name = example)]
+    pub fn example(&self) -> Option<String> {
+        self.inner.source().config().example_markdown.clone()
     }
 
     /// Read-only snapshot of the loaded quill's engine info and declared schema.
