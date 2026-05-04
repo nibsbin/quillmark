@@ -57,6 +57,10 @@ export interface QuillCardSchema {
  */
 export interface QuillSchema {
     name: string;
+    /** Semver version of this quill. */
+    version: string;
+    /** Canonical reference string (`name@version`) — the value authors write in the `QUILL:` field. */
+    ref: string;
     main: QuillCardSchema;
     /** Present only when the quill declares at least one named card type. */
     card_types?: Record<string, QuillCardSchema>;
