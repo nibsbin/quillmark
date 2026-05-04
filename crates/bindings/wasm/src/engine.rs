@@ -51,12 +51,19 @@ export interface QuillCardSchema {
 }
 
 /**
- * Public schema contract returned as `QuillMetadata.schema`.
+ * Quill schema contract — the structural description of documents this
+ * quill accepts.
  *
- * Contains only the fields needed for document composition. Identity fields
- * (`name`, `version`, `ref`) live on the parent `QuillMetadata` object.
- * The example document is available separately via `Quill.example` so
- * consumers can choose whether to include it in an LLM prompt.
+ * Returned by both `Quill.schema` (clean structural form, no ui hints) and
+ * `Quill.formSchema` (same shape extended with `ui` keys on cards and
+ * fields for form-builder consumers). The two values share this type
+ * because their shapes are identical except for the optional `ui` keys.
+ *
+ * Each `main.fields` map is prefixed with a required `QUILL` entry whose
+ * `const` value is the canonical ref (`name@version`). Each card type's
+ * `fields` map is prefixed with a required `CARD` entry whose `const`
+ * value is the card type name. These sentinels tell composing consumers
+ * exactly which sentinel strings to write.
  */
 export interface QuillSchema {
     main: QuillCardSchema;
@@ -65,14 +72,15 @@ export interface QuillSchema {
 }
 
 /**
- * Read-only snapshot of the loaded quill's engine info and declared schema.
- * Returned by `Quill.metadata`.
+ * Read-only snapshot of the loaded quill's identity, mirroring the `quill:`
+ * section of `Quill.yaml`. Returned by `Quill.metadata`.
  *
  * Well-known keys are strongly typed; any additional keys declared under
- * `quill:` in `Quill.yaml` appear as `unknown`.
+ * `quill:` in `Quill.yaml` appear as `unknown`. Schemas live on dedicated
+ * `Quill.schema` / `Quill.formSchema` getters and the bundled example on
+ * `Quill.example`.
  */
 export interface QuillMetadata {
-    schema: QuillSchema;
     name: string;
     version: string;
     backend: string;
@@ -316,24 +324,50 @@ impl Quill {
 
     /// The quill's bundled example document, or `undefined` if none was declared.
     ///
-    /// Not included in `metadata.schema` so consumers can decide whether to
-    /// inject it into an LLM prompt. Stable for the lifetime of the handle.
+    /// Exposed separately from the schemas so consumers can decide whether
+    /// to inject it into an LLM prompt. Stable for the lifetime of the handle.
     #[wasm_bindgen(getter, js_name = example)]
     pub fn example(&self) -> Option<String> {
         self.inner.source().config().example_markdown.clone()
     }
 
-    /// Read-only snapshot of the loaded quill's engine info and declared schema.
+    /// Structural document schema — types, constraints, and `QUILL`/`CARD`
+    /// sentinels with `const` values. **No ui hints.**
     ///
-    /// Returns a plain JS object mirroring the `quill:` section of `Quill.yaml`:
-    /// - `schema` — composition schema (`main` + optional `card_types`).
+    /// Use this for LLM/MCP consumers, document validators, and any tool
+    /// that does not render forms. Identical shape to `formSchema` minus
+    /// every `ui` key.
+    #[wasm_bindgen(getter, js_name = schema, unchecked_return_type = "QuillSchema")]
+    pub fn schema(&self) -> JsValue {
+        let value = self.inner.source().config().schema();
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        value.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
+    }
+
+    /// Form schema — same as `schema` plus card-level (`hide_body`,
+    /// `default_title`) and field-level (`group`, `order`, `compact`,
+    /// `multiline`) `ui` hints declared in `Quill.yaml`.
+    ///
+    /// Use this for form builders. LLM/MCP consumers should prefer
+    /// `schema`.
+    #[wasm_bindgen(getter, js_name = formSchema, unchecked_return_type = "QuillSchema")]
+    pub fn form_schema(&self) -> JsValue {
+        let value = self.inner.source().config().form_schema();
+        let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+        value.serialize(&serializer).unwrap_or(JsValue::UNDEFINED)
+    }
+
+    /// Read-only identity snapshot mirroring the `quill:` section of `Quill.yaml`.
+    ///
+    /// Returns a plain JS object with:
     /// - `name`, `version`, `backend`, `author`, `description` — identity
-    ///   fields from `Quill.yaml`'s `quill:` section. `description` is the
-    ///   quill-level description; `schema.main.description`, when present, is
-    ///   independent and describes the main card's schema.
+    ///   fields from `Quill.yaml`'s `quill:` section. `description` describes
+    ///   the quill itself.
     /// - `supportedFormats` — output formats the backend produces.
     /// - Any additional unstructured keys declared under `quill:`.
-    /// The example document is available separately via `Quill.example`.
+    ///
+    /// Schemas live on `Quill.schema` (clean) and `Quill.formSchema` (with
+    /// ui hints). The example document lives on `Quill.example`.
     ///
     /// Consumers that need validation run their own validator against
     /// `metadata.schema`.
@@ -346,7 +380,6 @@ impl Quill {
         let config = source.config();
 
         let mut obj = serde_json::Map::new();
-        obj.insert("schema".to_string(), config.public_schema());
         obj.insert(
             "name".to_string(),
             serde_json::Value::String(config.name.clone()),

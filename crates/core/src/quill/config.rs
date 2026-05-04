@@ -75,24 +75,43 @@ impl QuillConfig {
         self.card_types.iter().find(|card| card.name == name)
     }
 
-    /// Public schema contract as a JSON value.
+    /// Form schema as a JSON value: structural schema **plus** ui hints.
+    ///
+    /// Includes everything in [`schema`](Self::schema) and additionally
+    /// preserves field-level `ui` (group, order, compact, multiline) and
+    /// card-level `ui` (hide_body, default_title) hints. Form-builder
+    /// consumers (`Quill.formSchema` in WASM) use this to drive layout.
+    ///
+    /// LLM/MCP consumers should prefer [`schema`](Self::schema), which omits
+    /// these presentation-only keys.
+    pub fn form_schema(&self) -> serde_json::Value {
+        self.build_schema(true)
+    }
+
+    /// Structural schema as a JSON value: types, constraints, sentinels.
     ///
     /// Top-level keys: `main`, and optional `card_types` (map keyed by card
-    /// name). `main` and each card under `card_types` serialize their
-    /// `FieldSchema` children via the structs' own serde attributes; the wire
-    /// format here is therefore pinned by those attributes plus this
-    /// projection.
+    /// name). Field-level and card-level `ui` keys are stripped — this view
+    /// is the document structure schema only, suitable for LLM/MCP consumers
+    /// composing documents.
     ///
-    /// Each `main.fields` map is prefixed with a required `QUILL` entry
-    /// whose `const` value is the canonical ref (`name@version`). Each card
-    /// type's `fields` map is prefixed with a required `CARD` entry whose
-    /// `const` value is the card type name. These sentinels let LLM
-    /// consumers know exactly which values to write when composing documents.
+    /// Each `main.fields` map is prefixed with a required `QUILL` entry whose
+    /// `const` value is the canonical ref (`name@version`). Each card type's
+    /// `fields` map is prefixed with a required `CARD` entry whose `const`
+    /// value is the card type name. These sentinels tell consumers exactly
+    /// which values to write when composing documents.
     ///
-    /// Identity fields (`name`, `version`, `ref`) and `example` are
-    /// intentionally omitted — they live on the parent `QuillMetadata`
-    /// object and consumers can opt in to including the example separately.
-    pub fn public_schema(&self) -> serde_json::Value {
+    /// Identity fields (`name`, `version`, `backend`, `author`, `description`)
+    /// live on `QuillMetadata` rather than the schema. The bundled example
+    /// document is exposed separately so consumers can decide whether to
+    /// include it in a prompt.
+    pub fn schema(&self) -> serde_json::Value {
+        self.build_schema(false)
+    }
+
+    /// Shared projection. `with_ui = true` preserves `ui` hints for form
+    /// builders; `false` strips them for structural/composition consumers.
+    fn build_schema(&self, with_ui: bool) -> serde_json::Value {
         let canonical_ref = format!("{}@{}", self.name, self.version);
 
         let mut obj = serde_json::Map::new();
@@ -105,6 +124,9 @@ impl QuillConfig {
             &canonical_ref,
             "Canonical quill reference. Must be exactly this value as the QUILL: sentinel in the document frontmatter.",
         );
+        if !with_ui {
+            Self::strip_ui_recursive(&mut main_value);
+        }
         obj.insert("main".to_string(), main_value);
 
         if !self.card_types.is_empty() {
@@ -120,6 +142,9 @@ impl QuillConfig {
                         &card.name,
                         "Card type name. Must be exactly this value as the CARD: sentinel in the card frontmatter.",
                     );
+                    if !with_ui {
+                        Self::strip_ui_recursive(&mut card_value);
+                    }
                     (card.name.clone(), card_value)
                 })
                 .collect();
@@ -151,6 +176,24 @@ impl QuillConfig {
             let existing = std::mem::take(fields);
             fields.insert(key.to_string(), sentinel);
             fields.extend(existing);
+        }
+    }
+
+    /// Recursively remove every `ui` key from a JSON value.
+    fn strip_ui_recursive(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(map) => {
+                map.remove("ui");
+                for v in map.values_mut() {
+                    Self::strip_ui_recursive(v);
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for v in arr.iter_mut() {
+                    Self::strip_ui_recursive(v);
+                }
+            }
+            _ => {}
         }
     }
 
