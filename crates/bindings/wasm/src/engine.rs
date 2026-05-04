@@ -73,8 +73,9 @@ export interface QuillSchema {
  */
 export interface QuillMetadata {
     schema: QuillSchema;
-    backend: string;
+    name: string;
     version: string;
+    backend: string;
     author: string;
     description: string;
     supportedFormats: OutputFormat[];
@@ -324,22 +325,15 @@ impl Quill {
 
     /// Read-only snapshot of the loaded quill's engine info and declared schema.
     ///
-    /// Returns a plain JS object with:
-    /// - `schema` — the quill's public schema contract, identical to
-    ///   `QuillConfig::public_schema()`. Top-level keys: `name`, `version`,
-    ///   `ref` (`name@version` — the string authors write in `QUILL:`), `main`,
-    ///   optional `card_types` (map keyed by card name, omitted when empty),
-    ///   optional `example`. `main` and each card under `card_types` share
-    ///   the same shape: `fields` (map keyed by field name), optional
-    ///   `title`, `description`, `ui`.
-    /// - `backend`, `version`, `author`, `description` — quill identity
-    ///   declared in `Quill.yaml`'s `quill:` section. `description` describes
-    ///   the quill itself; if the author also declared `main.description` (the
-    ///   schema description of the entry-point card), it lives at
-    ///   `schema.main.description` and is independent.
-    /// - `supportedFormats` — output formats the backend produces, as
-    ///   lowercase strings.
+    /// Returns a plain JS object mirroring the `quill:` section of `Quill.yaml`:
+    /// - `schema` — composition schema (`main` + optional `card_types`).
+    /// - `name`, `version`, `backend`, `author`, `description` — identity
+    ///   fields from `Quill.yaml`'s `quill:` section. `description` is the
+    ///   quill-level description; `schema.main.description`, when present, is
+    ///   independent and describes the main card's schema.
+    /// - `supportedFormats` — output formats the backend produces.
     /// - Any additional unstructured keys declared under `quill:`.
+    /// The example document is available separately via `Quill.example`.
     ///
     /// Consumers that need validation run their own validator against
     /// `metadata.schema`.
@@ -354,12 +348,16 @@ impl Quill {
         let mut obj = serde_json::Map::new();
         obj.insert("schema".to_string(), config.public_schema());
         obj.insert(
-            "backend".to_string(),
-            serde_json::Value::String(config.backend.clone()),
+            "name".to_string(),
+            serde_json::Value::String(config.name.clone()),
         );
         obj.insert(
             "version".to_string(),
             serde_json::Value::String(config.version.clone()),
+        );
+        obj.insert(
+            "backend".to_string(),
+            serde_json::Value::String(config.backend.clone()),
         );
         obj.insert(
             "author".to_string(),
