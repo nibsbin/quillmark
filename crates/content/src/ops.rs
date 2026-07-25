@@ -11,7 +11,10 @@
 //! than drifting.
 
 use crate::delta::{Assoc, Delta, Op};
-use crate::model::{Container, Island, Line, LineKind, Mark, MarkKind, Content, Usv, ISLAND_SLOT};
+use crate::model::{
+    line_kind_mismatch, Container, Island, Line, LineKind, LineKindMismatch, Mark, MarkKind,
+    Content, Usv, ISLAND_SLOT,
+};
 use crate::normalize::is_bidi_char;
 use crate::usv::char_to_byte;
 use std::borrow::Cow;
@@ -83,7 +86,7 @@ pub enum LineOp {
 
 use crate::serial::{
     container_from_value, container_to_value, line_kind_from_value, line_kind_to_value,
-    mark_from_value, mark_to_value, ParseError,
+    mark_from_value, mark_to_value, usv_from, ParseError,
 };
 use serde_json::{Map, Value};
 
@@ -193,19 +196,10 @@ pub fn line_op_to_value(op: &LineOp) -> Value {
 /// Decode a [`LineOp`] from its wire object. Dispatches on `op`.
 pub fn line_op_from_value(v: &Value) -> Result<LineOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("line op"))?;
-    let line = || {
-        o.get("line")
-            .and_then(Value::as_u64)
-            .map(|n| n as usize)
-            .ok_or(ParseError::Shape("line op line"))
-    };
+    let line = || usv_from(o.get("line"), "line op line");
     match o.get("op").and_then(Value::as_str) {
         Some("split") => Ok(LineOp::Split {
-            at: o
-                .get("at")
-                .and_then(Value::as_u64)
-                .map(|n| n as usize)
-                .ok_or(ParseError::Shape("split at"))?,
+            at: usv_from(o.get("at"), "split at")?,
         }),
         Some("join") => Ok(LineOp::Join { line: line()? }),
         Some("setKind") => Ok(LineOp::SetKind {
@@ -330,6 +324,24 @@ pub enum ApplyError {
     /// A [`MarkOp::Add`] of an anchor with the empty `id` — a degenerate handle,
     /// refused so every anchor carries a usable referent.
     EmptyAnchorId,
+    /// A [`LineOp::SetKind`] whose kind contradicts the line's text — tagging
+    /// prose `Island` or `Rule`, or a slot-bearing line `Code`. Export trusts the
+    /// kind over the text, so the write would silently drop the line's content;
+    /// the op-time twin of
+    /// [`Invariant::LineKindMismatch`](crate::model::Invariant::LineKindMismatch),
+    /// refused here because `normalize` does not repair it.
+    LineKindMismatch {
+        line: usize,
+        mismatch: LineKindMismatch,
+    },
+    /// A [`LineOp::SetContainers`] nested a line deeper than
+    /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH) — the op-time twin of
+    /// [`Invariant::NestingTooDeep`](crate::model::Invariant::NestingTooDeep).
+    NestingTooDeep {
+        line: usize,
+        depth: usize,
+        max: usize,
+    },
 }
 
 impl Content {
@@ -551,10 +563,39 @@ impl Content {
                 LineOp::Split { at } => self.split_line(*at)?,
                 LineOp::Join { line } => self.join_line(*line)?,
                 LineOp::SetKind { line, kind } => {
+                    // The kind must agree with the text already on the line:
+                    // export reads the kind and never the segment, so an
+                    // `Island`/`Rule` tag over prose projects the text away.
+                    // Checked before the write (line ops stage on a scratch copy,
+                    // so an error leaves the content untouched).
+                    let seg = self
+                        .text
+                        .split('\n')
+                        .nth(*line)
+                        .ok_or(ApplyError::LineOutOfRange {
+                            line: *line,
+                            lines: self.lines.len(),
+                        })?;
+                    if let Some(mismatch) = line_kind_mismatch(kind, seg) {
+                        return Err(ApplyError::LineKindMismatch {
+                            line: *line,
+                            mismatch,
+                        });
+                    }
                     let line = self.line_mut(*line)?;
                     line.kind = kind.clone();
                 }
                 LineOp::SetContainers { line, containers } => {
+                    // Both emitters recurse one frame per container, so an
+                    // over-deep path is a stack overflow at render, not a render
+                    // error. Same cap as import, refused before the write.
+                    if containers.len() > crate::MAX_NESTING_DEPTH {
+                        return Err(ApplyError::NestingTooDeep {
+                            line: *line,
+                            depth: containers.len(),
+                            max: crate::MAX_NESTING_DEPTH,
+                        });
+                    }
                     let line = self.line_mut(*line)?;
                     line.containers = containers.clone();
                 }
@@ -1156,6 +1197,73 @@ mod tests {
         }])
         .unwrap();
         assert!(matches!(rt.lines[0].kind, LineKind::Heading { level: 2 }));
+    }
+
+    /// Issue #1050: `SetKind` may not tag a line with a kind its text
+    /// contradicts — export reads the kind and not the segment, so the write
+    /// would project the line's content away. Refused before the write, so the
+    /// content is untouched.
+    #[test]
+    fn line_op_set_kind_refuses_a_kind_the_text_contradicts() {
+        let mut rt = from_markdown("hello world").unwrap();
+        assert_eq!(
+            rt.apply_line_ops(&[LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Island,
+            }]),
+            Err(ApplyError::LineKindMismatch {
+                line: 0,
+                mismatch: LineKindMismatch::IslandNotOneSlot,
+            })
+        );
+        assert_eq!(
+            rt.apply_line_ops(&[LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Rule,
+            }]),
+            Err(ApplyError::LineKindMismatch {
+                line: 0,
+                mismatch: LineKindMismatch::RuleNotEmpty,
+            })
+        );
+        assert_eq!(rt.text, "hello world");
+        assert_eq!(rt.lines[0].kind, LineKind::Para);
+        assert_eq!(rt.validate(), Ok(()));
+
+        // A table island's line tagged `Code` would fence the slot, which
+        // re-imports as nothing.
+        let mut tbl = from_markdown("| a | b |\n|---|---|\n| 1 | 2 |").unwrap();
+        assert_eq!(
+            tbl.apply_line_ops(&[LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Code { lang: None },
+            }]),
+            Err(ApplyError::LineKindMismatch {
+                line: 0,
+                mismatch: LineKindMismatch::CodeHasSlot,
+            })
+        );
+        assert_eq!(tbl.lines[0].kind, LineKind::Island);
+    }
+
+    /// Issue #1051: `SetContainers` is capped at the depth both emitters can
+    /// recurse — the op-time twin of the `validate` invariant.
+    #[test]
+    fn line_op_set_containers_is_depth_capped() {
+        let mut rt = from_markdown("hi").unwrap();
+        let deep = vec![Container::Quote; crate::MAX_NESTING_DEPTH + 1];
+        assert_eq!(
+            rt.apply_line_ops(&[LineOp::SetContainers {
+                line: 0,
+                containers: deep,
+            }]),
+            Err(ApplyError::NestingTooDeep {
+                line: 0,
+                depth: crate::MAX_NESTING_DEPTH + 1,
+                max: crate::MAX_NESTING_DEPTH,
+            })
+        );
+        assert!(rt.lines[0].containers.is_empty());
     }
 
     #[test]

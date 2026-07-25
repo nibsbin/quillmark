@@ -553,6 +553,19 @@ fn render_marked_core(
 ) -> String {
     let n = chars.len();
 
+    // A code span cannot carry an island: the span is emitted verbatim between
+    // backticks, so a slot inside it lands raw in the output and re-imports as
+    // nothing — the island, its slot, and the code mark all vanish. Markdown has
+    // no honest encoding (`` `![x](y)` `` is the *literal* text), so split each
+    // code range around every slot it covers and let the island render as its own
+    // markup between the surviving code spans: text and island preserved, one
+    // mark lowered to several — the same trade the sweep makes for free overlap.
+    let code_ranges: Vec<(usize, usize)> = code_ranges
+        .iter()
+        .flat_map(|&(s, e)| split_around_slots(chars, s, e))
+        .collect();
+    let code_ranges = &code_ranges[..];
+
     // Clip the wrapping marks so the sweep only ever sees a representable shape.
     let mut fmt: Vec<(usize, usize, &MarkKind)> = fmt.to_vec();
     let mut atomics: Vec<(usize, usize)> = code_ranges.to_vec();
@@ -596,10 +609,22 @@ fn render_marked_core(
                 stack.push(fi);
             }
             // A link is emitted atomically as [text](url); its display text
-            // carries plain content (nested marks in link text are not supported).
+            // carries plain content (nested marks in link text are not supported)
+            // but does carry islands — a linked image is `[![alt](src)](url)`,
+            // plain CommonMark — so each char routes through `island_markup_at`
+            // the way the plain-text path below does. Emitting the slice raw
+            // would leak the slot char and lose the island with it.
             if let Some(&(ls, le, url)) = links.iter().find(|(s, _, _)| *s == pos) {
                 out.push('[');
-                out.push_str(&escape_run(&chars[ls..le], escape_pipe));
+                for (i, &c) in chars[ls..le].iter().enumerate() {
+                    if c == ISLAND_SLOT {
+                        if let Some(markup) = island_markup_at(ls + i) {
+                            out.push_str(&markup);
+                        }
+                    } else {
+                        escape_char_into(c, i == 0, escape_pipe, &mut out);
+                    }
+                }
                 out.push_str("](");
                 emit_url(url, &mut out);
                 out.push(')');
@@ -715,6 +740,33 @@ pub fn clip_range_to_atomic(start: &mut usize, end: &mut usize, atomics: &[(usiz
             *end = cs;
         }
     }
+}
+
+/// The maximal slot-free subranges of `[start, end)` — the range itself when it
+/// covers no [`ISLAND_SLOT`], else one range per run between slots (empty runs
+/// dropped). Used to keep a code span off an island it cannot represent.
+fn split_around_slots(chars: &[char], start: usize, end: usize) -> Vec<(usize, usize)> {
+    let end = end.min(chars.len());
+    if !chars[start.min(end)..end].contains(&ISLAND_SLOT) {
+        return vec![(start, end)];
+    }
+    let mut out = Vec::new();
+    let mut run = start;
+    for (i, _) in chars[start..end]
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (start + i, c))
+        .filter(|(_, &c)| c == ISLAND_SLOT)
+    {
+        if run < i {
+            out.push((run, i));
+        }
+        run = i + 1;
+    }
+    if run < end {
+        out.push((run, end));
+    }
+    out
 }
 
 /// Nest `strong`/`emph` marks that partially overlap, by truncating the
@@ -881,6 +933,38 @@ mod tests {
             rt, rt2,
             "content not a fixed point.\n  in:  {md:?}\n  mid: {md2:?}"
         );
+    }
+
+    /// Issue #1049: a link over an island slot. A linked image is plain
+    /// CommonMark, so it sits inside the fixed-point domain — the link arm must
+    /// route its display text through the island renderer rather than emit the
+    /// slot char raw (which re-imports as nothing, losing island, link, and the
+    /// char with it).
+    #[test]
+    fn link_over_island_slot_round_trips() {
+        round_trips("[![a cat](cat.png)](https://e.com)");
+        round_trips("[a ![cat](cat.png) b](https://e.com)");
+        assert_eq!(
+            to_markdown(&from_markdown("[![a cat](cat.png)](https://e.com)").unwrap()),
+            "[![a cat](cat.png)](https://e.com)"
+        );
+    }
+
+    /// Issue #1049: a `Code` mark over an island slot — editor-buildable, not
+    /// importable. A code span is emitted verbatim, so it cannot carry the
+    /// island; the span splits around the slot, keeping both the text and the
+    /// island (one code mark lowered to two).
+    #[test]
+    fn code_mark_over_island_slot_keeps_the_island() {
+        let mut rt = from_markdown("a ![x](y.png) b").unwrap();
+        rt.marks.push(Mark { start: 0, end: 5, kind: MarkKind::Code });
+        rt.normalize();
+        assert_eq!(rt.validate(), Ok(()));
+        let md = to_markdown(&rt);
+        assert_eq!(md, "`a `![x](y.png)` b`");
+        let rt2 = from_markdown(&md).unwrap();
+        assert_eq!(rt2.text, rt.text);
+        assert_eq!(rt2.islands.len(), 1);
     }
 
     /// [`to_plaintext`] keeps literal text, drops marks, and strips island
