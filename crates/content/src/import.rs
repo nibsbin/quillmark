@@ -1,6 +1,6 @@
 //! Markdown import (cold): `normalize → pulldown → content`.
 //!
-//! The one place the `<u>` allowlist and `***` fixups run — once, at the
+//! The one place the `<u>` allowlist runs — once, at the
 //! boundary (issue #831 § Codecs). Input is normalized by
 //! [`crate::normalize::normalize_markdown`] (CRLF→LF, bidi strip, HTML
 //! comment-fence repair) so the content invariants hold by construction, then
@@ -85,11 +85,7 @@ pub fn from_markdown(markdown: &str) -> Result<Content, ImportError> {
     options.insert(Options::ENABLE_TABLES);
     let parser = Parser::new_ext(&normalized, options);
     let underline_opens: UnderlineOpens = Rc::new(RefCell::new(HashSet::new()));
-    let fixer = MarkdownFixer::new(
-        parser.into_offset_iter(),
-        &normalized,
-        Rc::clone(&underline_opens),
-    );
+    let fixer = MarkdownFixer::new(parser.into_offset_iter(), Rc::clone(&underline_opens));
 
     let mut b = Builder::new(underline_opens);
     b.run(fixer)?;
@@ -788,8 +784,8 @@ impl Builder {
                 }
             }
             // Inline content of the open cell (pulldown already trimmed the cell's
-            // surrounding whitespace; the fixer already stripped non-`<u>` HTML
-            // and fixed `***`). A soft/hard break in a single-line cell is a space.
+            // surrounding whitespace; the fixer already stripped non-`<u>` HTML).
+            // A soft/hard break in a single-line cell is a space.
             Event::Text(t) => {
                 if let Some(c) = self.cell_mut() {
                     c.push_text(t);
@@ -914,11 +910,14 @@ fn sanitize_lang(lang: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// MarkdownFixer — the crate's single copy of the pulldown-cmark event fixups.
+// MarkdownFixer — the raw-HTML filter between pulldown and the builder.
 //
-// Two jobs before events reach the builder: allowlist `<u>…</u>` as underline
-// (rewrite to Strong start/end, detected by source peek) and strip all other
-// raw HTML; and fix `***`-adjacency runs pulldown splits awkwardly.
+// One job: allowlist `<u>…</u>` as underline (rewritten to Strong start/end,
+// the classification carried to the builder in `underline_opens`) and drop
+// every other raw HTML event. Delimiter arithmetic is pulldown's — a fixer that
+// re-segments `***` runs can only disagree with CommonMark, and disagreeing
+// means deleting an asterisk the author typed (`***a**` is a literal `*` then
+// strong `a`; `***bold italic***` parses natively).
 // ---------------------------------------------------------------------------
 
 fn is_u_open_tag(html: &str) -> bool {
@@ -940,195 +939,24 @@ fn is_u_close_tag(html: &str) -> bool {
 }
 
 struct MarkdownFixer<'a, I: Iterator<Item = (Event<'a>, Range<usize>)>> {
-    inner: std::iter::Peekable<I>,
-    source: &'a str,
+    inner: I,
     /// Shared with the [`Builder`]: each `<u>` open this fixer converts to
     /// `Tag::Strong` records its `range.start` here, so the builder recovers the
     /// underline without a second source-byte test (see [`UnderlineOpens`]).
     underline_opens: UnderlineOpens,
-    buffer: Vec<(Event<'a>, Range<usize>)>,
-    emph_depth: usize,
-    strong_depth: usize,
+    _marker: std::marker::PhantomData<&'a ()>,
 }
 
 impl<'a, I> MarkdownFixer<'a, I>
 where
     I: Iterator<Item = (Event<'a>, Range<usize>)>,
 {
-    fn new(inner: I, source: &'a str, underline_opens: UnderlineOpens) -> Self {
+    fn new(inner: I, underline_opens: UnderlineOpens) -> Self {
         Self {
-            inner: inner.peekable(),
-            source,
+            inner,
             underline_opens,
-            buffer: Vec::new(),
-            emph_depth: 0,
-            strong_depth: 0,
+            _marker: std::marker::PhantomData,
         }
-    }
-
-    fn events_for_stars(
-        star_count: usize,
-        is_start: bool,
-        start_idx: usize,
-    ) -> Vec<(Event<'a>, Range<usize>)> {
-        let mut events = Vec::new();
-        let mut offset = 0;
-        let mut remaining = star_count;
-
-        if remaining >= 2 {
-            let len = 2;
-            let range = start_idx + offset..start_idx + offset + len;
-            let event = if is_start {
-                Event::Start(Tag::Strong)
-            } else {
-                Event::End(TagEnd::Strong)
-            };
-            events.push((event, range));
-            remaining -= 2;
-            offset += 2;
-        }
-        if remaining >= 1 {
-            let len = 1;
-            let range = start_idx + offset..start_idx + offset + len;
-            let event = if is_start {
-                Event::Start(Tag::Emphasis)
-            } else {
-                Event::End(TagEnd::Emphasis)
-            };
-            events.push((event, range));
-        }
-        if !is_start {
-            events.reverse();
-        }
-        events
-    }
-
-    fn coalesce_text_range(&mut self, initial_range: Range<usize>) -> Range<usize> {
-        let mut merged_range = initial_range;
-        while let Some((next_event, next_range)) = self.inner.peek() {
-            if matches!(next_event, Event::Text(_)) && next_range.start == merged_range.end {
-                merged_range.end = next_range.end;
-                self.inner.next();
-            } else {
-                break;
-            }
-        }
-        merged_range
-    }
-
-    fn closable_star_count(&self, star_count: usize) -> usize {
-        let mut remaining = star_count;
-        let mut consumed = 0;
-        if remaining >= 2 && self.strong_depth > 0 {
-            remaining -= 2;
-            consumed += 2;
-        }
-        if remaining >= 1 && self.emph_depth > 0 {
-            consumed += 1;
-        }
-        consumed
-    }
-
-    fn handle_candidate(
-        &mut self,
-        candidate: (Event<'a>, Range<usize>),
-    ) -> Option<(Event<'a>, Range<usize>)> {
-        let (event, range) = candidate;
-
-        match &event {
-            Event::Start(Tag::Emphasis) => self.emph_depth += 1,
-            Event::Start(Tag::Strong) => self.strong_depth += 1,
-            Event::End(TagEnd::Emphasis) => self.emph_depth = self.emph_depth.saturating_sub(1),
-            Event::End(TagEnd::Strong) => self.strong_depth = self.strong_depth.saturating_sub(1),
-            _ => {}
-        }
-
-        match &event {
-            Event::Text(cow_str) => {
-                let s = cow_str.as_ref();
-                if s.ends_with('*') {
-                    let is_strong_start = if let Some(next) = self.buffer.last() {
-                        matches!(next.0, Event::Start(Tag::Strong))
-                    } else {
-                        matches!(self.inner.peek(), Some((Event::Start(Tag::Strong), _)))
-                    };
-                    if is_strong_start {
-                        let star_count = s.chars().rev().take_while(|c| *c == '*').count();
-                        if star_count > 0 && star_count <= 3 {
-                            let text_len = s.len() - star_count;
-                            let text_content = &s[..text_len];
-                            let star_events =
-                                Self::events_for_stars(star_count, true, range.start + text_len);
-                            let next_event = if !self.buffer.is_empty() {
-                                self.buffer.pop().unwrap()
-                            } else {
-                                self.inner.next().unwrap()
-                            };
-                            self.buffer.push(next_event);
-                            for ev in star_events.into_iter().rev() {
-                                self.buffer.push(ev);
-                            }
-                            if !text_content.is_empty() {
-                                return Some((
-                                    Event::Text(text_content.to_string().into()),
-                                    range.start..range.start + text_len,
-                                ));
-                            } else {
-                                return None;
-                            }
-                        }
-                    }
-                }
-            }
-            Event::End(TagEnd::Strong) | Event::End(TagEnd::Emphasis) => {
-                let has_open_tags = self.emph_depth > 0 || self.strong_depth > 0;
-                if !has_open_tags {
-                    return Some((event, range));
-                }
-                let next_is_star_text = if let Some((Event::Text(cow_str), _)) = self.buffer.last()
-                {
-                    cow_str.starts_with('*')
-                } else if let Some((Event::Text(cow_str), _)) = self.inner.peek() {
-                    cow_str.starts_with('*')
-                } else {
-                    false
-                };
-                if next_is_star_text {
-                    let (text_event, text_range) = if !self.buffer.is_empty() {
-                        self.buffer.pop().unwrap()
-                    } else {
-                        let (_ev, rng) = self.inner.next().unwrap();
-                        let merged_range = self.coalesce_text_range(rng);
-                        let text = self.source[merged_range.clone()].into();
-                        (Event::Text(text), merged_range)
-                    };
-                    if let Event::Text(cow_str) = text_event {
-                        let s = cow_str.as_ref();
-                        let star_count = s.chars().take_while(|c| *c == '*').count();
-                        let consumable = self.closable_star_count(star_count);
-                        if consumable > 0 {
-                            let star_events =
-                                Self::events_for_stars(consumable, false, text_range.start);
-                            let text_after = &s[consumable..];
-                            if !text_after.is_empty() {
-                                self.buffer.push((
-                                    Event::Text(text_after.to_string().into()),
-                                    text_range.start + consumable..text_range.end,
-                                ));
-                            }
-                            for ev in star_events.into_iter().rev() {
-                                self.buffer.push(ev);
-                            }
-                            return Some((event, range));
-                        } else {
-                            self.buffer.push((Event::Text(cow_str), text_range));
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-        Some((event, range))
     }
 }
 
@@ -1140,15 +968,8 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some(event) = self.buffer.pop() {
-                if let Some(result) = self.handle_candidate(event) {
-                    return Some(result);
-                } else {
-                    continue;
-                }
-            }
             let (event, range) = self.inner.next()?;
-            let (event, range) = match event {
+            return Some(match event {
                 Event::InlineHtml(ref html) | Event::Html(ref html) if is_u_open_tag(html) => {
                     // Carry the `<u>` classification to the builder keyed on the
                     // tag's start offset, so it need not re-sniff the source.
@@ -1160,12 +981,7 @@ where
                 }
                 Event::Html(_) | Event::InlineHtml(_) => continue,
                 other => (other, range),
-            };
-            if let Some(result) = self.handle_candidate((event, range)) {
-                return Some(result);
-            } else {
-                continue;
-            }
+            });
         }
     }
 }
@@ -1280,6 +1096,28 @@ mod tests {
     fn other_html_stripped() {
         let rt = imp("a <span>b</span> c");
         assert_eq!(rt.text, "a b c");
+    }
+
+    /// Issue #1053: an asterisk run the author typed reaches the content.
+    /// `***a**` is a literal `*` followed by strong `a` (CommonMark's rule of
+    /// three: the closing run matches two of the three), and every shape here
+    /// keeps its stars — a fixer re-segmenting the run deleted one.
+    #[test]
+    fn odd_asterisk_runs_keep_their_literal_star() {
+        for (src, text) in [
+            ("***a**", "*a"),
+            ("***aa**", "*aa"),
+            ("****a**", "**a"),
+            ("a***a**", "a*a"),
+        ] {
+            assert_eq!(imp(src).text, text, "literal star dropped from {src:?}");
+        }
+        // The shape the fixup read as its reason for existing: pulldown nests
+        // strong+emph natively, with no star left over.
+        let rt = imp("***bold italic***");
+        assert_eq!(rt.text, "bold italic");
+        assert!(rt.marks.iter().any(|m| m.kind == MarkKind::Strong));
+        assert!(rt.marks.iter().any(|m| m.kind == MarkKind::Emph));
     }
 
     /// A `<u>`-lookalike must not be read as underline. The fixer's single

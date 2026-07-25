@@ -752,13 +752,16 @@ fn split_around_slots(chars: &[char], start: usize, end: usize) -> Vec<(usize, u
     }
     let mut out = Vec::new();
     let mut run = start;
-    for i in start..end {
-        if chars[i] == ISLAND_SLOT {
-            if run < i {
-                out.push((run, i));
-            }
-            run = i + 1;
+    for (i, _) in chars[start..end]
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (start + i, c))
+        .filter(|(_, &c)| c == ISLAND_SLOT)
+    {
+        if run < i {
+            out.push((run, i));
         }
+        run = i + 1;
     }
     if run < end {
         out.push((run, end));

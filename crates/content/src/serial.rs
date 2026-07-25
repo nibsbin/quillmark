@@ -630,10 +630,7 @@ mod tests {
     /// `to_markdown`; the shared `validate` cap rejects it at the door.
     #[test]
     fn deep_container_nesting_is_rejected_at_decode() {
-        let containers = std::iter::repeat(r#"{"container":"quote"}"#)
-            .take(20_000)
-            .collect::<Vec<_>>()
-            .join(",");
+        let containers = vec![r#"{"container":"quote"}"#; 20_000].join(",");
         let json = format!(
             r#"{{"text":"hi","lines":[{{"kind":"para","containers":[{containers}]}}],"marks":[],"islands":[]}}"#
         );
