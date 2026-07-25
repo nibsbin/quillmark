@@ -6,7 +6,9 @@ finding schema; each report ranks its findings by LOC removed × confidence ÷
 risk and carries a *load-bearing* section recording what looked redundant and
 survived verification.
 
-Findings are proposals, not decisions. Nothing here has been applied.
+Findings are proposals, not decisions. Nothing here has been applied. The
+findings are filed as nine `hygiene` issues, grouped by theme rather than by
+crate — #1056, #1060, #1062, #1065, #1066, #1067, #1068, #1069, #1070.
 
 ## Reports
 
@@ -81,6 +83,20 @@ concentrated in tests, not in the engine.
   surface; the wire format makes removal a judgment call.
 - **03 F12, 03 F7** — two tests whose names promise coverage they never assert.
   Mis-signal costs a reader the same as a redundant test.
+
+## Issues
+
+| Issue | Theme | Est. LOC |
+|---|---|---|
+| #1056 | Engine semantics asserted at three altitudes | ~1000 |
+| #1060 | Test clusters that want to be tables | ~700 |
+| #1062 | Copy-pasted fixture walkers and quill builders | ~250 |
+| #1065 | Tests pinning foreign behavior or asserting nothing | ~400 |
+| #1066 | Dead and pure-forwarding public surface | ~150 |
+| #1067 | Duplicated logic in production code | ~250 |
+| #1068 | Shipped surface with no test; CI's zero-backend blind spot | — |
+| #1069 | `error.rs` path-grammar drift; two misnamed tests | ~25 |
+| #1070 | Dependency versions hand-pinned across crates | ~4 |
 
 ## Reading order
 
