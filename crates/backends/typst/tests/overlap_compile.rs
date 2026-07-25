@@ -6,28 +6,12 @@
 //! breaks the whole generated helper file's parse and fails the render. This
 //! drives `Backend::open`, which builds the world and compiles.
 
-use std::collections::HashMap;
-
-use quillmark_core::{Backend, FileTreeNode, Quill};
-use quillmark_content::model::{Line, LineKind, MarkKind, Content};
+use quillmark_content::model::{Content, Line, LineKind, MarkKind};
+use quillmark_core::Backend;
 use quillmark_typst::TypstBackend;
 
-fn quill(yaml: &str, plate: &str) -> Quill {
-    let mut files = HashMap::new();
-    files.insert(
-        "Quill.yaml".to_string(),
-        FileTreeNode::File {
-            contents: yaml.as_bytes().to_vec(),
-        },
-    );
-    files.insert(
-        "plate.typ".to_string(),
-        FileTreeNode::File {
-            contents: plate.as_bytes().to_vec(),
-        },
-    );
-    Quill::from_tree(FileTreeNode::Directory { files }).expect("load quill")
-}
+mod common;
+use common::quill_with_plate as quill;
 
 /// The canonical content JSON the render seam carries for a richtext field, built
 /// from a hand-placed free-overlap content (normalize + validate happen inside

@@ -1,30 +1,14 @@
 //! Tests for [`Quill::seed_document`], [`Quill::seed_main`], and
 //! [`Quill::seed_card`].
 
-use std::collections::HashMap;
-
 use serde_json::json;
 
-use crate::quill::FileTreeNode;
-
-use crate::{Document, Quill, SeedOverlay, Severity};
+use crate::quill::quill_from_yaml;
+use crate::{Document, SeedOverlay, Severity};
 
 /// Build a [`SeedOverlay`] from a JSON object (the `$seed[<kind>]` shape).
 fn overlay(value: serde_json::Value) -> SeedOverlay {
     SeedOverlay::from_json(&value).expect("overlay json must be an object")
-}
-
-/// Build a minimal [`Quill`] from inline YAML with no filesystem dependencies.
-fn quill_from_yaml(yaml: &str) -> Quill {
-    let mut files = HashMap::new();
-    files.insert(
-        "Quill.yaml".to_string(),
-        FileTreeNode::File {
-            contents: yaml.as_bytes().to_vec(),
-        },
-    );
-    let root = FileTreeNode::Directory { files };
-    Quill::from_tree(root).expect("quill_from_yaml: Quill::from_tree failed")
 }
 
 const QUILL: &str = r#"

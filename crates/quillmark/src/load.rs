@@ -24,10 +24,18 @@ pub fn quill_from_path<P: AsRef<Path>>(path: P) -> Result<Quill, RenderError> {
     Quill::from_tree(tree).map_err(RenderError::new)
 }
 
-/// Walk a filesystem path into an in-memory [`FileTreeNode`].
+/// Walk a filesystem path into an in-memory [`FileTreeNode`] — the tree half of
+/// [`quill_from_path`], for a caller that wants to edit the tree before
+/// [`Quill::from_tree`] reads it.
 ///
 /// Honours a `.quillignore` file at the root; otherwise applies a default
 /// ignore set (`.git/`, `target/`, `node_modules/`, etc.).
+pub fn tree_from_path<P: AsRef<Path>>(
+    path: P,
+) -> Result<FileTreeNode, Box<dyn StdError + Send + Sync>> {
+    load_tree_from_path(path.as_ref())
+}
+
 fn load_tree_from_path(path: &Path) -> Result<FileTreeNode, Box<dyn StdError + Send + Sync>> {
     use std::fs;
 

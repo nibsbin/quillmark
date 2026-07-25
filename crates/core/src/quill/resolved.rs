@@ -207,22 +207,8 @@ fn body_state(card: &Card) -> ResolvedField {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::quill::FileTreeNode;
-    use crate::{Card, Document, Payload, Quill};
-    use std::collections::HashMap as StdHashMap;
-
-    /// Build a minimal [`Quill`] from inline `Quill.yaml` with no filesystem deps.
-    fn quill_from_yaml(yaml: &str) -> Quill {
-        let mut files = StdHashMap::new();
-        files.insert(
-            "Quill.yaml".to_string(),
-            FileTreeNode::File {
-                contents: yaml.as_bytes().to_vec(),
-            },
-        );
-        let root = FileTreeNode::Directory { files };
-        Quill::from_tree(root).expect("quill_from_yaml: from_tree failed")
-    }
+    use crate::quill::quill_from_yaml;
+    use crate::{Card, Document, Payload};
 
     fn parse(md: &str) -> Document {
         Document::parse(md).expect("document should parse").document

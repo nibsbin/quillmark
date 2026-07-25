@@ -560,50 +560,16 @@ name = "minimal-package"
 
     #[test]
     fn test_asset_fonts_have_priority() {
-        use std::collections::HashMap;
-        use std::fs;
-        use std::path::{Path, PathBuf};
+        use quillmark_core::Quill;
 
-        use quillmark_core::{FileTreeNode, Quill};
-
-        fn walk(dir: &Path) -> std::io::Result<FileTreeNode> {
-            let mut files = HashMap::new();
-            for entry in fs::read_dir(dir)? {
-                let entry = entry?;
-                let p: PathBuf = entry.path();
-                let name = p.file_name().unwrap().to_string_lossy().into_owned();
-                if p.is_file() {
-                    files.insert(
-                        name,
-                        FileTreeNode::File {
-                            contents: fs::read(&p)?,
-                        },
-                    );
-                } else if p.is_dir() {
-                    files.insert(name, walk(&p)?);
-                }
-            }
-            Ok(FileTreeNode::Directory { files })
-        }
-
-        // Use the actual usaf_memo fixture which has real fonts
-        let quill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures")
-            .join("resources")
-            .join("quills")
-            .join("usaf_memo")
-            .join("0.2.0");
-
+        // The usaf_memo fixture carries real fonts.
+        let quill_path = quillmark_fixtures::quills_path("usaf_memo");
         if !quill_path.exists() {
             // Skip test if fixture not found
             return;
         }
 
-        let tree = walk(&quill_path).expect("walk fixture");
+        let tree = quillmark::tree_from_path(quill_path).expect("walk fixture");
         let source = Quill::from_tree(tree).expect("load source");
         let world = QuillWorld::new(&source, "// Test").unwrap();
 

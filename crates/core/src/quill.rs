@@ -120,3 +120,16 @@ impl std::fmt::Debug for Quill {
 
 #[cfg(test)]
 mod tests;
+
+/// Build a minimal [`Quill`] from inline `Quill.yaml` with no filesystem deps.
+#[cfg(test)]
+pub(crate) fn quill_from_yaml(yaml: &str) -> Quill {
+    let mut files = std::collections::HashMap::new();
+    files.insert(
+        "Quill.yaml".to_string(),
+        FileTreeNode::File {
+            contents: yaml.as_bytes().to_vec(),
+        },
+    );
+    Quill::from_tree(FileTreeNode::Directory { files }).expect("quill_from_yaml: from_tree failed")
+}

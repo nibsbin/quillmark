@@ -70,49 +70,17 @@ mod tests {
     use super::*;
     use crate::TypstBackend;
     use quillmark_core::{Backend, FileTreeNode, OutputFormat, Quill, RenderOptions};
-    use std::collections::HashMap;
-    use std::fs;
-    use std::path::{Path, PathBuf};
     use typst::diag::SourceDiagnostic;
     use typst::syntax::Span;
 
-    /// Walk the `usaf_memo@0.2.0` fixture into an in-memory tree, or `None` when
-    /// the fixture is absent (a stripped checkout).
+    /// The `usaf_memo` fixture as an in-memory tree, or `None` when the
+    /// fixture is absent (a stripped checkout).
     fn walk_fixture() -> Option<FileTreeNode> {
-        fn walk(dir: &Path) -> std::io::Result<FileTreeNode> {
-            let mut files = HashMap::new();
-            for entry in fs::read_dir(dir)? {
-                let entry = entry?;
-                let p: PathBuf = entry.path();
-                let name = p.file_name().unwrap().to_string_lossy().into_owned();
-                if p.is_file() {
-                    files.insert(
-                        name,
-                        FileTreeNode::File {
-                            contents: fs::read(&p)?,
-                        },
-                    );
-                } else if p.is_dir() {
-                    files.insert(name, walk(&p)?);
-                }
-            }
-            Ok(FileTreeNode::Directory { files })
-        }
-
-        let quill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures")
-            .join("resources")
-            .join("quills")
-            .join("usaf_memo")
-            .join("0.2.0");
+        let quill_path = quillmark_fixtures::quills_path("usaf_memo");
         if !quill_path.exists() {
             return None;
         }
-        Some(walk(&quill_path).expect("walk fixture"))
+        Some(quillmark::tree_from_path(quill_path).expect("walk fixture"))
     }
 
     /// A `QuillWorld` with a valid main source to resolve spans against.

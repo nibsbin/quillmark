@@ -5,63 +5,11 @@
 //! Acrobat verification still required per the spec — see `prose/...` or the
 //! PR description.
 
-use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
-
-use quillmark_core::{Backend, FileTreeNode, OutputFormat, Quill, RenderError, RenderOptions};
+use quillmark_core::{Backend, OutputFormat, RenderError, RenderOptions};
 use quillmark_typst::TypstBackend;
 
-/// Walk the `usaf_memo@0.2.0` fixture into an in-memory tree. Reused as a host
-/// because `signature-field` doesn't depend on any quill-specific config —
-/// any valid quill skeleton (fonts, packages) works.
-fn host_tree() -> FileTreeNode {
-    fn walk(dir: &Path) -> std::io::Result<FileTreeNode> {
-        let mut files = HashMap::new();
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let p: PathBuf = entry.path();
-            let name = p.file_name().unwrap().to_string_lossy().into_owned();
-            if p.is_file() {
-                files.insert(
-                    name,
-                    FileTreeNode::File {
-                        contents: fs::read(&p)?,
-                    },
-                );
-            } else if p.is_dir() {
-                files.insert(name, walk(&p)?);
-            }
-        }
-        Ok(FileTreeNode::Directory { files })
-    }
-    let quill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("fixtures")
-        .join("resources")
-        .join("quills")
-        .join("usaf_memo")
-        .join("0.2.0");
-    walk(&quill_path).expect("walk fixture")
-}
-
-/// Build the host quill with its `plate.typ` replaced by `plate`. The fixture
-/// declares `typst.plate_file: plate.typ`, so the backend reads this override.
-fn source_with_plate(plate: &str) -> Quill {
-    let mut tree = host_tree();
-    if let FileTreeNode::Directory { files } = &mut tree {
-        files.insert(
-            "plate.typ".to_string(),
-            FileTreeNode::File {
-                contents: plate.as_bytes().to_vec(),
-            },
-        );
-    }
-    Quill::from_tree(tree).expect("load source")
-}
+mod common;
+use common::host_with_plate as source_with_plate;
 
 fn compile(plate: &str) -> Result<Vec<u8>, RenderError> {
     // Our plates don't reference data fields, so an empty payload suffices.
@@ -518,20 +466,7 @@ main:
 #form-field("sig", type: "signature", field: "f_sig")
 #form-field("unbound", type: "text", value: "x")
 "#;
-    let mut files = HashMap::new();
-    files.insert(
-        "Quill.yaml".to_string(),
-        FileTreeNode::File {
-            contents: YAML.as_bytes().to_vec(),
-        },
-    );
-    files.insert(
-        "plate.typ".to_string(),
-        FileTreeNode::File {
-            contents: plate.as_bytes().to_vec(),
-        },
-    );
-    let source = Quill::from_tree(FileTreeNode::Directory { files }).expect("load quill");
+    let source = common::quill_with_plate(YAML, plate);
     let session = TypstBackend
         .open(&source, &serde_json::json!({}))
         .expect("open");

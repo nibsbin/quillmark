@@ -3,29 +3,11 @@
 //! Core no longer reads any template at load time, so a missing plate is a
 //! render-time (`open`) error rather than a load-time one.
 
-use std::collections::HashMap;
-
-use quillmark_core::{Backend, FileTreeNode, Quill};
+use quillmark_core::Backend;
 use quillmark_typst::TypstBackend;
 
-fn quill(yaml: &str, files: &[(&str, &[u8])]) -> Quill {
-    let mut map = HashMap::new();
-    map.insert(
-        "Quill.yaml".to_string(),
-        FileTreeNode::File {
-            contents: yaml.as_bytes().to_vec(),
-        },
-    );
-    for (name, bytes) in files {
-        map.insert(
-            (*name).to_string(),
-            FileTreeNode::File {
-                contents: bytes.to_vec(),
-            },
-        );
-    }
-    Quill::from_tree(FileTreeNode::Directory { files: map }).expect("load quill")
-}
+mod common;
+use common::quill;
 
 const YAML: &str = "quill:\n  name: t\n  version: \"1.0\"\n  backend: typst\n  \
                     description: d\n\ntypst:\n  plate_file: plate.typ\n";
