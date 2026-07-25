@@ -194,18 +194,27 @@ impl FileTreeNode {
     /// not exact directory structure.
     pub fn flatten(&self) -> Vec<(String, Vec<u8>)> {
         let mut out = Vec::new();
-        self.flatten_into(String::new(), &mut out);
+        self.for_each_file(&mut |path, contents| out.push((path.to_string(), contents.to_vec())));
         out.sort_by(|(a, _), (b, _)| a.cmp(b));
         out
     }
 
-    fn flatten_into(&self, prefix: String, out: &mut Vec<(String, Vec<u8>)>) {
+    /// Visit every file in the tree with its `/`-joined path, depth-first in
+    /// `HashMap` order (so unordered — callers that need a stable sequence sort
+    /// the result). The one walk: [`flatten`](Self::flatten) copies out of it,
+    /// `Quill::find_files` only reads the paths, and neither pays for the
+    /// other's work.
+    pub(crate) fn for_each_file(&self, visit: &mut impl FnMut(&str, &[u8])) {
+        self.walk_files(String::new(), visit);
+    }
+
+    fn walk_files(&self, prefix: String, visit: &mut impl FnMut(&str, &[u8])) {
         match self {
             FileTreeNode::File { contents } => {
                 // A File only reaches here with a non-empty prefix: the root is
                 // always a Directory, so every file is named by its parent.
                 if !prefix.is_empty() {
-                    out.push((prefix, contents.clone()));
+                    visit(&prefix, contents);
                 }
             }
             FileTreeNode::Directory { files } => {
@@ -215,7 +224,7 @@ impl FileTreeNode {
                     } else {
                         format!("{}/{}", prefix, name)
                     };
-                    node.flatten_into(path, out);
+                    node.walk_files(path, visit);
                 }
             }
         }

@@ -205,18 +205,11 @@ impl SessionHandle for PdfformSession {
     /// baked into the flat PDF as content-stream operators, so they appear in
     /// the raster without any regions-compositing by the caller.
     fn render_rgba(&self, page: usize, scale: f32) -> Option<(u32, u32, Vec<u8>)> {
-        use hayro::vello_cpu::color::palette::css::WHITE;
-
         let pdf = HayroPdf::new(self.flat_pdf.clone()).ok()?;
         let p = pdf.pages().get(page)?;
         let cache = RenderCache::new();
         let interp = standard_font_settings();
-        let render_settings = RenderSettings {
-            x_scale: scale,
-            y_scale: scale,
-            bg_color: WHITE,
-            ..Default::default()
-        };
+        let render_settings = scaled_render_settings(scale);
         let pixmap = hayro_render(p, &cache, &interp, &render_settings);
         let w = pixmap.width() as u32;
         let h = pixmap.height() as u32;
@@ -297,8 +290,6 @@ impl PdfformSession {
     /// is device pixels per PDF point (`ppi / 72`), so the values baked into
     /// the flat PDF rasterise at the requested resolution.
     fn render_png(&self, scale: f32) -> Result<RenderResult, RenderError> {
-        use hayro::vello_cpu::color::palette::css::WHITE;
-
         let pdf = HayroPdf::new(self.flat_pdf.clone()).map_err(|_| {
             engine_err(
                 "pdfform::png_parse_failed",
@@ -306,12 +297,7 @@ impl PdfformSession {
             )
         })?;
         let interp = standard_font_settings();
-        let render_settings = RenderSettings {
-            x_scale: scale,
-            y_scale: scale,
-            bg_color: WHITE,
-            ..Default::default()
-        };
+        let render_settings = scaled_render_settings(scale);
 
         let mut artifacts = Vec::with_capacity(pdf.pages().len());
         for page in pdf.pages().iter() {
@@ -330,6 +316,19 @@ impl PdfformSession {
         }
 
         Ok(RenderResult::new(artifacts, OutputFormat::Png))
+    }
+}
+
+/// Uniform scale on both axes over an opaque white page — the raster settings
+/// behind both the RGBA canvas path and the PNG artifact path, which must agree
+/// or a preview and its export drift apart.
+fn scaled_render_settings(scale: f32) -> RenderSettings {
+    use hayro::vello_cpu::color::palette::css::WHITE;
+    RenderSettings {
+        x_scale: scale,
+        y_scale: scale,
+        bg_color: WHITE,
+        ..Default::default()
     }
 }
 

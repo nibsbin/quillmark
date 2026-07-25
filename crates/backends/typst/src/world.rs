@@ -187,32 +187,21 @@ impl QuillWorld {
     ) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
         let mut font_data = Vec::new();
 
-        // Look for fonts in assets/fonts/ first
-        let fonts_paths = source.find_files("assets/fonts/*");
-        for font_path in fonts_paths {
-            if let Some(ext) = font_path.extension() {
-                if matches!(
+        // Asset fonts first — `QuillWorld` gives them priority over package
+        // fonts of the same family, and `Vec` order is that priority.
+        for glob in ["assets/fonts/*", "packages/**"] {
+            for font_path in source.find_files(glob) {
+                let Some(ext) = font_path.extension() else {
+                    continue;
+                };
+                if !matches!(
                     ext.to_string_lossy().to_lowercase().as_str(),
                     "ttf" | "otf" | "woff" | "woff2"
                 ) {
-                    if let Some(contents) = source.get_file(&font_path) {
-                        font_data.push(contents.to_vec());
-                    }
+                    continue;
                 }
-            }
-        }
-
-        // Also look in packages/*/fonts/ for package fonts
-        let package_font_paths = source.find_files("packages/**");
-        for font_path in package_font_paths {
-            if let Some(ext) = font_path.extension() {
-                if matches!(
-                    ext.to_string_lossy().to_lowercase().as_str(),
-                    "ttf" | "otf" | "woff" | "woff2"
-                ) {
-                    if let Some(contents) = source.get_file(&font_path) {
-                        font_data.push(contents.to_vec());
-                    }
+                if let Some(contents) = source.get_file(&font_path) {
+                    font_data.push(contents.to_vec());
                 }
             }
         }
