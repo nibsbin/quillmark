@@ -82,7 +82,26 @@ Caution: `used to` often means "used **in order to**" — not history; read befo
 cutting. In consumer `docs/`, keep history a reader needs to *use* the feature
 (an accepted alias, a tolerated input) — reframe it, don't delete it.
 
-### 4. State the design, not the deliberation
+### 4. One claim per sentence — density is bytes-per-fact, not facts-per-line
+
+Cutting words is only half of density. A sentence carrying seven clauses, three
+parentheticals, and an em-dash chain is maximally compressed and unreadable —
+the reader has to decompress it to find the one fact they came for, which is the
+cost a comment exists to remove. Compression is not density.
+
+- One claim per sentence. A bullet that needs three clauses is three bullets, a
+  nested list, or a table.
+- A set of per-case rules (per type, per format, per backend) is a table. Table
+  rows are records, not sentences, and are exempt from the budget.
+- Prefer a paragraph break over a semicolon chain when the second half states a
+  separate fact.
+
+`prose/README.md` sets the numeric budget — 700 characters per prose line hard,
+300 soft — and `scripts/check-canon.mjs` enforces it over `prose/canon/` and
+`docs/`. The soft limit is a ratchet: it reports only on files a change already
+touches, so split a long line when you are editing near it, not in a sweep.
+
+### 5. State the design, not the deliberation
 
 Describe what is, not what was considered. Cut spike/deferred/rejected
 narration; keep the resulting fact and, when it explains a present choice, the

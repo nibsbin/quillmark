@@ -43,7 +43,18 @@ Implements `Backend` for PDF, SVG, and PNG. Lowers each content field's `Content
 
 ### `backends/quillmark-pdfform`
 
-The second backend: fills an existing AcroForm PDF rather than typesetting from scratch. Resolves card values against the quill's `form.json` spec and stamps them onto the base `form.pdf` as real interactive fields (Technique A — `NeedAppearances`, no baked appearance streams). The PDF deliverable is always an interactive AcroForm; the backend also emits SVG and PNG (and a WASM canvas raster) by pre-flattening values into the page content streams (hayro raster). Field geometry is a session-level query (`LiveSession::regions()`) — per-field geometry keyed on the schema field path, no bound value. See [docs/quills/pdfform-backend.md](../../docs/quills/pdfform-backend.md) and [PREVIEW.md](PREVIEW.md).
+The second backend: fills an existing AcroForm PDF rather than typesetting from
+scratch. It resolves card values against the quill's `form.json` spec and stamps
+them onto the base `form.pdf` as real interactive fields (Technique A —
+`NeedAppearances`, no baked appearance streams).
+
+The PDF deliverable is always an interactive AcroForm. The backend also emits
+SVG and PNG (and a WASM canvas raster) by pre-flattening values into the page
+content streams (hayro raster). Field geometry is a session-level query
+(`LiveSession::regions()`) — per-field geometry keyed on the schema field path,
+no bound value. Quill-authoring surface:
+[docs/quills/pdfform-backend.md](../../docs/quills/pdfform-backend.md); preview
+seam: [PREVIEW.md](PREVIEW.md).
 
 ### `quillmark-pdf`
 
@@ -68,7 +79,18 @@ Property-based fuzz tests (proptest): `parse_fuzz` (YAML/Markdown parsing), `con
 - **`Quillmark`** — Engine: a backend registry + render dispatcher. Auto-registers `TypstBackend` when the `typst` feature is enabled. Resolves a quill's declared backend at render time (erroring `engine::backend_not_found` on no match) and owns the backend-dependent surface — `render`, `open`, `supported_formats(&quill)`, `supports_canvas(&quill)`. It does not construct quills.
 - **`Quill`** — The single quill type in `quillmark-core`: portable, declarative data (file bundle + config + metadata, tagged with a declared backend id). Held by value. Exposes the pure config-read operations: `dry_run`, `compile_data`, `backend_id`, plus `validate` (editor-facing: returns every schema diagnostic, including the non-fatal `validation::must_fill` warning raised for each `!must_fill` marker) and the `seed_document` / `seed_main` / `seed_card` starters that emit committed example documents and cards. Construct with `Quill::from_tree` or `quillmark::quill_from_path`
 - **`Backend`** — Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open(&Quill, json)`. There is no universal template input: a backend reads whatever static inputs it needs (a Typst plate, a `form.pdf`) from the quill's own files. No canvas-capability method — capability is derived (`LiveSession::supports_canvas()` from the session seam; `formats_support_canvas()` as a pre-session hint)
-- **`LiveSession`** — Opaque live session returned by `Backend::open()`: a persistent compiler whose reads (`render(opts)`, the canvas seam, `regions()`/`field_at()`) serve its current compile, and whose `apply(json)` recompiles in place, transactionally (on `Err` reads keep serving the last-good compile) — returning a `ChangeSet` of dirty pages. Exposes `page_count()` and `warnings()` for consumers that don't go through `render()`. The canvas-preview seam lives on `SessionHandle` itself (`page_size_pt`/`render_rgba`, default `None`); a canvas backend overrides both, and the WASM painter dispatches generically through them — no per-backend downcast (Typst and pdfform both ride this seam — see [PREVIEW.md](PREVIEW.md)). A backend with a different richer typed surface can still downcast via `LiveSession::handle()` + `SessionHandle::as_any`.
+- **`LiveSession`** — Opaque live session returned by `Backend::open()`: a
+  persistent compiler whose reads (`render(opts)`, the canvas seam,
+  `regions()`/`field_at()`) serve its current compile, and whose `apply(json)`
+  recompiles in place, transactionally (on `Err` reads keep serving the
+  last-good compile) — returning a `ChangeSet` of dirty pages. It exposes
+  `page_count()` and `warnings()` for consumers that don't go through
+  `render()`. The canvas-preview seam lives on `SessionHandle` itself
+  (`page_size_pt`/`render_rgba`, default `None`): a canvas backend overrides
+  both, and the WASM painter dispatches generically through them, with no
+  per-backend downcast — Typst and pdfform both ride this seam (see
+  [PREVIEW.md](PREVIEW.md)). A backend with a richer typed surface can still
+  downcast via `LiveSession::handle()` + `SessionHandle::as_any`.
 - **`Document`** — Typed in-memory representation of a Quillmark Markdown file (root block, body, cards). Serializes via `serde` to a versioned JSON envelope (`StoredDocument`) for database persistence, decoupled from the evolving Markdown syntax — see [DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md)
 - **`Diagnostic`** — Structured error with severity, code, message, location, hint, source chain
 - **`RenderResult`** — Output artifacts + accumulated warnings

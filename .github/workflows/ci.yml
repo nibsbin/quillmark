@@ -26,11 +26,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Two commits so the lint can diff. On a PR the checkout is the merge
+          # commit, so `HEAD^1` is the base tip and the diff is the PR's whole
+          # change; on a push it is the pushed commit alone. Both are fine for
+          # an advisory drift report.
+          fetch-depth: 2
 
       # Canon spine lint (prose/README.md). Zero deps; runs before the Rust
-      # setup so it fails fast on a checkout-only step.
+      # setup so it fails fast on a checkout-only step. `--drift` adds the
+      # non-blocking anchor-drift and soft-line-budget notes as PR annotations.
       - name: Check canon spine
-        run: node scripts/check-canon.mjs
+        run: node scripts/check-canon.mjs --drift
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
