@@ -71,6 +71,12 @@ fn inline_token() -> impl Strategy<Value = String> {
         // in the alt), exercised in prose context (marks, lists, hard breaks).
         (clean_word(), special_url()).prop_map(|(t, u)| format!("[{t}](<{u}>)")),
         (special_alt(), special_url()).prop_map(|(a, u)| format!("![{a}](<{u}>)")),
+        // #1049: a link *over* an image — a linked logo, plain CommonMark. The
+        // generator never nested the two, so no generated document carried a
+        // mark over an island slot, and the link arm emitting its display text
+        // raw (slot char and all) went unseen.
+        (special_alt(), special_url(), clean_word())
+            .prop_map(|(a, u, l)| format!("[![{a}](<{u}>)](https://ex.com/{l})")),
     ]
 }
 

@@ -352,6 +352,53 @@ pub enum Invariant {
     /// cannot carry column cells. `normalize` rewrites a non-array header to an
     /// empty array (a zero-column, content-free table).
     TableHeaderNotArray,
+    /// A line's [`LineKind`] contradicts its text. Export trusts the kind and
+    /// never re-reads the segment, so an unchecked mismatch is silent text loss
+    /// (an `Island`-tagged prose line projects to its resolved island alone).
+    LineKindMismatch { line: usize, mismatch: LineKindMismatch },
+    /// A line's container path is nested deeper than [`MAX_NESTING_DEPTH`]. Both
+    /// emitters recurse one frame per container, so an unbounded path overflows
+    /// the stack; import caps it, and this is the same cap for the content that
+    /// never went through import (a decoded blob, a hand-built value).
+    NestingTooDeep {
+        line: usize,
+        depth: usize,
+        max: usize,
+    },
+}
+
+/// The way a line's text can contradict its [`LineKind`]. `Para` and `Heading`
+/// carry arbitrary text including slots (an inline image is a slot in a `Para`),
+/// so only the three kinds whose contract *names* their content constrain it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineKindMismatch {
+    /// [`LineKind::Island`] whose text is not exactly one [`ISLAND_SLOT`].
+    IslandNotOneSlot,
+    /// [`LineKind::Rule`] carrying text — the break is the line itself.
+    RuleNotEmpty,
+    /// [`LineKind::Code`] carrying an [`ISLAND_SLOT`]. A fence emits its text
+    /// verbatim, so the slot lands raw in the output and re-imports as nothing:
+    /// the island and its slot both vanish.
+    CodeHasSlot,
+}
+
+/// How a line's text contradicts `kind`, if it does — the single reading behind
+/// the [`Invariant::LineKindMismatch`] and
+/// [`ApplyError::LineKindMismatch`](crate::ops::ApplyError::LineKindMismatch)
+/// twins, so the validate-time and op-time checks cannot drift.
+pub fn line_kind_mismatch(kind: &LineKind, seg: &str) -> Option<LineKindMismatch> {
+    match kind {
+        LineKind::Island => {
+            let mut chars = seg.chars();
+            match (chars.next(), chars.next()) {
+                (Some(ISLAND_SLOT), None) => None,
+                _ => Some(LineKindMismatch::IslandNotOneSlot),
+            }
+        }
+        LineKind::Rule if !seg.is_empty() => Some(LineKindMismatch::RuleNotEmpty),
+        LineKind::Code { .. } if seg.contains(ISLAND_SLOT) => Some(LineKindMismatch::CodeHasSlot),
+        _ => None,
+    }
 }
 
 impl Content {
@@ -425,6 +472,22 @@ impl Content {
     /// props and unknown-mark attrs, then sort marks canonically. Idempotent —
     /// the fixed point the canonical serialization commits to.
     pub fn normalize(&mut self) {
+        // Line kinds whose contract names their content, against the content
+        // they now hold. A splice writes text, never kinds: typing into a table
+        // line leaves it `Island` over prose, joining a fence to an image line
+        // leaves it `Code` over a slot, and export reads the kind and not the
+        // text — so the un-repaired line projects its content away. Demote to
+        // `Para`, the kind that carries anything (an inline island is a slot in a
+        // `Para`), which is what re-importing the line's own markdown yields.
+        // The repair-side twin of the [`Invariant::LineKindMismatch`] check; the
+        // deliberate mis-tag is refused up front instead
+        // ([`ApplyError::LineKindMismatch`](crate::ops::ApplyError::LineKindMismatch)),
+        // since silently undoing an op the caller asked for is worse than an error.
+        for (line, seg) in self.lines.iter_mut().zip(self.text.split('\n')) {
+            if line_kind_mismatch(&line.kind, seg).is_some() {
+                line.kind = LineKind::Para;
+            }
+        }
         // Islands: canonicalize props key order. A table island's cells carry
         // inline `{text, marks}`; repair its shape (pad the header/rows/aligns to
         // one column count, rewrite any cell `\n` to a space) and canonicalize
@@ -553,11 +616,23 @@ impl Content {
                 _ => {}
             }
         }
-        for line in &self.lines {
+        // One pass over the lines against their own text segment. `lines.len()`
+        // already equals the segment count, so the zip is total.
+        for (i, (line, seg)) in self.lines.iter().zip(self.text.split('\n')).enumerate() {
             if let LineKind::Heading { level } = line.kind {
                 if !(1..=6).contains(&level) {
                     return Err(Invariant::BadHeadingLevel(level));
                 }
+            }
+            if let Some(mismatch) = line_kind_mismatch(&line.kind, seg) {
+                return Err(Invariant::LineKindMismatch { line: i, mismatch });
+            }
+            if line.containers.len() > crate::MAX_NESTING_DEPTH {
+                return Err(Invariant::NestingTooDeep {
+                    line: i,
+                    depth: line.containers.len(),
+                    max: crate::MAX_NESTING_DEPTH,
+                });
             }
         }
         // Table-cell marks: the prose range/zero-width/reserved-tag rules again,
@@ -707,6 +782,119 @@ mod tests {
         let mut island_only = Content::empty();
         island_only.text = ISLAND_SLOT.to_string();
         assert!(!island_only.is_blank());
+    }
+
+    /// A single-line content over `text` tagged `kind` — the shape a `SetKind`
+    /// or a splice can leave behind.
+    fn tagged(text: &str, kind: LineKind) -> Content {
+        Content {
+            text: text.to_string(),
+            lines: vec![Line {
+                kind,
+                containers: Vec::new(),
+                continues: false,
+            }],
+            marks: Vec::new(),
+            islands: Vec::new(),
+        }
+    }
+
+    /// Issue #1050: a line kind that contradicts the line's text is refused.
+    /// Export trusts the kind and never re-reads the segment, so `Island` over
+    /// prose projects to the island alone and `Rule` over prose to `---` — the
+    /// text silently gone.
+    #[test]
+    fn line_kind_must_agree_with_line_text() {
+        assert_eq!(
+            tagged("hello world", LineKind::Island).validate(),
+            Err(Invariant::LineKindMismatch {
+                line: 0,
+                mismatch: LineKindMismatch::IslandNotOneSlot
+            })
+        );
+        assert_eq!(
+            tagged("", LineKind::Island).validate(),
+            Err(Invariant::LineKindMismatch {
+                line: 0,
+                mismatch: LineKindMismatch::IslandNotOneSlot
+            })
+        );
+        assert_eq!(
+            tagged("important text", LineKind::Rule).validate(),
+            Err(Invariant::LineKindMismatch {
+                line: 0,
+                mismatch: LineKindMismatch::RuleNotEmpty
+            })
+        );
+        // `Para`/`Heading` carry slots — an inline image is a slot in prose —
+        // so only a fence, whose text is emitted verbatim, refuses one.
+        let mut code = tagged(&format!("a{ISLAND_SLOT}b"), LineKind::Code { lang: None });
+        code.islands = vec![Island {
+            id: "isl-0".into(),
+            island_type: "image".into(),
+            props: serde_json::json!({"alt": "x", "url": "y.png"}),
+            loss: Loss::Lossless,
+        }];
+        assert_eq!(
+            code.validate(),
+            Err(Invariant::LineKindMismatch {
+                line: 0,
+                mismatch: LineKindMismatch::CodeHasSlot
+            })
+        );
+        let mut para = code.clone();
+        para.lines[0].kind = LineKind::Para;
+        assert_eq!(para.validate(), Ok(()));
+        let mut heading = code.clone();
+        heading.lines[0].kind = LineKind::Heading { level: 1 };
+        assert_eq!(heading.validate(), Ok(()));
+        // The kinds that name their content, holding it.
+        assert_eq!(tagged("", LineKind::Rule).validate(), Ok(()));
+    }
+
+    /// Issue #1050: a splice writes text, never kinds, so it can strand an
+    /// `Island` line over prose. `normalize` demotes the stranded kind to `Para`
+    /// rather than let export drop the text — the repair-side twin of the
+    /// invariant, and what keeps every op path's terminal normalize total.
+    #[test]
+    fn normalize_demotes_a_stranded_line_kind() {
+        let mut rt = tagged("typed into a table line", LineKind::Island);
+        rt.normalize();
+        assert_eq!(rt.lines[0].kind, LineKind::Para);
+        assert_eq!(rt.validate(), Ok(()));
+        let mut rt = tagged("text on a rule line", LineKind::Rule);
+        rt.normalize();
+        assert_eq!(rt.lines[0].kind, LineKind::Para);
+        // A well-formed island line is left alone.
+        let mut rt = tagged(&ISLAND_SLOT.to_string(), LineKind::Island);
+        rt.islands = vec![Island {
+            id: "isl-0".into(),
+            island_type: "image".into(),
+            props: serde_json::json!({"alt": "x", "url": "y.png"}),
+            loss: Loss::Lossless,
+        }];
+        rt.normalize();
+        assert_eq!(rt.lines[0].kind, LineKind::Island);
+        assert_eq!(rt.validate(), Ok(()));
+    }
+
+    /// Issue #1051: container nesting is capped at the same depth import
+    /// enforces, so a content that never went through import cannot reach the
+    /// emitters — which recurse one frame per container — with an unbounded path.
+    #[test]
+    fn container_nesting_is_capped() {
+        let mut rt = tagged("hi", LineKind::Para);
+        rt.lines[0].containers = vec![Container::Quote; crate::MAX_NESTING_DEPTH];
+        assert_eq!(rt.validate(), Ok(()));
+        rt.lines[0].containers.push(Container::Quote);
+        assert_eq!(
+            rt.validate(),
+            Err(Invariant::NestingTooDeep {
+                line: 0,
+                depth: crate::MAX_NESTING_DEPTH + 1,
+                max: crate::MAX_NESTING_DEPTH,
+            })
+        );
     }
 
     #[test]
