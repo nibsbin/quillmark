@@ -1,22 +1,15 @@
 #!/usr/bin/env node
-// Canon spine lint — enforces the doc spine, the link invariants, and the
-// prose line budget specified in prose/README.md. Zero dependencies.
+// Canon spine lint — enforces the doc spine and the link invariants specified
+// in prose/README.md. Zero dependencies, no arguments.
 //
-// Usage: node scripts/check-canon.mjs [--drift[=<base>]]
-//
-// `--drift` adds a non-blocking anchor-drift report: it diffs against <base>
-// (default `HEAD^1`) and names the canon docs whose `**Implementation**`
-// folder changed while the doc itself did not. Advisory only — most code
-// changes need no doc edit, and a hard gate here would only teach people to
-// write vague anchors.
+// Every rule here is a gate, and every gate catches a dead link or a dead
+// anchor: rot no reader would notice. Taste is the writer's job and the
+// reviewer's. A check that can only warn does not belong.
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
-import { execFileSync } from 'node:child_process';
-import { join, posix, dirname } from 'node:path';
+import { join, posix } from 'node:path';
 
 const problems = [];
-const notices = [];
 const fail = (file, msg) => problems.push(`${file}: ${msg}`);
-const warn = (file, msg) => notices.push(`${file}: ${msg}`);
 
 // A file path — a slashed token with a dotted basename — inside an anchor.
 // Keys on path shape, not an extension list, so a new file type can't slip past.
@@ -26,20 +19,15 @@ const FILE_IN_ANCHOR = /[\w-]+\/[\w/-]*\.[a-z0-9]+\b/;
 const PLAN_LINK = /\]\([^)]*\/(?:proposals|plans)\//;
 // A relative markdown link target to a .md file (an outbound prose link).
 const PROSE_LINK = /\]\((?!https?:)[^)]*\.md(?=[)#])/;
-// An issue or PR reference. A status marker: it says work is in motion, which
-// canon does not carry, and it dates the sentence around it. Narrow enough to
-// miss heading anchors (`](#regions-overlay)`) and Typst code (`#let`, `#data`).
-const ISSUE_REF = /#\d+\b|github\.com\/[^)\s]+\/(?:issues|pull)\/\d+/;
 // A backticked slashed token — an anchor's folder reference.
 const ANCHOR_PATH = /`([\w.-]+\/[\w./-]*)`/g;
 // A relative markdown link target of any kind.
 const REL_LINK = /\]\((?!https?:|#)([^)\s]+)/g;
 
-// Line budget. A prose line past SOFT reads as a paragraph crammed onto one
-// line: dense by the byte, unskimmable by the claim. HARD is the gate; SOFT is
-// the ratchet, reported so the tail gets cleaned as docs are touched anyway.
+// Line budget. Past this a line is a paragraph crammed onto one line, and a
+// one-word fix rewrites the whole of it in the diff. prose/README.md sets a
+// tighter target for writers; only the outer bound is mechanical.
 const HARD = 700;
-const SOFT = 300;
 
 const mdFiles = (dir) =>
   existsSync(dir) ? readdirSync(dir).filter((n) => n.endsWith('.md')).sort() : [];
@@ -73,8 +61,6 @@ function proseLines(text) {
   return out;
 }
 
-const anchors = []; // { doc, path } — one row per folder a canon doc claims
-
 for (const name of mdFiles('prose/canon')) {
   const file = join('prose/canon', name);
   const text = readFileSync(file, 'utf8');
@@ -82,11 +68,6 @@ for (const name of mdFiles('prose/canon')) {
 
   const planLink = text.match(PLAN_LINK);
   if (planLink) fail(file, `links into proposals/ or plans/ (\`${planLink[0]}\`) — canon never references them`);
-
-  for (const [n, line] of proseLines(text)) {
-    const ref = line.match(ISSUE_REF);
-    if (ref) fail(file, `line ${n} cites \`${ref[0]}\` — canon states the shape, not the ticket tracking it`);
-  }
 
   if (name === 'INDEX.md') continue; // the index has no spine
 
@@ -106,10 +87,8 @@ for (const name of mdFiles('prose/canon')) {
 
     // An anchor that no longer resolves is the rot the folder rule exists to
     // prevent; it only prevents it if something checks.
-    for (const [, p] of impl.join('\n').matchAll(ANCHOR_PATH)) {
+    for (const [, p] of impl.join('\n').matchAll(ANCHOR_PATH))
       if (!existsSync(p)) fail(file, `Implementation anchor \`${p}\` does not exist`);
-      else anchors.push({ doc: file, path: p.endsWith('/') ? p : `${p}/` });
-    }
   }
 
   const firstH2 = lines.find((l) => l.startsWith('## '));
@@ -136,63 +115,10 @@ for (const name of mdFiles('prose/references')) {
   if (m) fail(file, `links to another prose doc (\`${m[0]}\`) — references are self-contained`);
 }
 
-// The diff, when one is available: scopes the soft limit and drives the drift
-// report. `--drift` without a base diffs the last commit.
-const driftArg = process.argv.slice(2).find((a) => a === '--drift' || a.startsWith('--drift='));
-const base = driftArg ? driftArg.split('=')[1] || 'HEAD^1' : null;
-let changed = null;
-if (base) {
-  try {
-    changed = new Set(
-      execFileSync('git', ['diff', '--name-only', base, 'HEAD'], { encoding: 'utf8' }).split('\n').filter(Boolean),
-    );
-  } catch {
-    console.log(`check-canon: no diff against ${base} — drift and soft-limit reporting skipped`);
-  }
-}
-
-// Line budget over canon and the consumer docs, minus migrations. The hard
-// limit is a gate everywhere; the soft limit is a ratchet, reported only for
-// files this change touches so the standing tail never becomes background noise.
-let softTotal = 0;
-for (const file of [...mdFiles('prose/canon').map((n) => join('prose/canon', n)), ...walkDocs('docs')]) {
-  for (const [n, line] of proseLines(readFileSync(file, 'utf8'))) {
+for (const file of [...mdFiles('prose/canon').map((n) => join('prose/canon', n)), ...walkDocs('docs')])
+  for (const [n, line] of proseLines(readFileSync(file, 'utf8')))
     if (line.length > HARD) fail(file, `line ${n} is ${line.length} chars (max ${HARD}) — one claim per sentence; split the clauses into bullets or a table`);
-    else if (line.length > SOFT) {
-      softTotal++;
-      if (changed?.has(file)) warn(file, `line ${n} is ${line.length} chars (soft limit ${SOFT}) — split it while you are here`);
-    }
-  }
-}
-if (softTotal) console.log(`check-canon: ${softTotal} lines over the ${SOFT}-char soft limit tree-wide`);
 
-// Anchor drift: the `**Implementation**` line is a machine-readable code→doc
-// back-pointer. Map each changed file to the *most specific* anchor claiming
-// it, so a change under `crates/core/src/quill/` doesn't also wake every doc
-// anchored at `crates/core/src/`.
-if (changed && anchors.length) {
-  const woken = new Map(); // doc -> Set of folders
-  for (const path of changed) {
-    let best = 0;
-    for (const { path: a } of anchors) if (path.startsWith(a) && a.length > best) best = a.length;
-    if (!best) continue;
-    for (const { doc, path: a } of anchors) {
-      if (a.length !== best || !path.startsWith(a) || changed.has(doc)) continue;
-      if (!woken.has(doc)) woken.set(doc, new Set());
-      woken.get(doc).add(a);
-    }
-  }
-  for (const [doc, folders] of [...woken].sort())
-    warn(doc, `${[...folders].join(', ')} changed since ${base}; this doc did not — check it still describes what is`);
-}
-
-for (const n of notices) {
-  console.log(`check-canon: note: ${n}`);
-  if (process.env.GITHUB_ACTIONS) {
-    const [file, ...rest] = n.split(': ');
-    console.log(`::warning file=${file}::${rest.join(': ')}`);
-  }
-}
 if (problems.length) {
   for (const p of problems) console.error(`check-canon: ${p}`);
   process.exit(1);

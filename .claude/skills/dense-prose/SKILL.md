@@ -96,10 +96,10 @@ cost a comment exists to remove. Compression is not density.
 - Prefer a paragraph break over a semicolon chain when the second half states a
   separate fact.
 
-`prose/README.md` sets the numeric budget — 700 characters per prose line hard,
-300 soft — and `scripts/check-canon.mjs` enforces it over `prose/canon/` and
-`docs/`. The soft limit is a ratchet: it reports only on files a change already
-touches, so split a long line when you are editing near it, not in a sweep.
+`prose/README.md` sets the numeric budget: 700 characters per prose line, which
+`scripts/check-canon.mjs` gates over `prose/canon/` and `docs/`, and 300 as the
+target you write to. Split a long line when you are editing near it — nothing
+mechanical will remind you.
 
 ### 5. State the design, not the deliberation
 

@@ -49,5 +49,4 @@ fact that belongs to a neighbouring page is a link, not a copy.
 ## Done when
 
 No obvious duplicates. Everything discoverable from `INDEX.md`. Docs are short,
-skimmable, folder-anchored, and easy to maintain. `check-canon.mjs` passes, and
-any drift note it raises is either acted on or knowingly left.
+skimmable, folder-anchored, and easy to maintain. `check-canon.mjs` passes.
