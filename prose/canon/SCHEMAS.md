@@ -207,14 +207,11 @@ site (the Tier-1 cut, [BINDINGS.md](BINDINGS.md)).
 ## Zero-filled render
 
 **A document need not be complete to render** — render success is not a
-completeness signal.
-Shippability is the author's judgment; the engine's only hard requirement
-is that the document be *well-formed* (values coerce). A `!must_fill` marker
-and a present-null cell are both renderable — neither gates render.
-Completeness is not surfaced as a diagnostic — `Quill::validate` raises no
-completeness/`field_absent` code (see [Native validation](#native-validation));
-the only authoring signal it raises is the non-fatal `validation::must_fill`
-warning for each outstanding marker.
+completeness signal. Shippability is the author's judgment; the engine's only
+hard requirement is that the document be *well-formed* (values coerce). A
+`!must_fill` marker and a present-null cell are both renderable, and neither
+surfaces as a diagnostic beyond the non-fatal `validation::must_fill` warning
+(see [Native validation](#native-validation)).
 
 Rendering and the *completeness verdict* are orthogonal. The render path
 (`compile_data` / `resolve_fields` in `quillmark::orchestration`) uses
@@ -225,13 +222,12 @@ backend **only, never in the persisted document**.
 
 - **Incomplete is renderable.** A document that merely omits an Unendorsed
   field — or leaves it present-null — renders fine: the field is zero-filled
-  in the projection. Such a document validates clean; completeness is not
-  surfaced as a diagnostic.
+  in the projection, and validates clean.
 - **Malformed is fatal.** The only malformed case is a value that cannot
   coerce to (or validate against) its declared type. Placeholders and null
-  are *not* malformed: a `!must_fill` marker renders (using its suggested
-  value or zero-filling) and raises only the non-fatal `validation::must_fill`
-  warning, and a present-null cell zero-fills like an absent field.
+  are *not* malformed: a `!must_fill` marker renders, using its suggested
+  value or zero-filling, and a present-null cell zero-fills like an absent
+  field.
 - **Non-persist invariant.** The zero-fill lives only in the ephemeral
   projection and must never be written back. A type-empty value is
   indistinguishable from authored-empty, so persisting it would erase the
@@ -380,9 +376,8 @@ has endorsed no value, so the blueprint stamps the `!must_fill` marker to
 ask an LLM or author to supply one. That is a *communication device on the
 blueprint surface*, not a requirement: a missing (or present-null) Unendorsed
 field zero-fills silently at render, and a surviving marker raises only the
-non-fatal `validation::must_fill` warning, never a render gate. "Must-fill"
-therefore lives solely on the blueprint/marker surface; the schema axis is
-endorsement, not obligation.
+non-fatal warning. "Must-fill" therefore lives solely on the blueprint/marker
+surface; the schema axis is endorsement, not obligation.
 
 A field is **Endorsed** when `default:` is declared; the rendered default
 is shippable as-is (the author can keep or override it).

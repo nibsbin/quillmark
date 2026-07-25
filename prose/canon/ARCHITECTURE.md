@@ -18,8 +18,8 @@ Quillmark is a schema-driven document engine: it turns Markdown with card-yaml b
 
 Foundation types and traits: the render contract (`Backend` / `LiveSession`),
 the `Document` and `Quill` model, and the `Diagnostic` currency — see the
-crate's rustdoc for the full surface and Core Interfaces below for the
-load-bearing four. It depends on `quillmark-content` (the leaf rich-text
+crate's rustdoc for the full surface, and [Core Interfaces](#core-interfaces)
+below for the ones carrying the contract. It depends on `quillmark-content` (the leaf rich-text
 primitive one layer below it) and on no backend; backends depend on it.
 
 ### `quillmark-content`

@@ -71,46 +71,13 @@ inputs from the file bundle when it opens a session (the Typst backend reads its
 `typst.plate_file`; the pdfform backend reads `form.pdf` / `form.json`), so a
 missing or malformed template surfaces as a render-time error, not a load error.
 
-## `Quill.yaml` Structure
+## `Quill.yaml` Rules
 
-Required top-level sections: `quill` (bundle metadata). Optional: `main` (document fields), `card_kinds` (card kind definitions), `typst` (backend config).
-
-```yaml
-quill:
-  name: my_quill          # required; snake_case
-  backend: typst          # required
-  version: "1.0.0"        # required; semver (MAJOR.MINOR.PATCH or MAJOR.MINOR)
-  description: A beautiful format  # required; non-empty
-  author: Jane Doe        # optional; defaults to "Unknown"
-  ui:                     # optional; fallback for main.ui when absent
-    title: My Quill
-
-main:
-  fields:
-    title:
-      type: string
-      description: Document title
-    count:
-      type: integer
-      description: Whole-number count
-
-card_kinds:
-  quote:
-    description: A single pull quote
-    ui:
-      title: Quote block      # optional UI display label
-    body:
-      example: The quote text  # optional editor placeholder
-    fields:
-      author:
-        type: string
-        description: Quote author
-
-typst:
-  plate_file: plate.typ   # optional; path to the Typst template, read by the backend
-  packages:
-    - "@preview/some-package:1.0.0"
-```
+One required top-level section, `quill` (bundle metadata); optional `main`
+(document fields), `card_kinds` (card kind definitions), and a backend-named
+section (`typst`). Every key, type, and UI property is documented in the
+[Quill.yaml reference](../../docs/quills/quill-yaml-reference.md); what follows
+is what the engine enforces.
 
 Field names must be `snake_case` (match `[a-z][a-z0-9_]*`). Capitalized or `$`-prefixed keys are rejected at config parse time with `quill::invalid_field_name` — document-level metadata sits on dedicated `$`-prefixed keys in the plate JSON (`$quill`, `$body`, `$cards`, `$kind`), and user fields stay lowercase so they cannot shadow it. Standalone `object` fields require a `properties` map. Every `array` field requires an `items:` element schema: use `items: { type: string }` (or `integer`, `richtext`, …) for a list of scalars, and `items: { type: object, properties: … }` for a list of objects.
 
@@ -145,18 +112,11 @@ Construction:
 - `quillmark::quill_from_path(path)` — load from a filesystem directory (fs walk
   lives in `quillmark`, not core); returns `Result<Quill, RenderError>`.
 
-In-memory loading is `Quill::from_tree` directly; bindings map its
-`Vec<Diagnostic>` into their own error shape at the call site.
+The two differ in error shape: the pure constructor hands back the raw
+`Vec<Diagnostic>` and bindings map it at the call site, while the loader wraps
+it in `RenderError`. Either way the `Quill` carries no backend — rendering goes
+through the `Quillmark` engine (`engine.render` / `engine.open`).
 
-The `Quill` carries no backend; rendering goes through the `Quillmark` engine
-(`engine.render` / `engine.open`). Note: `Quill::from_json` is not part of the
-public API.
-
-File access on `FileTreeNode`:
-- `file_exists(path)` / `get_file(path)` — check/read file
-- `dir_exists(path)` / `list_files(path)` / `list_subdirectories(path)` — directory navigation
-
-Path rules:
-- Use forward slashes (`/`); absolute paths and `..` traversal are rejected
-- Root: use `""` (empty string)
-- `get_file()` returns `&[u8]` for all files
+`FileTreeNode` exposes the file and directory reads over the bundle. Paths use
+forward slashes, the root is `""`, absolute paths and `..` traversal are
+rejected, and every file reads back as `&[u8]`.
