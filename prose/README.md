@@ -54,8 +54,9 @@ genuine exceptions (e.g. a draft specification).
 
 ## Line budget
 
-A prose line caps at **700 characters** and should stay under **300**. Past
-that, a line is a paragraph crammed onto one line — dense by the byte,
+A prose line caps at **700 characters** — the gate — and should stay under
+**300**, which is the target you write to. Past that, a line is a paragraph
+crammed onto one line — dense by the byte,
 unskimmable by the claim, and unreviewable in a diff, where a one-word fix
 rewrites the whole line. One claim per sentence; a bullet that needs three
 clauses is three bullets, a nested list, or a table. Fenced code and table rows
@@ -63,14 +64,8 @@ are exempt: a table row is a record, not a sentence.
 
 ## Enforcement
 
-`scripts/check-canon.mjs` runs in CI. It fails on a broken spine, a link into
-`proposals/`/`plans/`, a reference that links out, an `**Implementation**`
-anchor that names a file or no longer exists, a canon page missing from
-`INDEX.md`, a dead `INDEX.md` link, an issue or PR number in canon prose, and a
-line over the hard budget.
-
-It also *warns*, without failing, when a folder named in an
-`**Implementation**` anchor changed and the doc anchored there did not — the
-anchor is a machine-readable code→doc back-pointer, and this is what reads it.
-Most such changes need no doc edit; the warning is a prompt, not a gate.
+`scripts/check-canon.mjs` runs in CI and gates the mechanical half of the above:
+the spine, the link invariants, anchors that resolve, and the 700-character
+cap. It only ever fails — read the script for the rule list. The rest of this
+page is the writer's and the reviewer's, enforced by neither.
 
