@@ -23,6 +23,11 @@ workspace. Each file enumerates its surface, then ranks findings with
 Ranked by how much each costs a caller. Per-surface findings stay in the
 per-surface files; these are the ones no single reviewer owns.
 
+Filed as #1055, #1057, #1058, #1059, #1061, #1063, #1064 (label `api`), one
+per theme below. Content-crate validation gaps found by this sweep were
+already open as #1050 and #1051; the Python stub/parity half of theme 6 as
+#1011.
+
 ### 1. The backend extension point is unreachable from published docs
 
 `Backend::open` returns a `LiveSession`, constructible only through
