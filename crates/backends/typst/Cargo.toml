@@ -31,10 +31,16 @@ typst-render = { workspace = true }
 typst-svg = { workspace = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-js-sys = "^0.3"
-wasm-bindgen = "^0.2"
+js-sys = { workspace = true }
+wasm-bindgen = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
 # Acceptance tests parse the injected PDF to validate AcroForm structure.
-lopdf = "0.36"
+lopdf = { workspace = true }
+quillmark-fixtures = { workspace = true }
+# Path-only: `quillmark` depends on this crate, so a versioned dev-dep here is
+# an unpublishable cycle; cargo strips path-only dev-deps at packaging. Tests
+# load fixture quills through its `tree_from_path`, the one walker that honours
+# `.quillignore`.
+quillmark = { path = "../../quillmark" }

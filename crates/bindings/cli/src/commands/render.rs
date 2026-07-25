@@ -1,6 +1,6 @@
 use crate::commands::load_quill;
 use crate::errors::{CliError, Result};
-use crate::output::{derive_output_path, OutputWriter};
+use crate::output::{derive_output_path, write_output};
 use clap::Parser;
 use quillmark::{Document, Quillmark};
 use quillmark_core::{OutputFormat, RenderOptions};
@@ -170,8 +170,12 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         }))
     };
 
-    let writer = OutputWriter::new(args.stdout, output_path, args.quiet);
-    writer.write(&artifact.bytes)?;
+    write_output(
+        args.stdout,
+        output_path.as_deref(),
+        args.quiet,
+        &artifact.bytes,
+    )?;
 
     if args.verbose && !args.quiet {
         println!("Rendering completed successfully");

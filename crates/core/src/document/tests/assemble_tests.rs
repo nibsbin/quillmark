@@ -780,31 +780,24 @@ rating: 4
     assert_eq!(doc.main().payload().len(), 3);
 }
 
+/// Flow-sequence YAML (`[a, b]`) reaches the payload as an array — the block
+/// form is covered by `emit_tests.rs::round_trip_sequence`.
 #[test]
-fn taro_quill_directive() {
+fn test_flow_sequence_array_field_parses() {
     let markdown = "~~~card-yaml
 $quill: usaf_memo
 $kind: main
-memo_for: [ORG/SYMBOL]
-memo_from: [ORG/SYMBOL]
+memo_for: [ORG/SYMBOL, OTHER/SYMBOL]
 ~~~
 
 This is the memo body.";
 
     let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.quill_reference().name, "usaf_memo");
-    assert_eq!(
-        doc.main()
-            .payload()
-            .get("memo_for")
-            .unwrap()
-            .as_array()
-            .unwrap()[0]
-            .as_str()
-            .unwrap(),
-        "ORG/SYMBOL"
-    );
-    assert_eq!(doc.main().body_markdown(), "This is the memo body.");
+    let memo_for = doc.main().payload().get("memo_for").unwrap();
+    let items = memo_for.as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0].as_str().unwrap(), "ORG/SYMBOL");
+    assert_eq!(items[1].as_str().unwrap(), "OTHER/SYMBOL");
 }
 
 #[test]
@@ -1789,10 +1782,8 @@ fn test_kind_name_validator() {
     }
 }
 
-// Guillemet preprocessing
-
 #[test]
-fn test_guillemet_in_yaml_preserves_non_strings() {
+fn test_scalar_types_survive_yaml_preprocessing() {
     let markdown = "~~~card-yaml
 $quill: test_quill
 $kind: main
@@ -1823,6 +1814,8 @@ Body.";
         .as_bool()
         .unwrap());
 }
+
+// Guillemet preprocessing
 
 #[test]
 fn test_guillemet_double_conversion_prevention() {

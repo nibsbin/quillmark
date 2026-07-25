@@ -389,50 +389,14 @@ impl<'de> Deserialize<'de> for QuillValue {
     }
 }
 
-// Common delegating accessors, projected through the JSON view so existing
-// consumers keep their serde_json-shaped API unchanged.
 impl QuillValue {
-    /// Check if the value is null
-    pub fn is_null(&self) -> bool {
-        self.as_json().is_null()
-    }
-
-    /// Get the value as a string reference
-    pub fn as_str(&self) -> Option<&str> {
-        self.as_json().as_str()
-    }
-
-    /// Get the value as a boolean
-    pub fn as_bool(&self) -> Option<bool> {
-        self.as_json().as_bool()
-    }
-
-    /// Get the value as an i64
-    pub fn as_i64(&self) -> Option<i64> {
-        self.as_json().as_i64()
-    }
-
-    /// Get the value as a u64
-    pub fn as_u64(&self) -> Option<u64> {
-        self.as_json().as_u64()
-    }
-
-    /// Get the value as an f64
-    pub fn as_f64(&self) -> Option<f64> {
-        self.as_json().as_f64()
-    }
-
-    /// Get the value as an array reference
-    pub fn as_array(&self) -> Option<&Vec<serde_json::Value>> {
-        self.as_json().as_array()
-    }
-
-    /// Get the value as an object reference
-    pub fn as_object(&self) -> Option<&serde_json::Map<String, serde_json::Value>> {
-        self.as_json().as_object()
-    }
-
     /// Get a field from an object by key, preserving the child's fill markers.
+    ///
+    /// The one accessor that is not reachable through [`Deref`]: it returns a
+    /// `QuillValue`, so the child keeps its fill marker. The scalar reads
+    /// (`is_null`, `as_str`, `as_bool`, `as_i64`, `as_u64`, `as_f64`,
+    /// `as_array`, `as_object`) come from the `serde_json::Value` deref target
+    /// — fill markers are not observable through them anyway.
     pub fn get(&self, key: &str) -> Option<QuillValue> {
         match &self.node.kind {
             Kind::Object(entries) => entries.get(key).map(|n| QuillValue::from_node(n.clone())),

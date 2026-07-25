@@ -31,7 +31,7 @@ proptest! {
 
     /// Arbitrary printable-Unicode input: parse→emit→re-parse must be stable.
     #[test]
-    fn fuzz_emit_roundtrip_arbitrary(s in "\\PC{0,500}") {
+    fn fuzz_emit_roundtrip_arbitrary(s in "\\PC{0,1000}") {
         let doc_a = match Document::parse(&s) {
             Ok(d) => d.document,
             Err(_) => return Ok(()), // invalid input — discard

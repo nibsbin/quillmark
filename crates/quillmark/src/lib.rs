@@ -28,5 +28,5 @@ pub use quillmark_core::{
 mod load;
 pub mod orchestration;
 
-pub use load::quill_from_path;
+pub use load::{quill_from_path, quill_from_path_with_warnings, tree_from_path};
 pub use orchestration::Quillmark;

@@ -190,7 +190,8 @@ card_kinds:
     const ed = quill.writer(blankDoc())
     const delta = ed.reviseField('subject', 'Q3 **results**')
     expect(quill.reader(ed.document).get('subject')).toBe('Q3 **results**')
-    expect(delta).toBeTruthy() // the anchor-preserving receipt
+    // The anchor-preserving receipt is a structured-clone-able change set.
+    expect(Array.isArray(delta.ops)).toBe(true)
   })
 
   it('reviseField rejects an undeclared name, and a non-inline result', () => {
@@ -236,7 +237,7 @@ card_kinds:
     // card(i).reviseField is the typed, anchor-preserving field write.
     const delta = ed.card(0).reviseField('body', 'Revised **field**.')
     expect(exportMarkdown(fieldOf(doc.cards[0], 'body'))).toBe('Revised **field**.')
-    expect(delta).toBeTruthy()
+    expect(Array.isArray(delta.ops)).toBe(true)
     expectEditCode(() => ed.card(0).reviseField('stray', 'x'), 'edit::unknown_field')
   })
 

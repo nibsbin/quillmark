@@ -226,22 +226,13 @@ impl FromStr for QuillReference {
 
         let name = name_part.to_string();
 
-        if !name
-            .chars()
-            .next()
-            .is_some_and(|c| c.is_ascii_lowercase() || c == '_')
-        {
+        // Same charset as a card kind, leading underscore included — one
+        // predicate, in `document::meta`. (Quill *config* names are stricter:
+        // `config.rs` rejects a leading underscore, so its predicate is not
+        // interchangeable with this one.)
+        if !crate::document::is_valid_kind_name(&name) {
             return Err(format!(
-                "Invalid Quill name '{}': must start with lowercase letter or underscore",
-                name
-            ));
-        }
-        if !name
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
-        {
-            return Err(format!(
-                "Invalid Quill name '{}': must contain only lowercase letters, digits, and underscores",
+                "Invalid Quill name '{}': must match [a-z_][a-z0-9_]*",
                 name
             ));
         }

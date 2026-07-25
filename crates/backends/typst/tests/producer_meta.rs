@@ -5,61 +5,12 @@
 //! escaping), preservation of Typst's `/Creator`, and correct composition
 //! with the signature-field overlay in the same incremental update.
 
-use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use lopdf::Object;
-use quillmark_core::{Backend, FileTreeNode, OutputFormat, Quill, RenderOptions};
+use quillmark_core::{Backend, OutputFormat, RenderOptions};
 use quillmark_typst::TypstBackend;
 
-fn host_tree() -> FileTreeNode {
-    fn walk(dir: &Path) -> std::io::Result<FileTreeNode> {
-        let mut files = HashMap::new();
-        for entry in fs::read_dir(dir)? {
-            let entry = entry?;
-            let p: PathBuf = entry.path();
-            let name = p.file_name().unwrap().to_string_lossy().into_owned();
-            if p.is_file() {
-                files.insert(
-                    name,
-                    FileTreeNode::File {
-                        contents: fs::read(&p)?,
-                    },
-                );
-            } else if p.is_dir() {
-                files.insert(name, walk(&p)?);
-            }
-        }
-        Ok(FileTreeNode::Directory { files })
-    }
-    let quill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("fixtures")
-        .join("resources")
-        .join("quills")
-        .join("usaf_memo")
-        .join("0.2.0");
-    walk(&quill_path).expect("walk fixture")
-}
-
-/// Build the host quill with its `plate.typ` replaced by `plate`; the fixture's
-/// `typst.plate_file: plate.typ` makes the backend read this override.
-fn source_with_plate(plate: &str) -> Quill {
-    let mut tree = host_tree();
-    if let FileTreeNode::Directory { files } = &mut tree {
-        files.insert(
-            "plate.typ".to_string(),
-            FileTreeNode::File {
-                contents: plate.as_bytes().to_vec(),
-            },
-        );
-    }
-    Quill::from_tree(tree).expect("load source")
-}
+mod common;
+use common::host_with_plate as source_with_plate;
 
 const PLATE: &str = "#set page(width: 400pt, height: 300pt)\n= Hello\n";
 

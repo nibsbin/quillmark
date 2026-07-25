@@ -446,6 +446,7 @@ fn test_dir_exists_and_list_apis() {
     );
 
     let root = FileTreeNode::Directory { files: root_files };
+    let tree = root.clone();
     let quill = Quill::from_tree(root).unwrap();
 
     // Test dir_exists
@@ -461,29 +462,32 @@ fn test_dir_exists_and_list_apis() {
     assert!(quill.file_exists("assets/fonts/font.ttf"));
     assert!(!quill.file_exists("assets")); // directory, not file
 
-    // Test list_files
-    let root_files_list = quill.list_files("");
+    // The listing pair is read off the tree — `Quill` exposes only
+    // `list_directories`, which is built on `FileTreeNode::list_subdirectories`.
+    let root_files_list = tree.list_files("");
     assert_eq!(root_files_list.len(), 2); // Quill.yaml and plate.typ
     assert!(root_files_list.contains(&"Quill.yaml".to_string()));
     assert!(root_files_list.contains(&"plate.typ".to_string()));
 
-    let assets_files_list = quill.list_files("assets");
+    let assets_files_list = tree.list_files("assets");
     assert_eq!(assets_files_list.len(), 2); // logo.png and icon.svg
     assert!(assets_files_list.contains(&"logo.png".to_string()));
     assert!(assets_files_list.contains(&"icon.svg".to_string()));
 
-    // Test list_subdirectories
-    let root_subdirs = quill.list_subdirectories("");
+    let root_subdirs = tree.list_subdirectories("");
     assert_eq!(root_subdirs.len(), 2); // assets and empty
     assert!(root_subdirs.contains(&"assets".to_string()));
     assert!(root_subdirs.contains(&"empty".to_string()));
 
-    let assets_subdirs = quill.list_subdirectories("assets");
+    let assets_subdirs = tree.list_subdirectories("assets");
     assert_eq!(assets_subdirs.len(), 1); // fonts
     assert!(assets_subdirs.contains(&"fonts".to_string()));
 
-    let empty_subdirs = quill.list_subdirectories("empty");
+    let empty_subdirs = tree.list_subdirectories("empty");
     assert_eq!(empty_subdirs.len(), 0);
+
+    // The live wrapper over the same walk.
+    assert_eq!(quill.list_directories("").len(), 2);
 }
 
 #[test]

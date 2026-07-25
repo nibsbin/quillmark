@@ -17,4 +17,4 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 # Acceptance tests reparse the stamped PDF to validate AcroForm structure.
-lopdf = "0.36"
+lopdf = { workspace = true }

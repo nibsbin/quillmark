@@ -187,32 +187,21 @@ impl QuillWorld {
     ) -> Result<Vec<Vec<u8>>, Box<dyn std::error::Error + Send + Sync>> {
         let mut font_data = Vec::new();
 
-        // Look for fonts in assets/fonts/ first
-        let fonts_paths = source.find_files("assets/fonts/*");
-        for font_path in fonts_paths {
-            if let Some(ext) = font_path.extension() {
-                if matches!(
+        // Asset fonts first — `QuillWorld` gives them priority over package
+        // fonts of the same family, and `Vec` order is that priority.
+        for glob in ["assets/fonts/*", "packages/**"] {
+            for font_path in source.find_files(glob) {
+                let Some(ext) = font_path.extension() else {
+                    continue;
+                };
+                if !matches!(
                     ext.to_string_lossy().to_lowercase().as_str(),
                     "ttf" | "otf" | "woff" | "woff2"
                 ) {
-                    if let Some(contents) = source.get_file(&font_path) {
-                        font_data.push(contents.to_vec());
-                    }
+                    continue;
                 }
-            }
-        }
-
-        // Also look in packages/*/fonts/ for package fonts
-        let package_font_paths = source.find_files("packages/**");
-        for font_path in package_font_paths {
-            if let Some(ext) = font_path.extension() {
-                if matches!(
-                    ext.to_string_lossy().to_lowercase().as_str(),
-                    "ttf" | "otf" | "woff" | "woff2"
-                ) {
-                    if let Some(contents) = source.get_file(&font_path) {
-                        font_data.push(contents.to_vec());
-                    }
+                if let Some(contents) = source.get_file(&font_path) {
+                    font_data.push(contents.to_vec());
                 }
             }
         }
@@ -560,50 +549,16 @@ name = "minimal-package"
 
     #[test]
     fn test_asset_fonts_have_priority() {
-        use std::collections::HashMap;
-        use std::fs;
-        use std::path::{Path, PathBuf};
+        use quillmark_core::Quill;
 
-        use quillmark_core::{FileTreeNode, Quill};
-
-        fn walk(dir: &Path) -> std::io::Result<FileTreeNode> {
-            let mut files = HashMap::new();
-            for entry in fs::read_dir(dir)? {
-                let entry = entry?;
-                let p: PathBuf = entry.path();
-                let name = p.file_name().unwrap().to_string_lossy().into_owned();
-                if p.is_file() {
-                    files.insert(
-                        name,
-                        FileTreeNode::File {
-                            contents: fs::read(&p)?,
-                        },
-                    );
-                } else if p.is_dir() {
-                    files.insert(name, walk(&p)?);
-                }
-            }
-            Ok(FileTreeNode::Directory { files })
-        }
-
-        // Use the actual usaf_memo fixture which has real fonts
-        let quill_path = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("fixtures")
-            .join("resources")
-            .join("quills")
-            .join("usaf_memo")
-            .join("0.2.0");
-
+        // The usaf_memo fixture carries real fonts.
+        let quill_path = quillmark_fixtures::quills_path("usaf_memo");
         if !quill_path.exists() {
             // Skip test if fixture not found
             return;
         }
 
-        let tree = walk(&quill_path).expect("walk fixture");
+        let tree = quillmark::tree_from_path(quill_path).expect("walk fixture");
         let source = Quill::from_tree(tree).expect("load source");
         let world = QuillWorld::new(&source, "// Test").unwrap();
 

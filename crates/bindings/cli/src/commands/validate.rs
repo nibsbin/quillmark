@@ -1,8 +1,8 @@
 use crate::errors::{CliError, Result};
 use clap::Parser;
 use quillmark_core::quill::{CardSchema, FieldSchema, QuillConfig};
+use quillmark_core::{Diagnostic, Severity};
 use indexmap::IndexMap;
-use std::fs;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
@@ -16,40 +16,13 @@ pub struct ValidateArgs {
     verbose: bool,
 }
 
-/// Validation issue severity
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Severity {
-    Error,
-    Warning,
-}
-
-/// A single validation issue
-#[derive(Debug)]
-struct ValidationIssue {
-    severity: Severity,
-    message: String,
-}
-
-impl ValidationIssue {
-    fn error(message: impl Into<String>) -> Self {
-        Self {
-            severity: Severity::Error,
-            message: message.into(),
-        }
-    }
-
-    fn warning(message: impl Into<String>) -> Self {
-        Self {
-            severity: Severity::Warning,
-            message: message.into(),
-        }
-    }
-}
-
-/// Result of validating a Quill configuration
+/// The issues one `validate` run accumulates — real `quillmark_core::Diagnostic`s
+/// throughout, the same type `QuillConfig::from_yaml_with_warnings` already
+/// hands this file, printed through the same `fmt_pretty()` every other CLI
+/// diagnostic uses.
 #[derive(Debug, Default)]
 struct ValidationResult {
-    issues: Vec<ValidationIssue>,
+    issues: Vec<Diagnostic>,
 }
 
 impl ValidationResult {
@@ -57,30 +30,22 @@ impl ValidationResult {
         Self { issues: Vec::new() }
     }
 
-    fn add_error(&mut self, message: impl Into<String>) {
-        self.issues.push(ValidationIssue::error(message));
+    fn add_error(&mut self, message: impl Into<String>, code: &str) {
+        self.issues
+            .push(Diagnostic::new(Severity::Error, message.into()).with_code(code.to_string()));
     }
 
-    fn add_warning(&mut self, message: impl Into<String>) {
-        self.issues.push(ValidationIssue::warning(message));
+    fn add_warning(&mut self, message: impl Into<String>, code: &str) {
+        self.issues
+            .push(Diagnostic::new(Severity::Warning, message.into()).with_code(code.to_string()));
+    }
+
+    fn count(&self, severity: Severity) -> usize {
+        self.issues.iter().filter(|d| d.severity == severity).count()
     }
 
     fn has_errors(&self) -> bool {
-        self.issues.iter().any(|i| i.severity == Severity::Error)
-    }
-
-    fn error_count(&self) -> usize {
-        self.issues
-            .iter()
-            .filter(|i| i.severity == Severity::Error)
-            .count()
-    }
-
-    fn warning_count(&self) -> usize {
-        self.issues
-            .iter()
-            .filter(|i| i.severity == Severity::Warning)
-            .count()
+        self.count(Severity::Error) > 0
     }
 }
 
@@ -107,62 +72,49 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
 
     let mut result = ValidationResult::new();
 
-    // Step 1: Parse the YAML config first (before full Quill load)
-    let yaml_content = fs::read_to_string(&quill_yaml_path).map_err(CliError::Io)?;
-
-    let (config, config_warnings) = match QuillConfig::from_yaml_with_warnings(&yaml_content) {
+    // Step 1: load the quill once. `quill_from_path_with_warnings` keeps the
+    // config warnings that the plain loader drops, so there is no second,
+    // hand-rolled `Quill.yaml` read to reach them.
+    let (quill, config_warnings) = match quillmark::quill_from_path_with_warnings(&args.quill_path) {
         Ok(pair) => pair,
-        Err(diags) => {
-            for diag in &diags {
+        Err(e) => {
+            for diag in e.diagnostics() {
                 eprintln!("{}", diag.fmt_pretty());
             }
             eprintln!(
                 "\nValidation failed: {} error(s) in Quill.yaml",
-                diags.len()
+                e.diagnostics().len()
             );
             return Err(CliError::InvalidArgument(
                 "Quill configuration is invalid".to_string(),
             ));
         }
     };
+    let config = quill.config();
 
-    for diag in &config_warnings {
-        result.add_warning(diag.message.clone());
-    }
+    // Already `Diagnostic`s — carry `code`/`path`/`hint` through instead of
+    // flattening each to its message.
+    result.issues.extend(config_warnings);
 
     if args.verbose {
         println!("  Quill name: {}", config.name);
         println!("  Backend: {}", config.backend);
         println!("  Fields: {}", config.main.fields.len());
         println!("  Cards: {}", config.card_kinds.len());
+        println!("  Schema generated successfully");
+        println!("  Defaults extracted: {}", config.main.defaults().len());
     }
 
     // Step 2: Validate file references
-    validate_file_references(&args.quill_path, &config, &mut result);
+    validate_file_references(&args.quill_path, config, &mut result);
 
     // Step 3: Emit schema-quality warnings (example/default type errors were
-    // already caught at parse time in Step 1).
+    // already caught at load time in Step 1).
     validate_field_schemas(&config.main.fields, &mut result, "field");
 
     // Step 4: Validate card-kind schemas
     for card_schema in &config.card_kinds {
         validate_card_schema(&card_schema.name, card_schema, &mut result);
-    }
-
-    // Step 5: Try to load the full Quill (this validates schema generation)
-    match quillmark::quill_from_path(&args.quill_path) {
-        Ok(quill) => {
-            if args.verbose {
-                println!("  Schema generated successfully");
-                println!(
-                    "  Defaults extracted: {}",
-                    quill.config().main.defaults().len()
-                );
-            }
-        }
-        Err(e) => {
-            result.add_error(format!("Failed to load Quill: {}", e));
-        }
     }
 
     // Print results
@@ -171,7 +123,7 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
     if result.has_errors() {
         Err(CliError::InvalidArgument(format!(
             "Validation failed with {} error(s)",
-            result.error_count()
+            result.count(Severity::Error)
         )))
     } else {
         Ok(())
@@ -199,17 +151,20 @@ fn validate_file_references(
             .components()
             .any(|c| !matches!(c, std::path::Component::Normal(_)))
         {
-            result.add_error(format!(
-                "plate_file '{}' must be a relative path within the quill (no '..' or absolute components)",
-                plate_file
-            ));
+            result.add_error(
+                format!(
+                    "plate_file '{}' must be a relative path within the quill (no '..' or absolute components)",
+                    plate_file
+                ),
+                "cli::plate_file_escapes_quill",
+            );
         } else {
             let plate_path = quill_path.join(rel);
             if !plate_path.exists() {
-                result.add_error(format!(
-                    "Referenced plate_file '{}' does not exist",
-                    plate_file
-                ));
+                result.add_error(
+                    format!("Referenced plate_file '{}' does not exist", plate_file),
+                    "cli::plate_file_missing",
+                );
             }
         }
     }
@@ -230,9 +185,10 @@ fn validate_field_schemas(
     for (field_name, field_schema) in fields {
         if let Some(ref enum_values) = field_schema.enum_values {
             if enum_values.is_empty() {
-                result.add_warning(format!(
-                    "{context} '{field_name}': enum constraint is empty"
-                ));
+                result.add_warning(
+                    format!("{context} '{field_name}': enum constraint is empty"),
+                    "cli::empty_enum",
+                );
             }
         }
         if field_schema
@@ -242,9 +198,10 @@ fn validate_field_schemas(
             .trim()
             .is_empty()
         {
-            result.add_warning(format!(
-                "{context} '{field_name}': missing or empty description"
-            ));
+            result.add_warning(
+                format!("{context} '{field_name}': missing or empty description"),
+                "cli::missing_description",
+            );
         }
     }
 }
@@ -257,10 +214,10 @@ fn validate_card_schema(card_name: &str, card_schema: &CardSchema, result: &mut 
         .trim()
         .is_empty()
     {
-        result.add_warning(format!(
-            "card '{}': missing or empty description",
-            card_name
-        ));
+        result.add_warning(
+            format!("card '{}': missing or empty description", card_name),
+            "cli::missing_description",
+        );
     }
 
     let context = format!("card '{}' field", card_name);
@@ -268,22 +225,18 @@ fn validate_card_schema(card_name: &str, card_schema: &CardSchema, result: &mut 
 }
 
 fn print_validation_result(result: &ValidationResult, verbose: bool) {
-    let error_count = result.error_count();
-    let warning_count = result.warning_count();
+    let error_count = result.count(Severity::Error);
+    let warning_count = result.count(Severity::Warning);
 
-    // Print issues
-    for issue in &result.issues {
-        match issue.severity {
-            Severity::Error => eprintln!("[ERROR] {}", issue.message),
-            Severity::Warning => {
-                if verbose {
-                    eprintln!("[WARNING] {}", issue.message)
-                }
-            }
+    // `-v` is the "all validation details including warnings" contract; errors
+    // always print. `fmt_pretty` is the same rendering `errors::print_warnings`
+    // gives every other CLI diagnostic, so `code`/`path`/`hint` survive.
+    for diag in &result.issues {
+        if diag.severity == Severity::Error || verbose {
+            eprintln!("{}", diag.fmt_pretty());
         }
     }
 
-    // Print summary
     if error_count == 0 && warning_count == 0 {
         println!("Validation passed: quill configuration is valid");
     } else if error_count == 0 {

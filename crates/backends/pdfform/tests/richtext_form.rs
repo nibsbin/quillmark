@@ -17,31 +17,8 @@ headline: The **headline**\n\
 bio: A **bold** claim and _emphasis_.\n\
 ~~~\n";
 
-fn decode_pdf_text(bytes: &[u8]) -> String {
-    if bytes.starts_with(&[0xFE, 0xFF]) {
-        let units: Vec<u16> = bytes[2..]
-            .chunks_exact(2)
-            .map(|c| u16::from_be_bytes([c[0], c[1]]))
-            .collect();
-        String::from_utf16_lossy(&units)
-    } else {
-        bytes.iter().map(|&b| b as char).collect()
-    }
-}
-
-fn widget<'a>(doc: &'a PdfDoc, af: &lopdf::Dictionary, name: &str) -> &'a lopdf::Dictionary {
-    for f in af.get(b"Fields").unwrap().as_array().unwrap() {
-        let w = doc
-            .get_object(f.as_reference().unwrap())
-            .unwrap()
-            .as_dict()
-            .unwrap();
-        if w.get(b"T").unwrap().as_str().unwrap() == name.as_bytes() {
-            return w;
-        }
-    }
-    panic!("no field named {name}");
-}
+mod common;
+use common::{decode_pdf_text, widget};
 
 #[test]
 fn richtext_fields_lower_to_plaintext_field_values() {

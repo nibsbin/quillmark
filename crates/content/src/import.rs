@@ -46,6 +46,18 @@ use crate::island::KnownIslandType;
 use crate::normalize::normalize_markdown;
 use crate::MAX_NESTING_DEPTH;
 use pulldown_cmark::{Event, Options, Parser, Tag, TagEnd};
+
+/// What `event` contributes to the alt text of an image being collected, or
+/// `None` when it contributes nothing. One rule, two accumulators: a `String`
+/// at top level and the table cell inside a table (which additionally flags the
+/// cell `degraded` and drops the URL).
+fn image_alt_text<'e>(event: &'e Event<'e>) -> Option<&'e str> {
+    match event {
+        Event::Text(t) | Event::Code(t) => Some(t),
+        Event::SoftBreak | Event::HardBreak => Some(" "),
+        _ => None,
+    }
+}
 use serde_json::json;
 use std::cell::RefCell;
 use std::collections::HashSet;
@@ -455,9 +467,11 @@ impl Builder {
                             self.emit_image();
                         }
                     }
-                    Event::Text(t) | Event::Code(t) => self.image_alt.push_str(t),
-                    Event::SoftBreak | Event::HardBreak => self.image_alt.push(' '),
-                    _ => {}
+                    other => {
+                        if let Some(s) = image_alt_text(other) {
+                            self.image_alt.push_str(s);
+                        }
+                    }
                 }
                 continue;
             }
@@ -721,17 +735,13 @@ impl Builder {
                         a.img_depth -= 1;
                     }
                 }
-                Event::Text(t) | Event::Code(t) => {
-                    if let Some(c) = self.cell_mut() {
-                        c.push_text(t);
+                other => {
+                    if let Some(s) = image_alt_text(other) {
+                        if let Some(c) = self.cell_mut() {
+                            c.push_text(s);
+                        }
                     }
                 }
-                Event::SoftBreak | Event::HardBreak => {
-                    if let Some(c) = self.cell_mut() {
-                        c.push_text(" ");
-                    }
-                }
-                _ => {}
             }
             return;
         }

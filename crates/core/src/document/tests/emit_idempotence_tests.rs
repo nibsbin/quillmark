@@ -4,23 +4,7 @@
 //! canonicalise to the same in-memory document. This is the non-trivial
 //! consequence of byte-stable, lossless round-trips through both formats.
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/// Collect all `.md` files reachable from `root`, walking recursively.
-fn collect_md_files(root: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
-    let entries = match std::fs::read_dir(root) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_md_files(&path, out);
-        } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
-            out.push(path);
-        }
-    }
-}
+use crate::document::tests::collect_md_files;
 
 // ── Markdown↔JSON canonical convergence (markdown-spec.md §9.1) ──────────────
 

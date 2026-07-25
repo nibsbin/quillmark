@@ -26,6 +26,16 @@ impl Quill {
     /// reported together. Backend-specific assets (e.g. a Typst plate) are
     /// not read here — a backend resolves its own inputs at render time.
     pub fn from_tree(root: FileTreeNode) -> Result<Self, Vec<Diagnostic>> {
+        Self::from_tree_with_warnings(root).map(|(quill, _)| quill)
+    }
+
+    /// [`from_tree`](Self::from_tree), keeping the advisory diagnostics
+    /// `QuillConfig::from_yaml_with_warnings` produces instead of dropping
+    /// them. A caller that surfaces config warnings (the CLI's `validate -v`)
+    /// takes this door; everything else takes `from_tree`.
+    pub fn from_tree_with_warnings(
+        root: FileTreeNode,
+    ) -> Result<(Self, Vec<Diagnostic>), Vec<Diagnostic>> {
         let quill_yaml_bytes = root.get_file("Quill.yaml").ok_or_else(|| {
             vec![diag(
                 "Quill.yaml not found in file tree",
@@ -42,9 +52,9 @@ impl Quill {
 
         // Parse YAML into QuillConfig — propagate the full diagnostic vector
         // so every Quill.yaml error reaches the caller.
-        let (config, _warnings) = QuillConfig::from_yaml_with_warnings(&quill_yaml_content)?;
+        let (config, warnings) = QuillConfig::from_yaml_with_warnings(&quill_yaml_content)?;
 
-        Self::from_config(config, root)
+        Self::from_config(config, root).map(|quill| (quill, warnings))
     }
 
     /// Create a Quill from a QuillConfig and file tree.

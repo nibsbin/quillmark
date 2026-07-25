@@ -83,6 +83,14 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
     — so each card's date surfaces its own region. Wrapping `v.display` (not a
     re-literalized date) inherits `v`'s type, so a `date`-only field's `display`
     throws Typst's native error on an `[hour]` pattern.
+
+    Two Typst-language facts the paren form rests on, verified against **Typst
+    0.15** and worth re-checking on a major bump: dict-key method sugar
+    (`d.display(..)`) is a hard error, and grabbing `.display` off a *native*
+    `datetime` without calling it is too — which is why `display-date`
+    dispatches on `type(date)` instead of parenthesizing uniformly. Neither is
+    pinned by a test: a test on Typst's error wording fails on a reworded
+    message, which says nothing about a Quillmark regression.
 - `plaintext(field)`: the sanctioned content→`str` coercion. Where
   `data.<field>` is Typst **content**, `plaintext(field)` returns the content
   field's plain text — the content text with island slots stripped and marks

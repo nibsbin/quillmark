@@ -381,7 +381,7 @@ impl Payload {
     }
 
     /// The map for the given out-of-band meta key, if declared.
-    fn meta(&self, want: MetaKey) -> Option<&JsonMap<String, JsonValue>> {
+    pub(crate) fn meta(&self, want: MetaKey) -> Option<&JsonMap<String, JsonValue>> {
         self.items.iter().find_map(|i| match i {
             PayloadItem::Meta { key, value, .. } if *key == want => Some(value),
             _ => None,
@@ -439,7 +439,7 @@ impl Payload {
     /// Set or replace an out-of-band meta entry at its canonical position.
     /// Nested comments on a replaced entry are dropped (the new value tree
     /// may not contain matching positions).
-    fn set_meta(&mut self, key: MetaKey, value: JsonMap<String, JsonValue>) {
+    pub(crate) fn set_meta(&mut self, key: MetaKey, value: JsonMap<String, JsonValue>) {
         self.upsert_meta(PayloadItem::Meta {
             key,
             value,
@@ -468,7 +468,7 @@ impl Payload {
 
     /// Remove an out-of-band meta entry, returning the previous map if any.
     /// Any nested comments attached to the entry are dropped.
-    fn take_meta(&mut self, want: MetaKey) -> Option<JsonMap<String, JsonValue>> {
+    pub(crate) fn take_meta(&mut self, want: MetaKey) -> Option<JsonMap<String, JsonValue>> {
         match self.take_item(|i| matches!(i, PayloadItem::Meta { key, .. } if *key == want))? {
             PayloadItem::Meta { value, .. } => Some(value),
             _ => unreachable!(),

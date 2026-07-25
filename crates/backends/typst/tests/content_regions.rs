@@ -10,30 +10,11 @@
 //! `field_at` resolves a point to a field on *any* placement, not just the
 //! first.
 
-use std::collections::HashMap;
-
-use quillmark_core::{Backend, FileTreeNode, Quill};
+use quillmark_core::Backend;
 use quillmark_typst::TypstBackend;
 
-/// A self-contained quill from a `Quill.yaml` + `plate.typ` pair. No fonts dir
-/// is needed — Typst's embedded defaults render text — and the helper package
-/// (`@local/quillmark-helper`) is injected by the backend.
-fn quill(yaml: &str, plate: &str) -> Quill {
-    let mut files = HashMap::new();
-    files.insert(
-        "Quill.yaml".to_string(),
-        FileTreeNode::File {
-            contents: yaml.as_bytes().to_vec(),
-        },
-    );
-    files.insert(
-        "plate.typ".to_string(),
-        FileTreeNode::File {
-            contents: plate.as_bytes().to_vec(),
-        },
-    );
-    Quill::from_tree(FileTreeNode::Directory { files }).expect("load quill")
-}
+mod common;
+use common::quill_with_plate as quill;
 
 /// The canonical content JSON the render seam carries for a richtext field —
 /// these tests drive `Backend::open` directly, so they build the content the way

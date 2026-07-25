@@ -22,6 +22,7 @@ use quillmark_content::import::ImportError;
 use quillmark_content::{ApplyError, Delta, LineOp, MarkOp, Content};
 
 use crate::document::meta::{validate_composable_kind, CardKindError};
+use crate::document::payload::MetaKey;
 use crate::document::{Card, Document, Payload};
 use crate::quill::{CoercionError, FieldSchema, Leniency, QuillConfig};
 use crate::value::QuillValue;
@@ -613,12 +614,7 @@ impl Card {
         namespace: impl Into<String>,
         value: serde_json::Value,
     ) -> Result<(), EditError> {
-        let mut map = self.payload_mut().ext().cloned().unwrap_or_default();
-        map.insert(namespace.into(), value);
-        check_meta_depth(&map)?;
-        self.payload_mut().take_ext();
-        self.payload_mut().set_ext(map);
-        Ok(())
+        self.merge_meta_namespace(MetaKey::Ext, namespace.into(), value)
     }
 
     /// Remove `namespace` from the card's `$ext` map, returning the value
@@ -632,10 +628,38 @@ impl Card {
     /// `store_ext_namespace(ns, v)` followed by `remove_ext_namespace(ns)`
     /// restores a card that had no `$ext` to its original state.
     pub fn remove_ext_namespace(&mut self, namespace: &str) -> Option<serde_json::Value> {
-        let mut map = self.payload_mut().take_ext()?;
+        self.remove_meta_namespace(MetaKey::Ext, namespace)
+    }
+
+    /// Merge `value` into the `key` map under `namespace`, preserving siblings.
+    /// The map is written back only after the depth check passes, so the card
+    /// is unchanged on error.
+    fn merge_meta_namespace(
+        &mut self,
+        key: MetaKey,
+        namespace: String,
+        value: serde_json::Value,
+    ) -> Result<(), EditError> {
+        let mut map = self.payload_mut().meta(key).cloned().unwrap_or_default();
+        map.insert(namespace, value);
+        check_meta_depth(&map)?;
+        self.payload_mut().take_meta(key);
+        self.payload_mut().set_meta(key, map);
+        Ok(())
+    }
+
+    /// Drop `namespace` from the `key` map, returning what was there. Emptying
+    /// the map drops the entry rather than leaving `$<key>: {}`, so a
+    /// merge/remove pair restores a card that carried no such entry.
+    fn remove_meta_namespace(
+        &mut self,
+        key: MetaKey,
+        namespace: &str,
+    ) -> Option<serde_json::Value> {
+        let mut map = self.payload_mut().take_meta(key)?;
         let removed = map.remove(namespace);
         if !map.is_empty() {
-            self.payload_mut().set_ext(map);
+            self.payload_mut().set_meta(key, map);
         }
         removed
     }
@@ -667,12 +691,7 @@ impl Card {
             CardKindError::InvalidName => EditError::InvalidKindName(card_kind.clone()),
             CardKindError::Reserved => EditError::ReservedKind,
         })?;
-        let mut map = self.payload_mut().seed().cloned().unwrap_or_default();
-        map.insert(card_kind, value);
-        check_meta_depth(&map)?;
-        self.payload_mut().take_seed();
-        self.payload_mut().set_seed(map);
-        Ok(())
+        self.merge_meta_namespace(MetaKey::Seed, card_kind, value)
     }
 
     /// Remove `card_kind` from the card's `$seed` map, returning the overlay
@@ -680,12 +699,7 @@ impl Card {
     /// the `$seed` entry is dropped entirely (not left as `$seed: {}`).
     /// The seed analogue of [`Card::remove_ext_namespace`].
     pub fn remove_seed_namespace(&mut self, card_kind: &str) -> Option<serde_json::Value> {
-        let mut map = self.payload_mut().take_seed()?;
-        let removed = map.remove(card_kind);
-        if !map.is_empty() {
-            self.payload_mut().set_seed(map);
-        }
-        removed
+        self.remove_meta_namespace(MetaKey::Seed, card_kind)
     }
 
     /// Install the body content directly from a pre-built [`Content`] — **value

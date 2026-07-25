@@ -16,23 +16,7 @@
 //!
 
 use crate::document::Document;
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-fn collect_md_files(root: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
-    let entries = match std::fs::read_dir(root) {
-        Ok(e) => e,
-        Err(_) => return,
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.is_dir() {
-            collect_md_files(&path, out);
-        } else if path.extension().and_then(|e| e.to_str()) == Some("md") {
-            out.push(path);
-        }
-    }
-}
+use crate::document::tests::collect_md_files;
 
 // ── Content stability ──────────────────────────────────────────────────────────
 

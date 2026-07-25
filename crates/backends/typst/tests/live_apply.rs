@@ -6,11 +6,11 @@
 //! transactional: a failed recompile leaves every read serving the last-good
 //! compile.
 
-use std::collections::HashMap;
-
-use quillmark_core::{Backend, FileTreeNode, OutputFormat, Quill, RenderOptions};
+use quillmark_core::{Backend, OutputFormat, Quill, RenderOptions};
 use quillmark_typst::TypstBackend;
 use serde_json::json;
+
+mod common;
 
 const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data
 #set page(width: 300pt, height: 200pt, margin: 20pt)
@@ -19,21 +19,8 @@ const PLATE: &str = r#"#import "@local/quillmark-helper:0.1.0": data
 "#;
 
 fn quill() -> Quill {
-    let yaml = b"quill:\n  name: live\n  version: 0.1.0\n  backend: typst\n  description: apply acceptance quill\n\ntypst:\n  plate_file: plate.typ\n\nmain:\n  fields:\n    msg:\n      description: message\n      type: string\n";
-    let mut files = HashMap::new();
-    files.insert(
-        "Quill.yaml".to_string(),
-        FileTreeNode::File {
-            contents: yaml.to_vec(),
-        },
-    );
-    files.insert(
-        "plate.typ".to_string(),
-        FileTreeNode::File {
-            contents: PLATE.as_bytes().to_vec(),
-        },
-    );
-    Quill::from_tree(FileTreeNode::Directory { files }).expect("quill")
+    let yaml = "quill:\n  name: live\n  version: 0.1.0\n  backend: typst\n  description: apply acceptance quill\n\ntypst:\n  plate_file: plate.typ\n\nmain:\n  fields:\n    msg:\n      description: message\n      type: string\n";
+    common::quill_with_plate(yaml, PLATE)
 }
 
 /// `n` sentences; `marker` appended after sentence `edit_at`.
@@ -109,20 +96,7 @@ main:
 #set text(size: 11pt)
 #data.body
 "#;
-    let mut files = HashMap::new();
-    files.insert(
-        "Quill.yaml".to_string(),
-        FileTreeNode::File {
-            contents: YAML.as_bytes().to_vec(),
-        },
-    );
-    files.insert(
-        "plate.typ".to_string(),
-        FileTreeNode::File {
-            contents: PLATE.as_bytes().to_vec(),
-        },
-    );
-    Quill::from_tree(FileTreeNode::Directory { files }).expect("quill")
+    common::quill_with_plate(YAML, PLATE)
 }
 
 #[test]
@@ -187,20 +161,7 @@ main:
 
 #data.note
 "#;
-    let mut files = HashMap::new();
-    files.insert(
-        "Quill.yaml".to_string(),
-        FileTreeNode::File {
-            contents: YAML.as_bytes().to_vec(),
-        },
-    );
-    files.insert(
-        "plate.typ".to_string(),
-        FileTreeNode::File {
-            contents: PLATE.as_bytes().to_vec(),
-        },
-    );
-    Quill::from_tree(FileTreeNode::Directory { files }).expect("quill")
+    common::quill_with_plate(YAML, PLATE)
 }
 
 #[test]
