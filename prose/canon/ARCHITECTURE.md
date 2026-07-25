@@ -35,7 +35,9 @@ backends lower the content.
 
 ### `quillmark` (orchestration)
 
-High-level API: `Quillmark` (the engine — a backend registry + render dispatcher) plus the `quill_from_path` loader. Re-exports core's `Quill`. Handles backend resolution at render time and auto-registration. Filesystem walking for `quill_from_path` lives here; core is filesystem-agnostic (in-memory loading is `Quill::from_tree` in core). The engine does not construct quills — it only renders them.
+The `Quillmark` engine plus the `quill_from_path` loader; re-exports core's
+`Quill`. Filesystem walking lives here, so core stays filesystem-agnostic —
+in-memory loading is `Quill::from_tree` in core.
 
 ### `backends/quillmark-typst`
 
@@ -79,20 +81,9 @@ coercion.
 ## Core Interfaces
 
 - **`Quillmark`** — Engine: a backend registry + render dispatcher. Auto-registers `TypstBackend` when the `typst` feature is enabled. Resolves a quill's declared backend at render time (erroring `engine::backend_not_found` on no match) and owns the backend-dependent surface — `render`, `open`, `supported_formats(&quill)`, `supports_canvas(&quill)`. It does not construct quills.
-- **`Quill`** — The single quill type in `quillmark-core`: portable, declarative data (file bundle + config + metadata, tagged with a declared backend id). Held by value. Exposes the pure config-read operations: `dry_run`, `compile_data`, `backend_id`, plus `validate` (editor-facing: returns every schema diagnostic, including the non-fatal `validation::must_fill` warning raised for each `!must_fill` marker) and the `seed_document` / `seed_main` / `seed_card` starters that emit committed example documents and cards. Construct with `Quill::from_tree` or `quillmark::quill_from_path`
+- **`Quill`** — The single quill type in `quillmark-core`: portable, declarative data (file bundle + config + metadata, tagged with a declared backend id), held by value and carrying the pure config-read operations (`validate`, `schema`, `blueprint`, `seed_*`, `compile_data`, `dry_run`). Construct with `Quill::from_tree` or `quillmark::quill_from_path` — see [QUILL.md](QUILL.md)
 - **`Backend`** — Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open(&Quill, json)`. There is no universal template input: a backend reads whatever static inputs it needs (a Typst plate, a `form.pdf`) from the quill's own files. No canvas-capability method — capability is derived (`LiveSession::supports_canvas()` from the session seam; `formats_support_canvas()` as a pre-session hint)
-- **`LiveSession`** — Opaque live session returned by `Backend::open()`: a
-  persistent compiler whose reads (`render(opts)`, the canvas seam,
-  `regions()`/`field_at()`) serve its current compile, and whose `apply(json)`
-  recompiles in place, transactionally (on `Err` reads keep serving the
-  last-good compile) — returning a `ChangeSet` of dirty pages. It exposes
-  `page_count()` and `warnings()` for consumers that don't go through
-  `render()`. The canvas-preview seam lives on `SessionHandle` itself
-  (`page_size_pt`/`render_rgba`, default `None`): a canvas backend overrides
-  both, and the WASM painter dispatches generically through them, with no
-  per-backend downcast — Typst and pdfform both ride this seam (see
-  [PREVIEW.md](PREVIEW.md)). A backend with a richer typed surface can still
-  downcast via `LiveSession::handle()` + `SessionHandle::as_any`.
+- **`LiveSession`** — Opaque live session returned by `Backend::open()`: a persistent compiler whose reads serve its current compile and whose `apply(json)` recompiles in place, transactionally, returning a `ChangeSet` of dirty pages. The canvas seam lives on `SessionHandle` (`page_size_pt`/`render_rgba`), so a canvas backend overrides two methods and the WASM painter dispatches generically — see [PREVIEW.md](PREVIEW.md)
 - **`Document`** — Typed in-memory representation of a Quillmark Markdown file (root block, body, cards). Serializes via `serde` to a versioned JSON envelope (`StoredDocument`) for database persistence, decoupled from the evolving Markdown syntax — see [DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md)
 - **`Diagnostic`** — Structured error with severity, code, message, location, hint, source chain
 - **`RenderResult`** — Output artifacts + accumulated warnings

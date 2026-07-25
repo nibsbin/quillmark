@@ -17,23 +17,14 @@ paints through one generic painter.
 
 ## Why
 
-For live previews of long documents, the byte-output formats are
-sub-optimal:
-
-- **Iframed SVG**: each iframe is its own browser document. N pages → N
-  documents; teardown and memory cost grow linearly.
-- **Inline SVG**: scales with content complexity (every glyph is a DOM
-  node); long, dense documents produce huge DOM trees.
-- **PNG**: pays zlib encode + decode on every render, and you typically
-  hold N decoded bitmaps.
-
-A canvas painter skips the encode/decode round-trip entirely — pixels go
-straight from the rasterizer into the canvas backing store. For long documents
-the consumer keeps memory bounded to the visible viewport — paint only pages
-near it, repaint as the user scrolls.
+Every byte-output format costs per page what canvas costs once: iframed SVG
+spends a browser document per page, inline SVG a DOM node per glyph, PNG a zlib
+encode and decode plus N decoded bitmaps. The painter writes rasterizer pixels
+straight into the backing store, so a consumer keeps memory bounded to the
+visible viewport.
 
 The edit loop is the second half of the argument. Re-opening a session per
-keystroke rebuilds the entire compilation world (fonts, packages, assets) and
+keystroke rebuilds the whole compilation world (fonts, packages, assets) and
 repaints every visible page whether or not it changed. A `LiveSession` keeps
 the world alive across edits and reports what an edit visibly changed, so the
 per-keystroke cost is *incremental recompile + repaint of `dirty ∩ visible`*.
@@ -141,7 +132,7 @@ compositing of its own. Backends satisfy it differently:
 
 `paint` writes the whole backing store with `put_image_data`, which bypasses
 the 2D context transform, `globalAlpha`, and clip. The painter therefore owns
-the entire canvas: **give each visible page its own `` element.** You
+the entire canvas: **give each visible page its own `<canvas>` element.** You
 cannot paint two pages into one canvas, paint into a sub-rect, or push a page
 through a context transform — the raster is complete precisely so you never
 need to composite, and the write ignores context state so you could not if you
@@ -347,16 +338,11 @@ renderScale = layoutScale × densityScale
 ```
 
 Fold `window.devicePixelRatio`, in-app zoom, and `visualViewport.scale` into
-`densityScale`. If the largest backing dimension would exceed
-**`MAX_BACKING_DIMENSION` (16384 px per side)** — the floor that works across
-browsers (Chrome/Firefox ~32k, Safari 16k, lower on memory-constrained mobile)
-— the painter clamps `densityScale` proportionally and reports the actual
-backing dimensions. `clamped` and `effectiveDensityScale` carry the fact and
-the applied density on the result, so the consumer reads the clamp off the
-return value rather than reconstructing it from
-`pixelWidth < round(layoutWidth × densityScale)`. A clamped page renders soft
-at the same `canvas.style` size; compare `effectiveDensityScale` to the
-requested `densityScale` to know by how much.
+`densityScale`. Past **`MAX_BACKING_DIMENSION` (16384 px per side)** — the
+floor that works across browsers — the painter clamps `densityScale`
+proportionally and reports the outcome on the result (`clamped`,
+`effectiveDensityScale`), so a consumer never reconstructs the clamp from the
+dimensions. A clamped page renders soft at the same `canvas.style` size.
 
 Each `paint` resets the backing store (writing `canvas.width` clears it), so
 paint is always a full repaint — consumers never call `clearRect`.
@@ -376,19 +362,11 @@ width_canvas  = (rect[2] − rect[0]) × renderScale
 height_canvas = (rect[3] − rect[1]) × renderScale
 ```
 
-For an **HTML/CSS overlay** on a `width:100%` canvas, prefer percentages of the
-page over device pixels — they track the displayed size across DPI and
-pane-resize for free, with no `renderScale` to thread; only the Y axis flips:
-
-```
-left%   = rect[0] / pageWidthPt  × 100
-top%    = (pageHeightPt − rect[3]) / pageHeightPt × 100
-width%  = (rect[2] − rect[0]) / pageWidthPt  × 100
-height% = (rect[3] − rect[1]) / pageHeightPt × 100
-```
-
-The device-pixel form above is still the right one for painting an overlay
-*into* a raster.
+That form is the one for painting an overlay *into* a raster. An HTML/CSS
+overlay on a `width:100%` canvas is better off in percentages of the page —
+`left% = rect[0] / pageWidthPt × 100`, `top% = (pageHeightPt − rect[3]) /
+pageHeightPt × 100`, and the extents likewise — because they track the
+displayed size across DPI and pane-resize with no `renderScale` to thread.
 
 ## Feature / build mapping
 
@@ -496,26 +474,7 @@ by `runtime.test.js`.
 
 ## Lifecycle and consumer flow
 
-```js
-import { Engine } from '@quillmark/wasm';      // single root export
-const engine = new Engine();
-
-if (!(await engine.supportsCanvas(quill))) return;   // non-canvas backends have no painter
-const session = await engine.open(quill, doc);       // compiles once; the session persists its world
-const densityScale = (window.devicePixelRatio || 1) * userZoom;  // userZoom is a UI control
-
-const result = session.paint(canvas.getContext('2d'), page, {
-  layoutScale: 1,                             // layout px per pt
-  densityScale,                               // includes devicePixelRatio + zoom
-});
-
-canvas.style.width  = `${result.layoutWidth}px`;   // CSS box, layout px
-canvas.style.height = `${result.layoutHeight}px`;
-
-// Edit loop: apply, repaint dirty ∩ visible. On throw, the canvas still
-// shows the last-good compile — keep it and surface the diagnostics.
-function onEdit(editedDoc) {
-  const { pageCount, dirtyPages } = session.apply(editedDoc);
-  for (const p of dirtyPages) if (isVisible(p)) repaint(p);
-}
-```
+`supportsCanvas` → `open` → `paint` per visible page → `apply` on edit →
+repaint `dirtyPages ∩ visible`. The [quickstart's canvas
+section](../../docs/getting-started/quickstart.md#live-preview-canvas) is the
+worked loop.

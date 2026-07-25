@@ -78,8 +78,10 @@
     ## Live Preview (Canvas)
 
     For editor-style previews, paint pages directly into a `<canvas>` instead
-    of round-tripping through PNG/SVG. `paint` is Typst-only and WASM-only,
-    and shares the cached compile with the byte-output `render` path.
+    of round-tripping through PNG/SVG. `paint` is WASM-only — both the Typst
+    and `pdfform` backends support it; probe with `engine.supportsCanvas(quill)`
+    before mounting canvas UI — and shares the cached compile with the
+    byte-output `render` path.
 
     ```javascript
     const session = await engine.open(quill, doc);     // compile once (async)
@@ -118,5 +120,16 @@
       stable between edits, but re-read them after a committed `apply(doc)`,
       which recompiles in place and can change the page count
       (`ChangeSet.pageCount`).
+    - In an edit loop, repaint `dirtyPages ∩ visible` rather than every page:
+
+      ```javascript
+      function onEdit(editedDoc) {
+        const { pageCount, dirtyPages } = session.apply(editedDoc);
+        for (const p of dirtyPages) if (isVisible(p)) renderPage(canvases[p], p);
+      }
+      ```
+
+      `apply` is transactional: if it throws, the canvas still shows the
+      last-good compile, so keep it up and surface the diagnostics.
 
     Full design rationale: [PREVIEW.md](https://github.com/borb-sh/quillmark/blob/main/prose/canon/PREVIEW.md).
