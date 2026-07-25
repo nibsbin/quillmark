@@ -1,6 +1,7 @@
 # Quill Versioning System
 
 > **Implementation**: `crates/core/src/`
+> **Related**: [QUILL.md](QUILL.md), [ERROR.md](ERROR.md)
 
 ## TL;DR
 
@@ -8,7 +9,10 @@ Quills declare a semantic `version` in `Quill.yaml`, and documents carry an opti
 
 ## Version Format
 
-Semantic versioning: `MAJOR.MINOR.PATCH` (two-segment `MAJOR.MINOR` also validates). Always quote the value in `Quill.yaml`: an unquoted `1.0` is read as a YAML number and stringified to `"1"`, which fails validation.
+Semantic versioning: `MAJOR.MINOR.PATCH`, with two-segment `MAJOR.MINOR` also
+valid. `version` is required in the `quill:` section, and an invalid or missing
+value fails at load. Always quote it: an unquoted `1.0` is read as a YAML number
+and stringified to `"1"`, which fails validation.
 
 | Increment | When |
 |-----------|------|
@@ -35,32 +39,17 @@ No registry consumes the selector — there is no collection of installed versio
 
 A quill mismatch is distinct from a validation failure (a malformed document): here the document is well-formed but paired with the wrong Quill, so the remedy is to render with the referenced Quill or amend `$quill`. A bare name or `@latest` matches any version, so correctly-targeted documents never trip either check.
 
-## Quill.yaml
-
-```yaml
-quill:
-  name: my_format
-  version: "2.1.0"
-  backend: typst
-  description: "Short description of this format"
-  author: "..."          # optional
-  ui: { ... }            # optional
-
-typst:
-  plate_file: "plate.typ" # optional; the Typst template, read by the backend
-```
-
-`name`, `backend`, `version`, and `description` are required. `author` and `ui` are optional. Unknown keys under `quill:` are a hard error. A backend's own settings (e.g. the Typst `plate_file`) live under the backend-named section, not in `quill:`. `version` must parse as `MAJOR.MINOR.PATCH` (or `MAJOR.MINOR`); an invalid or missing value fails at load.
-
 ## Error Handling
 
-Three distinct failure paths:
+Three distinct failure paths, and the parser owns one of them outright:
 
-- **`Quill.yaml` version invalid** → `quill::invalid_version` diagnostic → surfaces as `RenderError::QuillConfig` at Quill load.
-- **Document `$quill` reference invalid** (e.g. `my_format@bad`) → `ParseError::InvalidQuillReference`, returned directly by the parser, never as `RenderError::QuillConfig`.
-- **Loaded Quill does not satisfy a well-formed `$quill`** (wrong name, or version outside the selector — e.g. `my_format@2` against a `3.0.0` Quill) → `quill::name_mismatch` / `quill::version_mismatch` diagnostic → surfaces as a `RenderError` from `render`/`dry_run`.
-
-See [ERROR.md](ERROR.md) for error patterns.
+- **`Quill.yaml` version invalid** → `quill::invalid_version` → surfaces as
+  `RenderError::QuillConfig` at Quill load.
+- **Document `$quill` reference invalid** (e.g. `my_format@bad`) →
+  `ParseError::InvalidQuillReference`, returned directly by the parser, never as
+  `RenderError::QuillConfig`.
+- **Loaded Quill does not satisfy a well-formed `$quill`** → the two mismatch
+  codes above, as a `RenderError` from `render`/`dry_run`.
 
 ## Ref Immutability
 
@@ -83,8 +72,3 @@ ref, or a new `Quiver` — and the downstream caches follow automatically
 (WeakMap + weak refs). There is no invalidation API. One must arrive
 end-to-end with its first real consumer (republish-at-same-ref), which this
 immutability invariant deliberately rules out.
-
-## Links
-
-- [QUILL.md](QUILL.md) — Quill structure
-- [ERROR.md](ERROR.md) — error patterns

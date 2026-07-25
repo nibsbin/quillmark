@@ -16,11 +16,11 @@ Quillmark is a schema-driven document engine: it turns Markdown with card-yaml b
 
 ### `quillmark-core`
 
-Foundation types and traits; depends on `quillmark-content` (the leaf rich-text
-primitive one layer below it). No backend dependencies; backends depend on this
-crate.
-
-Key exports: `Backend`, `Artifact`, `OutputFormat`, `RenderOptions`, `LiveSession`, `Document`, `Quill`, `FileTreeNode`, `QuillIgnore`, `RenderError`, `Diagnostic`, `Severity`, `Location`, `RenderResult`, `QuillValue`, `QuillReference`, `Version`, `VersionSelector`. `Quill` is the single quill type — portable, validated data with the pure config-read operations (`validate`, `schema`, `metadata`, `blueprint`, `seed_*`, `compile_data`, `dry_run`); construct it with `Quill::from_tree`.
+Foundation types and traits: the render contract (`Backend` / `LiveSession`),
+the `Document` and `Quill` model, and the `Diagnostic` currency — see the
+crate's rustdoc for the full surface, and [Core Interfaces](#core-interfaces)
+below for the ones carrying the contract. It depends on `quillmark-content` (the leaf rich-text
+primitive one layer below it) and on no backend; backends depend on it.
 
 ### `quillmark-content`
 
@@ -35,7 +35,9 @@ backends lower the content.
 
 ### `quillmark` (orchestration)
 
-High-level API: `Quillmark` (the engine — a backend registry + render dispatcher) plus the `quill_from_path` loader. Re-exports core's `Quill`. Handles backend resolution at render time and auto-registration. Filesystem walking for `quill_from_path` lives here; core is filesystem-agnostic (in-memory loading is `Quill::from_tree` in core). The engine does not construct quills — it only renders them.
+The `Quillmark` engine plus the `quill_from_path` loader; re-exports core's
+`Quill`. Filesystem walking lives here, so core stays filesystem-agnostic —
+in-memory loading is `Quill::from_tree` in core.
 
 ### `backends/quillmark-typst`
 
@@ -43,7 +45,18 @@ Implements `Backend` for PDF, SVG, and PNG. Lowers each content field's `Content
 
 ### `backends/quillmark-pdfform`
 
-The second backend: fills an existing AcroForm PDF rather than typesetting from scratch. Resolves card values against the quill's `form.json` spec and stamps them onto the base `form.pdf` as real interactive fields (Technique A — `NeedAppearances`, no baked appearance streams). The PDF deliverable is always an interactive AcroForm; the backend also emits SVG and PNG (and a WASM canvas raster) by pre-flattening values into the page content streams (hayro raster). Field geometry is a session-level query (`LiveSession::regions()`) — per-field geometry keyed on the schema field path, no bound value. See [docs/quills/pdfform-backend.md](../../docs/quills/pdfform-backend.md) and [PREVIEW.md](PREVIEW.md).
+The second backend: fills an existing AcroForm PDF rather than typesetting from
+scratch. It resolves card values against the quill's `form.json` spec and stamps
+them onto the base `form.pdf` as real interactive fields (Technique A —
+`NeedAppearances`, no baked appearance streams).
+
+The PDF deliverable is always an interactive AcroForm. The backend also emits
+SVG and PNG (and a WASM canvas raster) by pre-flattening values into the page
+content streams (hayro raster). Field geometry is a session-level query
+(`LiveSession::regions()`) — per-field geometry keyed on the schema field path,
+no bound value. Quill-authoring surface:
+[docs/quills/pdfform-backend.md](../../docs/quills/pdfform-backend.md); preview
+seam: [PREVIEW.md](PREVIEW.md).
 
 ### `quillmark-pdf`
 
@@ -61,14 +74,16 @@ Test resources under `resources/`. Helper functions for test setup.
 
 ### `quillmark-fuzz`
 
-Property-based fuzz tests (proptest): `parse_fuzz` (YAML/Markdown parsing), `convert_fuzz` (Markdown→Typst conversion + escaping), `emit_roundtrip_fuzz` (emit roundtripping), `filter_fuzz` (filter injection safety), `coerce_fuzz` (type coercion).
+Property-based fuzz tests (proptest) over YAML/Markdown parsing, Markdown→Typst
+conversion and escaping, emit roundtripping, filter injection safety, and type
+coercion.
 
 ## Core Interfaces
 
 - **`Quillmark`** — Engine: a backend registry + render dispatcher. Auto-registers `TypstBackend` when the `typst` feature is enabled. Resolves a quill's declared backend at render time (erroring `engine::backend_not_found` on no match) and owns the backend-dependent surface — `render`, `open`, `supported_formats(&quill)`, `supports_canvas(&quill)`. It does not construct quills.
-- **`Quill`** — The single quill type in `quillmark-core`: portable, declarative data (file bundle + config + metadata, tagged with a declared backend id). Held by value. Exposes the pure config-read operations: `dry_run`, `compile_data`, `backend_id`, plus `validate` (editor-facing: returns every schema diagnostic, including the non-fatal `validation::must_fill` warning raised for each `!must_fill` marker) and the `seed_document` / `seed_main` / `seed_card` starters that emit committed example documents and cards. Construct with `Quill::from_tree` or `quillmark::quill_from_path`
+- **`Quill`** — The single quill type in `quillmark-core`: portable, declarative data (file bundle + config + metadata, tagged with a declared backend id), held by value and carrying the pure config-read operations (`validate`, `schema`, `blueprint`, `seed_*`, `compile_data`, `dry_run`). Construct with `Quill::from_tree` or `quillmark::quill_from_path` — see [QUILL.md](QUILL.md)
 - **`Backend`** — Trait for output formats (`Send + Sync`): `id()`, `supported_formats()`, `open(&Quill, json)`. There is no universal template input: a backend reads whatever static inputs it needs (a Typst plate, a `form.pdf`) from the quill's own files. No canvas-capability method — capability is derived (`LiveSession::supports_canvas()` from the session seam; `formats_support_canvas()` as a pre-session hint)
-- **`LiveSession`** — Opaque live session returned by `Backend::open()`: a persistent compiler whose reads (`render(opts)`, the canvas seam, `regions()`/`field_at()`) serve its current compile, and whose `apply(json)` recompiles in place, transactionally (on `Err` reads keep serving the last-good compile) — returning a `ChangeSet` of dirty pages. Exposes `page_count()` and `warnings()` for consumers that don't go through `render()`. The canvas-preview seam lives on `SessionHandle` itself (`page_size_pt`/`render_rgba`, default `None`); a canvas backend overrides both, and the WASM painter dispatches generically through them — no per-backend downcast (Typst and pdfform both ride this seam — see [PREVIEW.md](PREVIEW.md)). A backend with a different richer typed surface can still downcast via `LiveSession::handle()` + `SessionHandle::as_any`.
+- **`LiveSession`** — Opaque live session returned by `Backend::open()`: a persistent compiler whose reads serve its current compile and whose `apply(json)` recompiles in place, transactionally, returning a `ChangeSet` of dirty pages. The canvas seam lives on `SessionHandle` (`page_size_pt`/`render_rgba`), so a canvas backend overrides two methods and the WASM painter dispatches generically — see [PREVIEW.md](PREVIEW.md)
 - **`Document`** — Typed in-memory representation of a Quillmark Markdown file (root block, body, cards). Serializes via `serde` to a versioned JSON envelope (`StoredDocument`) for database persistence, decoupled from the evolving Markdown syntax — see [DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md)
 - **`Diagnostic`** — Structured error with severity, code, message, location, hint, source chain
 - **`RenderResult`** — Output artifacts + accumulated warnings
@@ -83,6 +98,7 @@ See [PLATE_DATA.md](PLATE_DATA.md) for the Typst helper package.
 
 ## Backend Implementation
 
-Implement `id()`, `supported_formats()`, and `open()` of the `Backend` trait. To paint to a canvas, override the `SessionHandle` seam (`page_size_pt` / `render_rgba`) on the returned session — capability is derived from that seam, so there is no separate flag to set. Return a `LiveSession` wrapping a `SessionHandle` that handles format-specific rendering.
-
-See `backends/quillmark-typst` for the reference implementation.
+Implement the `Backend` trait and return a `LiveSession` wrapping a
+`SessionHandle` that does the format-specific rendering; to paint to a canvas,
+override that handle's `page_size_pt` / `render_rgba`. See
+`backends/quillmark-typst` for the reference implementation.

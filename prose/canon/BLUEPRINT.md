@@ -280,8 +280,7 @@ shippable as-is; no `default:` is Unendorsed:
   annotations on each row). The outer key carries `# array<object>`.
 - `default: []` renders inline as `[]` with `# array<object>` —
   shippable empty. Inline row shape is not surfaced under an empty
-  default; use `example:` to document row shape (tracked in
-  [#736](https://github.com/borb-sh/quillmark/issues/736)).
+  default; use `example:` to document row shape.
 - No `default:` is Unendorsed: one synthetic row is emitted with each
   property carrying its own description, inline annotation, and the
   `!must_fill` marker on its leaf value. The container key itself is
@@ -437,10 +436,8 @@ contract**:
 > (zero) value in the plate projection, so an empty document is by
 > construction the *type-minimal valid input*.
 
-The zero-filled empty document is the *type-minimal valid input* — the
-worst-case-but-renderable document. A plate that renders it has shown it
-degrades gracefully on every type-valid input shape. The contract
-requires:
+It is the worst-case-but-renderable document, so a plate that renders it
+degrades gracefully on every type-valid input shape. The contract requires:
 
 - Templates treat type-empty values (`""`, `0`, `false`, `[]`, empty
   richtext body) as valid *present* input — read via `data.field`,
@@ -459,13 +456,11 @@ generated blueprint (`quiver_test.rs::every_quill_blueprint_round_trips_and_rend
 
 ## The blueprint and its filled-out twin
 
-The blueprint is the **one** annotated reference document — the authoring
-surface. Its "show me a filled-out one" counterpart is **seeding**, which
-materializes a real `Document` (committed, structured content for editor and
-render consumers) rather than a second annotated string. There is no
-annotated `example` *document*: nothing consumes a filled-out document for its
-annotations, so the filled-out projection is committed `Document` content, not
-prose.
+The blueprint is the **one** annotated reference document. Its "show me a
+filled-out one" counterpart is **seeding**, which materializes a real
+`Document` rather than a second annotated string: nothing consumes a
+filled-out document for its annotations, so that projection is committed
+content, not prose.
 
 | Projection | Intent | Value precedence | Output | Markers? |
 |---|---|---|---|---|
@@ -492,23 +487,7 @@ The Rust example `cargo run -p quillmark-core --example print_blueprint
 -- <quill_name> [<version>]` prints the blueprint for any bundled
 fixture.
 
-## Relationship to schema
-
-| Concern | Use |
-|---|---|
-| Validators, form builders, machine consumers | [SCHEMAS.md](SCHEMAS.md) — `schema()` |
-| LLM/MCP authoring, prompt-time reference document | this doc — `blueprint()` |
-
-## Authoring guidance
-
-Choosing **Unendorsed vs. Endorsed** per field (declare a `default:` or not)
-and **when to reach for `example:`** is schema-authoring guidance owned by
-[SCHEMAS.md](SCHEMAS.md) § "`default` and `example`" and § "Unendorsed vs.
-Endorsed fields". The blueprint is where that choice becomes visible: an
-Endorsed field renders its concrete default (shippable as-is); an Unendorsed
-field is stamped with the `!must_fill` marker.
-
-### Writing the literal text `!must_fill` as content
+## Writing the literal text `!must_fill` as content
 
 The placeholder is a YAML **tag**, not a string sentinel, so there is no
 collision and no quoting escape-hatch to learn. The literal text `!must_fill`

@@ -147,6 +147,12 @@ quillmark info [OPTIONS] <QUILL_PATH>
 
 - `--json`: Output as machine-readable JSON instead of human-readable format
 
+**Fields shown:** name, description, version, author, backend, field count, and
+card count (when nonzero), plus a metadata section for any non-standard
+`Quill.yaml` keys — the standard keys (`backend`, `version`, `author`,
+`description`) are excluded from it. The text output additionally shows a
+defaults count when nonzero; `--json` has no defaults count.
+
 **Examples:**
 
 ```bash

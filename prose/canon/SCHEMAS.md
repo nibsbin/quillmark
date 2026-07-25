@@ -45,9 +45,33 @@ application/quillmark-content+json`); `plaintext` additionally carries
 - Returns `Result<IndexMap<String, QuillValue>, CoercionError>`
 - Coerces top-level fields and per-card fields to their declared types
 - Fails fast (`Err`) on the first value that cannot be coerced
-- Coercion rules per type: array wrapping plus element-wise coercion against the `items` schema (a bad element fails at its indexed path, e.g. `counts[1]`); boolean from string/int/float; number/integer from string or from boolean (`true→1`, `false→0`); string unwraps a length-1 string array into the bare string (else identity); richtext commits the canonical content form (the model) — an authored markdown string imports (via `quillmark-content::import`), an editor-supplied content object revalidates and re-canonicalizes, and the length-1-array-unwrap / bare-scalar-stringify leniencies feed the import; `date`/`datetime` per-type strict-grammar validation, stored verbatim (a `date` rejects any time component, a `datetime` rejects offsets/space/fractional/bare-date; neither truncates); object property recursion
+Coercion rules per type:
+
+| Type | Rule |
+|---|---|
+| `array` | array wrapping plus element-wise coercion against the `items` schema; a bad element fails at its indexed path, e.g. `counts[1]` |
+| `boolean` | from string, int, or float |
+| `number` / `integer` | from string, or from boolean (`true→1`, `false→0`) |
+| `string` | unwraps a length-1 string array into the bare string; identity otherwise |
+| `richtext` | commits the canonical content form (the model): an authored markdown string imports via `quillmark-content::import`, an editor-supplied content object revalidates and re-canonicalizes. The length-1-array-unwrap and bare-scalar-stringify leniencies feed the import |
+| `date` / `datetime` | per-type strict-grammar validation, stored verbatim: a `date` rejects any time component, a `datetime` rejects offsets/space/fractional/bare-date. Neither truncates |
+| `object` | property recursion |
 - **`inline` richtext enforcement.** A `richtext` field with `inline: true` requires its content to be exactly one `Para` line, in no container, with no islands (`Content::is_inline`). The empty content satisfies it, so a blank or zero-filled inline field passes. The constraint is checked in three places: coercion (`CoercionError` for a document value), validation (`richtext::not_inline`, the `TypeMismatch` fatality class, as a backstop for a content that bypassed coercion), and load-time example import (a schema literal that violates it is a load error). Blueprint still annotates inline fields as `richtext(inline)<markdown>`; `build_transform_schema` emits `quillmark:inline: true`
-- **`plaintext` coercion and enforcement.** A `plaintext` value rides the same content as `richtext`, but a string is imported through the **literal** codec (`from_plaintext`, verbatim — no markdown parse, no escaping) and an editor-supplied content object is validated **plain** (`Content::is_plain`: no marks, no islands, all `Para` lines) rather than markdown-decoded. A formatted wire content is rejected, not stripped — mirroring the `inline` precedent, checked in the same three places (coercion `CoercionError`; validation `plaintext::not_plain`, `TypeMismatch` fatality class; load-time literal import). An `inline: true` plaintext field additionally requires a single line. The load-time content caches (`default_content`/`example_content`) and the render-floor zero (the empty content) cover `plaintext` exactly as `richtext` — both are content leaves (`field_contains_content`)
+- **`plaintext` coercion and enforcement.** A `plaintext` value rides the same
+  content as `richtext`, differing only at the codec:
+  - a string imports through the **literal** codec (`from_plaintext`, verbatim
+    — no markdown parse, no escaping);
+  - an editor-supplied content object is validated **plain**
+    (`Content::is_plain`: no marks, no islands, all `Para` lines) rather than
+    markdown-decoded. A formatted wire content is rejected, not stripped.
+
+  Enforcement mirrors the `inline` precedent, in the same three places:
+  coercion (`CoercionError`); validation (`plaintext::not_plain`, the
+  `TypeMismatch` fatality class); load-time literal import. An `inline: true`
+  plaintext field additionally requires a single line. The load-time content
+  caches (`default_content`/`example_content`) and the render-floor zero (the
+  empty content) cover `plaintext` exactly as `richtext` — both are content
+  leaves (`field_contains_content`)
 - **`enum` domain validation.** An `enum` field (or the deprecated `enum:` modifier on `string`) coerces as a string; domain membership is a *value* check (`validation::enum_violation`), not a type check, so an out-of-domain string is well-typed but invalid. `type: enum` requires a non-empty `values:` list; `enum:`/`values:` on any type other than `string`/`enum` is a load error (`quill::field_parse_error`), closing the pre-promotion silent no-op. Both spellings populate one carrier (`FieldSchema::enum_values`) and project identically to `{type: string, enum: […]}`
 - **Null short-circuits coercion.** A null value (`field:`, `field: null`,
   `field: ~`) passes coercion unchanged for *every* type — null ≡ absent, so
@@ -183,14 +207,11 @@ site (the Tier-1 cut, [BINDINGS.md](BINDINGS.md)).
 ## Zero-filled render
 
 **A document need not be complete to render** — render success is not a
-completeness signal.
-Shippability is the author's judgment; the engine's only hard requirement
-is that the document be *well-formed* (values coerce). A `!must_fill` marker
-and a present-null cell are both renderable — neither gates render.
-Completeness is not surfaced as a diagnostic — `Quill::validate` raises no
-completeness/`field_absent` code (see [Native validation](#native-validation));
-the only authoring signal it raises is the non-fatal `validation::must_fill`
-warning for each outstanding marker.
+completeness signal. Shippability is the author's judgment; the engine's only
+hard requirement is that the document be *well-formed* (values coerce). A
+`!must_fill` marker and a present-null cell are both renderable, and neither
+surfaces as a diagnostic beyond the non-fatal `validation::must_fill` warning
+(see [Native validation](#native-validation)).
 
 Rendering and the *completeness verdict* are orthogonal. The render path
 (`compile_data` / `resolve_fields` in `quillmark::orchestration`) uses
@@ -201,13 +222,12 @@ backend **only, never in the persisted document**.
 
 - **Incomplete is renderable.** A document that merely omits an Unendorsed
   field — or leaves it present-null — renders fine: the field is zero-filled
-  in the projection. Such a document validates clean; completeness is not
-  surfaced as a diagnostic.
+  in the projection, and validates clean.
 - **Malformed is fatal.** The only malformed case is a value that cannot
   coerce to (or validate against) its declared type. Placeholders and null
-  are *not* malformed: a `!must_fill` marker renders (using its suggested
-  value or zero-filling) and raises only the non-fatal `validation::must_fill`
-  warning, and a present-null cell zero-fills like an absent field.
+  are *not* malformed: a `!must_fill` marker renders, using its suggested
+  value or zero-filling, and a present-null cell zero-fills like an absent
+  field.
 - **Non-persist invariant.** The zero-fill lives only in the ephemeral
   projection and must never be written back. A type-empty value is
   indistinguishable from authored-empty, so persisting it would erase the
@@ -315,7 +335,20 @@ metadata, not schema fields, and do not appear in `fields`.
 
 For LLM/MCP authoring, see [BLUEPRINT.md](BLUEPRINT.md) — `blueprint()` emits a document-shaped, pre-filled Markdown reference that's denser than schema for prompt-time use.
 
-Top-level schema keys: `main`, optional `card_kinds` (map keyed by card name). `main` and each entry in `card_kinds` share the same `CardSchema` shape: `fields` (map keyed by field name), optional `description`, optional `ui`, optional `body`. Each `FieldSchema` includes `type`, optional `description`/`default`/`example`/`enum`/`values`/`inline`/`properties`/`items`/`ui`. `inline` is valid only on the prose types (`richtext`, `plaintext`). `values` declares an `enum` field's domain (required there); `enum` is its deprecated one-release alias on `string`. `items` (the element schema, itself a `FieldSchema`) is required on `array` fields and rejected elsewhere; `properties` is used by `object` fields (and by an array's `object`-typed `items`).
+Top-level schema keys: `main`, optional `card_kinds` (map keyed by card name).
+`main` and each entry in `card_kinds` share the same `CardSchema` shape:
+`fields` (map keyed by field name), optional `description`, optional `ui`,
+optional `body`. Each `FieldSchema` includes `type`, optional
+`description`/`default`/`example`/`enum`/`values`/`inline`/`properties`/`items`/`ui`.
+The type-gated keys:
+
+- `inline` — valid only on the prose types (`richtext`, `plaintext`).
+- `values` — declares an `enum` field's domain, required there.
+- `enum` — a deprecated one-release alias for `values` on `string`.
+- `items` — the element schema, itself a `FieldSchema`; required on `array`
+  fields and rejected elsewhere.
+- `properties` — used by `object` fields, and by an array's `object`-typed
+  `items`.
 
 ### `default` and `example`
 
@@ -343,9 +376,8 @@ has endorsed no value, so the blueprint stamps the `!must_fill` marker to
 ask an LLM or author to supply one. That is a *communication device on the
 blueprint surface*, not a requirement: a missing (or present-null) Unendorsed
 field zero-fills silently at render, and a surviving marker raises only the
-non-fatal `validation::must_fill` warning, never a render gate. "Must-fill"
-therefore lives solely on the blueprint/marker surface; the schema axis is
-endorsement, not obligation.
+non-fatal warning. "Must-fill" therefore lives solely on the blueprint/marker
+surface; the schema axis is endorsement, not obligation.
 
 A field is **Endorsed** when `default:` is declared; the rendered default
 is shippable as-is (the author can keep or override it).

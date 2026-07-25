@@ -191,8 +191,9 @@ confused with it:
 
 - **Plate JSON** — the sigiled `data.$cards` a template author composes
   ([CARDS.md](CARDS.md)), and the plate-space `$cards.<kind>.<ordinal>.<field>`
-  geometry address a plate's `$path` mints. Template-author contract; *not*
-  renamed (blast radius), and translated to `DocPath` before it crosses.
+  geometry address a plate's `$path` mints. A template-author contract, so it
+  keeps its own spelling (renaming it is a blast radius) and translates to
+  `DocPath` before it crosses.
 - **Schema-space coercion anchors** — `CoercionError` keeps its own
   `card_kinds.<kind>.<field>` / bare-field anchors, a schema-declaration
   namespace, not a document path. Where a coercion becomes an

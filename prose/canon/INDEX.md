@@ -15,13 +15,18 @@
 - **[BLUEPRINT.md](BLUEPRINT.md)** - Annotated Markdown blueprint for LLM/MCP authoring
 - **[PROGRAMMATIC.md](PROGRAMMATIC.md)** - Building documents in memory (blank canvas, batched mutators) for automation
 - **[CARDS.md](CARDS.md)** - Composable cards delivered on the `$cards` plate-JSON array
-- **[PLATE_DATA.md](PLATE_DATA.md)** - Plate data injection
 
 ## Backends
 
+A backend's engine-side seam is canon; its quill-authoring surface is a `docs/`
+page and its internals are rustdoc.
+
 - **[CONVERT.md](CONVERT.md)** - How the Typst backend lowers a `Content` value to Typst markup
-- Typst backend internals: see `crates/backends/typst/` rustdoc
-- **[../../docs/quills/pdfform-backend.md](../../docs/quills/pdfform-backend.md)** - The `pdfform` backend: fill an existing AcroForm PDF (real interactive fields, Technique A), built on the `quillmark-pdf` stamp spine
+- **[PLATE_DATA.md](PLATE_DATA.md)** - Plate data injection: the Typst backend's data seam
+- The `pdfform` seam is [ARCHITECTURE.md](ARCHITECTURE.md) (`Backend::open`, the two-asset model) plus [PREVIEW.md](PREVIEW.md) (canvas paint, `regions()`)
+- Outbound — authoring a Typst quill: [docs/quills/typst-backend.md](../../docs/quills/typst-backend.md)
+- Outbound — authoring a `pdfform` quill: [docs/quills/pdfform-backend.md](../../docs/quills/pdfform-backend.md) (`form.pdf` + `form.json`, Technique A stamping, on the `quillmark-pdf` stamp spine)
+- Outbound — Typst backend internals: `crates/backends/typst/` rustdoc
 
 ## Bindings
 

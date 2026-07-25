@@ -17,7 +17,7 @@ Published crates, in dependency order: `quillmark-content`, `quillmark-core`, `q
 
 | Job | What it does |
 |-----|-------------|
-| `lint` | `cargo doc --no-deps --locked` with `RUSTDOCFLAGS=-Dwarnings` — the standing lint gate; clippy is deliberately not gated |
+| `lint` | `node scripts/check-canon.mjs --drift` (the canon spine, link, anchor, and line-budget gate — see [prose/README.md](../README.md); the drift and soft-budget notes are annotations, not failures), then `cargo doc --no-deps --locked` with `RUSTDOCFLAGS=-Dwarnings` — the standing lint gate; clippy is deliberately not gated |
 | `test` | `cargo test --workspace --all-features --locked` |
 | `wasm` | first asserts the no-default-features core graph excludes Typst (`cargo tree -i quillmark-typst` must fail), then builds via `./scripts/build-wasm.sh --ci`, then `npx vitest run` |
 
