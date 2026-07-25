@@ -4,7 +4,7 @@
 
 ## TL;DR
 
-Four workflows. `ci.yml` runs lint/test/wasm on every PR and non-tag push. `release-prepare.yml` computes the next version, bumps the workspace, and opens a release PR. `release.yml` tags and publishes to crates.io, npm, and PyPI when that PR merges. `docs.yml` builds MkDocs and deploys to GitHub Pages on stable releases.
+Four workflows. `ci.yml` gates docs, the workspace tests, both binding surfaces, and the release tooling on every PR and non-tag push. `release-prepare.yml` computes the next version, bumps the workspace, and opens a release PR. `release.yml` tags and publishes to crates.io, npm, and PyPI when that PR merges. `docs.yml` builds MkDocs and deploys to GitHub Pages on stable releases.
 
 Published crates, in dependency order: `quillmark-content`, `quillmark-core`, `quillmark-pdf`, `quillmark-pdfform`, `quillmark-typst`, `quillmark`, `quillmark-cli`. Not published: `quillmark-fixtures`, `quillmark-fuzz`, `quillmark-python`, `quillmark-wasm`.
 
@@ -19,7 +19,9 @@ Published crates, in dependency order: `quillmark-content`, `quillmark-core`, `q
 |-----|-------------|
 | `lint` | `node scripts/check-canon.mjs` (the canon spine and link gate — see [prose/README.md](../README.md)), then `cargo doc --no-deps --locked` with `RUSTDOCFLAGS=-Dwarnings` — the standing lint gate; clippy is deliberately not gated |
 | `test` | `cargo test --workspace --all-features --locked` |
+| `release-tooling` | asserts `scripts/strip-seed-comment.sh` both strips a seed block and collapses the surrounding blanks to one, and no-ops on a file without one. `release.yml` runs that script unattended against `CHANGELOG.md` between the version bump and the tag, so a regression corrupts a release commit |
 | `wasm` | first asserts the no-default-features core graph excludes Typst (`cargo tree -i quillmark-typst` must fail), then builds via `./scripts/build-wasm.sh --ci`, then `npx vitest run` |
+| `python` | `maturin develop` into a `uv` venv (Python 3.12, debug profile), then `pytest -q` |
 
 The `wasm` job caches `target/wasm32-unknown-unknown/wasm-ci` under key `wasm-ci-${os}-${hashFiles('Cargo.lock')}` (restore-prefix `wasm-ci-${os}-`), so a lockfile change takes a fresh key while source-only edits restore the prefix and rebuild incrementally. The `wasm-ci-` namespace is deliberately disjoint from `release.yml`'s `wasm-release-` cache so a CI build (debug `wasm-ci` profile) can never be restored into a release job and published to npm.
 
