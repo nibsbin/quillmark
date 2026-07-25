@@ -71,25 +71,6 @@ pub enum ReadValue {
     Value(QuillValue),
 }
 
-impl ReadValue {
-    /// The projected text of a content field — markdown for a `richtext` field,
-    /// literal text for a `plaintext` field; `None` for a [`Value`](ReadValue::Value).
-    pub fn as_text(&self) -> Option<&str> {
-        match self {
-            ReadValue::Markdown(s) | ReadValue::Plaintext(s) => Some(s),
-            ReadValue::Value(_) => None,
-        }
-    }
-
-    /// The canonical value, when this is a [`Value`](ReadValue::Value).
-    pub fn as_value(&self) -> Option<&QuillValue> {
-        match self {
-            ReadValue::Value(v) => Some(v),
-            ReadValue::Markdown(_) | ReadValue::Plaintext(_) => None,
-        }
-    }
-}
-
 /// A [`Document`] bound to its [`QuillConfig`] for typed reads. Construct with
 /// [`Quill::reader`](crate::Quill::reader). Reads target the main card; use
 /// [`card`](Self::card) for a composable card. The read twin of

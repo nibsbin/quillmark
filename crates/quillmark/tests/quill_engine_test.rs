@@ -3,7 +3,9 @@
 use std::fs;
 use tempfile::TempDir;
 
-use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};
+use quillmark::Quillmark;
+#[cfg(feature = "typst")]
+use quillmark::{Document, OutputFormat, RenderOptions};
 
 fn make_quill_dir(temp_dir: &TempDir, name: &str, backend: &str) -> std::path::PathBuf {
     let quill_path = temp_dir.path().join(name);

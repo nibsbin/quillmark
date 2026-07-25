@@ -19,16 +19,6 @@ impl Quill {
         self.files.dir_exists(path)
     }
 
-    /// List files in a directory (non-recursive, returns file names only)
-    pub fn list_files<P: AsRef<Path>>(&self, path: P) -> Vec<String> {
-        self.files.list_files(path)
-    }
-
-    /// List subdirectories in a directory (non-recursive, returns directory names only)
-    pub fn list_subdirectories<P: AsRef<Path>>(&self, path: P) -> Vec<String> {
-        self.files.list_subdirectories(path)
-    }
-
     /// List all directories in a directory (returns paths relative to quill root)
     pub fn list_directories<P: AsRef<Path>>(&self, dir_path: P) -> Vec<PathBuf> {
         let dir_path = dir_path.as_ref();

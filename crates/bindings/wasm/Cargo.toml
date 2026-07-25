@@ -21,14 +21,14 @@ quillmark-core = { workspace = true }
 # The content codec (importMarkdown / exportMarkdown / rebase / mapPos) and the
 # change-bundle op wire live here; the addressed write surface lowers to it.
 quillmark-content = { workspace = true }
-wasm-bindgen = "0.2"
+wasm-bindgen = { workspace = true }
 serde = { workspace = true }
 serde_bytes = "0.11"
 serde_json = { workspace = true }
 serde-wasm-bindgen = "0.6"
 tsify = { version = "0.4.5", features = ["js"] }
 console_error_panic_hook = "0.1"
-js-sys = "0.3"
+js-sys = { workspace = true }
 web-sys = { version = "0.3", optional = true, features = [
     "CanvasRenderingContext2d",
     "HtmlCanvasElement",

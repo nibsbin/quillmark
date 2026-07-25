@@ -6,10 +6,19 @@
 //! outside the selector — is a footgun, so it is a hard error
 //! (`quill::name_mismatch` / `quill::version_mismatch`), never a warning.
 
-use quillmark::{Document, Quillmark};
-use quillmark_core::{OutputFormat, RenderError, RenderOptions};
+use quillmark::Document;
+use quillmark_core::RenderError;
 use std::fs;
 use tempfile::TempDir;
+
+// The reject-path tests drive `engine.render`, which resolves the quill's
+// declared `typst` backend before the reference check runs — without the
+// feature they would fail on `engine::backend_not_found` instead. `dry_run`
+// needs no backend, so the accept-path tests build unconditionally.
+#[cfg(feature = "typst")]
+use quillmark::Quillmark;
+#[cfg(feature = "typst")]
+use quillmark_core::{OutputFormat, RenderOptions};
 
 /// Write a minimal typst quill named `test_quill` at the given version.
 fn make_quill(temp_dir: &TempDir, version: &str) -> std::path::PathBuf {
@@ -27,6 +36,7 @@ fn make_quill(temp_dir: &TempDir, version: &str) -> std::path::PathBuf {
     quill_path
 }
 
+#[cfg(feature = "typst")]
 fn render_ref(
     quill_path: &std::path::Path,
     quill_ref: &str,
@@ -62,11 +72,13 @@ fn dry_run_ref(quill_path: &std::path::Path, quill_ref: &str) -> Result<(), Rend
 }
 
 /// The single code carried by a quill-mismatch error (the check emits exactly one).
+#[cfg(feature = "typst")]
 fn mismatch_code(err: &RenderError) -> Option<&str> {
     err.diagnostics().first().and_then(|d| d.code.as_deref())
 }
 
 #[test]
+#[cfg(feature = "typst")]
 fn version_out_of_selector_is_a_hard_error() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = make_quill(&temp_dir, "3.0.0");
@@ -77,6 +89,7 @@ fn version_out_of_selector_is_a_hard_error() {
 }
 
 #[test]
+#[cfg(feature = "typst")]
 fn name_mismatch_is_a_hard_error() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = make_quill(&temp_dir, "3.0.0");

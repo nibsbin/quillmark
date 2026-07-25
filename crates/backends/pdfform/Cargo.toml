@@ -30,4 +30,4 @@ quillmark-fixtures = { workspace = true }
 # Path-only: `quillmark` depends on this crate, so a versioned dev-dep here is
 # an unpublishable cycle; cargo strips path-only dev-deps at packaging.
 quillmark = { path = "../../quillmark" }
-lopdf = "0.36"
+lopdf = { workspace = true }

@@ -3,50 +3,34 @@ use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-/// Handles writing output to file or stdout
-pub struct OutputWriter {
+/// Write `bytes` to stdout, or to `output_path` (creating parent directories),
+/// announcing the destination unless `quiet`. Exactly one destination: stdout
+/// wins, and neither is an argument error.
+pub fn write_output(
     use_stdout: bool,
-    output_path: Option<PathBuf>,
+    output_path: Option<&Path>,
     quiet: bool,
-}
-
-impl OutputWriter {
-    pub fn new(use_stdout: bool, output_path: Option<PathBuf>, quiet: bool) -> Self {
-        Self {
-            use_stdout,
-            output_path,
-            quiet,
+    bytes: &[u8],
+) -> Result<()> {
+    if use_stdout {
+        io::stdout().write_all(bytes)?;
+        return Ok(());
+    }
+    let Some(path) = output_path else {
+        return Err(crate::errors::CliError::InvalidArgument(
+            "No output path configured and stdout output not selected".to_string(),
+        ));
+    };
+    if let Some(parent) = path.parent() {
+        if !parent.exists() {
+            fs::create_dir_all(parent)?;
         }
     }
-
-    /// Write bytes to the configured output destination
-    pub fn write(&self, bytes: &[u8]) -> Result<()> {
-        if self.use_stdout {
-            io::stdout().write_all(bytes)?;
-            Ok(())
-        } else if let Some(path) = &self.output_path {
-            self.write_to_file(path, bytes)?;
-            if !self.quiet {
-                println!("Output written to: {}", path.display());
-            }
-            Ok(())
-        } else {
-            Err(crate::errors::CliError::InvalidArgument(
-                "No output path configured and stdout output not selected".to_string(),
-            ))
-        }
+    fs::write(path, bytes)?;
+    if !quiet {
+        println!("Output written to: {}", path.display());
     }
-
-    /// Write bytes to a file, creating parent directories if needed
-    fn write_to_file(&self, path: &Path, bytes: &[u8]) -> Result<()> {
-        if let Some(parent) = path.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)?;
-            }
-        }
-        fs::write(path, bytes)?;
-        Ok(())
-    }
+    Ok(())
 }
 
 /// Derive output filename from input markdown path

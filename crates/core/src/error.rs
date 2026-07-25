@@ -12,31 +12,9 @@
 //!   [`crate::document::Document`]. Produced by schema validation and
 //!   coercion, which run on the typed model after line spans are gone.
 //!
-//! ### Path grammar
-//!
-//! ```text
-//! path        := segment ( "." field_name | "[" index "]" )*
-//! field_name  := [A-Za-z_][A-Za-z0-9_]*  // card kinds use lowercase-only [a-z_][a-z0-9_]*
-//! index       := [0-9]+
-//! ```
-//!
-//! Because field names and card kinds are validated to charsets that exclude
-//! `.`, `[`, `]`, and whitespace, the dotted form round-trips unambiguously.
 //! [`DocPath`](crate::path::DocPath) is the one type that constructs, renders,
-//! and parses it — no site assembles a path with `format!`.
-//!
-//! | Anchor                     | Path                                      |
-//! |----------------------------|-------------------------------------------|
-//! | Root-block field           | `title`                                   |
-//! | Nested in array of objects | `recipients[0].name`                      |
-//! | Main card body             | `main.body`                               |
-//! | Typed card (whole)         | `cards.indorsement[0]`                    |
-//! | Field on typed card        | `cards.indorsement[0].signature_block`    |
-//! | Body on typed card         | `cards.indorsement[0].body`               |
-//! | Card with unknown kind     | `cards[0]`                                |
-//!
-//! The `cards.<kind>[<index>]` form fuses card kind and document array index so
-//! consumers receive both without a second lookup.
+//! and parses the path — no site assembles one with `format!`. Its module doc
+//! carries the grammar; `prose/canon/ERROR.md` tabulates the anchors.
 
 use crate::OutputFormat;
 
