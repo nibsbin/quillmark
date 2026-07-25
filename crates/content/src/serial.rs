@@ -13,7 +13,7 @@
 
 use crate::model::{
     sort_keys_owned, sorted_value, Container, Invariant, Island, Line, LineKind, Loss, Mark,
-    MarkKind, Content,
+    MarkKind, Content, Usv,
 };
 use serde_json::{Map, Value};
 
@@ -129,6 +129,15 @@ pub fn from_canonical_value(v: &Value) -> Result<Content, ParseError> {
     rt.normalize();
     rt.validate().map_err(ParseError::Invalid)?;
     Ok(rt)
+}
+
+/// Read a wire position as a [`Usv`] index. **Checked**, not `as usize`: the
+/// deployment target is wasm32, where the truncating cast turns `2^32 + 5` into
+/// an in-range `5` — a mark silently landing at the wrong position instead of a
+/// rejected document. Every position the decoder reads goes through here.
+pub(crate) fn usv_from(v: Option<&Value>, what: &'static str) -> Result<Usv, ParseError> {
+    let n = v.and_then(Value::as_u64).ok_or(ParseError::Shape(what))?;
+    Usv::try_from(n).map_err(|_| ParseError::Shape(what))
 }
 
 fn arr<'a>(obj: &'a Map<String, Value>, key: &'static str) -> Result<&'a Vec<Value>, ParseError> {
@@ -313,14 +322,8 @@ pub fn mark_to_value(mark: &Mark) -> Value {
 /// mark-op wire.
 pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("mark"))?;
-    let start = o
-        .get("start")
-        .and_then(Value::as_u64)
-        .ok_or(ParseError::Shape("mark start"))? as usize;
-    let end = o
-        .get("end")
-        .and_then(Value::as_u64)
-        .ok_or(ParseError::Shape("mark end"))? as usize;
+    let start = usv_from(o.get("start"), "mark start")?;
+    let end = usv_from(o.get("end"), "mark end")?;
     let ty = o
         .get("type")
         .and_then(Value::as_str)
@@ -619,6 +622,38 @@ mod tests {
             ],
             islands: vec![],
         }
+    }
+
+    /// Issue #1051: the decoder is the entry point for stored and
+    /// caller-supplied content, and export recurses one frame per container. A
+    /// 20 000-deep path used to decode clean and abort the process on
+    /// `to_markdown`; the shared `validate` cap rejects it at the door.
+    #[test]
+    fn deep_container_nesting_is_rejected_at_decode() {
+        let containers = std::iter::repeat(r#"{"container":"quote"}"#)
+            .take(20_000)
+            .collect::<Vec<_>>()
+            .join(",");
+        let json = format!(
+            r#"{{"text":"hi","lines":[{{"kind":"para","containers":[{containers}]}}],"marks":[],"islands":[]}}"#
+        );
+        assert!(matches!(
+            Content::from_canonical_json(&json),
+            Err(ParseError::Invalid(Invariant::NestingTooDeep { .. }))
+        ));
+    }
+
+    /// Issue #1051: a wire position past `usize` is refused, not truncated. On
+    /// wasm32 — the deployment target — `as usize` turned `2^32 + 5` into an
+    /// in-range `5`, landing a mark at the wrong position in a document that
+    /// then validated clean. Rejected on every target, by the checked read here
+    /// on 32-bit and by the range invariant on 64-bit.
+    #[test]
+    fn out_of_range_wire_position_is_refused() {
+        let json = r#"{"text":"hello","lines":[{"kind":"para","containers":[]}],"marks":[{"start":4294967301,"end":4294967302,"type":"strong"}],"islands":[]}"#;
+        assert!(Content::from_canonical_json(json).is_err());
+        assert!(usv_from(Some(&Value::from(u64::MAX)), "x").is_ok() || usize::BITS < 64);
+        assert!(usv_from(Some(&Value::from(-1i64)), "x").is_err());
     }
 
     #[test]

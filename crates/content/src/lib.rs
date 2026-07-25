@@ -48,7 +48,8 @@ pub use export::{to_markdown, to_plaintext};
 pub use import::{from_markdown, from_plaintext};
 pub use island::KnownIslandType;
 pub use model::{
-    Container, Invariant, Island, Line, LineKind, Loss, Mark, MarkKind, Content, Usv,
+    Container, Invariant, Island, Line, LineKind, LineKindMismatch, Loss, Mark, MarkKind, Content,
+    Usv,
 };
 pub use normalize::normalize_markdown;
 pub use ops::{
