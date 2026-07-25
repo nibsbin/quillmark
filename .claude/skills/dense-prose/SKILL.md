@@ -113,14 +113,20 @@ rationale — minus the "we tried / earlier draft" framing.
   by design: <reason>."
 - Rejected-alternative rationale: "A sub-handle would be justified only if paint
   shipped with click()" — keeps the *why*, sheds the *when*.
+- Issue and PR numbers (`(#970)`, `tracked in #736`) are status markers: they
+  say work is in motion, which canon does not carry, and they date the sentence
+  around them. State the shape instead — "Python omits the opaque store by
+  intent" — and drop the number. Keep it only where the issue *is* the subject
+  (a CI or release doc describing a process).
 
 ## Voice
 
 Present tense. Lead with the invariant or contract, then the mechanism. Reuse
 the codebase's terms-of-art (*card-yaml block, plate, quill, backend, seam,
-Technique A*). Match the density of the best existing comments —
-`crates/core/src/value.rs`, `crates/core/src/document/fences.rs`, and
-`prose/canon/PREVIEW.md` are the exemplars.
+Technique A*). For the target density, read the comments in
+`crates/core/src/document/` and the Decisions section of `PREVIEW.md` — a
+rationale that names what it rejected and why, in the fewest words that stay
+correct.
 
 ## Scope
 
@@ -138,12 +144,12 @@ Technique A*). Match the density of the best existing comments —
    markers (`used to`, `no longer`, `previously`, `formerly`, `as of`,
    `removed in`, `renamed`, `we switched`, `legacy`, `deprecated`); and
    deliberation markers (`spike`, `deferred`, `considered`, `for now`,
-   `eventually`, `we tried`).
+   `eventually`, `we tried`); and status markers (`#\d+`, issue and PR links).
 2. **Triage** — each hit: violation, or load-bearing fact in costume?
 3. **Rewrite** in place — present tense, minimal, fact preserved. Fix a comment
    that contradicts the code rather than deleting it. Leave identifiers alone.
 4. **Verify** — build and tests pass; no doctest broken; no test asserted the
-   old wording.
+   old wording; `node scripts/check-canon.mjs` passes.
 
 ## Done when
 

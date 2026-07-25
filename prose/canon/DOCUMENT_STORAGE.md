@@ -179,8 +179,8 @@ from markdown.**
 
 - **Caller-supplied.** The engine mints no anchor id and cannot — only the
   consumer knows the referent. Each consumer (editor, MCP writer) supplies its
-  own; the runtime persists it verbatim. Engine-minting is a considered
-  non-goal: a counter is history-dependent (the same final content reached two
+  own; the runtime persists it verbatim. Engine-minting is a non-goal by
+  design: a counter is history-dependent (the same final content reached two
   ways carries different ids — the ambient source the twin rule forbids) and
   forfeits referent-convergence (two `add`s for one thread would mint two
   handles). A client wanting generated ids mints them client-side and supplies
@@ -294,8 +294,8 @@ When the `Document` wire format changes again:
 1. **Freeze** the current `DocumentV0_93_0` type tree — leave its struct
    /enum definitions and serde derives untouched so existing rows still parse.
 2. **Remove** the conversions binding the old DTO to the *live* `Document`
-   (`From<&Document>` and `TryFrom<… for Document>`); they no longer compile
-   and are superseded below.
+   (`From<&Document>` and `TryFrom<… for Document>`) — a frozen tree cannot
+   convert to a model it predates, and step 3 supersedes them.
 3. **Add** a new frozen tree `DocumentV0_NN_0` reflecting the new model,
    plus its `From<&Document>` and `TryFrom<… for Document>` conversions.
 4. **Add** the `StoredDocument::V0_NN_0` variant, tagged

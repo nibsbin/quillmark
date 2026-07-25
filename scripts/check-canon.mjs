@@ -26,6 +26,10 @@ const FILE_IN_ANCHOR = /[\w-]+\/[\w/-]*\.[a-z0-9]+\b/;
 const PLAN_LINK = /\]\([^)]*\/(?:proposals|plans)\//;
 // A relative markdown link target to a .md file (an outbound prose link).
 const PROSE_LINK = /\]\((?!https?:)[^)]*\.md(?=[)#])/;
+// An issue or PR reference. A status marker: it says work is in motion, which
+// canon does not carry, and it dates the sentence around it. Narrow enough to
+// miss heading anchors (`](#regions-overlay)`) and Typst code (`#let`, `#data`).
+const ISSUE_REF = /#\d+\b|github\.com\/[^)\s]+\/(?:issues|pull)\/\d+/;
 // A backticked slashed token — an anchor's folder reference.
 const ANCHOR_PATH = /`([\w.-]+\/[\w./-]*)`/g;
 // A relative markdown link target of any kind.
@@ -78,6 +82,11 @@ for (const name of mdFiles('prose/canon')) {
 
   const planLink = text.match(PLAN_LINK);
   if (planLink) fail(file, `links into proposals/ or plans/ (\`${planLink[0]}\`) — canon never references them`);
+
+  for (const [n, line] of proseLines(text)) {
+    const ref = line.match(ISSUE_REF);
+    if (ref) fail(file, `line ${n} cites \`${ref[0]}\` — canon states the shape, not the ticket tracking it`);
+  }
 
   if (name === 'INDEX.md') continue; // the index has no spine
 

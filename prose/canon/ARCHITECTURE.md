@@ -16,11 +16,11 @@ Quillmark is a schema-driven document engine: it turns Markdown with card-yaml b
 
 ### `quillmark-core`
 
-Foundation types and traits; depends on `quillmark-content` (the leaf rich-text
-primitive one layer below it). No backend dependencies; backends depend on this
-crate.
-
-Key exports: `Backend`, `Artifact`, `OutputFormat`, `RenderOptions`, `LiveSession`, `Document`, `Quill`, `FileTreeNode`, `QuillIgnore`, `RenderError`, `Diagnostic`, `Severity`, `Location`, `RenderResult`, `QuillValue`, `QuillReference`, `Version`, `VersionSelector`. `Quill` is the single quill type — portable, validated data with the pure config-read operations (`validate`, `schema`, `metadata`, `blueprint`, `seed_*`, `compile_data`, `dry_run`); construct it with `Quill::from_tree`.
+Foundation types and traits: the render contract (`Backend` / `LiveSession`),
+the `Document` and `Quill` model, and the `Diagnostic` currency — see the
+crate's rustdoc for the full surface and Core Interfaces below for the
+load-bearing four. It depends on `quillmark-content` (the leaf rich-text
+primitive one layer below it) and on no backend; backends depend on it.
 
 ### `quillmark-content`
 
@@ -72,7 +72,9 @@ Test resources under `resources/`. Helper functions for test setup.
 
 ### `quillmark-fuzz`
 
-Property-based fuzz tests (proptest): `parse_fuzz` (YAML/Markdown parsing), `convert_fuzz` (Markdown→Typst conversion + escaping), `emit_roundtrip_fuzz` (emit roundtripping), `filter_fuzz` (filter injection safety), `coerce_fuzz` (type coercion).
+Property-based fuzz tests (proptest) over YAML/Markdown parsing, Markdown→Typst
+conversion and escaping, emit roundtripping, filter injection safety, and type
+coercion.
 
 ## Core Interfaces
 
@@ -105,6 +107,7 @@ See [PLATE_DATA.md](PLATE_DATA.md) for the Typst helper package.
 
 ## Backend Implementation
 
-Implement `id()`, `supported_formats()`, and `open()` of the `Backend` trait. To paint to a canvas, override the `SessionHandle` seam (`page_size_pt` / `render_rgba`) on the returned session — capability is derived from that seam, so there is no separate flag to set. Return a `LiveSession` wrapping a `SessionHandle` that handles format-specific rendering.
-
-See `backends/quillmark-typst` for the reference implementation.
+Implement the `Backend` trait and return a `LiveSession` wrapping a
+`SessionHandle` that does the format-specific rendering; to paint to a canvas,
+override that handle's `page_size_pt` / `render_rgba`. See
+`backends/quillmark-typst` for the reference implementation.

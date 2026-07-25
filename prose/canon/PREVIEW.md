@@ -117,7 +117,7 @@ keeps the pageable document is a *mode* to add, not a second type.
 or selection across edits is the **editor's** job: its own transaction mapping
 (a ProseMirror / CodeMirror `StepMap`) carries positions through local edits, so
 the session holds no change log, no revision stamp, and no per-field delta path
-(#886 removed them; `FieldRegion` / `ContentHit` carry no `revision`). Geometry
+— `FieldRegion` / `ContentHit` carry no `revision`. Geometry
 (`regions`, `positionAt`, `locate`) is read against the current compile and
 re-read after each committed `apply`. `positionAt` (point → content position) and
 `locate` (content position → caret rect) are exact inverses over that compile —
@@ -212,9 +212,9 @@ field's `Content` that box covers. A scalar reference site and a widget carry
 no `span` (`undefined`): geometry with no content address.
 
 The whole-field highlight is **derived, not emitted**: per `(field, page)`,
-union the `span`-bearing segment rects. That is the point of #829 — the union
-is *striped*, leaving inter-paragraph whitespace uncovered, where the old
-single box painted over it. Emitting a field-level union from the *backend*
+union the `span`-bearing segment rects. The union is *striped*: it leaves
+inter-paragraph whitespace uncovered, which a single field-level box would
+paint over. Emitting a field-level union from the *backend*
 would reintroduce the lie the disjointness invariant exists to prevent, so the
 union stays out of `regions()`. But the derivation itself is subtle (which
 rects carry spans, first-placement-only, widget-vs-content), so a **convenience
@@ -418,9 +418,9 @@ by `runtime.test.js`.
 - Click handling in the painter. The painter is a dumb blit; it maps no
   clicks itself. Click→field lives on the **session** (`fieldAt`, hit-testing
   the compiled document) — a consumer converts the canvas click to PDF-pt
-  page coordinates (the inverse of the regions overlay transform) and asks
-  the session, keeping the painter free of interaction state — see
-  [SCHEMAS.md](SCHEMAS.md).
+  page coordinates (the inverse of the [regions overlay
+  transform](#regions-overlay-transform)) and asks the session, keeping the
+  painter free of interaction state.
 
 ## Decisions and rationale
 

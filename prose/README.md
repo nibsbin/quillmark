@@ -66,7 +66,8 @@ are exempt: a table row is a record, not a sentence.
 `scripts/check-canon.mjs` runs in CI. It fails on a broken spine, a link into
 `proposals/`/`plans/`, a reference that links out, an `**Implementation**`
 anchor that names a file or no longer exists, a canon page missing from
-`INDEX.md`, a dead `INDEX.md` link, and a line over the hard budget.
+`INDEX.md`, a dead `INDEX.md` link, an issue or PR number in canon prose, and a
+line over the hard budget.
 
 It also *warns*, without failing, when a folder named in an
 `**Implementation**` anchor changed and the doc anchored there did not — the
