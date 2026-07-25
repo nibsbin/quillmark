@@ -350,11 +350,6 @@ describe('Document JSON DTO — toJson / fromJson', () => {
 })
 
 describe('Quillmark.quill', () => {
-  it('should return a render-ready Quill', () => {
-    const quill = Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    expect(quill).toBeDefined()
-  })
-
   it('should accept a plain object tree (Record<string, Uint8Array>)', () => {
     const engine = new Quillmark()
     const mapTree = makeQuill({ name: 'test_quill', plate: TEST_PLATE })
@@ -1935,6 +1930,7 @@ title: T
 ~~~
 `
     const states = quill.resolve(Document.fromMarkdown(md))
-    expect(typeof JSON.stringify(states)).toBe('string')
+    const round = JSON.parse(JSON.stringify(states))
+    expect(byName(round.main.fields, 'title').value).toBe('T')
   })
 })

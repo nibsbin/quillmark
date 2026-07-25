@@ -1520,6 +1520,67 @@ mod tests {
         out.matches('[').count() == out.matches(']').count()
     }
 
+    /// Every formatting mark kind lowers to its Typst function, exactly. The
+    /// `#underline[` / `#strike[` rows were the only mapping coverage in the
+    /// workspace (previously `.contains()` checks in `quillmark-fuzz`, which
+    /// does not own this code).
+    #[test]
+    fn every_wrap_mark_lowers_to_its_typst_function() {
+        for (kind, expected) in [
+            (MarkKind::Strong, "#strong[abc]\n\n"),
+            (MarkKind::Emph, "#emph[abc]\n\n"),
+            (MarkKind::Underline, "#underline[abc]\n\n"),
+            (MarkKind::Strike, "#strike[abc]\n\n"),
+        ] {
+            let out = emit_marked(
+                "abc",
+                vec![Mark {
+                    start: 0,
+                    end: 3,
+                    kind: kind.clone(),
+                }],
+            );
+            assert_eq!(out, expected, "{kind:?} lowers wrong");
+        }
+    }
+
+    /// Nesting and adjacency compose the same functions — an intraword mark
+    /// (a position `__` cannot reach) included.
+    #[test]
+    fn nested_and_adjacent_marks_compose() {
+        let nested = emit_marked(
+            "abc",
+            vec![
+                Mark {
+                    start: 0,
+                    end: 3,
+                    kind: MarkKind::Strong,
+                },
+                Mark {
+                    start: 0,
+                    end: 3,
+                    kind: MarkKind::Underline,
+                },
+            ],
+        );
+        assert!(
+            nested.contains("#strong[") && nested.contains("#underline["),
+            "both wraps present: {nested}"
+        );
+        assert!(balanced(&nested));
+
+        // Intraword: a strike over the middle character only.
+        let intraword = emit_marked(
+            "abc",
+            vec![Mark {
+                start: 1,
+                end: 2,
+                kind: MarkKind::Strike,
+            }],
+        );
+        assert_eq!(intraword, "a#strike[b]c\n\n");
+    }
+
     use quillmark_content::model::Mark;
 
     /// A wrap that partially overlaps an atomic `code` mark lowers to balanced

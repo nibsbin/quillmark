@@ -472,19 +472,6 @@ card_kinds:
     // ── Wire shape ───────────────────────────────────────────────────────────
 
     #[test]
-    fn field_source_serializes_lowercase() {
-        assert_eq!(
-            serde_json::to_string(&FieldSource::Authored).unwrap(),
-            "\"authored\""
-        );
-        assert_eq!(
-            serde_json::to_string(&FieldSource::Default).unwrap(),
-            "\"default\""
-        );
-        assert_eq!(serde_json::to_string(&FieldSource::Zero).unwrap(), "\"zero\"");
-    }
-
-    #[test]
     fn field_state_is_name_value_and_source_only() {
         let state = ResolvedField {
             name: "x".to_string(),

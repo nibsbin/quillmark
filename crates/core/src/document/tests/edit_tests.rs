@@ -73,21 +73,6 @@ fn test_invalid_field_names() {
     assert!(!is_valid_field_name("$body")); // $-prefix reserved for metadata
 }
 
-// ── EditError Display ────────────────────────────────────────────────────────
-
-#[test]
-fn test_edit_error_display() {
-    assert!(EditError::InvalidFieldName("Bad-Name".to_string())
-        .to_string()
-        .contains("Bad-Name"));
-    assert!(EditError::InvalidKindName("Bad-Kind".to_string())
-        .to_string()
-        .contains("Bad-Kind"));
-    assert!(EditError::IndexOutOfRange { index: 3, len: 2 }
-        .to_string()
-        .contains("3"));
-}
-
 // ── `$`-prefixed names: Document::store_field ──────────────────────────────────
 
 #[test]

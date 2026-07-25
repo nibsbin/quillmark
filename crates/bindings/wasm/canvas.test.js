@@ -118,6 +118,11 @@ describe('LiveSession canvas preview', () => {
     expect(session.backendId).toBe('typst')
     expect(session.supportsCanvas).toBe(true)
     expect(Array.isArray(session.warnings)).toBe(true)
+    // Each entry crosses as a plain Diagnostic object, not a handle.
+    for (const w of session.warnings) {
+      expect(typeof w.severity).toBe('string')
+      expect(typeof w.message).toBe('string')
+    }
 
     const size = session.pageSize(0)
     expect(size.widthPt).toBeGreaterThan(0)
