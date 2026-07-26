@@ -27,7 +27,6 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
-use super::meta::is_valid_kind_name;
 use super::payload::{MetaKey, Payload, PayloadItem};
 use super::Card;
 use crate::value::{PathSegment, QuillValue};
@@ -147,11 +146,6 @@ pub enum WireError {
     /// `[A-Za-z_][A-Za-z0-9_]*`, or a value (including `$ext`) nesting past the
     /// §8 depth limit.
     InvalidField { key: String, reason: String },
-    /// The `kind` string is not a valid card-kind name (`[a-z_][a-z0-9_]*`).
-    /// `"main"` passes here — a detached wire card carries no signal of whether
-    /// it is the document root, so the composable-only rejection of `"main"`
-    /// stays with the insertion mutators that know the position.
-    InvalidKind { value: String },
 }
 
 impl std::fmt::Display for WireError {
@@ -162,9 +156,6 @@ impl std::fmt::Display for WireError {
             }
             WireError::InvalidField { key, reason } => {
                 write!(f, "invalid field {key:?}: {reason}")
-            }
-            WireError::InvalidKind { value } => {
-                write!(f, "invalid card kind {value:?}: expected `[a-z_][a-z0-9_]*`")
             }
         }
     }
@@ -266,10 +257,11 @@ impl TryFrom<CardWire> for Card {
                 .map_err(|reason| WireError::InvalidQuillReference { value, reason })?;
             payload.set_quill(reference);
         }
+        // No `$kind` grammar check here: construction is deliberately
+        // permissive (`Document::make_card` shapes data), and the invariant is
+        // enforced at insertion by `push_card`/`insert_card`, which carry the
+        // `edit::invalid_kind_name` code.
         if !wire.kind.is_empty() {
-            if !is_valid_kind_name(&wire.kind) {
-                return Err(WireError::InvalidKind { value: wire.kind });
-            }
             payload.set_kind(wire.kind);
         }
         if let Some(id) = wire.id {
@@ -493,29 +485,21 @@ mod tests {
         assert!(matches!(err, WireError::InvalidQuillReference { .. }));
     }
 
-    /// A malformed `kind` is a typed error too — the decoder checks the grammar
-    /// the mutators enforce, so a detached round-trip cannot smuggle one in.
+    /// Construction accepts a kind the mutators reject: `make_card` is
+    /// permissive data-shaping and `insert_card` is the gate, so the grammar
+    /// check belongs there, not here.
     #[test]
-    fn card_wire_rejects_bad_kind() {
-        let bad = |kind: &str| {
-            Card::try_from(CardWire {
-                kind: kind.to_string(),
-                quill: None,
-                id: None,
-                ext: None,
-                seed: None,
-                payload_items: Vec::new(),
-                body: JsonValue::Null,
-            })
-        };
-        for kind in ["Note", "1note", "has-dash", "has space"] {
-            assert!(
-                matches!(bad(kind).unwrap_err(), WireError::InvalidKind { .. }),
-                "expected {kind:?} rejected"
-            );
-        }
-        // `main` is a valid name; position, not the decoder, decides if it fits.
-        assert!(bad("main").is_ok());
-        assert!(bad("note").is_ok());
+    fn card_wire_accepts_any_kind() {
+        let card = Card::try_from(CardWire {
+            kind: "BadKind".to_string(),
+            quill: None,
+            id: None,
+            ext: None,
+            seed: None,
+            payload_items: Vec::new(),
+            body: JsonValue::Null,
+        })
+        .expect("construction does not police the kind grammar");
+        assert_eq!(card.kind(), Some("BadKind"));
     }
 }
