@@ -27,6 +27,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
+use super::meta::is_valid_kind_name;
 use super::payload::{MetaKey, Payload, PayloadItem};
 use super::Card;
 use crate::value::{PathSegment, QuillValue};
@@ -127,12 +128,12 @@ pub struct CardWire {
     /// The card body as canonical Content-JSON — the source-of-truth content
     /// model (a content object, `{text, lines, marks, islands}`). The empty content
     /// when absent. A markdown string is also accepted on input (imported), so an
-    /// LLM/markdown writer can still hand a string here.
+    /// LLM/markdown writer can hand a string here.
     ///
-    /// No `body_markdown` projection rides this wire: the eager `export ∘ body`
-    /// precompute was dropped (the delimiter-safety fix makes `to_markdown`
-    /// re-parse every rendered line, so it is no longer cheap) in favor of the
-    /// on-demand `exportMarkdown(body)` codec at the binding boundary.
+    /// No `body_markdown` projection rides this wire. Delimiter safety makes
+    /// `to_markdown` re-parse every rendered line, so an eager `export ∘ body`
+    /// precompute is not cheap; the `exportMarkdown(body)` codec at the binding
+    /// boundary does it on demand instead.
     #[serde(default)]
     pub body: JsonValue,
 }
@@ -146,6 +147,11 @@ pub enum WireError {
     /// `[A-Za-z_][A-Za-z0-9_]*`, or a value (including `$ext`) nesting past the
     /// §8 depth limit.
     InvalidField { key: String, reason: String },
+    /// The `kind` string is not a valid card-kind name (`[a-z_][a-z0-9_]*`).
+    /// `"main"` passes here — a detached wire card carries no signal of whether
+    /// it is the document root, so the composable-only rejection of `"main"`
+    /// stays with the insertion mutators that know the position.
+    InvalidKind { value: String },
 }
 
 impl std::fmt::Display for WireError {
@@ -156,6 +162,9 @@ impl std::fmt::Display for WireError {
             }
             WireError::InvalidField { key, reason } => {
                 write!(f, "invalid field {key:?}: {reason}")
+            }
+            WireError::InvalidKind { value } => {
+                write!(f, "invalid card kind {value:?}: expected `[a-z_][a-z0-9_]*`")
             }
         }
     }
@@ -258,6 +267,9 @@ impl TryFrom<CardWire> for Card {
             payload.set_quill(reference);
         }
         if !wire.kind.is_empty() {
+            if !is_valid_kind_name(&wire.kind) {
+                return Err(WireError::InvalidKind { value: wire.kind });
+            }
             payload.set_kind(wire.kind);
         }
         if let Some(id) = wire.id {
@@ -479,5 +491,31 @@ mod tests {
         })
         .unwrap_err();
         assert!(matches!(err, WireError::InvalidQuillReference { .. }));
+    }
+
+    /// A malformed `kind` is a typed error too — the decoder checks the grammar
+    /// the mutators enforce, so a detached round-trip cannot smuggle one in.
+    #[test]
+    fn card_wire_rejects_bad_kind() {
+        let bad = |kind: &str| {
+            Card::try_from(CardWire {
+                kind: kind.to_string(),
+                quill: None,
+                id: None,
+                ext: None,
+                seed: None,
+                payload_items: Vec::new(),
+                body: JsonValue::Null,
+            })
+        };
+        for kind in ["Note", "1note", "has-dash", "has space"] {
+            assert!(
+                matches!(bad(kind).unwrap_err(), WireError::InvalidKind { .. }),
+                "expected {kind:?} rejected"
+            );
+        }
+        // `main` is a valid name; position, not the decoder, decides if it fits.
+        assert!(bad("main").is_ok());
+        assert!(bad("note").is_ok());
     }
 }

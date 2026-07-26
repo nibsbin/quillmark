@@ -28,7 +28,7 @@ The file must open with a `~~~` block containing a `$quill:` key identifying the
 **Options:**
 
 - `-o <PATH>` / `--output <PATH>`: Output file path (default: input filename with format extension, e.g. `input.pdf`; `example.<format>` when no markdown file is given)
-- `-f <FORMAT>` / `--format <FORMAT>`: Output format: `pdf`, `svg`, `png`, `txt` (default: `pdf`)
+- `-f <FORMAT>` / `--format <FORMAT>`: Output format: `pdf`, `svg`, `png` (default: `pdf`)
 - `--output-data <DATA_FILE>`: Write compiled JSON data to a file
 - `-v` / `--verbose`: Show detailed processing information
 - `--quiet`: Suppress all non-error output

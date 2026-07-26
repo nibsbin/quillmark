@@ -22,7 +22,7 @@ const CODE_XREF_STREAM: &str = "pdf::xref_stream";
 
 /// Build a `PdfError` with `code`. Every fail site here just needs a code plus
 /// a message, so this is the whole error-construction surface.
-pub fn err(code: &'static str, msg: impl Into<String>) -> PdfError {
+pub(crate) fn err(code: &'static str, msg: impl Into<String>) -> PdfError {
     PdfError::new(code, msg)
 }
 

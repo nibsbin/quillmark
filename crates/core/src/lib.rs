@@ -47,8 +47,8 @@ pub use types::{Artifact, OutputFormat, RenderOptions};
 
 pub mod region;
 pub use region::{
-    doc_path_to_plate_addr, field_boxes, plate_addr_to_doc_path, ContentHit, HitGranularity,
-    RenderedRegion,
+    doc_path_to_plate_addr, field_boxes, plate_addr_to_doc_path, regions_to_doc_path, ContentHit,
+    HitGranularity, RenderedRegion,
 };
 
 pub mod session;
@@ -64,6 +64,11 @@ pub use quill::{
     zero_value, FieldSource, FileTreeNode, Quill, Resolved, ResolvedCard, ResolvedField, ResolvedMain,
     QuillIgnore, STANDARD_METADATA_KEYS,
 };
+/// The schema model behind [`Quill::config`], and the error
+/// [`QuillConfig::validate_document`] returns. Nameable from the root: reading
+/// a quill's schema, or writing a signature over the validation error, needs no
+/// `quill::` path.
+pub use quill::{CardSchema, FieldSchema, FieldType, QuillConfig, ValidationError};
 
 pub mod value;
 pub use value::{json_depth_exceeds, PathSegment, QuillValue};

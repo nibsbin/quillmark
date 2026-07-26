@@ -16,7 +16,7 @@ impl Backend for MockBackend {
     }
 
     fn supported_formats(&self) -> &'static [OutputFormat] {
-        &[OutputFormat::Txt]
+        &[OutputFormat::Pdf]
     }
 
     fn open(
@@ -46,9 +46,9 @@ impl SessionHandle for MockSession {
     fn render(&self, _opts: &RenderOptions) -> Result<RenderResult, RenderError> {
         let artifacts = vec![Artifact {
             bytes: self.bytes.clone(),
-            output_format: OutputFormat::Txt,
+            output_format: OutputFormat::Pdf,
         }];
-        Ok(RenderResult::new(artifacts, OutputFormat::Txt))
+        Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
     }
 
     fn page_count(&self) -> usize {
@@ -86,7 +86,7 @@ fn test_render_with_custom_backend() {
     assert!(engine
         .supported_formats(&quill)
         .expect("supported_formats failed")
-        .contains(&OutputFormat::Txt));
+        .contains(&OutputFormat::Pdf));
 
     let markdown =
         "~~~card-yaml\n$quill: custom_backend_quill\n$kind: main\ntitle: Hello Custom Backend\n~~~\n\n# Test\n";
@@ -96,12 +96,12 @@ fn test_render_with_custom_backend() {
             &quill,
             &parsed,
             &RenderOptions {
-                output_format: Some(OutputFormat::Txt),
+                output_format: Some(OutputFormat::Pdf),
                 ..Default::default()
             },
         )
         .expect("render failed");
 
     assert!(!result.artifacts.is_empty());
-    assert_eq!(result.artifacts[0].output_format, OutputFormat::Txt);
+    assert_eq!(result.artifacts[0].output_format, OutputFormat::Pdf);
 }

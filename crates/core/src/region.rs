@@ -226,6 +226,23 @@ fn per_kind_ordinal(card_kinds: &[Option<&str>], abs: usize) -> Option<usize> {
 /// (card field), and `$cards.<kind>.<ord>.$body` (card body). `None` for an
 /// address outside that grammar or one naming a card the kind list cannot
 /// place — the caller keeps the original string.
+/// Rewrite each region's plate-space `field` to its [`DocPath`] string — the
+/// translation [`RenderedRegion`] puts at a binding boundary. One funnel for
+/// every region a binding hands out, render sidecar and session query alike, so
+/// a consumer never sees the two address spaces mixed. An address outside the
+/// geometry grammar keeps its original string.
+pub fn regions_to_doc_path(
+    mut regions: Vec<RenderedRegion>,
+    card_kinds: &[Option<&str>],
+) -> Vec<RenderedRegion> {
+    for region in &mut regions {
+        if let Some(path) = plate_addr_to_doc_path(&region.field, card_kinds) {
+            region.field = path.to_string();
+        }
+    }
+    regions
+}
+
 pub fn plate_addr_to_doc_path(addr: &str, card_kinds: &[Option<&str>]) -> Option<DocPath> {
     if addr == "$body" {
         return Some(DocPath::main_body());

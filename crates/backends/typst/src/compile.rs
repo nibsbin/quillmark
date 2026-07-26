@@ -17,15 +17,7 @@ use crate::error_mapping::map_typst_errors;
 use crate::overlay;
 use crate::world::QuillWorld;
 use quillmark_core::{Artifact, Diagnostic, OutputFormat, RenderError, RenderResult, Severity};
-use quillmark_pdf::{stamp, PdfError, StampOptions};
-
-/// Map a stamp-spine [`PdfError`] to the backend's `RenderError`. The spine owns
-/// its own error type; this is the boundary translation.
-fn map_pdf_err(e: PdfError) -> RenderError {
-    RenderError::from_diag(
-        Diagnostic::new(Severity::Error, e.message).with_code(e.code.to_string()),
-    )
-}
+use quillmark_pdf::{stamp, StampOptions};
 
 /// Build raster render options for a given pixels-per-point scale factor.
 fn render_options(pixel_per_pt: f32) -> RenderOptions {
@@ -171,8 +163,7 @@ pub(crate) fn render_document_pages(
                     .map(str::to_string)
                     .unwrap_or_else(overlay::default_producer),
             );
-            let stamped =
-                stamp(pdf, &field_specs, &StampOptions { producer }).map_err(map_pdf_err)?;
+            let stamped = stamp(pdf, &field_specs, &StampOptions { producer })?;
             Ok(RenderResult::new(
                 vec![Artifact {
                     bytes: stamped,
@@ -181,12 +172,5 @@ pub(crate) fn render_document_pages(
                 OutputFormat::Pdf,
             ))
         }
-        OutputFormat::Txt => Err(RenderError::from_diag(
-            Diagnostic::new(
-                Severity::Error,
-                "TXT output is not supported for Typst".into(),
-            )
-            .with_code("typst::format_not_supported".to_string()),
-        )),
     }
 }

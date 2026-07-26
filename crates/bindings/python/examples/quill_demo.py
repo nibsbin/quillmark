@@ -55,7 +55,7 @@ I love **Taro** ice cream!
             if artifact.format == OutputFormat.PDF
             else "svg"
             if artifact.format == OutputFormat.SVG
-            else "txt"
+            else "png"
         )
         output_path = Path(f"/tmp/taro_example_{i}.{output_name}")
         artifact.save(str(output_path))

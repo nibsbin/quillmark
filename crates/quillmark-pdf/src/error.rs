@@ -1,10 +1,11 @@
 //! The stamp spine's own error type.
 //!
-//! `quillmark-pdf` is leaf infra and owns a `PdfError` rather than returning
-//! `quillmark_core::RenderError` with backend-flavoured codes, which would
-//! invert the dependency (a leaf crate shaping a core type). Each backend maps
-//! `PdfError` to `RenderError` at its boundary. Every failure here is a single
-//! `code` + `message`, so a struct (not a sprawling enum) is the honest shape.
+//! `quillmark-pdf` is leaf infra and owns a `PdfError` rather than threading
+//! `quillmark_core::RenderError` through: every failure here carries just a
+//! `code` and a `message`, so a struct (not a sprawling enum) is the honest
+//! shape. The [`From`] impl carries one across a backend boundary, forwarding
+//! the `pdf::*` code intact. Both backends share it, so the code's namespace is
+//! decided in one place.
 
 /// An error from the stamp spine. Carries a stable `code` (a `pdf::*` string a
 /// consumer can match on) and a human-readable `message`.
@@ -24,5 +25,14 @@ impl PdfError {
             code,
             message: message.into(),
         }
+    }
+}
+
+impl From<PdfError> for quillmark_core::RenderError {
+    fn from(e: PdfError) -> Self {
+        quillmark_core::RenderError::from_diag(
+            quillmark_core::Diagnostic::new(quillmark_core::Severity::Error, e.message)
+                .with_code(e.code.to_string()),
+        )
     }
 }

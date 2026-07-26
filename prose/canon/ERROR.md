@@ -40,8 +40,10 @@ Notable codes: `quill::name_mismatch` / `quill::version_mismatch` — the
 document is well-formed but paired with the wrong quill (see
 [VERSIONING.md](VERSIONING.md)); `backend::apply_unsupported` — the default
 for a backend session that does not override the incremental-`apply` seam
-(both built-in backends override it); `engine::backend_not_found` — the
-quill's declared backend is not registered.
+(both built-in backends override it); `backend::format_not_supported` — the
+requested format is outside the backend's `supported_formats`, one code on
+every backend so a caller matches the condition once; `engine::backend_not_found`
+— the quill's declared backend is not registered.
 
 **`edit::*` — mutator diagnostics.** Document and card mutators fail with the
 `EditError` enum (`crates/core/src/document/edit.rs`), one namespaced code per
@@ -212,7 +214,7 @@ labels) ride the `DocPath` serializer with their prefix as a leading segment.
   hint: Check variable spelling
 ```
 
-**Extended printing** (`Diagnostic::fmt_pretty_with_source()`): appends each cause in the source chain as `cause N: <message>`.
+**Source chain**: `with_source` walks an attached cause eagerly into `source_chain`. No Rust formatter prints it — `fmt_pretty` covers severity, message, code, location, and hint only. It reaches consumers through serialization instead: WASM as the `source_chain` field, Python as `Diagnostic.source_chain`.
 
 **Consolidated printing**: `print_errors()` pretty-prints every diagnostic a `RenderError` carries.
 
