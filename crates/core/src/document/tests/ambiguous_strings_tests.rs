@@ -9,6 +9,8 @@
 //! JSON-style escaping, which is what buys the round-trip guarantee tested
 //! here.
 //!
+//! `ambiguous_strings.md` declares every ambiguous field in one fixture, so
+//! all categories below share a single parse → emit → re-parse cycle.
 
 use crate::document::Document;
 
@@ -39,133 +41,105 @@ fn parse_fixture() -> Document {
 }
 
 /// Assert that a payload field is `QuillValue::String` with exactly the
-/// expected bytes, then perform a round-trip and assert byte-identical.
-fn assert_string_field_round_trips(doc: &Document, key: &str, expected: &str) {
+/// expected bytes. `when` names which parse (first parse vs. post-round-trip)
+/// this check belongs to, for failure messages.
+fn assert_string_field(doc: &Document, key: &str, expected: &str, when: &str) {
     let value = doc
         .main()
         .payload()
         .get(key)
-        .unwrap_or_else(|| panic!("field '{}' not found in payload", key));
+        .unwrap_or_else(|| panic!("field '{}' not found in payload ({})", key, when));
 
     // Must be a string, not a bool / number / null.
     assert!(
         value.as_str().is_some(),
-        "field '{}': expected QuillValue::String, got {:?}",
+        "field '{}' ({}): expected QuillValue::String, got {:?}",
         key,
+        when,
         value
     );
     assert_eq!(
         value.as_str().unwrap(),
         expected,
-        "field '{}': string value mismatch",
-        key
+        "field '{}' ({}): string value mismatch",
+        key,
+        when
     );
 }
 
-/// Full round-trip: parse → emit → re-parse → assert each field still string.
-fn assert_round_trip_strings(keys_and_values: &[(&str, &str)]) {
-    let doc = parse_fixture();
-    let emitted = doc.to_markdown();
-    let doc2 = Document::parse(&emitted)
-        .unwrap_or_else(|e| panic!("re-parse after emit failed: {}\nEmitted:\n{}", e, emitted))
-        .document;
-
-    for (key, expected) in keys_and_values {
-        // First parse: string type.
-        assert_string_field_round_trips(&doc, key, expected);
-        // Re-parsed: byte-identical.
-        let v2 = doc2
-            .main()
-            .payload()
-            .get(key)
-            .unwrap_or_else(|| panic!("field '{}' missing after round-trip", key));
-        assert!(
-            v2.as_str().is_some(),
-            "field '{}' is not a string after round-trip; value = {:?}",
-            key,
-            v2
-        );
-        assert_eq!(
-            v2.as_str().unwrap(),
-            *expected,
-            "field '{}': value changed on round-trip",
-            key
-        );
-    }
-}
-
-// ── Category: Word booleans ───────────────────────────────────────────────────
-
-/// `on`, `off`, `yes`, `no`, `true`, `false` are YAML 1.1 booleans.
-/// Quillmark always emits them double-quoted so they re-parse as strings.
+/// Every ambiguous-string field declared in the fixture, grouped by the YAML
+/// 1.1 hazard it exercises, checked against one shared parse → emit →
+/// re-parse cycle.
 #[test]
-fn ambiguous_word_booleans_round_trip() {
-    assert_round_trip_strings(&[
+fn ambiguous_strings_round_trip() {
+    // `on`, `off`, `yes`, `no`, `true`, `false` are YAML 1.1 booleans.
+    // Quillmark always emits them double-quoted so they re-parse as strings.
+    let word_booleans: &[(&str, &str)] = &[
         ("on_word", "on"),
         ("off_word", "off"),
         ("yes_word", "yes"),
         ("no_word", "no"),
         ("true_word", "true"),
         ("false_word", "false"),
-    ]);
-}
+    ];
 
-// ── Category: Null-like strings ───────────────────────────────────────────────
+    // `null` and `~` parse as YAML null in many parsers.
+    let null_like: &[(&str, &str)] = &[("null_word", "null"), ("tilde", "~")];
 
-/// `null` and `~` parse as YAML null in many parsers.
-#[test]
-fn ambiguous_null_like_round_trip() {
-    assert_round_trip_strings(&[("null_word", "null"), ("tilde", "~")]);
-}
-
-// ── Category: Numeric-like strings ───────────────────────────────────────────
-
-/// `01234` (octal-like), `1e10` (scientific notation), `0x1F` (hex-like).
-/// A YAML 1.1 parser would silently coerce these to integers or floats.
-#[test]
-fn ambiguous_numeric_like_round_trip() {
-    assert_round_trip_strings(&[
+    // `01234` (octal-like), `1e10` (scientific notation), `0x1F` (hex-like).
+    // A YAML 1.1 parser would silently coerce these to integers or floats.
+    let numeric_like: &[(&str, &str)] = &[
         ("leading_zeros", "01234"),
         ("exponential", "1e10"),
         ("hex_like", "0x1F"),
-    ]);
-}
+    ];
 
-// ── Category: Date-like string ────────────────────────────────────────────────
+    // ISO 8601 date strings look like YAML dates in YAML 1.1.
+    let iso_date: &[(&str, &str)] = &[("iso_date", "2024-01-15")];
 
-/// ISO 8601 date strings look like YAML dates in YAML 1.1.
-#[test]
-fn ambiguous_iso_date_round_trip() {
-    assert_round_trip_strings(&[("iso_date", "2024-01-15")]);
-}
-
-// ── Category: Special characters ─────────────────────────────────────────────
-
-/// Empty string, single space, embedded newline, embedded quote, backslash.
-#[test]
-fn ambiguous_special_characters_round_trip() {
-    assert_round_trip_strings(&[
+    // Empty string, single space, embedded newline, embedded quote, backslash.
+    let special_characters: &[(&str, &str)] = &[
         ("empty_string", ""),
         ("single_space", " "),
         ("embedded_newline", "line1\nline2"),
         ("embedded_quote", "he said \"hi\""),
         ("embedded_backslash", "a\\b"),
-    ]);
-}
+    ];
 
-// ── Category: YAML syntax strings ────────────────────────────────────────────
-
-/// Strings that look like YAML structural tokens: map entries, sequence
-/// markers, comments, anchors, aliases, tags.
-#[test]
-fn ambiguous_yaml_syntax_round_trip() {
-    assert_round_trip_strings(&[
+    // Strings that look like YAML structural tokens: map entries, sequence
+    // markers, comments, anchors, aliases, tags.
+    let yaml_syntax: &[(&str, &str)] = &[
         ("looks_like_map", "key: value"),
         ("looks_like_seq", "- item"),
         ("hash_comment", "#comment"),
         ("yaml_anchor", "&anchor"),
         ("yaml_alias", "*alias"),
         ("yaml_tag", "!tag"),
-    ]);
-}
+    ];
 
+    let all_categories: &[&[(&str, &str)]] = &[
+        word_booleans,
+        null_like,
+        numeric_like,
+        iso_date,
+        special_characters,
+        yaml_syntax,
+    ];
+
+    // One parse, one emit, one re-parse for the whole fixture: every
+    // category above reads from these two documents instead of re-parsing.
+    let doc = parse_fixture();
+    let emitted = doc.to_markdown();
+    let doc2 = Document::parse(&emitted)
+        .unwrap_or_else(|e| panic!("re-parse after emit failed: {}\nEmitted:\n{}", e, emitted))
+        .document;
+
+    for category in all_categories {
+        for (key, expected) in *category {
+            // First parse: string type + value.
+            assert_string_field(&doc, key, expected, "first parse");
+            // Re-parsed after emit: still a byte-identical string.
+            assert_string_field(&doc2, key, expected, "after round-trip");
+        }
+    }
+}

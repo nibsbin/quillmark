@@ -372,46 +372,30 @@ describe('Quillmark.quill', () => {
     expect(() => Quill.fromTree(null)).toThrow()
   })
 
-  it('should render markdown to PDF via quill.render(doc) with default opts', () => {
-    const engine = new Quillmark()
-    const quill = Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+  // `opts: undefined` is the two-argument call form, whose default is pdf.
+  const RENDER_FORMAT_CASES = [
+    { opts: undefined, mimeType: 'application/pdf' },
+    { opts: { format: 'pdf' }, mimeType: 'application/pdf' },
+    { opts: { format: 'svg' }, mimeType: 'image/svg+xml' },
+  ]
 
-    const result = engine.render(quill, doc)
+  it('should render markdown via quill.render(doc, opts) for each format', () => {
+    for (const { opts, mimeType } of RENDER_FORMAT_CASES) {
+      const engine = new Quillmark()
+      const quill = Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
+      const doc = Document.fromMarkdown(TEST_MARKDOWN)
 
-    expect(result).toBeDefined()
-    expect(result.artifacts).toBeDefined()
-    expect(result.artifacts.length).toBeGreaterThan(0)
-    // The declared TS type is Uint8Array — assert the runtime matches so
-    // consumers don't need to defensively coerce `new Uint8Array(bytes)`.
-    expect(result.artifacts[0].bytes).toBeInstanceOf(Uint8Array)
-    expect(result.artifacts[0].bytes.length).toBeGreaterThan(0)
-    expect(result.artifacts[0].mimeType).toBe('application/pdf')
-  })
+      const result = opts === undefined ? engine.render(quill, doc) : engine.render(quill, doc, opts)
 
-  it('should render markdown to PDF via quill.render(doc, opts)', () => {
-    const engine = new Quillmark()
-    const quill = Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-
-    const result = engine.render(quill, doc, { format: 'pdf' })
-
-    expect(result).toBeDefined()
-    expect(result.artifacts).toBeDefined()
-    expect(result.artifacts.length).toBeGreaterThan(0)
-    expect(result.artifacts[0].bytes.length).toBeGreaterThan(0)
-    expect(result.artifacts[0].mimeType).toBe('application/pdf')
-  })
-
-  it('should render markdown to SVG via quill.render(doc)', () => {
-    const engine = new Quillmark()
-    const quill = Quill.fromTree(makeQuill({ name: 'test_quill', plate: TEST_PLATE }))
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-
-    const result = engine.render(quill, doc, { format: 'svg' })
-
-    expect(result.artifacts.length).toBeGreaterThan(0)
-    expect(result.artifacts[0].mimeType).toBe('image/svg+xml')
+      expect(result).toBeDefined()
+      expect(result.artifacts).toBeDefined()
+      expect(result.artifacts.length).toBeGreaterThan(0)
+      // The declared TS type is Uint8Array — assert the runtime matches so
+      // consumers don't need to defensively coerce `new Uint8Array(bytes)`.
+      expect(result.artifacts[0].bytes).toBeInstanceOf(Uint8Array)
+      expect(result.artifacts[0].bytes.length).toBeGreaterThan(0)
+      expect(result.artifacts[0].mimeType).toBe(mimeType)
+    }
   })
 
   it('should allow rendering the same Document multiple times', () => {

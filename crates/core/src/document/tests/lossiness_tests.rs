@@ -14,69 +14,6 @@
 
 use crate::document::Document;
 
-// ── Category: YAML comments ───────────────────────────────────────────────────
-
-/// Top-level YAML comments survive a round-trip.
-#[test]
-fn top_level_comments_round_trip() {
-    let src =
-        "~~~card-yaml\n$quill: q\n$kind: main\n# recipient's full name\nrecipient: Jane\nauthor: Alice\n~~~\n\nBody.\n";
-
-    let doc = Document::parse(src).unwrap().document;
-    let emitted = doc.to_markdown();
-
-    assert!(
-        emitted.contains("# recipient's full name"),
-        "top-level YAML comment must survive round-trip\nGot:\n{}",
-        emitted
-    );
-
-    // Value remains intact.
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    assert_eq!(
-        doc2.main()
-            .payload()
-            .get("recipient")
-            .and_then(|v| v.as_str()),
-        Some("Jane"),
-    );
-
-    // Comment idempotent across repeated round-trips.
-    let emitted2 = doc2.to_markdown();
-    assert_eq!(emitted, emitted2, "round-trip must be idempotent");
-}
-
-/// Trailing inline comments on top-level fields round-trip inline.
-#[test]
-fn top_level_inline_comments_round_trip() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\ntitle: My Document # this is a comment\n~~~\n\nBody.\n";
-
-    let doc = Document::parse(src).unwrap().document;
-    let emitted = doc.to_markdown();
-
-    assert!(
-        emitted.contains("title: My Document # this is a comment"),
-        "trailing inline comment must round-trip on the same line\nGot:\n{}",
-        emitted
-    );
-    assert!(
-        !emitted.contains("My Document\n# this is a comment"),
-        "trailing inline comment must NOT degrade to own-line\nGot:\n{}",
-        emitted
-    );
-
-    // Value still intact.
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    assert_eq!(
-        doc2.main().payload().get("title").and_then(|v| v.as_str()),
-        Some("My Document"),
-    );
-
-    // Idempotent across repeated round-trips.
-    let emitted2 = doc2.to_markdown();
-    assert_eq!(emitted, emitted2, "round-trip must be idempotent");
-}
-
 // ── Category: Block scalars ───────────────────────────────────────────────────
 
 /// A block-scalar value (markdown) whose content contains `#` heading lines
@@ -298,93 +235,6 @@ fn nested_must_fill_on_mapping_is_rejected() {
     );
 }
 
-/// `!must_fill` on a bare key (no value) emits `key: !must_fill` and preserves null.
-#[test]
-fn fill_tag_bare_null_round_trip() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nrecipient: !must_fill\n~~~\n";
-
-    let doc = Document::parse(src).unwrap().document;
-    let fm = doc.main().payload();
-
-    assert!(fm.get("recipient").map(|v| v.is_null()).unwrap_or(false));
-    assert!(fm.is_fill("recipient"));
-
-    let emitted = doc.to_markdown();
-    assert!(
-        emitted.contains("recipient: !must_fill\n"),
-        "bare `!must_fill` must round-trip as `key: !must_fill`\nGot:\n{}",
-        emitted
-    );
-}
-
-/// `!must_fill` on a top-level block sequence round-trips, preserving items and
-/// the fill marker.
-#[test]
-fn fill_tag_block_sequence_round_trip() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nrecipient: !must_fill\n  - Dr. Who\n  - 1 TARDIS Lane\n~~~\n";
-
-    let doc = Document::parse(src).unwrap().document;
-    let fm = doc.main().payload();
-
-    assert!(fm.is_fill("recipient"));
-    let arr = fm.get("recipient").and_then(|v| v.as_array()).unwrap();
-    assert_eq!(arr.len(), 2);
-    assert_eq!(arr[0].as_str(), Some("Dr. Who"));
-    assert_eq!(arr[1].as_str(), Some("1 TARDIS Lane"));
-
-    let emitted = doc.to_markdown();
-    assert!(
-        emitted.contains("recipient: !must_fill\n"),
-        "`!must_fill` on sequence must emit `key: !must_fill` before the block\nGot:\n{}",
-        emitted
-    );
-
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    assert!(doc2.main().payload().is_fill("recipient"));
-    assert_eq!(doc2, doc, "full round-trip must be equal");
-}
-
-/// `!must_fill` on a flow sequence round-trips (normalised to block form).
-#[test]
-fn fill_tag_flow_sequence_round_trip() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\ntags: !must_fill [a, b, c]\n~~~\n";
-    let doc = Document::parse(src).unwrap().document;
-    let fm = doc.main().payload();
-    assert!(fm.is_fill("tags"));
-    assert_eq!(
-        fm.get("tags").and_then(|v| v.as_array()).map(|a| a.len()),
-        Some(3)
-    );
-
-    let emitted = doc.to_markdown();
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    assert!(doc2.main().payload().is_fill("tags"));
-    assert_eq!(doc2, doc);
-}
-
-/// `!must_fill` on an empty sequence round-trips as `key: !must_fill []`.
-#[test]
-fn fill_tag_empty_sequence_round_trip() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nitems: !must_fill []\n~~~\n";
-    let doc = Document::parse(src).unwrap().document;
-    let fm = doc.main().payload();
-    assert!(fm.is_fill("items"));
-    assert_eq!(
-        fm.get("items").and_then(|v| v.as_array()).map(|a| a.len()),
-        Some(0)
-    );
-
-    let emitted = doc.to_markdown();
-    assert!(
-        emitted.contains("items: !must_fill []\n"),
-        "empty fill-sequence must round-trip as `key: !must_fill []`\nGot:\n{}",
-        emitted
-    );
-
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    assert_eq!(doc2, doc);
-}
-
 /// `!must_fill` on a top-level mapping is rejected at parse.
 #[test]
 fn fill_tag_mapping_rejected() {
@@ -397,7 +247,12 @@ fn fill_tag_mapping_rejected() {
     );
 }
 
-/// `!must_fill` on every supported scalar type round-trips with the correct type.
+/// `!must_fill` round-trips across every supported shape: each scalar type
+/// on a shared document (including the bare-null form, `key: !must_fill`
+/// with no value), and top-level sequences in block, flow, and empty form.
+/// Sequences get their own sibling table below — each needs its own document
+/// and a full-document equality check, which doesn't fit the shared-document
+/// loop the scalar types use.
 #[test]
 fn fill_tag_all_scalar_types_round_trip() {
     let src = concat!(
@@ -426,6 +281,14 @@ fn fill_tag_all_scalar_types_round_trip() {
     }
 
     let emitted = doc.to_markdown();
+    // Bare-null shape (`n`): emits `key: !must_fill` with no trailing value,
+    // same shape a standalone top-level bare-null field takes.
+    assert!(
+        emitted.contains("n: !must_fill\n"),
+        "bare `!must_fill` must round-trip as `key: !must_fill`\nGot:\n{}",
+        emitted
+    );
+
     let doc2 = Document::parse(&emitted).unwrap().document;
     for key in ["s", "i", "f", "b", "n"] {
         assert!(
@@ -433,6 +296,82 @@ fn fill_tag_all_scalar_types_round_trip() {
             "{} must remain fill-tagged after round-trip",
             key
         );
+    }
+
+    // Sequence shapes: block, flow (normalises to block on emit), and empty.
+    struct SeqCase {
+        label: &'static str,
+        key: &'static str,
+        src: &'static str,
+        expected_items: &'static [&'static str],
+        emitted_contains: &'static str,
+    }
+
+    let seq_cases = [
+        SeqCase {
+            label: "block sequence",
+            key: "recipient",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\nrecipient: !must_fill\n  - Dr. Who\n  - 1 TARDIS Lane\n~~~\n",
+            expected_items: &["Dr. Who", "1 TARDIS Lane"],
+            emitted_contains: "recipient: !must_fill\n",
+        },
+        SeqCase {
+            label: "flow sequence normalises to block form",
+            key: "tags",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\ntags: !must_fill [a, b, c]\n~~~\n",
+            expected_items: &["a", "b", "c"],
+            emitted_contains: "tags: !must_fill",
+        },
+        SeqCase {
+            label: "empty sequence",
+            key: "items",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\nitems: !must_fill []\n~~~\n",
+            expected_items: &[],
+            emitted_contains: "items: !must_fill []\n",
+        },
+    ];
+
+    for case in seq_cases {
+        let doc = Document::parse(case.src).unwrap().document;
+        let fm = doc.main().payload();
+        assert!(
+            fm.is_fill(case.key),
+            "[{}] key must be fill-tagged",
+            case.label
+        );
+
+        let arr = fm.get(case.key).and_then(|v| v.as_array()).unwrap();
+        assert_eq!(
+            arr.len(),
+            case.expected_items.len(),
+            "[{}] array length",
+            case.label
+        );
+        for (item, expected) in arr.iter().zip(case.expected_items) {
+            assert_eq!(
+                item.as_str(),
+                Some(*expected),
+                "[{}] array element",
+                case.label
+            );
+        }
+
+        let emitted = doc.to_markdown();
+        assert!(
+            emitted.contains(case.emitted_contains),
+            "[{}] must emit `{}`\nGot:\n{}",
+            case.label,
+            case.emitted_contains,
+            emitted
+        );
+
+        let doc2 = Document::parse(&emitted).unwrap().document;
+        assert!(
+            doc2.main().payload().is_fill(case.key),
+            "[{}] fill marker must survive round-trip",
+            case.label
+        );
+        assert_eq!(doc2, doc, "[{}] full round-trip must be equal", case.label);
     }
 }
 
@@ -492,162 +431,160 @@ fn quoting_normalises_to_canonical_form_with_type_fidelity() {
     assert_eq!(emitted, emitted2, "round-trip must be idempotent");
 }
 
-// ── Category: Nested comments round-trip ─────────────────────────────────────
+// ── Category: Comment positions round-trip ───────────────────────────────────
 
-/// Comments inside nested sequences round-trip at the matching position.
+/// A comment placed at each of these structural positions in a card-yaml
+/// document survives a markdown round-trip: parse, emit, and confirm the
+/// comment (and any position-specific marker) lands where it should; then
+/// re-parse the emission and re-emit — a stable second round confirms the
+/// first is idempotent.
 #[test]
-fn nested_sequence_comments_round_trip() {
-    let src =
-        "~~~card-yaml\n$quill: q\n$kind: main\nitems:\n  # before-first\n  - a\n  # between\n  - b\n  # after-last\n~~~\n";
+fn comment_position_round_trips() {
+    struct Case {
+        label: &'static str,
+        src: &'static str,
+        /// Substrings that must appear in the first emission.
+        contains: &'static [&'static str],
+        /// Substrings that must NOT appear (guards against a comment
+        /// degrading to a different position, e.g. inline -> own-line).
+        not_contains: &'static [&'static str],
+        /// A field whose string value must remain intact after the
+        /// round-trip (guards against comment parsing corrupting the value).
+        value_check: Option<(&'static str, &'static str)>,
+        /// This case must not raise the nested-comments-dropped warning.
+        no_drop_warning: bool,
+    }
 
-    let out = Document::parse(src).unwrap();
-    assert!(
-        !out.warnings
-            .iter()
-            .any(|w| w.code.as_deref() == Some("parse::comments_in_nested_yaml_dropped")),
-        "no dropped-comment warning expected; nested comments are now preserved"
-    );
+    let cases = [
+        Case {
+            label: "top-level own-line comment",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\n# recipient's full name\nrecipient: Jane\nauthor: Alice\n~~~\n\nBody.\n",
+            contains: &["# recipient's full name"],
+            not_contains: &[],
+            value_check: Some(("recipient", "Jane")),
+            no_drop_warning: false,
+        },
+        Case {
+            label: "top-level trailing inline comment",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\ntitle: My Document # this is a comment\n~~~\n\nBody.\n",
+            contains: &["title: My Document # this is a comment"],
+            not_contains: &["My Document\n# this is a comment"],
+            value_check: Some(("title", "My Document")),
+            no_drop_warning: false,
+        },
+        Case {
+            label: "nested sequence comments (leading/between/trailing)",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\nitems:\n  # before-first\n  - a\n  # between\n  - b\n  # after-last\n~~~\n",
+            contains: &["# before-first", "# between", "# after-last"],
+            not_contains: &[],
+            value_check: None,
+            no_drop_warning: true,
+        },
+        Case {
+            label: "nested mapping comments (leading/trailing)",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\nouter:\n  # leading\n  inner: 1\n  # trailing\n~~~\n",
+            contains: &["# leading", "# trailing"],
+            not_contains: &[],
+            value_check: None,
+            no_drop_warning: false,
+        },
+        Case {
+            label: "nested sequence item trailing inline comment",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\nitems:\n  - a # inline\n  - b\n~~~\n",
+            contains: &["- a # inline"],
+            not_contains: &[],
+            value_check: None,
+            no_drop_warning: false,
+        },
+        Case {
+            label: "nested mapping field trailing inline comment",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\nouter:\n  inner: 1 # tail\n~~~\n",
+            contains: &["inner: 1 # tail"],
+            not_contains: &[],
+            value_check: None,
+            no_drop_warning: false,
+        },
+        Case {
+            label: "inline comment on a container key",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\nouter: # describes outer\n  inner: 1\n~~~\n",
+            contains: &["outer: # describes outer\n  inner: 1"],
+            not_contains: &[],
+            value_check: None,
+            no_drop_warning: false,
+        },
+        Case {
+            label: "own-line comment below $quill header (root payload)",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\n# main entry\ntitle: Hi\n~~~\n",
+            contains: &["~~~\n$quill: q\n$kind: main\n# main entry\n"],
+            not_contains: &[],
+            value_check: None,
+            no_drop_warning: false,
+        },
+        Case {
+            label: "own-line comment below $kind header (card payload)",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\n~~~card-yaml\n$kind: foo\n# the foo card\nx: 1\n~~~\n",
+            contains: &["~~~\n$kind: foo\n# the foo card\n"],
+            not_contains: &[],
+            value_check: None,
+            no_drop_warning: false,
+        },
+        Case {
+            label: "own-line comments flanking an inline comment",
+            src: "~~~card-yaml\n$quill: q\n$kind: main\n# header\ntitle: Hi # tail\n# footer\n~~~\n",
+            contains: &["# header\n", "title: Hi # tail\n", "# footer\n"],
+            not_contains: &[],
+            value_check: None,
+            no_drop_warning: false,
+        },
+    ];
 
-    let emitted = out.document.to_markdown();
-    assert!(
-        emitted.contains("# before-first"),
-        "leading nested comment must round-trip\nGot:\n{}",
-        emitted
-    );
-    assert!(
-        emitted.contains("# between"),
-        "between-items nested comment must round-trip\nGot:\n{}",
-        emitted
-    );
-    assert!(
-        emitted.contains("# after-last"),
-        "trailing nested comment must round-trip\nGot:\n{}",
-        emitted
-    );
+    for case in cases {
+        let out = Document::parse(case.src).unwrap();
+        if case.no_drop_warning {
+            assert!(
+                !out.warnings
+                    .iter()
+                    .any(|w| w.code.as_deref() == Some("parse::comments_in_nested_yaml_dropped")),
+                "[{}] no dropped-comment warning expected; nested comments are now preserved",
+                case.label
+            );
+        }
 
-    // Round-trip is idempotent across repeated parse/emit cycles.
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    let emitted2 = doc2.to_markdown();
-    assert_eq!(emitted, emitted2, "round-trip must be idempotent");
-}
+        let emitted = out.document.to_markdown();
+        for needle in case.contains {
+            assert!(
+                emitted.contains(needle),
+                "[{}] comment must survive round-trip at its position\nGot:\n{}",
+                case.label,
+                emitted
+            );
+        }
+        for needle in case.not_contains {
+            assert!(
+                !emitted.contains(needle),
+                "[{}] comment must not degrade to a different position\nGot:\n{}",
+                case.label,
+                emitted
+            );
+        }
 
-/// Comments inside nested mappings round-trip at the matching position.
-#[test]
-fn nested_mapping_comments_round_trip() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nouter:\n  # leading\n  inner: 1\n  # trailing\n~~~\n";
+        let doc2 = Document::parse(&emitted).unwrap().document;
+        if let Some((field, expected)) = case.value_check {
+            assert_eq!(
+                doc2.main().payload().get(field).and_then(|v| v.as_str()),
+                Some(expected),
+                "[{}] value must remain intact after round-trip",
+                case.label
+            );
+        }
 
-    let doc = Document::parse(src).unwrap().document;
-    let emitted = doc.to_markdown();
-    assert!(
-        emitted.contains("# leading"),
-        "leading nested mapping comment must round-trip\nGot:\n{}",
-        emitted
-    );
-    assert!(
-        emitted.contains("# trailing"),
-        "trailing nested mapping comment must round-trip\nGot:\n{}",
-        emitted
-    );
-
-    // Re-parse and idempotency.
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    let emitted2 = doc2.to_markdown();
-    assert_eq!(emitted, emitted2);
-}
-
-/// Trailing inline comments on nested sequence items round-trip inline.
-#[test]
-fn nested_sequence_inline_comments_round_trip() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nitems:\n  - a # inline\n  - b\n~~~\n";
-
-    let doc = Document::parse(src).unwrap().document;
-    let emitted = doc.to_markdown();
-    assert!(
-        emitted.contains("- a # inline"),
-        "trailing inline comment on a sequence item must round-trip on the same line\nGot:\n{}",
-        emitted
-    );
-
-    // Idempotent across repeated round-trips.
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    let emitted2 = doc2.to_markdown();
-    assert_eq!(emitted, emitted2, "round-trip must be idempotent");
-}
-
-/// Trailing inline comments on nested mapping fields round-trip inline.
-#[test]
-fn nested_mapping_inline_comments_round_trip() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nouter:\n  inner: 1 # tail\n~~~\n";
-
-    let doc = Document::parse(src).unwrap().document;
-    let emitted = doc.to_markdown();
-    assert!(
-        emitted.contains("inner: 1 # tail"),
-        "trailing inline comment on a nested mapping field must round-trip\nGot:\n{}",
-        emitted
-    );
-
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    let emitted2 = doc2.to_markdown();
-    assert_eq!(emitted, emitted2, "round-trip must be idempotent");
-}
-
-/// Inline comment on a container key (`outer: # tail`) lands on the key
-/// line, before the indented children.
-#[test]
-fn inline_on_container_key_round_trips() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nouter: # describes outer\n  inner: 1\n~~~\n";
-
-    let doc = Document::parse(src).unwrap().document;
-    let emitted = doc.to_markdown();
-    assert!(
-        emitted.contains("outer: # describes outer\n  inner: 1"),
-        "inline comment on a container key must land on the key line\nGot:\n{}",
-        emitted
-    );
-
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    let emitted2 = doc2.to_markdown();
-    assert_eq!(emitted, emitted2, "round-trip must be idempotent");
-}
-
-/// An own-line comment in the root payload — directly below the `$quill`
-/// metadata header — round-trips at its source position.
-#[test]
-fn root_payload_comment_round_trips() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\n# main entry\ntitle: Hi\n~~~\n";
-
-    let doc = Document::parse(src).unwrap().document;
-    let emitted = doc.to_markdown();
-    assert!(
-        emitted.starts_with("~~~\n$quill: q\n$kind: main\n# main entry\n"),
-        "own-line comment below the `$quill` header must round-trip\nGot:\n{}",
-        emitted
-    );
-
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    let emitted2 = doc2.to_markdown();
-    assert_eq!(emitted, emitted2, "round-trip must be idempotent");
-}
-
-/// An own-line comment in a card payload — directly below the `$kind`
-/// metadata header — round-trips at its source position.
-#[test]
-fn card_payload_comment_round_trips() {
-    let src =
-        "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\n~~~card-yaml\n$kind: foo\n# the foo card\nx: 1\n~~~\n";
-
-    let doc = Document::parse(src).unwrap().document;
-    let emitted = doc.to_markdown();
-    assert!(
-        emitted.contains("~~~\n$kind: foo\n# the foo card\n"),
-        "own-line comment below the `$kind` header must round-trip\nGot:\n{}",
-        emitted
-    );
-
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    let emitted2 = doc2.to_markdown();
-    assert_eq!(emitted, emitted2, "round-trip must be idempotent");
+        let emitted2 = doc2.to_markdown();
+        assert_eq!(
+            emitted, emitted2,
+            "[{}] round-trip must be idempotent",
+            case.label
+        );
+    }
 }
 
 /// Inline comment with `!must_fill` round-trips with the tag intact.
@@ -759,23 +696,6 @@ fn inline_on_empty_mapping_degrades_to_own_line() {
         "inline trailer for an omitted host must degrade to own-line\nGot:\n{}",
         emitted
     );
-}
-
-/// Mixed: own-line and inline comments referencing the same field.
-#[test]
-fn own_line_then_inline_round_trip() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\n# header\ntitle: Hi # tail\n# footer\n~~~\n";
-
-    let doc = Document::parse(src).unwrap().document;
-    let emitted = doc.to_markdown();
-
-    assert!(emitted.contains("# header\n"));
-    assert!(emitted.contains("title: Hi # tail\n"));
-    assert!(emitted.contains("# footer\n"));
-
-    let doc2 = Document::parse(&emitted).unwrap().document;
-    let emitted2 = doc2.to_markdown();
-    assert_eq!(emitted, emitted2, "round-trip must be idempotent");
 }
 
 /// A `!must_fill` marker on the *first* key of a sequence-item mapping

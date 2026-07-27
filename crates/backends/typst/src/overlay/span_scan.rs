@@ -1453,19 +1453,18 @@ main:
             .collect()
     }
 
-    /// The crux: transparent same-window ink between two hits of one segment
-    /// keeps the run — both accrue into one unioned box — while foreign ink in
-    /// the identical shape ends it, leaving only the first hit's extent.
-    /// Distinct rects make the difference visible (same-page union vs.
-    /// suppressed second hit).
-    #[test]
-    fn field_only_ink_is_transparent_but_foreign_ink_is_not() {
+    /// Shared crux for both ink-transparency tests below: `interrupt` between
+    /// two boxable hits of one segment keeps the run (both accrue into one
+    /// unioned box), while identically-placed foreign ink ends it, leaving
+    /// only the first hit's extent. Distinct rects make the difference
+    /// visible (same-page union vs. suppressed second hit).
+    fn assert_transparent_but_foreign_ink_is_not(interrupt: Hit) {
         let keys = vec![(0usize, Some(0usize))];
         let (a, b) = (aabb(0.0, 0.0, 1.0, 1.0), aabb(10.0, 10.0, 11.0, 11.0));
 
         let transparent = vec![
             boxable_hit(0, (0, Some(0)), a),
-            transparent_hit(0, 0),
+            interrupt,
             boxable_hit(0, (0, Some(0)), b),
         ];
         let boxes = run_scan_machine(&keys, &transparent);
@@ -1490,42 +1489,21 @@ main:
         );
     }
 
+    #[test]
+    fn field_only_ink_is_transparent_but_foreign_ink_is_not() {
+        assert_transparent_but_foreign_ink_is_not(transparent_hit(0, 0));
+    }
+
     /// #936: detached decoration ink (a `#underline`/`#strike` line) drawn
-    /// between two hits of one segment must keep the run — both accrue into one
-    /// unioned box — where identically-placed *foreign* ink would end it. The
-    /// underline case is exactly this shape: `Start `, then the decorated run's
-    /// glyphs, then the decoration `Shape` (detached span), then the trailing
-    /// plain run, all one segment. Foreign ink here would truncate the region
-    /// at the decoration, orphaning the trailing run.
+    /// between two hits of one segment must keep the run, where identically
+    /// placed *foreign* ink would end it. The underline case is exactly this
+    /// shape: `Start `, then the decorated run's glyphs, then the decoration
+    /// `Shape` (detached span), then the trailing plain run, all one segment.
+    /// Foreign ink here would truncate the region at the decoration,
+    /// orphaning the trailing run.
     #[test]
     fn anonymous_ink_is_transparent_but_foreign_ink_is_not() {
-        let keys = vec![(0usize, Some(0usize))];
-        let (a, b) = (aabb(0.0, 0.0, 1.0, 1.0), aabb(10.0, 10.0, 11.0, 11.0));
-
-        let anonymous = vec![
-            boxable_hit(0, (0, Some(0)), a),
-            anonymous_hit(0), // the underline/strike decoration Shape
-            boxable_hit(0, (0, Some(0)), b),
-        ];
-        let boxes = run_scan_machine(&keys, &anonymous);
-        assert_eq!(boxes[0].len(), 1, "one page-0 box");
-        let (_, bx) = boxes[0][0];
-        assert!(
-            bx.min_x <= 0.0 && bx.max_x >= 11.0,
-            "the box unions both hits — the decoration did not break the run"
-        );
-
-        let foreign = vec![
-            boxable_hit(0, (0, Some(0)), a),
-            foreign_hit(0),
-            boxable_hit(0, (0, Some(0)), b),
-        ];
-        let boxes = run_scan_machine(&keys, &foreign);
-        let (_, bx) = boxes[0][0];
-        assert!(
-            bx.max_x < 11.0,
-            "foreign ink still ends the run — only detached ink is exempt"
-        );
+        assert_transparent_but_foreign_ink_is_not(anonymous_hit(0)); // the underline/strike decoration Shape
     }
 
     /// Two adjacent segments of one field are tracked independently, exactly as

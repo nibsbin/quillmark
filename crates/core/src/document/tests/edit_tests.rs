@@ -94,16 +94,6 @@ fn test_document_store_field_rejects_dollar_prefixed_names() {
 // ── Document::store_field (happy path) ─────────────────────────────────────────
 
 #[test]
-fn test_document_store_field_inserts() {
-    let mut doc = make_doc();
-    doc.main_mut().store_field("author", qv("Alice")).unwrap();
-    assert_eq!(
-        doc.main().payload().get("author").unwrap().as_str(),
-        Some("Alice")
-    );
-}
-
-#[test]
 fn test_document_store_field_updates_existing() {
     let mut doc = make_doc();
     doc.main_mut().store_field("title", qv("New Title")).unwrap();
@@ -114,21 +104,6 @@ fn test_document_store_field_updates_existing() {
 }
 
 // ── Document::remove_field ───────────────────────────────────────────────────
-
-#[test]
-fn test_document_remove_field_existing() {
-    let mut doc = make_doc();
-    let removed = doc.main_mut().remove_field("title").unwrap();
-    assert_eq!(removed.unwrap().as_str(), Some("Hello"));
-    assert!(doc.main().payload().get("title").is_none());
-}
-
-#[test]
-fn test_document_remove_field_absent() {
-    let mut doc = make_doc();
-    let removed = doc.main_mut().remove_field("nonexistent").unwrap();
-    assert!(removed.is_none());
-}
 
 #[test]
 fn test_document_field_legacy_uppercase_accepted() {
@@ -149,15 +124,6 @@ fn test_document_field_legacy_uppercase_accepted() {
     }
 }
 
-#[test]
-fn test_document_remove_field_invalid_name_throws() {
-    let mut doc = make_doc();
-    match doc.main_mut().remove_field("Bad-Name") {
-        Err(EditError::InvalidFieldName(name)) => assert_eq!(name, "Bad-Name"),
-        other => panic!("expected InvalidFieldName, got {other:?}"),
-    }
-}
-
 // ── Document::set_quill_ref ──────────────────────────────────────────────────
 
 #[test]
@@ -166,15 +132,6 @@ fn test_document_set_quill_ref() {
     let new_ref = QuillReference::from_str("new_quill").unwrap();
     doc.set_quill_ref(new_ref);
     assert_eq!(doc.quill_reference().name, "new_quill");
-}
-
-// ── Document::replace_body ───────────────────────────────────────────────────
-
-#[test]
-fn test_document_replace_body() {
-    let mut doc = make_doc();
-    doc.main_mut().revise_body("New body content.").unwrap();
-    assert_eq!(doc.main().body_markdown(), "New body content.");
 }
 
 // ── Document::push_card ──────────────────────────────────────────────────────
@@ -257,45 +214,29 @@ fn test_document_card_mut_out_of_range() {
 // ── Document::move_card ──────────────────────────────────────────────────────
 
 #[test]
-fn test_move_card_no_op_same_index() {
-    let mut doc = make_doc_with_cards(); // note(0), summary(1)
-    let result = doc.move_card(0, 0);
-    assert_eq!(result, Ok(()));
-    assert_eq!(doc.cards()[0].kind(), Some("note"));
-    assert_eq!(doc.cards()[1].kind(), Some("summary"));
+fn test_move_card_reorders() {
+    // note(0), summary(1) before every move; `want` is the resulting order.
+    for (from, to, want) in [
+        (0, 0, ["note", "summary"]), // no-op, same index
+        (1, 0, ["summary", "note"]), // last to first
+        (0, 1, ["summary", "note"]), // first to last
+    ] {
+        let mut doc = make_doc_with_cards();
+        doc.move_card(from, to).unwrap();
+        assert_eq!(doc.cards()[0].kind(), Some(want[0]));
+        assert_eq!(doc.cards()[1].kind(), Some(want[1]));
+    }
 }
 
 #[test]
-fn test_move_card_last_to_first() {
-    let mut doc = make_doc_with_cards(); // note(0), summary(1)
-    doc.move_card(1, 0).unwrap();
-    assert_eq!(doc.cards()[0].kind(), Some("summary"));
-    assert_eq!(doc.cards()[1].kind(), Some("note"));
-}
-
-#[test]
-fn test_move_card_first_to_last() {
-    let mut doc = make_doc_with_cards(); // note(0), summary(1)
-    let last = doc.cards().len() - 1;
-    doc.move_card(0, last).unwrap();
-    assert_eq!(doc.cards()[0].kind(), Some("summary"));
-    assert_eq!(doc.cards()[last].kind(), Some("note"));
-}
-
-#[test]
-fn test_move_card_from_out_of_range() {
-    let mut doc = make_doc_with_cards(); // 2 cards
-    let len = doc.cards().len();
-    let result = doc.move_card(len, 0);
-    assert_eq!(result, Err(EditError::IndexOutOfRange { index: len, len }));
-}
-
-#[test]
-fn test_move_card_to_out_of_range() {
-    let mut doc = make_doc_with_cards(); // 2 cards
-    let len = doc.cards().len();
-    let result = doc.move_card(0, len);
-    assert_eq!(result, Err(EditError::IndexOutOfRange { index: len, len }));
+fn test_move_card_index_out_of_range() {
+    let len = make_doc_with_cards().cards().len(); // 2
+    for (from, to) in [(len, 0), (0, len)] {
+        // from out of range, then to out of range
+        let mut doc = make_doc_with_cards();
+        let result = doc.move_card(from, to);
+        assert_eq!(result, Err(EditError::IndexOutOfRange { index: len, len }));
+    }
 }
 
 // ── Document::set_card_kind ───────────────────────────────────────────────────

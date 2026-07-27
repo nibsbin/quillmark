@@ -130,39 +130,31 @@ fn fixtures_round_trip() {
 // ── Value type unit tests ─────────────────────────────────────────────────────
 
 #[test]
-fn round_trip_booleans() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nflag_true: true\nflag_false: false\n~~~\n";
-    assert_round_trip("booleans", src);
-}
-
-#[test]
-fn round_trip_null() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nnull_field: null\n~~~\n";
-    assert_round_trip("null", src);
-}
-
-#[test]
-fn round_trip_nested_map() {
-    let src =
-        "~~~card-yaml\n$quill: q\n$kind: main\nsender:\n  name: Alice\n  city: Springfield\n~~~\n";
-    assert_round_trip("nested map", src);
-}
-
-#[test]
-fn round_trip_sequence() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\ntags:\n  - demo\n  - test\n~~~\n";
-    assert_round_trip("sequence", src);
-}
-
-#[test]
-fn round_trip_empty_sequence() {
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nempty: []\n~~~\n";
-    assert_round_trip("empty sequence", src);
-}
-
-#[test]
-fn round_trip_cards() {
-    let src = "\
+fn round_trip_value_types() {
+    let cases: &[(&str, &str)] = &[
+        (
+            "booleans",
+            "~~~card-yaml\n$quill: q\n$kind: main\nflag_true: true\nflag_false: false\n~~~\n",
+        ),
+        (
+            "null",
+            "~~~card-yaml\n$quill: q\n$kind: main\nnull_field: null\n~~~\n",
+        ),
+        (
+            "nested map",
+            "~~~card-yaml\n$quill: q\n$kind: main\nsender:\n  name: Alice\n  city: Springfield\n~~~\n",
+        ),
+        (
+            "sequence",
+            "~~~card-yaml\n$quill: q\n$kind: main\ntags:\n  - demo\n  - test\n~~~\n",
+        ),
+        (
+            "empty sequence",
+            "~~~card-yaml\n$quill: q\n$kind: main\nempty: []\n~~~\n",
+        ),
+        (
+            "cards",
+            "\
 ~~~card-yaml
 $quill: q
 $kind: main
@@ -177,13 +169,11 @@ heading: Chapter 1
 ~~~
 
 Card body here.
-";
-    assert_round_trip("cards", src);
-}
-
-#[test]
-fn round_trip_card_empty_body() {
-    let src = "\
+",
+        ),
+        (
+            "card with empty body",
+            "\
 ~~~card-yaml
 $quill: q
 $kind: main
@@ -194,22 +184,23 @@ title: Test
 $kind: empty_body_card
 title: No body
 ~~~
-";
-    assert_round_trip("card with empty body", src);
-}
+",
+        ),
+        // String containing backslash and quotes — must survive as a string.
+        (
+            "string with backslash",
+            "~~~card-yaml\n$quill: q\n$kind: main\npath: \"C:\\\\Users\\\\test\"\n~~~\n",
+        ),
+        // A string containing a literal newline.
+        (
+            "multiline string",
+            "~~~card-yaml\n$quill: q\n$kind: main\nbio: \"Line one\\nLine two\"\n~~~\n",
+        ),
+    ];
 
-#[test]
-fn round_trip_string_with_escapes() {
-    // String containing backslash and quotes — must survive as a string.
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\npath: \"C:\\\\Users\\\\test\"\n~~~\n";
-    assert_round_trip("string with backslash", src);
-}
-
-#[test]
-fn round_trip_multiline_string() {
-    // A string containing a literal newline.
-    let src = "~~~card-yaml\n$quill: q\n$kind: main\nbio: \"Line one\\nLine two\"\n~~~\n";
-    assert_round_trip("multiline string", src);
+    for (label, src) in cases {
+        assert_round_trip(label, src);
+    }
 }
 
 #[test]

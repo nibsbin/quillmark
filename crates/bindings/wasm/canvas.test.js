@@ -108,6 +108,23 @@ function openSession() {
   return engine.open(quill, Document.fromMarkdown(TEST_MARKDOWN))
 }
 
+/** Asserts a captured `putImageData` call's RGBA buffer carries both visible
+ * ink (non-white, opaque pixels) and opaque background — catches a rasterizer
+ * regression that wrote zeros, swapped channels, or skipped demultiply.
+ * Shared by the typst and pdfform paint tests below; the two rasterizers
+ * differ, but this ink/opacity scan is the same check on either buffer. */
+function expectInkAndOpaquePixels(call) {
+  let inkPixels = 0
+  let opaquePixels = 0
+  for (let i = 0; i < call.data.length; i += 4) {
+    const [r, g, b, a] = [call.data[i], call.data[i + 1], call.data[i + 2], call.data[i + 3]]
+    if (a > 0 && (r < 250 || g < 250 || b < 250)) inkPixels++
+    if (a === 255) opaquePixels++
+  }
+  expect(inkPixels).toBeGreaterThan(0)
+  expect(opaquePixels).toBeGreaterThan(0)
+}
+
 describe('LiveSession canvas preview', () => {
   it('exposes pageCount, backendId, supportsCanvas, warnings, and pageSize on a Typst session', () => {
     const { engine, quill } = openQuill()
@@ -199,18 +216,8 @@ describe('LiveSession canvas preview', () => {
 
     // Pixel-content sanity. The test plate renders a title heading, so the
     // rasterized buffer must contain non-white pixels (visible glyph ink)
-    // *and* opaque pixels (page background). A regression that wrote zeros,
-    // swapped channels, or skipped demultiply would fail at least one of
-    // these.
-    let inkPixels = 0
-    let opaquePixels = 0
-    for (let i = 0; i < call.data.length; i += 4) {
-      const [r, g, b, a] = [call.data[i], call.data[i + 1], call.data[i + 2], call.data[i + 3]]
-      if (a > 0 && (r < 250 || g < 250 || b < 250)) inkPixels++
-      if (a === 255) opaquePixels++
-    }
-    expect(inkPixels).toBeGreaterThan(0)
-    expect(opaquePixels).toBeGreaterThan(0)
+    // *and* opaque pixels (page background).
+    expectInkAndOpaquePixels(call)
   })
 
   it('paint defaults layoutScale and densityScale to 1 when opts are omitted', () => {
@@ -344,15 +351,7 @@ describe('LiveSession canvas preview (pdfform backend)', () => {
     // baked into the page, so the buffer must carry non-white opaque ink
     // (field values + form lines) AND opaque page background. A backend that
     // returned only a blank background (no values) would fail the ink check.
-    let inkPixels = 0
-    let opaquePixels = 0
-    for (let i = 0; i < call.data.length; i += 4) {
-      const [r, g, b, a] = [call.data[i], call.data[i + 1], call.data[i + 2], call.data[i + 3]]
-      if (a > 0 && (r < 250 || g < 250 || b < 250)) inkPixels++
-      if (a === 255) opaquePixels++
-    }
-    expect(inkPixels).toBeGreaterThan(0)
-    expect(opaquePixels).toBeGreaterThan(0)
+    expectInkAndOpaquePixels(call)
   })
 })
 
