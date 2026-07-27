@@ -257,10 +257,10 @@ impl TryFrom<CardWire> for Card {
                 .map_err(|reason| WireError::InvalidQuillReference { value, reason })?;
             payload.set_quill(reference);
         }
-        // No `$kind` check here. This decoder validates what a detached card
-        // decides alone — field-name grammar, value depth, the `$quill`
-        // reference above. `$kind` validity is positional: `main` is right for
-        // the root and reserved for a composable card, and a `CardWire` carries
+        // No `$kind` check here. This decoder validates only what a detached
+        // card can decide alone: field-name grammar, value depth, the `$quill`
+        // reference above. `$kind` validity is positional — `main` is right for
+        // the root and reserved for a composable card — and a `CardWire` carries
         // no signal of which it is. So it belongs to `push_card`/`insert_card`,
         // which know the position and the sibling `$id`s, and which report
         // `edit::invalid_kind_name` / `edit::reserved_kind`.

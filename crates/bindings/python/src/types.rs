@@ -576,10 +576,10 @@ impl PyDocument {
     /// `remove_card` returns one, so a card round-trips without passing through
     /// here.
     ///
-    /// Rejects what a detached card decides alone — a malformed field name, an
-    /// over-deep value. Kind validity is positional (`main` is right for the
-    /// root, reserved for a composable card), so `insert_card` is the gate for
-    /// it, and this accepts any kind string. Mirrors WASM `Document.makeCard`.
+    /// Checks only what a detached card can decide alone: field-name grammar
+    /// and value depth. Kind validity is positional — `main` is right for the
+    /// root, reserved for a composable card — so `insert_card` is its gate, and
+    /// any kind string is accepted here. Mirrors WASM `Document.makeCard`.
     #[staticmethod]
     #[pyo3(signature = (kind, fields=None, body=None))]
     fn make_card<'py>(
