@@ -141,6 +141,14 @@ lowers markdown into the content (markdown-spec §6 is its normative acceptance
 surface); every downstream render walks the content. No render path parses
 markdown.
 
+The one other caller is `export` itself, deliberately: its safety net settles a
+line's markdown by re-importing it and dropping marks until the text comes back
+intact, because CommonMark's emphasis algorithm has corners no local rule
+captures. So export's correctness is *defined* by import — the two codecs cannot
+be changed independently, and `to_markdown` transitively depends on the parser.
+The cost is bounded per line rather than per mark (issue #1052); the trade is
+stated in the `export` module doc.
+
 ## Codegen integration
 
 `generate_lib_typ` (`helper.rs`) lowers each content field's content to a markup
