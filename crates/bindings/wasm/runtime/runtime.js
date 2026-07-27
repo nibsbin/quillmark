@@ -99,15 +99,19 @@ export function isQuillmarkError(e) {
 }
 
 // ── Open-set discriminant guards ────────────────────────────────────────────
-// `ContentIsland.type` and `ContentMark.type` are OPEN sets: each union carries
-// a residual `{ type: string; … }` arm, so a bare `x.type === 'table'` check
-// never narrows the payload — TS keeps the residual arm live (a `string` can be
-// `'table'`), leaving `props` / the mark payload opaque at every consumer. These
+// `ContentIsland.type`, `ContentMark.type`, `ContentLine.kind`, and
+// `ContentContainer.container` are OPEN sets: each union carries a residual
+// `{ …: string; … }` arm, so a bare `x.type === 'table'` check never narrows the
+// payload — TS keeps the residual arm live (a `string` can be `'table'`),
+// leaving `props` / the mark payload / `level` opaque at every consumer. These
 // are the checked narrowing path: on the true branch the payload's pinned shape
 // is asserted. Only the payload-carrying arms get a guard — an island always
-// carries `props`, a `link` mark carries `url`, an `anchor` mark carries `id`;
-// the bare marks (`strong`/`emph`/`underline`/`strike`/`code`) narrow to
-// nothing. An unrecognized `type` fails every guard and keeps its opaque payload.
+// carries `props`, a `link` mark carries `url`, an `anchor` mark carries `id`, a
+// `heading` line carries `level` and a `code` line `lang`, a `list_item`
+// container its shape; the payload-free arms (`strong`/`emph`/`underline`/
+// `strike`/`code` marks, `para`/`island`/`rule` lines, `quote`) narrow to
+// nothing. An unrecognized discriminant fails every guard and keeps its opaque
+// `attrs`/`props`.
 
 /**
  * @param {import('../core/wasm.js').ContentIsland} island
@@ -139,6 +143,30 @@ export function isLinkMark(mark) {
  */
 export function isAnchorMark(mark) {
 	return mark.type === 'anchor';
+}
+
+/**
+ * @param {import('../core/wasm.js').ContentLine} line
+ * @returns {line is import('../core/wasm.js').ContentLine & { kind: 'heading'; level: number }}
+ */
+export function isHeadingLine(line) {
+	return line.kind === 'heading';
+}
+
+/**
+ * @param {import('../core/wasm.js').ContentLine} line
+ * @returns {line is import('../core/wasm.js').ContentLine & { kind: 'code'; lang?: string }}
+ */
+export function isCodeLine(line) {
+	return line.kind === 'code';
+}
+
+/**
+ * @param {import('../core/wasm.js').ContentContainer} container
+ * @returns {container is import('../core/wasm.js').ContentContainer & { container: 'list_item'; ordered: boolean; start: number; ordinal: number }}
+ */
+export function isListItemContainer(container) {
+	return container.container === 'list_item';
 }
 
 // Backend builds are NEVER statically imported here — that would pull a

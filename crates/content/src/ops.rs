@@ -969,6 +969,22 @@ mod tests {
                 line: 2,
                 containers: vec![Container::Quote],
             },
+            // The open block vocabulary rides the same op wire (issue #1054):
+            // a host can set a role or a container this build does not know.
+            LineOp::SetKind {
+                line: 0,
+                kind: LineKind::Unknown {
+                    tag: "callout".into(),
+                    attrs: serde_json::json!({"variant": "warn"}),
+                },
+            },
+            LineOp::SetContainers {
+                line: 2,
+                containers: vec![Container::Unknown {
+                    tag: "indent".into(),
+                    attrs: serde_json::json!({"depth": 2}),
+                }],
+            },
             LineOp::SetContinues {
                 line: 1,
                 continues: true,

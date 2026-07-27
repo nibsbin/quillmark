@@ -188,8 +188,18 @@ void mainCardAddrIsCardAddr;
 // `x.type === 'table'` check cannot (the residual `{ type: string; … }` arm
 // stays live). Each `if` body reads a payload reachable only after narrowing, so
 // a guard that stops narrowing fails `npm run typecheck`. `ContentIsland`,
-// `TableProps`, `ImageProps`, and `ContentMark` are the types imported above.
-import { isTableIsland, isImageIsland, isLinkMark, isAnchorMark } from '../../../pkg/runtime/runtime.js';
+// `TableProps`, `ImageProps`, `ContentMark`, `ContentLine`, and
+// `ContentContainer` are the types imported above. (#1054 opened the block
+// vocabulary — `kind` and `container` — on the same terms.)
+import {
+	isTableIsland,
+	isImageIsland,
+	isLinkMark,
+	isAnchorMark,
+	isHeadingLine,
+	isCodeLine,
+	isListItemContainer
+} from '../../../pkg/runtime/runtime.js';
 
 declare const guardIsland: ContentIsland;
 if (isTableIsland(guardIsland)) {
@@ -209,4 +219,20 @@ if (isLinkMark(guardMark)) {
 if (isAnchorMark(guardMark)) {
 	const id: string = guardMark.id;
 	void id;
+}
+
+declare const guardLine: ContentLine;
+if (isHeadingLine(guardLine)) {
+	const level: number = guardLine.level;
+	void level;
+}
+if (isCodeLine(guardLine)) {
+	const lang: string | undefined = guardLine.lang;
+	void lang;
+}
+
+declare const guardContainer: ContentContainer;
+if (isListItemContainer(guardContainer)) {
+	const ordinal: number = guardContainer.ordinal;
+	void ordinal;
 }

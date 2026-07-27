@@ -122,15 +122,24 @@ export interface QuillmarkError extends Error {
 export declare function isQuillmarkError(e: unknown): e is QuillmarkError;
 
 // ── Open-set discriminant guards ────────────────────────────────────────────
-// `ContentIsland.type` / `ContentMark.type` are open sets — each union has a
-// residual `{ type: string; … }` arm, so a bare discriminant check never narrows
-// the payload (TS keeps the residual arm live, since a `string` can equal the
-// literal). These guards are the checked narrowing path for the pinned arms; an
-// unrecognized `type` fails every guard and keeps its opaque payload. Only the
-// payload-carrying arms get a guard — the bare marks
-// (`strong`/`emph`/`underline`/`strike`/`code`) narrow to nothing.
+// `ContentIsland.type`, `ContentMark.type`, `ContentLine.kind`, and
+// `ContentContainer.container` are open sets — each union has a residual
+// `{ …: string; … }` arm, so a bare discriminant check never narrows the payload
+// (TS keeps the residual arm live, since a `string` can equal the literal).
+// These guards are the checked narrowing path for the pinned arms; an
+// unrecognized discriminant fails every guard and keeps its opaque payload. Only
+// the payload-carrying arms get a guard — the bare marks
+// (`strong`/`emph`/`underline`/`strike`/`code`), the payload-free lines
+// (`para`/`island`/`rule`), and `quote` narrow to nothing.
 
-import type { ContentIsland, TableProps, ImageProps, ContentMark } from '../core/wasm.js';
+import type {
+	ContentIsland,
+	TableProps,
+	ImageProps,
+	ContentMark,
+	ContentLine,
+	ContentContainer
+} from '../core/wasm.js';
 
 /** Narrow a {@link ContentIsland} to the pinned `table` arm (`props: TableProps`). */
 export declare function isTableIsland(
@@ -151,6 +160,26 @@ export declare function isLinkMark(
 export declare function isAnchorMark(
 	mark: ContentMark
 ): mark is ContentMark & { type: 'anchor'; id: string };
+
+/** Narrow a {@link ContentLine} to the `heading` arm (carries `level`). */
+export declare function isHeadingLine(
+	line: ContentLine
+): line is ContentLine & { kind: 'heading'; level: number };
+
+/** Narrow a {@link ContentLine} to the `code` arm (carries `lang`). */
+export declare function isCodeLine(
+	line: ContentLine
+): line is ContentLine & { kind: 'code'; lang?: string };
+
+/** Narrow a {@link ContentContainer} to the `list_item` arm (carries its shape). */
+export declare function isListItemContainer(
+	container: ContentContainer
+): container is ContentContainer & {
+	container: 'list_item';
+	ordered: boolean;
+	start: number;
+	ordinal: number;
+};
 
 // ── Canonical render-side types ─────────────────────────────────────────────
 // These are the BACKEND-NEUTRAL render contract of the plural-backend API. They

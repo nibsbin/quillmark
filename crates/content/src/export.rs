@@ -1,10 +1,15 @@
-//! Markdown export: content → markdown, per island loss class.
+//! Markdown export: content → markdown, per island type.
 //!
-//! The projection back to markdown. Marks become syntax; islands are emitted per
-//! their [`Loss`] class; identity ([`MarkKind::Anchor`]) marks are **omitted** —
-//! they survive across edits via diff-rebase, not the projection (issue #831
-//! § Codecs). Anchors carry no markdown encoding, so dropping them here is by
-//! design, not loss.
+//! The projection back to markdown. Marks become syntax; islands are emitted
+//! per their type ([`Loss`](crate::model::Loss) describes fidelity, it does not
+//! gate the emit — see [`to_markdown`]); identity ([`MarkKind::Anchor`]) marks
+//! are **omitted** — they survive across edits via diff-rebase, not the
+//! projection (issue #831 § Codecs). Anchors carry no markdown encoding, so
+//! dropping them here is by design, not loss.
+//!
+//! The block vocabulary is open (issue #1054): a [`LineKind::Unknown`] projects
+//! as a paragraph and a [`Container::Unknown`] transparently, the block-axis
+//! twin of an unknown mark contributing no delimiters.
 //!
 //! The contract this crate pins is the **content fixed point**: for a content `rt`
 //! obtained from [`crate::import::from_markdown`],
@@ -30,8 +35,17 @@
 use crate::island::KnownIslandType;
 use crate::model::{Container, Island, LineKind, MarkKind, Content, ISLAND_SLOT};
 
-/// Render a content to markdown. Lossless/degraded islands emit their markdown;
-/// unrepresentable islands emit a placeholder comment.
+/// Render a content to markdown. An island projects by **type**: a type this
+/// build knows emits its markdown, any other a placeholder comment.
+///
+/// [`Loss`](crate::model::Loss) does not gate the emit and is not read here. It
+/// *describes* the projection's fidelity for a consumer to surface (issue
+/// #1043); the type is what decides whether a projection exists at all. Keeping
+/// the two apart is what makes a known type stamped `Unrepresentable` by a
+/// future writer's unrecognized loss class (`serial::loss_from_str` degrades to
+/// the safe end) still emit its table rather than swallow it behind a
+/// placeholder — the conservative default describes the value, it does not
+/// suppress it.
 pub fn to_markdown(rt: &Content) -> String {
     // Per-line char ranges, so global marks can be clipped to a line.
     let segments = line_segments(rt);
@@ -222,6 +236,11 @@ fn emit_container(
             // one quote on re-import.
             prefix_quote(&inner, out);
         }
+        // Open set: a container this build does not know has no markdown syntax
+        // to prefix with, so it projects transparently — its blocks land at the
+        // enclosing level. The container survives via storage, not the
+        // projection, exactly as an unknown island's props do.
+        Container::Unknown { .. } => out.push_str(&inner),
     }
 }
 
@@ -309,7 +328,9 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
             }
             out.push_str(&inline);
         }
-        LineKind::Para => {
+        // An unknown block role projects as a paragraph — the role is lost to
+        // markdown (it round-trips through storage), the text is not.
+        LineKind::Para | LineKind::Unknown { .. } => {
             // Join continuation lines with a backslash hard break.
             let parts: Vec<String> = range.map(|i| render_inline(ctx, i, true)).collect();
             out.push_str(&parts.join("\\\n"));
@@ -965,6 +986,50 @@ mod tests {
         let rt2 = from_markdown(&md).unwrap();
         assert_eq!(rt2.text, rt.text);
         assert_eq!(rt2.islands.len(), 1);
+    }
+
+    /// Issue #1054: an unknown block role projects as a paragraph and an unknown
+    /// container projects transparently — the older reader renders a future
+    /// construct as plain prose instead of refusing it. Text and marks survive;
+    /// only the role/container is lost, and only to *markdown* (both round-trip
+    /// through storage).
+    #[test]
+    fn unknown_block_vocabulary_projects_as_prose() {
+        let mut rt = Content {
+            text: "heads up\nstill inside".into(),
+            lines: vec![
+                Line {
+                    kind: LineKind::Unknown {
+                        tag: "callout".into(),
+                        attrs: serde_json::json!({"variant": "warn"}),
+                    },
+                    containers: vec![Container::Unknown {
+                        tag: "indent".into(),
+                        attrs: serde_json::Value::Null,
+                    }],
+                    continues: false,
+                },
+                Line {
+                    kind: LineKind::Para,
+                    containers: vec![Container::Unknown {
+                        tag: "indent".into(),
+                        attrs: serde_json::Value::Null,
+                    }],
+                    continues: false,
+                },
+            ],
+            marks: vec![Mark { start: 0, end: 5, kind: MarkKind::Strong }],
+            islands: vec![],
+        };
+        rt.normalize();
+        assert_eq!(rt.validate(), Ok(()));
+        // Two paragraphs at the top level: no container prefix, no placeholder.
+        assert_eq!(to_markdown(&rt), "**heads** up\n\nstill inside");
+        // An unknown container nested inside a known one keeps the known
+        // prefix and adds none of its own.
+        rt.lines[0].containers.insert(0, Container::Quote);
+        rt.lines[1].containers.insert(0, Container::Quote);
+        assert_eq!(to_markdown(&rt), "> **heads** up\n>\n> still inside");
     }
 
     /// [`to_plaintext`] keeps literal text, drops marks, and strips island
