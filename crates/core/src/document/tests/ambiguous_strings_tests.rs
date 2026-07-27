@@ -10,8 +10,7 @@
 //! here.
 //!
 //! `ambiguous_strings.md` declares every ambiguous field in one fixture, so
-//! all categories below share a single parse → emit → re-parse cycle instead
-//! of each re-parsing the fixture from scratch.
+//! all categories below share a single parse → emit → re-parse cycle.
 
 use crate::document::Document;
 
@@ -70,10 +69,7 @@ fn assert_string_field(doc: &Document, key: &str, expected: &str, when: &str) {
 
 /// Every ambiguous-string field declared in the fixture, grouped by the YAML
 /// 1.1 hazard it exercises, checked against one shared parse → emit →
-/// re-parse cycle. Previously each category below was its own `#[test]` that
-/// re-parsed the identical fixture solely to check its own slice of fields;
-/// merging them drops the redundant re-parses without dropping any
-/// assertion pair.
+/// re-parse cycle.
 #[test]
 fn ambiguous_strings_round_trip() {
     // `on`, `off`, `yes`, `no`, `true`, `false` are YAML 1.1 booleans.

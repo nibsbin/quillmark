@@ -299,8 +299,6 @@ fn fill_tag_all_scalar_types_round_trip() {
     }
 
     // Sequence shapes: block, flow (normalises to block on emit), and empty.
-    // Each needs its own document and a full-document equality check, so they
-    // get a sibling loop rather than a row in the scalar loop above.
     struct SeqCase {
         label: &'static str,
         key: &'static str,

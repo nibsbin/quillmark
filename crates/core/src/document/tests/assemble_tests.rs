@@ -321,9 +321,50 @@ Body of item 1.";
     assert_eq!(card.body_markdown(), "Body of item 1.");
 }
 
+// ── "N composable cards parse with correct kind/payload/order" (table-driven) ─
+// Each row parses `markdown` and checks the subset of {quill reference, main
+// payload fields, main body, per-card kind/fields/body in order} it sets. An
+// unset/`None` entry is not checked.
 #[test]
-fn test_multiple_card_blocks() {
-    let markdown = "~~~card-yaml
+fn cards_parse_with_correct_kind_payload_and_order() {
+    enum Expect {
+        Str(&'static str),
+        I64(i64),
+        F64(f64),
+    }
+
+    fn check_field(payload: &crate::document::Payload, key: &str, expect: &Expect, ctx: &str) {
+        let v = payload
+            .get(key)
+            .unwrap_or_else(|| panic!("{ctx}: missing field {key:?}"));
+        match expect {
+            Expect::Str(s) => assert_eq!(v.as_str().unwrap(), *s, "{ctx}: field {key:?}"),
+            Expect::I64(i) => assert_eq!(v.as_i64().unwrap(), *i, "{ctx}: field {key:?}"),
+            Expect::F64(f) => assert_eq!(v.as_f64().unwrap(), *f, "{ctx}: field {key:?}"),
+        }
+    }
+
+    struct ExpectedCard {
+        kind: Option<&'static str>,
+        fields: Vec<(&'static str, Expect)>,
+        body: Option<&'static str>,
+    }
+
+    struct Case {
+        name: &'static str,
+        markdown: &'static str,
+        quill: Option<&'static str>,
+        main_fields: Vec<(&'static str, Expect)>,
+        main_payload_len: Option<usize>,
+        main_body_eq: Option<&'static str>,
+        main_body_contains: Vec<&'static str>,
+        cards: Vec<ExpectedCard>,
+    }
+
+    let cases = vec![
+        Case {
+            name: "multiple_card_blocks",
+            markdown: "~~~card-yaml
 $quill: test_quill
 $kind: main
 ~~~
@@ -342,29 +383,28 @@ name: Item 2
 tags: [c, d]
 ~~~
 
-Second item body.";
-
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.cards().len(), 2);
-
-    let card1 = &doc.cards()[0];
-    assert_eq!(card1.kind(), Some("items"));
-    assert_eq!(
-        card1.payload().get("name").unwrap().as_str().unwrap(),
-        "Item 1"
-    );
-
-    let card2 = &doc.cards()[1];
-    assert_eq!(card2.kind(), Some("items"));
-    assert_eq!(
-        card2.payload().get("name").unwrap().as_str().unwrap(),
-        "Item 2"
-    );
-}
-
-#[test]
-fn test_mixed_global_and_cards() {
-    let markdown = "~~~card-yaml
+Second item body.",
+            quill: None,
+            main_fields: vec![],
+            main_payload_len: None,
+            main_body_eq: None,
+            main_body_contains: vec![],
+            cards: vec![
+                ExpectedCard {
+                    kind: Some("items"),
+                    fields: vec![("name", Expect::Str("Item 1"))],
+                    body: None,
+                },
+                ExpectedCard {
+                    kind: Some("items"),
+                    fields: vec![("name", Expect::Str("Item 2"))],
+                    body: None,
+                },
+            ],
+        },
+        Case {
+            name: "mixed_global_and_cards",
+            markdown: "~~~card-yaml
 $quill: test_quill
 $kind: main
 title: Global
@@ -385,17 +425,373 @@ $kind: sections
 title: Section 2
 ~~~
 
-Section 2 content.";
+Section 2 content.",
+            quill: None,
+            main_fields: vec![("title", Expect::Str("Global"))],
+            main_payload_len: None,
+            main_body_eq: Some("Global body."),
+            main_body_contains: vec![],
+            cards: vec![
+                ExpectedCard {
+                    kind: Some("sections"),
+                    fields: vec![],
+                    body: None,
+                },
+                ExpectedCard {
+                    kind: None,
+                    fields: vec![],
+                    body: None,
+                },
+            ],
+        },
+        Case {
+            name: "adjacent_blocks_different_kinds",
+            markdown: "~~~card-yaml
+$quill: test_quill
+$kind: main
+~~~
 
-    let doc = decompose(markdown).unwrap();
+~~~card-yaml
+$kind: items
+name: Item 1
+~~~
 
-    assert_eq!(
-        doc.main().payload().get("title").unwrap().as_str().unwrap(),
-        "Global"
-    );
-    assert_eq!(doc.main().body_markdown(), "Global body.");
-    assert_eq!(doc.cards().len(), 2);
-    assert_eq!(doc.cards()[0].kind(), Some("sections"));
+Item 1 body
+
+~~~card-yaml
+$kind: sections
+title: Section 1
+~~~
+
+Section 1 body",
+            quill: None,
+            main_fields: vec![],
+            main_payload_len: None,
+            main_body_eq: None,
+            main_body_contains: vec![],
+            cards: vec![
+                ExpectedCard {
+                    kind: Some("items"),
+                    fields: vec![("name", Expect::Str("Item 1"))],
+                    body: None,
+                },
+                ExpectedCard {
+                    kind: Some("sections"),
+                    fields: vec![("title", Expect::Str("Section 1"))],
+                    body: None,
+                },
+            ],
+        },
+        Case {
+            name: "order_preservation",
+            markdown: "~~~card-yaml
+$quill: test_quill
+$kind: main
+~~~
+
+~~~card-yaml
+$kind: items
+id: 1
+~~~
+
+First
+
+~~~card-yaml
+$kind: items
+id: 2
+~~~
+
+Second
+
+~~~card-yaml
+$kind: items
+id: 3
+~~~
+
+Third",
+            quill: None,
+            main_fields: vec![],
+            main_payload_len: None,
+            main_body_eq: None,
+            main_body_contains: vec![],
+            cards: vec![
+                ExpectedCard {
+                    kind: Some("items"),
+                    fields: vec![("id", Expect::I64(1))],
+                    body: None,
+                },
+                ExpectedCard {
+                    kind: Some("items"),
+                    fields: vec![("id", Expect::I64(2))],
+                    body: None,
+                },
+                ExpectedCard {
+                    kind: Some("items"),
+                    fields: vec![("id", Expect::I64(3))],
+                    body: None,
+                },
+            ],
+        },
+        Case {
+            name: "product_catalog_integration",
+            markdown: "~~~card-yaml
+$quill: test_quill
+$kind: main
+title: Product Catalog
+author: John Doe
+date: 2024-01-01
+~~~
+
+This is the main catalog description.
+
+~~~card-yaml
+$kind: products
+name: Widget A
+price: 19.99
+sku: WID-001
+~~~
+
+The **Widget A** is our most popular product.
+
+~~~card-yaml
+$kind: products
+name: Gadget B
+price: 29.99
+sku: GAD-002
+~~~
+
+The **Gadget B** is perfect for professionals.
+
+~~~card-yaml
+$kind: reviews
+product: Widget A
+rating: 5
+~~~
+
+\"Excellent product! Highly recommended.\"
+
+~~~card-yaml
+$kind: reviews
+product: Gadget B
+rating: 4
+~~~
+
+\"Very good, but a bit pricey.\"",
+            quill: None,
+            main_fields: vec![
+                ("title", Expect::Str("Product Catalog")),
+                ("author", Expect::Str("John Doe")),
+                ("date", Expect::Str("2024-01-01")),
+            ],
+            main_payload_len: Some(3),
+            main_body_eq: None,
+            main_body_contains: vec!["main catalog description"],
+            cards: vec![
+                ExpectedCard {
+                    kind: Some("products"),
+                    fields: vec![
+                        ("name", Expect::Str("Widget A")),
+                        ("price", Expect::F64(19.99)),
+                    ],
+                    body: None,
+                },
+                ExpectedCard {
+                    kind: Some("products"),
+                    fields: vec![("name", Expect::Str("Gadget B"))],
+                    body: None,
+                },
+                ExpectedCard {
+                    kind: Some("reviews"),
+                    fields: vec![
+                        ("product", Expect::Str("Widget A")),
+                        ("rating", Expect::I64(5)),
+                    ],
+                    body: None,
+                },
+                ExpectedCard {
+                    kind: None,
+                    fields: vec![],
+                    body: None,
+                },
+            ],
+        },
+        Case {
+            name: "quill_with_card_blocks",
+            markdown: "~~~card-yaml
+$quill: document
+$kind: main
+title: Test Document
+~~~
+
+Main body.
+
+~~~card-yaml
+$kind: sections
+name: Section 1
+~~~
+
+Section 1 body.",
+            quill: Some("document"),
+            main_fields: vec![("title", Expect::Str("Test Document"))],
+            main_payload_len: None,
+            main_body_eq: Some("Main body."),
+            main_body_contains: vec![],
+            cards: vec![ExpectedCard {
+                kind: Some("sections"),
+                fields: vec![],
+                body: None,
+            }],
+        },
+        Case {
+            name: "card_consecutive_blocks",
+            markdown: "~~~card-yaml
+$quill: test_quill
+$kind: main
+~~~
+
+~~~card-yaml
+$kind: a
+id: 1
+~~~
+
+~~~card-yaml
+$kind: a
+id: 2
+~~~",
+            quill: None,
+            main_fields: vec![],
+            main_payload_len: None,
+            main_body_eq: None,
+            main_body_contains: vec![],
+            cards: vec![
+                ExpectedCard {
+                    kind: Some("a"),
+                    fields: vec![],
+                    body: None,
+                },
+                ExpectedCard {
+                    kind: Some("a"),
+                    fields: vec![],
+                    body: None,
+                },
+            ],
+        },
+        // A multi-card document (root + two composable cards, prose thematic
+        // break in the root body) exercising the shapes described in
+        // markdown-spec.md. `***` (thematic break) has no content
+        // representation and is dropped by the projection; the surrounding
+        // paragraphs survive — hence `main_body_contains` rather than
+        // `main_body_eq`.
+        Case {
+            name: "spec_example",
+            markdown: "~~~card-yaml
+$quill: blog_post
+$kind: main
+title: My Document
+~~~
+
+Main document body.
+
+***
+
+More content after horizontal rule.
+
+~~~card-yaml
+$kind: section
+heading: Introduction
+~~~
+
+Introduction content.
+
+~~~card-yaml
+$kind: section
+heading: Conclusion
+~~~
+
+Conclusion content.
+",
+            quill: Some("blog_post"),
+            main_fields: vec![("title", Expect::Str("My Document"))],
+            main_payload_len: None,
+            main_body_eq: None,
+            main_body_contains: vec![
+                "Main document body.",
+                "More content after horizontal rule.",
+            ],
+            cards: vec![
+                ExpectedCard {
+                    kind: Some("section"),
+                    fields: vec![("heading", Expect::Str("Introduction"))],
+                    body: Some("Introduction content."),
+                },
+                ExpectedCard {
+                    kind: Some("section"),
+                    fields: vec![("heading", Expect::Str("Conclusion"))],
+                    body: Some("Conclusion content."),
+                },
+            ],
+        },
+    ];
+
+    for case in &cases {
+        let doc = decompose(case.markdown)
+            .unwrap_or_else(|e| panic!("{}: parse failed: {e}", case.name));
+
+        if let Some(quill) = case.quill {
+            assert_eq!(
+                doc.quill_reference().name,
+                quill,
+                "{}: quill name",
+                case.name
+            );
+        }
+        for (key, expect) in &case.main_fields {
+            check_field(
+                doc.main().payload(),
+                key,
+                expect,
+                &format!("{}: main", case.name),
+            );
+        }
+        if let Some(len) = case.main_payload_len {
+            assert_eq!(
+                doc.main().payload().len(),
+                len,
+                "{}: main payload len",
+                case.name
+            );
+        }
+        if let Some(body) = case.main_body_eq {
+            assert_eq!(doc.main().body_markdown(), body, "{}: main body", case.name);
+        }
+        for needle in &case.main_body_contains {
+            assert!(
+                doc.main().body_markdown().contains(needle),
+                "{}: main body missing {needle:?}",
+                case.name
+            );
+        }
+
+        assert_eq!(
+            doc.cards().len(),
+            case.cards.len(),
+            "{}: cards len",
+            case.name
+        );
+        for (i, expected) in case.cards.iter().enumerate() {
+            let card = &doc.cards()[i];
+            let ctx = format!("{}: card[{i}]", case.name);
+            if let Some(kind) = expected.kind {
+                assert_eq!(card.kind(), Some(kind), "{ctx} kind");
+            }
+            for (key, expect) in &expected.fields {
+                check_field(card.payload(), key, expect, &ctx);
+            }
+            if let Some(body) = expected.body {
+                assert_eq!(card.body_markdown(), body, "{ctx} body");
+            }
+        }
+    }
 }
 
 #[test]
@@ -438,9 +834,15 @@ name: Item
     assert_eq!(card.body_markdown(), ""); // empty, not absent
 }
 
+// ── card-kind / global-field name collision: is_ok()-only cases (table-driven) ─
+// `test_allowed_card_field_collision` (below) exercises the same collision
+// shape and additionally checks the resulting values.
 #[test]
-fn test_name_collision_global_and_card() {
-    let markdown = "~~~card-yaml
+fn card_kind_global_field_name_collision_is_allowed() {
+    let cases: &[(&str, &str)] = &[
+        (
+            "scalar global field",
+            "~~~card-yaml
 $quill: test_quill
 $kind: main
 items: \"global value\"
@@ -453,16 +855,11 @@ $kind: items
 name: Item
 ~~~
 
-Item body";
-
-    let result = decompose(markdown);
-    assert!(result.is_ok(), "Name collision should be allowed now");
-}
-
-#[test]
-fn test_card_name_collision_with_array_field() {
-    // Card kind names CAN conflict with payload field names.
-    let markdown = "~~~card-yaml
+Item body",
+        ),
+        (
+            "array-valued global field",
+            "~~~card-yaml
 $quill: test_quill
 $kind: main
 items:
@@ -477,18 +874,11 @@ $kind: items
 name: Scope Item 1
 ~~~
 
-Scope item 1 body";
-
-    let result = decompose(markdown);
-    assert!(
-        result.is_ok(),
-        "Collision with array field should be allowed"
-    );
-}
-
-#[test]
-fn test_empty_global_array_with_card() {
-    let markdown = "~~~card-yaml
+Scope item 1 body",
+        ),
+        (
+            "empty-array global field",
+            "~~~card-yaml
 $quill: test_quill
 $kind: main
 items: []
@@ -501,13 +891,16 @@ $kind: items
 name: Item 1
 ~~~
 
-Item 1 body";
+Item 1 body",
+        ),
+    ];
 
-    let result = decompose(markdown);
-    assert!(
-        result.is_ok(),
-        "Collision with empty array field should be allowed"
-    );
+    for (label, markdown) in cases {
+        assert!(
+            decompose(markdown).is_ok(),
+            "{label}: name collision should be allowed"
+        );
+    }
 }
 
 #[test]
@@ -570,216 +963,6 @@ More content.
     assert_eq!(doc.cards().len(), 0);
 }
 
-#[test]
-fn test_adjacent_blocks_different_kinds() {
-    let markdown = "~~~card-yaml
-$quill: test_quill
-$kind: main
-~~~
-
-~~~card-yaml
-$kind: items
-name: Item 1
-~~~
-
-Item 1 body
-
-~~~card-yaml
-$kind: sections
-title: Section 1
-~~~
-
-Section 1 body";
-
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.cards().len(), 2);
-
-    let card0 = &doc.cards()[0];
-    assert_eq!(card0.kind(), Some("items"));
-    assert_eq!(
-        card0.payload().get("name").unwrap().as_str().unwrap(),
-        "Item 1"
-    );
-
-    let card1 = &doc.cards()[1];
-    assert_eq!(card1.kind(), Some("sections"));
-    assert_eq!(
-        card1.payload().get("title").unwrap().as_str().unwrap(),
-        "Section 1"
-    );
-}
-
-#[test]
-fn test_order_preservation() {
-    let markdown = "~~~card-yaml
-$quill: test_quill
-$kind: main
-~~~
-
-~~~card-yaml
-$kind: items
-id: 1
-~~~
-
-First
-
-~~~card-yaml
-$kind: items
-id: 2
-~~~
-
-Second
-
-~~~card-yaml
-$kind: items
-id: 3
-~~~
-
-Third";
-
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.cards().len(), 3);
-
-    for (i, card) in doc.cards().iter().enumerate() {
-        assert_eq!(card.kind(), Some("items"));
-        let id = card.payload().get("id").unwrap().as_i64().unwrap();
-        assert_eq!(id, (i + 1) as i64);
-    }
-}
-
-#[test]
-fn test_product_catalog_integration() {
-    let markdown = "~~~card-yaml
-$quill: test_quill
-$kind: main
-title: Product Catalog
-author: John Doe
-date: 2024-01-01
-~~~
-
-This is the main catalog description.
-
-~~~card-yaml
-$kind: products
-name: Widget A
-price: 19.99
-sku: WID-001
-~~~
-
-The **Widget A** is our most popular product.
-
-~~~card-yaml
-$kind: products
-name: Gadget B
-price: 29.99
-sku: GAD-002
-~~~
-
-The **Gadget B** is perfect for professionals.
-
-~~~card-yaml
-$kind: reviews
-product: Widget A
-rating: 5
-~~~
-
-\"Excellent product! Highly recommended.\"
-
-~~~card-yaml
-$kind: reviews
-product: Gadget B
-rating: 4
-~~~
-
-\"Very good, but a bit pricey.\"";
-
-    let doc = decompose(markdown).unwrap();
-
-    // Verify global payload
-    assert_eq!(
-        doc.main().payload().get("title").unwrap().as_str().unwrap(),
-        "Product Catalog"
-    );
-    assert_eq!(
-        doc.main()
-            .payload()
-            .get("author")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "John Doe"
-    );
-    assert_eq!(
-        doc.main().payload().get("date").unwrap().as_str().unwrap(),
-        "2024-01-01"
-    );
-
-    // Verify global body
-    assert!(doc
-        .main()
-        .body_markdown()
-        .contains("main catalog description"));
-
-    // 4 cards total
-    assert_eq!(doc.cards().len(), 4);
-
-    // First 2 are products
-    assert_eq!(doc.cards()[0].kind(), Some("products"));
-    assert_eq!(
-        doc.cards()[0]
-            .payload()
-            .get("name")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "Widget A"
-    );
-    assert_eq!(
-        doc.cards()[0]
-            .payload()
-            .get("price")
-            .unwrap()
-            .as_f64()
-            .unwrap(),
-        19.99
-    );
-
-    assert_eq!(doc.cards()[1].kind(), Some("products"));
-    assert_eq!(
-        doc.cards()[1]
-            .payload()
-            .get("name")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "Gadget B"
-    );
-
-    // Last 2 are reviews
-    assert_eq!(doc.cards()[2].kind(), Some("reviews"));
-    assert_eq!(
-        doc.cards()[2]
-            .payload()
-            .get("product")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "Widget A"
-    );
-    assert_eq!(
-        doc.cards()[2]
-            .payload()
-            .get("rating")
-            .unwrap()
-            .as_i64()
-            .unwrap(),
-        5
-    );
-
-    // Payload has 3 fields: title, author, date
-    assert_eq!(doc.main().payload().len(), 3);
-}
-
 /// Flow-sequence YAML (`[a, b]`) reaches the payload as an array — the block
 /// form is covered by `emit_tests.rs::round_trip_sequence`.
 #[test]
@@ -798,34 +981,6 @@ This is the memo body.";
     assert_eq!(items.len(), 2);
     assert_eq!(items[0].as_str().unwrap(), "ORG/SYMBOL");
     assert_eq!(items[1].as_str().unwrap(), "OTHER/SYMBOL");
-}
-
-#[test]
-fn test_quill_with_card_blocks() {
-    let markdown = "~~~card-yaml
-$quill: document
-$kind: main
-title: Test Document
-~~~
-
-Main body.
-
-~~~card-yaml
-$kind: sections
-name: Section 1
-~~~
-
-Section 1 body.";
-
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.quill_reference().name, "document");
-    assert_eq!(
-        doc.main().payload().get("title").unwrap().as_str().unwrap(),
-        "Test Document"
-    );
-    assert_eq!(doc.cards().len(), 1);
-    assert_eq!(doc.cards()[0].kind(), Some("sections"));
-    assert_eq!(doc.main().body_markdown(), "Main body.");
 }
 
 #[test]
@@ -1509,9 +1664,23 @@ fn test_unicode_in_body() {
 
 // YAML edge cases
 
+// ── Single-field YAML scalar types (table-driven) ────────────────────────────
+// `|` (literal) and `>` (folded) block scalars are exercised nowhere else in
+// the workspace — keep them as explicit rows here.
 #[test]
-fn test_yaml_multiline_string() {
-    let markdown = "~~~card-yaml
+fn single_field_yaml_scalar_types() {
+    enum Check {
+        StrEq(&'static str),
+        StrContains(&'static [&'static str]),
+        I64Eq(i64),
+        F64Eq(f64),
+        BoolEq(bool),
+    }
+
+    let cases: &[(&str, &str, &[(&str, Check)])] = &[
+        (
+            "literal block scalar (`|`)",
+            "~~~card-yaml
 $quill: test_quill
 $kind: main
 description: |
@@ -1520,22 +1689,15 @@ description: |
   with preserved newlines.
 ~~~
 
-Body.";
-    let doc = decompose(markdown).unwrap();
-    let desc = doc
-        .main()
-        .payload()
-        .get("description")
-        .unwrap()
-        .as_str()
-        .unwrap();
-    assert!(desc.contains("multiline string"));
-    assert!(desc.contains('\n'));
-}
-
-#[test]
-fn test_yaml_folded_string() {
-    let markdown = "~~~card-yaml
+Body.",
+            &[(
+                "description",
+                Check::StrContains(&["multiline string", "\n"]),
+            )],
+        ),
+        (
+            "folded block scalar (`>`)",
+            "~~~card-yaml
 $quill: test_quill
 $kind: main
 description: >
@@ -1544,49 +1706,67 @@ description: >
   a single line.
 ~~~
 
-Body.";
-    let doc = decompose(markdown).unwrap();
-    let desc = doc
-        .main()
-        .payload()
-        .get("description")
-        .unwrap()
-        .as_str()
-        .unwrap();
-    assert!(desc.contains("folded"));
-}
+Body.",
+            &[("description", Check::StrContains(&["folded"]))],
+        ),
+        (
+            "empty string",
+            "~~~card-yaml\n$quill: test_quill\n$kind: main\nempty: \"\"\n~~~\n\nBody.",
+            &[("empty", Check::StrEq(""))],
+        ),
+        (
+            "special characters in a quoted string",
+            "~~~card-yaml\n$quill: test_quill\n$kind: main\nspecial: \"colon: here, and [brackets]\"\n~~~\n\nBody.",
+            &[(
+                "special",
+                Check::StrEq("colon: here, and [brackets]"),
+            )],
+        ),
+        (
+            "int/float/bool scalars",
+            "~~~card-yaml
+$quill: test_quill
+$kind: main
+count: 42
+price: 19.99
+active: true
+items:
+  - first
+  - 100
+  - true
+~~~
 
-#[test]
-fn test_yaml_null_value() {
-    let markdown = "~~~card-yaml\n$quill: test_quill\n$kind: main\noptional: null\n~~~\n\nBody.";
-    let doc = decompose(markdown).unwrap();
-    assert!(doc.main().payload().get("optional").unwrap().is_null());
-}
+Body.",
+            &[
+                ("count", Check::I64Eq(42)),
+                ("price", Check::F64Eq(19.99)),
+                ("active", Check::BoolEq(true)),
+            ],
+        ),
+    ];
 
-#[test]
-fn test_yaml_empty_string_value() {
-    let markdown = "~~~card-yaml\n$quill: test_quill\n$kind: main\nempty: \"\"\n~~~\n\nBody.";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(
-        doc.main().payload().get("empty").unwrap().as_str().unwrap(),
-        ""
-    );
-}
-
-#[test]
-fn test_yaml_special_characters_in_string() {
-    let markdown =
-        "~~~card-yaml\n$quill: test_quill\n$kind: main\nspecial: \"colon: here, and [brackets]\"\n~~~\n\nBody.";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(
-        doc.main()
-            .payload()
-            .get("special")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "colon: here, and [brackets]"
-    );
+    for (label, markdown, fields) in cases {
+        let doc = decompose(markdown).unwrap_or_else(|e| panic!("{label}: parse failed: {e}"));
+        for (key, check) in *fields {
+            let v = doc
+                .main()
+                .payload()
+                .get(key)
+                .unwrap_or_else(|| panic!("{label}: missing field {key:?}"));
+            match check {
+                Check::StrEq(s) => assert_eq!(v.as_str().unwrap(), *s, "{label}: {key}"),
+                Check::StrContains(needles) => {
+                    let s = v.as_str().unwrap();
+                    for n in *needles {
+                        assert!(s.contains(n), "{label}: {key} missing {n:?} in {s:?}");
+                    }
+                }
+                Check::I64Eq(i) => assert_eq!(v.as_i64().unwrap(), *i, "{label}: {key}"),
+                Check::F64Eq(f) => assert_eq!(v.as_f64().unwrap(), *f, "{label}: {key}"),
+                Check::BoolEq(b) => assert_eq!(v.as_bool().unwrap(), *b, "{label}: {key}"),
+            }
+        }
+    }
 }
 
 #[test]
@@ -1617,28 +1797,6 @@ Body.";
 }
 
 // Card block edge cases
-
-#[test]
-fn test_card_consecutive_blocks() {
-    let markdown = "~~~card-yaml
-$quill: test_quill
-$kind: main
-~~~
-
-~~~card-yaml
-$kind: a
-id: 1
-~~~
-
-~~~card-yaml
-$kind: a
-id: 2
-~~~";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(doc.cards().len(), 2);
-    assert_eq!(doc.cards()[0].kind(), Some("a"));
-    assert_eq!(doc.cards()[1].kind(), Some("a"));
-}
 
 #[test]
 fn test_card_with_body_containing_dashes() {
@@ -1782,39 +1940,6 @@ fn test_kind_name_validator() {
     }
 }
 
-#[test]
-fn test_scalar_types_survive_yaml_preprocessing() {
-    let markdown = "~~~card-yaml
-$quill: test_quill
-$kind: main
-count: 42
-price: 19.99
-active: true
-items:
-  - first
-  - 100
-  - true
-~~~
-
-Body.";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(
-        doc.main().payload().get("count").unwrap().as_i64().unwrap(),
-        42
-    );
-    assert_eq!(
-        doc.main().payload().get("price").unwrap().as_f64().unwrap(),
-        19.99
-    );
-    assert!(doc
-        .main()
-        .payload()
-        .get("active")
-        .unwrap()
-        .as_bool()
-        .unwrap());
-}
-
 // Guillemet preprocessing
 
 #[test]
@@ -1864,108 +1989,6 @@ Body
             .unwrap(),
         "My Card"
     );
-}
-
-#[test]
-fn test_yaml_custom_tags_in_payload() {
-    let markdown = "~~~card-yaml
-$quill: test_quill
-$kind: main
-memo_from: !must_fill 2d lt example
-regular_field: normal value
-~~~
-
-Body content.";
-    let doc = decompose(markdown).unwrap();
-    assert_eq!(
-        doc.main()
-            .payload()
-            .get("memo_from")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "2d lt example"
-    );
-    assert_eq!(
-        doc.main()
-            .payload()
-            .get("regular_field")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "normal value"
-    );
-    assert_eq!(doc.main().body_markdown(), "Body content.");
-}
-
-/// A multi-card document (root + two composable cards, prose thematic break
-/// in the root body) exercising the shapes described in markdown-spec.md.
-#[test]
-fn test_spec_example() {
-    let markdown = "~~~card-yaml
-$quill: blog_post
-$kind: main
-title: My Document
-~~~
-
-Main document body.
-
-***
-
-More content after horizontal rule.
-
-~~~card-yaml
-$kind: section
-heading: Introduction
-~~~
-
-Introduction content.
-
-~~~card-yaml
-$kind: section
-heading: Conclusion
-~~~
-
-Conclusion content.
-";
-
-    let doc = decompose(markdown).unwrap();
-
-    assert_eq!(
-        doc.main().payload().get("title").unwrap().as_str().unwrap(),
-        "My Document"
-    );
-    assert_eq!(doc.quill_reference().name, "blog_post");
-
-    let body = doc.main().body_markdown();
-    assert!(body.contains("Main document body."));
-    // `***` (thematic break) has no content representation and is dropped by the
-    // projection; the surrounding paragraphs survive.
-    assert!(body.contains("More content after horizontal rule."));
-
-    assert_eq!(doc.cards().len(), 2);
-    assert_eq!(doc.cards()[0].kind(), Some("section"));
-    assert_eq!(
-        doc.cards()[0]
-            .payload()
-            .get("heading")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "Introduction"
-    );
-    assert_eq!(doc.cards()[0].body_markdown(), "Introduction content.");
-    assert_eq!(doc.cards()[1].kind(), Some("section"));
-    assert_eq!(
-        doc.cards()[1]
-            .payload()
-            .get("heading")
-            .unwrap()
-            .as_str()
-            .unwrap(),
-        "Conclusion"
-    );
-    assert_eq!(doc.cards()[1].body_markdown(), "Conclusion content.");
 }
 
 // ── to_plate_json round-trip snapshot ─────────────────────────────────────────

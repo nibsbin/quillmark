@@ -372,9 +372,7 @@ describe('Quillmark.quill', () => {
     expect(() => Quill.fromTree(null)).toThrow()
   })
 
-  // Table-driven: quill.render(doc, opts) with each format literal, asserting
-  // the resulting artifact shape and mime type. `opts: undefined` covers the
-  // default-opts (implicit pdf) call form.
+  // `opts: undefined` is the two-argument call form, whose default is pdf.
   const RENDER_FORMAT_CASES = [
     { opts: undefined, mimeType: 'application/pdf' },
     { opts: { format: 'pdf' }, mimeType: 'application/pdf' },
