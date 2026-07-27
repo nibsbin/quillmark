@@ -2669,9 +2669,15 @@ card_kinds:
     );
 }
 
+// The fence guard delegates to the parser's own opener predicate
+// (`document::fences::is_card_yaml_opener_line`), whose grammar — bare `~~~`,
+// longer runs, indented, four-space, backtick, bare `---` — is exhaustively
+// covered in `document/tests/card_fence_tests.rs`. What is config's own is the
+// wiring: the guard runs over `main.body.example` and every card kind's, and it
+// stays quiet when there is no opener.
+
 #[test]
-fn body_example_with_card_yaml_fence_line_is_an_error() {
-    // A `~~~card-yaml` opener in a body example would be parsed as a block.
+fn body_example_fence_line_is_an_error_on_main_and_card_kinds() {
     let yaml = r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
@@ -2679,132 +2685,37 @@ main:
     example: "Opening paragraph.\n\n~~~card-yaml\n$kind: note\n~~~\n\nClosing paragraph."
   fields:
     title: { type: string }
+card_kinds:
+  note:
+    body:
+      example: "See below:\n~~~card-yaml\n$kind: other\n~~~\nEnd."
+    fields:
+      author: { type: string }
 "#;
-    let result = QuillConfig::from_yaml_with_warnings(yaml);
-    let errors = result.unwrap_err();
+    let errors = QuillConfig::from_yaml_with_warnings(yaml).unwrap_err();
+    let fence_labels: Vec<&str> = errors
+        .iter()
+        .filter(|d| d.code.as_deref() == Some("quill::body_example_contains_fence"))
+        .map(|d| d.message.as_str())
+        .collect();
+    assert_eq!(
+        fence_labels.len(),
+        2,
+        "both body-example sites are guarded, got: {errors:?}"
+    );
     assert!(
-        errors.iter().any(|d| d
-            .code
-            .as_deref()
-            .map(|c| c == "quill::body_example_contains_fence")
-            .unwrap_or(false)),
-        "expected body_example_contains_fence error, got: {:?}",
-        errors
+        fence_labels.iter().any(|m| m.contains("`main.body.example`"))
+            && fence_labels
+                .iter()
+                .any(|m| m.contains("`card_kinds.note.body.example`")),
+        "each error names its own site, got: {fence_labels:?}"
     );
 }
 
 #[test]
-fn body_example_indented_fence_line_is_not_an_error() {
-    // Card openers are at column zero; an indented `~~~card-yaml` (1–3 spaces)
-    // is an ordinary code block and cannot corrupt the blueprint, so it is not
-    // flagged.
-    let yaml = r#"
-quill: { name: x, version: 1.0.0, backend: typst, description: x }
-main:
-  body:
-    example: "text\n   ~~~card-yaml\nmore text"
-  fields:
-    title: { type: string }
-"#;
-    let result = QuillConfig::from_yaml_with_warnings(yaml);
-    assert!(
-        result.is_ok(),
-        "an indented ~~~card-yaml is a code block, not a card opener"
-    );
-}
-
-#[test]
-fn body_example_four_leading_spaces_is_not_a_fence() {
-    // Four leading spaces = indented code block, not a fence marker.
-    let yaml = r#"
-quill: { name: x, version: 1.0.0, backend: typst, description: x }
-main:
-  body:
-    example: "text\n    ~~~card-yaml\nmore text"
-  fields:
-    title: { type: string }
-"#;
-    let result = QuillConfig::from_yaml_with_warnings(yaml);
-    assert!(
-        result.is_ok(),
-        "four-space indented ~~~card-yaml should not trigger fence error"
-    );
-}
-
-#[test]
-fn body_example_bare_triple_dash_is_not_a_fence() {
-    // A bare `---` thematic break is not a metadata fence — allowed.
-    let yaml = r#"
-quill: { name: x, version: 1.0.0, backend: typst, description: x }
-main:
-  body:
-    example: "Opening paragraph.\n\n---\n\nClosing paragraph."
-  fields:
-    title: { type: string }
-"#;
-    let result = QuillConfig::from_yaml_with_warnings(yaml);
-    assert!(
-        result.is_ok(),
-        "a bare --- thematic break should not trigger a fence error"
-    );
-}
-
-#[test]
-fn body_example_bare_tilde_fence_line_is_an_error() {
-    // A bare `~~~` opener (the canonical card-yaml fence) in a body example
-    // would be parsed as a block and corrupt the blueprint.
-    let yaml = r#"
-quill: { name: x, version: 1.0.0, backend: typst, description: x }
-main:
-  body:
-    example: "Opening paragraph.\n\n~~~\n$kind: note\n~~~\n\nClosing paragraph."
-  fields:
-    title: { type: string }
-"#;
-    let result = QuillConfig::from_yaml_with_warnings(yaml);
-    let errors = result.unwrap_err();
-    assert!(
-        errors.iter().any(|d| d
-            .code
-            .as_deref()
-            .map(|c| c == "quill::body_example_contains_fence")
-            .unwrap_or(false)),
-        "expected body_example_contains_fence error for bare ~~~, got: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn body_example_four_tilde_fence_is_an_error() {
-    // A four-tilde fence is a (non-canonical) card opener, not a code block, so
-    // it would corrupt the blueprint and must be rejected in a body example.
-    let yaml = r#"
-quill: { name: x, version: 1.0.0, backend: typst, description: x }
-main:
-  body:
-    example: "See code:\n\n~~~~\n$kind: note\n~~~~\n\nEnd."
-  fields:
-    title: { type: string }
-"#;
-    let result = QuillConfig::from_yaml_with_warnings(yaml);
-    let errors = result.unwrap_err();
-    assert!(
-        errors.iter().any(|d| d
-            .code
-            .as_deref()
-            .map(|c| c == "quill::body_example_contains_fence")
-            .unwrap_or(false)),
-        "expected body_example_contains_fence error for ~~~~, got: {:?}",
-        errors
-    );
-}
-
-#[test]
-fn body_example_backtick_fence_is_allowed() {
+fn body_example_without_a_card_opener_is_accepted() {
     // A backtick fence is the escape hatch for a literal code block — it never
-    // opens a card-yaml block, so it is allowed in a body example. (The guard
-    // is line-based and conservative, so the example itself avoids bare `~~~`
-    // lines, which it would flag regardless of an enclosing fence.)
+    // opens a card-yaml block, so the guard stays quiet.
     let yaml = "
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
@@ -2816,35 +2727,7 @@ main:
     let result = QuillConfig::from_yaml_with_warnings(yaml);
     assert!(
         result.is_ok(),
-        "a backtick code fence should not trigger a card-fence error: {result:?}"
-    );
-}
-
-#[test]
-fn body_example_card_yaml_fence_line_in_card_kind_is_an_error() {
-    // The fence check applies to card-kind body examples too.
-    let yaml = r#"
-quill: { name: x, version: 1.0.0, backend: typst, description: x }
-main:
-  fields:
-    title: { type: string }
-card_kinds:
-  note:
-    body:
-      example: "See below:\n~~~card-yaml\n$kind: other\n~~~\nEnd."
-    fields:
-      author: { type: string }
-"#;
-    let result = QuillConfig::from_yaml_with_warnings(yaml);
-    let errors = result.unwrap_err();
-    assert!(
-        errors.iter().any(|d| d
-            .code
-            .as_deref()
-            .map(|c| c == "quill::body_example_contains_fence")
-            .unwrap_or(false)),
-        "expected body_example_contains_fence error for card kind, got: {:?}",
-        errors
+        "a backtick code fence must not trigger a card-fence error: {result:?}"
     );
 }
 
