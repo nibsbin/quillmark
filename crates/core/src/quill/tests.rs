@@ -767,43 +767,30 @@ fields:
 }
 
 #[test]
-fn test_quill_config_rejects_root_level_fields() {
-    let yaml = r#"
-quill:
-  name: root_fields_test
-  version: "1.0"
-  backend: typst
-  description: Root fields must not be used
+fn test_quill_config_rejects_non_snake_case_identifiers() {
+    // Each slot where a bare identifier appears — quill name, card-kind name,
+    // main field key, card field key — must reject non-snake_case input and
+    // name the offending identifier in the error.
+    struct Case {
+        yaml: &'static str,
+        bad_identifier: &'static str,
+        extra_contains: &'static str,
+    }
 
-fields:
-  title:
-    type: string
-"#;
-    let result = QuillConfig::from_yaml(yaml);
-    assert!(result.is_err());
-    assert!(result.unwrap_err().to_string().contains("main.fields"));
-}
-
-#[test]
-fn test_quill_config_rejects_non_snake_case_quill_name() {
-    let yaml = r#"
+    let cases = [
+        Case {
+            yaml: r#"
 quill:
   name: BadQuill
   version: "1.0"
   backend: typst
   description: Bad quill name
-"#;
-
-    let result = QuillConfig::from_yaml(yaml);
-    assert!(result.is_err());
-    let err = result.unwrap_err().to_string();
-    assert!(err.contains("BadQuill"));
-    assert!(err.contains("snake_case"));
-}
-
-#[test]
-fn test_quill_config_rejects_non_snake_case_card_name() {
-    let yaml = r#"
+"#,
+            bad_identifier: "BadQuill",
+            extra_contains: "snake_case",
+        },
+        Case {
+            yaml: r#"
 quill:
   name: good_quill
   version: "1.0"
@@ -815,13 +802,62 @@ card_kinds:
     fields:
       title:
         type: string
-"#;
+"#,
+            bad_identifier: "BadCard",
+            extra_contains: "[a-z_][a-z0-9_]*",
+        },
+        Case {
+            yaml: r#"
+quill:
+  name: bad_field_key
+  version: "1.0"
+  backend: typst
+  description: Bad main field key
 
-    let result = QuillConfig::from_yaml(yaml);
-    assert!(result.is_err());
-    let err = result.unwrap_err().to_string();
-    assert!(err.contains("BadCard"));
-    assert!(err.contains("[a-z_][a-z0-9_]*"));
+main:
+  fields:
+    BadField:
+      type: string
+"#,
+            bad_identifier: "BadField",
+            extra_contains: "snake_case",
+        },
+        Case {
+            yaml: r#"
+quill:
+  name: bad_card_field_key
+  version: "1.0"
+  backend: typst
+  description: Bad card field key
+
+card_kinds:
+  profile:
+    fields:
+      DisplayName:
+        type: string
+"#,
+            bad_identifier: "DisplayName",
+            extra_contains: "snake_case",
+        },
+    ];
+
+    for case in cases {
+        let result = QuillConfig::from_yaml(case.yaml);
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains(case.bad_identifier),
+            "expected error to contain {:?}, got: {}",
+            case.bad_identifier,
+            err
+        );
+        assert!(
+            err.contains(case.extra_contains),
+            "expected error to contain {:?}, got: {}",
+            case.extra_contains,
+            err
+        );
+    }
 }
 
 #[test]
@@ -842,51 +878,6 @@ card_kinds:
 
     let result = QuillConfig::from_yaml(yaml);
     assert!(result.is_ok());
-}
-
-#[test]
-fn test_quill_config_rejects_non_snake_case_main_field_keys() {
-    let yaml = r#"
-quill:
-  name: bad_field_key
-  version: "1.0"
-  backend: typst
-  description: Bad main field key
-
-main:
-  fields:
-    BadField:
-      type: string
-"#;
-
-    let result = QuillConfig::from_yaml(yaml);
-    assert!(result.is_err());
-    let err = result.unwrap_err().to_string();
-    assert!(err.contains("BadField"));
-    assert!(err.contains("snake_case"));
-}
-
-#[test]
-fn test_quill_config_rejects_non_snake_case_card_field_keys() {
-    let yaml = r#"
-quill:
-  name: bad_card_field_key
-  version: "1.0"
-  backend: typst
-  description: Bad card field key
-
-card_kinds:
-  profile:
-    fields:
-      DisplayName:
-        type: string
-"#;
-
-    let result = QuillConfig::from_yaml(yaml);
-    assert!(result.is_err());
-    let err = result.unwrap_err().to_string();
-    assert!(err.contains("DisplayName"));
-    assert!(err.contains("snake_case"));
 }
 
 #[test]
