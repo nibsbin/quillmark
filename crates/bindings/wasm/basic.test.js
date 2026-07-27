@@ -1429,8 +1429,8 @@ count: "nope"
 // blueprint emits a `!must_fill` marker, and render zero-fills it).
 //
 // The blueprint's exact text is pinned line-by-line in
-// `core/src/quill/blueprint.rs`, and zero-fill tolerance in
-// `quillmark/tests/default_values_test.rs`. What is JS-facing, and lives here:
+// `core/src/quill/blueprint.rs`, and the authored/default/zero ladder in
+// `core/src/quill/resolved.rs`. What is JS-facing, and lives here:
 // the schema DTO's shape, the blueprint crossing as a string, and a
 // `!must_fill` marker reaching both render and validate intact.
 //
@@ -1438,9 +1438,7 @@ count: "nope"
 
 describe('Unendorsed / Endorsed schema model', () => {
   // The plate `unwrap`s `data.title` (Unendorsed) and substitutes the optional
-  // `data.subtitle` if present. Authoring a quill with both Unendorsed and
-  // Endorsed fields lets us exercise both validation codes without having to
-  // ship two separate test quills.
+  // `data.subtitle` if present, so one quill carries both cell states.
   const SCHEMA_QUILL_YAML = `quill:
   name: schema_test
   version: "1.0"
