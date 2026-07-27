@@ -16,7 +16,6 @@ use wasm_bindgen::prelude::*;
 pub enum OutputFormat {
     Pdf,
     Svg,
-    Txt,
     Png,
 }
 
@@ -26,7 +25,6 @@ impl From<OutputFormat> for quillmark_core::OutputFormat {
         match format {
             OutputFormat::Pdf => quillmark_core::OutputFormat::Pdf,
             OutputFormat::Svg => quillmark_core::OutputFormat::Svg,
-            OutputFormat::Txt => quillmark_core::OutputFormat::Txt,
             OutputFormat::Png => quillmark_core::OutputFormat::Png,
         }
     }
@@ -38,7 +36,6 @@ impl From<quillmark_core::OutputFormat> for OutputFormat {
         match format {
             quillmark_core::OutputFormat::Pdf => OutputFormat::Pdf,
             quillmark_core::OutputFormat::Svg => OutputFormat::Svg,
-            quillmark_core::OutputFormat::Txt => OutputFormat::Txt,
             quillmark_core::OutputFormat::Png => OutputFormat::Png,
         }
     }
@@ -343,7 +340,7 @@ pub struct RenderOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub format: Option<OutputFormat>,
     /// Pixels per inch for raster output formats (PNG).
-    /// Ignored for vector/document formats (PDF, SVG, TXT).
+    /// Ignored for vector/document formats (PDF, SVG).
     /// Defaults to 144.0 (2x at 72pt/inch) when omitted.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ppi: Option<f32>,

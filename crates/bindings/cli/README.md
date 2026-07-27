@@ -102,7 +102,7 @@ quillmark render [OPTIONS] <QUILL_PATH> [MARKDOWN_FILE]
 
 **Options:**
 - `-o, --output <FILE>` - Output file path (default: derived from input filename)
-- `-f, --format <FORMAT>` - Output format: pdf, svg, png, txt (default: pdf)
+- `-f, --format <FORMAT>` - Output format: pdf, svg, png (default: pdf)
 - `--stdout` - Write output to stdout instead of file
 - `-v, --verbose` - Show detailed processing information
 - `--quiet` - Suppress all non-error output

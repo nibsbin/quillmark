@@ -61,7 +61,6 @@ mod tests {
         assert!(formats_support_canvas(&[Png]));
         // No visual-page format → no canvas.
         assert!(!formats_support_canvas(&[Pdf]));
-        assert!(!formats_support_canvas(&[Txt]));
         assert!(!formats_support_canvas(&[]));
     }
 }

@@ -29,7 +29,7 @@ use quillmark_core::{
     RenderOptions, RenderResult, RenderedRegion, Severity,
 };
 use quillmark_pdf::regions_of;
-use quillmark_pdf::{stamp, FieldSpec, PdfError, StampOptions};
+use quillmark_pdf::{stamp, FieldSpec, StampOptions};
 
 use {
     hayro::hayro_interpret::{font::FontQuery, InterpreterSettings},
@@ -92,7 +92,7 @@ impl Backend for PdfformBackend {
         // non-zero page origin); reading them from the background also surfaces
         // a malformed/out-of-contract base early. Read before binding so
         // geometry is placed once, at load.
-        let page_boxes = quillmark_pdf::page_media_boxes(&base_pdf).map_err(map_pdf_err)?;
+        let page_boxes = quillmark_pdf::page_media_boxes(&base_pdf)?;
 
         // Bind at load: resolve every field against the two static inputs — the
         // quill schema (kind, options, multiline, tooltip) and the page geometry
@@ -107,7 +107,7 @@ impl Backend for PdfformBackend {
         // Pre-flatten once so render_rgba / SVG / PNG renders have a
         // ready-to-rasterize flat PDF without re-running flatten on every
         // paint call.
-        let flat_pdf = flatten_to_pdf(base_pdf.clone(), &field_specs).map_err(map_pdf_err)?;
+        let flat_pdf = flatten_to_pdf(base_pdf.clone(), &field_specs)?;
 
         Ok(LiveSession::new(Box::new(PdfformSession {
             base_pdf,
@@ -157,7 +157,7 @@ impl SessionHandle for PdfformSession {
                     Severity::Error,
                     format!("{format:?} not supported by the pdfform backend"),
                 )
-                .with_code("pdfform::format_not_supported".to_string())
+                .with_code("backend::format_not_supported".to_string())
                 .with_hint(format!("Supported formats: {SUPPORTED_FORMATS:?}")),
             ));
         }
@@ -179,8 +179,7 @@ impl SessionHandle for PdfformSession {
         // never a PDF deliverable.
         let producer = Some(opts.producer.clone().unwrap_or_else(default_producer));
         let stamp_opts = StampOptions { producer };
-        let stamped =
-            stamp(self.base_pdf.clone(), &self.field_specs, &stamp_opts).map_err(map_pdf_err)?;
+        let stamped = stamp(self.base_pdf.clone(), &self.field_specs, &stamp_opts)?;
 
         Ok(RenderResult::new(
             vec![Artifact {
@@ -235,7 +234,7 @@ impl SessionHandle for PdfformSession {
     /// visible delta.
     fn apply(&mut self, json_data: &serde_json::Value) -> Result<ChangeSet, RenderError> {
         let field_specs = resolve_field_specs(&self.bound, json_data);
-        let flat_pdf = flatten_to_pdf(self.base_pdf.clone(), &field_specs).map_err(map_pdf_err)?;
+        let flat_pdf = flatten_to_pdf(self.base_pdf.clone(), &field_specs)?;
 
         let mut dirty_pages: Vec<usize> = self
             .field_specs
@@ -349,13 +348,6 @@ fn standard_font_settings() -> InterpreterSettings {
 /// product layer), never defaulted from the leaf spine's version.
 fn default_producer() -> String {
     format!("Quillmark {}", env!("CARGO_PKG_VERSION"))
-}
-
-/// Map a stamp-spine [`PdfError`] to the backend's `RenderError` at the boundary.
-fn map_pdf_err(e: PdfError) -> RenderError {
-    RenderError::from_diag(
-        Diagnostic::new(Severity::Error, e.message).with_code(e.code.to_string()),
-    )
 }
 
 /// A single-diagnostic `RenderError` with `code`.

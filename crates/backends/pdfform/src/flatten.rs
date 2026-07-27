@@ -23,8 +23,7 @@
 
 use quillmark_pdf::{
     reader::{
-        err, extract_outer_dict, find_dict_value, find_object_bytes, splice_dict_value,
-        UpdatedObject,
+        extract_outer_dict, find_dict_value, find_object_bytes, splice_dict_value, UpdatedObject,
     },
     writer::{alloc_id, dict_object, pdf_escape, winansi_encode},
     FieldSpec, FieldType, PdfError, PdfUpdate, CHECKBOX_ON_STATE,
@@ -93,9 +92,9 @@ pub fn flatten(base: Vec<u8>, fields: &[FieldSpec]) -> Result<Vec<u8>, PdfError>
 
         let page_obj_id = page_ids[page_idx];
         let (s, e) = find_object_bytes(&pdf, page_obj_id)
-            .ok_or_else(|| err(CODE_PARSE, format!("page object {page_obj_id} not found")))?;
+            .ok_or_else(|| PdfError::new(CODE_PARSE, format!("page object {page_obj_id} not found")))?;
         let pg_dict = extract_outer_dict(&pdf[s..e])
-            .ok_or_else(|| err(CODE_PARSE, "page dict not parseable"))?;
+            .ok_or_else(|| PdfError::new(CODE_PARSE, "page dict not parseable"))?;
 
         let new_pg = rewrite_page_for_flatten(pg_dict, helv_id, zadb_id, stream_id)?;
         up.objects.push(dict_object(page_obj_id, &new_pg));
@@ -242,7 +241,7 @@ fn add_content_stream(pg_dict: &[u8], stream_id: u32) -> Result<Vec<u8>, PdfErro
                 let end = trimmed
                     .iter()
                     .rposition(|&b| b == b']')
-                    .ok_or_else(|| err(CODE_PARSE, "/Contents array missing ]"))?;
+                    .ok_or_else(|| PdfError::new(CODE_PARSE, "/Contents array missing ]"))?;
                 let inner = String::from_utf8_lossy(&trimmed[1..end]);
                 format!("[{} {ref_str}]", inner.trim())
             } else {
@@ -282,13 +281,13 @@ fn add_font_resource(pg_dict: &[u8], name: &str, font_id: u32) -> Result<Vec<u8>
             if !res_val.trim_ascii().starts_with(b"<<") {
                 // Indirect /Resources ref: cannot inject the named font, and the
                 // emitted `/Helv`/`/ZaDb` Tf operators would not resolve.
-                return Err(err(
+                return Err(PdfError::new(
                     CODE_PARSE,
                     "page /Resources is an indirect reference; flatten requires inline resources",
                 ));
             }
             let res_inner = extract_outer_dict(res_val)
-                .ok_or_else(|| err(CODE_PARSE, "page /Resources dict not parseable"))?;
+                .ok_or_else(|| PdfError::new(CODE_PARSE, "page /Resources dict not parseable"))?;
 
             // Build new_res_inner with /Helv injected into /Font.
             let new_res_inner: Vec<u8> = match find_dict_value(res_inner, "Font") {
@@ -300,14 +299,14 @@ fn add_font_resource(pg_dict: &[u8], name: &str, font_id: u32) -> Result<Vec<u8>
                 Some(font_val) => {
                     if !font_val.trim_ascii().starts_with(b"<<") {
                         // Indirect /Font ref: same unresolvable-name problem.
-                        return Err(err(
+                        return Err(PdfError::new(
                             CODE_PARSE,
                             "page /Resources /Font is an indirect reference; flatten requires \
                              an inline /Font dict",
                         ));
                     }
                     let font_inner = extract_outer_dict(font_val).ok_or_else(|| {
-                        err(CODE_PARSE, "page /Resources /Font dict not parseable")
+                        PdfError::new(CODE_PARSE, "page /Resources /Font dict not parseable")
                     })?;
                     // Build new font dict value.
                     let mut new_font_val = b"<< ".to_vec();

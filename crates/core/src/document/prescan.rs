@@ -31,7 +31,7 @@ use crate::Severity;
 /// `Comment.inline` distinguishes own-line from trailing inline comments;
 /// inline comments immediately follow their host `Field` in the item stream.
 #[derive(Debug, Clone, PartialEq)]
-pub enum PreItem {
+pub(crate) enum PreItem {
     Field { key: String, fill: bool },
     Comment { text: String, inline: bool },
 }
@@ -59,7 +59,7 @@ pub struct NestedComment {
 
 /// Output of [`prescan_fence_content`].
 #[derive(Debug, Clone, Default)]
-pub struct PreScan {
+pub(crate) struct PreScan {
     /// YAML with `!must_fill` tags stripped and comment lines removed; fed to serde_saphyr.
     pub cleaned_yaml: String,
     /// Top-level fields and comments in source order.
@@ -88,7 +88,7 @@ enum FrameKind {
     Sequence,
 }
 
-pub fn prescan_fence_content(content: &str) -> PreScan {
+pub(crate) fn prescan_fence_content(content: &str) -> PreScan {
     let mut out = PreScan::default();
 
     let lines: Vec<&str> = content.split('\n').collect();

@@ -3,8 +3,6 @@
 /// Output formats supported by backends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 pub enum OutputFormat {
-    /// Plain text output
-    Txt,
     /// Scalable Vector Graphics output
     Svg,
     /// Portable Document Format output
@@ -16,14 +14,9 @@ pub enum OutputFormat {
 impl OutputFormat {
     /// Every output format, in a stable order. Bindings enumerate this for
     /// choice lists and error messages instead of hand-listing the variants.
-    pub const ALL: [OutputFormat; 4] = [
-        OutputFormat::Pdf,
-        OutputFormat::Svg,
-        OutputFormat::Png,
-        OutputFormat::Txt,
-    ];
+    pub const ALL: [OutputFormat; 3] = [OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Png];
 
-    /// The lowercase string id (`"pdf"`, `"svg"`, `"png"`, `"txt"`). This is the
+    /// The lowercase string id (`"pdf"`, `"svg"`, `"png"`). This is the
     /// single source of truth for the format ↔ string mapping every binding and
     /// the CLI share.
     pub fn as_str(&self) -> &'static str {
@@ -31,7 +24,6 @@ impl OutputFormat {
             OutputFormat::Pdf => "pdf",
             OutputFormat::Svg => "svg",
             OutputFormat::Png => "png",
-            OutputFormat::Txt => "txt",
         }
     }
 
@@ -42,7 +34,6 @@ impl OutputFormat {
             OutputFormat::Pdf => "application/pdf",
             OutputFormat::Svg => "image/svg+xml",
             OutputFormat::Png => "image/png",
-            OutputFormat::Txt => "text/plain",
         }
     }
 }
@@ -79,7 +70,6 @@ impl std::str::FromStr for OutputFormat {
             "pdf" => Ok(OutputFormat::Pdf),
             "svg" => Ok(OutputFormat::Svg),
             "png" => Ok(OutputFormat::Png),
-            "txt" => Ok(OutputFormat::Txt),
             other => Err(ParseOutputFormatError(other.to_string())),
         }
     }
@@ -133,7 +123,7 @@ pub struct RenderOptions {
     /// Optional output format specification
     pub output_format: Option<OutputFormat>,
     /// Pixels per inch for raster output formats (e.g., PNG).
-    /// Ignored for vector/document formats (PDF, SVG, TXT).
+    /// Ignored for vector/document formats (PDF, SVG).
     /// Defaults to 144.0 (2x at 72pt/inch) when `None`.
     pub ppi: Option<f32>,
     /// Optional 0-based page indices to render (e.g., `vec![0, 2]` for
@@ -147,7 +137,7 @@ pub struct RenderOptions {
     pub pages: Option<Vec<usize>>,
     /// Override for the PDF `/Info` `/Producer` metadata string. `None` uses
     /// the backend default (`Quillmark <version>` for the Typst backend).
-    /// Applies to PDF output only; ignored by SVG/PNG/TXT.
+    /// Applies to PDF output only; ignored by SVG/PNG.
     pub producer: Option<String>,
     /// Populate [`RenderResult::regions`](crate::RenderResult) with the
     /// schema-field geometry sidecar (the same entries

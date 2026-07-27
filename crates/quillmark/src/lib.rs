@@ -18,10 +18,14 @@
 
 // Re-export core types for convenience. `Quill` is the single quill type
 // (portable, declarative data); construct it from an in-memory tree with
-// `Quill::from_tree`, or from disk with the `quill_from_path` helper below.
+// `Quill::from_tree` — taking `FileTreeNode` and `QuillIgnore` from here — or
+// from disk with the `quill_from_path` helper below. Neither path needs a
+// direct `quillmark-core` dependency. `QuillConfig` and the schema types come
+// along, since a caller holding a `Quill` reads its schema through them.
 pub use quillmark_core::{
-    Artifact, Backend, Card, ChangeSet, Delta, Diagnostic, Document, LiveSession, Location,
-    OutputFormat, ParseError, Parsed, Quill, RenderError, RenderOptions, RenderResult,
+    Artifact, Backend, Card, CardSchema, ChangeSet, Delta, Diagnostic, Document, FieldSchema,
+    FieldType, FileTreeNode, LiveSession, Location, OutputFormat, ParseError, Parsed, Quill,
+    QuillConfig, QuillIgnore, RenderError, RenderOptions, RenderResult, ValidationError,
     Content, Severity,
 };
 

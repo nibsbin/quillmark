@@ -103,8 +103,10 @@ def test_engine_render_regions_sidecar(engine, taro_quill_dir, taro_md):
 
     Mirrors the WASM regions contract: each entry is a dict carrying `field`,
     `page`, `rect`, and `span` (the covered USV content range for content ink,
-    `None` for a scalar/widget). The taro plate interpolates `$body`, so the
-    markdown body auto-tags at least one `$body` segment region carrying a span.
+    `None` for a scalar/widget). `field` is a `DocPath` address, translated from
+    the backend's plate space at the boundary, so the main body reads
+    `main.body` and a card field `cards.<kind>[<i>].<field>`. The taro plate
+    interpolates the body, so it auto-tags at least one segment carrying a span.
     """
     quill = Quill.from_path(str(taro_quill_dir))
     parsed = Document.from_markdown(taro_md)
@@ -119,12 +121,17 @@ def test_engine_render_regions_sidecar(engine, taro_quill_dir, taro_md):
         assert isinstance(r["page"], int)
         assert isinstance(r["rect"], list) and len(r["rect"]) == 4
         assert r["span"] is None or (isinstance(r["span"], list) and len(r["span"]) == 2)
-    body_segments = [r for r in regions if r["field"] == "$body"]
+        # Plate-space spellings (`$body`, `$cards.<kind>.<ordinal>.`) must not
+        # reach a caller — they name nothing any document API accepts.
+        assert not r["field"].startswith("$"), (
+            f"untranslated plate address: {r['field']}"
+        )
+    body_segments = [r for r in regions if r["field"] == "main.body"]
     assert body_segments, (
-        f"expected a `$body` region; got: {[r['field'] for r in regions]}"
+        f"expected a `main.body` region; got: {[r['field'] for r in regions]}"
     )
     assert any(r["span"] is not None for r in body_segments), (
-        "a `$body` content segment carries a content span"
+        "a `main.body` content segment carries a content span"
     )
 
 

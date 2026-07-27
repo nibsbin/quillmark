@@ -42,7 +42,6 @@ py_enum! {
     pub enum PyOutputFormat / "OutputFormat" {
         PDF,
         SVG,
-        TXT,
         PNG,
     }
 }
@@ -59,7 +58,6 @@ impl From<PyOutputFormat> for OutputFormat {
         match val {
             PyOutputFormat::PDF => OutputFormat::Pdf,
             PyOutputFormat::SVG => OutputFormat::Svg,
-            PyOutputFormat::TXT => OutputFormat::Txt,
             PyOutputFormat::PNG => OutputFormat::Png,
         }
     }
@@ -70,7 +68,6 @@ impl From<OutputFormat> for PyOutputFormat {
         match val {
             OutputFormat::Pdf => PyOutputFormat::PDF,
             OutputFormat::Svg => PyOutputFormat::SVG,
-            OutputFormat::Txt => PyOutputFormat::TXT,
             OutputFormat::Png => PyOutputFormat::PNG,
         }
     }

@@ -512,7 +512,7 @@ impl Quillmark {
             warnings,
             output_format: result.output_format.into(),
             render_time_ms: now_ms() - start,
-            regions: regions_to_docpath(result.regions, &kinds)
+            regions: quillmark_core::regions_to_doc_path(result.regions, &kinds)
                 .into_iter()
                 .map(Into::into)
                 .collect(),
@@ -1613,8 +1613,16 @@ impl Document {
     /// Build a fresh `Card` from a kind and a flat field map — the ergonomic
     /// constructor for `insertCard`. `fields` is an optional
     /// `Record<string, unknown>` (each entry becomes a card field, in
-    /// insertion order); `body` defaults to `""`. Kind validity is checked by
-    /// `insertCard`, not here.
+    /// insertion order); `body` defaults to `""`.
+    ///
+    /// Sugar, not a required step: `insertCard` takes any `Card` object, and
+    /// `removeCard` returns one, so a card round-trips without passing through
+    /// here.
+    ///
+    /// Checks only what a detached card can decide alone: field-name grammar
+    /// and value depth. Kind validity is positional — `main` is right for the
+    /// root, reserved for a composable card — so `insertCard` is its gate, and
+    /// any kind string is accepted here.
     #[wasm_bindgen(js_name = makeCard, unchecked_return_type = "Card")]
     pub fn make_card(
         kind: String,
@@ -2427,23 +2435,6 @@ fn docpath_to_plate(addr: &str, kinds: &[Option<&str>]) -> String {
         .unwrap_or_else(|| addr.to_string())
 }
 
-/// Rewrite every region's plate-space `field` to its `DocPath` string — the one
-/// funnel both the session queries (`regions`) and the render sidecar route
-/// through, so a `FieldRegion` that crosses the boundary always speaks `DocPath`.
-#[cfg(any(feature = "typst", feature = "pdfform"))]
-fn regions_to_docpath(
-    regions: Vec<quillmark_core::RenderedRegion>,
-    kinds: &[Option<&str>],
-) -> Vec<quillmark_core::RenderedRegion> {
-    regions
-        .into_iter()
-        .map(|mut r| {
-            r.field = plate_to_docpath(&r.field, kinds);
-            r
-        })
-        .collect()
-}
-
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 impl LiveSession {
     /// The card-kind lookup as `&[Option<&str>]` for the core translators —
@@ -2529,7 +2520,7 @@ impl LiveSession {
             output_format: result.output_format.into(),
             render_time_ms: now_ms() - start,
             // Same `DocPath` grammar as `regions()` — one address grammar per session.
-            regions: regions_to_docpath(result.regions, &self.kinds())
+            regions: quillmark_core::regions_to_doc_path(result.regions, &self.kinds())
                 .into_iter()
                 .map(Into::into)
                 .collect(),
@@ -2547,7 +2538,7 @@ impl LiveSession {
     /// Empty for backends that place no schema fields.
     #[wasm_bindgen(js_name = regions, unchecked_return_type = "FieldRegion[]")]
     pub fn regions(&self) -> Result<JsValue, JsValue> {
-        let regions: Vec<FieldRegion> = regions_to_docpath(self.inner.regions(), &self.kinds())
+        let regions: Vec<FieldRegion> = quillmark_core::regions_to_doc_path(self.inner.regions(), &self.kinds())
             .into_iter()
             .map(Into::into)
             .collect();
@@ -2568,7 +2559,7 @@ impl LiveSession {
         // `field` is a DocPath address; the backend filters in plate space.
         let kinds = self.kinds();
         let plate = docpath_to_plate(field, &kinds);
-        let boxes: Vec<FieldRegion> = regions_to_docpath(self.inner.field_boxes(&plate), &kinds)
+        let boxes: Vec<FieldRegion> = quillmark_core::regions_to_doc_path(self.inner.field_boxes(&plate), &kinds)
             .into_iter()
             .map(Into::into)
             .collect();

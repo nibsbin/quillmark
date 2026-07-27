@@ -127,12 +127,12 @@ pub struct CardWire {
     /// The card body as canonical Content-JSON — the source-of-truth content
     /// model (a content object, `{text, lines, marks, islands}`). The empty content
     /// when absent. A markdown string is also accepted on input (imported), so an
-    /// LLM/markdown writer can still hand a string here.
+    /// LLM/markdown writer can hand a string here.
     ///
-    /// No `body_markdown` projection rides this wire: the eager `export ∘ body`
-    /// precompute was dropped (the delimiter-safety fix makes `to_markdown`
-    /// re-parse every rendered line, so it is no longer cheap) in favor of the
-    /// on-demand `exportMarkdown(body)` codec at the binding boundary.
+    /// No `body_markdown` projection rides this wire. Delimiter safety makes
+    /// `to_markdown` re-parse every rendered line, so an eager `export ∘ body`
+    /// precompute is not cheap; the `exportMarkdown(body)` codec at the binding
+    /// boundary does it on demand instead.
     #[serde(default)]
     pub body: JsonValue,
 }
@@ -257,6 +257,17 @@ impl TryFrom<CardWire> for Card {
                 .map_err(|reason| WireError::InvalidQuillReference { value, reason })?;
             payload.set_quill(reference);
         }
+        // No `$kind` check here. This decoder validates only what a detached
+        // card can decide alone: field-name grammar, value depth, the `$quill`
+        // reference above. `$kind` validity is positional — `main` is right for
+        // the root and reserved for a composable card — and a `CardWire` carries
+        // no signal of which it is. So it belongs to `push_card`/`insert_card`,
+        // which know the position and the sibling `$id`s, and which report
+        // `edit::invalid_kind_name` / `edit::reserved_kind`.
+        //
+        // Checking the context-free half (the `[a-z_][a-z0-9_]*` grammar) here
+        // would split one user-facing concept across two error types, and the
+        // earlier `WireError` would shadow the routable `EditError` code.
         if !wire.kind.is_empty() {
             payload.set_kind(wire.kind);
         }
@@ -479,5 +490,23 @@ mod tests {
         })
         .unwrap_err();
         assert!(matches!(err, WireError::InvalidQuillReference { .. }));
+    }
+
+    /// Construction accepts a kind the mutators reject: `make_card` is
+    /// permissive data-shaping and `insert_card` is the gate, so the grammar
+    /// check belongs there, not here.
+    #[test]
+    fn card_wire_accepts_any_kind() {
+        let card = Card::try_from(CardWire {
+            kind: "BadKind".to_string(),
+            quill: None,
+            id: None,
+            ext: None,
+            seed: None,
+            payload_items: Vec::new(),
+            body: JsonValue::Null,
+        })
+        .expect("construction does not police the kind grammar");
+        assert_eq!(card.kind(), Some("BadKind"));
     }
 }

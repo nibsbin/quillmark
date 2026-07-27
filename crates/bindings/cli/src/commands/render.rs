@@ -21,7 +21,7 @@ pub struct RenderArgs {
     #[arg(short, long, value_name = "FILE")]
     output: Option<PathBuf>,
 
-    /// Output format: pdf, svg, png, txt
+    /// Output format: pdf, svg, png
     #[arg(short, long, value_name = "FORMAT", default_value = "pdf")]
     format: String,
 

@@ -291,7 +291,7 @@ export interface RenderResult {
 }
 
 /** Canonical contract every backend build must satisfy. The emittable formats. */
-export type OutputFormat = 'pdf' | 'svg' | 'txt' | 'png';
+export type OutputFormat = 'pdf' | 'svg' | 'png';
 
 /**
  * Canonical contract every backend build must satisfy. Page geometry in pt.

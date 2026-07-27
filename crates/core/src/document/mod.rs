@@ -111,7 +111,7 @@ pub mod fences;
 pub mod limits;
 pub mod meta;
 pub mod payload;
-pub mod prescan;
+pub(crate) mod prescan;
 pub mod wire;
 pub(crate) mod yaml_hints;
 
@@ -119,6 +119,8 @@ pub use dto::{peek_schema_version, StorageError, StoredDocument, SCHEMA_V0_93_0}
 pub use edit::EditError;
 pub use meta::{is_valid_kind_name, validate_composable_kind, CardKindError};
 pub use payload::{MetaKey, Payload, PayloadItem};
+// Reachable through `PayloadItem::nested_comments`, so nameable from here.
+pub use prescan::{CommentPathSegment, NestedComment};
 pub use wire::{CardWire, PayloadItemWire, WireError};
 
 /// Authoring-format rules for the `~~~` card-yaml markdown surface.

@@ -9,6 +9,7 @@ license.workspace = true
 documentation = "https://docs.rs/quillmark-pdf"
 homepage.workspace = true
 repository = "https://github.com/borb-sh/quillmark"
+publish = true
 
 [dependencies]
 quillmark-core = { workspace = true }
