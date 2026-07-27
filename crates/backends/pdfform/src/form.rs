@@ -335,21 +335,16 @@ mod tests {
     }
 
     #[test]
-    fn rejects_foreign_schema_tag() {
-        let json = br#"{ "schema": "something/else@1", "fields": [] }"#;
-        assert!(matches!(
-            FormSpec::parse(json),
-            Err(FormParseError::BadSchema(_))
-        ));
-    }
-
-    #[test]
-    fn rejects_unknown_form_version_as_bad_schema() {
-        let json = br#"{ "schema": "quillmark/form@9.9.9", "fields": [] }"#;
-        assert!(matches!(
-            FormSpec::parse(json),
-            Err(FormParseError::BadSchema(_))
-        ));
+    fn rejects_bad_schema_tag() {
+        for json in [
+            br#"{ "schema": "something/else@1", "fields": [] }"#.as_slice(),
+            br#"{ "schema": "quillmark/form@9.9.9", "fields": [] }"#.as_slice(),
+        ] {
+            assert!(matches!(
+                FormSpec::parse(json),
+                Err(FormParseError::BadSchema(_))
+            ));
+        }
     }
 
     #[test]

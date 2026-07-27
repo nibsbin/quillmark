@@ -147,59 +147,30 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_strip_bidi_no_change() {
-        assert_eq!(strip_bidi_formatting("hello world"), "hello world");
-        assert_eq!(strip_bidi_formatting(""), "");
-        assert_eq!(strip_bidi_formatting("**bold** text"), "**bold** text");
-    }
+    fn test_strip_bidi_formatting_cases() {
+        let cases: &[(&str, &str)] = &[
+            ("hello world", "hello world"),
+            ("", ""),
+            ("**bold** text", "**bold** text"),
+            ("he\u{202D}llo", "hello"),
+            ("**asdf** or \u{202D}**(1234**", "**asdf** or **(1234**"),
+            ("a\u{200E}b\u{200F}c", "abc"),
+            ("\u{202A}text\u{202B}more\u{202C}", "textmore"),
+            ("\u{2066}a\u{2067}b\u{2068}c\u{2069}", "abc"),
+            (
+                "\u{061C}\u{200E}\u{200F}\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}",
+                "",
+            ),
+            ("hello\u{061C}world", "helloworld"),
+            ("\u{061C}**bold**", "**bold**"),
+            ("你好世界", "你好世界"),
+            ("مرحبا", "مرحبا"),
+            ("🎉", "🎉"),
+        ];
 
-    #[test]
-    fn test_strip_bidi_lro() {
-        assert_eq!(strip_bidi_formatting("he\u{202D}llo"), "hello");
-        assert_eq!(
-            strip_bidi_formatting("**asdf** or \u{202D}**(1234**"),
-            "**asdf** or **(1234**"
-        );
-    }
-
-    #[test]
-    fn test_strip_bidi_marks() {
-        assert_eq!(strip_bidi_formatting("a\u{200E}b\u{200F}c"), "abc");
-    }
-
-    #[test]
-    fn test_strip_bidi_embeddings() {
-        assert_eq!(
-            strip_bidi_formatting("\u{202A}text\u{202B}more\u{202C}"),
-            "textmore"
-        );
-    }
-
-    #[test]
-    fn test_strip_bidi_isolates() {
-        assert_eq!(
-            strip_bidi_formatting("\u{2066}a\u{2067}b\u{2068}c\u{2069}"),
-            "abc"
-        );
-    }
-
-    #[test]
-    fn test_strip_bidi_all_chars() {
-        let all_bidi = "\u{061C}\u{200E}\u{200F}\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}";
-        assert_eq!(strip_bidi_formatting(all_bidi), "");
-    }
-
-    #[test]
-    fn test_strip_bidi_arabic_letter_mark() {
-        assert_eq!(strip_bidi_formatting("hello\u{061C}world"), "helloworld");
-        assert_eq!(strip_bidi_formatting("\u{061C}**bold**"), "**bold**");
-    }
-
-    #[test]
-    fn test_strip_bidi_unicode_preserved() {
-        assert_eq!(strip_bidi_formatting("你好世界"), "你好世界");
-        assert_eq!(strip_bidi_formatting("مرحبا"), "مرحبا");
-        assert_eq!(strip_bidi_formatting("🎉"), "🎉");
+        for (input, expected) in cases {
+            assert_eq!(strip_bidi_formatting(input), *expected, "input: {:?}", input);
+        }
     }
 
     #[test]
@@ -220,103 +191,63 @@ mod tests {
     }
 
     #[test]
-    fn test_fix_html_comment_no_comment() {
-        assert_eq!(fix_html_comment_fences("hello world"), "hello world");
-        assert_eq!(fix_html_comment_fences("**bold** text"), "**bold** text");
-        assert_eq!(fix_html_comment_fences(""), "");
-    }
+    fn test_fix_html_comment_fences_cases() {
+        let cases: &[(&str, &str)] = &[
+            ("hello world", "hello world"),
+            ("**bold** text", "**bold** text"),
+            ("", ""),
+            (
+                "<!-- comment -->Same line text",
+                "<!-- comment -->\nSame line text",
+            ),
+            (
+                "<!-- comment -->\nNext line text",
+                "<!-- comment -->\nNext line text",
+            ),
+            (
+                "<!-- comment -->   \nSome text",
+                "<!-- comment -->   \nSome text",
+            ),
+            (
+                "<!--\nmultiline\ncomment\n-->Trailing text",
+                "<!--\nmultiline\ncomment\n-->\nTrailing text",
+            ),
+            (
+                "<!--\nmultiline\n-->\n\nParagraph text",
+                "<!--\nmultiline\n-->\n\nParagraph text",
+            ),
+            (
+                "<!-- first -->Text\n\n<!-- second -->More text",
+                "<!-- first -->\nText\n\n<!-- second -->\nMore text",
+            ),
+            (
+                "Some text before <!-- comment -->",
+                "Some text before <!-- comment -->",
+            ),
+            ("-->some text", "-->some text"),
+            // The first <!-- opens, the first --> closes; inner <!-- is just text.
+            ("<!-- <!-- -->Trailing", "<!-- <!-- -->\nTrailing"),
+            (
+                "<!-- valid -->FixMe\ntext --> Ignore\n<!-- valid2 -->FixMe2",
+                "<!-- valid -->\nFixMe\ntext --> Ignore\n<!-- valid2 -->\nFixMe2",
+            ),
+            (
+                "<!-- comment -->\r\nSome text",
+                "<!-- comment -->\r\nSome text",
+            ),
+            (
+                "<!--- comment --->Trailing text",
+                "<!--- comment --->\nTrailing text",
+            ),
+        ];
 
-    #[test]
-    fn test_fix_html_comment_single_line_trailing_text() {
-        assert_eq!(
-            fix_html_comment_fences("<!-- comment -->Same line text"),
-            "<!-- comment -->\nSame line text"
-        );
+        for (input, expected) in cases {
+            assert_eq!(
+                fix_html_comment_fences(input),
+                *expected,
+                "input: {:?}",
+                input
+            );
+        }
     }
-
-    #[test]
-    fn test_fix_html_comment_already_newline() {
-        assert_eq!(
-            fix_html_comment_fences("<!-- comment -->\nNext line text"),
-            "<!-- comment -->\nNext line text"
-        );
-    }
-
-    #[test]
-    fn test_fix_html_comment_only_whitespace_after() {
-        assert_eq!(
-            fix_html_comment_fences("<!-- comment -->   \nSome text"),
-            "<!-- comment -->   \nSome text"
-        );
-    }
-
-    #[test]
-    fn test_fix_html_comment_multiline_trailing_text() {
-        assert_eq!(
-            fix_html_comment_fences("<!--\nmultiline\ncomment\n-->Trailing text"),
-            "<!--\nmultiline\ncomment\n-->\nTrailing text"
-        );
-    }
-
-    #[test]
-    fn test_fix_html_comment_multiline_proper() {
-        assert_eq!(
-            fix_html_comment_fences("<!--\nmultiline\n-->\n\nParagraph text"),
-            "<!--\nmultiline\n-->\n\nParagraph text"
-        );
-    }
-
-    #[test]
-    fn test_fix_html_comment_multiple_comments() {
-        assert_eq!(
-            fix_html_comment_fences("<!-- first -->Text\n\n<!-- second -->More text"),
-            "<!-- first -->\nText\n\n<!-- second -->\nMore text"
-        );
-    }
-
-    #[test]
-    fn test_fix_html_comment_end_of_string() {
-        assert_eq!(
-            fix_html_comment_fences("Some text before <!-- comment -->"),
-            "Some text before <!-- comment -->"
-        );
-    }
-
-    #[test]
-    fn test_fix_html_comment_arrow_not_comment() {
-        assert_eq!(fix_html_comment_fences("-->some text"), "-->some text");
-    }
-
-    #[test]
-    fn test_fix_html_comment_nested_opener() {
-        // The first <!-- opens, the first --> closes; inner <!-- is just text.
-        assert_eq!(
-            fix_html_comment_fences("<!-- <!-- -->Trailing"),
-            "<!-- <!-- -->\nTrailing"
-        );
-    }
-
-    #[test]
-    fn test_fix_html_comment_multiple_valid_invalid() {
-        let input = "<!-- valid -->FixMe\ntext --> Ignore\n<!-- valid2 -->FixMe2";
-        let expected = "<!-- valid -->\nFixMe\ntext --> Ignore\n<!-- valid2 -->\nFixMe2";
-        assert_eq!(fix_html_comment_fences(input), expected);
-    }
-
-    #[test]
-    fn test_fix_html_comment_crlf() {
-        assert_eq!(
-            fix_html_comment_fences("<!-- comment -->\r\nSome text"),
-            "<!-- comment -->\r\nSome text"
-        );
-    }
-
-    #[test]
-    fn test_fix_html_comment_triple_hyphen_single_line() {
-        assert_eq!(
-            fix_html_comment_fences("<!--- comment --->Trailing text"),
-            "<!--- comment --->\nTrailing text"
-        );
-    }
-
 }
