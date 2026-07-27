@@ -571,8 +571,15 @@ impl PyDocument {
     /// Build a fresh `Card` dict from a kind and a flat field mapping — the
     /// ergonomic constructor for `insert_card`. `fields` maps field name → value
     /// (each becomes a card field, in insertion order); `body` defaults to `""`.
-    /// Kind validity is checked by `insert_card`, not here. Mirrors WASM
-    /// `Document.makeCard`.
+    ///
+    /// Sugar, not a required step: `insert_card` takes any card dict, and
+    /// `remove_card` returns one, so a card round-trips without passing through
+    /// here.
+    ///
+    /// Rejects what a detached card decides alone — a malformed field name, an
+    /// over-deep value. Kind validity is positional (`main` is right for the
+    /// root, reserved for a composable card), so `insert_card` is the gate for
+    /// it, and this accepts any kind string. Mirrors WASM `Document.makeCard`.
     #[staticmethod]
     #[pyo3(signature = (kind, fields=None, body=None))]
     fn make_card<'py>(

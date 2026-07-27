@@ -232,8 +232,12 @@ def test_insert_card_accepts_content_dict_body():
 
 
 def test_make_card_accepts_any_kind_insert_card_is_the_gate():
-    """make_card is permissive data-shaping; the kind invariant is enforced at
-    insert_card, not construction."""
+    """make_card accepts any kind string; insert_card is the gate.
+
+    Not blanket permissiveness — make_card still rejects a malformed field name
+    or an over-deep value. The line is what a detached card can decide alone:
+    kind validity is positional, so only insert_card can rule on it, and it is
+    the one reporting `edit::invalid_kind_name`."""
     card = Document.make_card("BadKind", {"x": 1})
     assert card["kind"] == "BadKind"  # construction succeeds
     doc = Document.from_markdown(SIMPLE_MD)

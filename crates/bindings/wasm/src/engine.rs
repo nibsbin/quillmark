@@ -1613,8 +1613,16 @@ impl Document {
     /// Build a fresh `Card` from a kind and a flat field map — the ergonomic
     /// constructor for `insertCard`. `fields` is an optional
     /// `Record<string, unknown>` (each entry becomes a card field, in
-    /// insertion order); `body` defaults to `""`. Kind validity is checked by
-    /// `insertCard`, not here.
+    /// insertion order); `body` defaults to `""`.
+    ///
+    /// Sugar, not a required step: `insertCard` takes any `Card` object, and
+    /// `removeCard` returns one, so a card round-trips without passing through
+    /// here.
+    ///
+    /// Rejects what a detached card decides alone — a malformed field name, an
+    /// over-deep value. Kind validity is positional (`main` is right for the
+    /// root, reserved for a composable card), so `insertCard` is the gate for
+    /// it, and this accepts any kind string.
     #[wasm_bindgen(js_name = makeCard, unchecked_return_type = "Card")]
     pub fn make_card(
         kind: String,

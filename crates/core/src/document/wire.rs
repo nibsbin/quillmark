@@ -257,10 +257,17 @@ impl TryFrom<CardWire> for Card {
                 .map_err(|reason| WireError::InvalidQuillReference { value, reason })?;
             payload.set_quill(reference);
         }
-        // No `$kind` grammar check here: construction is deliberately
-        // permissive (`Document::make_card` shapes data), and the invariant is
-        // enforced at insertion by `push_card`/`insert_card`, which carry the
-        // `edit::invalid_kind_name` code.
+        // No `$kind` check here. This decoder validates what a detached card
+        // decides alone — field-name grammar, value depth, the `$quill`
+        // reference above. `$kind` validity is positional: `main` is right for
+        // the root and reserved for a composable card, and a `CardWire` carries
+        // no signal of which it is. So it belongs to `push_card`/`insert_card`,
+        // which know the position and the sibling `$id`s, and which report
+        // `edit::invalid_kind_name` / `edit::reserved_kind`.
+        //
+        // Checking the context-free half (the `[a-z_][a-z0-9_]*` grammar) here
+        // would split one user-facing concept across two error types, and the
+        // earlier `WireError` would shadow the routable `EditError` code.
         if !wire.kind.is_empty() {
             payload.set_kind(wire.kind);
         }
