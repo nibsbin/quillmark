@@ -12,9 +12,10 @@ def test_quill_from_path(taro_quill_dir):
 
 
 def test_quill_from_path_bad_backend_loads_then_fails_at_render(tmp_path):
-    """A quill whose declared backend is not registered loads fine — the
-    backend is resolved at render time, not load time. The error surfaces when
-    the engine is asked to render or report capability, not from from_path."""
+    """An unregistered backend crosses as a plain `backend_id` string on a
+    loaded quill and as a raised QuillmarkError at render. Which engine calls
+    resolve the backend is core's contract
+    (`crates/quillmark/tests/quill_engine_test.rs`)."""
     quill_dir = tmp_path / "test_quill"
     quill_dir.mkdir()
     (quill_dir / "Quill.yaml").write_text(
@@ -24,14 +25,10 @@ def test_quill_from_path_bad_backend_loads_then_fails_at_render(tmp_path):
     # Engine-free load succeeds: the config is valid, the backend is not resolved.
     quill = Quill.from_path(str(quill_dir))
     assert quill.backend_id == "nonexistent"
-
-    engine = Quillmark()
-    # Capability and render both resolve the backend → raise here.
-    with pytest.raises(QuillmarkError):
-        engine.supported_formats(quill)
+    assert quill.metadata["backend"] == "nonexistent"
 
     doc = Document.from_markdown(
         "~~~card-yaml\n$quill: test\n$kind: main\n~~~\n\nBody.\n"
     )
     with pytest.raises(QuillmarkError):
-        engine.render(quill, doc, OutputFormat.PDF)
+        Quillmark().render(quill, doc, OutputFormat.PDF)

@@ -198,34 +198,18 @@ describe('Document.toMarkdown — fromMarkdown → mutate → emit → re-parse'
     expect(exportMarkdown(doc2.cards[0].body)).toBe('Hello')
   })
 
-  it('ambiguous-string survival: YAML-keyword values are preserved as strings', () => {
-    // "on", "off", "yes", "no", "true", "false", "null" are all YAML booleans/null
-    // in permissive parsers. The emitter must double-quote them so they survive
-    // as strings through a re-parse.
+  it('a JS string stays a JS string across emit → re-parse, even when YAML-ambiguous', () => {
+    // `on` is a YAML 1.1 boolean; the emitter quotes it so it survives. The
+    // nine-keyword table (booleans, null, octal-like, date-like) is the
+    // emitter's contract, pinned in
+    // `core/src/document/tests/ambiguous_strings_tests.rs`. What the boundary
+    // owes is that the JS type does not change under it.
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.storeField('flag_on', 'on')
-    doc.storeField('flag_off', 'off')
-    doc.storeField('flag_yes', 'yes')
-    doc.storeField('flag_no', 'no')
-    doc.storeField('str_true', 'true')
-    doc.storeField('str_false', 'false')
-    doc.storeField('str_null', 'null')
-    doc.storeField('octal_str', '01234')
-    doc.storeField('date_str', '2024-01-15')
 
-    const emitted = doc.toMarkdown()
-    const doc2 = Document.fromMarkdown(emitted)
+    const doc2 = Document.fromMarkdown(doc.toMarkdown())
 
-    // Every value must survive as a string, not be re-interpreted as bool/null/number
     expect(field(doc2.main, 'flag_on')).toBe('on')
-    expect(field(doc2.main, 'flag_off')).toBe('off')
-    expect(field(doc2.main, 'flag_yes')).toBe('yes')
-    expect(field(doc2.main, 'flag_no')).toBe('no')
-    expect(field(doc2.main, 'str_true')).toBe('true')
-    expect(field(doc2.main, 'str_false')).toBe('false')
-    expect(field(doc2.main, 'str_null')).toBe('null')
-    expect(field(doc2.main, 'octal_str')).toBe('01234')
-    expect(field(doc2.main, 'date_str')).toBe('2024-01-15')
   })
 })
 
@@ -234,20 +218,21 @@ describe('Document.toMarkdown — fromMarkdown → mutate → emit → re-parse'
 // ---------------------------------------------------------------------------
 
 describe('Document JSON DTO — toJson / fromJson', () => {
-  it('toJson emits a string carrying the schema version', () => {
+  // The DTO's content rules — what round-trips, what a reconstruction drops,
+  // which payloads are refused — are core's
+  // (`core/src/document/tests/`). At this boundary the questions are narrower:
+  // does the DTO cross as a plain JSON string, does a handle survive the
+  // round-trip, and do the JS-only statics (`tryFromJson`, `schemaVersionOf`)
+  // answer with `undefined` where their throwing twins throw.
+
+  it('toJson emits a plain JSON string carrying the current schema version', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     const dto = doc.toJson()
     expect(typeof dto).toBe('string')
-    expect(dto).toContain('quillmark/document@0.93.0')
+    expect(JSON.parse(dto).schema).toBe(Document.currentSchemaVersion())
   })
 
-  it('round-trips losslessly: fromJson(toJson(doc)) equals doc', () => {
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    const restored = Document.fromJson(doc.toJson())
-    expect(restored.equals(doc)).toBe(true)
-  })
-
-  it('round-trips a mutated document with cards', () => {
+  it('round-trips a mutated document with cards back to an equal handle', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     doc.storeField('title', 'New Title')
     doc.insertCard(Document.makeCard('note', { author: 'Alice' }, 'Hello'))
@@ -257,93 +242,34 @@ describe('Document JSON DTO — toJson / fromJson', () => {
     expect(restored.equals(doc)).toBe(true)
     expect(field(restored.main, 'title')).toBe('New Title')
     expect(restored.cards[0].kind).toBe('note')
-    expect(field(restored.cards[0], 'author')).toBe('Alice')
     expect(exportMarkdown(restored.cards[0].body)).toBe('Hello')
   })
 
-  it('toJson output is standard JSON parseable by the JSON global', () => {
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    const parsed = JSON.parse(doc.toJson())
-    expect(parsed.schema).toBe('quillmark/document@0.93.0')
-  })
-
-  it('drops parse-time warnings on reconstruction', () => {
-    // An unknown YAML tag triggers a `parse::unsupported_yaml_tag` warning.
-    const warnMd =
-      '~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Hi\nweird: !custom value\n~~~\n\nBody\n'
-    const doc = Document.fromMarkdown(warnMd)
-    expect(doc.warnings.length).toBeGreaterThan(0)
-
-    const restored = Document.fromJson(doc.toJson())
-    expect(restored.warnings.length).toBe(0)
-  })
-
-  it('fromJson accepts a stored DTO with an uppercase field name', () => {
-    // Regression: uppercase data-field names (e.g. PRESENTATION) are valid
-    // user fields — only `$`-prefixed keys are reserved — so a stored DTO
-    // carrying one must deserialize and round-trip verbatim.
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    doc.storeField('PRESENTATION', 'deck')
-    const restored = Document.fromJson(doc.toJson())
-    expect(field(restored.main, 'PRESENTATION')).toBe('deck')
-  })
-
-  it('fromJson rejects an unknown schema version', () => {
+  it('fromJson throws on a payload it cannot accept', () => {
     expect(() =>
       Document.fromJson('{"schema":"quillmark/document@0.99.0","main":{}}'),
     ).toThrow()
   })
 
-  it('fromJson rejects malformed JSON', () => {
-    expect(() => Document.fromJson('not json at all')).toThrow()
-  })
-
-  it('toJson is deterministic across repeated calls', () => {
-    const doc = Document.fromMarkdown(TEST_MARKDOWN)
-    expect(doc.toJson()).toBe(doc.toJson())
-  })
-
-  it('toJson is byte-identical for equal documents', () => {
-    const a = Document.fromMarkdown(TEST_MARKDOWN)
-    const b = Document.fromJson(a.toJson())
-    expect(b.equals(a)).toBe(true)
-    expect(b.toJson()).toBe(a.toJson())
-  })
-
-  it('tryFromJson returns a Document for a valid DTO', () => {
+  it('tryFromJson is the non-throwing twin: a Document, or undefined', () => {
     const dto = Document.fromMarkdown(TEST_MARKDOWN).toJson()
-    const restored = Document.tryFromJson(dto)
-    expect(restored).toBeDefined()
-    expect(restored.equals(Document.fromMarkdown(TEST_MARKDOWN))).toBe(true)
-  })
+    expect(Document.tryFromJson(dto).equals(Document.fromMarkdown(TEST_MARKDOWN))).toBe(true)
 
-  it('tryFromJson returns undefined for non-DTO input instead of throwing', () => {
     expect(Document.tryFromJson('not json at all')).toBeUndefined()
     expect(
       Document.tryFromJson('{"schema":"quillmark/document@0.99.0","main":{}}'),
     ).toBeUndefined()
-    expect(Document.tryFromJson(TEST_MARKDOWN)).toBeUndefined()
   })
 
-  it('currentSchemaVersion matches what toJson writes', () => {
-    const dto = JSON.parse(Document.fromMarkdown(TEST_MARKDOWN).toJson())
-    expect(dto.schema).toBe(Document.currentSchemaVersion())
-  })
-
-  it('schemaVersionOf reads the schema field from any object payload', () => {
+  it('schemaVersionOf reads the schema tag off any payload, or undefined', () => {
     const current = Document.fromMarkdown(TEST_MARKDOWN).toJson()
-    expect(Document.schemaVersionOf(current)).toBe(
-      Document.currentSchemaVersion(),
-    )
+    expect(Document.schemaVersionOf(current)).toBe(Document.currentSchemaVersion())
 
-    // Future versions are returned as-is, even though fromJson would reject.
+    // A future version reads back as-is, even though fromJson would reject it.
     expect(
-      Document.schemaVersionOf(
-        '{"schema":"quillmark/document@0.99.0","main":{}}',
-      ),
+      Document.schemaVersionOf('{"schema":"quillmark/document@0.99.0","main":{}}'),
     ).toBe('quillmark/document@0.99.0')
 
-    expect(Document.schemaVersionOf('not json')).toBeUndefined()
     expect(Document.schemaVersionOf('{"foo":"bar"}')).toBeUndefined()
     expect(Document.schemaVersionOf(TEST_MARKDOWN)).toBeUndefined()
   })
@@ -1421,6 +1347,9 @@ describe('Document.clone', () => {
 // vitest loads it in a Node environment.
 // ---------------------------------------------------------------------------
 
+// Which documents produce which diagnostics is core's, pinned in
+// `crates/quillmark/tests/validate_test.rs`. Here: the result crosses as a
+// plain JS array, and a diagnostic keeps its `code` / `path` / `hint`.
 describe('quill.validate', () => {
   const QUILL_YAML = `quill:
   name: validate_smoke_test
@@ -1476,24 +1405,6 @@ count: "not-a-number"
     expect(typeof mismatch.hint).toBe('string')
   })
 
-  it('reports an unknown card kind under validation::unknown_card', () => {
-    const quill = buildQuill()
-    const md = `~~~card-yaml
-$quill: validate_smoke_test
-$kind: main
-title: "T"
-count: 1
-~~~
-
-~~~card-yaml
-$kind: ghost
-body: "B"
-~~~
-`
-    const diags = quill.validate(Document.fromMarkdown(md))
-    expect(diags.some((d) => d.code === 'validation::unknown_card')).toBe(true)
-  })
-
   it('result is JSON.stringify-able', () => {
     const quill = buildQuill()
     const md = `~~~card-yaml
@@ -1514,20 +1425,14 @@ count: "nope"
 // ---------------------------------------------------------------------------
 //
 // The schema axis is implicit: a field with a `default:` is Endorsed (the
-// rendered default is shippable as-is and the blueprint emits the concrete
-// value with a type-only `# <type>` annotation); a field without a `default:`
-// is Unendorsed (the blueprint emits the `!must_fill` marker).
+// rendered default is shippable as-is); a field without one is Unendorsed (the
+// blueprint emits a `!must_fill` marker, and render zero-fills it).
 //
-// These tests pin the JS-facing contract:
-//   - `QuillFieldSchema` carries no `required` axis.
-//   - `quill.blueprint` carries the `!must_fill` marker on Unendorsed fields.
-//   - `quill.render(doc)` *tolerates* an absent Unendorsed field: zero-filled
-//     render fills it with its type-empty value in the plate projection
-//     (never persisted), so absence is not a render error.
-//   - A `!must_fill` marker left in the document is non-fatal: `quill.render`
-//     succeeds (the field zero-fills or uses its suggested value), and
-//     `quill.validate(doc)` surfaces a non-fatal `validation::must_fill`
-//     warning per marker.
+// The blueprint's exact text is pinned line-by-line in
+// `core/src/quill/blueprint.rs`, and zero-fill tolerance in
+// `quillmark/tests/default_values_test.rs`. What is JS-facing, and lives here:
+// the schema DTO's shape, the blueprint crossing as a string, and a
+// `!must_fill` marker reaching both render and validate intact.
 //
 // See prose/canon/SCHEMAS.md.
 
@@ -1579,73 +1484,24 @@ main:
     return { engine, quill }
   }
 
-  it('schema fields carry no `required` axis', () => {
+  it('schema fields carry no `required` axis, and blueprint crosses as a string', () => {
     const { quill } = buildQuill()
     const fields = quill.schema.main.fields
 
-    expect(fields.title).toBeDefined()
-    expect(fields.subtitle).toBeDefined()
-
     // Cell status is implied by `default:` presence, not a `required` axis.
     expect('required' in fields.title).toBe(false)
-    expect('required' in fields.subtitle).toBe(false)
-
-    // Unendorsed fields have no `default`; Endorsed fields do.
     expect(fields.title.default).toBeUndefined()
     expect(fields.subtitle.default).toBe('Untitled subtitle')
-  })
 
-  it('blueprint carries `!must_fill` for Unendorsed fields and a type-only annotation for Endorsed', () => {
-    const { quill } = buildQuill()
-    const blueprint = quill.blueprint
-
-    expect(typeof blueprint).toBe('string')
-    expect(blueprint.length).toBeGreaterThan(0)
-
-    // Unendorsed: value cell is the `!must_fill` marker.
-    expect(blueprint).toContain('title: !must_fill # string')
-
-    // Endorsed: rendered default with a type-only `# string` annotation. The
-    // emitter does not quote strings that don't need quoting (`Untitled
-    // subtitle` has no YAML ambiguity), so the value cell is bare.
-    expect(blueprint).toContain('subtitle: Untitled subtitle # string')
-
-    // The `; delete-ok` tag is gone entirely — shippability is the value cell.
-    expect(blueprint).not.toContain('delete-ok')
-
-    // The `; required` / `; optional` role tag must not appear anywhere.
-    expect(blueprint).not.toContain('; required')
-    expect(blueprint).not.toContain('; optional')
-  })
-
-  it('render tolerates an absent Unendorsed field (zero-filled, not an error)', () => {
-    const { engine, quill } = buildQuill()
-
-    // Document omits `title`. Schema declares no default → Unendorsed. Under
-    // zero-filled render this is merely *incomplete*, not malformed: render
-    // fills `title` with its type-empty value in the plate projection and
-    // succeeds. Absence is not a hard error.
-    const md = `~~~card-yaml
-$quill: schema_test
-$kind: main
-subtitle: "Just a subtitle"
-~~~
-
-# Body
-`
-    const doc = Document.fromMarkdown(md)
-
-    const result = engine.render(quill, doc, { format: 'svg' })
-    expect(result).toBeDefined()
-    expect(Array.isArray(result.artifacts)).toBe(true)
-    expect(result.artifacts.length).toBeGreaterThan(0)
+    expect(typeof quill.blueprint).toBe('string')
+    expect(quill.blueprint.length).toBeGreaterThan(0)
   })
 
   it('render tolerates a `!must_fill` marker left in (non-fatal, zero-fills)', () => {
     const { engine, quill } = buildQuill()
 
-    // Document leaves a `!must_fill` marker on `title` — the LLM didn't fill
-    // it. This is non-fatal: render zero-fills the field and succeeds.
+    // The marker survives the boundary as a marker rather than a bare null, so
+    // render zero-fills the field and succeeds.
     const md = `~~~card-yaml
 $quill: schema_test
 $kind: main
@@ -1654,54 +1510,29 @@ title: !must_fill
 
 # Body
 `
-    const doc = Document.fromMarkdown(md)
-
-    const result = engine.render(quill, doc, { format: 'svg' })
-    expect(result).toBeDefined()
-    expect(Array.isArray(result.artifacts)).toBe(true)
-    expect(result.artifacts.length).toBeGreaterThan(0)
-  })
-
-  it('render succeeds when every Unendorsed field is supplied with a real value', () => {
-    const { engine, quill } = buildQuill()
-
-    const md = `~~~card-yaml
-$quill: schema_test
-$kind: main
-title: "A Real Title"
-~~~
-
-# Body
-`
-    const doc = Document.fromMarkdown(md)
-    const result = engine.render(quill, doc, { format: 'svg' })
+    const result = engine.render(quill, Document.fromMarkdown(md), { format: 'svg' })
     expect(result.artifacts.length).toBeGreaterThan(0)
   })
 
   it('validate surfaces a non-fatal `validation::must_fill` warning per marker', () => {
     const { quill } = buildQuill()
 
-    // A `!must_fill` marker left in surfaces a non-fatal warning from validate.
-    const mdFill = `~~~card-yaml
+    const md = `~~~card-yaml
 $quill: schema_test
 $kind: main
 title: !must_fill
 ~~~
 `
-    const diagsFill = quill.validate(Document.fromMarkdown(mdFill))
+    const diags = quill.validate(Document.fromMarkdown(md))
     expect(
-      diagsFill.some(
+      diags.some(
         (d) =>
           d.code === 'validation::must_fill' &&
           d.severity === 'warning' &&
           d.path === 'main.title' &&
-          typeof d.hint === 'string' &&
-          d.hint.includes('!must_fill'),
+          typeof d.hint === 'string',
       ),
     ).toBe(true)
-    // The removed `validation::field_absent` completeness code never surfaces —
-    // absent Unendorsed fields zero-fill silently.
-    expect(diagsFill.some((d) => d.code === 'validation::field_absent')).toBe(false)
   })
 })
 

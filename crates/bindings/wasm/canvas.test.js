@@ -146,19 +146,20 @@ describe('LiveSession canvas preview', () => {
     expect(size.heightPt).toBeGreaterThan(0)
   })
 
-  it('positionAt resolves content ink to a content position and locate reverses it (#829)', () => {
+  it('positionAt and locate cross the boundary as ContentHit / caret rect (#829)', () => {
+    // Where the boxes land and which offsets they cover is geometry, owned by
+    // `backends/typst/tests/content_regions.rs` and
+    // `quillmark/tests/usaf_memo_regions_test.rs`. Here: the navigation verbs
+    // reach JS with their declared shapes, addressed by DocPath, and a miss
+    // maps `None` to `undefined` rather than throwing.
     const session = openSession()
 
-    // A content field surfaces one span-bearing region per segment (#829); the
-    // body's heading is one. The address is the canonical DocPath `main.body`.
     const bodyRegion = session.regions().find((r) => r.field === 'main.body' && r.span)
     expect(bodyRegion, 'a main.body segment region carries a span').toBeTruthy()
     const [x0, y0, x1, y1] = bodyRegion.rect
     const cy = (y0 + y1) / 2
 
-    // Forward: scan across the segment's ink until a point resolves (glyph
-    // layout decides which x lands on ink), then assert the ContentHit crosses
-    // the JS boundary with the right shape.
+    // Glyph layout decides which x lands on ink, so scan across the segment.
     let hit = null
     for (let f = 0.1; f <= 0.9 && !hit; f += 0.1) {
       hit = session.positionAt(bodyRegion.page, x0 + (x1 - x0) * f, cy)
@@ -166,17 +167,13 @@ describe('LiveSession canvas preview', () => {
     expect(hit, 'positionAt resolves a point on the body ink').toBeTruthy()
     expect(hit.field).toBe('main.body')
     expect(typeof hit.pos).toBe('number')
-    const [start, end] = bodyRegion.span
-    expect(hit.pos).toBeGreaterThanOrEqual(start)
-    expect(hit.pos).toBeLessThanOrEqual(end)
 
-    // Reverse: content position → caret rect on the same field (DocPath in).
     const caret = session.locate('main.body', hit.pos)
     expect(caret, 'locate reverses positionAt').toBeTruthy()
     expect(caret.field).toBe('main.body')
-    expect(caret.rect[2]).toBeGreaterThanOrEqual(caret.rect[0])
+    expect(Array.isArray(caret.rect)).toBe(true)
 
-    // A click far off any ink resolves to nothing (wasm maps `None` to undefined).
+    // A click far off any ink resolves to nothing.
     expect(session.positionAt(bodyRegion.page, 2, 2)).toBeFalsy()
   })
 

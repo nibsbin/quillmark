@@ -125,8 +125,12 @@ describe('@quillmark/wasm/runtime — surface', () => {
 
 // The typed-writer sugar binds a quill to a document once, so writes are bare
 // `set` / `setAll` / `reviseField` / `card(i).set` — the JS twin of Rust's
-// `quill.writer(doc)`, forwarding to the underscored `_commit*` / `_reviseField`
-// ABI on the raw `Document` class (hidden from the `.d.ts`).
+// `quill.writer(doc)`. Every verb is a one-line delegation to the underscored
+// `_commit*` / `_reviseField` ABI on the raw `Document` class (hidden from the
+// `.d.ts`), whose error-code matrix is exercised at that altitude in
+// `basic.test.js`. What is the sugar's own, and what these pin: each verb
+// forwards to the right ABI call with the right address, and errors propagate
+// rather than being swallowed.
 describe('@quillmark/wasm/runtime — DocumentWriter / CardWriter (bind the quill once)', () => {
   const EDITOR_QUILL_YAML = `quill:
   name: editor_test
@@ -160,23 +164,19 @@ card_kinds:
     expect(new DocumentWriter(quill, blankDoc())).toBeInstanceOf(DocumentWriter)
   })
 
-  it('set binds the quill once and strict-commits a schema field', () => {
+  it('set / setAll bind the quill once and strict-commit main-card fields', () => {
     const ed = buildQuill().writer(blankDoc())
     ed.set('qty', '3') // schema field → strict coerce
     expect(fieldOf(ed.document.main, 'qty')).toBe(3)
+
+    ed.setAll({ subject: 'Q3 **results**', qty: '5' })
+    expect(fieldOf(ed.document.main, 'qty')).toBe(5)
   })
 
-  it('set rejects an undeclared name as a typo, not a fallback', () => {
+  it('an ABI error propagates through the sugar rather than being swallowed', () => {
     const ed = buildQuill().writer(blankDoc())
     expectEditCode(() => ed.set('stray', 'x'), 'edit::unknown_field')
     expect(fieldOf(ed.document.main, 'stray')).toBeUndefined()
-  })
-
-  it('setAll aborts the whole batch on a typo, applying nothing', () => {
-    const ed = buildQuill().writer(blankDoc())
-    expectEditCode(() => ed.setAll({ qty: '5', titel: 'oops' }), 'edit::unknown_field')
-    expect(fieldOf(ed.document.main, 'qty')).toBeUndefined()
-    expect(fieldOf(ed.document.main, 'titel')).toBeUndefined()
   })
 
   it('setBody writes the main body from markdown, receipt-free', () => {
@@ -194,17 +194,7 @@ card_kinds:
     expect(Array.isArray(delta.ops)).toBe(true)
   })
 
-  it('reviseField rejects an undeclared name, and a non-inline result', () => {
-    const quill = buildQuill()
-    const ed = quill.writer(blankDoc())
-    expectEditCode(() => ed.reviseField('stray', 'x'), 'edit::unknown_field')
-    // `subject` is richtext(inline): a multi-block result is refused, field intact.
-    ed.reviseField('subject', 'kept')
-    expectEditCode(() => ed.reviseField('subject', 'a\n\nb'), 'edit::field_richtext_not_inline')
-    expect(quill.reader(ed.document).get('subject')).toBe('kept')
-  })
-
-  it('addCard fuses make + typed commit + push, transactionally', () => {
+  it('addCard fuses make + typed commit + push', () => {
     const ed = buildQuill().writer(blankDoc())
     // `body` here is the card's richtext FIELD; the third arg is the card body.
     ed.addCard('note', { body: 'Field **body**.' }, 'Card body text.')
@@ -212,9 +202,6 @@ card_kinds:
     expect(ed.document.cards[0].kind).toBe('note')
     expect(exportMarkdown(fieldOf(ed.document.cards[0], 'body'))).toBe('Field **body**.')
     expect(exportMarkdown(ed.document.cards[0].body)).toBe('Card body text.')
-    // A typo aborts the commit; the card never joins the document.
-    expectEditCode(() => ed.addCard('note', { stray: 'x' }), 'edit::unknown_field')
-    expect(ed.document.cards).toHaveLength(1)
   })
 
   it('removeCard drops the card and returns it', () => {
@@ -225,7 +212,7 @@ card_kinds:
     expect(ed.document.cards).toHaveLength(0)
   })
 
-  it('card(i).set / card(i).setBody target the composable card', () => {
+  it('card(i).set / setBody / reviseField address the composable card', () => {
     const doc = Document.fromMarkdown(
       '~~~card-yaml\n$quill: editor_test\n~~~\n\nMain.\n\n~~~card-yaml\n$kind: note\n~~~\n\nCard.',
     )
@@ -238,7 +225,6 @@ card_kinds:
     const delta = ed.card(0).reviseField('body', 'Revised **field**.')
     expect(exportMarkdown(fieldOf(doc.cards[0], 'body'))).toBe('Revised **field**.')
     expect(Array.isArray(delta.ops)).toBe(true)
-    expectEditCode(() => ed.card(0).reviseField('stray', 'x'), 'edit::unknown_field')
   })
 
   it('a bad card index throws at write time, not at card()', () => {

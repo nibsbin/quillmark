@@ -53,7 +53,12 @@ def test_render_result_carries_render_time(engine, taro_quill_dir, taro_md):
 
 
 def test_engine_render_name_mismatch_errors(engine, taro_quill_dir):
-    """Rendering a Document whose $quill names a different quill is a hard error."""
+    """A render error crosses as QuillmarkError with its diagnostic `code` intact.
+
+    `$quill` mismatch is the representative case; that it is a hard error at all
+    — and the version-selector half of the rule — is pinned in
+    `crates/quillmark/tests/version_mismatch_test.rs`.
+    """
     quill = Quill.from_path(str(taro_quill_dir))
 
     # Build a document that names a different quill
