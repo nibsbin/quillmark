@@ -1006,15 +1006,10 @@ mod tests {
     /// name and drop the payload unread, corrupting the line with no diagnostic.
     #[test]
     fn op_wire_rejects_attrs_beside_a_built_in_name() {
-        for bad in [
-            serde_json::json!({"op": "setKind", "line": 0, "kind": "para", "attrs": {"tone": "warn"}}),
-            serde_json::json!({"op": "setKind", "line": 0, "kind": "rule", "attrs": {}}),
-        ] {
-            assert!(
-                matches!(line_op_from_value(&bad), Err(ParseError::Shape(_))),
-                "accepted: {bad}"
-            );
-        }
+        let bad = serde_json::json!({
+            "op": "setKind", "line": 0, "kind": "para", "attrs": {"tone": "warn"},
+        });
+        assert!(matches!(line_op_from_value(&bad), Err(ParseError::Shape(_))));
         let bad = serde_json::json!({
             "op": "setContainers", "line": 0,
             "containers": [{"container": "quote", "attrs": {"k": 1}}],

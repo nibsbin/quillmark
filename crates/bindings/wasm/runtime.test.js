@@ -381,23 +381,20 @@ describe('@quillmark/wasm/runtime — MAIN_CARD_ADDR (the named main-card addres
 })
 
 describe('@quillmark/wasm/runtime — open-set membership guards (#1085)', () => {
+  // One known name per axis, not the whole table: membership is a `Set.has`,
+  // uniform across members, and the tables themselves are pinned against the
+  // Rust constants by `crates/bindings/wasm/tests/known_names_drift.rs`.
   it('answers known-vs-unknown on all four axes', () => {
-    for (const kind of ['para', 'heading', 'code', 'island', 'rule']) {
-      expect(isUnknownLine({ kind, containers: [] })).toBe(false)
-    }
+    expect(isUnknownLine({ kind: 'heading', level: 2, containers: [] })).toBe(false)
     expect(isUnknownLine({ kind: 'callout', attrs: {}, containers: [] })).toBe(true)
 
     expect(isUnknownContainer({ container: 'quote' })).toBe(false)
-    expect(isUnknownContainer({ container: 'list_item' })).toBe(false)
     expect(isUnknownContainer({ container: 'indent', attrs: {} })).toBe(true)
 
-    for (const type of ['strong', 'emph', 'underline', 'strike', 'code', 'link', 'anchor']) {
-      expect(isUnknownMark({ start: 0, end: 1, type })).toBe(false)
-    }
+    expect(isUnknownMark({ start: 0, end: 1, type: 'strong' })).toBe(false)
     expect(isUnknownMark({ start: 0, end: 1, type: 'highlight', attrs: {} })).toBe(true)
 
     expect(isUnknownIsland({ id: 'i1', type: 'table', props: {}, loss: 'lossless' })).toBe(false)
-    expect(isUnknownIsland({ id: 'i1', type: 'image', props: {}, loss: 'lossless' })).toBe(false)
     expect(isUnknownIsland({ id: 'i1', type: 'widget', props: {}, loss: 'lossless' })).toBe(true)
   })
 
