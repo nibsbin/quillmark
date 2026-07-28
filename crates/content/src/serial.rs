@@ -482,12 +482,12 @@ fn reject_reserved_attrs_deep(v: &Value) -> Result<(), ParseError> {
                 for cell in table_cell_values(props) {
                     for m in arr_or_empty(cell, "marks") {
                         reject_mark_attrs(m)?;
-                        // `parse_cell` drops a mark it cannot read, and
-                        // `canon_cell` then writes back only what parsed, so the
-                        // drop is permanent. Lenient is right for a blob at rest;
-                        // on the authored lane it means the host's malformed mark
-                        // disappears with no signal — the same reasoning that
-                        // makes `attrs` beside a built-in an error here.
+                        // `parse_cell` skips a mark it cannot read and
+                        // `canon_cell` writes back only what parsed, so the skip
+                        // is permanent. Leniency is right for a blob at rest. On
+                        // the authored lane it means the host's malformed mark
+                        // vanishes with no signal — the reserved-name rule's
+                        // reasoning, one field over.
                         mark_from_value(m)?;
                     }
                 }
@@ -692,13 +692,14 @@ fn pad_row(v: &mut Value, cols: usize) {
 /// and re-normalize its marks. Reached per-cell from [`normalize_table_props`].
 ///
 /// Writes `text` and `marks` back into the cell's **own** object rather than
-/// minting a fresh one, so a key this build does not recognize survives. A cell
-/// is the sub-structure the `table` type is likeliest to grow (`colspan`,
-/// `rowspan`, a per-cell alignment or style handle), and every other opaque
-/// payload in the model — unknown `attrs` on all three block axes, island
-/// `props`, a table's own top-level props — already round-trips untouched. A
-/// cell minted whole was the one exception, which made the likeliest extension
-/// the one that could not be added without a schema-version event.
+/// minting a fresh one, so a key this build does not recognize survives.
+///
+/// Every opaque payload in the model round-trips untouched: unknown `attrs` on
+/// all three block axes, island `props`, a table's own top-level props, and a
+/// cell's unrecognized keys. A cell earns the rule twice over — it is the
+/// sub-structure the `table` type is likeliest to grow (`colspan`, `rowspan`, a
+/// per-cell alignment or style handle), so a cell rebuilt whole would make that
+/// growth a schema-version event.
 fn canon_cell(cell: &mut Value) {
     let (text, marks) = parse_cell(cell);
     let text = if text.contains(['\n', '\r']) {
@@ -941,10 +942,10 @@ mod tests {
         ));
     }
 
-    /// Issue #1091: `loss` is the fifth open vocabulary, on the same terms as the
-    /// four below. A class this build lacks is **carried**, not rewritten, so a
-    /// reader that merely opened the document neither destroys the class nor
-    /// moves the content hash; reading it degrades to the safe end.
+    /// Issue #1091: `loss` is the fifth open vocabulary, on the terms the four
+    /// below use. A class this build lacks is **carried**, not rewritten, so a
+    /// reader that merely opens the document neither destroys the class nor
+    /// moves the content hash. Reading it degrades to the safe end.
     #[test]
     fn unknown_loss_class_round_trips_and_reads_unrepresentable() {
         let json = concat!(

@@ -231,27 +231,26 @@ pub enum Loss {
     Unrepresentable,
     /// A class a future writer stamped that this build lacks, carried verbatim.
     ///
-    /// The other four vocabularies in the canonical form — mark `type`, line
-    /// `kind`, container, island `type` — are open sets that round-trip an
-    /// unrecognized member opaque. `loss` was the one axis that rewrote instead,
-    /// so an older reader that merely opened a document destroyed the class and
-    /// moved the content hash of a document nobody edited, against
-    /// `DOCUMENT_STORAGE.md` § Byte-stability.
+    /// `loss` is open on the terms the other four vocabularies use — mark
+    /// `type`, line `kind`, container, island `type` all round-trip an
+    /// unrecognized member opaque. Carrying the raw tag rather than rewriting it
+    /// is what keeps a reader that merely opens a document from moving that
+    /// document's content hash (`DOCUMENT_STORAGE.md` § Byte-stability).
     ///
     /// Read fidelity through [`Loss::fidelity`], never by matching this arm: an
     /// unrecognized class degrades to [`Unrepresentable`](Loss::Unrepresentable),
-    /// so nothing is ever claimed to carry faithfully on the strength of a name
-    /// this build cannot interpret.
+    /// so nothing is claimed to carry faithfully on the strength of a name this
+    /// build cannot interpret.
     Unknown(String),
 }
 
 impl Loss {
     /// The fidelity this class describes, with an unrecognized class degraded to
-    /// the safe end.
+    /// the safe end. Never returns [`Unknown`](Loss::Unknown).
     ///
-    /// Carrying the raw tag is what preserves the byte round-trip; projecting it
-    /// through here is what keeps that carriage from being mistaken for a claim
-    /// about the projection. Never returns [`Unknown`](Loss::Unknown).
+    /// Carrying the raw tag preserves the byte round-trip. Reading it through
+    /// here keeps that carriage from being mistaken for a claim about the
+    /// projection.
     pub fn fidelity(&self) -> Loss {
         match self {
             Loss::Lossless => Loss::Lossless,
@@ -1227,10 +1226,9 @@ mod tests {
 
     /// Issue #1092: a cell is canonicalized in place, so a key this build does
     /// not recognize survives — the carriage every other opaque payload in the
-    /// model already has. Without it the `table` type's likeliest extension
-    /// (`colspan`, a per-cell style handle) could not be added without a
-    /// schema-version event, and `normalize` runs on decode, on every op apply,
-    /// and on every serialize, so the loss was immediate and permanent.
+    /// model has. The rule has no slack: `normalize` runs on decode, on every op
+    /// apply, and on every serialize, so a cell rebuilt whole drops the key on
+    /// first contact and every contact after.
     #[test]
     fn unrecognized_cell_key_survives_normalize() {
         let mut rt = Content::empty();

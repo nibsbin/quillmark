@@ -920,10 +920,10 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
                 ord: m.kind.ord(),
                 open: format!("#link(\"{}\")[", escape_string(url)),
             }),
-            // An anchor is identity, not formatting, and an unknown mark has no
-            // Typst spelling — both contribute no wrap. `MarkKind` is open
-            // (`#[non_exhaustive]`), so a kind added after this build takes the
-            // same nothing, matching `wrap_open`'s own fallthrough.
+            // An anchor is identity, not formatting; an unknown mark has no
+            // Typst spelling. Neither contributes a wrap. `MarkKind` is open
+            // (`#[non_exhaustive]`), so a kind this build lacks contributes none
+            // either, matching `wrap_open`'s own fallthrough.
             MarkKind::Anchor { .. } | MarkKind::Unknown { .. } => {}
             _ => {}
         }

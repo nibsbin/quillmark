@@ -191,11 +191,11 @@ Two rules bound the openness:
       An op or an `install` is host-authored now, so that shape means a stale
       copy of the built-in list, never a document from the past. Reads that hand
       back stored content — `exportMarkdown`, `rebase` — are storage-lane, not
-      this one. The same split governs an unreadable **table-cell mark**: the
-      storage lane skips it (`serial::parse_cell` is lenient, and normalization
-      then makes the drop permanent), while the authored lane refuses it, since
-      a host's malformed mark disappearing with no signal is the silent
-      corruption this rule exists to catch.
+      this one. The same split governs an unreadable **table-cell mark**.
+      Storage skips it: `serial::parse_cell` is lenient, and normalization makes
+      the skip permanent. The authored lane refuses it, because a host's
+      malformed mark vanishing with no signal is the silent corruption this rule
+      exists to catch.
     - **The storage lane accepts it, and must.** A blob written while `callout`
       was unknown carries `{"kind": "callout", "attrs": {…}}`; the release that
       promotes `callout` to a built-in has to keep opening it. Rejecting at
