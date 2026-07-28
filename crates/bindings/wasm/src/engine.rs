@@ -1888,6 +1888,11 @@ impl Addr {
 /// Decode a JS value as a canonical `Content` content object — the `install`
 /// input (value semantics, content only). Rejects a markdown string: the cold
 /// path is spelled `install(addr, importMarkdown(md))`.
+///
+/// Reads through the **authored** lane, not the storage one: this content is
+/// something the host is writing now, so `attrs` beside a built-in discriminator
+/// is a stale built-in list rather than a document predating that built-in, and
+/// is reported instead of silently dropped (#1084).
 fn js_to_content(value: JsValue, ctx: &str) -> Result<quillmark_core::Content, JsValue> {
     let json = js_value_to_json(value, ctx)?;
     if !json.is_object() {
@@ -1896,7 +1901,7 @@ fn js_to_content(value: JsValue, ctx: &str) -> Result<quillmark_core::Content, J
         ))
         .to_js_value());
     }
-    quillmark_content::serial::from_canonical_value(&json)
+    quillmark_content::serial::from_authored_value(&json)
         .map_err(|e| WasmError::from(format!("{ctx}: not a canonical Content content: {e}")).to_js_value())
 }
 

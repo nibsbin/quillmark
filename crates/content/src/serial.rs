@@ -382,6 +382,176 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
     Ok(Mark { start, end, kind })
 }
 
+// ---- Op-lane readers (strict about reserved-name reuse) ----
+//
+// The three readers above resolve a built-in discriminator before the `Unknown`
+// fallthrough, so `{"kind": "para", "attrs": {…}}` decodes to `Para` and the
+// `attrs` are dropped unread. `Content::validate`'s reserved-name rule
+// (`Invariant::ReservedUnknownTag` and its two block-axis siblings) therefore
+// never sees such a value — it guards in-process Rust construction, not the wire
+// (#1084).
+//
+// The two wire lanes want opposite answers to that drop:
+//
+// - **Storage** (`Content::from_canonical_json`) must stay lenient. A blob
+//   written when `callout` was unknown carries `{"kind": "callout", "attrs":
+//   {…}}`; the release that makes `callout` a built-in must still open it.
+//   Rejecting `attrs` beside a built-in there would refuse documents at rest
+//   precisely when the vocabulary grows — the failure the open set exists to
+//   prevent.
+// - **Ops** (`crate::ops`) is ephemeral and host-built, so the same shape is
+//   never a document from the past, only a producer that classified a built-in
+//   as unknown — a host carrying a stale copy of the built-in list. There the
+//   drop is silent corruption, and a diagnostic costs nothing.
+//
+// Hence one strict reader per axis, used only by the op wire. Narrow on purpose:
+// `attrs` beside a *reserved* name, nothing else. A stray sibling key is not
+// evidence of anything (a line object carries `containers`, an op carries
+// `op`/`line`), and only `attrs` is the unknown carrier's own spelling.
+
+/// [`line_kind_from_value`] for the op lane: `attrs` beside a built-in `kind` is
+/// a shape error rather than a silent drop.
+pub fn line_kind_from_op_value(v: &Value) -> Result<LineKind, ParseError> {
+    reject_reserved_attrs(
+        v,
+        "kind",
+        &Content::RESERVED_LINE_KINDS,
+        "attrs beside built-in kind",
+    )?;
+    line_kind_from_value(v)
+}
+
+/// [`container_from_value`] for the op lane. See [`line_kind_from_op_value`].
+pub fn container_from_op_value(v: &Value) -> Result<Container, ParseError> {
+    reject_reserved_attrs(
+        v,
+        "container",
+        &Content::RESERVED_CONTAINERS,
+        "attrs beside built-in container",
+    )?;
+    container_from_value(v)
+}
+
+/// [`mark_from_value`] for the op lane. See [`line_kind_from_op_value`].
+pub fn mark_from_op_value(v: &Value) -> Result<Mark, ParseError> {
+    reject_reserved_attrs(
+        v,
+        "type",
+        &Content::RESERVED_MARK_TYPES,
+        "attrs beside built-in mark type",
+    )?;
+    mark_from_value(v)
+}
+
+/// [`from_canonical_value`] for a content the **host authored just now** — the
+/// `install` input, not a blob read back from storage. Same decode, plus the op
+/// lane's reserved-name rule applied across the whole object, on every axis
+/// [`Content::validate`] checks: line kinds, containers, prose marks, and
+/// table-cell marks.
+///
+/// The lane split is the one in [`line_kind_from_op_value`], drawn at the same
+/// seam: a value a host is writing *now* carrying `attrs` beside a built-in name
+/// is a stale built-in list, while the same bytes arriving from storage are a
+/// document from before that name was built in. An editor lowering a whole-field
+/// diff writes through here on every keystroke, so this is where the silent drop
+/// would do its damage.
+pub fn from_authored_value(v: &Value) -> Result<Content, ParseError> {
+    reject_reserved_attrs_deep(v)?;
+    from_canonical_value(v)
+}
+
+/// The reserved-name scan [`from_authored_value`] runs, over the canonical
+/// content shape. Structural on purpose rather than a blind recursive walk: an
+/// unknown's `attrs` is opaque host payload that may legitimately contain an
+/// object spelled `{"type": "link", "attrs": …}`, and rejecting that would make
+/// the carrier unable to carry.
+fn reject_reserved_attrs_deep(v: &Value) -> Result<(), ParseError> {
+    let Some(root) = v.as_object() else {
+        return Ok(());
+    };
+    let arr = |k: &str| root.get(k).and_then(Value::as_array).map(|a| a.as_slice());
+    for line in arr("lines").unwrap_or_default() {
+        reject_reserved_attrs(
+            line,
+            "kind",
+            &Content::RESERVED_LINE_KINDS,
+            "attrs beside built-in kind",
+        )?;
+        let containers = line
+            .get("containers")
+            .and_then(Value::as_array)
+            .map(|a| a.as_slice())
+            .unwrap_or_default();
+        for c in containers {
+            reject_reserved_attrs(
+                c,
+                "container",
+                &Content::RESERVED_CONTAINERS,
+                "attrs beside built-in container",
+            )?;
+        }
+    }
+    for m in arr("marks").unwrap_or_default() {
+        reject_mark_attrs(m)?;
+    }
+    // Cell marks ride the prose mark shape, so the rule follows them in. Only a
+    // table carries cells; any other `props` is opaque and left alone.
+    for island in arr("islands").unwrap_or_default() {
+        if island.get("type").and_then(Value::as_str) != Some("table") {
+            continue;
+        }
+        let props = island.get("props");
+        let header = props.and_then(|p| p.get("header")).and_then(Value::as_array);
+        let rows = props.and_then(|p| p.get("rows")).and_then(Value::as_array);
+        let cells = header
+            .into_iter()
+            .flatten()
+            .chain(rows.into_iter().flatten().filter_map(Value::as_array).flatten());
+        for cell in cells {
+            let marks = cell
+                .get("marks")
+                .and_then(Value::as_array)
+                .map(|a| a.as_slice())
+                .unwrap_or_default();
+            for m in marks {
+                reject_mark_attrs(m)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn reject_mark_attrs(m: &Value) -> Result<(), ParseError> {
+    reject_reserved_attrs(
+        m,
+        "type",
+        &Content::RESERVED_MARK_TYPES,
+        "attrs beside built-in mark type",
+    )
+}
+
+/// Error when `v` carries an `attrs` bag alongside a `discriminant` naming a
+/// built-in — the producer meant an unknown and named a known. A non-object or a
+/// missing/non-string discriminant is left to the reader that follows, which
+/// reports the shape error in its own terms.
+fn reject_reserved_attrs(
+    v: &Value,
+    discriminant: &str,
+    reserved: &[&str],
+    err: &'static str,
+) -> Result<(), ParseError> {
+    let Some(o) = v.as_object() else {
+        return Ok(());
+    };
+    let Some(tag) = o.get(discriminant).and_then(Value::as_str) else {
+        return Ok(());
+    };
+    if o.contains_key("attrs") && reserved.contains(&tag) {
+        return Err(ParseError::Shape(err));
+    }
+    Ok(())
+}
+
 // ---- Table cell {text, marks} ----
 //
 // A pipe-table cell is inline-only: its own plain `text` plus `marks` whose
@@ -821,6 +991,57 @@ mod tests {
             rt.validate(),
             Err(Invariant::ReservedUnknownContainer("quote".into()))
         );
+    }
+
+    /// Issue #1084: the authored lane (`install`) applies the reserved-name rule
+    /// the decoders cannot — by the time a lenient reader has resolved `"para"`
+    /// to `Para`, the `attrs` are gone and `validate` has nothing to object to.
+    /// Every axis `validate` checks, including cell marks.
+    #[test]
+    fn authored_lane_rejects_attrs_beside_a_built_in_name() {
+        let bad = [
+            // line kind
+            r#"{"islands":[],"lines":[{"attrs":{"tone":"warn"},"containers":[],"kind":"para"}],"marks":[],"text":"x"}"#,
+            // container
+            r#"{"islands":[],"lines":[{"containers":[{"attrs":{},"container":"quote"}],"kind":"para"}],"marks":[],"text":"x"}"#,
+            // prose mark
+            r#"{"islands":[],"lines":[{"containers":[],"kind":"para"}],"marks":[{"attrs":{},"end":1,"start":0,"type":"strong"}],"text":"x"}"#,
+            // table cell mark
+            concat!(
+                r#"{"islands":[{"id":"i1","loss":"lossless","props":{"aligns":["none"],"#,
+                r#""header":[{"marks":[{"attrs":{},"end":1,"start":0,"type":"emph"}],"text":"h"}],"#,
+                r#""rows":[[{"marks":[],"text":"r"}]]},"type":"table"}],"#,
+                r#""lines":[{"containers":[],"kind":"island"}],"marks":[],"text":"￼"}"#
+            ),
+        ];
+        for json in bad {
+            let v: Value = serde_json::from_str(json).unwrap();
+            assert!(
+                matches!(from_authored_value(&v), Err(ParseError::Shape(_))),
+                "accepted: {json}"
+            );
+            // The storage lane opens all four — a document written before the
+            // name was built in must keep loading.
+            assert!(
+                Content::from_canonical_json(json).is_ok(),
+                "storage lane rejected: {json}"
+            );
+        }
+    }
+
+    /// Issue #1084: the authored lane's scan is structural, not a blind walk. An
+    /// unknown's `attrs` is opaque host payload and may contain an object spelled
+    /// like a reserved mark; rejecting that would make the carrier unable to
+    /// carry the thing it exists to carry.
+    #[test]
+    fn authored_lane_leaves_opaque_attrs_payload_alone() {
+        let json = concat!(
+            r#"{"islands":[],"lines":[{"attrs":{"nested":{"attrs":{},"type":"link"}},"#,
+            r#""containers":[],"kind":"callout"}],"marks":[],"text":"x"}"#
+        );
+        let v: Value = serde_json::from_str(json).unwrap();
+        let rt = from_authored_value(&v).unwrap();
+        assert_eq!(rt.to_canonical_json(), json);
     }
 
     /// Issue #1054: opaque block attrs are hash input, so their key order must

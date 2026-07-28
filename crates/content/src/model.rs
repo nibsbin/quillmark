@@ -600,7 +600,15 @@ impl Content {
 
     /// Mark `type` names the projection reserves; an [`MarkKind::Unknown`] may
     /// not reuse one (its serialization would parse back as the built-in,
-    /// silently dropping its attrs — non-injective). Checked by [`Content::validate`].
+    /// silently dropping its attrs — non-injective).
+    ///
+    /// Two enforcement points, on two lanes (#1084). [`Content::validate`] catches
+    /// an in-process Rust construction. The wire never reaches it — a decoder
+    /// resolves the built-in name before the `Unknown` fallthrough, so a reserved
+    /// tag *becomes* the built-in rather than arriving as an `Unknown` — so the op
+    /// lane rejects the shape up front instead
+    /// ([`serial::mark_from_op_value`](crate::serial::mark_from_op_value) and its
+    /// two block-axis twins). Storage decode stays lenient by design; see there.
     pub const RESERVED_MARK_TYPES: [&'static str; 7] = [
         "strong",
         "emph",
@@ -844,6 +852,35 @@ mod tests {
 
     fn f(start: Usv, end: Usv, kind: MarkKind) -> Mark {
         Mark { start, end, kind }
+    }
+
+    /// Issue #1085: DRIFT GUARD. The four open sets' known halves are re-spelled
+    /// by hand on the TypeScript surface — the unions in
+    /// `crates/bindings/wasm/src/engine.rs` (`ContentLineKind`,
+    /// `ContentContainer`, `ContentMark`, `ContentIsland`) and the `isUnknown*`
+    /// guards' known-name tables in
+    /// `crates/bindings/wasm/runtime/runtime.js`. A guard whose table lags a new
+    /// built-in reports that built-in as unknown, and a consumer round-trips it
+    /// through its unknown carrier, dropping the payload. Adding a built-in means
+    /// editing this list and both of those sites in the same commit.
+    #[test]
+    fn known_open_set_names_are_pinned() {
+        assert_eq!(
+            Content::RESERVED_MARK_TYPES,
+            ["strong", "emph", "underline", "strike", "code", "link", "anchor"]
+        );
+        assert_eq!(
+            Content::RESERVED_LINE_KINDS,
+            ["para", "heading", "code", "island", "rule"]
+        );
+        assert_eq!(Content::RESERVED_CONTAINERS, ["list_item", "quote"]);
+        // The island axis has no reserved-name rule (its `type` is a bare
+        // `String`, never an `Unknown` variant), so `KnownIslandType` is the
+        // known half the guard mirrors.
+        for t in ["table", "image"] {
+            assert!(crate::island::KnownIslandType::parse(t).is_some());
+        }
+        assert!(crate::island::KnownIslandType::parse("widget").is_none());
     }
 
     #[test]

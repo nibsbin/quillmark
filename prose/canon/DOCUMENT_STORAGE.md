@@ -168,15 +168,54 @@ Two rules bound the openness:
   (`heading`, `quote`, `link`, …): it would serialize as the built-in and parse
   back as one, silently dropping its attrs. `Content::validate` rejects this
   (`Invariant::ReservedUnknownTag` / `ReservedUnknownLineKind` /
-  `ReservedUnknownContainer`). The enforcement point is **decode**, which every
-  read runs — a host that builds a non-injective tag through the op wire writes
-  a blob that saves and then fails to load, the same gap on all three axes.
+  `ReservedUnknownContainer`) for an in-process Rust construction. The wire
+  reaches that check on neither block axis nor the mark axis: a decoder resolves
+  the built-in name *before* the `Unknown` fallthrough, so `{"kind": "para",
+  "attrs": {…}}` decodes to `Para` and the attrs are dropped unread. The two
+  wire lanes therefore split (#1084):
+
+    - **The op lane rejects it.** `attrs` beside a built-in discriminator is a
+      shape error (`serial::line_kind_from_op_value` and its two twins). An op
+      is ephemeral and host-built, so that shape is never a document from the
+      past — only a producer carrying a stale copy of the built-in list, whose
+      write would otherwise corrupt the line with no diagnostic.
+    - **The storage lane accepts it, and must.** A blob written while `callout`
+      was unknown carries `{"kind": "callout", "attrs": {…}}`; the release that
+      promotes `callout` to a built-in has to keep opening it. Rejecting at
+      `from_canonical_json` would refuse documents at rest exactly when the
+      vocabulary grows — the failure this whole section exists to prevent.
 
 The opaque attrs are hash input like everything else in the canonical form, so
 they are recursively key-sorted along with the rest (see Byte-stability). What
 *does* remain a schema event is a change to the content object's own structure
 — a new top-level key beside `text`/`lines`/`marks`/`islands`, or a changed
 meaning for an existing discriminator.
+
+### What openness buys a consumer, and what it does not
+
+Two consumer postures read this contract differently, and only one of them is
+served by "project an unknown as its nearest safe neighbor":
+
+- **Render-only.** Degrade and move on. An unknown line is a paragraph, an
+  unknown container is absent; nothing is written back, so nothing is lost.
+- **Read-modify-write.** An editor lowers a whole-field diff, restating every
+  line's `kind` and `containers` whenever any of them changed. A construct its
+  tree cannot hold is gone on the next keystroke — the document opens intact and
+  saves mangled. Such a consumer must carry unknowns *inertly*: a carrier node
+  per axis that renders as the nearest safe neighbor and re-emits the tag and
+  `attrs` verbatim.
+
+Classifying known-vs-unknown is therefore the read-modify-write consumer's
+problem, and the boundary answers it — `isUnknownLine` / `isUnknownContainer` /
+`isUnknownMark` / `isUnknownIsland` on the WASM surface, `KnownIslandType::parse`
+and the `RESERVED_*` lists in Rust. A consumer that re-derives the built-in list
+instead has re-coupled to a closed set, and misreads the first release that adds
+a built-in.
+
+The bound worth stating plainly: **the carrier preserves unknown tags, not
+unknown payloads on known tags.** A future `kind: "footnote"` carrying a sibling
+`ref` loses `ref` at any consumer that predates it, predicates or no — which is
+the first rule above (*payload rides `attrs`*) read from the other end.
 
 ## Island-id determinism
 

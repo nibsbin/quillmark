@@ -18,6 +18,18 @@ guides in order.
 
 ## Available guides
 
+- [0.98 → 0.99](0.98-to-0.99.md) — the open sets get a membership question, and
+  a strict write lane.
+  **Break:** `attrs` beside a built-in discriminator (`{kind: "para", attrs:
+  {…}}`) is rejected where a host authors it — `install` and `applyChange`'s line
+  and mark ops — instead of resolving to the built-in and dropping the payload in
+  silence. Reading a stored document is unchanged and stays lenient by design.
+  New `isUnknownLine` / `isUnknownContainer` / `isUnknownMark` /
+  `isUnknownIsland` guards answer "is this a value this build knows?", so a
+  read-modify-write consumer no longer re-derives the built-in list; and
+  `ContentLineKind` is re-exported from the package entry point, making the
+  whole-lift spelling of a `setKind` op type-check without a cast. No action for
+  a render-only consumer.
 - [0.97 → 0.98](0.97-to-0.98.md) — the block vocabulary opens, and `txt`
   retires.
   **Break:** `LineKind` and `Container` each gain an `Unknown { tag, attrs }`

@@ -22,6 +22,11 @@ import {
   MAIN_CARD_ADDR,
   isQuillmarkError,
   exportMarkdown,
+  isHeadingLine,
+  isUnknownLine,
+  isUnknownContainer,
+  isUnknownMark,
+  isUnknownIsland,
 } from '@quillmark-wasm/runtime'
 // Pin that the runtime's Quill IS the internal core build's class (re-export,
 // not a parallel wrapper). This imports the internal core artifact directly —
@@ -373,6 +378,44 @@ describe('@quillmark/wasm/runtime — MAIN_CARD_ADDR (the named main-card addres
     const doc = new Document('editor_test')
     doc.storeExt(MAIN_CARD_ADDR, { editor: { pinned: true } })
     expect(doc.main.ext.editor.pinned).toBe(true)
+  })
+})
+
+describe('@quillmark/wasm/runtime — open-set membership guards (#1085)', () => {
+  it('answers known-vs-unknown on all four axes', () => {
+    for (const kind of ['para', 'heading', 'code', 'island', 'rule']) {
+      expect(isUnknownLine({ kind, containers: [] })).toBe(false)
+    }
+    expect(isUnknownLine({ kind: 'callout', attrs: {}, containers: [] })).toBe(true)
+
+    expect(isUnknownContainer({ container: 'quote' })).toBe(false)
+    expect(isUnknownContainer({ container: 'list_item' })).toBe(false)
+    expect(isUnknownContainer({ container: 'indent', attrs: {} })).toBe(true)
+
+    for (const type of ['strong', 'emph', 'underline', 'strike', 'code', 'link', 'anchor']) {
+      expect(isUnknownMark({ start: 0, end: 1, type })).toBe(false)
+    }
+    expect(isUnknownMark({ start: 0, end: 1, type: 'highlight', attrs: {} })).toBe(true)
+
+    expect(isUnknownIsland({ id: 'i1', type: 'table', props: {}, loss: 'lossless' })).toBe(false)
+    expect(isUnknownIsland({ id: 'i1', type: 'image', props: {}, loss: 'lossless' })).toBe(false)
+    expect(isUnknownIsland({ id: 'i1', type: 'widget', props: {}, loss: 'lossless' })).toBe(true)
+  })
+
+  it('is the exact complement of the pinned-arm guards on the known names', () => {
+    // The point of the predicate: a consumer branches on membership rather than
+    // eliminating arm by arm against a hard-coded built-in list.
+    const line = { kind: 'heading', level: 2, containers: [] }
+    expect(isHeadingLine(line)).toBe(true)
+    expect(isUnknownLine(line)).toBe(false)
+  })
+
+  it('reports a missing or non-string discriminant as not-unknown, never throwing', () => {
+    // A malformed value is not an unknown construct — it is malformed, and the
+    // decoder rejects it. The guard must not turn one into the other.
+    for (const bad of [{}, { kind: 7 }, null, undefined]) {
+      expect(isUnknownLine(bad)).toBe(false)
+    }
   })
 })
 
