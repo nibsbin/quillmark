@@ -267,12 +267,12 @@ Three additions make the freeze mechanical rather than noticed:
 
 Blocking on 1.0.0, in the sense that each is unfixable or expensive after it:
 
-1. `#[non_exhaustive]` (§ 5) — free now, needs a 2.0 later.
-2. `loss` carries its tag (§ 1) — a wire-behavior change.
-3. Cell keys survive (§ 3) — a wire-behavior change.
-4. Promotion protocol written and tested (§ 2) — the first promotion after
-   1.0.0 does the damage.
-5. JSON depth invariant (§ 4) — an abort on a host-reachable path.
+1. `#[non_exhaustive]` (§ 5, #1090) — free now, needs a 2.0 later.
+2. `loss` carries its tag (§ 1, #1091) — a wire-behavior change.
+3. Cell keys survive (§ 3, #1092) — a wire-behavior change.
+4. JSON depth invariant (§ 4, #1093) — an abort on a host-reachable path.
+5. Promotion protocol written and tested (§ 2, #1094) — the first promotion
+   after 1.0.0 does the damage.
 
 Deferrable past 1.0.0 without cost:
 
