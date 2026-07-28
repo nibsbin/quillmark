@@ -1,5 +1,38 @@
 # Changelog
 
+## v0.98.0 - 2026-07-28
+
+- Simplification pass over the integration merge
+- Dense-prose pass over the integration merge
+- Open the block vocabulary; `Loss` describes fidelity, it does not gate export
+- content: bound export's verify-and-drop net — close #1052
+- Point the schema-model note at the ladder's real owner
+- Trim binding tests to marshalling altitude (issue #1056)
+- Move wrong-altitude tests down to core (issue #1056)
+- Table-drive assemble_tests.rs clusters; dense-prose pass on issue #1060 tests
+- Table-drive lossiness_tests.rs clusters for issue #1060 (partial)
+- Table-drive edit_tests.rs, quill/tests.rs, and wasm test clusters for issue #1060 (partial)
+- Table-drive quill/tests.rs clusters for issue #1060 (partial)
+- Table-drive test clusters for issue #1060 (partial)
+- dense-prose: fix an ambiguous reading in the validation-line docs
+- Document the construction-vs-insertion validation line
+- Revert the `$kind` wire check: construction is permissive by design
+- api: close the straightforward gaps from the public-API sweep
+- hygiene: production-side duplication from #1067
+- hygiene: drop tests that pin foreign behavior or assert nothing — close #1065
+- hygiene: one walker, one quill builder — close #1062
+- content: delete the `***` fixup — its only effect was dropping a literal asterisk
+- content: close three codec holes — island-swallowing marks, unchecked line kinds, unbounded decode
+- hygiene: close #1070, #1069; CI zero-backend gate; dead surface from #1066
+- canon: the CI job table lists every CI job
+- ci: cut the canon lint to gates only
+- canon: aggressive prune — overview stops re-documenting its own docs
+- canon: cut what docs/ already owns; state each fact once
+- canon: state the shape, not the ticket; drop the rotting export list
+- ci_cd: record the canon lint in the lint-job row
+- canon: make the lint check truth, not only shape
+
+
 ## v0.97.0 - 2026-07-24
 
 - core: one take_item primitive behind the three payload removers
