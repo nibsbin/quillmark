@@ -619,6 +619,14 @@ impl<'a> Emit<'a> {
                 (g0, Vec::new())
             }
             LineKind::Code { .. } => unreachable!("code handled by early return"),
+            // `LineKind` is open (`#[non_exhaustive]`): a block role added after
+            // this build lowers as a paragraph, the same projection
+            // `LineKind::Unknown` gets. Its inline content renders; its role is
+            // lost to the projection and survives in storage.
+            _ => {
+                let g0 = self.out.len();
+                (g0, self.emit_inline(lo, hi))
+            }
         };
         let g1 = self.out.len();
         self.segments.push(SegmentMap {
@@ -912,7 +920,12 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
                 ord: m.kind.ord(),
                 open: format!("#link(\"{}\")[", escape_string(url)),
             }),
+            // An anchor is identity, not formatting, and an unknown mark has no
+            // Typst spelling — both contribute no wrap. `MarkKind` is open
+            // (`#[non_exhaustive]`), so a kind added after this build takes the
+            // same nothing, matching `wrap_open`'s own fallthrough.
             MarkKind::Anchor { .. } | MarkKind::Unknown { .. } => {}
+            _ => {}
         }
     }
     codes.sort_unstable();

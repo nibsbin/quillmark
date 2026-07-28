@@ -57,6 +57,7 @@ pub struct Delta {
 /// (`{"retain": 5}`, `{"insert": "x"}`, `{"delete": 2}`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Op {
     /// Keep `n` chars of the base unchanged.
     Retain(usize),
@@ -70,6 +71,7 @@ pub enum Op {
 /// as `"before"` / `"after"`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Assoc {
     /// Stay before inserted text.
     Before,

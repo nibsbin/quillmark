@@ -20,6 +20,7 @@ use serde_json::{Map, Value};
 /// Why canonical-JSON parsing failed. Structural only — a well-formed producer
 /// (this crate's serializer, the seam, storage) never trips these.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ParseError {
     /// Top-level JSON was not an object, or a required key was missing/mistyped.
     Shape(&'static str),
@@ -481,6 +482,13 @@ fn reject_reserved_attrs_deep(v: &Value) -> Result<(), ParseError> {
                 for cell in table_cell_values(props) {
                     for m in arr_or_empty(cell, "marks") {
                         reject_mark_attrs(m)?;
+                        // `parse_cell` drops a mark it cannot read, and
+                        // `canon_cell` then writes back only what parsed, so the
+                        // drop is permanent. Lenient is right for a blob at rest;
+                        // on the authored lane it means the host's malformed mark
+                        // disappears with no signal — the same reasoning that
+                        // makes `attrs` beside a built-in an error here.
+                        mark_from_value(m)?;
                     }
                 }
             }
@@ -682,6 +690,15 @@ fn pad_row(v: &mut Value, cols: usize) {
 
 /// De-newline a cell's text (each `\n`/`\r` → a space, 1:1 so mark offsets hold)
 /// and re-normalize its marks. Reached per-cell from [`normalize_table_props`].
+///
+/// Writes `text` and `marks` back into the cell's **own** object rather than
+/// minting a fresh one, so a key this build does not recognize survives. A cell
+/// is the sub-structure the `table` type is likeliest to grow (`colspan`,
+/// `rowspan`, a per-cell alignment or style handle), and every other opaque
+/// payload in the model — unknown `attrs` on all three block axes, island
+/// `props`, a table's own top-level props — already round-trips untouched. A
+/// cell minted whole was the one exception, which made the likeliest extension
+/// the one that could not be added without a schema-version event.
 fn canon_cell(cell: &mut Value) {
     let (text, marks) = parse_cell(cell);
     let text = if text.contains(['\n', '\r']) {
@@ -689,7 +706,22 @@ fn canon_cell(cell: &mut Value) {
     } else {
         text
     };
-    *cell = cell_to_value(&text, &crate::model::normalize_marks(marks));
+    let marks = crate::model::normalize_marks(marks);
+    match cell.as_object_mut() {
+        Some(o) => {
+            o.insert("text".into(), Value::String(text));
+            o.insert(
+                "marks".into(),
+                Value::Array(marks.iter().map(mark_to_value).collect()),
+            );
+        }
+        // A non-object cell (a bare string, a null) holds no keys to preserve;
+        // rewriting it whole is what gives it the canonical shape at all. Same
+        // for the empty cells `pad_row` mints — synthesized, nothing to carry.
+        None => *cell = cell_to_value(&text, &marks),
+    }
+    // Key order is restored by the recursive `canonicalize_keys` pass in
+    // `Content::normalize`, which runs over the whole props tree after this.
 }
 
 /// A table island's shape violation, if any — the widths the header, `aligns`,
@@ -743,7 +775,7 @@ fn island_to_value(island: &Island) -> Value {
     m.insert("id".into(), Value::String(island.id.clone()));
     m.insert("type".into(), Value::String(island.island_type.clone()));
     m.insert("props".into(), sorted_value(&island.props));
-    m.insert("loss".into(), loss_to_str(island.loss).into());
+    m.insert("loss".into(), loss_to_str(&island.loss).into());
     Value::Object(m)
 }
 
@@ -765,11 +797,14 @@ fn island_from_value(v: &Value) -> Result<Island, ParseError> {
     })
 }
 
-fn loss_to_str(loss: Loss) -> &'static str {
+fn loss_to_str(loss: &Loss) -> &str {
     match loss {
         Loss::Lossless => "lossless",
         Loss::Degraded => "degraded",
         Loss::Unrepresentable => "unrepresentable",
+        // Verbatim, so a class this build lacks survives a reader that merely
+        // opened the document.
+        Loss::Unknown(raw) => raw,
     }
 }
 
@@ -777,9 +812,11 @@ fn loss_from_str(s: &str) -> Loss {
     match s {
         "lossless" => Loss::Lossless,
         "degraded" => Loss::Degraded,
-        // Unknown/future loss class defaults to the *safe* end: never claim a
-        // value the reader can't interpret "carries faithfully".
-        _ => Loss::Unrepresentable,
+        "unrepresentable" => Loss::Unrepresentable,
+        // Unknown/future loss class is carried, and reads through
+        // `Loss::fidelity` at the *safe* end: never claim a value the reader
+        // can't interpret "carries faithfully".
+        other => Loss::Unknown(other.to_string()),
     }
 }
 
@@ -904,11 +941,20 @@ mod tests {
         ));
     }
 
+    /// Issue #1091: `loss` is the fifth open vocabulary, on the same terms as the
+    /// four below. A class this build lacks is **carried**, not rewritten, so a
+    /// reader that merely opened the document neither destroys the class nor
+    /// moves the content hash; reading it degrades to the safe end.
     #[test]
-    fn unknown_loss_class_defaults_unrepresentable() {
-        let json = r#"{"text":"￼","lines":[{"kind":"island","containers":[]}],"marks":[],"islands":[{"id":"i1","type":"widget","props":{},"loss":"future_class"}]}"#;
+    fn unknown_loss_class_round_trips_and_reads_unrepresentable() {
+        let json = concat!(
+            r#"{"islands":[{"id":"i1","loss":"partial","props":{},"type":"widget"}],"#,
+            r#""lines":[{"containers":[],"kind":"island"}],"marks":[],"text":"￼"}"#
+        );
         let rt = Content::from_canonical_json(json).unwrap();
-        assert_eq!(rt.islands[0].loss, Loss::Unrepresentable);
+        assert_eq!(rt.islands[0].loss, Loss::Unknown("partial".into()));
+        assert_eq!(rt.islands[0].loss.fidelity(), Loss::Unrepresentable);
+        assert_eq!(rt.to_canonical_json(), json);
     }
 
     /// Issue #1054: the block vocabulary is open on the mark axis' terms. A
@@ -1021,6 +1067,31 @@ mod tests {
                 "storage lane rejected: {json}"
             );
         }
+    }
+
+    /// Issue #1092: a cell mark the reader cannot parse is dropped by
+    /// `parse_cell` and the drop made permanent by `canon_cell`, so the authored
+    /// lane refuses it on the same reasoning as the reserved-name rule — the
+    /// host's mark would otherwise vanish with no signal. Storage stays lenient:
+    /// a stored blob's unreadable mark must not make the document unopenable.
+    #[test]
+    fn authored_lane_rejects_an_unparseable_cell_mark() {
+        let json = concat!(
+            r#"{"islands":[{"id":"i1","loss":"lossless","props":{"aligns":["none"],"#,
+            r#""header":[{"marks":[{"end":1,"start":0}],"text":"h"}],"#,
+            r#""rows":[[{"marks":[],"text":"r"}]]},"type":"table"}],"#,
+            r#""lines":[{"containers":[],"kind":"island"}],"marks":[],"text":"￼"}"#
+        );
+        let v: Value = serde_json::from_str(json).unwrap();
+        assert!(matches!(
+            from_authored_value(&v),
+            Err(ParseError::Shape(_))
+        ));
+        let rt = Content::from_canonical_json(json).unwrap();
+        assert!(rt.islands[0].props["header"][0]["marks"]
+            .as_array()
+            .unwrap()
+            .is_empty());
     }
 
     /// Issue #1084: the authored lane's scan is structural, not a blind walk. An

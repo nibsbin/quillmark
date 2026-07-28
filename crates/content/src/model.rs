@@ -75,6 +75,7 @@ pub struct Line {
 /// instead of refusing the whole document, and the opaque tag+attrs still reach a
 /// reader that understands them (`DOCUMENT_STORAGE.md` § Open vocabularies).
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum LineKind {
     Para,
     /// ATX/Setext heading, level 1..=6.
@@ -121,6 +122,7 @@ impl LineKind {
 /// [`Container::Unknown`] and projects *transparently* — its lines render at the
 /// enclosing level, with no prefix, no wrapper, and no grouping of their own.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Container {
     /// A list item. `ordered` distinguishes `1.` from `-`; `start` is the list's
     /// first number (1 by default); `ordinal` is this item's 0-based index in
@@ -164,6 +166,7 @@ pub struct Mark {
 /// algebra classes: formatting is a property of a range (two coincident are
 /// redundant); identity is a handle (two over the same range are two things).
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum MarkKind {
     // Formatting — round-trippable projection marks. `is_formatting()`.
     Strong,
@@ -217,15 +220,45 @@ pub struct Island {
 /// warned that a form field silently dropped a table, issue #1043). It is not a
 /// switch: [`crate::export::to_markdown`] dispatches on
 /// [`Island::island_type`], never on this.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Loss {
     /// Markdown carries it faithfully (round-trips identically).
     Lossless,
     /// Markdown carries an approximation (round-trips visibly, not identically).
     Degraded,
-    /// No markdown encoding — what an island type with no projection carries,
-    /// and the safe default a decoder mints for an unrecognized loss class.
+    /// No markdown encoding — what an island type with no projection carries.
     Unrepresentable,
+    /// A class a future writer stamped that this build lacks, carried verbatim.
+    ///
+    /// The other four vocabularies in the canonical form — mark `type`, line
+    /// `kind`, container, island `type` — are open sets that round-trip an
+    /// unrecognized member opaque. `loss` was the one axis that rewrote instead,
+    /// so an older reader that merely opened a document destroyed the class and
+    /// moved the content hash of a document nobody edited, against
+    /// `DOCUMENT_STORAGE.md` § Byte-stability.
+    ///
+    /// Read fidelity through [`Loss::fidelity`], never by matching this arm: an
+    /// unrecognized class degrades to [`Unrepresentable`](Loss::Unrepresentable),
+    /// so nothing is ever claimed to carry faithfully on the strength of a name
+    /// this build cannot interpret.
+    Unknown(String),
+}
+
+impl Loss {
+    /// The fidelity this class describes, with an unrecognized class degraded to
+    /// the safe end.
+    ///
+    /// Carrying the raw tag is what preserves the byte round-trip; projecting it
+    /// through here is what keeps that carriage from being mistaken for a claim
+    /// about the projection. Never returns [`Unknown`](Loss::Unknown).
+    pub fn fidelity(&self) -> Loss {
+        match self {
+            Loss::Lossless => Loss::Lossless,
+            Loss::Degraded => Loss::Degraded,
+            Loss::Unrepresentable | Loss::Unknown(_) => Loss::Unrepresentable,
+        }
+    }
 }
 
 impl MarkKind {
@@ -356,6 +389,7 @@ pub(crate) fn sort_keys_owned(v: JsonValue) -> JsonValue {
 /// Ways a [`Content`] can violate its invariants. Returned by
 /// [`Content::validate`]; import normalization guarantees none of these.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Invariant {
     /// `\r` in the text (line endings must be normalized to `\n`).
     CarriageReturn,
@@ -431,6 +465,7 @@ pub enum Invariant {
 /// carry arbitrary text including slots (an inline image is a slot in a `Para`),
 /// so only the three kinds whose contract *names* their content constrain it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LineKindMismatch {
     /// [`LineKind::Island`] whose text is not exactly one [`ISLAND_SLOT`].
     IslandNotOneSlot,
@@ -1188,6 +1223,43 @@ mod tests {
         let once = a.to_canonical_json();
         a.normalize();
         assert_eq!(a.to_canonical_json(), once);
+    }
+
+    /// Issue #1092: a cell is canonicalized in place, so a key this build does
+    /// not recognize survives — the carriage every other opaque payload in the
+    /// model already has. Without it the `table` type's likeliest extension
+    /// (`colspan`, a per-cell style handle) could not be added without a
+    /// schema-version event, and `normalize` runs on decode, on every op apply,
+    /// and on every serialize, so the loss was immediate and permanent.
+    #[test]
+    fn unrecognized_cell_key_survives_normalize() {
+        let mut rt = Content::empty();
+        rt.text = ISLAND_SLOT.to_string();
+        rt.lines = vec![Line {
+            kind: LineKind::Island,
+            containers: vec![],
+            continues: false,
+        }];
+        rt.islands = vec![Island {
+            id: "i".into(),
+            island_type: "table".into(),
+            props: serde_json::json!({
+                "aligns": ["none"],
+                "header": [{"text": "h", "marks": [], "colspan": 2}],
+                "rows": [[{"text": "a", "marks": []}]],
+            }),
+            loss: Loss::Lossless,
+        }];
+        rt.normalize();
+        assert_eq!(rt.validate(), Ok(()));
+        assert_eq!(rt.islands[0].props["header"][0]["colspan"], 2);
+        // The padded cell `pad_row` mints carries nothing, and should not.
+        assert!(rt.islands[0].props["rows"][0][0].get("colspan").is_none());
+        // Idempotent, and the carried key is hash input like any other.
+        let once = rt.to_canonical_json();
+        rt.normalize();
+        assert_eq!(rt.to_canonical_json(), once);
+        assert!(once.contains(r#""colspan":2"#));
     }
 
     /// `validate` bounds a cell mark by its own cell's text length (in USV).

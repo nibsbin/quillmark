@@ -73,6 +73,7 @@ type UnderlineOpens = Rc<RefCell<HashSet<usize>>>;
 /// Import errors: just the nesting guard (mirrors the typst backend's
 /// `ConversionError::NestingTooDeep`).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ImportError {
     /// Container nesting exceeded [`MAX_NESTING_DEPTH`].
     NestingTooDeep { depth: usize, max: usize },

@@ -58,11 +58,11 @@ use crate::model::{Container, Island, LineKind, MarkKind, Content, ISLAND_SLOT};
 /// *describes* the projection's fidelity for a consumer to surface (issue
 /// #1043); the type decides whether a projection exists at all.
 ///
-/// Keeping the two apart is what makes a decode-time default safe. A known type
+/// Keeping the two apart is what makes a decode-time degrade safe. A known type
 /// a future writer stamped with a loss class this build lacks arrives as
-/// `Unrepresentable` (`serial::loss_from_str` degrades to the safe end) and
-/// still emits its table: the conservative default describes the value, it does
-/// not suppress it.
+/// `Loss::Unknown` — carried verbatim, reading as `Unrepresentable` through
+/// `Loss::fidelity` — and still emits its table: the conservative reading
+/// describes the value, it does not suppress it.
 pub fn to_markdown(rt: &Content) -> String {
     // Per-line char ranges, so global marks can be clipped to a line.
     let segments = line_segments(rt);
