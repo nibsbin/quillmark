@@ -71,11 +71,11 @@ pub const MAX_NESTING_DEPTH: usize = 100;
 ///
 /// The payload axis of [`MAX_NESTING_DEPTH`]: `is_value_key_sorted`,
 /// `sort_keys_owned`, and `serde_json::Value`'s own `Drop` each recurse one
-/// frame per level, so an unbounded bag overflows the
-/// stack — on wasm32, an unrecoverable trap rather than a catchable error. The
-/// bag is refused at the decode boundary, before it is cloned out of the wire,
-/// and [`Content::validate`](model::Content::validate) restates it as an
-/// invariant for the hand-built content that never went through a decoder.
+/// frame per level, so an unbounded bag overflows the stack — on wasm32, an
+/// unrecoverable trap rather than a catchable error. The bag is refused at the
+/// decode boundary, before it is cloned out of the wire, and
+/// [`Content::validate`](model::Content::validate) restates it as an invariant
+/// for the hand-built content that never went through a decoder.
 ///
 /// 128 is what `serde_json::from_str` already enforces, so nothing a stored blob
 /// can carry is refused. The string lane counts from the document root rather

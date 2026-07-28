@@ -409,15 +409,16 @@ pub(crate) fn canonicalize_keys(v: &mut JsonValue) {
 /// The crate's one key sorter: reorder every object's keys by **moving** each
 /// entry into a freshly key-sorted map, recursively. Pins island `props` (and
 /// unknown line/container/mark `attrs`) against `preserve_order` leaking
-/// insertion order into the canonical bytes / content hash (Spike C
-/// carry-forward). The fixed struct keys land alphabetically and any
-/// already-sorted `props`/`attrs` re-sort to themselves; the leaves (the `text`
-/// string, mark attrs, arrays) are moved rather than deep-cloned, so a tree
-/// built once by `to_value` is canonicalized without a second full clone. The
-/// encoders therefore emit their payload bags verbatim — one pass over the
-/// finished tree, not one per bag. Re-sorting a new
-/// `serde_json::Map` (not sorting in place) keeps this independent of whether
-/// `serde_json`'s `preserve_order` feature is on in the crate graph.
+/// insertion order into the canonical bytes / content hash. Re-sorting into a
+/// new `serde_json::Map` (not sorting in place) keeps that independent of
+/// whether `serde_json`'s `preserve_order` feature is on in the crate graph.
+///
+/// The fixed struct keys land alphabetically and an already-sorted
+/// `props`/`attrs` re-sorts to itself. The leaves (the `text` string, mark
+/// attrs, arrays) move rather than deep-clone, so a tree built once by
+/// `to_value` is canonicalized without a second full clone — and the encoders
+/// emit their payload bags verbatim, one pass over the finished tree rather
+/// than one per bag.
 pub(crate) fn sort_keys_owned(v: JsonValue) -> JsonValue {
     match v {
         JsonValue::Array(items) => {
@@ -510,11 +511,9 @@ pub enum Invariant {
         max: usize,
     },
     /// An opaque JSON payload — an island's `props`, an unknown line/container/
-    /// mark's `attrs` — nests deeper than [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH).
-    /// [`Invariant::NestingTooDeep`] on the payload axis: key-canonicalization,
-    /// the hash key, and `Value`'s own `Drop` each recurse one frame per level, so
-    /// an unbounded bag overflows the stack instead of erroring. `what` names the
-    /// bag. No true depth: the check bails at the first over-deep container rather
+    /// mark's `attrs` — nests deeper than [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH):
+    /// [`Invariant::NestingTooDeep`] on the payload axis. `what` names the bag.
+    /// No true depth — the check bails at the first over-deep container rather
     /// than measuring past the limit.
     JsonTooDeep { what: &'static str, max: usize },
 }
@@ -1107,10 +1106,9 @@ mod tests {
     }
 
     /// Issue #1093: [`container_nesting_is_capped`] on the payload axis. The
-    /// decoders refuse an over-deep bag at the wire, and this is the same cap for
-    /// the content that never went through a decoder — key canonicalization, the
-    /// hash key, and `Value`'s own `Drop` recurse one frame per level whatever
-    /// built the tree.
+    /// decoders refuse an over-deep bag at the wire; this is the same cap for
+    /// content that never went through one, since the recursive consumers spend
+    /// a frame per level whatever built the tree.
     #[test]
     fn json_payload_depth_is_capped() {
         let nested = |depth: usize| {

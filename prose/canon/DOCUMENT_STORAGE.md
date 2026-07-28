@@ -185,13 +185,13 @@ Three rules bound the openness:
   content-hash key, and `serde_json::Value`'s own `Drop` each recurse one frame
   per level, so an unbounded bag overflows the stack — on wasm32, a trap that
   takes the module down rather than an error the host can catch. The cap is the
-  one `serde_json::from_str` already enforces, so it refuses nothing a stored blob
-  can carry; it exists because the `Value` lane (the host-authored one, which
-  `install` reaches) is not parsed from a string and had no limit of its own. A
-  bag is refused where the decoder reads it off the wire, before it is cloned into
-  the model, and `Content::validate` restates it as `Invariant::JsonTooDeep` for
-  content that never went through a decoder. This is
-  `Invariant::NestingTooDeep`'s container cap on the payload axis.
+  one `serde_json::from_str` already enforces, so it refuses nothing a stored
+  blob can carry. It is stated on its own because the `Value` lane — the
+  host-authored one, which `install` reaches — is not parsed from a string, so
+  nothing else bounds it. A bag is refused where the decoder reads it off the
+  wire, before it is cloned into the model; `Content::validate` restates it as
+  `Invariant::JsonTooDeep` for content that never went through a decoder. This
+  is `Invariant::NestingTooDeep`'s container cap on the payload axis.
 
 - **Payload rides `attrs`.** A built-in carries its payload in named sibling
   keys (`level`, `lang`, `url`); an unknown carries it in one opaque `attrs`
@@ -261,7 +261,7 @@ rides `attrs`*) read from the other end.
 
 ## Promoting a vocabulary member
 
-Adding an unknown is not a schema event; the reverse trip — a later release
+Adding an unknown is not a schema event. The reverse trip — a later release
 **promoting** a tag to a built-in, which is what the open set exists for — moves
 four things at once.
 
@@ -285,7 +285,7 @@ sibling wins over a bag entry, only reserved names fold, and the discriminator i
 read from the original object. A promotion adds its name to `RESERVED_*` in the
 same edit that adds its arm, so it inherits the fold and carries its own legacy
 form. Re-encoding a folded blob writes the promoted spelling, so the read is a
-byte movement of the read-repair kind § Byte-stability governs.
+byte movement of the read-repair kind that § Byte-stability governs.
 
 The island axis has no such gap: `props` is the payload carrier for known and
 unknown types alike, so a promoted island type reads what its unknown wrote. Nor
@@ -299,9 +299,9 @@ one document two canonical forms, one per reader. The rule is stated on
 nothing.
 
 **Promoting a mark into the formatting class changes stored meaning**, since
-adjacent runs that round-tripped as two marks begin to union. It is a
+adjacent runs that round-trip as two marks begin to union. It is a
 canonical-byte event, and takes the read-repair-or-accept-the-movement treatment
-§ Byte-stability sets out for migrated rows.
+that § Byte-stability sets out for migrated rows.
 
 **`RESERVED_*` growth rejects previously-valid authored content**, by design. A
 host still authoring `Unknown { tag: "callout" }` after the promotion gets

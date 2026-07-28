@@ -134,15 +134,15 @@ pub fn from_canonical_value(v: &Value) -> Result<Content, ParseError> {
 }
 
 /// Read an opaque payload bag (`attrs`, `props`) off the wire, absent → `Null`.
-/// **Depth-checked before the clone**, against
-/// [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH): `Value::clone` recurses one frame
-/// per level, as do the key-canonicalization passes, the hash key, and the tree's
-/// own `Drop`, so an over-deep bag must be refused while it is still borrowed from
-/// the caller's `Value` — by the time it is owned, the frames have already been
-/// spent and dropping it spends them again. The wire twin of the
+/// Every bag any decoder retains comes through here — the wire twin of the
 /// [`Invariant::JsonTooDeep`] check in
-/// [`Content::validate`](crate::model::Content::validate), and every bag every
-/// decoder retains comes through here.
+/// [`Content::validate`](crate::model::Content::validate).
+///
+/// **Depth-checked before the clone.** `Value::clone` spends a frame per level
+/// like every other consumer ([`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH)), so an
+/// over-deep bag has to be refused while it is still borrowed from the caller's
+/// `Value`: once it is owned the frames are already spent, and dropping it
+/// spends them again.
 fn bag_from_wire(
     o: &Map<String, Value>,
     key: &'static str,
@@ -974,10 +974,10 @@ mod tests {
 
     /// Build a `Value` nesting `depth` array levels — iteratively, so *building*
     /// the fixture cannot overflow. Handling it still can: `Value`'s `Clone` and
-    /// `Drop` both recurse, which is why the tests below probe just past the cap
-    /// (1 000, the depth issue #1093 measured as safe to hold) rather than at the
-    /// 5 000 that aborted. A depth the guard must reject is a depth the test
-    /// cannot pass around either — the reason the limit exists.
+    /// `Drop` both recurse, so the tests below probe just past the cap at 1 000 —
+    /// deep enough to be refused, shallow enough to pass around — rather than at
+    /// a depth that overflows the test itself. A depth the guard must reject is a
+    /// depth the test cannot hold either, which is the reason the limit exists.
     fn nested_arrays(depth: usize) -> Value {
         let mut v = Value::Null;
         for _ in 0..depth {
@@ -987,10 +987,11 @@ mod tests {
     }
 
     /// Issue #1093: [`deep_container_nesting_is_rejected_at_decode`] on the
-    /// payload axis, through the `Value` lane. The string lane was already safe
-    /// by accident (`serde_json::from_str` refuses past 128), but the `Value` lane
-    /// is the host-authored one — `install` reaches it — and had no guard, so a
-    /// 5 000-deep `props` aborted the process instead of erroring.
+    /// payload axis, through the `Value` lane. The string lane is bounded by its
+    /// parser (`serde_json::from_str` refuses past 128); the `Value` lane is the
+    /// host-authored one — `install` reaches it — and has to refuse the same
+    /// shape, since an unguarded deep `props` aborts the process rather than
+    /// erroring.
     #[test]
     fn deep_json_payload_is_rejected_at_decode_on_the_value_lane() {
         let deep = nested_arrays(1_000);
@@ -1052,7 +1053,7 @@ mod tests {
         // Across the whole boundary region, string-lane-accepted implies
         // `Value`-lane-accepted. The converse does not hold and need not: the
         // string lane's root-relative count refuses a few depths the bag cap
-        // allows, which is where it was accidentally safe all along.
+        // allows.
         let mut storable = 0;
         for d in 1..=crate::MAX_JSON_DEPTH + 8 {
             let v = content(nested_arrays(d));
