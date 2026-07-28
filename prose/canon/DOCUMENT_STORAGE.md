@@ -160,13 +160,23 @@ mark axis' terms, not one step behind it, and `loss` carries its raw tag rather
 than rewriting it — a reader that merely opens a document must not move its
 content hash (§ Byte-stability).
 
-Openness is a property of the *payload carriers*, not only the discriminators.
-Every opaque bag round-trips untouched through normalization — unknown `attrs`
-on all three block axes, island `props`, a table island's own top-level props,
-and a table **cell's** unrecognized keys. The cell is the sub-structure the
-`table` type is likeliest to grow (`colspan`, `rowspan`, a per-cell style
-handle), so canonicalization rewrites a cell's `text` and `marks` in place
-rather than minting a fresh `{text, marks}` object.
+Unknown *keys* survive in designated carriers only, and the boundary is worth
+stating because it is not the discriminator boundary:
+
+- **Opaque carriers keep what they hold.** Unknown `attrs` on all three block
+  axes, island `props`, a table island's top-level props, and a table **cell's**
+  own keys all round-trip untouched.
+- **Envelopes drop what they do not name, by design.** An island, line, mark, or
+  container object is decoded into a struct and re-minted from its fields, so an
+  unrecognized sibling key beside `id`/`kind`/`start` does not survive. Growing
+  those shapes is a schema event; that is what the envelope's version-and-reject
+  discipline is for.
+
+A table cell sits on the first side because it never became a struct, and it
+earns the place: cells are where the `table` type is likeliest to grow
+(`colspan`, `rowspan`, a per-cell style handle). Canonicalization therefore
+rewrites a cell's `text` and `marks` in place rather than minting a fresh
+`{text, marks}` object.
 
 Three rules bound the openness:
 
@@ -204,11 +214,11 @@ Three rules bound the openness:
       An op or an `install` is host-authored now, so that shape means a stale
       copy of the built-in list, never a document from the past. Reads that hand
       back stored content — `exportMarkdown`, `rebase` — are storage-lane, not
-      this one. The same split governs an unreadable **table-cell mark**: the
-      storage lane skips it (`serial::parse_cell` is lenient, and normalization
-      then makes the drop permanent), while the authored lane refuses it, since
-      a host's malformed mark disappearing with no signal is the silent
-      corruption this rule exists to catch.
+      this one. The same split governs an unreadable **table-cell mark**.
+      Storage skips it: `serial::parse_cell` is lenient, and normalization makes
+      the skip permanent. The authored lane refuses it, because a host's
+      malformed mark vanishing with no signal is the silent corruption this rule
+      exists to catch.
     - **The storage lane accepts it, and must.** A blob written while `callout`
       was unknown carries `{"kind": "callout", "attrs": {…}}`; the release that
       promotes `callout` to a built-in has to keep opening it. Rejecting at
