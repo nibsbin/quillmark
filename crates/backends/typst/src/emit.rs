@@ -384,7 +384,7 @@ impl<'a> Emit<'a> {
                 Some(j)
             }
             Some(Container::Quote) => {
-                let j = self.quote_run_end(range.clone(), depth, i);
+                let j = self.container_run_end(range.clone(), depth, &Container::Quote, i);
                 self.emit_quote(i..j, depth);
                 Some(j)
             }
@@ -394,7 +394,7 @@ impl<'a> Emit<'a> {
             // whole run here (rather than falling through to the leaf path) keeps
             // its lines grouped as one block instead of splitting them.
             Some(key @ Container::Unknown { .. }) => {
-                let j = self.same_container_run_end(range.clone(), depth, &key, i);
+                let j = self.container_run_end(range.clone(), depth, &key, i);
                 self.emit_block_level(i..j, depth + 1);
                 Some(j)
             }
@@ -402,10 +402,11 @@ impl<'a> Emit<'a> {
         }
     }
 
-    /// End of the run starting at `i` whose container at `depth` equals `key` —
-    /// the whole-container-equality twin of [`Self::list_run_end`] (which matches
-    /// a list's shape, not an item) for containers with no shape of their own.
-    fn same_container_run_end(
+    /// End of the run starting at `i` whose container at `depth` equals `key`.
+    /// Whole-container equality, which is what a container with no shape of its
+    /// own (`Quote`, an unknown) needs; [`Self::list_run_end`] is the sibling for
+    /// a list, where the run is the *shape* and each item differs.
+    fn container_run_end(
         &self,
         range: Range<usize>,
         depth: usize,
@@ -459,21 +460,6 @@ impl<'a> Emit<'a> {
         j
     }
 
-    /// End of the quote run starting at `i`: the maximal span of lines whose
-    /// container at `depth` is a `Quote`.
-    fn quote_run_end(&self, range: Range<usize>, depth: usize, i: usize) -> usize {
-        let mut j = i + 1;
-        while j < range.end
-            && matches!(
-                self.rt.lines[j].containers.get(depth),
-                Some(Container::Quote)
-            )
-        {
-            j += 1;
-        }
-        j
-    }
-
     /// A leaf block terminated with `\n\n`. An empty paragraph emits nothing;
     /// every other block — including an empty heading (`= `) or empty code
     /// fence — still renders.
@@ -481,7 +467,7 @@ impl<'a> Emit<'a> {
         let first = &self.rt.lines[range.start];
         let (lo, _) = self.line_usv[range.start];
         let (_, hi) = self.line_usv[range.end - 1];
-        if matches!(first.kind, LineKind::Para) && lo == hi {
+        if first.kind.projects_as_para() && lo == hi {
             return;
         }
         self.emit_segment(range);

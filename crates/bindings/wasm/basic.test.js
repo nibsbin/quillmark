@@ -220,7 +220,7 @@ describe('Document.toMarkdown — fromMarkdown → mutate → emit → re-parse'
 describe('Document JSON DTO — toJson / fromJson', () => {
   // The DTO's content rules — what round-trips, what a reconstruction drops,
   // which payloads are refused — are core's
-  // (`core/src/document/tests/`). At this boundary the questions are narrower:
+  // (`core/src/document/dto.rs`). At this boundary the questions are narrower:
   // does the DTO cross as a plain JSON string, does a handle survive the
   // round-trip, and do the JS-only statics (`tryFromJson`, `schemaVersionOf`)
   // answer with `undefined` where their throwing twins throw.

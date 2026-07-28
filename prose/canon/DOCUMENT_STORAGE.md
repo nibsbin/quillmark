@@ -168,7 +168,9 @@ Two rules bound the openness:
   (`heading`, `quote`, `link`, …): it would serialize as the built-in and parse
   back as one, silently dropping its attrs. `Content::validate` rejects this
   (`Invariant::ReservedUnknownTag` / `ReservedUnknownLineKind` /
-  `ReservedUnknownContainer`), so a non-injective blob cannot be stored.
+  `ReservedUnknownContainer`). The enforcement point is **decode**, which every
+  read runs — a host that builds a non-injective tag through the op wire writes
+  a blob that saves and then fails to load, the same gap on all three axes.
 
 The opaque attrs are hash input like everything else in the canonical form, so
 they are recursively key-sorted along with the rest (see Byte-stability). What

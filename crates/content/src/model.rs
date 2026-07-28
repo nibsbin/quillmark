@@ -102,6 +102,19 @@ pub enum LineKind {
     },
 }
 
+impl LineKind {
+    /// Whether the line projects as a paragraph: [`LineKind::Para`] itself, or an
+    /// unknown role, which every projection renders as one. For the tests a
+    /// `match` cannot serve — a `matches!(kind, Para)` that special-cases the
+    /// paragraph (suppressing an empty block, say) reads as complete but drops
+    /// the open arm, and the two emitters then drift on the construct neither
+    /// knows. An exhaustive `match` keeps listing both arms; the compiler polices
+    /// that one.
+    pub fn projects_as_para(&self) -> bool {
+        matches!(self, LineKind::Para | LineKind::Unknown { .. })
+    }
+}
+
 /// A container a line nests inside. The ancestor path is a `Vec<Container>`.
 ///
 /// **Open**, on [`LineKind`]'s terms: an unrecognized container round-trips as
@@ -302,6 +315,15 @@ pub(crate) fn is_value_key_sorted(v: &JsonValue) -> bool {
                 && map.values().all(is_value_key_sorted)
         }
         _ => true,
+    }
+}
+
+/// Put `v` in canonical key order, rebuilding it only when a key is actually out
+/// of order — an untouched tree (a pure text splice) stays sorted, so the
+/// per-keystroke path pays the scan and skips the deep clone.
+pub(crate) fn canonicalize_keys(v: &mut JsonValue) {
+    if !is_value_key_sorted(v) {
+        *v = sorted_value(v);
     }
 }
 
@@ -521,9 +543,22 @@ impl Content {
         // deliberate mis-tag is refused up front instead
         // ([`ApplyError::LineKindMismatch`](crate::ops::ApplyError::LineKindMismatch)),
         // since silently undoing an op the caller asked for is worse than an error.
+        // The same pass canonicalizes the open block vocabulary's opaque `attrs`:
+        // it is hash input like every other field, so two equal contents whose
+        // unknown lines were built key-reversed must not serialize to different
+        // bytes. A demoted line is `Para`, never `Unknown`, so the two are
+        // independent.
         for (line, seg) in self.lines.iter_mut().zip(self.text.split('\n')) {
             if line_kind_mismatch(&line.kind, seg).is_some() {
                 line.kind = LineKind::Para;
+            }
+            if let LineKind::Unknown { attrs, .. } = &mut line.kind {
+                canonicalize_keys(attrs);
+            }
+            for c in &mut line.containers {
+                if let Container::Unknown { attrs, .. } = c {
+                    canonicalize_keys(attrs);
+                }
             }
         }
         // Islands: canonicalize props key order. A table island's cells carry
@@ -534,36 +569,11 @@ impl Content {
         // otherwise opaque here.
         for island in &mut self.islands {
             crate::island::normalize_island_structure(island);
-            // Rebuild props only when a key is actually out of order — an
-            // untouched island (a pure text splice) stays sorted, so this skips
-            // the deep clone on the common per-keystroke path.
-            if !is_value_key_sorted(&island.props) {
-                island.props = sorted_value(&island.props);
-            }
+            canonicalize_keys(&mut island.props);
         }
         for mark in &mut self.marks {
             if let MarkKind::Unknown { attrs, .. } = &mut mark.kind {
-                if !is_value_key_sorted(attrs) {
-                    *attrs = sorted_value(attrs);
-                }
-            }
-        }
-        // The open block vocabulary carries the same opaque `attrs`, and it is
-        // hash input like every other field — canonicalize its key order too, or
-        // two equal contents whose unknown lines were built key-reversed
-        // serialize to different bytes.
-        for line in &mut self.lines {
-            if let LineKind::Unknown { attrs, .. } = &mut line.kind {
-                if !is_value_key_sorted(attrs) {
-                    *attrs = sorted_value(attrs);
-                }
-            }
-            for c in &mut line.containers {
-                if let Container::Unknown { attrs, .. } = c {
-                    if !is_value_key_sorted(attrs) {
-                        *attrs = sorted_value(attrs);
-                    }
-                }
+                canonicalize_keys(attrs);
             }
         }
         // A formatting mark's edges never sit on a line boundary: markdown can't

@@ -618,21 +618,23 @@ fn render_marked_core(
     clip_fmt_to_atomic(&mut fmt, &atomics);
     clip_asterisk_overlap(&mut fmt);
 
-    // One mark sweep over `fmt` → inline markdown. Free (Peritext) overlap is
-    // lowered to nesting by closing every mark ending at `pos` and reopening the
-    // deeper survivors.
-    let sweep = |fmt: &[(usize, usize, &MarkKind)]| -> String {
+    // `fmt` by start, longest span (outer) first at a tie. `pos` only ever
+    // advances, so one cursor over this order opens every mark exactly once — the
+    // sweep is linear in `chars` + `fmt` rather than rescanning all three mark
+    // lists at every position (issue #1052). Built once here, not per sweep: the
+    // net below sweeps the same `fmt` up to `PROBE_BUDGET` times.
+    let mut by_start: Vec<usize> = (0..fmt.len()).collect();
+    by_start.sort_by(|&a, &b| fmt[a].0.cmp(&fmt[b].0).then(fmt[b].1.cmp(&fmt[a].1)));
+
+    // One mark sweep over the marks `keep` selects (indices into `fmt`) → inline
+    // markdown. Free (Peritext) overlap is lowered to nesting by closing every
+    // mark ending at `pos` and reopening the deeper survivors.
+    let sweep = |keep: &[bool]| -> String {
         let mut out = String::new();
         // Indices into `fmt` for the marks currently open, outermost first.
         // Storing the index (not `(end, kind)`) keeps each open mark's identity,
         // so a reopened mark re-emits its OWN delimiter.
         let mut stack: Vec<usize> = Vec::new();
-        // `fmt` by start, longest span (outer) first at a tie. `pos` only ever
-        // advances, so one cursor over this order opens every mark exactly once
-        // — the sweep is linear in `chars` + `fmt` rather than rescanning all
-        // three mark lists at every position (issue #1052).
-        let mut by_start: Vec<usize> = (0..fmt.len()).collect();
-        by_start.sort_by(|&a, &b| fmt[a].0.cmp(&fmt[b].0).then(fmt[b].1.cmp(&fmt[a].1)));
         let (mut oi, mut li, mut ci) = (0usize, 0usize, 0usize);
         let mut pos = 0usize;
         while pos <= n {
@@ -661,9 +663,12 @@ fn render_marked_core(
             }
             while oi < by_start.len() && fmt[by_start[oi]].0 == pos {
                 let fi = by_start[oi];
+                oi += 1;
+                if !keep[fi] {
+                    continue;
+                }
                 out.push_str(&delim_open(fmt[fi].2));
                 stack.push(fi);
-                oi += 1;
             }
             // A link is emitted atomically as [text](url); its display text
             // carries plain content (nested marks in link text are not supported)
@@ -757,25 +762,24 @@ fn render_marked_core(
             .map(|rt| rt.text == want)
             .unwrap_or(false)
     };
+    let out = sweep(&vec![true; fmt.len()]);
+    if !fmt.iter().any(|m| is_flanking(m.2)) || text_safe(&out) {
+        return out;
+    }
     // The flanking marks in document order (`marks` is normalized, so: start
     // ascending, then span, then kind). That order is the re-add priority below
     // — when two marks can't both survive, the earlier one wins — and it is the
     // one user-visible choice in this search, so it is fixed here rather than
     // falling out of the traversal.
     let cands: Vec<usize> = (0..fmt.len()).filter(|&i| is_flanking(fmt[i].2)).collect();
-    let out = sweep(&fmt);
-    if cands.is_empty() || text_safe(&out) {
-        return out;
-    }
-    // Render `fmt` with only the flanking marks in `keep` (ascending).
+    // Render with only the flanking marks in `keep`; every other mark always
+    // rides.
     let render = |keep: &[usize]| -> String {
-        let subset: Vec<(usize, usize, &MarkKind)> = fmt
-            .iter()
-            .enumerate()
-            .filter(|(i, m)| !is_flanking(m.2) || keep.binary_search(i).is_ok())
-            .map(|(_, m)| *m)
-            .collect();
-        sweep(&subset)
+        let mut mask: Vec<bool> = fmt.iter().map(|m| !is_flanking(m.2)).collect();
+        for &i in keep {
+            mask[i] = true;
+        }
+        sweep(&mask)
     };
     // Drop the whole flanking set, then re-add by halves: a chunk that stays
     // text-safe is accepted whole, one that doesn't splits and its halves are
@@ -788,37 +792,46 @@ fn render_marked_core(
     //
     // Dropping every flanking mark is the floor the search can't go below, so if
     // even that leaks, the leak is not a flanking mark's and no re-add can fix it:
-    // return the floor rather than probe a search that cannot succeed.
+    // return the floor rather than probe a search that cannot succeed. A lone
+    // candidate has nowhere to split, so the floor is already its answer.
     let mut out = render(&[]);
-    if !text_safe(&out) {
+    if cands.len() == 1 || !text_safe(&out) {
         return out;
     }
     let mut kept: Vec<usize> = Vec::new();
-    // The whole set is the render that already failed, so start one level down;
-    // a lone candidate has nowhere to split and is dropped.
-    let mut work: Vec<(usize, usize)> = Vec::new();
-    if cands.len() > 1 {
-        let mid = cands.len() / 2;
-        work.push((mid, cands.len()));
-        work.push((0, mid));
-    }
+    // A chunk `(lo, hi)` and the `kept` length at which its trial is *already
+    // known to fail*: a right half popped with every mark of its left sibling
+    // accepted re-renders exactly the chunk their parent failed on, so it splits
+    // without spending a probe. The whole set is the render that already failed,
+    // so the search starts one level down.
+    let mid = cands.len() / 2;
+    let mut work: Vec<(usize, usize, usize)> = vec![(mid, cands.len(), mid), (0, mid, usize::MAX)];
     let mut budget = PROBE_BUDGET;
-    while let Some((lo, hi)) = work.pop() {
+    while let Some((lo, hi, known_bad_at)) = work.pop() {
+        let split = |work: &mut Vec<_>, kept_len: usize| {
+            if hi - lo > 1 {
+                let mid = lo + (hi - lo) / 2;
+                work.push((mid, hi, kept_len + (mid - lo)));
+                work.push((lo, mid, usize::MAX));
+            }
+        };
+        if known_bad_at == kept.len() {
+            split(&mut work, kept.len());
+            continue;
+        }
         if budget == 0 {
             break;
         }
         budget -= 1;
         // `work` is a left-to-right DFS, so every accepted mark precedes this
-        // chunk and `trial` stays ascending for `render`'s lookup.
+        // chunk and `trial` stays in document order.
         let trial: Vec<usize> = kept.iter().chain(&cands[lo..hi]).copied().collect();
         let md = render(&trial);
         if text_safe(&md) {
             kept = trial;
             out = md;
-        } else if hi - lo > 1 {
-            let mid = lo + (hi - lo) / 2;
-            work.push((mid, hi));
-            work.push((lo, mid));
+        } else {
+            split(&mut work, kept.len());
         }
     }
     out

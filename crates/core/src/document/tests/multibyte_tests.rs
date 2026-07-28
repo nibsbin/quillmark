@@ -1,12 +1,12 @@
 //! Regression coverage for the "string index N is not a character boundary"
 //! panic class on the YAML scanner paths that run *after* the prescan.
 //!
-//! The bullet-marker path is pinned at its own altitude in
-//! [`crate::document::prescan`] (`sequence_with_multibyte_after_dash_does_not_panic`);
-//! what lives here is the quoted-scalar reader and the caret renderer that
-//! formats a YAML error — both of which index into the source line and so must
-//! respect char boundaries. Each test's crucial assertion is "did not panic";
-//! whether the input parses is secondary.
+//! The bullet-marker path is pinned in [`crate::document::prescan`]
+//! (`sequence_with_multibyte_after_dash_does_not_panic`) and the caret renderer
+//! in [`crate::document::yaml_hints`]; what lives here is the quoted-scalar
+//! reader, which has no unit owner, and the wiring that hands the renderer a
+//! char-bounded slice. Each test's crucial assertion is "did not panic"; whether
+//! the input parses is secondary.
 
 use crate::document::assemble::decompose;
 
@@ -23,19 +23,15 @@ fn multibyte_in_quoted_scalar_parses() {
 }
 
 #[test]
-fn multibyte_keys_do_not_panic_on_duplicate() {
-    // YAML error formatting can include the offending key in its caret message.
-    // A multibyte key is the suspect input for the caret renderer.
-    let md = "~~~card-yaml\n$quill: q@0.1\n$kind: main\nf\u{2014}o: 1\nf\u{2014}o: 2\n~~~\n";
-    // A duplicate-key parse error is the expected outcome; a panic is not.
-    let _ = decompose(md);
-}
-
-#[test]
-fn multibyte_in_value_with_yaml_error_does_not_panic() {
-    // A value carrying multibyte chars alongside a YAML structural bug on the
-    // same line — caret positioning has to scan past the multibyte chars.
+fn multibyte_yaml_errors_reach_the_renderer_char_bounded() {
+    // The renderer's own multibyte guarantee is pinned at its altitude
+    // (`yaml_hints::does_not_panic_on_multibyte_content`); what this covers is
+    // the wiring — that `assemble` hands it a char-bounded slice, whether the
+    // multibyte chars sit in a key, before a structural bug on the same line, or
+    // in the value the caret has to scan past. A parse error is the expected
+    // outcome; a panic is not.
     let inputs = [
+        "~~~card-yaml\n$quill: q@0.1\n$kind: main\nf\u{2014}o: 1\nf\u{2014}o: 2\n~~~\n",
         "~~~card-yaml\n$quill: q@0.1\n$kind: main\nx: hello \u{2014} world\nbluf: *bad-alias\n~~~\n",
         "~~~card-yaml\n$quill: q@0.1\n$kind: main\nsystem_name: \u{201C}Service\u{201D}: Order API\n~~~\n",
     ];
