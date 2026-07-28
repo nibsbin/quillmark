@@ -59,9 +59,10 @@ export type {
 // must name all of them; they are its correctness core, not edge types.
 // `ContentLineKind` is the shared half of `ContentLine` and `setKind`, so lifting
 // a line's kind whole — destructure off `containers`/`continues`, spread the rest
-// into the op — is the version-proof spelling of building a `setKind`, and it is
-// nameable rather than cast-only (#1086). The alternative, an arm-by-arm switch,
-// means guessing at the open arm's shape and re-editing on every arm added.
+// into the op — is the version-proof spelling of building a `setKind`. Naming it
+// is what makes that spelling type-check without a cast. The alternative, an
+// arm-by-arm switch, means guessing at the open arm's shape and re-editing on
+// every arm added.
 export type {
 	Content,
 	ContentLine,
@@ -192,9 +193,9 @@ export declare function isListItemContainer(
 // answer "is this a value this build knows?" — the question a read-modify-write
 // consumer must ask, since lowering an edit restates every line's kind and
 // containers, and a construct the consumer cannot hold is gone on write-back
-// unless it is carried inertly (#1085). Without a predicate a consumer
-// enumerates the built-in names itself and re-couples to a closed set, going
-// wrong at the first release that adds one.
+// unless it is carried inertly. Without a predicate a consumer enumerates the
+// built-in names itself and re-couples to a closed set, going wrong at the first
+// release that adds one.
 //
 // They classify unknown TAGS, not unknown payloads on known tags: a future
 // `kind: "footnote"` carrying a sibling `ref` loses `ref` at any consumer that

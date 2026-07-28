@@ -1396,7 +1396,7 @@ impl Document {
         #[wasm_bindgen(unchecked_param_type = "Content")] rt: JsValue,
     ) -> Result<(), JsValue> {
         let addr = Addr::from_js_or_string(&addr)?;
-        let content = js_to_content(rt, "install")?;
+        let content = js_to_authored_content(rt, "install")?;
         let base = self.addr_base(&addr);
         let card = self.addr_card_mut(&addr)?;
         match &addr.field {
@@ -1885,15 +1885,33 @@ impl Addr {
     }
 }
 
-/// Decode a JS value as a canonical `Content` content object — the `install`
-/// input (value semantics, content only). Rejects a markdown string: the cold
-/// path is spelled `install(addr, importMarkdown(md))`.
+/// Decode a JS value as a canonical `Content` content object (value semantics,
+/// content only). Rejects a markdown string: the cold path is spelled
+/// `install(addr, importMarkdown(md))`.
 ///
-/// Reads through the **authored** lane, not the storage one: this content is
-/// something the host is writing now, so `attrs` beside a built-in discriminator
-/// is a stale built-in list rather than a document predating that built-in, and
-/// is reported instead of silently dropped (#1084).
+/// The **storage** lane — `exportMarkdown(card.body)` and `rebase(base, md)` are
+/// handed content read back out of a document, which must keep opening whatever
+/// it was written as. A host authoring content goes through
+/// [`js_to_authored_content`].
 fn js_to_content(value: JsValue, ctx: &str) -> Result<quillmark_core::Content, JsValue> {
+    js_to_content_with(value, ctx, quillmark_content::serial::from_canonical_value)
+}
+
+/// [`js_to_content`] on the **authored** lane — the `install` input. The host is
+/// writing this content now, so `attrs` beside a built-in discriminator is a
+/// stale copy of the built-in list rather than a document predating that
+/// built-in, and is reported instead of silently dropped.
+fn js_to_authored_content(value: JsValue, ctx: &str) -> Result<quillmark_core::Content, JsValue> {
+    js_to_content_with(value, ctx, quillmark_content::serial::from_authored_value)
+}
+
+fn js_to_content_with(
+    value: JsValue,
+    ctx: &str,
+    read: fn(
+        &serde_json::Value,
+    ) -> Result<quillmark_core::Content, quillmark_content::serial::ParseError>,
+) -> Result<quillmark_core::Content, JsValue> {
     let json = js_value_to_json(value, ctx)?;
     if !json.is_object() {
         return Err(WasmError::from(format!(
@@ -1901,8 +1919,9 @@ fn js_to_content(value: JsValue, ctx: &str) -> Result<quillmark_core::Content, J
         ))
         .to_js_value());
     }
-    quillmark_content::serial::from_authored_value(&json)
-        .map_err(|e| WasmError::from(format!("{ctx}: not a canonical Content content: {e}")).to_js_value())
+    read(&json).map_err(|e| {
+        WasmError::from(format!("{ctx}: not a canonical Content content: {e}")).to_js_value()
+    })
 }
 
 /// Lower a `ChangeBundle` (`{ delta?, lineOps?, markOps? }`) to core ops via the

@@ -171,25 +171,25 @@ export function isListItemContainer(container) {
 
 // ── Open-set membership guards ──────────────────────────────────────────────
 // The guards above each answer "is this arm X" — one pinned arm at a time. These
-// four answer the other question: "is this a value this build knows?" (#1085).
-// Without them a consumer that must branch known-vs-unknown — any
-// read-modify-write consumer, since lowering an edit restates every line's kind
-// and containers — enumerates the built-in names in its own source, recreating
-// the closed-set coupling the open set exists to remove. That list is correct
-// until the release that adds a built-in, at which point the new construct is
-// misclassified as unknown and round-trips through the consumer's unknown
-// carrier, losing any sibling-key payload.
+// four answer the other question: "is this a value this build knows?" A consumer
+// that must branch known-vs-unknown — any read-modify-write consumer, since
+// lowering an edit restates every line's kind and containers — otherwise
+// enumerates the built-in names in its own source, recreating the closed-set
+// coupling the open set exists to remove. That list is correct until the release
+// that adds a built-in, at which point the new construct is misclassified as
+// unknown and round-trips through the consumer's unknown carrier, losing any
+// sibling-key payload.
 //
-// The known tables below are upstream's business, not a consumer's, which is why
-// this is a predicate rather than an exported name list. They are pinned against
-// the Rust source (`Content::RESERVED_*` and `KnownIslandType`) by the
+// A predicate rather than an exported name list, because the known tables below
+// are upstream's business. They are pinned against the Rust source
+// (`Content::RESERVED_*` and `KnownIslandType`) by the
 // `known_open_set_names_are_pinned` drift-guard test in
-// `crates/content/src/model.rs` — adding a built-in means editing there, here,
-// and the TS unions in `crates/bindings/wasm/src/engine.rs` in one commit.
+// `crates/content/src/model.rs`: adding a built-in means editing there, here, and
+// the TS unions in `crates/bindings/wasm/src/engine.rs` in one commit.
 //
-// What these buy is narrower than it looks: they classify unknown *tags*, not
-// unknown *payloads on known tags*. A future `kind: "footnote"` with a sibling
-// `ref` loses `ref` at a consumer that predates it either way.
+// These classify unknown *tags*, not unknown *payloads on known tags*. A future
+// `kind: "footnote"` with a sibling `ref` loses `ref` at a consumer that predates
+// it either way.
 
 const KNOWN_LINE_KINDS = new Set(['para', 'heading', 'code', 'island', 'rule']);
 const KNOWN_CONTAINERS = new Set(['list_item', 'quote']);

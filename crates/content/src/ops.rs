@@ -85,8 +85,8 @@ pub enum LineOp {
 // language bindings call them to lower a JS/Python bundle to core ops.
 
 use crate::serial::{
-    container_from_op_value, container_to_value, line_kind_from_op_value, line_kind_to_value,
-    mark_from_op_value, mark_to_value, usv_from, ParseError,
+    container_from_authored_value, container_to_value, line_kind_from_authored_value,
+    line_kind_to_value, mark_from_authored_value, mark_to_value, usv_from, ParseError,
 };
 use serde_json::{Map, Value};
 
@@ -125,12 +125,12 @@ fn merge_mark(m: &mut Map<String, Value>, start: Usv, end: Usv, kind: &MarkKind)
 }
 
 /// Decode a [`MarkOp`] from its wire object. Dispatches on `op`; `add`/`remove`
-/// read the mark vocabulary through [`mark_from_op_value`].
+/// read the mark vocabulary through [`mark_from_authored_value`].
 pub fn mark_op_from_value(v: &Value) -> Result<MarkOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("mark op"))?;
     match o.get("op").and_then(Value::as_str) {
         Some("add") => {
-            let mark = mark_from_op_value(v)?;
+            let mark = mark_from_authored_value(v)?;
             Ok(MarkOp::Add {
                 start: mark.start,
                 end: mark.end,
@@ -138,7 +138,7 @@ pub fn mark_op_from_value(v: &Value) -> Result<MarkOp, ParseError> {
             })
         }
         Some("remove") => {
-            let mark = mark_from_op_value(v)?;
+            let mark = mark_from_authored_value(v)?;
             Ok(MarkOp::Remove {
                 start: mark.start,
                 end: mark.end,
@@ -204,7 +204,7 @@ pub fn line_op_from_value(v: &Value) -> Result<LineOp, ParseError> {
         Some("join") => Ok(LineOp::Join { line: line()? }),
         Some("setKind") => Ok(LineOp::SetKind {
             line: line()?,
-            kind: line_kind_from_op_value(v)?,
+            kind: line_kind_from_authored_value(v)?,
         }),
         Some("setContainers") => Ok(LineOp::SetContainers {
             line: line()?,
@@ -213,7 +213,7 @@ pub fn line_op_from_value(v: &Value) -> Result<LineOp, ParseError> {
                 .and_then(Value::as_array)
                 .ok_or(ParseError::Shape("setContainers containers"))?
                 .iter()
-                .map(container_from_op_value)
+                .map(container_from_authored_value)
                 .collect::<Result<_, _>>()?,
         }),
         Some("setContinues") => Ok(LineOp::SetContinues {
