@@ -46,7 +46,7 @@ pub struct Content {
 }
 
 /// A line's attributes: its block role plus the container path it sits in.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Line {
     pub kind: LineKind,
     /// Ancestor containers, outermost first. A multi-paragraph list item is two
@@ -67,7 +67,14 @@ pub struct Line {
 /// The block role of a line. The tree between lines is inferred: two adjacent
 /// lines with equal `kind`+`containers` are two blocks of that role (e.g. two
 /// paragraphs), never one.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// **Open**, on the same terms as [`MarkKind`]: an unrecognized role round-trips
+/// as [`LineKind::Unknown`] and *projects* as [`LineKind::Para`], so adding a
+/// block construct (a callout, a footnote, a task item) is not a document schema
+/// event — an older reader renders the future construct as a plain paragraph
+/// instead of refusing the whole document, and the opaque tag+attrs still reach a
+/// reader that understands them (`DOCUMENT_STORAGE.md` § Open vocabularies).
+#[derive(Debug, Clone, PartialEq)]
 pub enum LineKind {
     Para,
     /// ATX/Setext heading, level 1..=6.
@@ -85,10 +92,22 @@ pub enum LineKind {
     /// break is the line itself, parallel to how an island's content is its
     /// one slot char.
     Rule,
+    /// Open-set escape hatch — a block role this build does not know,
+    /// round-tripped opaque and projected as [`LineKind::Para`]. Carries
+    /// arbitrary text, like the `Para` it projects as, so no
+    /// [`LineKindMismatch`] constrains it.
+    Unknown {
+        tag: String,
+        attrs: JsonValue,
+    },
 }
 
 /// A container a line nests inside. The ancestor path is a `Vec<Container>`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// **Open**, on [`LineKind`]'s terms: an unrecognized container round-trips as
+/// [`Container::Unknown`] and projects *transparently* — its lines render at the
+/// enclosing level, with no prefix, no wrapper, and no grouping of their own.
+#[derive(Debug, Clone, PartialEq)]
 pub enum Container {
     /// A list item. `ordered` distinguishes `1.` from `-`; `start` is the list's
     /// first number (1 by default); `ordinal` is this item's 0-based index in
@@ -108,6 +127,14 @@ pub enum Container {
     /// quote; two adjacent separate quotes are not distinguished (they merge on
     /// round-trip — a documented canonicalization).
     Quote,
+    /// Open-set escape hatch — a container this build does not know, kept in the
+    /// path so it round-trips, transparent to both projections. Two adjacent
+    /// lines sit in the same one iff their whole `(tag, attrs)` is equal, the
+    /// path-plus-contiguity rule the known containers use.
+    Unknown {
+        tag: String,
+        attrs: JsonValue,
+    },
 }
 
 /// A mark over a char range `[start, end)`. `start == end` (zero-width) is legal
@@ -172,14 +199,19 @@ pub struct Island {
     pub loss: Loss,
 }
 
-/// The markdown-projection loss class of an island.
+/// The markdown-projection loss class of an island — a **description** of how
+/// faithfully the projection carries it, for a consumer to surface (a caller
+/// warned that a form field silently dropped a table, issue #1043). It is not a
+/// switch: [`crate::export::to_markdown`] dispatches on
+/// [`Island::island_type`], never on this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Loss {
     /// Markdown carries it faithfully (round-trips identically).
     Lossless,
     /// Markdown carries an approximation (round-trips visibly, not identically).
     Degraded,
-    /// No markdown encoding; export emits a placeholder only.
+    /// No markdown encoding — what an island type with no projection carries,
+    /// and the safe default a decoder mints for an unrecognized loss class.
     Unrepresentable,
 }
 
@@ -321,6 +353,12 @@ pub enum Invariant {
     FirstLineContinues,
     /// An [`MarkKind::Unknown`] reused a reserved built-in `type` name.
     ReservedUnknownTag(String),
+    /// A [`LineKind::Unknown`] reused a reserved built-in `kind` name — its
+    /// serialization would parse back as the built-in, dropping its attrs.
+    ReservedUnknownLineKind(String),
+    /// A [`Container::Unknown`] reused a reserved built-in `container` name, the
+    /// same non-injectivity as [`Invariant::ReservedUnknownLineKind`].
+    ReservedUnknownContainer(String),
     /// A formatting mark edge sits on a `\n` (normalization should have trimmed
     /// it) — a hand-built content that skipped `normalize`.
     MarkEdgeOnNewline { at: Usv },
@@ -510,6 +548,24 @@ impl Content {
                 }
             }
         }
+        // The open block vocabulary carries the same opaque `attrs`, and it is
+        // hash input like every other field — canonicalize its key order too, or
+        // two equal contents whose unknown lines were built key-reversed
+        // serialize to different bytes.
+        for line in &mut self.lines {
+            if let LineKind::Unknown { attrs, .. } = &mut line.kind {
+                if !is_value_key_sorted(attrs) {
+                    *attrs = sorted_value(attrs);
+                }
+            }
+            for c in &mut line.containers {
+                if let Container::Unknown { attrs, .. } = c {
+                    if !is_value_key_sorted(attrs) {
+                        *attrs = sorted_value(attrs);
+                    }
+                }
+            }
+        }
         // A formatting mark's edges never sit on a line boundary: markdown can't
         // bold a `\n`, so two producers that disagree only about whether the
         // boundary is "inside" the mark must canonicalize to the same bounds.
@@ -544,6 +600,16 @@ impl Content {
         "link",
         "anchor",
     ];
+
+    /// Line `kind` names the projection reserves — the [`LineKind`] twin of
+    /// [`RESERVED_MARK_TYPES`](Self::RESERVED_MARK_TYPES), for the same
+    /// injectivity reason.
+    pub const RESERVED_LINE_KINDS: [&'static str; 5] =
+        ["para", "heading", "code", "island", "rule"];
+
+    /// Container names the projection reserves — the [`Container`] twin of
+    /// [`RESERVED_MARK_TYPES`](Self::RESERVED_MARK_TYPES).
+    pub const RESERVED_CONTAINERS: [&'static str; 2] = ["list_item", "quote"];
 
     /// Check every invariant. `Ok(())` on a well-formed content. Import
     /// guarantees this; a hand-built content should be run through it in tests.
@@ -619,9 +685,25 @@ impl Content {
         // One pass over the lines against their own text segment. `lines.len()`
         // already equals the segment count, so the zip is total.
         for (i, (line, seg)) in self.lines.iter().zip(self.text.split('\n')).enumerate() {
-            if let LineKind::Heading { level } = line.kind {
-                if !(1..=6).contains(&level) {
-                    return Err(Invariant::BadHeadingLevel(level));
+            match &line.kind {
+                LineKind::Heading { level } if !(1..=6).contains(level) => {
+                    return Err(Invariant::BadHeadingLevel(*level));
+                }
+                // An unknown role may not reuse a built-in `kind` name: it would
+                // serialize as the built-in and parse back as one, dropping its
+                // attrs — the mark-side rule, one axis over.
+                LineKind::Unknown { tag, .. }
+                    if Self::RESERVED_LINE_KINDS.contains(&tag.as_str()) =>
+                {
+                    return Err(Invariant::ReservedUnknownLineKind(tag.clone()));
+                }
+                _ => {}
+            }
+            for c in &line.containers {
+                if let Container::Unknown { tag, .. } = c {
+                    if Self::RESERVED_CONTAINERS.contains(&tag.as_str()) {
+                        return Err(Invariant::ReservedUnknownContainer(tag.clone()));
+                    }
                 }
             }
             if let Some(mismatch) = line_kind_mismatch(&line.kind, seg) {

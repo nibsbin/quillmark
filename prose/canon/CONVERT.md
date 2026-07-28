@@ -51,6 +51,7 @@ Two escapers guard the two Typst contexts; both live in `emit`:
 | `LineKind::Para` | inline content; a hard break (a `continues` line join) emits `#linebreak()`, a soft break is a space (both settled at import) |
 | `LineKind::Code{lang}` (code fence) | `#raw(block: true, lang: "…", "…")`; `lang:` emitted only when the language tag is non-empty |
 | `LineKind::Rule` (thematic break) | `#line(length: 100%)` |
+| `LineKind::Unknown` (open set) | inline content, as `Para` — the role is lost to the projection, not to storage |
 | `MarkKind::Strong` | `#strong[…]` |
 | `MarkKind::Emph` | `#emph[…]` |
 | `MarkKind::Underline` | `#underline[…]` |
@@ -61,6 +62,7 @@ Two escapers guard the two Typst contexts; both live in `emit`:
 | `Container::ListItem` (bullet) | `- ` |
 | `Container::ListItem` (ordered) | `+ ` auto-numbered; first item emits `N. ` when the list starts at `N ≠ 1` |
 | `Container::Quote` | `#quote(block: true)[…]` |
+| `Container::Unknown` (open set) | nothing — transparent; its run lowers at the enclosing level, one block, no wrapper |
 | `image` island | `#image("url", alt: "…")`; `alt:` omitted when empty |
 | `table` island | `#table(columns: N, align: (…), table.header(…), …)` |
 
@@ -75,7 +77,11 @@ divergence from a flat inline pass; a quote's inner blocks lower under the
 block-level discipline.
 
 Anchor and unknown marks emit nothing; unknown island types emit nothing
-(parallel to the HTML rule at import). Content that import never admits into the
+(parallel to the HTML rule at import). Unknown line kinds and containers lower
+as prose and as nothing respectively — every content vocabulary is open, so a
+build that predates a construct renders it plainly instead of failing
+([DOCUMENT_STORAGE § Open vocabularies](DOCUMENT_STORAGE.md#open-vocabularies)).
+Content that import never admits into the
 content — raw HTML other than `<u>`, HTML comments, `<br>`, math, footnotes, task
 lists, definition lists (markdown-spec §6.3) — is absent here.
 

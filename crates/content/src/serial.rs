@@ -174,6 +174,13 @@ pub fn line_kind_to_value(kind: &LineKind) -> Value {
         LineKind::Rule => {
             m.insert("kind".into(), "rule".into());
         }
+        // Open set, the mark encoding one axis over: the tag *is* the
+        // discriminator and the payload rides one opaque `attrs` bag, so a
+        // reader that lacks the role still carries it whole.
+        LineKind::Unknown { tag, attrs } => {
+            m.insert("kind".into(), Value::String(tag.clone()));
+            m.insert("attrs".into(), sorted_value(attrs));
+        }
     }
     Value::Object(m)
 }
@@ -200,7 +207,14 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
         }),
         Some("island") => Ok(LineKind::Island),
         Some("rule") => Ok(LineKind::Rule),
-        _ => Err(ParseError::Shape("line kind")),
+        // Open set: any other name is a block role this build lacks, kept opaque
+        // and projected as `Para`. Only a missing/non-string `kind` is a shape
+        // error — the *document* still opens when its vocabulary grows.
+        Some(other) => Ok(LineKind::Unknown {
+            tag: other.to_string(),
+            attrs: o.get("attrs").cloned().unwrap_or(Value::Null),
+        }),
+        None => Err(ParseError::Shape("line kind")),
     }
 }
 
@@ -257,6 +271,10 @@ pub fn container_to_value(c: &Container) -> Value {
         Container::Quote => {
             m.insert("container".into(), "quote".into());
         }
+        Container::Unknown { tag, attrs } => {
+            m.insert("container".into(), Value::String(tag.clone()));
+            m.insert("attrs".into(), sorted_value(attrs));
+        }
     }
     Value::Object(m)
 }
@@ -272,7 +290,13 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
             ordinal: o.get("ordinal").and_then(Value::as_u64).unwrap_or(0),
         }),
         Some("quote") => Ok(Container::Quote),
-        _ => Err(ParseError::Shape("container kind")),
+        // Open set, as for line kinds: an unrecognized container round-trips
+        // opaque and projects transparently.
+        Some(other) => Ok(Container::Unknown {
+            tag: other.to_string(),
+            attrs: o.get("attrs").cloned().unwrap_or(Value::Null),
+        }),
+        None => Err(ParseError::Shape("container kind")),
     }
 }
 
@@ -721,6 +745,111 @@ mod tests {
         let json = r#"{"text":"￼","lines":[{"kind":"island","containers":[]}],"marks":[],"islands":[{"id":"i1","type":"widget","props":{},"loss":"future_class"}]}"#;
         let rt = Content::from_canonical_json(json).unwrap();
         assert_eq!(rt.islands[0].loss, Loss::Unrepresentable);
+    }
+
+    /// Issue #1054: the block vocabulary is open on the mark axis' terms. A
+    /// `kind`/`container` this build lacks decodes to `Unknown` — the document
+    /// **opens** — and re-encodes byte-identically, so a construct a future
+    /// reader understands survives the trip through this one.
+    #[test]
+    fn unknown_line_kind_and_container_round_trip_opaque() {
+        let json = concat!(
+            r#"{"islands":[],"lines":[{"attrs":{"variant":"warn"},"containers":"#,
+            r#"[{"attrs":{"depth":2},"container":"indent"}],"kind":"callout"}],"#,
+            r#""marks":[],"text":"heads up"}"#
+        );
+        let rt = Content::from_canonical_json(json).unwrap();
+        assert_eq!(
+            rt.lines[0].kind,
+            LineKind::Unknown {
+                tag: "callout".into(),
+                attrs: serde_json::json!({"variant": "warn"}),
+            }
+        );
+        assert_eq!(
+            rt.lines[0].containers,
+            vec![Container::Unknown {
+                tag: "indent".into(),
+                attrs: serde_json::json!({"depth": 2}),
+            }]
+        );
+        assert_eq!(rt.to_canonical_json(), json);
+        // An attrs-free unknown decodes too (`attrs` is null, not a shape error).
+        let bare = r#"{"islands":[],"lines":[{"containers":[],"kind":"footnote"}],"marks":[],"text":"x"}"#;
+        let rt = Content::from_canonical_json(bare).unwrap();
+        assert_eq!(
+            rt.lines[0].kind,
+            LineKind::Unknown {
+                tag: "footnote".into(),
+                attrs: Value::Null,
+            }
+        );
+        // A missing/non-string discriminator is still a shape error — the open
+        // set absorbs unknown *names*, not malformed objects.
+        for bad in [
+            r#"{"islands":[],"lines":[{"containers":[]}],"marks":[],"text":"x"}"#,
+            r#"{"islands":[],"lines":[{"containers":[{"container":7}],"kind":"para"}],"marks":[],"text":"x"}"#,
+        ] {
+            assert!(matches!(
+                Content::from_canonical_json(bad),
+                Err(ParseError::Shape(_))
+            ));
+        }
+    }
+
+    /// Issue #1054: an unknown line kind / container may not reuse a built-in
+    /// name — it would serialize as the built-in and parse back as one, dropping
+    /// its attrs (the `ReservedUnknownTag` rule, one axis over).
+    #[test]
+    fn reserved_block_vocabulary_names_rejected() {
+        let mut rt = Content::empty();
+        rt.text = "abcd".into();
+        rt.lines[0].kind = LineKind::Unknown {
+            tag: "heading".into(),
+            attrs: serde_json::json!({}),
+        };
+        assert_eq!(
+            rt.validate(),
+            Err(Invariant::ReservedUnknownLineKind("heading".into()))
+        );
+        rt.lines[0].kind = LineKind::Para;
+        rt.lines[0].containers = vec![Container::Unknown {
+            tag: "quote".into(),
+            attrs: serde_json::json!({}),
+        }];
+        assert_eq!(
+            rt.validate(),
+            Err(Invariant::ReservedUnknownContainer("quote".into()))
+        );
+    }
+
+    /// Issue #1054: opaque block attrs are hash input, so their key order must
+    /// not leak into the canonical bytes — the unknown-mark rule, one axis over.
+    #[test]
+    fn unknown_block_attrs_key_order_does_not_leak() {
+        let mut one = Content::empty();
+        one.text = "hi".into();
+        one.lines[0].kind = LineKind::Unknown {
+            tag: "callout".into(),
+            attrs: serde_json::json!({"b": 1, "a": 2}),
+        };
+        one.lines[0].containers = vec![Container::Unknown {
+            tag: "indent".into(),
+            attrs: serde_json::json!({"y": 1, "x": 2}),
+        }];
+        let mut two = one.clone();
+        two.lines[0].kind = LineKind::Unknown {
+            tag: "callout".into(),
+            attrs: serde_json::json!({"a": 2, "b": 1}),
+        };
+        two.lines[0].containers = vec![Container::Unknown {
+            tag: "indent".into(),
+            attrs: serde_json::json!({"x": 2, "y": 1}),
+        }];
+        assert_eq!(one.to_canonical_json(), two.to_canonical_json());
+        one.normalize();
+        two.normalize();
+        assert_eq!(one, two, "normalize canonicalizes the live model too");
     }
 
     #[test]

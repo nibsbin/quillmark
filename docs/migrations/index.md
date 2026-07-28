@@ -18,6 +18,15 @@ guides in order.
 
 ## Available guides
 
+- [0.97 → 0.98](0.97-to-0.98.md) — the block vocabulary opens.
+  **Break:** `LineKind` and `Container` each gain an `Unknown { tag, attrs }`
+  variant (exhaustive matches need an arm) and `Line` / `LineKind` / `Container`
+  drop their `Eq` derive; `ContentLine.kind` and `ContentContainer.container`
+  gain an open TS arm, so a bare discriminant check no longer narrows — use the
+  new `isHeadingLine` / `isCodeLine` / `isListItemContainer` guards. Stored
+  documents are unaffected: an unrecognized line kind or container now
+  round-trips opaque and renders as a paragraph (or transparently) instead of
+  failing the load, so adding a block construct is no longer a schema event.
 - [0.96 → 0.97](0.96-to-0.97.md) — the WASM transport read renames; `$id`
   becomes the unique card handle.
   **Break:** `Document.get` → **`Document.getStored`** (JS) — the quill-free
