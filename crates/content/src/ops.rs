@@ -362,7 +362,7 @@ impl Content {
     /// normalization `import` applies at the string boundary. The text-delta
     /// channel is the *other* way text enters the content, so without this an
     /// insert of `\r` or a bidi control returned `Ok` while leaving a content
-    /// that fails `validate()` (see issue #899).
+    /// that fails `validate()`.
     pub fn apply_text_delta(&mut self, delta: &Delta) -> Result<(), ApplyError> {
         self.apply_text_delta_inner(delta)?;
         self.normalize();
@@ -972,7 +972,7 @@ mod tests {
                 line: 2,
                 containers: vec![Container::Quote],
             },
-            // The open block vocabulary rides the same op wire (issue #1054):
+            // The open block vocabulary rides the same op wire:
             // a host can set a role or a container this build does not know.
             LineOp::SetKind {
                 line: 0,
@@ -1003,7 +1003,7 @@ mod tests {
         }
     }
 
-    /// Issue #1084: on the op lane, `attrs` beside a built-in discriminator is a
+    /// On the op lane, `attrs` beside a built-in discriminator is a
     /// shape error. A host that emits one classified a built-in as unknown —
     /// stale copy of the built-in list — and the lenient reader would resolve the
     /// name and drop the payload unread, corrupting the line with no diagnostic.
@@ -1115,7 +1115,7 @@ mod tests {
     #[test]
     fn apply_mark_ops_remove_punches_hole() {
         // Un-formatting the middle of a run leaves the two non-overlapping
-        // fragments, not an empty mark set (issue #901). Strong[0,6) over
+        // fragments, not an empty mark set. Strong[0,6) over
         // "abcdef", Remove[2,4) -> Strong[0,2) + Strong[4,6).
         let mut rt = from_markdown("abcdef").unwrap();
         rt.apply_mark_ops(&[MarkOp::Add {
@@ -1248,7 +1248,7 @@ mod tests {
         assert!(matches!(rt.lines[0].kind, LineKind::Heading { level: 2 }));
     }
 
-    /// Issue #1050: `SetKind` may not tag a line with a kind its text
+    /// `SetKind` may not tag a line with a kind its text
     /// contradicts — export reads the kind and not the segment, so the write
     /// would project the line's content away. Refused before the write, so the
     /// content is untouched.
@@ -1295,7 +1295,7 @@ mod tests {
         assert_eq!(tbl.lines[0].kind, LineKind::Island);
     }
 
-    /// Issue #1051: `SetContainers` is capped at the depth both emitters can
+    /// `SetContainers` is capped at the depth both emitters can
     /// recurse — the op-time twin of the `validate` invariant.
     #[test]
     fn line_op_set_containers_is_depth_capped() {
@@ -1455,7 +1455,7 @@ mod tests {
     fn insert_carriage_return_is_stripped() {
         // A `\r` in an insert is dropped, not persisted — the content stays
         // valid instead of the op returning Ok over a `CarriageReturn`
-        // violation (issue #899). `\r\n` still yields the line-boundary `\n`.
+        // violation. `\r\n` still yields the line-boundary `\n`.
         let mut rt = from_markdown("ab").unwrap();
         let d = Delta {
             ops: vec![Op::Retain(1), Op::Insert("\r".into()), Op::Retain(1)],
@@ -1468,7 +1468,7 @@ mod tests {
     #[test]
     fn insert_bidi_control_is_stripped() {
         // A bidi override (U+202E) in an insert is dropped — the content stays
-        // valid and import's Trojan-source defense is not bypassed (issue #899).
+        // valid and import's Trojan-source defense is not bypassed.
         let mut rt = from_markdown("ab").unwrap();
         let d = Delta {
             ops: vec![
@@ -1559,7 +1559,6 @@ mod tests {
 
     /// `add` of an anchor rejects a live id collision and the empty id, but
     /// re-adds an id freed by an earlier `RemoveAnchor` in the same bundle.
-    /// Issue #1039.
     #[test]
     fn add_anchor_id_uniqueness() {
         let anchor = |id: &str| MarkKind::Anchor { id: id.into() };
@@ -1605,7 +1604,7 @@ mod tests {
         assert_eq!((anchors[0].start, anchors[0].end), (2, 4));
     }
 
-    // ── sync_lines_for_delta characterization (issue #926 finding 2) ─────────
+    // ── sync_lines_for_delta characterization ───────────────────────────────
     //
     // Pin the observable behavior of the line-sync walk — retain/insert/delete
     // interleavings, the split template-clone rule, and the malformed-content
@@ -1729,7 +1728,7 @@ mod tests {
         }
     }
 
-    // ── line-op mark remap + terminal-normalize collapse (issue #926 finding 3) ──
+    // ── line-op mark remap + terminal-normalize collapse ────────────────────
 
     #[test]
     fn split_line_rebases_mark_across_the_split_point() {
@@ -1817,7 +1816,7 @@ mod tests {
 
     #[test]
     fn sync_lines_select_all_delete_collapses_to_first_line() {
-        // The motivating case (issue #926 finding 2): deleting a whole
+        // The motivating case: deleting a whole
         // multi-line body drops every line but the first (each deleted '\n'
         // merges the next line away).
         let text: String = (0..50).map(|i| format!("line{i}\n")).collect();

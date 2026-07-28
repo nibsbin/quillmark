@@ -156,7 +156,7 @@ title: Draft
     expect(doc.cards[0].kind).toBe('note')
 
     doc.storeField({ card: 0, field: 'author' }, 'Bob')
-    // Keyed card read (#953) — mirrors the write, no payloadItems walk. Agrees
+    // Keyed card read — mirrors the write, no payloadItems walk. Agrees
     // with the hand-rolled projection it replaces.
     expect(doc.getStored({ card: 0, field: 'author' })).toBe('Bob')
     expect(doc.getStored({ card: 0, field: 'author' })).toBe(field(doc.cards[0], 'author'))
@@ -170,7 +170,7 @@ title: Draft
     expect(doc.cardCount).toBe(0)
   })
 
-  it('keyed card reads mirror the card write verbs (#953)', () => {
+  it('keyed card reads mirror the card write verbs', () => {
     const doc = Document.fromMarkdown(`~~~
 $quill: core_test
 $kind: main
@@ -186,7 +186,7 @@ title: Draft
 
     // getMarkdown is the card body read (card address); a field address throws.
     // A field's markdown reads through the schema-plane view,
-    // quill.reader(doc).card(i).get(name) (#978).
+    // quill.reader(doc).card(i).get(name).
     expect(doc.getMarkdown({ card: 0 })).toContain('A note body.')
     expect(() => doc.getMarkdown({ card: 0, field: 'author' })).toThrow(/body-only/)
 
@@ -201,7 +201,7 @@ title: Draft
     expect(doc.getStored({ card: 0, field: 'qty' })).toBe(3)
   })
 
-  it('single-card, $id, and seed-overlay reads (#956)', () => {
+  it('single-card, $id, and seed-overlay reads', () => {
     const doc = Document.fromMarkdown(`~~~
 $quill: core_test
 $kind: main

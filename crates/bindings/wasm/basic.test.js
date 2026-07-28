@@ -544,13 +544,13 @@ describe('Document editor surface — setQuillRef / install / revise', () => {
     expect(() => doc.install({}, { not: 'a content' })).toThrow()
   })
 
-  // Issue #1093: island `props` and unknown `attrs` are opaque host payload with
-  // no depth limit, and every consumer of them — key canonicalization, the hash
-  // key, the JS→JSON conversion, the tree's own drop — recurses one frame per
-  // level. On wasm32 the stack is 1 MB and an overflow is a trap that takes the
-  // module down rather than an error the host can catch, so this must throw and
-  // then keep working. `install` is the reachable door: the value arrives from JS
-  // and one loop builds it.
+  // Island `props` and unknown `attrs` are opaque host payload, and
+  // every consumer of them — key canonicalization, the hash key, the JS→JSON
+  // conversion, the tree's own drop — recurses one frame per level. On wasm32 the
+  // stack is 1 MB and an overflow is a trap that takes the module down rather than
+  // an error the host can catch, so an over-deep value must throw and leave the
+  // module serving. `install` is the reachable door: the value arrives from JS and
+  // one loop builds it.
   it('install rejects a deeply nested props instead of trapping the module', () => {
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
     let deep = []
@@ -730,7 +730,7 @@ card_kinds:
     ).toThrow()
   })
 
-  it('applyChange setContinues lowers a hard break op-wise (#949)', () => {
+  it('applyChange setContinues lowers a hard break op-wise', () => {
     const doc = blankDoc()
     // Two paragraph lines (a delta-inserted `\n` mints `continues:false`), so
     // export separates them with a blank line — two blocks.

@@ -239,7 +239,7 @@ impl Delta {
 const MIN_MOVE: usize = 4;
 
 /// Above this many USV chars, the single-line path skips `similar`'s
-/// char-level Myers diff and falls back to [`coarse_replace`] (issue #849).
+/// char-level Myers diff and falls back to [`coarse_replace`].
 /// `TextDiff::from_chars` is O(N·D) with no deadline; on two long, unrelated
 /// single-line strings (no newlines to fall back to line granularity — the
 /// realistic shape of an LLM full-document rewrite) D grows with N, so cost
@@ -683,7 +683,7 @@ mod tests {
     }
 
     /// Deterministic filler with no long common substring between the two
-    /// variants — worst case for a char-level Myers diff (issue #849).
+    /// variants — worst case for a char-level Myers diff.
     fn filler(n: usize, offset: u8) -> String {
         (0..n)
             .map(|i| char::from(b'a' + ((i as u8).wrapping_mul(7).wrapping_add(offset)) % 26))
@@ -693,8 +693,8 @@ mod tests {
     #[test]
     fn large_single_line_diff_stays_fast() {
         // Two long, unrelated single-line strings — exactly the shape
-        // `similar::TextDiff::from_chars` chokes on with no cutoff (issue
-        // #849: 30,000 unrelated chars measured 86s in a debug build). Above
+        // `similar::TextDiff::from_chars` chokes on with no cutoff
+        // (30,000 unrelated chars measured 86s in a debug build). Above
         // CHAR_DIFF_LIMIT, `diff` must skip Myers and stay far under budget
         // regardless of input size.
         let base = format!("PREFIX-{}-BASE-SUFFIX", filler(25_000, 0));

@@ -248,7 +248,7 @@ card_kinds:
     expect(ed.document.getStored('qty')).toBe(3)
     expect(ed.document.getStored('missing')).toBeUndefined()
     // getMarkdown is the body read; a field address throws — a field's markdown
-    // reads through the schema-plane view (#978).
+    // reads through the schema-plane view.
     expect(ed.document.getMarkdown()).toBe('Main **body**.')
     expect(() => ed.document.getMarkdown({ field: 'subject' })).toThrow(/body-only/)
     expect(quill.reader(ed.document).get('subject')).toBe('Q3 **results**')
@@ -380,7 +380,7 @@ describe('@quillmark/wasm/runtime — MAIN_CARD_ADDR (the named main-card addres
   })
 })
 
-describe('@quillmark/wasm/runtime — open-set membership guards (#1085)', () => {
+describe('@quillmark/wasm/runtime — open-set membership guards', () => {
   // One known name per axis, not the whole table: membership is a `Set.has`,
   // uniform across members, and the tables themselves are pinned against the
   // Rust constants by `crates/bindings/wasm/tests/known_names_drift.rs`.
@@ -631,8 +631,8 @@ describe('@quillmark/wasm/runtime — Engine (hidden core→backend crossing)', 
 
   // GUARD for the class of bug where a method is declared in runtime.d.ts and
   // implemented in the backend build, but the hand-written canonical LiveSession
-  // wrapper (runtime.js) forgets to forward it — `fieldAt`, issue #801. The
-  // type-level drift test (runtime.types.test-d.ts) only checks structural type
+  // wrapper (runtime.js) forgets to forward it — `fieldAt` is the case in point.
+  // The type-level drift test (runtime.types.test-d.ts) only checks structural type
   // compatibility, so a wrapper that TYPE-checks but has no matching JS method
   // sails through it and throws `X is not a function` at runtime. This calls
   // EVERY documented LiveSession member on a live canonical session, so a
@@ -701,7 +701,7 @@ A single line of body ink.`
       expect(size.widthPt).toBeGreaterThan(0)
       expect(size.heightPt).toBeGreaterThan(0)
 
-      // fieldAt — the delegation that was missing (#801). Hit-test the centre
+      // fieldAt — the delegation that was missing. Hit-test the centre
       // of the body region's rect ([x0, y0, x1, y1], bottom-left PDF points)
       // — guaranteed ink for the single-line body (see SMOKE_MARKDOWN above) —
       // and expect it to resolve back through the wrapper as its DocPath. Off
@@ -845,7 +845,7 @@ main:
     // Both caller handles are snapshotted before the first await inside
     // render/open (the backend load — a real suspension point on first call),
     // so a synchronous free() right after the call cannot race the clone.
-    // Regression pin for the "null pointer passed to rust" panic (#782 §3):
+    // Regression pin for the "null pointer passed to rust" panic:
     // each engine below is fresh, so its first call has the load pending when
     // free() runs.
     const renderEngine = new Engine()

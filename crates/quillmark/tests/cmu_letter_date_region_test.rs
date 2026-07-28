@@ -1,4 +1,4 @@
-//! #990 region coverage on the `cmu_letter` quill's date.
+//! Region coverage on the `cmu_letter` quill's date.
 //!
 //! Like the USAF memo, `cmu_letter` places the letter date inside its vendored
 //! package (`utils.typ`'s `display-date`), and falls back to a native

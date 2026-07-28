@@ -834,7 +834,7 @@ name: Item
     assert_eq!(card.body_markdown(), ""); // empty, not absent
 }
 
-// ── card-kind / global-field name collision: is_ok()-only cases (table-driven) ─
+// ── card-kind / global-field name collision: is_ok()-only cases (table-driven) ───
 // `test_allowed_card_field_collision` (below) exercises the same collision
 // shape and additionally checks the resulting values.
 #[test]
@@ -1664,7 +1664,7 @@ fn test_unicode_in_body() {
 
 // YAML edge cases
 
-// ── Single-field YAML scalar types (table-driven) ────────────────────────────
+// ── Single-field YAML scalar types (table-driven) ─────────────────────────────
 // `|` (literal) and `>` (folded) block scalars are exercised nowhere else in
 // the workspace — keep them as explicit rows here.
 #[test]
@@ -1861,7 +1861,7 @@ fn test_body_with_trailing_newlines() {
     assert_eq!(doc.main().body_markdown(), "Body.");
 }
 
-// ── Blank-line separator stripping: parse-side normalisation ─────────────────
+// ── Blank-line separator stripping: parse-side normalisation ──────────────────
 // See `assemble.rs::strip_blank_separator` and `markdown-spec.md §4` (rule D1).
 
 #[test]
@@ -2108,7 +2108,7 @@ fn payload_field_order_preserved_after_quill_removal() {
     );
 }
 
-// ── Card-id normalization (#1044, §Card-id identity) ─────────────────────────
+// ── Card-id normalization (§ Card-id identity) ────────────────────────────────
 
 #[test]
 fn parse_drops_duplicate_card_id_keeps_first_and_warns() {

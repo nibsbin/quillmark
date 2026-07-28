@@ -283,7 +283,7 @@ pub fn emit_content(rt: &Content) -> Result<Emission, EmitError> {
 /// omitting the block terminator the block walk appends (`\n\n`, a `parbreak()`).
 /// So the field composes in an inline slot (`par(..)`, a signature line, a grid
 /// cell, `measure`) without emitting Typst's non-fatal "parbreak may not occur
-/// inside of a paragraph" warning (#872). The single segment's source map is
+/// inside of a paragraph" warning. The single segment's source map is
 /// identical to the block path's — only the trailing separator differs.
 ///
 /// A content that is *not* [`is_inline`] (never produced for an inline field once
@@ -780,7 +780,7 @@ fn wrap_open(kind: &MarkKind) -> String {
 
 /// Clip wrapping marks so none crosses the interior of an atomic `#raw(...)`
 /// code span (`start`→`ce`, `end`→`cs`), then drop any wrap a span swallowed
-/// whole. Enforces the #846 balance via the shared
+/// whole. Enforces the atomic balance via the shared
 /// [`clip_range_to_atomic`](quillmark_content::export::clip_range_to_atomic) —
 /// the same rule this crate's inline emitter and richtext's export both apply,
 /// here against code spans only (export also clips against link text).
@@ -1203,7 +1203,7 @@ mod tests {
         }
     }
 
-    // ---- inline lowering (richtext(inline), #872) ----
+    // ---- inline lowering (richtext(inline)) ----
 
     /// A `richtext(inline)` content (one `Para`) lowers to pure inline markup —
     /// no trailing `\n\n` (a `parbreak`) — while the block path terminates the
@@ -1517,7 +1517,7 @@ mod tests {
         assert_eq!(out.matches('[').count(), out.matches(']').count());
     }
 
-    /// Issue #1054: the open block vocabulary lowers like prose — an unknown
+    /// The open block vocabulary lowers like prose — an unknown
     /// line kind as a paragraph, an unknown container transparently (its run
     /// lowers at the enclosing level, one block, no wrapper markup). A build
     /// that predates a construct renders it plainly instead of failing.
@@ -1802,7 +1802,7 @@ mod tests {
     }
 
     /// A zero-column (empty) table emits nothing rather than `#table(columns: 0)`
-    /// (which fails to compile), matching the markdown export path. Issue #904.
+    /// (which fails to compile), matching the markdown export path.
     #[test]
     fn empty_table_emits_nothing() {
         let props = serde_json::json!({ "header": [], "aligns": [], "rows": [] });

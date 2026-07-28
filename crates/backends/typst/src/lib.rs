@@ -103,8 +103,8 @@ struct TypstSession {
 /// pixel-for-pixel identically must hash identically, and only render-affecting
 /// data (font, size, paint, glyph geometry, position) may enter the hash.
 ///
-/// This is the #801 dirty-every-reapply bug, and it is real, not theoretical.
-/// The span rework (#795) routes content-field glyphs' spans into the helper
+/// This is the dirty-every-reapply bug, and it is real, not theoretical.
+/// The span rework routes content-field glyphs' spans into the helper
 /// `lib.typ`, which is regenerated per `apply` with a `data` literal whose keys
 /// serialize in field order (`serde_json` is built with `preserve_order`). An
 /// editor's mutate path can hand `apply` the SAME content in a different field
@@ -710,7 +710,7 @@ fn content_field_names(properties: &serde_json::Map<String, serde_json::Value>) 
 }
 
 /// Names of the `inline` richtext / `array<richtext(inline)>` fields — a subset
-/// of [`content_field_names`] whose content lowers to pure inline markup (#872).
+/// of [`content_field_names`] whose content lowers to pure inline markup.
 fn inline_field_names(properties: &serde_json::Map<String, serde_json::Value>) -> Vec<String> {
     field_names_where(properties, is_inline_richtext_field)
 }
@@ -757,7 +757,7 @@ pub(crate) struct SchemaMeta {
     pub(crate) datetime_fields: Vec<String>,
     pub(crate) array_fields: Vec<String>,
     /// Content fields whose (element) richtext is `inline` — a subset of
-    /// `content_fields`, driving the pure-inline lowering (#872).
+    /// `content_fields`, driving the pure-inline lowering.
     pub(crate) inline_fields: Vec<String>,
     pub(crate) card_content_fields: serde_json::Map<String, serde_json::Value>,
     pub(crate) card_date_fields: serde_json::Map<String, serde_json::Value>,
@@ -870,7 +870,7 @@ mod tests {
         quillmark_content::serial::to_canonical_value(&rt)
     }
 
-    /// Direct teeth for the pixels-not-spans contract (#801): two compiles
+    /// Direct teeth for the pixels-not-spans contract: two compiles
     /// whose pages ink identically must fingerprint identically even when every
     /// glyph's `Span` differs. The quills below are identical except one schema
     /// declares an extra unused field, which lengthens the generated `_qm-meta`
@@ -999,7 +999,7 @@ mod tests {
         assert_eq!(count(<TermsElem as NativeElement>::ELEM), 0, "no term list");
     }
 
-    /// End-to-end teeth for #872: a `richtext(inline)` field composed inside
+    /// End-to-end teeth for inline lowering: a `richtext(inline)` field composed inside
     /// `par(..)` compiles with **no** "parbreak may not occur inside of a
     /// paragraph" warning, whereas the same field lowered as a plain (block)
     /// richtext DOES warn. Runs against the real Typst grammar, so a future
@@ -1059,7 +1059,7 @@ mod tests {
         );
     }
 
-    /// End-to-end teeth for #873: a plate imports `plaintext` and uses a content
+    /// End-to-end teeth for the plaintext helper: a plate imports `plaintext` and uses a content
     /// field as a **string** — `type(plaintext("subject")) == str` and a string
     /// op (`upper`) on it — where `data.subject` is Typst `content` that would
     /// fail those. Compiles against real Typst, so a helper whose `plaintext`

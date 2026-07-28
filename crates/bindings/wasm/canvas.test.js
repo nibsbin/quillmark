@@ -146,7 +146,7 @@ describe('LiveSession canvas preview', () => {
     expect(size.heightPt).toBeGreaterThan(0)
   })
 
-  it('positionAt and locate cross the boundary as ContentHit / caret rect (#829)', () => {
+  it('positionAt and locate cross the boundary as ContentHit / caret rect', () => {
     // Where the boxes land and which offsets they cover is geometry, owned by
     // `backends/typst/tests/content_regions.rs` and
     // `quillmark/tests/usaf_memo_regions_test.rs`. Here: the navigation verbs

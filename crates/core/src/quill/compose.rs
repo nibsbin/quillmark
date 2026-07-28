@@ -605,7 +605,7 @@ mod tests {
     }
 
     // A typed dictionary carrying a key the schema does not declare keeps that
-    // key in the resolved projection (regression guard for #803: the schema is
+    // key in the resolved projection (regression guard: the schema is
     // a floor, not an allowlist). Declared-but-absent properties still zero-fill.
     #[test]
     fn typed_dict_preserves_undeclared_keys() {

@@ -491,7 +491,7 @@ mod tests {
     #[test]
     fn must_fill_markdown_example_surfaces_as_eg_hint_not_inline_value() {
         // Markdown never inlines its example as the marker value, but the
-        // `example:` must still surface as a `# e.g.` hint (regression: #805).
+        // `example:` must still surface as a `# e.g.` hint.
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
@@ -885,7 +885,7 @@ main:
     fn typed_table_with_empty_default_renders_inline() {
         // `default: []` means shippable as-is — the value renders inline as `[]`
         // (no marker). Inline row shape under an empty default belongs in
-        // `example:` (borb-sh/quillmark#736).
+        // `example:`.
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:

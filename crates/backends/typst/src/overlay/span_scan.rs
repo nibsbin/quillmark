@@ -14,7 +14,7 @@
 //! spans and a single uniform span both fall inside the same window/segment, so
 //! classification is by containment, not identity. A region keys on a
 //! `(window, segment)` pair, so a field breaks into one box per segment and the
-//! whole-field highlight is the consumer's union of them (#829); a span between
+//! whole-field highlight is the consumer's union of them; a span between
 //! segments — a field's own structural ink (brackets, container-open syntax) —
 //! is transparent, accruing no box. A scalar the plate interpolates directly
 //! (`#data.subject`) needs no codegen and carries no segments: its whole first
@@ -58,7 +58,7 @@
 //! run (else interleaved placements merge into one lying box). The other
 //! exception is **detached-span** ink — Typst's synthesized text decorations
 //! (the `underline`/`strike` line, a `Shape` drawn mid-run) and list markers:
-//! anonymous, attributable to no field, so it breaks no run at all (#936). A
+//! anonymous, attributable to no field, so it breaks no run at all. A
 //! scalar referenced at several distinct plate sites costs nothing: each site
 //! is its own window, so each surfaces independently.
 //!
@@ -181,7 +181,7 @@ enum HitClass {
     /// construction — attributable to no field — and, unlike [`Foreign`],
     /// **never a run-breaker**: a `#underline[..]` decoration drawn between a
     /// field's own text glyphs would otherwise suspend the run and orphan the
-    /// rest of the line (#936). A marker preceding a list item's text is a
+    /// rest of the line. A marker preceding a list item's text is a
     /// no-op for the same reason, harmlessly — the next item is a different
     /// segment key that ends the run on its own.
     ///
@@ -516,7 +516,7 @@ fn run_scan_machine(keys: &[(usize, Option<usize>)], hits: &[Hit]) -> Vec<Vec<(u
             },
             // Detached decoration/marker ink is anonymous — it breaks no run,
             // so a `#underline[..]`/`#strike[..]` line drawn mid-run does not
-            // orphan the rest of its line (#936).
+            // orphan the rest of its line.
             HitClass::Anonymous => {}
             HitClass::Foreign => {
                 if let Some((c, last_page)) = current.take() {
@@ -801,7 +801,7 @@ fn forward_pos(helper: &Source, segmap: &SegmentMap, pos: usize) -> usize {
 /// shared expression site across every card instance — no per-instance
 /// identity exists in span data; a card *content* or *date* field is covered by
 /// its per-instance generated site instead (a content block, or a date
-/// value-object's `text(..)` closure — #990). Content- and date-field
+/// value-object's `text(..)` closure). Content- and date-field
 /// references also match harmlessly: their rendered glyphs carry the helper
 /// site's span, which no plate window contains, so a scalar window over
 /// `data.issued` is inert once its ink migrates to the generated closure.
@@ -993,7 +993,7 @@ main:
         );
     }
 
-    /// #936 end-to-end: an `underline`/`strike` mark must not truncate its
+    /// End-to-end: an `underline`/`strike` mark must not truncate its
     /// line's `$body` region. Typst lowers all four wrapping marks the same way
     /// (`#strong[`/`#emph[`/`#underline[`/`#strike[`), but `underline`/`strike`
     /// additionally draw a decoration **`Shape` with a detached span** between
@@ -1075,7 +1075,7 @@ main:
             let w = region_width(kind.clone());
             assert!(
                 w >= baseline * 0.9,
-                "{kind:?} region width {w} truncated vs {baseline} baseline (#936)"
+                "{kind:?} region width {w} truncated vs {baseline} baseline"
             );
         }
     }
@@ -1139,7 +1139,7 @@ main:
 
     // -----------------------------------------------------------------
     // Two-tier `(window, Option<segment>)` classification and the run-machine
-    // transparency arm (#829). The tests below drive the production
+    // transparency arm. The tests below drive the production
     // `Classifier::classify_seg` and `run_scan_machine` directly, pinning a
     // transparent same-window arm that still suspends across fields against
     // the shipped code, not a re-derived copy.
@@ -1494,7 +1494,7 @@ main:
         assert_transparent_but_foreign_ink_is_not(transparent_hit(0, 0));
     }
 
-    /// #936: detached decoration ink (a `#underline`/`#strike` line) drawn
+    /// Detached decoration ink (a `#underline`/`#strike` line) drawn
     /// between two hits of one segment must keep the run, where identically
     /// placed *foreign* ink would end it. The underline case is exactly this
     /// shape: `Start `, then the decorated run's glyphs, then the decoration
@@ -1778,7 +1778,7 @@ main:
     }
 
     // -----------------------------------------------------------------
-    // #990 verification spikes — the value-object date design's load-bearing
+    // Verification spikes — the value-object date design's load-bearing
     // assumptions, pinned against Typst 0.15 (the driving-consumer gap: USAF
     // memo/indorsement dates place through `.display()`, and indorsements are
     // cards whose loop-variable ink `scalar_windows` deliberately does not
@@ -1790,7 +1790,7 @@ main:
     // recorded in PLATE_DATA.md instead, where a Typst bump re-checks them.
     // -----------------------------------------------------------------
 
-    /// #990 spike 2 (go/no-go gate #2) — **`text()` over a programmatic string
+    /// Spike 2 (go/no-go gate #2) — **`text()` over a programmatic string
     /// stamps its glyphs with the constructing node's span, which classifies
     /// into a recorded segment-less window.**
     ///
@@ -1875,10 +1875,10 @@ main:
         );
     }
 
-    /// #990 spike 4 — **page hashes are unmoved when ink is identical.** Today a
+    /// Spike 4 — **page hashes are unmoved when ink is identical.** Today a
     /// date's `.display("[year]")` interpolates a `str` into markup; the design
-    /// wraps the same glyphs in `text(..)` (content). The #795/#801
-    /// page-fingerprint is pixels-not-spans, so the two must hash identically —
+    /// wraps the same glyphs in `text(..)` (content). The page
+    /// fingerprint is pixels-not-spans, so the two must hash identically —
     /// the emission change moves ink *provenance*, never ink. Asserted, not
     /// assumed.
     #[test]

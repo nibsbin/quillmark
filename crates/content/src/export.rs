@@ -4,10 +4,10 @@
 //! per their type ([`Loss`](crate::model::Loss) describes fidelity, it does not
 //! gate the emit — see [`to_markdown`]); identity ([`MarkKind::Anchor`]) marks
 //! are **omitted** — they survive across edits via diff-rebase, not the
-//! projection (issue #831 § Codecs). Anchors carry no markdown encoding, so
+//! projection (§ Codecs). Anchors carry no markdown encoding, so
 //! dropping them here is by design, not loss.
 //!
-//! The block vocabulary is open (issue #1054): a [`LineKind::Unknown`] projects
+//! The block vocabulary is open: a [`LineKind::Unknown`] projects
 //! as a paragraph and a [`Container::Unknown`] transparently, the block-axis
 //! twin of an unknown mark contributing no delimiters.
 //!
@@ -55,8 +55,8 @@ use crate::model::{Container, Island, LineKind, MarkKind, Content, ISLAND_SLOT};
 /// build knows emits its markdown, any other a placeholder comment.
 ///
 /// [`Loss`](crate::model::Loss) does not gate the emit and is not read here. It
-/// *describes* the projection's fidelity for a consumer to surface (issue
-/// #1043); the type decides whether a projection exists at all.
+/// *describes* the projection's fidelity for a consumer to surface; the type
+/// decides whether a projection exists at all.
 ///
 /// Keeping the two apart is what makes a decode-time degrade safe. A known type
 /// a future writer stamped with a loss class this build lacks arrives as
@@ -74,8 +74,8 @@ pub fn to_markdown(rt: &Content) -> String {
     emit_block(&ctx, 0..rt.lines.len(), 0, &mut out);
     // Collapse any trailing blank lines. `to_markdown` projects a *value*, not a
     // file: it emits no final newline, so `writer.set("subject", "Hello")` reads
-    // back as `"Hello"`, not `"Hello\n"` (the read-back-grows-a-newline footgun,
-    // issue #965). Document-file writers own the file-final newline
+    // back as `"Hello"`, not `"Hello\n"` (the read-back-grows-a-newline
+    // footgun). Document-file writers own the file-final newline
     // (`Document::to_markdown`); the content fixed point is defined at the content,
     // and import is newline-insensitive, so dropping it is round-trip-invisible.
     while out.ends_with('\n') {
@@ -91,7 +91,7 @@ pub fn to_markdown(rt: &Content) -> String {
 /// empty string themselves.
 ///
 /// Tables (and images) having no plaintext form is a **decided limitation**, not
-/// an oversight (issue #880): the pdfform backend fills a form field from this
+/// an oversight: the pdfform backend fills a form field from this
 /// projection, so a field bound to a table-bearing content renders the surrounding
 /// text and silently omits the table. A degraded row/tab dump was rejected — it
 /// would read as a faithful table and mislead — so the projection drops the
@@ -572,7 +572,7 @@ fn render_inline(ctx: &Ctx, i: usize, escape_leading_block: bool) -> String {
 /// - **Atomic spans** (`code`/`link`) can't carry a partial wrap, and the sweep's
 ///   cursor jumps their interior — a wrap edge hiding inside would be missed and
 ///   left unbalanced. [`clip_fmt_to_atomic`] pulls such edges to the span's
-///   boundary (the #846 shape, in markdown).
+///   boundary (the atomic-balance shape, in markdown).
 /// - **`*`/`**` (emph/strong) share a delimiter character**, so a reopened
 ///   `*` abutting a `**` merges into an ambiguous `***` run that CommonMark
 ///   re-segments wrong — this overlap is *unrepresentable*, so
@@ -621,7 +621,7 @@ fn render_marked_core(
     // `fmt` by start, longest span (outer) first at a tie. `pos` only ever
     // advances, so one cursor over this order opens every mark exactly once — the
     // sweep is linear in `chars` + `fmt` rather than rescanning all three mark
-    // lists at every position (issue #1052). Built once here, not per sweep: the
+    // lists at every position. Built once here, not per sweep: the
     // net below sweeps the same `fmt` up to `PROBE_BUDGET` times.
     let mut by_start: Vec<usize> = (0..fmt.len()).collect();
     by_start.sort_by(|&a, &b| fmt[a].0.cmp(&fmt[b].0).then(fmt[b].1.cmp(&fmt[a].1)));
@@ -786,7 +786,7 @@ fn render_marked_core(
     // retried, a lone mark that still leaks is dropped. `m` marks cost ~2·log(m)
     // probes when one is at fault and 2 when none can survive, so a densely
     // marked paragraph costs re-parses in its mark count's logarithm rather than
-    // one per dropped mark (issue #1052). Greedy, so the result is a maximal
+    // one per dropped mark. Greedy, so the result is a maximal
     // text-safe set, not necessarily the largest one: a chunk taken early can
     // foreclose a later mark that a different partition would have kept.
     //
@@ -855,7 +855,7 @@ fn clip_fmt_to_atomic(fmt: &mut Vec<(usize, usize, &MarkKind)>, atomics: &[(usiz
     fmt.retain(|m| m.0 < m.1);
 }
 
-/// The #846 balance rule for a single `[*start, *end)` range against a set of
+/// The atomic-balance rule for a single `[*start, *end)` range against a set of
 /// atomic spans. A range edge landing strictly inside an atomic `[cs, ce)` span
 /// is pulled to that span's boundary (`start`→`ce`, `end`→`cs`); an edge outside
 /// every span is untouched. An atomic span can't carry partial styling, and a
@@ -865,7 +865,7 @@ fn clip_fmt_to_atomic(fmt: &mut Vec<(usize, usize, &MarkKind)>, atomics: &[(usiz
 /// in sequence is order-independent across ranges, so a caller may loop ranges
 /// or spans on the outside — a range whose edges cross after clipping (swallowed
 /// whole) is left empty for the caller to drop. Shared by this crate's export
-/// and the Typst backend's inline emitter, the two sites that enforce #846.
+/// and the Typst backend's inline emitter, the two sites that enforce it.
 pub fn clip_range_to_atomic(start: &mut usize, end: &mut usize, atomics: &[(usize, usize)]) {
     for &(cs, ce) in atomics {
         if cs < *start && *start < ce {
@@ -1070,7 +1070,7 @@ mod tests {
         );
     }
 
-    /// Issue #1049: a link over an island slot. A linked image is plain
+    /// A link over an island slot. A linked image is plain
     /// CommonMark, so it sits inside the fixed-point domain — the link arm must
     /// route its display text through the island renderer rather than emit the
     /// slot char raw (which re-imports as nothing, losing island, link, and the
@@ -1085,7 +1085,7 @@ mod tests {
         );
     }
 
-    /// Issue #1049: a `Code` mark over an island slot — editor-buildable, not
+    /// A `Code` mark over an island slot — editor-buildable, not
     /// importable. A code span is emitted verbatim, so it cannot carry the
     /// island; the span splits around the slot, keeping both the text and the
     /// island (one code mark lowered to two).
@@ -1102,7 +1102,7 @@ mod tests {
         assert_eq!(rt2.islands.len(), 1);
     }
 
-    /// Issue #1054: an unknown block role projects as a paragraph and an unknown
+    /// An unknown block role projects as a paragraph and an unknown
     /// container projects transparently — the older reader renders a future
     /// construct as plain prose instead of refusing it. Text and marks survive;
     /// only the role/container is lost, and only to *markdown* (both round-trip
@@ -1325,10 +1325,10 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------
-    // Issue #848: markdown export fixed-point violations.
+    // Markdown export fixed-point violations.
     // ---------------------------------------------------------------------
 
-    /// The exact #848 repro: `strong[0,4)` + `emph[2,6)` over "abcdef" must
+    /// The exact repro: `strong[0,4)` + `emph[2,6)` over "abcdef" must
     /// export balanced markdown that preserves the text, not `**ab*cdef*`,
     /// which re-imports as LITERAL `**abcdef` text (a silent content change).
     /// The two marks share the `*` delimiter character, so their
@@ -1410,7 +1410,7 @@ mod tests {
 
     /// A formatting mark partially overlapping an atomic `code` span can't wrap
     /// the code's interior; the wrap clips to the text outside so the markdown
-    /// stays balanced (the #846 shape, here in the markdown emitter).
+    /// stays balanced (the atomic-balance shape, here in the markdown emitter).
     #[test]
     fn wrap_over_code_stays_balanced() {
         let rt = marked(
@@ -1434,7 +1434,7 @@ mod tests {
         assert_eq!(rt2.text, "abcdef");
     }
 
-    /// Issue #848 part 2: a literal `&` (or an entity-shaped `&amp;`) must not
+    /// A literal `&` (or an entity-shaped `&amp;`) must not
     /// re-import as the decoded entity. `from_markdown("\\&amp;")` yields content
     /// text "&amp;"; exporting it unescaped as `&amp;` would re-import as "&".
     #[test]
@@ -1452,7 +1452,7 @@ mod tests {
         assert_eq!(rt, rt2);
     }
 
-    /// Issue #848 part 3: heading text ending in a `#` run must not re-import as
+    /// Heading text ending in a `#` run must not re-import as
     /// an ATX closing sequence. `from_markdown("# a \\#")` yields heading text
     /// "a #"; exporting it as `# a #` would re-import as "a", dropping the `#`.
     #[test]
@@ -1470,11 +1470,11 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------
-    // Issue #900: unescaped image alt/URL and link URL cause silent content
+    // Unescaped image alt/URL and link URL cause silent content
     // loss on round-trip (a special char terminates the markup early).
     // ---------------------------------------------------------------------
 
-    /// The exact #900 image repro: an alt with `\]` imports to alt text "a]b";
+    /// The exact image repro: an alt with `\]` imports to alt text "a]b";
     /// exporting it unescaped as `![a]b](x.png)` re-imports as prose with the
     /// image gone. The alt must be escaped so the island survives.
     #[test]
@@ -1494,7 +1494,7 @@ mod tests {
         assert_eq!(rt2.islands[0].props["alt"], "a]b");
     }
 
-    /// The exact #900 link repro: a URL with a space imports to link url
+    /// The exact link repro: a URL with a space imports to link url
     /// "foo bar"; exporting it unescaped as `[t](foo bar)` re-imports as prose
     /// with the link gone. The URL must be angle-wrapped.
     #[test]
@@ -1542,7 +1542,7 @@ mod tests {
     }
 
     // ---------------------------------------------------------------------
-    // Issue #1052: the verify-and-drop net's search.
+    // The verify-and-drop net's search.
     // ---------------------------------------------------------------------
 
     /// A strong mark whose delimiters land where CommonMark won't read them as a
@@ -1620,7 +1620,7 @@ mod tests {
     }
 
     /// Past the budget the net still terminates and still preserves the text; it
-    /// drops what it has not cleared. The shape issue #1052 measured — one
+    /// drops what it has not cleared. The pathological shape — one
     /// unrepresentable mark per five chars — costs a bounded number of re-parses
     /// instead of one per mark.
     #[test]

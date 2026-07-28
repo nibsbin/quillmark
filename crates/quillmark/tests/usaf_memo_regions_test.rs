@@ -118,7 +118,7 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
     );
 }
 
-/// #990 end-to-end on the flagship quill: a real memo date surfaces a clickable
+/// End-to-end on the flagship quill: a real memo date surfaces a clickable
 /// region even though the **vendored package** places it. The plate hands
 /// `data.date` to `frontmatter`, which formats it deep inside `utils.typ`'s
 /// `display-date` — the exact laundered shape that left the memo date's ink

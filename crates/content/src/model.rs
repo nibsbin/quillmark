@@ -2,7 +2,7 @@
 //! attributes, anchored marks, and embedded islands, over a single coordinate
 //! space of Unicode scalar values (Rust `char`).
 //!
-//! This is the freeze (issue #831): the mark set, the three
+//! This is the freeze: the mark set, the three
 //! normalization rules, and the invariants are what canonical serialization
 //! commits to. Everything an editor disagrees on (edge-expand,
 //! adjacent-merge-at-insertion) is *not* encoded — the model only ever stores
@@ -222,7 +222,7 @@ pub struct Island {
 
 /// The markdown-projection loss class of an island — a **description** of how
 /// faithfully the projection carries it, for a consumer to surface (a caller
-/// warned that a form field silently dropped a table, issue #1043). It is not a
+/// warned that a form field silently dropped a table). It is not a
 /// switch: [`crate::export::to_markdown`] dispatches on
 /// [`Island::island_type`], never on this.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -409,15 +409,16 @@ pub(crate) fn canonicalize_keys(v: &mut JsonValue) {
 /// The crate's one key sorter: reorder every object's keys by **moving** each
 /// entry into a freshly key-sorted map, recursively. Pins island `props` (and
 /// unknown line/container/mark `attrs`) against `preserve_order` leaking
-/// insertion order into the canonical bytes / content hash (Spike C
-/// carry-forward). The fixed struct keys land alphabetically and any
-/// already-sorted `props`/`attrs` re-sort to themselves; the leaves (the `text`
-/// string, mark attrs, arrays) are moved rather than deep-cloned, so a tree
-/// built once by `to_value` is canonicalized without a second full clone. The
-/// encoders therefore emit their payload bags verbatim — one pass over the
-/// finished tree, not one per bag. Re-sorting a new
-/// `serde_json::Map` (not sorting in place) keeps this independent of whether
-/// `serde_json`'s `preserve_order` feature is on in the crate graph.
+/// insertion order into the canonical bytes / content hash. Re-sorting into a
+/// new `serde_json::Map` (not sorting in place) keeps that independent of
+/// whether `serde_json`'s `preserve_order` feature is on in the crate graph.
+///
+/// The fixed struct keys land alphabetically and an already-sorted
+/// `props`/`attrs` re-sorts to itself. The leaves (the `text` string, mark
+/// attrs, arrays) move rather than deep-clone, so a tree built once by
+/// `to_value` is canonicalized without a second full clone — and the encoders
+/// emit their payload bags verbatim, one pass over the finished tree rather
+/// than one per bag.
 pub(crate) fn sort_keys_owned(v: JsonValue) -> JsonValue {
     match v {
         JsonValue::Array(items) => {
@@ -510,11 +511,9 @@ pub enum Invariant {
         max: usize,
     },
     /// An opaque JSON payload — an island's `props`, an unknown line/container/
-    /// mark's `attrs` — nests deeper than [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH).
-    /// [`Invariant::NestingTooDeep`] on the payload axis: key-canonicalization,
-    /// the hash key, and `Value`'s own `Drop` each recurse one frame per level, so
-    /// an unbounded bag overflows the stack instead of erroring. `what` names the
-    /// bag. No true depth: the check bails at the first over-deep container rather
+    /// mark's `attrs` — nests deeper than [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH):
+    /// [`Invariant::NestingTooDeep`] on the payload axis. `what` names the bag.
+    /// No true depth — the check bails at the first over-deep container rather
     /// than measuring past the limit.
     JsonTooDeep { what: &'static str, max: usize },
 }
@@ -1008,7 +1007,7 @@ mod tests {
         }
     }
 
-    /// Issue #1050: a line kind that contradicts the line's text is refused.
+    /// A line kind that contradicts the line's text is refused.
     /// Export trusts the kind and never re-reads the segment, so `Island` over
     /// prose projects to the island alone and `Rule` over prose to `---` — the
     /// text silently gone.
@@ -1061,7 +1060,7 @@ mod tests {
         assert_eq!(tagged("", LineKind::Rule).validate(), Ok(()));
     }
 
-    /// Issue #1050: a splice writes text, never kinds, so it can strand an
+    /// A splice writes text, never kinds, so it can strand an
     /// `Island` line over prose. `normalize` demotes the stranded kind to `Para`
     /// rather than let export drop the text — the repair-side twin of the
     /// invariant, and what keeps every op path's terminal normalize total.
@@ -1087,7 +1086,7 @@ mod tests {
         assert_eq!(rt.validate(), Ok(()));
     }
 
-    /// Issue #1051: container nesting is capped at the same depth import
+    /// Container nesting is capped at the same depth import
     /// enforces, so a content that never went through import cannot reach the
     /// emitters — which recurse one frame per container — with an unbounded path.
     #[test]
@@ -1106,11 +1105,10 @@ mod tests {
         );
     }
 
-    /// Issue #1093: [`container_nesting_is_capped`] on the payload axis. The
-    /// decoders refuse an over-deep bag at the wire, and this is the same cap for
-    /// the content that never went through a decoder — key canonicalization, the
-    /// hash key, and `Value`'s own `Drop` recurse one frame per level whatever
-    /// built the tree.
+    /// [`container_nesting_is_capped`] on the payload axis. The
+    /// decoders refuse an over-deep bag at the wire; this is the same cap for
+    /// content that never went through one, since the recursive consumers spend
+    /// a frame per level whatever built the tree.
     #[test]
     fn json_payload_depth_is_capped() {
         let nested = |depth: usize| {
@@ -1351,7 +1349,7 @@ mod tests {
         assert_eq!(a.to_canonical_json(), once);
     }
 
-    /// Issue #1092: a cell is canonicalized in place, so a key this build does
+    /// A cell is canonicalized in place, so a key this build does
     /// not recognize survives. The rule has no slack — `normalize` runs on
     /// decode, on every op apply, and on every serialize, so a cell rebuilt
     /// whole drops the key on first contact and every contact after.
@@ -1518,7 +1516,7 @@ mod tests {
 
     /// A non-array `header` carries no cells: `validate` rejects it and
     /// `normalize` repairs it to an empty array (a zero-column table that then
-    /// validates). Issue #904.
+    /// validates).
     #[test]
     fn non_array_table_header_is_rejected_then_repaired() {
         let mut rt = table_rt(serde_json::json!({
@@ -1534,7 +1532,6 @@ mod tests {
 
     /// Two islands sharing an `id` violate the minted-identity invariant.
     /// Import mints ids by index so never collides; a hand-built content can.
-    /// Issue #903.
     #[test]
     fn duplicate_island_id_is_rejected() {
         let mut rt = Content::empty();
@@ -1570,7 +1567,6 @@ mod tests {
     /// Two prose anchors sharing an `id` at different ranges violate the
     /// anchor-id uniqueness invariant, as does the empty id. (Byte-identical
     /// anchors `normalize` already dedupes; this is the surviving collision.)
-    /// Issue #1039.
     #[test]
     fn duplicate_or_empty_anchor_id_is_rejected() {
         let mut rt = Content::empty();
@@ -1599,7 +1595,7 @@ mod tests {
 
     /// `normalize` drops a byte-identical duplicate identity mark (same range,
     /// same id) — the same handle recorded twice is redundant, not two handles.
-    /// Distinct-id anchors over the same range are kept. Issue #906.
+    /// Distinct-id anchors over the same range are kept.
     #[test]
     fn normalize_dedupes_identical_identity_marks() {
         let mut rt = Content::empty();

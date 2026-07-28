@@ -1,4 +1,4 @@
-//! Phase-1 property suite (issue #831 step 1).
+//! Phase-1 property suite.
 //!
 //! The four properties the freeze rests on:
 //!
@@ -36,15 +36,15 @@ fn clean_word() -> impl Strategy<Value = String> {
 // alphanumeric, so a block marker never *leads* an item's content (`- >`, `- #`
 // would make pulldown build an empty nested block, not literal text — a
 // degenerate content no editor emits); but the tail now carries `&` and the
-// block-marker chars (`# > - . +`), exercising `&`-entity escaping (#848 part 2)
-// and a trailing-`#` heading run (#848 part 3) through the round-trip, not just
+// block-marker chars (`# > - . +`), exercising `&`-entity escaping and a
+// trailing-`#` heading run through the round-trip, not just
 // the pinned `export::tests::*` unit tests.
 fn plain_word() -> impl Strategy<Value = String> {
     r"[a-z0-9][a-z0-9*_~\\&#>.+😀你-]{0,5}"
 }
 
 // `special_alt`/`special_url` carry the destination- and markup-terminating
-// chars #900 exposed, in *markdown source* form: a raw `]`/`[`/`\` would break
+// chars, in *markdown source* form: a raw `]`/`[`/`\` would break
 // the markup at the source level (those live only in the direct-content
 // `image_and_link_specials_round_trip` property), so alt carries `&` and inline
 // delimiters as literal text, and the url is angle-wrapped in source so a space,
@@ -66,12 +66,12 @@ fn inline_token() -> impl Strategy<Value = String> {
         clean_word().prop_map(|w| format!("`{w}`")),
         clean_word().prop_map(|w| format!("<u>{w}</u>")),
         (clean_word(), clean_word()).prop_map(|(t, u)| format!("[{t}](https://ex.com/{u})")),
-        // #900: a link/image whose url and alt carry specials the escaper must
+        // A link/image whose url and alt carry specials the escaper must
         // neutralize (space/paren/`&` in the angle-wrapped url; `&`/delimiters
         // in the alt), exercised in prose context (marks, lists, hard breaks).
         (clean_word(), special_url()).prop_map(|(t, u)| format!("[{t}](<{u}>)")),
         (special_alt(), special_url()).prop_map(|(a, u)| format!("![{a}](<{u}>)")),
-        // #1049: a link *over* an image — a linked logo, plain CommonMark. The
+        // A link *over* an image — a linked logo, plain CommonMark. The
         // generator never nested the two, so no generated document carried a
         // mark over an island slot, and the link arm emitting its display text
         // raw (slot char and all) went unseen.
@@ -131,7 +131,7 @@ fn document() -> impl Strategy<Value = String> {
 }
 
 // ---------------------------------------------------------------------------
-// Overlapping-mark helpers (issue #848 property): the four formatting kinds an
+// Overlapping-mark helpers: the four formatting kinds an
 // editor can freely overlap, and the predicates for the one unrepresentable
 // shape (two asterisk-family marks partially overlapping).
 // ---------------------------------------------------------------------------
@@ -175,7 +175,7 @@ proptest! {
         prop_assert_eq!(&rt, &rt2, "not a fixed point.\n in:  {:?}\n out: {:?}", md, md2);
     }
 
-    /// Property 1b (issue #848): overlapping formatting marks — the free
+    /// Property 1b: overlapping formatting marks — the free
     /// (Peritext-style) overlap `apply_mark_ops` produces but markdown import
     /// never does — export to *balanced* markdown that preserves the text.
     ///
@@ -221,7 +221,7 @@ proptest! {
         let md = to_markdown(&rt);
         let rt2 = from_markdown(&md).unwrap();
         prop_assert_eq!(rt2.validate(), Ok(()), "re-import invalid for {:?}", md);
-        // The critical #848 invariant: overlap never corrupts the text (no
+        // The critical invariant: overlap never corrupts the text (no
         // unbalanced/unclosed delimiter leaks a literal `**`/`*` into the content).
         prop_assert_eq!(&rt2.text, &rt.text, "overlap corrupted text: {:?}", md);
 
@@ -240,7 +240,7 @@ proptest! {
     }
 
     /// Editor marks over *mixed* text stay text-safe — the punctuation, symbol,
-    /// emoji, and whitespace coverage the #848 staircase above deliberately
+    /// emoji, and whitespace coverage the overlap staircase above deliberately
     /// excludes (its content is `[a-z]` only). An `apply_mark_ops` mark whose
     /// edge falls between a word char and a punctuation/symbol/whitespace char is
     /// not representable as a `*`/`**`/`~~` run under CommonMark flanking, so the
@@ -311,7 +311,7 @@ proptest! {
             "text drifted on the second cycle: {:?}", md);
     }
 
-    /// Issue #900: image alt and image/link URLs carry the markup- and
+    /// Image alt and image/link URLs carry the markup- and
     /// destination-terminating specials — `]`/`[`/`\` in alt, spaces, unbalanced
     /// parens, `&`, `<`/`>`/`\` in a url — that the codec must escape so the
     /// island/link survives export∘import. The `clean_word` alt/url generator
@@ -394,7 +394,7 @@ proptest! {
 }
 
 // ---------------------------------------------------------------------------
-// Edit-channel invariant properties (issue #847): the three apply channels
+// Edit-channel invariant properties: the three apply channels
 // preserve `validate()`. The content arriving at a channel is valid; a
 // successful apply must leave it valid. For `apply_text_delta` this includes
 // cascading island removal when a slot char is deleted (islands.len() stays in
@@ -416,10 +416,10 @@ proptest! {
     /// `apply_text_delta` preserves `validate()` for a text-channel edit
     /// (insert clean text — including `\n` — or delete a range). A deletion can
     /// span an island slot; the cascade must drop the backing island so the
-    /// slot/island counts stay in sync (the #847 corruption, now caught here).
+    /// slot/island counts stay in sync — the corruption this property catches.
     /// The insert charset includes `\r` and bidi controls (U+202E, U+2069):
     /// `apply_text_delta` strips them, so the apply still leaves a valid content
-    /// (issue #899 — before the fix these returned Ok over a broken invariant).
+    /// (an apply must not return Ok over a broken invariant).
     /// U+FFFC (a raw slot) is excluded — that insert is rejected outright.
     #[test]
     fn apply_text_delta_preserves_validate(
@@ -454,7 +454,7 @@ proptest! {
         }
     }
 
-    /// Property (issue #1039): an anchor's `id` is bit-invariant under a random
+    /// Property: an anchor's `id` is bit-invariant under a random
     /// splice + rebase. The mark may drop (its anchored text deleted) or move
     /// (its range rebases through `map_pos`), but any *surviving* anchor carries
     /// the exact id it started with — the runtime never rewrites an id. Import
@@ -568,7 +568,7 @@ fn fixture_body(name: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Structured-table property (issue #880): an editor-built table island — one
+// Structured-table property: an editor-built table island — one
 // whose shape markdown import never produces (ragged rows, an empty/short
 // header, an `aligns` array out of sync with the columns) — is a fixed point of
 // export∘import *after normalization*, and normalization always yields a content

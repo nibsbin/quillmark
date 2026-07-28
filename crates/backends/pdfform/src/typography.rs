@@ -9,7 +9,7 @@
 //! "preview and flattening agree exactly" invariant: there is exactly one place
 //! that answers "what font and size does this value render at."
 //!
-//! ## Regions carry no typography (#752)
+//! ## Regions carry no typography
 //!
 //! The region sidecar carries only geometry and the schema-field address for
 //! cross-navigation — no resolved font/size/align. No consumer composites a

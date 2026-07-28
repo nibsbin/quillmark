@@ -126,7 +126,7 @@ void fieldRegionKeys;
 void changeSetKeys;
 void contentHitKeys;
 
-// ── Re-export presence guard (#948) ─────────────────────────────────────────
+// ── Re-export presence guard ────────────────────────────────────────
 // The content edit vocabulary is DECLARED in the core build but consumed through
 // the single runtime entry point. Importing every name from the runtime root
 // here asserts the re-export in `runtime/runtime.d.ts` stays present: drop any
@@ -176,7 +176,7 @@ export type ContentExportsPresent = [
 	ChangeBundle
 ];
 
-// ── MAIN_CARD_ADDR is a CardAddr (#969) ─────────────────────────────────────
+// ── MAIN_CARD_ADDR is a CardAddr ────────────────────────────────────
 // The named main-card address must type as a `CardAddr` so it flows into every
 // card-scoped verb's address slot. `typeof import(...)` keeps this purely
 // type-level — no value import, no runtime code — and the assignment fails
@@ -185,14 +185,14 @@ type MainCardAddrType = typeof import('../../../pkg/runtime/runtime.d.ts').MAIN_
 const mainCardAddrIsCardAddr: CardAddr = {} as MainCardAddrType;
 void mainCardAddrIsCardAddr;
 
-// ── Open-set discriminant guards (#1042) ────────────────────────────────────
+// ── Open-set discriminant guards ────────────────────────────────────
 // The guards must NARROW the open `type` unions — the whole point, since a bare
 // `x.type === 'table'` check cannot (the residual `{ type: string; … }` arm
 // stays live). Each `if` body reads a payload reachable only after narrowing, so
 // a guard that stops narrowing fails `npm run typecheck`. `ContentIsland`,
 // `TableProps`, `ImageProps`, `ContentMark`, `ContentLine`, and
-// `ContentContainer` are the types imported above. (#1054 opened the block
-// vocabulary — `kind` and `container` — on the same terms.)
+// `ContentContainer` are the types imported above. (The block
+// vocabulary — `kind` and `container` — is open on the same terms.)
 import {
 	isTableIsland,
 	isImageIsland,
@@ -239,7 +239,7 @@ if (isListItemContainer(guardContainer)) {
 	void ordinal;
 }
 
-// ── Open-set membership guards (#1085) ──────────────────────────────────────
+// ── Open-set membership guards ──────────────────────────────────────
 // The negative predicates the pinned-arm guards above cannot express. Each `if`
 // body reads the open arm's opaque payload, reachable only after narrowing, so a
 // guard that stops narrowing fails `npm run typecheck`.
@@ -267,7 +267,7 @@ if (isUnknownIsland(guardIsland)) {
 	void props;
 }
 
-// ── ContentLineKind is nameable (#1086) ─────────────────────────────────────
+// ── ContentLineKind is nameable ─────────────────────────────────────
 // `ContentLineKind` is exactly `setKind`'s payload, so building the op is a
 // whole-lift: drop a line's envelope, spread the rest. That spelling survives
 // every arm added upstream — including the open one, whose shape an arm-by-arm
