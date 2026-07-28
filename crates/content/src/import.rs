@@ -855,8 +855,8 @@ impl Builder {
             // Degraded when a cell dropped an inline image's url — the projection
             // then carries the alt text but not the image (not a fixed point);
             // otherwise the type's ceiling. Recorded, not acted on: `Loss`
-            // describes fidelity for a consumer to surface (issue #1043), and no
-            // projection branches on it (issue #1054).
+            // describes fidelity for a consumer to surface (issue #1043); no
+            // projection branches on it.
             let loss = if acc.degraded {
                 Loss::Degraded
             } else {

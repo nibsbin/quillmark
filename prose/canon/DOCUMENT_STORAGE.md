@@ -154,10 +154,8 @@ The consequence, and the point: **adding a construct to any of these
 vocabularies is not a schema-version event.** An older reader degrades a future
 callout to a plain paragraph rather than refusing the document, and a reader
 that does understand it sees it whole, because the tag and attrs round-tripped
-untouched. The block axes were closed until issue #1054 — a new line kind or
-container was a schema bump plus a migration, while the same addition on the
-mark axis cost nothing; the split was an accident of implementation, not a
-decision, and this is it decided.
+untouched. The rule is the same on all four axes: the block axes are open on the
+mark axis' terms, not one step behind it.
 
 Two rules bound the openness:
 

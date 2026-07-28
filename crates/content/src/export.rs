@@ -17,22 +17,21 @@
 //! source is not canonical, but the content is, so round-trip is defined at the
 //! content, not the string.
 //!
-//! ## Export is defined by import (a decided coupling)
+//! ## Export is defined by import
 //!
 //! The `render_marked_core` safety net settles a line's markdown by re-parsing it
 //! with [`crate::import::from_markdown`] and dropping marks until the text comes
 //! back intact. Export's correctness is therefore *defined* by running import,
-//! and this is deliberate, not an implementation detail that leaked: CommonMark's
-//! emphasis algorithm (delimiter-run matching, the rule of 3, `\*`-escape
-//! adjacency) has corners no local rule captures, and a local rule that
-//! approximates it drops good marks on the cases it gets wrong. Verifying against
-//! the parser is the only check that is exactly as strict as the format.
+//! by design. CommonMark's emphasis algorithm (delimiter-run matching, the rule
+//! of 3, `\*`-escape adjacency) has corners no local rule captures, and a local
+//! rule that approximates it drops good marks on the cases it gets wrong;
+//! verifying against the parser is the only check exactly as strict as the
+//! format.
 //!
-//! What it costs, stated so it is chosen rather than discovered: the two codecs
-//! cannot be tested or changed independently — an importer change moves exporter
-//! output — and every [`to_markdown`] call transitively depends on
-//! `pulldown_cmark`, which is why this crate is the workspace's only home for a
-//! CommonMark parser.
+//! The coupling costs two things. The codecs cannot be tested or changed
+//! independently — an importer change moves exporter output. And every
+//! [`to_markdown`] call transitively depends on `pulldown_cmark`, which is why
+//! this crate is the workspace's only home for a CommonMark parser.
 //!
 //! ## Documented codec limits (degenerate, non-authorable content values)
 //!
@@ -57,12 +56,13 @@ use crate::model::{Container, Island, LineKind, MarkKind, Content, ISLAND_SLOT};
 ///
 /// [`Loss`](crate::model::Loss) does not gate the emit and is not read here. It
 /// *describes* the projection's fidelity for a consumer to surface (issue
-/// #1043); the type is what decides whether a projection exists at all. Keeping
-/// the two apart is what makes a known type stamped `Unrepresentable` by a
-/// future writer's unrecognized loss class (`serial::loss_from_str` degrades to
-/// the safe end) still emit its table rather than swallow it behind a
-/// placeholder — the conservative default describes the value, it does not
-/// suppress it.
+/// #1043); the type decides whether a projection exists at all.
+///
+/// Keeping the two apart is what makes a decode-time default safe. A known type
+/// a future writer stamped with a loss class this build lacks arrives as
+/// `Unrepresentable` (`serial::loss_from_str` degrades to the safe end) and
+/// still emits its table: the conservative default describes the value, it does
+/// not suppress it.
 pub fn to_markdown(rt: &Content) -> String {
     // Per-line char ranges, so global marks can be clipped to a line.
     let segments = line_segments(rt);
@@ -780,11 +780,11 @@ fn render_marked_core(
     // Drop the whole flanking set, then re-add by halves: a chunk that stays
     // text-safe is accepted whole, one that doesn't splits and its halves are
     // retried, a lone mark that still leaks is dropped. `m` marks cost ~2·log(m)
-    // probes when one is at fault and 2 when none can survive — against one probe
-    // *per dropped mark* for the walk from the end this replaces, the ~n^2.4 issue
-    // #1052 measured on a densely marked paragraph. Greedy, so the result is a
-    // maximal text-safe set, not necessarily the largest one: a chunk taken early
-    // can foreclose a later mark that a different partition would have kept.
+    // probes when one is at fault and 2 when none can survive, so a densely
+    // marked paragraph costs re-parses in its mark count's logarithm rather than
+    // one per dropped mark (issue #1052). Greedy, so the result is a maximal
+    // text-safe set, not necessarily the largest one: a chunk taken early can
+    // foreclose a later mark that a different partition would have kept.
     //
     // Dropping every flanking mark is the floor the search can't go below, so if
     // even that leaks, the leak is not a flanking mark's and no re-add can fix it:
@@ -795,7 +795,7 @@ fn render_marked_core(
     }
     let mut kept: Vec<usize> = Vec::new();
     // The whole set is the render that already failed, so start one level down;
-    // a lone candidate has nowhere to split and is simply dropped.
+    // a lone candidate has nowhere to split and is dropped.
     let mut work: Vec<(usize, usize)> = Vec::new();
     if cands.len() > 1 {
         let mid = cands.len() / 2;
@@ -829,8 +829,8 @@ fn render_marked_core(
 /// costs at most `2m-2` probes, so at 64 no line carrying 32 or fewer ever loses
 /// a mark to the budget; past that the line is one an editor filled with
 /// unrepresentable marks, and dropping those is the net's own remedy anyway.
-/// What this buys is the ceiling: export cost stays linear in document size
-/// whatever marks are thrown at it.
+/// The ceiling is the point: export cost stays linear in document size whatever
+/// marks are thrown at it.
 const PROBE_BUDGET: usize = 64;
 
 /// Clip wrapping marks so none crosses the interior of an atomic span (`code` or
@@ -1539,9 +1539,9 @@ mod tests {
 
     /// A strong mark whose delimiters land where CommonMark won't read them as a
     /// run (`**a.**b` re-imports as literal text) is dropped, and every other
-    /// mark on the line is kept. The re-add order is document order, so a good
-    /// mark *after* a bad one survives — a walk from the end drops it first, on
-    /// its way to the bad one, and never puts it back.
+    /// mark on the line is kept. The re-add order is document order, so position
+    /// does not decide survival: a good mark before *or* after a leaking one
+    /// lives.
     #[test]
     fn net_drops_only_the_leaking_marks() {
         for (label, text, spans, want) in [

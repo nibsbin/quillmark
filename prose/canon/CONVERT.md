@@ -77,13 +77,14 @@ divergence from a flat inline pass; a quote's inner blocks lower under the
 block-level discipline.
 
 Anchor and unknown marks emit nothing; unknown island types emit nothing
-(parallel to the HTML rule at import). Unknown line kinds and containers lower
-as prose and as nothing respectively — every content vocabulary is open, so a
-build that predates a construct renders it plainly instead of failing
+(parallel to the HTML rule at import). An unknown line kind lowers as a
+paragraph and an unknown container as nothing at all: every content vocabulary
+is open, so a build that predates a construct renders it plainly instead of
+failing
 ([DOCUMENT_STORAGE § Open vocabularies](DOCUMENT_STORAGE.md#open-vocabularies)).
-Content that import never admits into the
-content — raw HTML other than `<u>`, HTML comments, `<br>`, math, footnotes, task
-lists, definition lists (markdown-spec §6.3) — is absent here.
+Content that import never admits into the content — raw HTML other than `<u>`,
+HTML comments, `<br>`, math, footnotes, task lists, definition lists
+(markdown-spec §6.3) — is absent here.
 
 ### Island props
 
@@ -152,8 +153,8 @@ line's markdown by re-importing it and dropping marks until the text comes back
 intact, because CommonMark's emphasis algorithm has corners no local rule
 captures. So export's correctness is *defined* by import — the two codecs cannot
 be changed independently, and `to_markdown` transitively depends on the parser.
-The cost is bounded per line rather than per mark (issue #1052); the trade is
-stated in the `export` module doc.
+A line's re-parses are bounded by a probe budget, not by its mark count; the
+trade is stated in the `export` module doc.
 
 ## Codegen integration
 
