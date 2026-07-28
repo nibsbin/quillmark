@@ -399,7 +399,7 @@ enum Run {
 /// one [`RenderedRegion`] per page the placement's run touches, PDF
 /// bottom-left rects, sorted (page, field, window order). Best-effort like the
 /// widget path: an unresolvable span simply matches no window.
-pub(crate) fn scan(
+pub(crate) fn scan_content_regions(
     doc: &PagedDocument,
     world: &QuillWorld,
     helper: &Source,
@@ -540,11 +540,11 @@ fn accrue(boxes: &mut Vec<(usize, Aabb)>, hit: &Hit) {
 
 /// The schema field under a point — the forward (click → field) direction.
 /// `x`/`y` are PDF points with a **bottom-left** origin, the same convention
-/// as [`RenderedRegion::rect`]. Unlike [`scan`], every placement answers, not
-/// just the first: a concrete point identifies one frame item, whose span is
-/// unambiguous however many times its field is placed. Among tracked ink the
-/// later-painted item wins; untracked ink never occludes — a decorative
-/// overlay does not swallow clicks on the field beneath it.
+/// as [`RenderedRegion::rect`]. Unlike [`scan_content_regions`], every
+/// placement answers, not just the first: a concrete point identifies one frame
+/// item, whose span is unambiguous however many times its field is placed.
+/// Among tracked ink the later-painted item wins; untracked ink never occludes
+/// — a decorative overlay does not swallow clicks on the field beneath it.
 pub(crate) fn field_at(
     doc: &PagedDocument,
     world: &QuillWorld,
@@ -1056,7 +1056,7 @@ main:
             let helper = world
                 .source(QuillWorld::helper_fid("lib.typ"))
                 .expect("helper source");
-            let regions = scan(&doc, &world, &helper, &windows);
+            let regions = scan_content_regions(&doc, &world, &helper, &windows);
             regions
                 .iter()
                 .filter(|r| r.field == "body")
@@ -1860,7 +1860,7 @@ main:
             range: window_range,
             segments: vec![],
         }];
-        let regions = scan(&doc, &world, &helper, &windows);
+        let regions = scan_content_regions(&doc, &world, &helper, &windows);
         let issued: Vec<_> = regions.iter().filter(|r| r.field == "issued").collect();
         assert_eq!(
             issued.len(),
