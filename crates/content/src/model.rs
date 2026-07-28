@@ -329,33 +329,12 @@ impl MarkKind {
 /// A `serde_json::Value` rendered to a string with object keys recursively
 /// sorted — order-insensitive, so it is a stable comparison/grouping key.
 fn canonical_json_string(v: &JsonValue) -> String {
-    serde_json::to_string(&sorted_value(v)).unwrap_or_default()
-}
-
-/// Rebuild `v` with every object's keys sorted, recursively. Pins island
-/// `props` (and unknown-mark attrs) against `preserve_order` leaking insertion
-/// order into the canonical bytes / content hash (Spike C carry-forward). For
-/// an owned tree, prefer [`sort_keys_owned`] — it reorders in place without
-/// cloning the leaves.
-pub(crate) fn sorted_value(v: &JsonValue) -> JsonValue {
-    match v {
-        JsonValue::Array(items) => JsonValue::Array(items.iter().map(sorted_value).collect()),
-        JsonValue::Object(map) => {
-            let mut keys: Vec<&String> = map.keys().collect();
-            keys.sort();
-            let mut out = serde_json::Map::with_capacity(map.len());
-            for k in keys {
-                out.insert(k.clone(), sorted_value(&map[k]));
-            }
-            JsonValue::Object(out)
-        }
-        other => other.clone(),
-    }
+    serde_json::to_string(&sort_keys_owned(v.clone())).unwrap_or_default()
 }
 
 /// Whether every object in `v` already has its keys in ascending order,
 /// recursively — the cheap allocation-free check that lets a re-normalize skip
-/// rebuilding an already-canonical `props`/`attrs` tree via [`sorted_value`].
+/// rebuilding an already-canonical `props`/`attrs` tree.
 /// Once normalized, an untouched tree stays sorted, so a per-keystroke
 /// re-normalize pays a scan instead of a full clone.
 pub(crate) fn is_value_key_sorted(v: &JsonValue) -> bool {
@@ -370,8 +349,8 @@ pub(crate) fn is_value_key_sorted(v: &JsonValue) -> bool {
 }
 
 /// `true` when `v` nests deeper than `max` container levels — the guard that
-/// keeps the recursive walkers above ([`sorted_value`], [`is_value_key_sorted`],
-/// [`sort_keys_owned`]) and `Value`'s own `Drop` inside a bounded frame count.
+/// keeps the recursive walkers above ([`is_value_key_sorted`], [`sort_keys_owned`])
+/// and `Value`'s own `Drop` inside a bounded frame count.
 ///
 /// The walk is iterative (explicit stack), so the check itself cannot overflow on
 /// the adversarially deep input it exists to detect. The unit is **container
@@ -423,16 +402,20 @@ pub(crate) fn check_json_depth(v: &JsonValue, what: &'static str) -> Result<(), 
 /// per-keystroke path pays the scan and skips the deep clone.
 pub(crate) fn canonicalize_keys(v: &mut JsonValue) {
     if !is_value_key_sorted(v) {
-        *v = sorted_value(v);
+        *v = sort_keys_owned(std::mem::take(v));
     }
 }
 
-/// The owned twin of [`sorted_value`]: reorder every object's keys by **moving**
-/// each entry into a freshly key-sorted map, recursively. Same canonical result
-/// — the fixed struct keys land alphabetically and any already-sorted `props`/
-/// `attrs` re-sort to themselves — but the leaves (the `text` string, mark
-/// attrs, arrays) are moved rather than deep-cloned, so a tree built once by
-/// `to_value` is canonicalized without a second full clone. Re-sorting a new
+/// The crate's one key sorter: reorder every object's keys by **moving** each
+/// entry into a freshly key-sorted map, recursively. Pins island `props` (and
+/// unknown line/container/mark `attrs`) against `preserve_order` leaking
+/// insertion order into the canonical bytes / content hash (Spike C
+/// carry-forward). The fixed struct keys land alphabetically and any
+/// already-sorted `props`/`attrs` re-sort to themselves; the leaves (the `text`
+/// string, mark attrs, arrays) are moved rather than deep-cloned, so a tree
+/// built once by `to_value` is canonicalized without a second full clone. The
+/// encoders therefore emit their payload bags verbatim — one pass over the
+/// finished tree, not one per bag. Re-sorting a new
 /// `serde_json::Map` (not sorting in place) keeps this independent of whether
 /// `serde_json`'s `preserve_order` feature is on in the crate graph.
 pub(crate) fn sort_keys_owned(v: JsonValue) -> JsonValue {

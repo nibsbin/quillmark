@@ -12,7 +12,7 @@
 //! canonical form — one serializer, not two to keep aligned.
 
 use crate::model::{
-    sort_keys_owned, sorted_value, Container, Invariant, Island, Line, LineKind, Loss, Mark,
+    sort_keys_owned, Container, Invariant, Island, Line, LineKind, Loss, Mark,
     MarkKind, Content, Usv,
 };
 use serde_json::{Map, Value};
@@ -256,7 +256,7 @@ pub fn line_kind_to_value(kind: &LineKind) -> Value {
         // reader that lacks the role still carries it whole.
         LineKind::Unknown { tag, attrs } => {
             m.insert("kind".into(), Value::String(tag.clone()));
-            m.insert("attrs".into(), sorted_value(attrs));
+            m.insert("attrs".into(), attrs.clone());
         }
     }
     Value::Object(m)
@@ -356,7 +356,7 @@ pub fn container_to_value(c: &Container) -> Value {
         }
         Container::Unknown { tag, attrs } => {
             m.insert("container".into(), Value::String(tag.clone()));
-            m.insert("attrs".into(), sorted_value(attrs));
+            m.insert("attrs".into(), attrs.clone());
         }
     }
     Value::Object(m)
@@ -422,7 +422,7 @@ pub fn mark_to_value(mark: &Mark) -> Value {
         }
         MarkKind::Unknown { tag, attrs } => {
             m.insert("type".into(), Value::String(tag.clone()));
-            m.insert("attrs".into(), sorted_value(attrs));
+            m.insert("attrs".into(), attrs.clone());
         }
     }
     Value::Object(m)
@@ -701,8 +701,8 @@ pub fn parse_cell(v: &Value) -> (String, Vec<Mark>) {
 }
 
 /// Build a table-cell object `{text, marks}` — the inverse of [`parse_cell`],
-/// reusing [`mark_to_value`]. Key order is fixed by the recursive
-/// [`sorted_value`] pass in [`Content::normalize`], not here.
+/// reusing [`mark_to_value`]. Key order is fixed by the recursive key-sort in
+/// [`Content::normalize`], not here.
 pub(crate) fn cell_to_value(text: &str, marks: &[Mark]) -> Value {
     let mut m = Map::new();
     m.insert("text".into(), Value::String(text.to_string()));
@@ -881,7 +881,7 @@ fn island_to_value(island: &Island) -> Value {
     let mut m = Map::new();
     m.insert("id".into(), Value::String(island.id.clone()));
     m.insert("type".into(), Value::String(island.island_type.clone()));
-    m.insert("props".into(), sorted_value(&island.props));
+    m.insert("props".into(), island.props.clone());
     m.insert("loss".into(), loss_to_str(&island.loss).into());
     Value::Object(m)
 }

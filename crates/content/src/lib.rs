@@ -69,9 +69,9 @@ pub const MAX_NESTING_DEPTH: usize = 100;
 /// unknown line/container/mark's `attrs` — measured in container levels from the
 /// bag itself.
 ///
-/// The payload axis of [`MAX_NESTING_DEPTH`]: `sorted_value`,
-/// `is_value_key_sorted`, `sort_keys_owned`, and `serde_json::Value`'s own
-/// `Drop` each recurse one frame per level, so an unbounded bag overflows the
+/// The payload axis of [`MAX_NESTING_DEPTH`]: `is_value_key_sorted`,
+/// `sort_keys_owned`, and `serde_json::Value`'s own `Drop` each recurse one
+/// frame per level, so an unbounded bag overflows the
 /// stack — on wasm32, an unrecoverable trap rather than a catchable error. The
 /// bag is refused at the decode boundary, before it is cloned out of the wire,
 /// and [`Content::validate`](model::Content::validate) restates it as an
