@@ -543,6 +543,28 @@ describe('Document editor surface — setQuillRef / install / revise', () => {
     expect(() => doc.install({}, 'plain markdown')).toThrow()
     expect(() => doc.install({}, { not: 'a content' })).toThrow()
   })
+
+  // Issue #1093: island `props` and unknown `attrs` are opaque host payload with
+  // no depth limit, and every consumer of them — key canonicalization, the hash
+  // key, the JS→JSON conversion, the tree's own drop — recurses one frame per
+  // level. On wasm32 the stack is 1 MB and an overflow is a trap that takes the
+  // module down rather than an error the host can catch, so this must throw and
+  // then keep working. `install` is the reachable door: the value arrives from JS
+  // and one loop builds it.
+  it('install rejects a deeply nested props instead of trapping the module', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    let deep = []
+    for (let i = 0; i < 5000; i++) deep = [deep]
+    const rt = importMarkdown('body')
+    rt.islands = [{ id: 'i1', type: 'widget', loss: 'lossless', props: deep }]
+    // Matched on the message: a slot/shape complaint would pass a bare toThrow
+    // while the depth door stayed open.
+    expect(() => doc.install({}, rt)).toThrow(/nests deeper/)
+    // Still alive: the guard errored rather than trapping, so the module keeps
+    // serving. A trap would fail every later call in the file, not just this one.
+    doc.install({}, importMarkdown('after'))
+    expect(doc.main.body.text).toBe('after')
+  })
 })
 
 describe('Content codec — importMarkdown / exportMarkdown / rebase / mapPos', () => {
