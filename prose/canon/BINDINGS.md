@@ -135,7 +135,7 @@ table.
 
 The single **idiom** row on the front door is the honest cost: the typed writer
 is the one shape pyo3 carries worst, so its "identical" is qualified, not
-claimed. See the as-built [0.93 → 0.94 migration](../../docs/migrations/0.93-to-0.94.md#the-two-tier-binding-surface-932).
+claimed.
 
 ## Python — `bindings/quillmark-python`
 
@@ -175,8 +175,7 @@ own linear memory, lazily loaded on the first render — there is no public
 `/core` or `/render` subpath. The core build is ~0.66 MB gzip; the Typst backend
 ~8 MB (Typst dominates), loaded only when something renders. Backend handles
 never escape the `Engine`: it clones the quill tree + `doc.toJson()` into the
-backend's memory as serialized data and frees the clones. See the
-[as-built 0.90 design](../../docs/migrations/0.89-to-0.90.md).
+backend's memory as serialized data and frees the clones.
 
 Beyond the byte-output verbs (`engine.render`, `LiveSession.render`), the
 canvas-capable backend builds (Typst, and pdfform under its preview seam)
