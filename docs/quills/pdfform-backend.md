@@ -210,8 +210,10 @@ The widget is unsigned: Quillmark performs no cryptography. To produce a signed 
 | **SVG** | A `render()` output format — one SVG document per page. |
 | **PNG** | A `render()` output format — one raster per page at `RenderOptions::ppi` (default 144). |
 
-The backend's formats are `[Pdf, Svg, Png]`; `render` with any other
-`output_format` errors with `pdfform::format_not_supported`.
+The backend's formats are `[Pdf, Svg, Png]` — every `OutputFormat` there is. The
+guard behind them stays, so a format added to the enum and not to this backend
+errors with `backend::format_not_supported`, the code both built-in backends
+share.
 
 **Canvas** is a separate surface from the `render()` output formats above: it is
 the WASM `paint()` raster path (`render_rgba`), not an `OutputFormat`. See

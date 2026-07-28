@@ -18,7 +18,8 @@ guides in order.
 
 ## Available guides
 
-- [0.97 → 0.98](0.97-to-0.98.md) — the block vocabulary opens.
+- [0.97 → 0.98](0.97-to-0.98.md) — the block vocabulary opens, and `txt`
+  retires.
   **Break:** `LineKind` and `Container` each gain an `Unknown { tag, attrs }`
   variant (exhaustive matches need an arm) and `Line` / `LineKind` / `Container`
   drop their `Eq` derive; `ContentLine.kind` and `ContentContainer.container`
@@ -27,6 +28,19 @@ guides in order.
   documents are unaffected: an unrecognized line kind or container now
   round-trips opaque and renders as a paragraph (or transparently) instead of
   failing the load, so adding a block construct is no longer a schema event.
+  **Break:** `OutputFormat::Txt` is removed on every surface — the Rust variant,
+  Python's `OutputFormat.TXT`, the TS `'txt'` arm, and CLI `--format txt`. No
+  backend ever produced it, so every path reaching it failed at render.
+  **Break:** `typst::format_not_supported` and `pdfform::format_not_supported`
+  collapse into **`backend::format_not_supported`** — route on the one code.
+  **Break:** `ReadValue::as_text` / `as_value` and `Quill::list_files` /
+  `list_subdirectories` are removed (match the variant; walk `quill.files()`).
+  `QuillValue`'s eight removed accessors resolve unchanged through `Deref` — no
+  action.
+  **Break (Python):** `RenderResult.regions[].field` is a `DocPath`
+  (`main.body`, `cards.<kind>[<i>].<field>`), not a plate-space address; WASM
+  was already correct. Additive: the content decoder enforces the nesting cap
+  and refuses out-of-range wire positions instead of truncating them.
 - [0.96 → 0.97](0.96-to-0.97.md) — the WASM transport read renames; `$id`
   becomes the unique card handle.
   **Break:** `Document.get` → **`Document.getStored`** (JS) — the quill-free
