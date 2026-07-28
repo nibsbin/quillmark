@@ -119,18 +119,19 @@ impl KnownIslandType {
     }
 }
 
-/// Repair an island's props to its type's canonical shape in place (a no-op for
-/// an unknown type — its opaque props are preserved verbatim). The normalize-side
-/// island-type dispatch, called from [`Content::normalize`](crate::Content).
+// The three `Island`-taking wrappers below are where the open set's `None` arm
+// is answered — once each, so `model.rs` calls a total function and no site
+// re-decides what an unknown type does.
+
+/// [`KnownIslandType::normalize_props`] for a known type; for an unknown one, a
+/// no-op that leaves the opaque props verbatim.
 pub(crate) fn normalize_island_structure(island: &mut Island) {
     if let Some(k) = KnownIslandType::parse(&island.island_type) {
         k.normalize_props(&mut island.props);
     }
 }
 
-/// An island's `(text, marks)` cells for validation (empty for a type with no
-/// cell model, and for an unknown type). The validate-side twin of
-/// [`normalize_island_structure`].
+/// [`KnownIslandType::cell_marks`] for a known type; empty for an unknown one.
 pub(crate) fn island_cell_marks(island: &Island) -> Vec<(String, Vec<Mark>)> {
     match KnownIslandType::parse(&island.island_type) {
         Some(k) => k.cell_marks(&island.props),
@@ -138,9 +139,8 @@ pub(crate) fn island_cell_marks(island: &Island) -> Vec<(String, Vec<Mark>)> {
     }
 }
 
-/// An island's shape violation, if any (`None` for a well-formed, shape-free, or
-/// unknown island). For a known type, [`normalize_island_structure`] guarantees
-/// this returns `None`.
+/// [`KnownIslandType::shape_error`] for a known type; `None` for an unknown one.
+/// [`normalize_island_structure`] guarantees `None` for the known ones too.
 pub(crate) fn island_shape_error(island: &Island) -> Option<Invariant> {
     KnownIslandType::parse(&island.island_type).and_then(|k| k.shape_error(&island.props))
 }

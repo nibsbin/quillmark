@@ -12,10 +12,11 @@
 //! canonical form — one serializer, not two to keep aligned.
 
 use crate::model::{
-    sort_keys_owned, sorted_value, Container, Invariant, Island, Line, LineKind, Loss, Mark,
+    sort_keys_owned, Container, Invariant, Island, Line, LineKind, Loss, Mark,
     MarkKind, Content, Usv,
 };
 use serde_json::{Map, Value};
+use std::borrow::Cow;
 
 /// Why canonical-JSON parsing failed. Structural only — a well-formed producer
 /// (this crate's serializer, the seam, storage) never trips these.
@@ -132,6 +133,28 @@ pub fn from_canonical_value(v: &Value) -> Result<Content, ParseError> {
     Ok(rt)
 }
 
+/// Read an opaque payload bag (`attrs`, `props`) off the wire, absent → `Null`.
+/// **Depth-checked before the clone**, against
+/// [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH): `Value::clone` recurses one frame
+/// per level, as do the key-canonicalization passes, the hash key, and the tree's
+/// own `Drop`, so an over-deep bag must be refused while it is still borrowed from
+/// the caller's `Value` — by the time it is owned, the frames have already been
+/// spent and dropping it spends them again. The wire twin of the
+/// [`Invariant::JsonTooDeep`] check in
+/// [`Content::validate`](crate::model::Content::validate), and every bag every
+/// decoder retains comes through here.
+fn bag_from_wire(
+    o: &Map<String, Value>,
+    key: &'static str,
+    what: &'static str,
+) -> Result<Value, ParseError> {
+    let Some(v) = o.get(key) else {
+        return Ok(Value::Null);
+    };
+    crate::model::check_json_depth(v, what).map_err(ParseError::Invalid)?;
+    Ok(v.clone())
+}
+
 /// Read a wire position as a [`Usv`] index. **Checked**, not `as usize`: the
 /// deployment target is wasm32, where the truncating cast turns `2^32 + 5` into
 /// an in-range `5` — a mark silently landing at the wrong position instead of a
@@ -157,6 +180,47 @@ fn as_slice(v: &Value) -> &[Value] {
 /// `v[key]` as a slice, empty when the key is absent or not an array.
 fn arr_or_empty<'a>(v: &'a Value, key: &str) -> &'a [Value] {
     v.get(key).map(as_slice).unwrap_or_default()
+}
+
+/// Fold a legacy `attrs` bag into the object when `tag` names a **built-in** —
+/// the storage lane's promotion path. A blob written while `callout` was outside
+/// this build's vocabulary carries `{"kind":"callout","attrs":{…}}`; the release
+/// that promotes `callout` to a built-in reads named siblings that blob never had
+/// and would drop its payload unread. Folding the bag's entries in before the
+/// built-in arms run makes each promotion carry its own legacy form structurally,
+/// rather than as something the promoting author has to remember
+/// (`DOCUMENT_STORAGE.md` § Promoting a vocabulary member).
+///
+/// Three bounds. A named sibling wins over an `attrs` entry — the built-in
+/// encoding is canonical wherever both spellings are present. Only a reserved
+/// name folds, so an unknown's bag stays its opaque payload. The discriminator is
+/// read from the *original* object, so a bag holding a `kind`/`type`/`container`
+/// key cannot re-target the match.
+///
+/// The authored lane never arrives here with this shape: it rejects `attrs`
+/// beside a built-in up front.
+///
+/// Depth-checked like [`bag_from_wire`], and for the same reason one level up: the
+/// fold deep-clones the object it folds into, so an over-deep bag spends the
+/// frames here even though a built-in never retains it as a bag.
+fn fold_legacy_attrs<'a>(
+    o: &'a Map<String, Value>,
+    tag: &str,
+    reserved: &[&str],
+    what: &'static str,
+) -> Result<Cow<'a, Map<String, Value>>, ParseError> {
+    let Some(bag @ Value::Object(attrs)) = o.get("attrs") else {
+        return Ok(Cow::Borrowed(o));
+    };
+    if attrs.is_empty() || !reserved.contains(&tag) {
+        return Ok(Cow::Borrowed(o));
+    }
+    crate::model::check_json_depth(bag, what).map_err(ParseError::Invalid)?;
+    let mut folded = o.clone();
+    for (k, v) in attrs {
+        folded.entry(k.clone()).or_insert_with(|| v.clone());
+    }
+    Ok(Cow::Owned(folded))
 }
 
 // ---- Line ----
@@ -192,7 +256,7 @@ pub fn line_kind_to_value(kind: &LineKind) -> Value {
         // reader that lacks the role still carries it whole.
         LineKind::Unknown { tag, attrs } => {
             m.insert("kind".into(), Value::String(tag.clone()));
-            m.insert("attrs".into(), sorted_value(attrs));
+            m.insert("attrs".into(), attrs.clone());
         }
     }
     Value::Object(m)
@@ -203,9 +267,16 @@ pub fn line_kind_to_value(kind: &LineKind) -> Value {
 /// [`line_from_value`] and the line-op wire.
 pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("line"))?;
-    match o.get("kind").and_then(Value::as_str) {
-        Some("para") => Ok(LineKind::Para),
-        Some("heading") => {
+    // A missing/non-string `kind` is the one shape error here — the open set
+    // absorbs unknown *names*, not malformed objects.
+    let tag = o
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or(ParseError::Shape("line kind"))?;
+    let o = fold_legacy_attrs(o, tag, &Content::RESERVED_LINE_KINDS, "line attrs")?;
+    match tag {
+        "para" => Ok(LineKind::Para),
+        "heading" => {
             let level = o
                 .get("level")
                 .and_then(Value::as_u64)
@@ -215,19 +286,18 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
             }
             Ok(LineKind::Heading { level: level as u8 })
         }
-        Some("code") => Ok(LineKind::Code {
+        "code" => Ok(LineKind::Code {
             lang: o.get("lang").and_then(Value::as_str).map(str::to_string),
         }),
-        Some("island") => Ok(LineKind::Island),
-        Some("rule") => Ok(LineKind::Rule),
+        "island" => Ok(LineKind::Island),
+        "rule" => Ok(LineKind::Rule),
         // Open set: any other name is a block role this build lacks, kept opaque
-        // and projected as `Para`. Only a missing/non-string `kind` is a shape
-        // error — the *document* still opens when its vocabulary grows.
-        Some(other) => Ok(LineKind::Unknown {
+        // and projected as `Para` — the *document* still opens when its
+        // vocabulary grows.
+        other => Ok(LineKind::Unknown {
             tag: other.to_string(),
-            attrs: o.get("attrs").cloned().unwrap_or(Value::Null),
+            attrs: bag_from_wire(&o, "attrs", "line attrs")?,
         }),
-        None => Err(ParseError::Shape("line kind")),
     }
 }
 
@@ -286,7 +356,7 @@ pub fn container_to_value(c: &Container) -> Value {
         }
         Container::Unknown { tag, attrs } => {
             m.insert("container".into(), Value::String(tag.clone()));
-            m.insert("attrs".into(), sorted_value(attrs));
+            m.insert("attrs".into(), attrs.clone());
         }
     }
     Value::Object(m)
@@ -296,20 +366,24 @@ pub fn container_to_value(c: &Container) -> Value {
 /// [`container_to_value`].
 pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("container"))?;
-    match o.get("container").and_then(Value::as_str) {
-        Some("list_item") => Ok(Container::ListItem {
+    let tag = o
+        .get("container")
+        .and_then(Value::as_str)
+        .ok_or(ParseError::Shape("container kind"))?;
+    let o = fold_legacy_attrs(o, tag, &Content::RESERVED_CONTAINERS, "container attrs")?;
+    match tag {
+        "list_item" => Ok(Container::ListItem {
             ordered: o.get("ordered").and_then(Value::as_bool).unwrap_or(false),
             start: o.get("start").and_then(Value::as_u64).unwrap_or(1),
             ordinal: o.get("ordinal").and_then(Value::as_u64).unwrap_or(0),
         }),
-        Some("quote") => Ok(Container::Quote),
+        "quote" => Ok(Container::Quote),
         // Open set, as for line kinds: an unrecognized container round-trips
         // opaque and projects transparently.
-        Some(other) => Ok(Container::Unknown {
+        other => Ok(Container::Unknown {
             tag: other.to_string(),
-            attrs: o.get("attrs").cloned().unwrap_or(Value::Null),
+            attrs: bag_from_wire(&o, "attrs", "container attrs")?,
         }),
-        None => Err(ParseError::Shape("container kind")),
     }
 }
 
@@ -348,7 +422,7 @@ pub fn mark_to_value(mark: &Mark) -> Value {
         }
         MarkKind::Unknown { tag, attrs } => {
             m.insert("type".into(), Value::String(tag.clone()));
-            m.insert("attrs".into(), sorted_value(attrs));
+            m.insert("attrs".into(), attrs.clone());
         }
     }
     Value::Object(m)
@@ -395,6 +469,9 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
         end,
         ty,
     } = mark_shape(v)?;
+    // After the shape read, not inside it: the fold's clone is exactly the cost
+    // `mark_shape` exists to let a verdict-only caller skip.
+    let o = fold_legacy_attrs(o, ty, &Content::RESERVED_MARK_TYPES, "mark attrs")?;
     let kind = match ty {
         "strong" => MarkKind::Strong,
         "emph" => MarkKind::Emph,
@@ -419,7 +496,7 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
         // with whatever `attrs` it carried.
         other => MarkKind::Unknown {
             tag: other.to_string(),
-            attrs: o.get("attrs").cloned().unwrap_or(Value::Null),
+            attrs: bag_from_wire(&o, "attrs", "mark attrs")?,
         },
     };
     Ok(Mark { start, end, kind })
@@ -624,8 +701,8 @@ pub fn parse_cell(v: &Value) -> (String, Vec<Mark>) {
 }
 
 /// Build a table-cell object `{text, marks}` — the inverse of [`parse_cell`],
-/// reusing [`mark_to_value`]. Key order is fixed by the recursive
-/// [`sorted_value`] pass in [`Content::normalize`], not here.
+/// reusing [`mark_to_value`]. Key order is fixed by the recursive key-sort in
+/// [`Content::normalize`], not here.
 pub(crate) fn cell_to_value(text: &str, marks: &[Mark]) -> Value {
     let mut m = Map::new();
     m.insert("text".into(), Value::String(text.to_string()));
@@ -804,7 +881,7 @@ fn island_to_value(island: &Island) -> Value {
     let mut m = Map::new();
     m.insert("id".into(), Value::String(island.id.clone()));
     m.insert("type".into(), Value::String(island.island_type.clone()));
-    m.insert("props".into(), sorted_value(&island.props));
+    m.insert("props".into(), island.props.clone());
     m.insert("loss".into(), loss_to_str(&island.loss).into());
     Value::Object(m)
 }
@@ -822,7 +899,7 @@ fn island_from_value(v: &Value) -> Result<Island, ParseError> {
             .and_then(Value::as_str)
             .ok_or(ParseError::Shape("island type"))?
             .to_string(),
-        props: o.get("props").cloned().unwrap_or(Value::Null),
+        props: bag_from_wire(o, "props", "island props")?,
         loss: loss_from_str(o.get("loss").and_then(Value::as_str).unwrap_or("lossless")),
     })
 }
@@ -892,6 +969,143 @@ mod tests {
         assert!(matches!(
             Content::from_canonical_json(&json),
             Err(ParseError::Invalid(Invariant::NestingTooDeep { .. }))
+        ));
+    }
+
+    /// Build a `Value` nesting `depth` array levels — iteratively, so *building*
+    /// the fixture cannot overflow. Handling it still can: `Value`'s `Clone` and
+    /// `Drop` both recurse, which is why the tests below probe just past the cap
+    /// (1 000, the depth issue #1093 measured as safe to hold) rather than at the
+    /// 5 000 that aborted. A depth the guard must reject is a depth the test
+    /// cannot pass around either — the reason the limit exists.
+    fn nested_arrays(depth: usize) -> Value {
+        let mut v = Value::Null;
+        for _ in 0..depth {
+            v = Value::Array(vec![v]);
+        }
+        v
+    }
+
+    /// Issue #1093: [`deep_container_nesting_is_rejected_at_decode`] on the
+    /// payload axis, through the `Value` lane. The string lane was already safe
+    /// by accident (`serde_json::from_str` refuses past 128), but the `Value` lane
+    /// is the host-authored one — `install` reaches it — and had no guard, so a
+    /// 5 000-deep `props` aborted the process instead of erroring.
+    #[test]
+    fn deep_json_payload_is_rejected_at_decode_on_the_value_lane() {
+        let deep = nested_arrays(1_000);
+        let cases: [(Value, &'static str); 4] = [
+            (
+                serde_json::json!({"text":"\u{fffc}","lines":[{"kind":"island","containers":[]}],
+                  "marks":[],"islands":[{"id":"i1","type":"widget","loss":"lossless","props":deep}]}),
+                "island props",
+            ),
+            (
+                serde_json::json!({"text":"x","lines":[{"kind":"para","containers":[]}],
+                  "marks":[{"start":0,"end":1,"type":"sparkle","attrs":deep}],"islands":[]}),
+                "mark attrs",
+            ),
+            (
+                serde_json::json!({"text":"x","lines":[{"kind":"callout","containers":[],"attrs":deep}],
+                  "marks":[],"islands":[]}),
+                "line attrs",
+            ),
+            (
+                serde_json::json!({"text":"x","lines":[{"kind":"para",
+                  "containers":[{"container":"indent","attrs":deep}]}],"marks":[],"islands":[]}),
+                "container attrs",
+            ),
+        ];
+        for (v, what) in cases {
+            assert_eq!(
+                from_canonical_value(&v),
+                Err(ParseError::Invalid(Invariant::JsonTooDeep {
+                    what,
+                    max: crate::MAX_JSON_DEPTH,
+                })),
+                "{what} accepted a 1 000-deep payload"
+            );
+            // The authored lane funnels through the same decode, so it refuses
+            // the same shape rather than trapping on the reserved-name scan.
+            assert!(matches!(
+                from_authored_value(&v),
+                Err(ParseError::Invalid(Invariant::JsonTooDeep { .. }))
+            ));
+        }
+    }
+
+    /// The cap admits every payload a stored blob can carry, so closing the
+    /// `Value` lane costs no stored population. Stated as the implication rather
+    /// than an offset: `serde_json::from_str`'s own limit counts from the document
+    /// root, not from the bag, so the wrapper levels it also charges are its
+    /// business — what must hold is that anything the string lane delivers, the
+    /// per-bag cap accepts.
+    #[test]
+    fn json_depth_cap_admits_every_storable_payload() {
+        let content = |props: Value| {
+            serde_json::json!({"text":"\u{fffc}","lines":[{"kind":"island","containers":[]}],
+              "marks":[],"islands":[{"id":"i1","type":"widget","loss":"lossless","props":props}]})
+        };
+        assert!(from_canonical_value(&content(nested_arrays(crate::MAX_JSON_DEPTH))).is_ok());
+        assert!(from_canonical_value(&content(nested_arrays(crate::MAX_JSON_DEPTH + 1))).is_err());
+
+        // Across the whole boundary region, string-lane-accepted implies
+        // `Value`-lane-accepted. The converse does not hold and need not: the
+        // string lane's root-relative count refuses a few depths the bag cap
+        // allows, which is where it was accidentally safe all along.
+        let mut storable = 0;
+        for d in 1..=crate::MAX_JSON_DEPTH + 8 {
+            let v = content(nested_arrays(d));
+            if Content::from_canonical_json(&v.to_string()).is_ok() {
+                storable = d;
+                assert!(
+                    from_canonical_value(&v).is_ok(),
+                    "the bag cap refused a {d}-deep props the string lane accepts"
+                );
+            }
+        }
+        assert!(
+            storable > 0 && storable <= crate::MAX_JSON_DEPTH,
+            "string lane's deepest storable props was {storable}"
+        );
+    }
+
+    /// Issue #1093: the legacy-attrs fold is the one frame that spends the depth
+    /// without retaining the bag — it deep-clones the object it folds into, and it
+    /// runs for a *built-in* name, where no `Unknown` arm reads the bag at all. A
+    /// nested-object bag, since only an object folds.
+    #[test]
+    fn deep_json_payload_is_rejected_before_the_legacy_attrs_fold() {
+        let mut deep = Value::Null;
+        for _ in 0..1_000 {
+            deep = serde_json::json!({"a": deep});
+        }
+        // `para` is reserved, `attrs` is a non-empty object: the fold path.
+        let v = serde_json::json!({"text":"x","lines":[{"kind":"para","containers":[],"attrs":deep}],
+          "marks":[],"islands":[]});
+        assert_eq!(
+            from_canonical_value(&v),
+            Err(ParseError::Invalid(Invariant::JsonTooDeep {
+                what: "line attrs",
+                max: crate::MAX_JSON_DEPTH,
+            }))
+        );
+    }
+
+    /// Issue #1093: an over-deep bag is refused whichever door it arrives at, so
+    /// the op wire cannot install one either.
+    #[test]
+    fn deep_json_payload_is_rejected_on_the_op_wire() {
+        let deep = nested_arrays(1_000);
+        let op = serde_json::json!({"op":"add","start":0,"end":1,"type":"sparkle","attrs":deep});
+        assert!(matches!(
+            crate::ops::mark_op_from_value(&op),
+            Err(ParseError::Invalid(Invariant::JsonTooDeep { .. }))
+        ));
+        let op = serde_json::json!({"op":"setKind","line":0,"kind":"callout","attrs":deep});
+        assert!(matches!(
+            crate::ops::line_op_from_value(&op),
+            Err(ParseError::Invalid(Invariant::JsonTooDeep { .. }))
         ));
     }
 
@@ -1177,5 +1391,172 @@ mod tests {
         let json = rt.to_canonical_json();
         let back = Content::from_canonical_json(&json).unwrap();
         assert_eq!(back.marks[0].kind, rt.marks[0].kind);
+    }
+
+    /// Issue #1094: promotion moves a construct's payload from the opaque bag to
+    /// named siblings, and every blob written before it still spells the payload
+    /// the old way. The storage lane folds the bag in, so the promoted decoder
+    /// reads what the unknown wrote instead of dropping it. Pinned on the
+    /// built-ins carrying payload today — the fold keys off `RESERVED_*`, so a
+    /// promoted name joins it by the same edit that promotes it.
+    #[test]
+    fn built_in_decoders_read_the_legacy_attrs_form() {
+        let cases: [(Value, LineKind); 2] = [
+            (
+                serde_json::json!({"kind": "heading", "attrs": {"level": 2}}),
+                LineKind::Heading { level: 2 },
+            ),
+            (
+                serde_json::json!({"kind": "code", "attrs": {"lang": "rust"}}),
+                LineKind::Code {
+                    lang: Some("rust".into()),
+                },
+            ),
+        ];
+        for (v, want) in cases {
+            assert_eq!(line_kind_from_value(&v).unwrap(), want);
+        }
+        let item = serde_json::json!({
+            "container": "list_item",
+            "attrs": {"ordered": true, "start": 3, "ordinal": 1}
+        });
+        assert_eq!(
+            container_from_value(&item).unwrap(),
+            Container::ListItem {
+                ordered: true,
+                start: 3,
+                ordinal: 1,
+            }
+        );
+        let link = serde_json::json!({"start": 0, "end": 1, "type": "link", "attrs": {"url": "u"}});
+        assert_eq!(
+            mark_from_value(&link).unwrap().kind,
+            MarkKind::Link { url: "u".into() }
+        );
+        // Both spellings present: the named sibling is the canonical one.
+        let both = serde_json::json!({"kind": "heading", "level": 3, "attrs": {"level": 2}});
+        assert_eq!(
+            line_kind_from_value(&both).unwrap(),
+            LineKind::Heading { level: 3 }
+        );
+        // An unknown's bag is payload, not a source of named fields — including a
+        // key that would re-target the match if the fold read the discriminator
+        // back out of it.
+        let unknown = serde_json::json!({"kind": "callout", "attrs": {"kind": "heading", "level": 2}});
+        assert_eq!(
+            line_kind_from_value(&unknown).unwrap(),
+            LineKind::Unknown {
+                tag: "callout".into(),
+                attrs: serde_json::json!({"kind": "heading", "level": 2}),
+            }
+        );
+        // Re-encode is the promoted spelling, so opening a legacy blob under the
+        // release that promotes its tag moves the document's canonical bytes —
+        // the read-repair / accepted-movement case § Byte-stability governs.
+        let legacy = r#"{"islands":[],"lines":[{"attrs":{"level":2},"containers":[],"kind":"heading"}],"marks":[],"text":"hi"}"#;
+        assert_eq!(
+            Content::from_canonical_json(legacy)
+                .unwrap()
+                .to_canonical_json(),
+            r#"{"islands":[],"lines":[{"containers":[],"kind":"heading","level":2}],"marks":[],"text":"hi"}"#
+        );
+    }
+
+    /// Issue #1094: `ord` is part of the freeze, and a promoted type takes the
+    /// slot `Unknown` held. Anywhere else and a build that knows the type orders
+    /// it against the built-ins differently from a build that reads it as
+    /// `Unknown` — one document, two canonical forms.
+    #[test]
+    fn unknown_holds_the_last_mark_ordinal() {
+        let all = [
+            MarkKind::Strong,
+            MarkKind::Emph,
+            MarkKind::Underline,
+            MarkKind::Strike,
+            MarkKind::Code,
+            MarkKind::Link { url: "u".into() },
+            MarkKind::Anchor { id: "a".into() },
+            MarkKind::Unknown {
+                tag: "kbd".into(),
+                attrs: Value::Null,
+            },
+        ];
+        // Exhaustive on purpose: a new variant is a compile error here, which is
+        // where the placement rule gets read, rather than a slot silently taken
+        // after `Unknown`.
+        for k in &all {
+            match k {
+                MarkKind::Strong
+                | MarkKind::Emph
+                | MarkKind::Underline
+                | MarkKind::Strike
+                | MarkKind::Code
+                | MarkKind::Link { .. }
+                | MarkKind::Anchor { .. }
+                | MarkKind::Unknown { .. } => {}
+            }
+        }
+        let ords: Vec<u8> = all.iter().map(MarkKind::ord).collect();
+        assert_eq!(ords, (0..all.len() as u8).collect::<Vec<_>>());
+        assert!(matches!(all.last(), Some(MarkKind::Unknown { .. })));
+    }
+
+    /// Issue #1094: formatting-class membership is stored meaning. Two adjacent
+    /// unknowns are two marks; two adjacent formatting marks are one. Promoting a
+    /// tag into the class therefore rewrites documents nobody edited, which makes
+    /// it a canonical-byte event rather than a silent widening.
+    #[test]
+    fn formatting_class_membership_decides_adjacent_union() {
+        let mut rt = Content::empty();
+        rt.text = "abcd".into();
+        let unknown = |start, end| Mark {
+            start,
+            end,
+            kind: MarkKind::Unknown {
+                tag: "kbd".into(),
+                attrs: serde_json::json!({}),
+            },
+        };
+        rt.marks = vec![unknown(0, 2), unknown(2, 4)];
+        rt.normalize();
+        assert_eq!(rt.marks.len(), 2);
+        rt.marks = vec![
+            Mark {
+                start: 0,
+                end: 2,
+                kind: MarkKind::Strong,
+            },
+            Mark {
+                start: 2,
+                end: 4,
+                kind: MarkKind::Strong,
+            },
+        ];
+        rt.normalize();
+        assert_eq!(rt.marks.len(), 1);
+    }
+
+    /// Issue #1094: promotion grows `RESERVED_*`, and the authored lane then
+    /// refuses a shape it accepted the release before. By design — a host still
+    /// authoring the unknown spelling of a name that now means the built-in is
+    /// writing the silent drop the rule exists to catch — but from the host's
+    /// side it reads as a release breaking its writes.
+    #[test]
+    fn reserved_growth_flips_authored_acceptance() {
+        let doc = |kind: &str| {
+            serde_json::json!({
+                "islands": [],
+                "lines": [{"attrs": {"level": 2}, "containers": [], "kind": kind}],
+                "marks": [],
+                "text": "hi",
+            })
+        };
+        // Outside `RESERVED_LINE_KINDS` today: an unknown carrying its payload.
+        assert!(from_authored_value(&doc("callout")).is_ok());
+        // Inside it: what `"callout"` becomes the release it is promoted.
+        assert!(matches!(
+            from_authored_value(&doc("heading")),
+            Err(ParseError::Shape(_))
+        ));
     }
 }

@@ -846,13 +846,8 @@ fn render_marked_core(
 /// marks are thrown at it.
 const PROBE_BUDGET: usize = 64;
 
-/// Clip wrapping marks so none crosses the interior of an atomic span (`code` or
-/// a `link`'s text). A wrap edge landing strictly inside a `[cs, ce)` span is
-/// pulled to that span's boundary (`start`→`ce`, `end`→`cs`); a wrap swallowed
-/// whole collapses and drops. An atomic span can't carry partial styling, and
-/// the sweep's cursor jumps its interior start→end, so a wrap `end` hiding inside
-/// would be missed and left unbalanced (the #846 shape). A wrap that strictly
-/// *contains* a span keeps both edges, so the span still nests inside it.
+/// [`clip_range_to_atomic`] over every wrapping mark, dropping the ones an
+/// atomic span swallowed whole.
 fn clip_fmt_to_atomic(fmt: &mut Vec<(usize, usize, &MarkKind)>, atomics: &[(usize, usize)]) {
     for m in fmt.iter_mut() {
         clip_range_to_atomic(&mut m.0, &mut m.1, atomics);

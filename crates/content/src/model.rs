@@ -268,6 +268,12 @@ impl Loss {
 impl MarkKind {
     /// Formatting marks are a property of a range and union when coincident;
     /// identity/unknown marks are handles and never merge (Spike-A rules).
+    ///
+    /// Class membership is stored meaning, not presentation: promoting an
+    /// open-set tag *into* this class starts unioning adjacent runs that
+    /// round-tripped as two marks, so the promotion moves the canonical bytes of
+    /// documents nobody edited (`DOCUMENT_STORAGE.md` § Promoting a vocabulary
+    /// member).
     pub fn is_formatting(&self) -> bool {
         matches!(
             self,
@@ -282,6 +288,14 @@ impl MarkKind {
 
     /// Total order over kinds for the canonical sort tie-break, after
     /// `(start, end)`. Stable across releases — part of the freeze.
+    ///
+    /// A new variant takes the slot immediately **before** [`MarkKind::Unknown`],
+    /// pushing `Unknown` up by one. That is the only placement where a build that
+    /// knows the type and a build that reads it as `Unknown` order it identically
+    /// against every built-in; anywhere else is two canonical forms for one
+    /// document, one per reader (`DOCUMENT_STORAGE.md` § Promoting a vocabulary
+    /// member). The block axes sort by nothing, so the rule is the mark axis'
+    /// alone.
     pub fn ord(&self) -> u8 {
         match self {
             MarkKind::Strong => 0,
@@ -315,33 +329,12 @@ impl MarkKind {
 /// A `serde_json::Value` rendered to a string with object keys recursively
 /// sorted — order-insensitive, so it is a stable comparison/grouping key.
 fn canonical_json_string(v: &JsonValue) -> String {
-    serde_json::to_string(&sorted_value(v)).unwrap_or_default()
-}
-
-/// Rebuild `v` with every object's keys sorted, recursively. Pins island
-/// `props` (and unknown-mark attrs) against `preserve_order` leaking insertion
-/// order into the canonical bytes / content hash (Spike C carry-forward). For
-/// an owned tree, prefer [`sort_keys_owned`] — it reorders in place without
-/// cloning the leaves.
-pub(crate) fn sorted_value(v: &JsonValue) -> JsonValue {
-    match v {
-        JsonValue::Array(items) => JsonValue::Array(items.iter().map(sorted_value).collect()),
-        JsonValue::Object(map) => {
-            let mut keys: Vec<&String> = map.keys().collect();
-            keys.sort();
-            let mut out = serde_json::Map::with_capacity(map.len());
-            for k in keys {
-                out.insert(k.clone(), sorted_value(&map[k]));
-            }
-            JsonValue::Object(out)
-        }
-        other => other.clone(),
-    }
+    serde_json::to_string(&sort_keys_owned(v.clone())).unwrap_or_default()
 }
 
 /// Whether every object in `v` already has its keys in ascending order,
 /// recursively — the cheap allocation-free check that lets a re-normalize skip
-/// rebuilding an already-canonical `props`/`attrs` tree via [`sorted_value`].
+/// rebuilding an already-canonical `props`/`attrs` tree.
 /// Once normalized, an untouched tree stays sorted, so a per-keystroke
 /// re-normalize pays a scan instead of a full clone.
 pub(crate) fn is_value_key_sorted(v: &JsonValue) -> bool {
@@ -355,21 +348,74 @@ pub(crate) fn is_value_key_sorted(v: &JsonValue) -> bool {
     }
 }
 
+/// `true` when `v` nests deeper than `max` container levels — the guard that
+/// keeps the recursive walkers above ([`is_value_key_sorted`], [`sort_keys_owned`])
+/// and `Value`'s own `Drop` inside a bounded frame count.
+///
+/// The walk is iterative (explicit stack), so the check itself cannot overflow on
+/// the adversarially deep input it exists to detect. The unit is **container
+/// levels**, not nodes: only arrays and objects are charged a level and the
+/// scalar leaf at the bottom of a chain is never checked, so `max` nested
+/// containers are accepted whether the deepest holds a scalar, is empty, or holds
+/// another container, and `max + 1` is rejected in every case. Level-charging
+/// matches [`quillmark_core::json_depth_exceeds`], the document-side twin, so the
+/// two boundaries reject the identical shape.
+pub(crate) fn json_depth_exceeds(v: &JsonValue, max: usize) -> bool {
+    // (value, depth) pairs; depth counts container levels entered.
+    let mut stack: Vec<(&JsonValue, usize)> = vec![(v, 0)];
+    while let Some((v, depth)) = stack.pop() {
+        match v {
+            JsonValue::Array(items) => {
+                if depth + 1 > max {
+                    return true;
+                }
+                stack.extend(items.iter().map(|c| (c, depth + 1)));
+            }
+            JsonValue::Object(map) => {
+                if depth + 1 > max {
+                    return true;
+                }
+                stack.extend(map.values().map(|c| (c, depth + 1)));
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+/// [`json_depth_exceeds`] against [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH) as an
+/// [`Invariant`] result, `what` naming the bag. The one spelling shared by
+/// [`Content::validate`] and the decoders in [`crate::serial`], so the wire and
+/// in-process readings of the limit cannot drift.
+pub(crate) fn check_json_depth(v: &JsonValue, what: &'static str) -> Result<(), Invariant> {
+    if json_depth_exceeds(v, crate::MAX_JSON_DEPTH) {
+        return Err(Invariant::JsonTooDeep {
+            what,
+            max: crate::MAX_JSON_DEPTH,
+        });
+    }
+    Ok(())
+}
+
 /// Put `v` in canonical key order, rebuilding it only when a key is actually out
 /// of order — an untouched tree (a pure text splice) stays sorted, so the
 /// per-keystroke path pays the scan and skips the deep clone.
 pub(crate) fn canonicalize_keys(v: &mut JsonValue) {
     if !is_value_key_sorted(v) {
-        *v = sorted_value(v);
+        *v = sort_keys_owned(std::mem::take(v));
     }
 }
 
-/// The owned twin of [`sorted_value`]: reorder every object's keys by **moving**
-/// each entry into a freshly key-sorted map, recursively. Same canonical result
-/// — the fixed struct keys land alphabetically and any already-sorted `props`/
-/// `attrs` re-sort to themselves — but the leaves (the `text` string, mark
-/// attrs, arrays) are moved rather than deep-cloned, so a tree built once by
-/// `to_value` is canonicalized without a second full clone. Re-sorting a new
+/// The crate's one key sorter: reorder every object's keys by **moving** each
+/// entry into a freshly key-sorted map, recursively. Pins island `props` (and
+/// unknown line/container/mark `attrs`) against `preserve_order` leaking
+/// insertion order into the canonical bytes / content hash (Spike C
+/// carry-forward). The fixed struct keys land alphabetically and any
+/// already-sorted `props`/`attrs` re-sort to themselves; the leaves (the `text`
+/// string, mark attrs, arrays) are moved rather than deep-cloned, so a tree
+/// built once by `to_value` is canonicalized without a second full clone. The
+/// encoders therefore emit their payload bags verbatim — one pass over the
+/// finished tree, not one per bag. Re-sorting a new
 /// `serde_json::Map` (not sorting in place) keeps this independent of whether
 /// `serde_json`'s `preserve_order` feature is on in the crate graph.
 pub(crate) fn sort_keys_owned(v: JsonValue) -> JsonValue {
@@ -463,6 +509,14 @@ pub enum Invariant {
         depth: usize,
         max: usize,
     },
+    /// An opaque JSON payload — an island's `props`, an unknown line/container/
+    /// mark's `attrs` — nests deeper than [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH).
+    /// [`Invariant::NestingTooDeep`] on the payload axis: key-canonicalization,
+    /// the hash key, and `Value`'s own `Drop` each recurse one frame per level, so
+    /// an unbounded bag overflows the stack instead of erroring. `what` names the
+    /// bag. No true depth: the check bails at the first over-deep container rather
+    /// than measuring past the limit.
+    JsonTooDeep { what: &'static str, max: usize },
 }
 
 /// The way a line's text can contradict its [`LineKind`]. `Para` and `Heading`
@@ -734,10 +788,11 @@ impl Content {
                 }
             }
             match &m.kind {
-                MarkKind::Unknown { tag, .. } => {
+                MarkKind::Unknown { tag, attrs } => {
                     if Self::RESERVED_MARK_TYPES.contains(&tag.as_str()) {
                         return Err(Invariant::ReservedUnknownTag(tag.clone()));
                     }
+                    check_json_depth(attrs, "mark attrs")?;
                 }
                 MarkKind::Anchor { id } => {
                     if id.is_empty() || !seen_anchor_ids.insert(id.as_str()) {
@@ -757,18 +812,20 @@ impl Content {
                 // An unknown role may not reuse a built-in `kind` name: it would
                 // serialize as the built-in and parse back as one, dropping its
                 // attrs — the mark-side rule, one axis over.
-                LineKind::Unknown { tag, .. }
-                    if Self::RESERVED_LINE_KINDS.contains(&tag.as_str()) =>
-                {
-                    return Err(Invariant::ReservedUnknownLineKind(tag.clone()));
+                LineKind::Unknown { tag, attrs } => {
+                    if Self::RESERVED_LINE_KINDS.contains(&tag.as_str()) {
+                        return Err(Invariant::ReservedUnknownLineKind(tag.clone()));
+                    }
+                    check_json_depth(attrs, "line attrs")?;
                 }
                 _ => {}
             }
             for c in &line.containers {
-                if let Container::Unknown { tag, .. } = c {
+                if let Container::Unknown { tag, attrs } = c {
                     if Self::RESERVED_CONTAINERS.contains(&tag.as_str()) {
                         return Err(Invariant::ReservedUnknownContainer(tag.clone()));
                     }
+                    check_json_depth(attrs, "container attrs")?;
                 }
             }
             if let Some(mismatch) = line_kind_mismatch(&line.kind, seg) {
@@ -795,6 +852,10 @@ impl Content {
                     id: island.id.clone(),
                 });
             }
+            // Payload depth before any pass that walks `props`. A cell's own
+            // `attrs` is a subtree of `props`, so one check bounds the cell marks
+            // the loop below reads as well.
+            check_json_depth(&island.props, "island props")?;
             // Structural shape (table column/row/aligns consistency, `\n`-free
             // cells) before the per-cell mark ranges — a ragged island is
             // ill-formed regardless of its marks.
@@ -1043,6 +1104,67 @@ mod tests {
                 max: crate::MAX_NESTING_DEPTH,
             })
         );
+    }
+
+    /// Issue #1093: [`container_nesting_is_capped`] on the payload axis. The
+    /// decoders refuse an over-deep bag at the wire, and this is the same cap for
+    /// the content that never went through a decoder — key canonicalization, the
+    /// hash key, and `Value`'s own `Drop` recurse one frame per level whatever
+    /// built the tree.
+    #[test]
+    fn json_payload_depth_is_capped() {
+        let nested = |depth: usize| {
+            let mut v = JsonValue::Null;
+            for _ in 0..depth {
+                v = JsonValue::Array(vec![v]);
+            }
+            v
+        };
+        let too_deep = |what: &'static str| {
+            Err(Invariant::JsonTooDeep {
+                what,
+                max: crate::MAX_JSON_DEPTH,
+            })
+        };
+
+        let mut rt = tagged("hi", LineKind::Para);
+        rt.lines[0].kind = LineKind::Unknown {
+            tag: "callout".into(),
+            attrs: nested(crate::MAX_JSON_DEPTH),
+        };
+        assert_eq!(rt.validate(), Ok(()));
+        rt.lines[0].kind = LineKind::Unknown {
+            tag: "callout".into(),
+            attrs: nested(crate::MAX_JSON_DEPTH + 1),
+        };
+        assert_eq!(rt.validate(), too_deep("line attrs"));
+
+        let mut rt = tagged("hi", LineKind::Para);
+        rt.lines[0].containers = vec![Container::Unknown {
+            tag: "indent".into(),
+            attrs: nested(crate::MAX_JSON_DEPTH + 1),
+        }];
+        assert_eq!(rt.validate(), too_deep("container attrs"));
+
+        let mut rt = tagged("hi", LineKind::Para);
+        rt.marks = vec![Mark {
+            start: 0,
+            end: 2,
+            kind: MarkKind::Unknown {
+                tag: "sparkle".into(),
+                attrs: nested(crate::MAX_JSON_DEPTH + 1),
+            },
+        }];
+        assert_eq!(rt.validate(), too_deep("mark attrs"));
+
+        let mut rt = tagged("\u{fffc}", LineKind::Island);
+        rt.islands = vec![Island {
+            id: "i1".into(),
+            island_type: "widget".into(),
+            props: nested(crate::MAX_JSON_DEPTH + 1),
+            loss: Loss::Lossless,
+        }];
+        assert_eq!(rt.validate(), too_deep("island props"));
     }
 
     #[test]

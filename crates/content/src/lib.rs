@@ -64,3 +64,21 @@ pub use serial::ParseError;
 /// `quillmark_core::error::MAX_NESTING_DEPTH`), so a document that imports also
 /// renders.
 pub const MAX_NESTING_DEPTH: usize = 100;
+
+/// Maximum nesting depth of an opaque JSON payload — an island's `props`, an
+/// unknown line/container/mark's `attrs` — measured in container levels from the
+/// bag itself.
+///
+/// The payload axis of [`MAX_NESTING_DEPTH`]: `is_value_key_sorted`,
+/// `sort_keys_owned`, and `serde_json::Value`'s own `Drop` each recurse one
+/// frame per level, so an unbounded bag overflows the
+/// stack — on wasm32, an unrecoverable trap rather than a catchable error. The
+/// bag is refused at the decode boundary, before it is cloned out of the wire,
+/// and [`Content::validate`](model::Content::validate) restates it as an
+/// invariant for the hand-built content that never went through a decoder.
+///
+/// 128 is what `serde_json::from_str` already enforces, so nothing a stored blob
+/// can carry is refused. The string lane counts from the document root rather
+/// than the bag, so it admits ~3 levels fewer; both bound the recursion, and the
+/// per-bag reading is the one the recursive consumers actually walk.
+pub const MAX_JSON_DEPTH: usize = 128;

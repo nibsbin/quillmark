@@ -178,7 +178,20 @@ earns the place: cells are where the `table` type is likeliest to grow
 rewrites a cell's `text` and `marks` in place rather than minting a fresh
 `{text, marks}` object.
 
-Two rules bound the openness:
+Three rules bound the openness:
+
+- **Payload depth is capped at `MAX_JSON_DEPTH` (128).** An opaque bag is host
+  JSON of arbitrary shape, but not arbitrary depth: key canonicalization, the
+  content-hash key, and `serde_json::Value`'s own `Drop` each recurse one frame
+  per level, so an unbounded bag overflows the stack — on wasm32, a trap that
+  takes the module down rather than an error the host can catch. The cap is the
+  one `serde_json::from_str` already enforces, so it refuses nothing a stored blob
+  can carry; it exists because the `Value` lane (the host-authored one, which
+  `install` reaches) is not parsed from a string and had no limit of its own. A
+  bag is refused where the decoder reads it off the wire, before it is cloned into
+  the model, and `Content::validate` restates it as `Invariant::JsonTooDeep` for
+  content that never went through a decoder. This is
+  `Invariant::NestingTooDeep`'s container cap on the payload axis.
 
 - **Payload rides `attrs`.** A built-in carries its payload in named sibling
   keys (`level`, `lang`, `url`); an unknown carries it in one opaque `attrs`
@@ -210,7 +223,9 @@ Two rules bound the openness:
       was unknown carries `{"kind": "callout", "attrs": {…}}`; the release that
       promotes `callout` to a built-in has to keep opening it. Rejecting at
       `from_canonical_json` would refuse documents at rest exactly when the
-      vocabulary grows — the failure this section exists to prevent.
+      vocabulary grows — the failure this section exists to prevent. Opening it
+      is half: the promoted arm also *reads* the bag rather than dropping it, see
+      Promoting a vocabulary member.
 
 The opaque attrs are hash input like everything else in the canonical form, so
 they are recursively key-sorted along with the rest (see Byte-stability). What
@@ -244,6 +259,76 @@ tags.** A future `kind: "footnote"` carrying a sibling `ref` loses `ref` at any
 consumer that predates it, predicates or no — the first rule above (*payload
 rides `attrs`*) read from the other end.
 
+## Promoting a vocabulary member
+
+Adding an unknown is not a schema event; the reverse trip — a later release
+**promoting** a tag to a built-in, which is what the open set exists for — moves
+four things at once.
+
+| What moves | How |
+|---|---|
+| Encoding | `{"kind":"callout","attrs":{…}}` becomes `{"kind":"callout",…}` with named siblings. |
+| Stored blobs | The decoder resolves the built-in name *before* the `Unknown` fallthrough, so the stored `attrs` reach an arm that reads siblings. |
+| Normalization | A promoted mark that `is_formatting()` unions adjacent runs that were two marks. |
+| Sort order | `attrs_key` is `tag\0{json}` for an `Unknown` and whatever its own arm returns for a built-in, so the `(start, end, ord)` tie-break can reorder. |
+
+The first two are data loss on exactly the documents the open set protects; the
+last two move canonical bytes for a document nobody edited. Four rules bound
+them.
+
+**A promoted built-in's decoder also reads the legacy `attrs` form.** This is
+the load-bearing one — without it the first promotion eats every stored blob's
+payload, silently. It is structural rather than a discipline: `fold_legacy_attrs`
+folds an `attrs` bag into the object whenever the discriminator names a reserved
+member, before the built-in arms run, on all three block-and-mark axes. A named
+sibling wins over a bag entry, only reserved names fold, and the discriminator is
+read from the original object. A promotion adds its name to `RESERVED_*` in the
+same edit that adds its arm, so it inherits the fold and carries its own legacy
+form. Re-encoding a folded blob writes the promoted spelling, so the read is a
+byte movement of the read-repair kind § Byte-stability governs.
+
+The island axis has no such gap: `props` is the payload carrier for known and
+unknown types alike, so a promoted island type reads what its unknown wrote. Nor
+does `loss`, which carries no payload.
+
+**A new `MarkKind` takes the ordinal immediately before `Unknown`.** That is the
+one placement where a build that knows the type and a build that reads it as
+`Unknown` order the mark identically against every built-in; any other slot gives
+one document two canonical forms, one per reader. The rule is stated on
+`MarkKind::ord` itself. It is the mark axis' alone — the block axes sort by
+nothing.
+
+**Promoting a mark into the formatting class changes stored meaning**, since
+adjacent runs that round-tripped as two marks begin to union. It is a
+canonical-byte event, and takes the read-repair-or-accept-the-movement treatment
+§ Byte-stability sets out for migrated rows.
+
+**`RESERVED_*` growth rejects previously-valid authored content**, by design. A
+host still authoring `Unknown { tag: "callout" }` after the promotion gets
+`ReservedUnknownLineKind`, and `from_authored_value` starts refusing `attrs`
+beside `"callout"` — the reserved-name rule above, applied to a name that changed
+sides. From the host's seat it reads as a release breaking its writes, so it is a
+release note, not a silent tightening.
+
+## The three id handles
+
+Islands, anchors, and cards each carry an id, and all three are the same handle:
+**opaque, unique within a scope, hash input, stable for the session, rebased
+through edits and never rewritten.** They differ on one axis — **who mints one,
+and why only they can.** Uniqueness scope, collision response, and markdown
+round-trip all follow from that.
+
+|                     | Island `id`                                        | Anchor `id`                                        | Card `$id`                                                            |
+| ------------------- | -------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------- |
+| Minted by           | the engine, at import                              | the caller                                         | the caller                                                            |
+| Because             | content determines it — the nth island minted      | the referent is external; no content determines it | nothing external does, but the scope that validates it is out of view |
+| Unique across       | the `Content`'s islands                            | the `Content`'s prose marks                        | the document's composable cards                                       |
+| Required            | yes                                                | yes — the empty id is rejected                     | no; the handle is opt-in                                              |
+| On collision        | unreachable — mint is sequential; `validate` scans | `add` rejects                                      | parse repairs, mutators and storage reject                            |
+| Markdown round-trip | re-minted identically                              | lost — export emits none, import mints none        | carried verbatim                                                      |
+
+Each section below states one handle's policy whole.
+
 ## Island-id determinism
 
 An island's `id` is part of the canonical form (`{id, type, props, loss}`),
@@ -273,16 +358,12 @@ id.
 
 ## Anchor-id identity
 
-An anchor (`MarkKind::Anchor { id }`) and an island id are the *same handle* —
-opaque, unique per `Content`, hash input, session-stable, rebased not rewritten
-— differing on exactly one axis: **derivability at the markdown boundary**. An
-island projects to markdown, so its id is a pure function of that projection
-(§ Island-id determinism); an anchor has **no** projection — it names an
-external referent (a comment thread, an editor bookmark) that no content
-determines. The never-ambient rule therefore cannot apply, and need not: that
-rule exists to keep *import* a pure function of markdown, and import mints no
-anchor, so equal markdown still imports to equal bytes. The two sections read as
-one handle model, not a contradiction.
+An anchor (`MarkKind::Anchor { id }`) sits at the caller-minted end of the mint
+axis (§ The three id handles) because it has **no markdown projection** — it
+names an external referent (a comment thread, an editor bookmark) that no
+content determines. The never-ambient rule therefore cannot apply, and need not:
+that rule exists to keep *import* a pure function of markdown, and import mints
+no anchor, so equal markdown still imports to equal bytes.
 
 The policy: **an anchor id is caller-supplied, unique per `Content`, opaque and
 invariant while the mark lives; the mark is best-effort under edits and absent
@@ -321,17 +402,13 @@ position, never the id, so this policy holds either way.
 
 ## Card-id identity
 
-A card's `$id` is the third id-bearing handle beside island and anchor ids:
-the **durable card handle** — the address that survives reorder, kind change,
-and both round-trips, where a card's index does not (`Document::find_card`
-resolves it). The three handles differ on one stated axis — *who can know
-the id*. An island id is determined by content, so the engine mints it at
-import (§ Island-id determinism). An anchor id is determined by an external
-referent only the caller knows (§ Anchor-id identity). A card id is
-determined by nothing external — but the scope that makes one valid, the
-document, is out of view at the creation site (`Quill::seed_card` returns a
-detached card), so the caller mints here too: the engine lacks the scope,
-not the referent.
+A card's `$id` is the **durable card handle** — the address that survives
+reorder, kind change, and both round-trips, where a card's index does not
+(`Document::find_card` resolves it). Unlike an anchor's referent, nothing
+external determines it; the caller still mints it because the scope that makes
+one valid, the document, is out of view at the creation site (`Quill::seed_card`
+returns a detached card). The engine lacks the scope, not the referent — the
+third position on the mint axis (§ The three id handles).
 
 The policy: **a card `$id` is caller-supplied, optional, unique across the
 document's composable cards, opaque and invariant while the card lives;

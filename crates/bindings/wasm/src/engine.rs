@@ -2187,8 +2187,49 @@ fn js_value_to_field_batch(
 /// mutators take any shape (the consumer's slot may hold an array, scalar, or
 /// map); `js_value_to_object` adds the object constraint on top.
 fn js_value_to_json(value: JsValue, ctx: &str) -> Result<serde_json::Value, JsValue> {
+    reject_deep_js_value(&value, ctx)?;
     serde_wasm_bindgen::from_value(value)
         .map_err(|e| WasmError::from(format!("{}: invalid value: {}", ctx, e)).to_js_value())
+}
+
+/// Refuse a JS value nesting past [`MAX_JSON_DEPTH`] **before**
+/// `serde_wasm_bindgen` builds it.
+///
+/// The Rust-side depth guards in `quillmark_content` cannot cover this frame:
+/// `serde_wasm_bindgen::from_value` recurses one frame per level while
+/// constructing the `serde_json::Value`, so a deep enough input overflows during
+/// conversion, before any decoder sees a tree to check. On wasm32 the stack is
+/// 1 MB and an overflow is a trap that takes the module down — not a `WasmError`
+/// the host can catch. `let v = []; for (…) v = [v]` builds such a value in one
+/// loop, so the check belongs on the JS side of the boundary or nowhere.
+///
+/// Iterative, and early-exits at the first over-deep container, so it neither
+/// overflows on the input it detects nor walks past the limit. Arrays, plain
+/// objects, and `Map`s are the three containers `serde_wasm_bindgen` descends
+/// into, and each is charged one level — the reading in
+/// [`quillmark_content::MAX_JSON_DEPTH`].
+fn reject_deep_js_value(value: &JsValue, ctx: &str) -> Result<(), JsValue> {
+    const MAX: usize = quillmark_content::MAX_JSON_DEPTH;
+    let mut stack: Vec<(JsValue, usize)> = vec![(value.clone(), 0)];
+    while let Some((v, depth)) = stack.pop() {
+        let children = if Array::is_array(&v) {
+            Array::from(&v)
+        } else if v.is_instance_of::<js_sys::Map>() {
+            js_sys::Array::from(&v.unchecked_into::<js_sys::Map>().values())
+        } else if v.is_object() && !v.is_null() {
+            js_sys::Object::values(&v.unchecked_into::<js_sys::Object>())
+        } else {
+            continue;
+        };
+        if depth + 1 > MAX {
+            return Err(WasmError::from(format!(
+                "{ctx}: value nests deeper than {MAX} levels"
+            ))
+            .to_js_value());
+        }
+        stack.extend(children.iter().map(|c| (c, depth + 1)));
+    }
+    Ok(())
 }
 
 /// Deserialize a JS value into a JSON object map, rejecting non-objects. Used by
