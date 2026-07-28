@@ -168,7 +168,20 @@ and a table **cell's** unrecognized keys. The cell is the sub-structure the
 handle), so canonicalization rewrites a cell's `text` and `marks` in place
 rather than minting a fresh `{text, marks}` object.
 
-Two rules bound the openness:
+Three rules bound the openness:
+
+- **Payload depth is capped at `MAX_JSON_DEPTH` (128).** An opaque bag is host
+  JSON of arbitrary shape, but not arbitrary depth: key canonicalization, the
+  content-hash key, and `serde_json::Value`'s own `Drop` each recurse one frame
+  per level, so an unbounded bag overflows the stack — on wasm32, a trap that
+  takes the module down rather than an error the host can catch. The cap is the
+  one `serde_json::from_str` already enforces, so it refuses nothing a stored blob
+  can carry; it exists because the `Value` lane (the host-authored one, which
+  `install` reaches) is not parsed from a string and had no limit of its own. A
+  bag is refused where the decoder reads it off the wire, before it is cloned into
+  the model, and `Content::validate` restates it as `Invariant::JsonTooDeep` for
+  content that never went through a decoder. This is
+  `Invariant::NestingTooDeep`'s container cap on the payload axis.
 
 - **Payload rides `attrs`.** A built-in carries its payload in named sibling
   keys (`level`, `lang`, `url`); an unknown carries it in one opaque `attrs`

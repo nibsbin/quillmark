@@ -133,6 +133,28 @@ pub fn from_canonical_value(v: &Value) -> Result<Content, ParseError> {
     Ok(rt)
 }
 
+/// Read an opaque payload bag (`attrs`, `props`) off the wire, absent → `Null`.
+/// **Depth-checked before the clone**, against
+/// [`MAX_JSON_DEPTH`](crate::MAX_JSON_DEPTH): `Value::clone` recurses one frame
+/// per level, as do the key-canonicalization passes, the hash key, and the tree's
+/// own `Drop`, so an over-deep bag must be refused while it is still borrowed from
+/// the caller's `Value` — by the time it is owned, the frames have already been
+/// spent and dropping it spends them again. The wire twin of the
+/// [`Invariant::JsonTooDeep`] check in
+/// [`Content::validate`](crate::model::Content::validate), and every bag every
+/// decoder retains comes through here.
+fn bag_from_wire(
+    o: &Map<String, Value>,
+    key: &'static str,
+    what: &'static str,
+) -> Result<Value, ParseError> {
+    let Some(v) = o.get(key) else {
+        return Ok(Value::Null);
+    };
+    crate::model::check_json_depth(v, what).map_err(ParseError::Invalid)?;
+    Ok(v.clone())
+}
+
 /// Read a wire position as a [`Usv`] index. **Checked**, not `as usize`: the
 /// deployment target is wasm32, where the truncating cast turns `2^32 + 5` into
 /// an in-range `5` — a mark silently landing at the wrong position instead of a
@@ -177,22 +199,28 @@ fn arr_or_empty<'a>(v: &'a Value, key: &str) -> &'a [Value] {
 ///
 /// The authored lane never arrives here with this shape: it rejects `attrs`
 /// beside a built-in up front.
+///
+/// Depth-checked like [`bag_from_wire`], and for the same reason one level up: the
+/// fold deep-clones the object it folds into, so an over-deep bag spends the
+/// frames here even though a built-in never retains it as a bag.
 fn fold_legacy_attrs<'a>(
     o: &'a Map<String, Value>,
     tag: &str,
     reserved: &[&str],
-) -> Cow<'a, Map<String, Value>> {
-    let Some(Value::Object(attrs)) = o.get("attrs") else {
-        return Cow::Borrowed(o);
+    what: &'static str,
+) -> Result<Cow<'a, Map<String, Value>>, ParseError> {
+    let Some(bag @ Value::Object(attrs)) = o.get("attrs") else {
+        return Ok(Cow::Borrowed(o));
     };
     if attrs.is_empty() || !reserved.contains(&tag) {
-        return Cow::Borrowed(o);
+        return Ok(Cow::Borrowed(o));
     }
+    crate::model::check_json_depth(bag, what).map_err(ParseError::Invalid)?;
     let mut folded = o.clone();
     for (k, v) in attrs {
         folded.entry(k.clone()).or_insert_with(|| v.clone());
     }
-    Cow::Owned(folded)
+    Ok(Cow::Owned(folded))
 }
 
 // ---- Line ----
@@ -245,7 +273,7 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
         .get("kind")
         .and_then(Value::as_str)
         .ok_or(ParseError::Shape("line kind"))?;
-    let o = fold_legacy_attrs(o, tag, &Content::RESERVED_LINE_KINDS);
+    let o = fold_legacy_attrs(o, tag, &Content::RESERVED_LINE_KINDS, "line attrs")?;
     match tag {
         "para" => Ok(LineKind::Para),
         "heading" => {
@@ -268,7 +296,7 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
         // vocabulary grows.
         other => Ok(LineKind::Unknown {
             tag: other.to_string(),
-            attrs: o.get("attrs").cloned().unwrap_or(Value::Null),
+            attrs: bag_from_wire(&o, "attrs", "line attrs")?,
         }),
     }
 }
@@ -342,7 +370,7 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
         .get("container")
         .and_then(Value::as_str)
         .ok_or(ParseError::Shape("container kind"))?;
-    let o = fold_legacy_attrs(o, tag, &Content::RESERVED_CONTAINERS);
+    let o = fold_legacy_attrs(o, tag, &Content::RESERVED_CONTAINERS, "container attrs")?;
     match tag {
         "list_item" => Ok(Container::ListItem {
             ordered: o.get("ordered").and_then(Value::as_bool).unwrap_or(false),
@@ -354,7 +382,7 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
         // opaque and projects transparently.
         other => Ok(Container::Unknown {
             tag: other.to_string(),
-            attrs: o.get("attrs").cloned().unwrap_or(Value::Null),
+            attrs: bag_from_wire(&o, "attrs", "container attrs")?,
         }),
     }
 }
@@ -411,7 +439,7 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
         .get("type")
         .and_then(Value::as_str)
         .ok_or(ParseError::Shape("mark type"))?;
-    let o = fold_legacy_attrs(o, ty, &Content::RESERVED_MARK_TYPES);
+    let o = fold_legacy_attrs(o, ty, &Content::RESERVED_MARK_TYPES, "mark attrs")?;
     let kind = match ty {
         "strong" => MarkKind::Strong,
         "emph" => MarkKind::Emph,
@@ -436,7 +464,7 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
         // with whatever `attrs` it carried.
         other => MarkKind::Unknown {
             tag: other.to_string(),
-            attrs: o.get("attrs").cloned().unwrap_or(Value::Null),
+            attrs: bag_from_wire(&o, "attrs", "mark attrs")?,
         },
     };
     Ok(Mark { start, end, kind })
@@ -839,7 +867,7 @@ fn island_from_value(v: &Value) -> Result<Island, ParseError> {
             .and_then(Value::as_str)
             .ok_or(ParseError::Shape("island type"))?
             .to_string(),
-        props: o.get("props").cloned().unwrap_or(Value::Null),
+        props: bag_from_wire(o, "props", "island props")?,
         loss: loss_from_str(o.get("loss").and_then(Value::as_str).unwrap_or("lossless")),
     })
 }
@@ -909,6 +937,143 @@ mod tests {
         assert!(matches!(
             Content::from_canonical_json(&json),
             Err(ParseError::Invalid(Invariant::NestingTooDeep { .. }))
+        ));
+    }
+
+    /// Build a `Value` nesting `depth` array levels — iteratively, so *building*
+    /// the fixture cannot overflow. Handling it still can: `Value`'s `Clone` and
+    /// `Drop` both recurse, which is why the tests below probe just past the cap
+    /// (1 000, the depth issue #1093 measured as safe to hold) rather than at the
+    /// 5 000 that aborted. A depth the guard must reject is a depth the test
+    /// cannot pass around either — the reason the limit exists.
+    fn nested_arrays(depth: usize) -> Value {
+        let mut v = Value::Null;
+        for _ in 0..depth {
+            v = Value::Array(vec![v]);
+        }
+        v
+    }
+
+    /// Issue #1093: [`deep_container_nesting_is_rejected_at_decode`] on the
+    /// payload axis, through the `Value` lane. The string lane was already safe
+    /// by accident (`serde_json::from_str` refuses past 128), but the `Value` lane
+    /// is the host-authored one — `install` reaches it — and had no guard, so a
+    /// 5 000-deep `props` aborted the process instead of erroring.
+    #[test]
+    fn deep_json_payload_is_rejected_at_decode_on_the_value_lane() {
+        let deep = nested_arrays(1_000);
+        let cases: [(Value, &'static str); 4] = [
+            (
+                serde_json::json!({"text":"\u{fffc}","lines":[{"kind":"island","containers":[]}],
+                  "marks":[],"islands":[{"id":"i1","type":"widget","loss":"lossless","props":deep}]}),
+                "island props",
+            ),
+            (
+                serde_json::json!({"text":"x","lines":[{"kind":"para","containers":[]}],
+                  "marks":[{"start":0,"end":1,"type":"sparkle","attrs":deep}],"islands":[]}),
+                "mark attrs",
+            ),
+            (
+                serde_json::json!({"text":"x","lines":[{"kind":"callout","containers":[],"attrs":deep}],
+                  "marks":[],"islands":[]}),
+                "line attrs",
+            ),
+            (
+                serde_json::json!({"text":"x","lines":[{"kind":"para",
+                  "containers":[{"container":"indent","attrs":deep}]}],"marks":[],"islands":[]}),
+                "container attrs",
+            ),
+        ];
+        for (v, what) in cases {
+            assert_eq!(
+                from_canonical_value(&v),
+                Err(ParseError::Invalid(Invariant::JsonTooDeep {
+                    what,
+                    max: crate::MAX_JSON_DEPTH,
+                })),
+                "{what} accepted a 1 000-deep payload"
+            );
+            // The authored lane funnels through the same decode, so it refuses
+            // the same shape rather than trapping on the reserved-name scan.
+            assert!(matches!(
+                from_authored_value(&v),
+                Err(ParseError::Invalid(Invariant::JsonTooDeep { .. }))
+            ));
+        }
+    }
+
+    /// The cap admits every payload a stored blob can carry, so closing the
+    /// `Value` lane costs no stored population. Stated as the implication rather
+    /// than an offset: `serde_json::from_str`'s own limit counts from the document
+    /// root, not from the bag, so the wrapper levels it also charges are its
+    /// business — what must hold is that anything the string lane delivers, the
+    /// per-bag cap accepts.
+    #[test]
+    fn json_depth_cap_admits_every_storable_payload() {
+        let content = |props: Value| {
+            serde_json::json!({"text":"\u{fffc}","lines":[{"kind":"island","containers":[]}],
+              "marks":[],"islands":[{"id":"i1","type":"widget","loss":"lossless","props":props}]})
+        };
+        assert!(from_canonical_value(&content(nested_arrays(crate::MAX_JSON_DEPTH))).is_ok());
+        assert!(from_canonical_value(&content(nested_arrays(crate::MAX_JSON_DEPTH + 1))).is_err());
+
+        // Across the whole boundary region, string-lane-accepted implies
+        // `Value`-lane-accepted. The converse does not hold and need not: the
+        // string lane's root-relative count refuses a few depths the bag cap
+        // allows, which is where it was accidentally safe all along.
+        let mut storable = 0;
+        for d in 1..=crate::MAX_JSON_DEPTH + 8 {
+            let v = content(nested_arrays(d));
+            if Content::from_canonical_json(&v.to_string()).is_ok() {
+                storable = d;
+                assert!(
+                    from_canonical_value(&v).is_ok(),
+                    "the bag cap refused a {d}-deep props the string lane accepts"
+                );
+            }
+        }
+        assert!(
+            storable > 0 && storable <= crate::MAX_JSON_DEPTH,
+            "string lane's deepest storable props was {storable}"
+        );
+    }
+
+    /// Issue #1093: the legacy-attrs fold is the one frame that spends the depth
+    /// without retaining the bag — it deep-clones the object it folds into, and it
+    /// runs for a *built-in* name, where no `Unknown` arm reads the bag at all. A
+    /// nested-object bag, since only an object folds.
+    #[test]
+    fn deep_json_payload_is_rejected_before_the_legacy_attrs_fold() {
+        let mut deep = Value::Null;
+        for _ in 0..1_000 {
+            deep = serde_json::json!({"a": deep});
+        }
+        // `para` is reserved, `attrs` is a non-empty object: the fold path.
+        let v = serde_json::json!({"text":"x","lines":[{"kind":"para","containers":[],"attrs":deep}],
+          "marks":[],"islands":[]});
+        assert_eq!(
+            from_canonical_value(&v),
+            Err(ParseError::Invalid(Invariant::JsonTooDeep {
+                what: "line attrs",
+                max: crate::MAX_JSON_DEPTH,
+            }))
+        );
+    }
+
+    /// Issue #1093: an over-deep bag is refused whichever door it arrives at, so
+    /// the op wire cannot install one either.
+    #[test]
+    fn deep_json_payload_is_rejected_on_the_op_wire() {
+        let deep = nested_arrays(1_000);
+        let op = serde_json::json!({"op":"add","start":0,"end":1,"type":"sparkle","attrs":deep});
+        assert!(matches!(
+            crate::ops::mark_op_from_value(&op),
+            Err(ParseError::Invalid(Invariant::JsonTooDeep { .. }))
+        ));
+        let op = serde_json::json!({"op":"setKind","line":0,"kind":"callout","attrs":deep});
+        assert!(matches!(
+            crate::ops::line_op_from_value(&op),
+            Err(ParseError::Invalid(Invariant::JsonTooDeep { .. }))
         ));
     }
 
