@@ -600,7 +600,23 @@ impl Content {
 
     /// Mark `type` names the projection reserves; an [`MarkKind::Unknown`] may
     /// not reuse one (its serialization would parse back as the built-in,
-    /// silently dropping its attrs — non-injective). Checked by [`Content::validate`].
+    /// silently dropping its attrs — non-injective).
+    ///
+    /// Two enforcement points, on two lanes. [`Content::validate`] catches an
+    /// in-process Rust construction. The wire never reaches it: a decoder resolves
+    /// the built-in name before the `Unknown` fallthrough, so a reserved tag
+    /// *becomes* the built-in rather than arriving as an `Unknown`. The authored
+    /// lane therefore rejects the shape up front
+    /// ([`serial::mark_from_op_value`](crate::serial::mark_from_op_value), its two
+    /// block-axis twins, and
+    /// [`serial::from_authored_value`](crate::serial::from_authored_value)), while
+    /// storage decode stays lenient by design — see there.
+    ///
+    /// This list and its two siblings are re-spelled by hand on the TypeScript
+    /// surface: the unions in `crates/bindings/wasm/src/engine.rs` and the
+    /// `isUnknown*` guards' tables in
+    /// `crates/bindings/wasm/runtime/runtime.js`. Both are pinned to these
+    /// constants by `crates/bindings/wasm/tests/known_names_drift.rs`.
     pub const RESERVED_MARK_TYPES: [&'static str; 7] = [
         "strong",
         "emph",
@@ -845,6 +861,7 @@ mod tests {
     fn f(start: Usv, end: Usv, kind: MarkKind) -> Mark {
         Mark { start, end, kind }
     }
+
 
     #[test]
     fn is_blank_tracks_whitespace_and_islands() {

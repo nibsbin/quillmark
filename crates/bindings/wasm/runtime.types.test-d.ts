@@ -135,6 +135,7 @@ void contentHitKeys;
 import type {
 	Content,
 	ContentLine,
+	ContentLineKind,
 	ContentContainer,
 	ContentMark,
 	ContentIsland,
@@ -157,6 +158,7 @@ import type {
 export type ContentExportsPresent = [
 	Content,
 	ContentLine,
+	ContentLineKind,
 	ContentContainer,
 	ContentMark,
 	ContentIsland,
@@ -236,3 +238,47 @@ if (isListItemContainer(guardContainer)) {
 	const ordinal: number = guardContainer.ordinal;
 	void ordinal;
 }
+
+// ── Open-set membership guards (#1085) ──────────────────────────────────────
+// The negative predicates the pinned-arm guards above cannot express. Each `if`
+// body reads the open arm's opaque payload, reachable only after narrowing, so a
+// guard that stops narrowing fails `npm run typecheck`.
+import {
+	isUnknownLine,
+	isUnknownContainer,
+	isUnknownMark,
+	isUnknownIsland
+} from '../../../pkg/runtime/runtime.js';
+
+if (isUnknownLine(guardLine)) {
+	const attrs: unknown = guardLine.attrs;
+	void attrs;
+}
+if (isUnknownContainer(guardContainer)) {
+	const attrs: unknown = guardContainer.attrs;
+	void attrs;
+}
+if (isUnknownMark(guardMark)) {
+	const attrs: unknown = guardMark.attrs;
+	void attrs;
+}
+if (isUnknownIsland(guardIsland)) {
+	const props: unknown = guardIsland.props;
+	void props;
+}
+
+// ── ContentLineKind is nameable (#1086) ─────────────────────────────────────
+// `ContentLineKind` is exactly `setKind`'s payload, so building the op is a
+// whole-lift: drop a line's envelope, spread the rest. That spelling survives
+// every arm added upstream — including the open one, whose shape an arm-by-arm
+// switch would have to guess at. It only type-checks if the type is nameable
+// from the package entry point, which is the point of the re-export.
+function kindPart(line: ContentLine): ContentLineKind {
+	const { containers, continues, ...kind } = line;
+	void containers;
+	void continues;
+	return kind;
+}
+declare const liftLine: ContentLine;
+const liftedOp: LineOp = { op: 'setKind', line: 0, ...kindPart(liftLine) };
+void liftedOp;

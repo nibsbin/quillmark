@@ -85,8 +85,8 @@ pub enum LineOp {
 // language bindings call them to lower a JS/Python bundle to core ops.
 
 use crate::serial::{
-    container_from_value, container_to_value, line_kind_from_value, line_kind_to_value,
-    mark_from_value, mark_to_value, usv_from, ParseError,
+    container_from_authored_value, container_to_value, line_kind_from_authored_value,
+    line_kind_to_value, mark_from_authored_value, mark_to_value, usv_from, ParseError,
 };
 use serde_json::{Map, Value};
 
@@ -125,12 +125,12 @@ fn merge_mark(m: &mut Map<String, Value>, start: Usv, end: Usv, kind: &MarkKind)
 }
 
 /// Decode a [`MarkOp`] from its wire object. Dispatches on `op`; `add`/`remove`
-/// read the mark vocabulary through [`mark_from_value`].
+/// read the mark vocabulary through [`mark_from_authored_value`].
 pub fn mark_op_from_value(v: &Value) -> Result<MarkOp, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("mark op"))?;
     match o.get("op").and_then(Value::as_str) {
         Some("add") => {
-            let mark = mark_from_value(v)?;
+            let mark = mark_from_authored_value(v)?;
             Ok(MarkOp::Add {
                 start: mark.start,
                 end: mark.end,
@@ -138,7 +138,7 @@ pub fn mark_op_from_value(v: &Value) -> Result<MarkOp, ParseError> {
             })
         }
         Some("remove") => {
-            let mark = mark_from_value(v)?;
+            let mark = mark_from_authored_value(v)?;
             Ok(MarkOp::Remove {
                 start: mark.start,
                 end: mark.end,
@@ -204,7 +204,7 @@ pub fn line_op_from_value(v: &Value) -> Result<LineOp, ParseError> {
         Some("join") => Ok(LineOp::Join { line: line()? }),
         Some("setKind") => Ok(LineOp::SetKind {
             line: line()?,
-            kind: line_kind_from_value(v)?,
+            kind: line_kind_from_authored_value(v)?,
         }),
         Some("setContainers") => Ok(LineOp::SetContainers {
             line: line()?,
@@ -213,7 +213,7 @@ pub fn line_op_from_value(v: &Value) -> Result<LineOp, ParseError> {
                 .and_then(Value::as_array)
                 .ok_or(ParseError::Shape("setContainers containers"))?
                 .iter()
-                .map(container_from_value)
+                .map(container_from_authored_value)
                 .collect::<Result<_, _>>()?,
         }),
         Some("setContinues") => Ok(LineOp::SetContinues {
@@ -997,6 +997,36 @@ mod tests {
         for op in ops {
             let v = line_op_to_value(&op);
             assert_eq!(line_op_from_value(&v).unwrap(), op, "round-trip: {v}");
+        }
+    }
+
+    /// Issue #1084: on the op lane, `attrs` beside a built-in discriminator is a
+    /// shape error. A host that emits one classified a built-in as unknown —
+    /// stale copy of the built-in list — and the lenient reader would resolve the
+    /// name and drop the payload unread, corrupting the line with no diagnostic.
+    #[test]
+    fn op_wire_rejects_attrs_beside_a_built_in_name() {
+        let bad = serde_json::json!({
+            "op": "setKind", "line": 0, "kind": "para", "attrs": {"tone": "warn"},
+        });
+        assert!(matches!(line_op_from_value(&bad), Err(ParseError::Shape(_))));
+        let bad = serde_json::json!({
+            "op": "setContainers", "line": 0,
+            "containers": [{"container": "quote", "attrs": {"k": 1}}],
+        });
+        assert!(matches!(line_op_from_value(&bad), Err(ParseError::Shape(_))));
+        let bad = serde_json::json!({
+            "op": "add", "start": 0, "end": 1, "type": "strong", "attrs": {"k": 1},
+        });
+        assert!(matches!(mark_op_from_value(&bad), Err(ParseError::Shape(_))));
+
+        // An unknown name keeps carrying `attrs` — the rule is reserved-name
+        // reuse, not `attrs` itself — and a built-in without `attrs` is untouched.
+        for ok in [
+            serde_json::json!({"op": "setKind", "line": 0, "kind": "callout", "attrs": {"tone": "warn"}}),
+            serde_json::json!({"op": "setKind", "line": 0, "kind": "heading", "level": 2}),
+        ] {
+            assert!(line_op_from_value(&ok).is_ok(), "rejected: {ok}");
         }
     }
 

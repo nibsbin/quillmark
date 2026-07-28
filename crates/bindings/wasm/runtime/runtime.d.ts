@@ -57,9 +57,16 @@ export type {
 // `Content | string` — rather than forcing consumers to derive them structurally
 // off the `Document` handle. The content write path (a ProseMirror↔content codec)
 // must name all of them; they are its correctness core, not edge types.
+// `ContentLineKind` is the shared half of `ContentLine` and `setKind`, so lifting
+// a line's kind whole — destructure off `containers`/`continues`, spread the rest
+// into the op — is the version-proof spelling of building a `setKind`. Naming it
+// is what makes that spelling type-check without a cast. The alternative, an
+// arm-by-arm switch, means guessing at the open arm's shape and re-editing on
+// every arm added.
 export type {
 	Content,
 	ContentLine,
+	ContentLineKind,
 	ContentContainer,
 	ContentMark,
 	ContentIsland,
@@ -180,6 +187,39 @@ export declare function isListItemContainer(
 	start: number;
 	ordinal: number;
 };
+
+// ── Open-set membership guards ──────────────────────────────────────────────
+// The guards above answer "is this arm X", one pinned arm at a time. These four
+// answer "is this a value this build knows?" — the question a read-modify-write
+// consumer must ask, since lowering an edit restates every line's kind and
+// containers, and a construct the consumer cannot hold is gone on write-back
+// unless it is carried inertly. Without a predicate a consumer enumerates the
+// built-in names itself and re-couples to a closed set, going wrong at the first
+// release that adds one.
+//
+// They classify unknown TAGS, not unknown payloads on known tags: a future
+// `kind: "footnote"` carrying a sibling `ref` loses `ref` at any consumer that
+// predates it, with or without these.
+
+/** True when this build does not know `line.kind` — the open arm, carrying opaque `attrs`. */
+export declare function isUnknownLine(
+	line: ContentLine
+): line is ContentLine & { kind: string; attrs: unknown };
+
+/** True when this build does not know `container.container`. See {@link isUnknownLine}. */
+export declare function isUnknownContainer(
+	container: ContentContainer
+): container is ContentContainer & { container: string; attrs: unknown };
+
+/** True when this build does not know `mark.type`. See {@link isUnknownLine}. */
+export declare function isUnknownMark(
+	mark: ContentMark
+): mark is ContentMark & { type: string; attrs: unknown };
+
+/** True when this build does not know `island.type` (its payload rides `props`, not `attrs`). */
+export declare function isUnknownIsland(
+	island: ContentIsland
+): island is ContentIsland & { type: string; props: unknown };
 
 // ── Canonical render-side types ─────────────────────────────────────────────
 // These are the BACKEND-NEUTRAL render contract of the plural-backend API. They

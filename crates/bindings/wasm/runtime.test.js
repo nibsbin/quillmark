@@ -22,6 +22,10 @@ import {
   MAIN_CARD_ADDR,
   isQuillmarkError,
   exportMarkdown,
+  isUnknownLine,
+  isUnknownContainer,
+  isUnknownMark,
+  isUnknownIsland,
 } from '@quillmark-wasm/runtime'
 // Pin that the runtime's Quill IS the internal core build's class (re-export,
 // not a parallel wrapper). This imports the internal core artifact directly —
@@ -373,6 +377,33 @@ describe('@quillmark/wasm/runtime — MAIN_CARD_ADDR (the named main-card addres
     const doc = new Document('editor_test')
     doc.storeExt(MAIN_CARD_ADDR, { editor: { pinned: true } })
     expect(doc.main.ext.editor.pinned).toBe(true)
+  })
+})
+
+describe('@quillmark/wasm/runtime — open-set membership guards (#1085)', () => {
+  // One known name per axis, not the whole table: membership is a `Set.has`,
+  // uniform across members, and the tables themselves are pinned against the
+  // Rust constants by `crates/bindings/wasm/tests/known_names_drift.rs`.
+  it('answers known-vs-unknown on all four axes', () => {
+    expect(isUnknownLine({ kind: 'heading', level: 2, containers: [] })).toBe(false)
+    expect(isUnknownLine({ kind: 'callout', attrs: {}, containers: [] })).toBe(true)
+
+    expect(isUnknownContainer({ container: 'quote' })).toBe(false)
+    expect(isUnknownContainer({ container: 'indent', attrs: {} })).toBe(true)
+
+    expect(isUnknownMark({ start: 0, end: 1, type: 'strong' })).toBe(false)
+    expect(isUnknownMark({ start: 0, end: 1, type: 'highlight', attrs: {} })).toBe(true)
+
+    expect(isUnknownIsland({ id: 'i1', type: 'table', props: {}, loss: 'lossless' })).toBe(false)
+    expect(isUnknownIsland({ id: 'i1', type: 'widget', props: {}, loss: 'lossless' })).toBe(true)
+  })
+
+  it('reports a missing or non-string discriminant as not-unknown, never throwing', () => {
+    // A malformed value is not an unknown construct — it is malformed, and the
+    // decoder rejects it. The guard must not turn one into the other.
+    for (const bad of [{}, { kind: 7 }, null, undefined]) {
+      expect(isUnknownLine(bad)).toBe(false)
+    }
   })
 })
 

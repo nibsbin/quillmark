@@ -169,6 +169,65 @@ export function isListItemContainer(container) {
 	return container.container === 'list_item';
 }
 
+// ── Open-set membership guards ──────────────────────────────────────────────
+// The guards above each answer "is this arm X" — one pinned arm at a time. These
+// four answer the other question: "is this a value this build knows?" A consumer
+// that must branch known-vs-unknown — any read-modify-write consumer, since
+// lowering an edit restates every line's kind and containers — otherwise
+// enumerates the built-in names in its own source, recreating the closed-set
+// coupling the open set exists to remove. That list is correct until the release
+// that adds a built-in, at which point the new construct is misclassified as
+// unknown and round-trips through the consumer's unknown carrier, losing any
+// sibling-key payload.
+//
+// A predicate rather than an exported name list, because the known tables below
+// are upstream's business. They are pinned against the Rust source
+// (`Content::RESERVED_*` and `KnownIslandType`) by the
+// `known_open_set_names_are_pinned` drift-guard test in
+// `crates/content/src/model.rs`: adding a built-in means editing there, here, and
+// the TS unions in `crates/bindings/wasm/src/engine.rs` in one commit.
+//
+// These classify unknown *tags*, not unknown *payloads on known tags*. A future
+// `kind: "footnote"` with a sibling `ref` loses `ref` at a consumer that predates
+// it either way.
+
+const KNOWN_LINE_KINDS = new Set(['para', 'heading', 'code', 'island', 'rule']);
+const KNOWN_CONTAINERS = new Set(['list_item', 'quote']);
+const KNOWN_MARK_TYPES = new Set(['strong', 'emph', 'underline', 'strike', 'code', 'link', 'anchor']);
+const KNOWN_ISLAND_TYPES = new Set(['table', 'image']);
+
+/**
+ * @param {import('../core/wasm.js').ContentLine} line
+ * @returns {line is import('../core/wasm.js').ContentLine & { kind: string; attrs: unknown }}
+ */
+export function isUnknownLine(line) {
+	return typeof line?.kind === 'string' && !KNOWN_LINE_KINDS.has(line.kind);
+}
+
+/**
+ * @param {import('../core/wasm.js').ContentContainer} container
+ * @returns {container is import('../core/wasm.js').ContentContainer & { container: string; attrs: unknown }}
+ */
+export function isUnknownContainer(container) {
+	return typeof container?.container === 'string' && !KNOWN_CONTAINERS.has(container.container);
+}
+
+/**
+ * @param {import('../core/wasm.js').ContentMark} mark
+ * @returns {mark is import('../core/wasm.js').ContentMark & { type: string; attrs: unknown }}
+ */
+export function isUnknownMark(mark) {
+	return typeof mark?.type === 'string' && !KNOWN_MARK_TYPES.has(mark.type);
+}
+
+/**
+ * @param {import('../core/wasm.js').ContentIsland} island
+ * @returns {island is import('../core/wasm.js').ContentIsland & { type: string; props: unknown }}
+ */
+export function isUnknownIsland(island) {
+	return typeof island?.type === 'string' && !KNOWN_ISLAND_TYPES.has(island.type);
+}
+
 // Backend builds are NEVER statically imported here — that would pull a
 // multi-MB binary into the eager graph and defeat lazy loading. Each entry is a
 // DESCRIPTOR: `load` is a thunk returning a dynamic `import()` (a backend's
