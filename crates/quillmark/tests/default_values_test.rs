@@ -1,4 +1,10 @@
-//! # Default Values Tests
+//! Zero-fill of *nested* nulls in the plate projection.
+//!
+//! The authored/default/zero ladder itself is owned by
+//! `quillmark_core::quill::resolved` — which also proves `resolve()` is
+//! byte-for-byte with `compile_data()`, so drift shows up there first. What
+//! only shows up through a loaded quill is recursion: a null inside an object
+//! property or an array element.
 
 use quillmark::Document;
 use std::fs;
@@ -67,118 +73,5 @@ main:
     assert!(
         !tags.iter().any(|v| v.is_null()),
         "null array element must not leak into the plate: {data}"
-    );
-}
-
-#[test]
-fn test_defaults_applied_when_absent() {
-    // An absent Endorsed field (one with a `default:`) resolves to its default
-    // in the plate projection — across string and number types — while an
-    // authored value still wins over the default. dry_run tolerates the
-    // partially-authored document (nothing gates on absence).
-    let temp_dir = TempDir::new().unwrap();
-    let quill_path = create_test_quill(
-        &temp_dir,
-        r#"quill:
-  name: "test_quill"
-  version: "1.0"
-  backend: "typst"
-  description: "Test quill with defaults"
-
-main:
-  fields:
-    title:
-      type: "string"
-      default: "Untitled"
-    status:
-      type: "string"
-      default: "draft"
-    version:
-      type: "number"
-      default: 1
-"#,
-    );
-
-    let quill = quillmark::quill_from_path(&quill_path).expect("from_path failed");
-
-    // `status` is authored; `title` and `version` fall back to their defaults.
-    let markdown =
-        "~~~card-yaml\n$quill: test_quill\n$kind: main\nstatus: published\n~~~\n\n# Content\n";
-    let parsed = Document::parse(markdown).expect("parse failed").document;
-
-    assert!(
-        quill.dry_run(&parsed).is_ok(),
-        "dry_run should tolerate absent Endorsed fields (defaults apply)"
-    );
-
-    let data = quill
-        .compile_data(&parsed)
-        .expect("compile_data should succeed");
-    assert_eq!(
-        data.get("title").and_then(|v| v.as_str()),
-        Some("Untitled"),
-        "absent Endorsed `title` should resolve to its default: {data}"
-    );
-    assert_eq!(
-        data.get("version").and_then(|v| v.as_f64()),
-        Some(1.0),
-        "absent Endorsed `version` should resolve to its numeric default: {data}"
-    );
-    assert_eq!(
-        data.get("status").and_then(|v| v.as_str()),
-        Some("published"),
-        "authored value should win over the default: {data}"
-    );
-}
-
-#[test]
-fn test_absent_must_fill_is_zero_filled() {
-    // Zero-filled render: an absent Unendorsed field (`title`) is tolerated and
-    // filled with its type-empty zero value (`""`) in the plate projection —
-    // never persisted. See prose/canon/SCHEMAS.md.
-    let temp_dir = TempDir::new().unwrap();
-    let quill_path = create_test_quill(
-        &temp_dir,
-        r#"quill:
-  name: "test_quill"
-  version: "1.0"
-  backend: "typst"
-  description: "Test quill with an Unendorsed field"
-
-main:
-  fields:
-    title:
-      type: "string"
-    status:
-      type: "string"
-      default: "draft"
-"#,
-    );
-
-    let quill = quillmark::quill_from_path(&quill_path).expect("from_path failed");
-
-    let markdown =
-        "~~~card-yaml\n$quill: test_quill\n$kind: main\nstatus: published\n~~~\n\n# Content\n";
-    let parsed = Document::parse(markdown).expect("parse failed").document;
-
-    // Render does not gate on absence.
-    assert!(
-        quill.dry_run(&parsed).is_ok(),
-        "dry_run should tolerate an absent Unendorsed field (zero-filled)"
-    );
-
-    // The plate projection carries the zero value for the absent field.
-    let data = quill
-        .compile_data(&parsed)
-        .expect("compile_data should succeed");
-    assert_eq!(
-        data.get("title").and_then(|v| v.as_str()),
-        Some(""),
-        "absent Unendorsed `title` should be zero-filled to \"\" in the projection: {data}"
-    );
-    assert_eq!(
-        data.get("status").and_then(|v| v.as_str()),
-        Some("published"),
-        "authored value should win over default"
     );
 }

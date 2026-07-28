@@ -1,3 +1,12 @@
+//! Real-browser wasm32 smoke coverage.
+//!
+//! `run_in_browser` is this file's reason to exist: node/vitest cannot prove
+//! that the `serde_wasm_bindgen` boundary produces the right JS types under a
+//! real browser's WASM instantiation. So the assertions here stay at the
+//! crossing — a verb runs, and its result deserializes into the declared shape.
+//! Engine semantics belong to core, and the JS-facing API surface to
+//! `basic.test.js`.
+
 use wasm_bindgen_test::*;
 
 use quillmark_wasm::{Document, Quill, Quillmark, RenderOptions};
@@ -40,22 +49,6 @@ fn test_document_body_and_warnings() {
 fn test_quill_from_tree() {
     let quill = Quill::from_tree(small_quill_tree()).expect("quill failed");
     let _ = quill;
-}
-
-/// Rendering with a `$quill` ref that differs from the quill name is a hard
-/// error (`quill::name_mismatch`), surfaced to JS as a thrown error — the
-/// engine does not fall back to rendering with the loaded quill.
-#[wasm_bindgen_test]
-fn test_render_name_mismatch_errors() {
-    let engine = Quillmark::new();
-    let quill = Quill::from_tree(small_quill_tree()).expect("quill failed");
-
-    let mismatch_md =
-        "~~~card-yaml\n$quill: other_quill\n$kind: main\ntitle: Mismatch\n~~~\n\n# Content\n";
-    let doc = Document::from_markdown(mismatch_md).expect("fromMarkdown failed");
-    let result = engine.render(&quill, &doc, Some(RenderOptions::default()));
-
-    assert!(result.is_err(), "name mismatch must reject the render");
 }
 
 /// `quill.render(Document, opts)` — render via pre-parsed document.
@@ -149,75 +142,44 @@ fn region_quill_tree() -> wasm_bindgen::JsValue {
     ])
 }
 
-/// The full region + navigation surface through the WASM session: `regions()`
-/// yields per-segment boxes carrying `span`, `fieldAt` resolves a click to the
-/// field, and `positionAt` / `locate` round-trip a content offset (#829).
+/// The region + navigation results deserialize into their declared shapes
+/// across the WASM boundary: `regions()` yields span-bearing boxes, and
+/// `positionAt` / `locate` round-trip a content offset. Which boxes land where
+/// is geometry, pinned in `backends/typst/tests/content_regions.rs`.
 #[wasm_bindgen_test]
-fn test_session_regions_and_navigation() {
+fn test_session_region_shapes_cross_the_boundary() {
     let engine = Quillmark::new();
     let quill = Quill::from_tree(region_quill_tree()).expect("quill failed");
     let md = "~~~card-yaml\n$quill: region_quill\n$kind: main\nbody: |\n  First paragraph, alpha.\n\n  Second paragraph, beta.\n~~~\n\nignored\n";
     let doc = Document::from_markdown(md).expect("fromMarkdown failed");
     let session = engine.open(&quill, &doc).expect("open failed");
 
-    // regions(): two paragraphs → two segment regions, each carrying a `span`.
     let regions_js = session.regions().expect("regions");
     let regions: Vec<serde_json::Value> =
         serde_wasm_bindgen::from_value(regions_js).expect("regions deserialize");
     let body: Vec<&serde_json::Value> = regions.iter().filter(|r| r["field"] == "body").collect();
+    let first = *body
+        .first()
+        .unwrap_or_else(|| panic!("expected a body region, got: {regions:?}"));
     assert!(
-        body.len() >= 2,
-        "two paragraphs surface two segment regions: {regions:?}"
+        first.get("span").and_then(|s| s.as_array()).is_some(),
+        "a content segment region carries a span: {first}"
     );
-    for r in &body {
-        assert!(
-            r.get("span").and_then(|s| s.as_array()).is_some(),
-            "each segment region carries a span: {r}"
-        );
-    }
 
-    // A click inside the first segment resolves via fieldAt and positionAt.
-    let rect = body[0]["rect"].as_array().expect("rect array");
-    let x0 = rect[0].as_f64().unwrap() as f32;
-    let y1 = rect[3].as_f64().unwrap() as f32;
-    let page = body[0]["page"].as_u64().unwrap() as usize;
-    let (cx, cy) = (x0 + 5.0, y1 - 3.0);
-
-    assert_eq!(session.field_at(page, cx, cy).as_deref(), Some("body"));
-
+    // A click on the segment's ink resolves to a ContentHit, and `locate` maps
+    // the offset back to a caret rect — both crossing as typed structs.
+    let rect = first["rect"].as_array().expect("rect array");
+    let page = first["page"].as_u64().unwrap() as usize;
+    let (cx, cy) = (
+        rect[0].as_f64().unwrap() as f32 + 5.0,
+        rect[3].as_f64().unwrap() as f32 - 3.0,
+    );
     let hit = session
         .position_at(page, cx, cy)
         .expect("positionAt inside content resolves");
     assert_eq!(hit.field, "body");
-    // A hit on prose ink is cluster-exact — the signal a caret UI trusts.
-    assert_eq!(
-        hit.granularity,
-        Some(quillmark_wasm::HitGranularity::Cluster)
-    );
-
-    // fieldBoxes unions the two paragraph segments into one whole-field box per
-    // page — the derived highlight, span-filtered and unioned by the helper.
-    let boxes_js = session.field_boxes("body").expect("fieldBoxes");
-    let boxes: Vec<serde_json::Value> =
-        serde_wasm_bindgen::from_value(boxes_js).expect("fieldBoxes deserialize");
-    assert!(
-        !boxes.is_empty() && boxes.len() <= body.len(),
-        "the two segments union into at most one box per page: {boxes:?}"
-    );
-    assert!(
-        boxes.iter().all(|b| b["field"] == "body" && b.get("span").is_some()),
-        "each derived box keeps the field and a union span: {boxes:?}"
-    );
-
-    // locate maps that content offset back to a caret rect on the same page.
-    let caret = session
-        .locate("body", hit.pos)
-        .expect("locate maps the position to a caret rect");
-    assert_eq!(caret.page, page);
+    let caret = session.locate("body", hit.pos).expect("locate");
     assert_eq!(caret.span, Some([hit.pos, hit.pos]));
-
-    // A click off all content ink resolves to nothing.
-    assert!(session.position_at(page, 3.0, 3.0).is_none());
 }
 
 /// `toMarkdown` emits canonical Quillmark Markdown and round-trips cleanly.
@@ -260,43 +222,6 @@ fn test_json_dto_round_trip() {
         "fromJson(toJson(doc)) must equal doc"
     );
     assert_eq!(restored.quill_ref(), doc.quill_ref());
-}
-
-/// A DTO-reconstructed document carries no parse-time warnings, even when
-/// the source document had them — the DTO describes content, not source.
-#[wasm_bindgen_test]
-fn test_json_dto_drops_parse_warnings() {
-    // An unknown YAML tag triggers a `parse::unsupported_yaml_tag` warning.
-    let warn_md =
-        "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Hi\nweird: !custom value\n~~~\n\nBody\n";
-    let doc = Document::from_markdown(warn_md).expect("fromMarkdown failed");
-    assert!(
-        js_sys::Array::from(&doc.warnings().unwrap()).length() > 0,
-        "source document must carry a parse warning"
-    );
-
-    let restored = Document::from_json(&doc.to_json()).expect("fromJson failed");
-    assert_eq!(
-        js_sys::Array::from(&restored.warnings().unwrap()).length(),
-        0,
-        "DTO-reconstructed document must have no warnings"
-    );
-}
-
-/// `fromJson` rejects a payload whose `schema` tag is unknown, and rejects
-/// malformed JSON.
-#[wasm_bindgen_test]
-fn test_json_dto_rejects_invalid_input() {
-    let unknown_schema = r#"{"schema":"quillmark/document@0.99.0","main":{}}"#;
-    assert!(
-        Document::from_json(unknown_schema).is_err(),
-        "fromJson must reject an unknown schema version"
-    );
-
-    assert!(
-        Document::from_json("not json at all").is_err(),
-        "fromJson must reject malformed JSON"
-    );
 }
 
 /// Plain object (`Record<string, Uint8Array>`) must be accepted by
@@ -372,40 +297,18 @@ fn test_quill_metadata_and_schemas() {
     assert!(get(&card_fields, "CARD").is_undefined());
 }
 
-/// `seedDocument` returns a Document committing each field's `example` and
-/// leaving default-only fields absent (interpolated at render, not persisted).
+/// The seed verbs cross the boundary with their declared shapes: `seedDocument`
+/// as a `Document`, `seedMain` / `seedCard` as card objects, `seedCard` of an
+/// unknown kind as `undefined`, and `storeSeedNamespace` / `removeSeedNamespace`
+/// writing and clearing `main.seed[kind]`. What the seeds *contain* — example
+/// commitment, overlay layering — is core's (`core/src/quill/seed/tests.rs`,
+/// mirrored once in JS by `core.test.js`).
 #[wasm_bindgen_test]
-fn test_quill_seed_document() {
-    let quill = Quill::from_tree(common::tree(&[
-        (
-            "Quill.yaml",
-            b"quill:\n  name: seed_quill\n  backend: typst\n  version: \"1.0\"\n  description: Seed quill\nmain:\n  fields:\n    byline:\n      type: string\n      example: FIRST LAST\n    title:\n      type: string\n      default: Untitled\n",
-        ),
-        ("plate.typ", b"= Title"),
-    ]))
-    .expect("quill load");
-
-    let md = quill.seed_document().to_markdown();
-    assert!(
-        md.contains("FIRST LAST"),
-        "byline example must be committed: {md}"
-    );
-    assert!(
-        !md.contains("Untitled"),
-        "title default must not be persisted: {md}"
-    );
-}
-
-/// `seedMain` / `seedCard` are the per-card seeds (the `Document.main` /
-/// `cards` shape): each commits its fields' `example`, and `seedCard` is
-/// `undefined` for an unknown kind.
-#[wasm_bindgen_test]
-fn test_quill_seed_main_and_card() {
+fn test_seed_verbs_cross_the_boundary() {
     use js_sys::Reflect;
     use wasm_bindgen::JsValue;
 
     let get = |obj: &JsValue, key: &str| Reflect::get(obj, &JsValue::from_str(key)).unwrap();
-    let json = |v: &JsValue| js_sys::JSON::stringify(v).unwrap().as_string().unwrap();
 
     let quill = Quill::from_tree(common::tree(&[
         (
@@ -416,24 +319,11 @@ fn test_quill_seed_main_and_card() {
     ]))
     .expect("quill load");
 
-    // seed_main: the `$kind: main` card, committing the byline example.
+    assert!(!quill.seed_document().to_markdown().is_empty());
     let main = quill.seed_main().unwrap();
     assert_eq!(get(&main, "kind").as_string().as_deref(), Some("main"));
-    assert!(
-        json(&main).contains("FIRST LAST"),
-        "byline example must be committed: {}",
-        json(&main)
-    );
-
-    // seed_card: a known kind seeds its example; an unknown kind is undefined.
-    // `None`/undefined overlay → the bare schema seed.
     let note = quill.seed_card("note", JsValue::UNDEFINED).unwrap();
     assert_eq!(get(&note, "kind").as_string().as_deref(), Some("note"));
-    assert!(
-        json(&note).contains("NOTE EXAMPLE"),
-        "note example must be committed: {}",
-        json(&note)
-    );
     assert!(
         quill
             .seed_card("missing", JsValue::UNDEFINED)
@@ -441,70 +331,27 @@ fn test_quill_seed_main_and_card() {
             .is_undefined(),
         "unknown kind must be undefined"
     );
-}
 
-/// `$seed` overlays: the per-kind overlay is read off `Document.main`'s
-/// `seed` map, `Quill.seedCard(kind, overlay)` layers it over the schema
-/// example (overlay › example), and `storeSeedNamespace` / `removeSeedNamespace`
-/// write and clear it.
-#[wasm_bindgen_test]
-fn test_seed_overlay_round_trip() {
-    use wasm_bindgen::JsValue;
-
-    let json = |v: &JsValue| js_sys::JSON::stringify(v).unwrap().as_string().unwrap();
-
-    // Read `main.seed[kind]` (the overlay), returning `undefined` when the
-    // `$seed` map is absent — there is no `Document.seed` convenience.
+    // `main.seed[kind]` is the per-kind overlay slot the write verbs target.
     let seed_of = |doc: &Document, kind: &str| -> JsValue {
-        let main = doc.main().unwrap();
-        let seed = js_sys::Reflect::get(&main, &JsValue::from_str("seed")).unwrap();
+        let seed = get(&doc.main().unwrap(), "seed");
         if seed.is_null() || seed.is_undefined() {
             return JsValue::UNDEFINED;
         }
-        js_sys::Reflect::get(&seed, &JsValue::from_str(kind)).unwrap()
+        get(&seed, kind)
     };
-
-    let quill = Quill::from_tree(common::tree(&[
-        (
-            "Quill.yaml",
-            b"quill:\n  name: seed_quill\n  backend: typst\n  version: \"1.0\"\n  description: Seed quill\nmain:\n  fields:\n    byline:\n      type: string\n      example: FIRST LAST\ncard_kinds:\n  note:\n    fields:\n      text:\n        type: string\n        example: NOTE EXAMPLE\n",
-        ),
-        ("plate.typ", b"= Title"),
-    ]))
-    .expect("quill load");
-
-    let md = "~~~card-yaml\n$quill: seed_quill@1.0\n$kind: main\n$seed:\n  note:\n    text: OVERLAY TEXT\n~~~\n";
-    let doc = Document::from_markdown(md).expect("fromMarkdown failed");
-
-    // main.seed[kind] is the per-kind overlay object (or undefined).
-    let overlay = seed_of(&doc, "note");
-    assert!(json(&overlay).contains("OVERLAY TEXT"));
-    assert!(seed_of(&doc, "missing").is_undefined());
-
-    // seedCard with the overlay layers it over the example; without it the
-    // bare schema example is used.
-    let with_overlay = quill.seed_card("note", overlay).unwrap();
-    assert!(
-        json(&with_overlay).contains("OVERLAY TEXT"),
-        "overlay value must win: {}",
-        json(&with_overlay)
-    );
-    let bare = quill.seed_card("note", JsValue::UNDEFINED).unwrap();
-    assert!(
-        json(&bare).contains("NOTE EXAMPLE"),
-        "bare seed uses the example: {}",
-        json(&bare)
-    );
-
-    // storeSeedNamespace writes an overlay; main.seed reads it back; remove clears.
-    let mut doc2 =
+    let mut doc =
         Document::from_markdown("~~~card-yaml\n$quill: seed_quill@1.0\n$kind: main\n~~~\n")
             .expect("fromMarkdown failed");
-    let overlay_in = js_sys::JSON::parse("{\"text\":\"WRITTEN\"}").unwrap();
-    doc2.store_seed_namespace("note", overlay_in).unwrap();
-    assert!(json(&seed_of(&doc2, "note")).contains("WRITTEN"));
-    doc2.remove_seed_namespace("note").unwrap();
-    assert!(seed_of(&doc2, "note").is_undefined());
+    assert!(seed_of(&doc, "note").is_undefined());
+    doc.store_seed_namespace("note", js_sys::JSON::parse("{\"text\":\"WRITTEN\"}").unwrap())
+        .unwrap();
+    assert_eq!(
+        get(&seed_of(&doc, "note"), "text").as_string().as_deref(),
+        Some("WRITTEN")
+    );
+    doc.remove_seed_namespace("note").unwrap();
+    assert!(seed_of(&doc, "note").is_undefined());
 }
 
 /// `doc.clone()` returns an independent handle: mutations on the clone
