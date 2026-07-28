@@ -22,6 +22,28 @@ use serde_json::Value;
 /// string [`Island::island_type`](crate::model::Island::island_type); this is its
 /// closed parse. Adding a variant forces every dispatch arm — here and in the two
 /// emitters — to be supplied before the workspace compiles.
+///
+/// **Deliberately not `#[non_exhaustive]`**, unlike every other public enum in
+/// this crate. The attribute forces a `_` arm on downstream matchers, and two of
+/// the dispatch sites this enum exists to police — the typst backend's markdown
+/// and Typst emitters — are in another crate, where that `_` would swallow
+/// exactly the compile error described above.
+///
+/// The cost is that **adding a variant is a semver-major change**, since a
+/// downstream exhaustive match stops compiling. That is the price of the
+/// guarantee, paid on purpose: an island type wired into some emitters and not
+/// others projects the island away silently, which is worse than a major bump.
+/// Routing an internal exhaustive enum through a `#[non_exhaustive]` public
+/// re-export would buy the semver back and lose the guarantee — not the trade
+/// this module wants.
+///
+/// The trade runs the other way for [`MarkKind`](crate::model::MarkKind) and
+/// [`LineKind`](crate::model::LineKind), which do carry the attribute. What an
+/// unhandled arm costs there is decoration: the text still renders, the mark
+/// loses its delimiters, the line lowers as a paragraph. An unhandled island
+/// type costs the island — content leaves the projection entirely. A silent
+/// gap in a total function is worth a major bump; a silent gap in a
+/// degradation ladder that already has an `Unknown` rung is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KnownIslandType {
     /// `{header, rows, aligns}` with inline `{text, marks}` cells. Mark-carrying,

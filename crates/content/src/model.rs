@@ -75,6 +75,7 @@ pub struct Line {
 /// instead of refusing the whole document, and the opaque tag+attrs still reach a
 /// reader that understands them (`DOCUMENT_STORAGE.md` § Open vocabularies).
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum LineKind {
     Para,
     /// ATX/Setext heading, level 1..=6.
@@ -108,8 +109,13 @@ impl LineKind {
     /// `match` cannot serve — a `matches!(kind, Para)` that special-cases the
     /// paragraph (suppressing an empty block, say) reads as complete but drops
     /// the open arm, and the two emitters then drift on the construct neither
-    /// knows. An exhaustive `match` keeps listing both arms; the compiler polices
-    /// that one.
+    /// knows.
+    ///
+    /// An exhaustive `match` keeps listing both arms, and in this crate the
+    /// compiler still polices that — `#[non_exhaustive]` does not apply within
+    /// the defining crate. It does apply to the typst backend, whose emitter
+    /// folds both arms into one wildcard; there the ladder, not the compiler,
+    /// is what keeps a new role rendering.
     pub fn projects_as_para(&self) -> bool {
         matches!(self, LineKind::Para | LineKind::Unknown { .. })
     }
@@ -121,6 +127,7 @@ impl LineKind {
 /// [`Container::Unknown`] and projects *transparently* — its lines render at the
 /// enclosing level, with no prefix, no wrapper, and no grouping of their own.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum Container {
     /// A list item. `ordered` distinguishes `1.` from `-`; `start` is the list's
     /// first number (1 by default); `ordinal` is this item's 0-based index in
@@ -164,6 +171,7 @@ pub struct Mark {
 /// algebra classes: formatting is a property of a range (two coincident are
 /// redundant); identity is a handle (two over the same range are two things).
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum MarkKind {
     // Formatting — round-trippable projection marks. `is_formatting()`.
     Strong,
@@ -217,15 +225,44 @@ pub struct Island {
 /// warned that a form field silently dropped a table, issue #1043). It is not a
 /// switch: [`crate::export::to_markdown`] dispatches on
 /// [`Island::island_type`], never on this.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Loss {
     /// Markdown carries it faithfully (round-trips identically).
     Lossless,
     /// Markdown carries an approximation (round-trips visibly, not identically).
     Degraded,
-    /// No markdown encoding — what an island type with no projection carries,
-    /// and the safe default a decoder mints for an unrecognized loss class.
+    /// No markdown encoding — what an island type with no projection carries.
     Unrepresentable,
+    /// A class a future writer stamped that this build lacks, carried verbatim.
+    ///
+    /// `loss` is open on the terms the other four vocabularies use — mark
+    /// `type`, line `kind`, container, island `type` all round-trip an
+    /// unrecognized member opaque. Carrying the raw tag rather than rewriting it
+    /// is what keeps a reader that merely opens a document from moving that
+    /// document's content hash (`DOCUMENT_STORAGE.md` § Byte-stability).
+    ///
+    /// Read fidelity through [`Loss::fidelity`], never by matching this arm: an
+    /// unrecognized class degrades to [`Unrepresentable`](Loss::Unrepresentable),
+    /// so nothing is claimed to carry faithfully on the strength of a name this
+    /// build cannot interpret.
+    Unknown(String),
+}
+
+impl Loss {
+    /// The fidelity this class describes, with an unrecognized class degraded to
+    /// the safe end. Never returns [`Unknown`](Loss::Unknown).
+    ///
+    /// Carrying the raw tag preserves the byte round-trip. Reading it through
+    /// here keeps that carriage from being mistaken for a claim about the
+    /// projection.
+    pub fn fidelity(&self) -> Loss {
+        match self {
+            Loss::Lossless => Loss::Lossless,
+            Loss::Degraded => Loss::Degraded,
+            Loss::Unrepresentable | Loss::Unknown(_) => Loss::Unrepresentable,
+        }
+    }
 }
 
 impl MarkKind {
@@ -356,6 +393,7 @@ pub(crate) fn sort_keys_owned(v: JsonValue) -> JsonValue {
 /// Ways a [`Content`] can violate its invariants. Returned by
 /// [`Content::validate`]; import normalization guarantees none of these.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Invariant {
     /// `\r` in the text (line endings must be normalized to `\n`).
     CarriageReturn,
@@ -431,6 +469,7 @@ pub enum Invariant {
 /// carry arbitrary text including slots (an inline image is a slot in a `Para`),
 /// so only the three kinds whose contract *names* their content constrain it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum LineKindMismatch {
     /// [`LineKind::Island`] whose text is not exactly one [`ISLAND_SLOT`].
     IslandNotOneSlot,
@@ -1188,6 +1227,27 @@ mod tests {
         let once = a.to_canonical_json();
         a.normalize();
         assert_eq!(a.to_canonical_json(), once);
+    }
+
+    /// Issue #1092: a cell is canonicalized in place, so a key this build does
+    /// not recognize survives. The rule has no slack — `normalize` runs on
+    /// decode, on every op apply, and on every serialize, so a cell rebuilt
+    /// whole drops the key on first contact and every contact after.
+    #[test]
+    fn unrecognized_cell_key_survives_normalize() {
+        // Two columns, one body cell: `pad_row` mints the second, so the same
+        // pass exercises both a carried cell and a synthesized one.
+        let mut rt = table_rt(serde_json::json!({
+            "aligns": ["none", "none"],
+            "header": [{"text": "h", "marks": [], "colspan": 2}, cell("h2")],
+            "rows": [[cell("a")]],
+        }));
+        rt.normalize();
+        assert_eq!(rt.islands[0].props["header"][0]["colspan"], 2);
+        // A minted cell has nothing to carry.
+        assert!(rt.islands[0].props["rows"][0][1].get("colspan").is_none());
+        // Hash input like any other key.
+        assert!(rt.to_canonical_json().contains(r#""colspan":2"#));
     }
 
     /// `validate` bounds a cell mark by its own cell's text length (in USV).

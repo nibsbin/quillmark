@@ -606,19 +606,20 @@ impl<'a> Emit<'a> {
                 let g0 = self.out.len();
                 (g0, self.emit_inline(lo, hi))
             }
-            // An unknown block role lowers as a paragraph — its inline content
-            // renders, its role is lost to the projection (it round-trips
-            // through storage).
-            LineKind::Island | LineKind::Para | LineKind::Unknown { .. } => {
-                let g0 = self.out.len();
-                (g0, self.emit_inline(lo, hi))
-            }
             LineKind::Rule => {
                 let g0 = self.out.len();
                 self.out.push_str("#line(length: 100%)");
                 (g0, Vec::new())
             }
             LineKind::Code { .. } => unreachable!("code handled by early return"),
+            // `Island`, `Para`, `Unknown`, and — `LineKind` being
+            // `#[non_exhaustive]` — any role added after this build: all lower as
+            // a paragraph. The inline content renders; the role is lost to the
+            // projection and survives in storage.
+            _ => {
+                let g0 = self.out.len();
+                (g0, self.emit_inline(lo, hi))
+            }
         };
         let g1 = self.out.len();
         self.segments.push(SegmentMap {
@@ -912,7 +913,11 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
                 ord: m.kind.ord(),
                 open: format!("#link(\"{}\")[", escape_string(url)),
             }),
-            MarkKind::Anchor { .. } | MarkKind::Unknown { .. } => {}
+            // `Anchor` is identity, not formatting; `Unknown` has no Typst
+            // spelling; and `MarkKind` being `#[non_exhaustive]`, neither does a
+            // kind added after this build. None contributes a wrap, matching
+            // `wrap_open`'s own fallthrough.
+            _ => {}
         }
     }
     codes.sort_unstable();

@@ -20,6 +20,7 @@ use serde_json::{Map, Value};
 /// Why canonical-JSON parsing failed. Structural only — a well-formed producer
 /// (this crate's serializer, the seam, storage) never trips these.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ParseError {
     /// Top-level JSON was not an object, or a required key was missing/mistyped.
     Shape(&'static str),
@@ -353,17 +354,47 @@ pub fn mark_to_value(mark: &Mark) -> Value {
     Value::Object(m)
 }
 
+/// What every mark carries whatever its type: the object, the two positions, the
+/// type name.
+struct MarkShape<'a> {
+    fields: &'a Map<String, Value>,
+    start: Usv,
+    end: Usv,
+    ty: &'a str,
+}
+
+/// A mark's fallible half — the prologue of [`mark_from_value`], and on its own
+/// the *whole* of what a caller wanting only the verdict needs.
+///
+/// Building the [`MarkKind`] cannot fail, and for an unknown tag it deep-clones
+/// the opaque `attrs` bag: cost a validity check has no reason to pay
+/// ([`reject_unreadable_mark`]).
+fn mark_shape(v: &Value) -> Result<MarkShape<'_>, ParseError> {
+    let fields = v.as_object().ok_or(ParseError::Shape("mark"))?;
+    let start = usv_from(fields.get("start"), "mark start")?;
+    let end = usv_from(fields.get("end"), "mark end")?;
+    let ty = fields
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or(ParseError::Shape("mark type"))?;
+    Ok(MarkShape {
+        fields,
+        start,
+        end,
+        ty,
+    })
+}
+
 /// Decode a [`Mark`] from its canonical wire object. The inverse of
 /// [`mark_to_value`]; the shared mark reader for the content decoder and the
 /// mark-op wire.
 pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
-    let o = v.as_object().ok_or(ParseError::Shape("mark"))?;
-    let start = usv_from(o.get("start"), "mark start")?;
-    let end = usv_from(o.get("end"), "mark end")?;
-    let ty = o
-        .get("type")
-        .and_then(Value::as_str)
-        .ok_or(ParseError::Shape("mark type"))?;
+    let MarkShape {
+        fields: o,
+        start,
+        end,
+        ty,
+    } = mark_shape(v)?;
     let kind = match ty {
         "strong" => MarkKind::Strong,
         "emph" => MarkKind::Emph,
@@ -440,6 +471,19 @@ pub(crate) fn mark_from_authored_value(v: &Value) -> Result<Mark, ParseError> {
     mark_from_value(v)
 }
 
+/// The authored lane's verdict on a mark, without building it — everything
+/// [`mark_from_authored_value`] would reject, for a caller that has no use for
+/// the `Mark` itself.
+///
+/// Table cells are that caller, and the only one: [`parse_cell`] reads their
+/// marks leniently, so unlike a prose mark, a cell mark reaches no strict decode
+/// that would raise the error on its own.
+pub(crate) fn reject_unreadable_mark(v: &Value) -> Result<(), ParseError> {
+    reject_mark_attrs(v)?;
+    mark_shape(v)?;
+    Ok(())
+}
+
 /// [`from_canonical_value`] for a content the **host authored just now** — the
 /// `install` input, not a blob read back from storage. Same decode, plus the
 /// reserved-name rule across the whole object, on every axis
@@ -453,11 +497,14 @@ pub fn from_authored_value(v: &Value) -> Result<Content, ParseError> {
     from_canonical_value(v)
 }
 
-/// The reserved-name scan [`from_authored_value`] runs, over the canonical
-/// content shape. Structural on purpose rather than a blind recursive walk: an
-/// unknown's `attrs` is opaque host payload that may legitimately contain an
-/// object spelled `{"type": "link", "attrs": …}`, and rejecting that would make
-/// the carrier unable to carry.
+/// The authored-lane scan [`from_authored_value`] runs, over the canonical
+/// content shape: the reserved-name rule on every axis, plus a readability check
+/// on table-cell marks, the one axis whose reader is lenient.
+///
+/// Structural on purpose rather than a blind recursive walk: an unknown's
+/// `attrs` is opaque host payload that may legitimately contain an object
+/// spelled `{"type": "link", "attrs": …}`, and rejecting that would make the
+/// carrier unable to carry.
 fn reject_reserved_attrs_deep(v: &Value) -> Result<(), ParseError> {
     for line in arr_or_empty(v, "lines") {
         reject_line_kind_attrs(line)?;
@@ -465,10 +512,13 @@ fn reject_reserved_attrs_deep(v: &Value) -> Result<(), ParseError> {
             reject_container_attrs(c)?;
         }
     }
+    // Only the reserved-name half here: a prose mark that will not parse is
+    // rejected by the strict decode `from_canonical_value` runs next.
     for m in arr_or_empty(v, "marks") {
         reject_mark_attrs(m)?;
     }
-    // Cell marks ride the prose mark shape, so the rule follows them in. The
+    // Cell marks ride the prose mark shape, so the rule follows them in — and
+    // the readability check with it, since no strict decode reaches them. The
     // dispatch goes through `KnownIslandType` like every other one, so a new
     // mark-carrying type is a compile error here rather than a silent skip.
     for island in arr_or_empty(v, "islands") {
@@ -480,7 +530,7 @@ fn reject_reserved_attrs_deep(v: &Value) -> Result<(), ParseError> {
                 };
                 for cell in table_cell_values(props) {
                     for m in arr_or_empty(cell, "marks") {
-                        reject_mark_attrs(m)?;
+                        reject_unreadable_mark(m)?;
                     }
                 }
             }
@@ -682,6 +732,11 @@ fn pad_row(v: &mut Value, cols: usize) {
 
 /// De-newline a cell's text (each `\n`/`\r` → a space, 1:1 so mark offsets hold)
 /// and re-normalize its marks. Reached per-cell from [`normalize_table_props`].
+///
+/// Writes `text` and `marks` back into the cell's **own** object rather than
+/// minting a fresh one, so a key this build does not recognize survives — a
+/// cell is an opaque carrier, not an envelope (`DOCUMENT_STORAGE.md` § Open
+/// vocabularies).
 fn canon_cell(cell: &mut Value) {
     let (text, marks) = parse_cell(cell);
     let text = if text.contains(['\n', '\r']) {
@@ -689,7 +744,14 @@ fn canon_cell(cell: &mut Value) {
     } else {
         text
     };
-    *cell = cell_to_value(&text, &crate::model::normalize_marks(marks));
+    let canon = cell_to_value(&text, &crate::model::normalize_marks(marks));
+    match (cell.as_object_mut(), canon) {
+        // Overwrite the canonical keys, leave the rest — the merge
+        // [`crate::ops`] does for a mark's fields on an op object.
+        (Some(o), Value::Object(fields)) => o.extend(fields),
+        // A non-object cell (a bare string, a null) holds no keys to preserve.
+        (_, canon) => *cell = canon,
+    }
 }
 
 /// A table island's shape violation, if any — the widths the header, `aligns`,
@@ -743,7 +805,7 @@ fn island_to_value(island: &Island) -> Value {
     m.insert("id".into(), Value::String(island.id.clone()));
     m.insert("type".into(), Value::String(island.island_type.clone()));
     m.insert("props".into(), sorted_value(&island.props));
-    m.insert("loss".into(), loss_to_str(island.loss).into());
+    m.insert("loss".into(), loss_to_str(&island.loss).into());
     Value::Object(m)
 }
 
@@ -765,11 +827,14 @@ fn island_from_value(v: &Value) -> Result<Island, ParseError> {
     })
 }
 
-fn loss_to_str(loss: Loss) -> &'static str {
+fn loss_to_str(loss: &Loss) -> &str {
     match loss {
         Loss::Lossless => "lossless",
         Loss::Degraded => "degraded",
         Loss::Unrepresentable => "unrepresentable",
+        // Verbatim, so a class this build lacks survives a reader that merely
+        // opened the document.
+        Loss::Unknown(raw) => raw,
     }
 }
 
@@ -777,9 +842,11 @@ fn loss_from_str(s: &str) -> Loss {
     match s {
         "lossless" => Loss::Lossless,
         "degraded" => Loss::Degraded,
-        // Unknown/future loss class defaults to the *safe* end: never claim a
-        // value the reader can't interpret "carries faithfully".
-        _ => Loss::Unrepresentable,
+        "unrepresentable" => Loss::Unrepresentable,
+        // Unknown/future loss class is carried, and reads through
+        // `Loss::fidelity` at the *safe* end: never claim a value the reader
+        // can't interpret "carries faithfully".
+        other => Loss::Unknown(other.to_string()),
     }
 }
 
@@ -904,11 +971,20 @@ mod tests {
         ));
     }
 
+    /// Issue #1091: `loss` is the fifth open vocabulary, on the terms the four
+    /// below use. A class this build lacks is **carried**, not rewritten, so a
+    /// reader that merely opens the document neither destroys the class nor
+    /// moves the content hash. Reading it degrades to the safe end.
     #[test]
-    fn unknown_loss_class_defaults_unrepresentable() {
-        let json = r#"{"text":"￼","lines":[{"kind":"island","containers":[]}],"marks":[],"islands":[{"id":"i1","type":"widget","props":{},"loss":"future_class"}]}"#;
+    fn unknown_loss_class_round_trips_and_reads_unrepresentable() {
+        let json = concat!(
+            r#"{"islands":[{"id":"i1","loss":"partial","props":{},"type":"widget"}],"#,
+            r#""lines":[{"containers":[],"kind":"island"}],"marks":[],"text":"￼"}"#
+        );
         let rt = Content::from_canonical_json(json).unwrap();
-        assert_eq!(rt.islands[0].loss, Loss::Unrepresentable);
+        assert_eq!(rt.islands[0].loss, Loss::Unknown("partial".into()));
+        assert_eq!(rt.islands[0].loss.fidelity(), Loss::Unrepresentable);
+        assert_eq!(rt.to_canonical_json(), json);
     }
 
     /// Issue #1054: the block vocabulary is open on the mark axis' terms. A
@@ -991,6 +1067,11 @@ mod tests {
     /// the decoders cannot — by the time a lenient reader has resolved `"para"`
     /// to `Para`, the `attrs` are gone and `validate` has nothing to object to.
     /// Every axis `validate` checks, including cell marks.
+    ///
+    /// Issue #1092 adds the last case: a cell mark that will not parse at all.
+    /// It is the one axis with no strict decode behind it — `parse_cell` skips
+    /// what it cannot read and `canon_cell` makes the skip permanent — so
+    /// without this the host's mark vanishes with no signal.
     #[test]
     fn authored_lane_rejects_attrs_beside_a_built_in_name() {
         let bad = [
@@ -1007,6 +1088,13 @@ mod tests {
                 r#""rows":[[{"marks":[],"text":"r"}]]},"type":"table"}],"#,
                 r#""lines":[{"containers":[],"kind":"island"}],"marks":[],"text":"￼"}"#
             ),
+            // table cell mark with no `type` at all
+            concat!(
+                r#"{"islands":[{"id":"i1","loss":"lossless","props":{"aligns":["none"],"#,
+                r#""header":[{"marks":[{"end":1,"start":0}],"text":"h"}],"#,
+                r#""rows":[[{"marks":[],"text":"r"}]]},"type":"table"}],"#,
+                r#""lines":[{"containers":[],"kind":"island"}],"marks":[],"text":"￼"}"#
+            ),
         ];
         for json in bad {
             let v: Value = serde_json::from_str(json).unwrap();
@@ -1014,13 +1102,20 @@ mod tests {
                 matches!(from_authored_value(&v), Err(ParseError::Shape(_))),
                 "accepted: {json}"
             );
-            // The storage lane opens all four — a document written before the
+            // The storage lane opens all five — a document written before the
             // name was built in must keep loading.
             assert!(
                 Content::from_canonical_json(json).is_ok(),
                 "storage lane rejected: {json}"
             );
         }
+        // …and what storage does with the unreadable one: skips it, keeping the
+        // document openable.
+        let rt = Content::from_canonical_json(bad[4]).unwrap();
+        assert!(rt.islands[0].props["header"][0]["marks"]
+            .as_array()
+            .unwrap()
+            .is_empty());
     }
 
     /// Issue #1084: the authored lane's scan is structural, not a blind walk. An

@@ -138,10 +138,10 @@ change. Two ways to manage this:
 The envelope's version-and-reject discipline covers the document's **shape** —
 the schema tag, the DTO tree, the keys a `body` object carries. It does *not*
 cover the content's **vocabularies**. Every discriminator inside a `body` is an
-open set: a mark `type`, an island `type`, a line `kind`, and a container name
-this build does not recognize each decode to an opaque `Unknown` carrying the
-tag plus its `attrs` (`props` for an island), round-trip byte-identically, and
-project as their nearest safe neighbor.
+open set: a mark `type`, an island `type`, a line `kind`, a container name, and
+an island's `loss` class this build does not recognize each decode to an opaque
+`Unknown` carrying the tag plus its `attrs` (`props` for an island), round-trip
+byte-identically, and project as their nearest safe neighbor.
 
 | Axis | Unknown value projects as |
 |---|---|
@@ -149,13 +149,34 @@ project as their nearest safe neighbor.
 | Island `type` | a placeholder comment; the props survive in storage |
 | Line `kind` | a paragraph |
 | Container | transparent — its lines render at the enclosing level |
+| Island `loss` | `Unrepresentable`, via `Loss::fidelity` — never a claim of fidelity on a name this build cannot read |
 
 The consequence, and the point: **adding a construct to any of these
 vocabularies is not a schema-version event.** An older reader degrades a future
 callout to a plain paragraph rather than refusing the document, and a reader
 that does understand it sees it whole, because the tag and attrs round-tripped
-untouched. The rule is the same on all four axes: the block axes are open on the
-mark axis' terms, not one step behind it.
+untouched. The rule is the same on all five axes: the block axes are open on the
+mark axis' terms, not one step behind it, and `loss` carries its raw tag rather
+than rewriting it — a reader that merely opens a document must not move its
+content hash (§ Byte-stability).
+
+Unknown *keys* survive in designated carriers only, and the boundary is worth
+stating because it is not the discriminator boundary:
+
+- **Opaque carriers keep what they hold.** Unknown `attrs` on all three block
+  axes, island `props`, a table island's top-level props, and a table **cell's**
+  own keys all round-trip untouched.
+- **Envelopes drop what they do not name, by design.** An island, line, mark, or
+  container object is decoded into a struct and re-minted from its fields, so an
+  unrecognized sibling key beside `id`/`kind`/`start` does not survive. Growing
+  those shapes is a schema event; that is what the envelope's version-and-reject
+  discipline is for.
+
+A table cell sits on the first side because it never became a struct, and it
+earns the place: cells are where the `table` type is likeliest to grow
+(`colspan`, `rowspan`, a per-cell style handle). Canonicalization therefore
+rewrites a cell's `text` and `marks` in place rather than minting a fresh
+`{text, marks}` object.
 
 Two rules bound the openness:
 
@@ -180,7 +201,11 @@ Two rules bound the openness:
       An op or an `install` is host-authored now, so that shape means a stale
       copy of the built-in list, never a document from the past. Reads that hand
       back stored content — `exportMarkdown`, `rebase` — are storage-lane, not
-      this one.
+      this one. The same split governs an unreadable **table-cell mark**.
+      Storage skips it: `serial::parse_cell` is lenient, and normalization makes
+      the skip permanent. The authored lane refuses it, because a host's
+      malformed mark vanishing with no signal is the silent corruption this rule
+      exists to catch.
     - **The storage lane accepts it, and must.** A blob written while `callout`
       was unknown carries `{"kind": "callout", "attrs": {…}}`; the release that
       promotes `callout` to a built-in has to keep opening it. Rejecting at
