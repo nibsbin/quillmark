@@ -20,11 +20,11 @@ Stored documents are unaffected: a `0.97` blob loads byte-identically and
   join the existing guards in `@quillmark/wasm/runtime`. `Loss` describes
   fidelity; it does not gate export (#1054). See
   `docs/migrations/0.97-to-0.98.md`
-- refactor(core,wasm,python,cli)!: `OutputFormat::Txt` is removed. No backend
-  listed it in `SUPPORTED_FORMATS`, so every path reaching it — `--format txt`,
-  `from_str("txt")`, iterating `ALL` — failed at render time. The Rust variant,
-  Python's `OutputFormat.TXT`, and the TS `'txt'` arm all go; `--format txt` now
-  fails argument parsing instead of the render (#1058). See
+- refactor(core,wasm,python,cli)!: `OutputFormat::Txt` is removed — the Rust
+  variant, Python's `OutputFormat.TXT`, the TS `'txt'` arm. No backend listed it
+  in `SUPPORTED_FORMATS`, so every path reaching it failed at render time;
+  `--format txt` and `from_str("txt")` now fail at the argument instead, and
+  there is no replacement format (#1058). See
   `docs/migrations/0.97-to-0.98.md`
 - refactor(typst,pdfform)!: `format_not_supported` was three codes for one
   condition. Both backends now emit `backend::format_not_supported`, alongside
@@ -43,16 +43,18 @@ Stored documents are unaffected: a `0.97` blob loads byte-identically and
   `cards.<kind>[<i>].<field>` as WASM already did (#1063). See
   `docs/migrations/0.97-to-0.98.md`
 - fix(content): three codec holes close. A mark spanning an island slot no
-  longer swallows it, `LineKind`/segment mismatches are checked
-  (`Invariant::LineKindMismatch`, with a `LineKindMismatch` reason enum), and
-  decode is bounded — `MAX_NESTING_DEPTH` is enforced at the door and wire
-  positions are read checked rather than `as usize`, which on wasm32 turned
-  `2^32 + 5` into an in-range `5` (#1051)
+  longer swallows it; a `LineKind` that disagrees with its segment is caught
+  (`Invariant::LineKindMismatch`, carrying a `LineKindMismatch` reason); and
+  decode is bounded — `MAX_NESTING_DEPTH` is enforced at the door, and a wire
+  position is read checked rather than `as usize`, which on wasm32 landed
+  `2^32 + 5` at position `5` (#1051)
 - fix(content): export's verify-and-drop safety net is bounded per line rather
   than per mark; `CONVERT.md` states the import↔export coupling the net implies
   (#1052)
-- fix(content): the `***` fixup is deleted — its only effect was dropping a
-  literal asterisk
+- fix(content): markdown import keeps a literal `*` that abuts strong or
+  emphasis — `a***a**` imports as `a`, `*`, strong `a`, where the deleted fixup
+  dropped the typed star. Removing it also fixes a backslash escape or entity in
+  such a span re-entering the content as literal source bytes (#1053)
 - feat(core): `FileTreeNode`, `QuillIgnore`, `QuillConfig`, the schema types,
   and `ValidationError` are nameable from `quillmark` and from `quillmark_core`'s
   root, so in-memory quill construction and schema reading need no direct core
