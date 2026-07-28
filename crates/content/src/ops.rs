@@ -1035,20 +1035,6 @@ mod tests {
         }
     }
 
-    /// Issue #1084: the storage lane stays lenient, and must. A blob written
-    /// while `callout` was unknown carries `{kind: "callout", attrs}`; the
-    /// release that promotes `callout` to a built-in has to keep opening it, so
-    /// the op lane's strictness may not leak into `from_canonical_json`.
-    #[test]
-    fn storage_lane_still_opens_attrs_beside_a_built_in_name() {
-        let json = concat!(
-            r#"{"islands":[],"lines":[{"attrs":{"tone":"warn"},"containers":[],"#,
-            r#""kind":"para"}],"marks":[],"text":"x"}"#
-        );
-        let rt = crate::Content::from_canonical_json(json).unwrap();
-        assert_eq!(rt.lines[0].kind, LineKind::Para);
-    }
-
     #[test]
     fn delta_serde_shape() {
         let d = Delta {

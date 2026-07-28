@@ -39,13 +39,8 @@ fn js_known_name_tables_match_the_rust_open_sets() {
     assert_eq!(js_set("KNOWN_MARK_TYPES"), Content::RESERVED_MARK_TYPES);
     // The island axis has no reserved-name rule — its `type` is a bare `String`,
     // never an `Unknown` variant — so `KnownIslandType` is the known half.
-    for ty in js_set("KNOWN_ISLAND_TYPES") {
-        assert!(
-            KnownIslandType::parse(&ty).is_some(),
-            "runtime.js knows an island type Rust does not: {ty}"
-        );
-    }
-    assert_eq!(js_set("KNOWN_ISLAND_TYPES").len(), 2, "island types added?");
+    let island_types: Vec<_> = KnownIslandType::ALL.iter().map(|k| k.as_str()).collect();
+    assert_eq!(js_set("KNOWN_ISLAND_TYPES"), island_types);
 }
 
 /// The same names are spelled a third time as TypeScript unions in

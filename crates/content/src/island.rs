@@ -32,6 +32,11 @@ pub enum KnownIslandType {
 }
 
 impl KnownIslandType {
+    /// Every known type. The one enumeration point, so a reader that needs the
+    /// closed set whole (the WASM guards' known-name table, say) asks rather than
+    /// re-spelling it.
+    pub const ALL: [KnownIslandType; 2] = [KnownIslandType::Table, KnownIslandType::Image];
+
     /// The wire discriminator; `parse(k.as_str()) == Some(k)` for every variant.
     pub fn as_str(self) -> &'static str {
         match self {

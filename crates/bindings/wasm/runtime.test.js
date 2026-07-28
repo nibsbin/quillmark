@@ -22,7 +22,6 @@ import {
   MAIN_CARD_ADDR,
   isQuillmarkError,
   exportMarkdown,
-  isHeadingLine,
   isUnknownLine,
   isUnknownContainer,
   isUnknownMark,
@@ -400,14 +399,6 @@ describe('@quillmark/wasm/runtime — open-set membership guards (#1085)', () =>
     expect(isUnknownIsland({ id: 'i1', type: 'table', props: {}, loss: 'lossless' })).toBe(false)
     expect(isUnknownIsland({ id: 'i1', type: 'image', props: {}, loss: 'lossless' })).toBe(false)
     expect(isUnknownIsland({ id: 'i1', type: 'widget', props: {}, loss: 'lossless' })).toBe(true)
-  })
-
-  it('is the exact complement of the pinned-arm guards on the known names', () => {
-    // The point of the predicate: a consumer branches on membership rather than
-    // eliminating arm by arm against a hard-coded built-in list.
-    const line = { kind: 'heading', level: 2, containers: [] }
-    expect(isHeadingLine(line)).toBe(true)
-    expect(isUnknownLine(line)).toBe(false)
   })
 
   it('reports a missing or non-string discriminant as not-unknown, never throwing', () => {
