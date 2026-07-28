@@ -2,35 +2,83 @@
 
 ## v0.98.0 - 2026-07-28
 
-- Simplification pass over the integration merge
-- Dense-prose pass over the integration merge
-- Open the block vocabulary; `Loss` describes fidelity, it does not gate export
-- content: bound export's verify-and-drop net — close #1052
-- Point the schema-model note at the ladder's real owner
-- Trim binding tests to marshalling altitude (issue #1056)
-- Move wrong-altitude tests down to core (issue #1056)
-- Table-drive assemble_tests.rs clusters; dense-prose pass on issue #1060 tests
-- Table-drive lossiness_tests.rs clusters for issue #1060 (partial)
-- Table-drive edit_tests.rs, quill/tests.rs, and wasm test clusters for issue #1060 (partial)
-- Table-drive quill/tests.rs clusters for issue #1060 (partial)
-- Table-drive test clusters for issue #1060 (partial)
-- dense-prose: fix an ambiguous reading in the validation-line docs
-- Document the construction-vs-insertion validation line
-- Revert the `$kind` wire check: construction is permissive by design
-- api: close the straightforward gaps from the public-API sweep
-- hygiene: production-side duplication from #1067
-- hygiene: drop tests that pin foreign behavior or assert nothing — close #1065
-- hygiene: one walker, one quill builder — close #1062
-- content: delete the `***` fixup — its only effect was dropping a literal asterisk
-- content: close three codec holes — island-swallowing marks, unchecked line kinds, unbounded decode
-- hygiene: close #1070, #1069; CI zero-backend gate; dead surface from #1066
-- canon: the CI job table lists every CI job
-- ci: cut the canon lint to gates only
-- canon: aggressive prune — overview stops re-documenting its own docs
-- canon: cut what docs/ already owns; state each fact once
-- canon: state the shape, not the ticket; drop the rotting export list
-- ci_cd: record the canon lint in the lint-job row
-- canon: make the lint check truth, not only shape
+Five breaking changes, all covered by `docs/migrations/0.97-to-0.98.md`.
+Stored documents are unaffected: a `0.97` blob loads byte-identically and
+`0.98` writes the same bytes for the same content.
+
+- feat(core,content,wasm)!: the block vocabulary opens. A line's `kind` and a
+  container's name join the mark `type` and island `type` as open sets — an
+  unrecognized value round-trips opaque and renders as its nearest safe
+  neighbor instead of failing the load, so adding a block construct is no
+  longer a document schema-version event. `LineKind` and `Container` each gain
+  an `Unknown { tag, attrs }` variant (exhaustive matches need an arm) and
+  `Line` / `LineKind` / `Container` drop their `Eq` derive, matching `MarkKind`;
+  `Invariant` gains `ReservedUnknownLineKind` / `ReservedUnknownContainer`, so
+  an unknown may not reuse a built-in name. `ContentLine.kind` and
+  `ContentContainer.container` gain an open TS arm, so a bare discriminant check
+  no longer narrows — `isHeadingLine` / `isCodeLine` / `isListItemContainer`
+  join the existing guards in `@quillmark/wasm/runtime`. `Loss` describes
+  fidelity; it does not gate export (#1054). See
+  `docs/migrations/0.97-to-0.98.md`
+- refactor(core,wasm,python,cli)!: `OutputFormat::Txt` is removed — the Rust
+  variant, Python's `OutputFormat.TXT`, the TS `'txt'` arm. No backend listed it
+  in `SUPPORTED_FORMATS`, so every path reaching it failed at render time;
+  `--format txt` and `from_str("txt")` now fail at the argument instead, and
+  there is no replacement format (#1058). See
+  `docs/migrations/0.97-to-0.98.md`
+- refactor(typst,pdfform)!: `format_not_supported` was three codes for one
+  condition. Both backends now emit `backend::format_not_supported`, alongside
+  the sibling `backend::apply_unsupported` — route on the namespaced code
+  (#1057). See `docs/migrations/0.97-to-0.98.md`
+- refactor(core)!: dead public surface is removed — `ReadValue::as_text` /
+  `as_value` (match the variants), `Quill::list_files` / `list_subdirectories`
+  (`quill.files()` owns the walk), and `QuillValue`'s eight `Deref`-shadowed
+  accessors (`QuillValue: Deref<Target = serde_json::Value>` resolves each call
+  unchanged — no action). `prescan`'s helpers and `reader::err` drop to
+  `pub(crate)` (#1066, #1064). See `docs/migrations/0.97-to-0.98.md`
+- fix(python)!: rendered regions cross the boundary as `DocPath`. Python
+  returned plate-space addresses no document API accepts; the plate→`DocPath`
+  translation now lives in core as `regions_to_doc_path` and both bindings call
+  it, so `RenderResult.regions[].field` reads `main.body` /
+  `cards.<kind>[<i>].<field>` as WASM already did (#1063). See
+  `docs/migrations/0.97-to-0.98.md`
+- fix(content): three codec holes close. A mark spanning an island slot no
+  longer swallows it; a `LineKind` that disagrees with its segment is caught
+  (`Invariant::LineKindMismatch`, carrying a `LineKindMismatch` reason); and
+  decode is bounded — `MAX_NESTING_DEPTH` is enforced at the door, and a wire
+  position is read checked rather than `as usize`, which on wasm32 landed
+  `2^32 + 5` at position `5` (#1051)
+- fix(content): export's verify-and-drop safety net is bounded per line rather
+  than per mark; `CONVERT.md` states the import↔export coupling the net implies
+  (#1052)
+- fix(content): markdown import keeps a literal `*` that abuts strong or
+  emphasis — `a***a**` imports as `a`, `*`, strong `a`, where the deleted fixup
+  dropped the typed star. Removing it also fixes a backslash escape or entity in
+  such a span re-entering the content as literal source bytes (#1053)
+- feat(core): `FileTreeNode`, `QuillIgnore`, `QuillConfig`, the schema types,
+  and `ValidationError` are nameable from `quillmark` and from `quillmark_core`'s
+  root, so in-memory quill construction and schema reading need no direct core
+  dependency (#1055)
+- refactor(core,pdfform): `From<PdfError> for RenderError` replaces two
+  byte-identical `map_pdf_err` copies; `lopdf`, `js-sys` and `wasm-bindgen`
+  hoist into `[workspace.dependencies]`, the no-op `default-features = false`
+  pins drop, and `publish` is explicit on every crate (#1070, #1064)
+- docs(core): the card-kind validation line is documented where it lives —
+  construction (`Document::make_card`, `TryFrom<CardWire>`) is permissive
+  data-shaping and insertion is the gate, returning `edit::invalid_kind_name`
+- docs(canon): `ERROR.md` stops documenting a `fmt_pretty_with_source()` that
+  does not exist and states what carries the source chain: serialization to
+  both bindings, no Rust formatter. `error.rs`'s divergent path-grammar copy
+  gives way to a pointer at `path.rs` and the canon anchor table (#1061, #1069)
+- docs(canon): prune — canon stops re-documenting what `docs/` owns and states
+  each fact once; the lint checks truth rather than shape, and the CI job table
+  lists every job
+- test: test clusters go table-driven, wrong-altitude binding tests move down to
+  core, tests that pin foreign behavior or assert nothing are dropped, and one
+  walker and one quill builder replace the per-suite copies (#1060, #1056,
+  #1065, #1062, #1067)
+- ci: the zero-backend configuration is built and tested — `--workspace
+  --all-features` forces `typst` on, so that branch never compiled (#1068)
 
 
 ## v0.97.0 - 2026-07-24
