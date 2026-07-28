@@ -1,4 +1,9 @@
-"""Smoke tests for quill.validate and quill.seed_document.
+"""Marshalling tests for quill.validate and the seed verbs.
+
+The diagnostic set and the seed layering rules are core's — `validate`'s
+decision matrix lives in `crates/quillmark/tests/validate_test.rs`, the seed
+semantics in `core/src/quill/seed/tests.rs`. What is pyo3's is the crossing:
+each verb returns the right Python shape, and an error keeps its `code`.
 
 NOTE: These tests cannot run in the devcontainer because the Python binding
 is not built with `maturin develop` in this environment.  They are written
@@ -95,20 +100,6 @@ def test_validate_forwards_type_mismatch(tmp_path):
     assert mismatch.get("hint")
 
 
-def test_validate_reports_unknown_card_kind(tmp_path):
-    """An undeclared card kind surfaces under validation::unknown_card."""
-    quill = make_quill(tmp_path)
-    md = (
-        '~~~card-yaml\n$quill: py_validate_smoke\n$kind: main\ntitle: "T"\ncount: 1\n~~~\n\n'
-        '~~~card-yaml\n$kind: ghost\nbody: "B"\n~~~\n'
-    )
-    doc = Document.from_markdown(md)
-
-    diags = quill.validate(doc)
-    codes = [d.get("code") for d in diags]
-    assert "validation::unknown_card" in codes, f"got: {codes}"
-
-
 def test_validate_json_serializable(tmp_path):
     """The diagnostics list is fully JSON-serializable via json.dumps."""
     quill = make_quill(tmp_path)
@@ -153,24 +144,10 @@ def test_seed_main_and_card(tmp_path):
     assert quill.seed_card("missing") is None, "unknown kind must be None"
 
 
-def test_seed_card_with_overlay_layers_over_example(tmp_path):
-    """seed_card(kind, overlay) layers the overlay over the schema example
-    (overlay > example); without an overlay the bare example is used."""
-    quill = make_quill(tmp_path)
-
-    # Override `tag`; pin `body` (a default-only field with no example).
-    card = quill.seed_card("note", {"tag": "PINNED", "body": "Pinned body"})
-    blob = json.dumps(card)
-    assert "PINNED" in blob, "overlay value wins over the example"
-    assert "Pinned body" in blob, "overlay can pin a default-only field"
-
-    bare = json.dumps(quill.seed_card("note"))
-    assert "NOTE TAG" in bare and "PINNED" not in bare
-
-
 def test_document_seed_and_store_seed_namespace_round_trip(tmp_path):
     """main['seed'][kind] reads what store_seed_namespace wrote; the overlay
-    feeds straight back into seed_card; remove_seed_namespace clears it."""
+    feeds straight back into seed_card as a plain dict; remove_seed_namespace
+    clears it."""
 
     def seed_of(document, kind):
         # The per-kind overlay lives on the main card's `$seed` map; there is
@@ -189,15 +166,3 @@ def test_document_seed_and_store_seed_namespace_round_trip(tmp_path):
 
     doc.remove_seed_namespace("note")
     assert seed_of(doc, "note") is None
-
-
-def test_seed_overlay_validation_is_advisory(tmp_path):
-    """A type-mismatched overlay surfaces a WARNING rooted at its seed path —
-    seed overlays are advisory and never gate render."""
-    quill = make_quill(tmp_path)
-    doc = Document.from_markdown(_md("$seed:", "  note:", "    tag: 123"))
-
-    diags = quill.validate(doc)
-    seed_diags = [d for d in diags if (d.get("path") or "").startswith("$seed")]
-    assert seed_diags, f"expected a seed-rooted diagnostic; got: {diags}"
-    assert all(d.get("severity") == "warning" for d in seed_diags)

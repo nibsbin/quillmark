@@ -1,16 +1,37 @@
-//! Markdown export: content → markdown, per island loss class.
+//! Markdown export: content → markdown, per island type.
 //!
-//! The projection back to markdown. Marks become syntax; islands are emitted per
-//! their [`Loss`] class; identity ([`MarkKind::Anchor`]) marks are **omitted** —
-//! they survive across edits via diff-rebase, not the projection (issue #831
-//! § Codecs). Anchors carry no markdown encoding, so dropping them here is by
-//! design, not loss.
+//! The projection back to markdown. Marks become syntax; islands are emitted
+//! per their type ([`Loss`](crate::model::Loss) describes fidelity, it does not
+//! gate the emit — see [`to_markdown`]); identity ([`MarkKind::Anchor`]) marks
+//! are **omitted** — they survive across edits via diff-rebase, not the
+//! projection (issue #831 § Codecs). Anchors carry no markdown encoding, so
+//! dropping them here is by design, not loss.
+//!
+//! The block vocabulary is open (issue #1054): a [`LineKind::Unknown`] projects
+//! as a paragraph and a [`Container::Unknown`] transparently, the block-axis
+//! twin of an unknown mark contributing no delimiters.
 //!
 //! The contract this crate pins is the **content fixed point**: for a content `rt`
 //! obtained from [`crate::import::from_markdown`],
 //! `from_markdown(to_markdown(rt)) == rt` modulo island loss class — markdown
 //! source is not canonical, but the content is, so round-trip is defined at the
 //! content, not the string.
+//!
+//! ## Export is defined by import
+//!
+//! The `render_marked_core` safety net settles a line's markdown by re-parsing it
+//! with [`crate::import::from_markdown`] and dropping marks until the text comes
+//! back intact. Export's correctness is therefore *defined* by running import,
+//! by design. CommonMark's emphasis algorithm (delimiter-run matching, the rule
+//! of 3, `\*`-escape adjacency) has corners no local rule captures, and a local
+//! rule that approximates it drops good marks on the cases it gets wrong;
+//! verifying against the parser is the only check exactly as strict as the
+//! format.
+//!
+//! The coupling costs two things. The codecs cannot be tested or changed
+//! independently — an importer change moves exporter output. And every
+//! [`to_markdown`] call transitively depends on `pulldown_cmark`, which is why
+//! this crate is the workspace's only home for a CommonMark parser.
 //!
 //! ## Documented codec limits (degenerate, non-authorable content values)
 //!
@@ -30,8 +51,18 @@
 use crate::island::KnownIslandType;
 use crate::model::{Container, Island, LineKind, MarkKind, Content, ISLAND_SLOT};
 
-/// Render a content to markdown. Lossless/degraded islands emit their markdown;
-/// unrepresentable islands emit a placeholder comment.
+/// Render a content to markdown. An island projects by **type**: a type this
+/// build knows emits its markdown, any other a placeholder comment.
+///
+/// [`Loss`](crate::model::Loss) does not gate the emit and is not read here. It
+/// *describes* the projection's fidelity for a consumer to surface (issue
+/// #1043); the type decides whether a projection exists at all.
+///
+/// Keeping the two apart is what makes a decode-time default safe. A known type
+/// a future writer stamped with a loss class this build lacks arrives as
+/// `Unrepresentable` (`serial::loss_from_str` degrades to the safe end) and
+/// still emits its table: the conservative default describes the value, it does
+/// not suppress it.
 pub fn to_markdown(rt: &Content) -> String {
     // Per-line char ranges, so global marks can be clipped to a line.
     let segments = line_segments(rt);
@@ -222,6 +253,11 @@ fn emit_container(
             // one quote on re-import.
             prefix_quote(&inner, out);
         }
+        // Open set: a container this build does not know has no markdown syntax
+        // to prefix with, so it projects transparently — its blocks land at the
+        // enclosing level. The container survives via storage, not the
+        // projection, exactly as an unknown island's props do.
+        Container::Unknown { .. } => out.push_str(&inner),
     }
 }
 
@@ -309,7 +345,9 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
             }
             out.push_str(&inline);
         }
-        LineKind::Para => {
+        // An unknown block role projects as a paragraph — the role is lost to
+        // markdown (it round-trips through storage), the text is not.
+        LineKind::Para | LineKind::Unknown { .. } => {
             // Join continuation lines with a backslash hard break.
             let parts: Vec<String> = range.map(|i| render_inline(ctx, i, true)).collect();
             out.push_str(&parts.join("\\\n"));
@@ -560,11 +598,18 @@ fn render_marked_core(
     // code range around every slot it covers and let the island render as its own
     // markup between the surviving code spans: text and island preserved, one
     // mark lowered to several — the same trade the sweep makes for free overlap.
-    let code_ranges: Vec<(usize, usize)> = code_ranges
+    let mut code_ranges: Vec<(usize, usize)> = code_ranges
         .iter()
         .flat_map(|&(s, e)| split_around_slots(chars, s, e))
         .collect();
+    // The sweep reaches the atomic spans with a cursor, so both lists are put in
+    // start order here — a local guarantee rather than an obligation on every
+    // caller — instead of being re-scanned at every position.
+    code_ranges.sort_unstable();
     let code_ranges = &code_ranges[..];
+    let mut links: Vec<(usize, usize, &str)> = links.to_vec();
+    links.sort_by_key(|&(s, _, _)| s);
+    let links = &links[..];
 
     // Clip the wrapping marks so the sweep only ever sees a representable shape.
     let mut fmt: Vec<(usize, usize, &MarkKind)> = fmt.to_vec();
@@ -573,15 +618,24 @@ fn render_marked_core(
     clip_fmt_to_atomic(&mut fmt, &atomics);
     clip_asterisk_overlap(&mut fmt);
 
-    // One mark sweep over `fmt` → inline markdown. Free (Peritext) overlap is
-    // lowered to nesting by closing every mark ending at `pos` and reopening the
-    // deeper survivors.
-    let sweep = |fmt: &[(usize, usize, &MarkKind)]| -> String {
+    // `fmt` by start, longest span (outer) first at a tie. `pos` only ever
+    // advances, so one cursor over this order opens every mark exactly once — the
+    // sweep is linear in `chars` + `fmt` rather than rescanning all three mark
+    // lists at every position (issue #1052). Built once here, not per sweep: the
+    // net below sweeps the same `fmt` up to `PROBE_BUDGET` times.
+    let mut by_start: Vec<usize> = (0..fmt.len()).collect();
+    by_start.sort_by(|&a, &b| fmt[a].0.cmp(&fmt[b].0).then(fmt[b].1.cmp(&fmt[a].1)));
+
+    // One mark sweep over the marks `keep` selects (indices into `fmt`) → inline
+    // markdown. Free (Peritext) overlap is lowered to nesting by closing every
+    // mark ending at `pos` and reopening the deeper survivors.
+    let sweep = |keep: &[bool]| -> String {
         let mut out = String::new();
         // Indices into `fmt` for the marks currently open, outermost first.
         // Storing the index (not `(end, kind)`) keeps each open mark's identity,
         // so a reopened mark re-emits its OWN delimiter.
         let mut stack: Vec<usize> = Vec::new();
+        let (mut oi, mut li, mut ci) = (0usize, 0usize, 0usize);
         let mut pos = 0usize;
         while pos <= n {
             if let Some(idx) = stack.iter().position(|&fi| fmt[fi].1 == pos) {
@@ -601,10 +655,18 @@ fn render_marked_core(
             // Open formatting marks starting here, longest span (outer) first —
             // BEFORE any atomic run, so a formatting mark that begins at the same
             // position as inline code/link still wraps it (`**` + code →
-            // `**`code`…**`, not a dropped strong).
-            let mut opening: Vec<usize> = (0..fmt.len()).filter(|&fi| fmt[fi].0 == pos).collect();
-            opening.sort_by(|&a, &b| fmt[b].1.cmp(&fmt[a].1));
-            for fi in opening {
+            // `**`code`…**`, not a dropped strong). A mark whose start the cursor
+            // has already passed was jumped over by an atomic span's interior and
+            // never opens (clipping keeps that set empty).
+            while oi < by_start.len() && fmt[by_start[oi]].0 < pos {
+                oi += 1;
+            }
+            while oi < by_start.len() && fmt[by_start[oi]].0 == pos {
+                let fi = by_start[oi];
+                oi += 1;
+                if !keep[fi] {
+                    continue;
+                }
                 out.push_str(&delim_open(fmt[fi].2));
                 stack.push(fi);
             }
@@ -614,7 +676,10 @@ fn render_marked_core(
             // plain CommonMark — so each char routes through `island_markup_at`
             // the way the plain-text path below does. Emitting the slice raw
             // would leak the slot char and lose the island with it.
-            if let Some(&(ls, le, url)) = links.iter().find(|(s, _, _)| *s == pos) {
+            while li < links.len() && links[li].0 < pos {
+                li += 1;
+            }
+            if let Some(&(ls, le, url)) = links.get(li).filter(|l| l.0 == pos) {
                 out.push('[');
                 for (i, &c) in chars[ls..le].iter().enumerate() {
                     if c == ISLAND_SLOT {
@@ -632,7 +697,10 @@ fn render_marked_core(
                 continue;
             }
             // A code range is atomic.
-            if let Some(&(cs, ce)) = code_ranges.iter().find(|(s, _)| *s == pos) {
+            while ci < code_ranges.len() && code_ranges[ci].0 < pos {
+                ci += 1;
+            }
+            if let Some(&(cs, ce)) = code_ranges.get(ci).filter(|r| r.0 == pos) {
                 let content: String = chars[cs..ce].iter().collect();
                 let ticks = longest_backtick_run(&content) + 1;
                 let fence = "`".repeat(ticks.max(1));
@@ -671,10 +739,9 @@ fn render_marked_core(
     // (delimiter-run matching, the rule of 3, `\*`-escape adjacency) has corners
     // no local rule captures — and it lowers to a `**`/`*`/`~~` run pulldown
     // re-reads as literal text, leaking a delimiter into the content. Re-parse the
-    // rendered line and, if its plain text drifted, drop the last flanking mark
-    // and re-sweep until the text is preserved. Terminates: dropping only removes
-    // delimiters, and the mark-free render is always text-safe. Only marked lines
-    // pay the re-parse; a line markdown already round-trips passes on the first.
+    // rendered line and, if its plain text drifted, search for a set of flanking
+    // marks that keeps the text intact. Only lines carrying a flanking mark probe
+    // at all; a line markdown already round-trips passes on the first.
     //
     // The probe wraps the fragment in `,…,`: this is an *inline* fragment, but
     // parsed standalone a leading `0. ` / `# ` / `> ` would read as a list/heading/
@@ -695,16 +762,89 @@ fn render_marked_core(
             .map(|rt| rt.text == want)
             .unwrap_or(false)
     };
-    let mut out = sweep(&fmt);
-    while fmt.iter().any(|m| is_flanking(m.2)) && !text_safe(&out) {
-        let Some(i) = fmt.iter().rposition(|m| is_flanking(m.2)) else {
-            break;
+    let out = sweep(&vec![true; fmt.len()]);
+    if !fmt.iter().any(|m| is_flanking(m.2)) || text_safe(&out) {
+        return out;
+    }
+    // The flanking marks in document order (`marks` is normalized, so: start
+    // ascending, then span, then kind). That order is the re-add priority below
+    // — when two marks can't both survive, the earlier one wins — and it is the
+    // one user-visible choice in this search, so it is fixed here rather than
+    // falling out of the traversal.
+    let cands: Vec<usize> = (0..fmt.len()).filter(|&i| is_flanking(fmt[i].2)).collect();
+    // Render with only the flanking marks in `keep`; every other mark always
+    // rides.
+    let render = |keep: &[usize]| -> String {
+        let mut mask: Vec<bool> = fmt.iter().map(|m| !is_flanking(m.2)).collect();
+        for &i in keep {
+            mask[i] = true;
+        }
+        sweep(&mask)
+    };
+    // Drop the whole flanking set, then re-add by halves: a chunk that stays
+    // text-safe is accepted whole, one that doesn't splits and its halves are
+    // retried, a lone mark that still leaks is dropped. `m` marks cost ~2·log(m)
+    // probes when one is at fault and 2 when none can survive, so a densely
+    // marked paragraph costs re-parses in its mark count's logarithm rather than
+    // one per dropped mark (issue #1052). Greedy, so the result is a maximal
+    // text-safe set, not necessarily the largest one: a chunk taken early can
+    // foreclose a later mark that a different partition would have kept.
+    //
+    // Dropping every flanking mark is the floor the search can't go below, so if
+    // even that leaks, the leak is not a flanking mark's and no re-add can fix it:
+    // return the floor rather than probe a search that cannot succeed. A lone
+    // candidate has nowhere to split, so the floor is already its answer.
+    let mut out = render(&[]);
+    if cands.len() == 1 || !text_safe(&out) {
+        return out;
+    }
+    let mut kept: Vec<usize> = Vec::new();
+    // A chunk `(lo, hi)` and the `kept` length at which its trial is *already
+    // known to fail*: a right half popped with every mark of its left sibling
+    // accepted re-renders exactly the chunk their parent failed on, so it splits
+    // without spending a probe. The whole set is the render that already failed,
+    // so the search starts one level down.
+    let mid = cands.len() / 2;
+    let mut work: Vec<(usize, usize, usize)> = vec![(mid, cands.len(), mid), (0, mid, usize::MAX)];
+    let mut budget = PROBE_BUDGET;
+    while let Some((lo, hi, known_bad_at)) = work.pop() {
+        let split = |work: &mut Vec<_>, kept_len: usize| {
+            if hi - lo > 1 {
+                let mid = lo + (hi - lo) / 2;
+                work.push((mid, hi, kept_len + (mid - lo)));
+                work.push((lo, mid, usize::MAX));
+            }
         };
-        fmt.remove(i);
-        out = sweep(&fmt);
+        if known_bad_at == kept.len() {
+            split(&mut work, kept.len());
+            continue;
+        }
+        if budget == 0 {
+            break;
+        }
+        budget -= 1;
+        // `work` is a left-to-right DFS, so every accepted mark precedes this
+        // chunk and `trial` stays in document order.
+        let trial: Vec<usize> = kept.iter().chain(&cands[lo..hi]).copied().collect();
+        let md = render(&trial);
+        if text_safe(&md) {
+            kept = trial;
+            out = md;
+        } else {
+            split(&mut work, kept.len());
+        }
     }
     out
 }
+
+/// Probes the verify-and-drop net will spend on one line before giving up and
+/// dropping the flanking marks it hasn't cleared. Resolving `m` of them exactly
+/// costs at most `2m-2` probes, so at 64 no line carrying 32 or fewer ever loses
+/// a mark to the budget; past that the line is one an editor filled with
+/// unrepresentable marks, and dropping those is the net's own remedy anyway.
+/// The ceiling is the point: export cost stays linear in document size whatever
+/// marks are thrown at it.
+const PROBE_BUDGET: usize = 64;
 
 /// Clip wrapping marks so none crosses the interior of an atomic span (`code` or
 /// a `link`'s text). A wrap edge landing strictly inside a `[cs, ce)` span is
@@ -965,6 +1105,50 @@ mod tests {
         let rt2 = from_markdown(&md).unwrap();
         assert_eq!(rt2.text, rt.text);
         assert_eq!(rt2.islands.len(), 1);
+    }
+
+    /// Issue #1054: an unknown block role projects as a paragraph and an unknown
+    /// container projects transparently — the older reader renders a future
+    /// construct as plain prose instead of refusing it. Text and marks survive;
+    /// only the role/container is lost, and only to *markdown* (both round-trip
+    /// through storage).
+    #[test]
+    fn unknown_block_vocabulary_projects_as_prose() {
+        let mut rt = Content {
+            text: "heads up\nstill inside".into(),
+            lines: vec![
+                Line {
+                    kind: LineKind::Unknown {
+                        tag: "callout".into(),
+                        attrs: serde_json::json!({"variant": "warn"}),
+                    },
+                    containers: vec![Container::Unknown {
+                        tag: "indent".into(),
+                        attrs: serde_json::Value::Null,
+                    }],
+                    continues: false,
+                },
+                Line {
+                    kind: LineKind::Para,
+                    containers: vec![Container::Unknown {
+                        tag: "indent".into(),
+                        attrs: serde_json::Value::Null,
+                    }],
+                    continues: false,
+                },
+            ],
+            marks: vec![Mark { start: 0, end: 5, kind: MarkKind::Strong }],
+            islands: vec![],
+        };
+        rt.normalize();
+        assert_eq!(rt.validate(), Ok(()));
+        // Two paragraphs at the top level: no container prefix, no placeholder.
+        assert_eq!(to_markdown(&rt), "**heads** up\n\nstill inside");
+        // An unknown container nested inside a known one keeps the known
+        // prefix and adds none of its own.
+        rt.lines[0].containers.insert(0, Container::Quote);
+        rt.lines[1].containers.insert(0, Container::Quote);
+        assert_eq!(to_markdown(&rt), "> **heads** up\n>\n> still inside");
     }
 
     /// [`to_plaintext`] keeps literal text, drops marks, and strips island
@@ -1360,6 +1544,107 @@ mod tests {
         let mut esc = String::new();
         emit_url("a&<\\b", &mut esc);
         assert_eq!(esc, "<a\\&\\<\\\\b>", "specials escaped inside the wrap");
+    }
+
+    // ---------------------------------------------------------------------
+    // Issue #1052: the verify-and-drop net's search.
+    // ---------------------------------------------------------------------
+
+    /// A strong mark whose delimiters land where CommonMark won't read them as a
+    /// run (`**a.**b` re-imports as literal text) is dropped, and every other
+    /// mark on the line is kept. The re-add order is document order, so position
+    /// does not decide survival: a good mark before *or* after a leaking one
+    /// lives.
+    #[test]
+    fn net_drops_only_the_leaking_marks() {
+        for (label, text, spans, want) in [
+            ("leaking alone", "a.b", vec![(0, 2)], "a.b"),
+            ("representable alone", "ab cd", vec![(0, 2)], "**ab** cd"),
+            (
+                "leaking then representable",
+                "a.b and cd ef",
+                vec![(1, 3), (8, 10)],
+                "a.b and **cd** ef",
+            ),
+            (
+                "representable then leaking",
+                "cd ef and a.b",
+                vec![(0, 2), (11, 13)],
+                "**cd** ef and a.b",
+            ),
+        ] {
+            let rt = marked(
+                text,
+                spans
+                    .into_iter()
+                    .map(|(start, end)| Mark {
+                        start,
+                        end,
+                        kind: MarkKind::Strong,
+                    })
+                    .collect(),
+            );
+            let md = to_markdown(&rt);
+            assert_eq!(md, want, "{label}");
+            assert_eq!(from_markdown(&md).unwrap().text, text, "{label}: text drift");
+        }
+    }
+
+    /// A line at the [`PROBE_BUDGET`] guarantee — 32 flanking marks, half of them
+    /// unrepresentable — resolves exactly: the budget covers the full search, so
+    /// no representable mark is lost to it.
+    #[test]
+    fn net_resolves_a_line_at_the_budget_guarantee() {
+        let (mut text, mut marks) = (String::new(), Vec::new());
+        for i in 0..32 {
+            let at = i * 6;
+            if i % 2 == 0 {
+                text.push_str("abcde "); // `**abcde**` — a run on both edges
+                marks.push((at, at + 5));
+            } else {
+                text.push_str("abc.e "); // `**.e**` — cannot open against `.`
+                marks.push((at + 3, at + 5));
+            }
+        }
+        let text = text.trim_end();
+        let rt = marked(
+            text,
+            marks
+                .into_iter()
+                .map(|(start, end)| Mark {
+                    start,
+                    end,
+                    kind: MarkKind::Strong,
+                })
+                .collect(),
+        );
+        let md = to_markdown(&rt);
+        assert_eq!(md.matches("**abcde**").count(), 16, "every good mark kept");
+        assert_eq!(md.matches("**").count(), 32, "every leaking mark dropped");
+        assert_eq!(from_markdown(&md).unwrap().text, text);
+    }
+
+    /// Past the budget the net still terminates and still preserves the text; it
+    /// drops what it has not cleared. The shape issue #1052 measured — one
+    /// unrepresentable mark per five chars — costs a bounded number of re-parses
+    /// instead of one per mark.
+    #[test]
+    fn net_bounds_a_pathological_line() {
+        let text = "a.b, ".repeat(200);
+        let text = text.trim_end();
+        let rt = marked(
+            text,
+            (0..200)
+                .map(|i| Mark {
+                    start: i * 5 + 1,
+                    end: i * 5 + 4,
+                    kind: MarkKind::Strong,
+                })
+                .collect(),
+        );
+        let md = to_markdown(&rt);
+        assert!(!md.contains('*'), "every leaking mark dropped: {md:?}");
+        assert_eq!(from_markdown(&md).unwrap().text, text);
     }
 
     #[test]

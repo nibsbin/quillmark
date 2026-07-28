@@ -384,12 +384,40 @@ impl<'a> Emit<'a> {
                 Some(j)
             }
             Some(Container::Quote) => {
-                let j = self.quote_run_end(range.clone(), depth, i);
+                let j = self.container_run_end(range.clone(), depth, &Container::Quote, i);
                 self.emit_quote(i..j, depth);
+                Some(j)
+            }
+            // Open set: a container this build does not know is **transparent** —
+            // its run lowers at the next depth with no wrapper markup, so the
+            // blocks inside it render where they would without it. Consuming the
+            // whole run here (rather than falling through to the leaf path) keeps
+            // its lines grouped as one block instead of splitting them.
+            Some(key @ Container::Unknown { .. }) => {
+                let j = self.container_run_end(range.clone(), depth, &key, i);
+                self.emit_block_level(i..j, depth + 1);
                 Some(j)
             }
             _ => None,
         }
+    }
+
+    /// End of the run starting at `i` whose container at `depth` equals `key`.
+    /// Whole-container equality, which is what a container with no shape of its
+    /// own (`Quote`, an unknown) needs; [`Self::list_run_end`] is the sibling for
+    /// a list, where the run is the *shape* and each item differs.
+    fn container_run_end(
+        &self,
+        range: Range<usize>,
+        depth: usize,
+        key: &Container,
+        i: usize,
+    ) -> usize {
+        let mut j = i + 1;
+        while j < range.end && self.rt.lines[j].containers.get(depth) == Some(key) {
+            j += 1;
+        }
+        j
     }
 
     /// End of the leaf segment starting at `i` at `depth`: `i` plus every
@@ -432,21 +460,6 @@ impl<'a> Emit<'a> {
         j
     }
 
-    /// End of the quote run starting at `i`: the maximal span of lines whose
-    /// container at `depth` is a `Quote`.
-    fn quote_run_end(&self, range: Range<usize>, depth: usize, i: usize) -> usize {
-        let mut j = i + 1;
-        while j < range.end
-            && matches!(
-                self.rt.lines[j].containers.get(depth),
-                Some(Container::Quote)
-            )
-        {
-            j += 1;
-        }
-        j
-    }
-
     /// A leaf block terminated with `\n\n`. An empty paragraph emits nothing;
     /// every other block — including an empty heading (`= `) or empty code
     /// fence — still renders.
@@ -454,7 +467,7 @@ impl<'a> Emit<'a> {
         let first = &self.rt.lines[range.start];
         let (lo, _) = self.line_usv[range.start];
         let (_, hi) = self.line_usv[range.end - 1];
-        if matches!(first.kind, LineKind::Para) && lo == hi {
+        if first.kind.projects_as_para() && lo == hi {
             return;
         }
         self.emit_segment(range);
@@ -593,7 +606,10 @@ impl<'a> Emit<'a> {
                 let g0 = self.out.len();
                 (g0, self.emit_inline(lo, hi))
             }
-            LineKind::Island | LineKind::Para => {
+            // An unknown block role lowers as a paragraph — its inline content
+            // renders, its role is lost to the projection (it round-trips
+            // through storage).
+            LineKind::Island | LineKind::Para | LineKind::Unknown { .. } => {
                 let g0 = self.out.len();
                 (g0, self.emit_inline(lo, hi))
             }
@@ -1494,6 +1510,53 @@ mod tests {
         assert_eq!(out, "#strong[ab#emph[cd]]#emph[ef]\n\n");
         // Bracket-balanced regardless.
         assert_eq!(out.matches('[').count(), out.matches(']').count());
+    }
+
+    /// Issue #1054: the open block vocabulary lowers like prose — an unknown
+    /// line kind as a paragraph, an unknown container transparently (its run
+    /// lowers at the enclosing level, one block, no wrapper markup). A build
+    /// that predates a construct renders it plainly instead of failing.
+    #[test]
+    fn unknown_block_vocabulary_lowers_as_prose() {
+        use quillmark_content::model::Line;
+        let indent = || Container::Unknown {
+            tag: "indent".to_string(),
+            attrs: serde_json::Value::Null,
+        };
+        let mut rt = Content {
+            text: "heads up\nsecond".to_string(),
+            lines: vec![
+                Line {
+                    kind: LineKind::Unknown {
+                        tag: "callout".to_string(),
+                        attrs: serde_json::json!({"variant": "warn"}),
+                    },
+                    containers: vec![indent()],
+                    continues: false,
+                },
+                Line {
+                    kind: LineKind::Para,
+                    containers: vec![indent()],
+                    continues: true,
+                },
+            ],
+            marks: vec![],
+            islands: vec![],
+        };
+        rt.normalize();
+        assert_eq!(rt.validate(), Ok(()));
+        // One block (the `continues` join is a hard break), no wrapper.
+        assert_eq!(
+            emit_content(&rt).unwrap().markup,
+            "heads up#linebreak()second\n\n"
+        );
+        // Inside a known container the known wrapper still renders.
+        rt.lines[0].containers.insert(0, Container::Quote);
+        rt.lines[1].containers.insert(0, Container::Quote);
+        assert_eq!(
+            emit_content(&rt).unwrap().markup,
+            "#quote(block: true)[\nheads up#linebreak()second\n\n]\n\n"
+        );
     }
 
     /// Build a single-paragraph content over `text` with hand-placed `marks`

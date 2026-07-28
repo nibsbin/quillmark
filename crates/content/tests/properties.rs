@@ -244,10 +244,10 @@ proptest! {
     /// excludes (its content is `[a-z]` only). An `apply_mark_ops` mark whose
     /// edge falls between a word char and a punctuation/symbol/whitespace char is
     /// not representable as a `*`/`**`/`~~` run under CommonMark flanking, so the
-    /// codec clips the mark inward (or drops it) rather than leak a literal
-    /// delimiter into the text. Formatting may be lost; the text never is. Guards
-    /// the corruption `clip_unflankable` fixes: bolding `a.` used to export
-    /// `**a.**b`, which re-imports as the literal string `**a.**b`.
+    /// export's verify-and-drop net drops it rather than leak a literal delimiter
+    /// into the text. Formatting may be lost; the text never is. Guards the
+    /// corruption the net catches: bolding `a.` renders `**a.**b`, which
+    /// re-imports as the literal string `**a.**b`.
     #[test]
     fn editor_marks_over_mixed_text_are_text_safe(
         mid in prop::collection::vec(

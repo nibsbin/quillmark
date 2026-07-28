@@ -133,6 +133,51 @@ change. Two ways to manage this:
   guarantee is required) or an accepted, logged hash movement on
   not-yet-migrated rows.
 
+## Open vocabularies
+
+The envelope's version-and-reject discipline covers the document's **shape** —
+the schema tag, the DTO tree, the keys a `body` object carries. It does *not*
+cover the content's **vocabularies**. Every discriminator inside a `body` is an
+open set: a mark `type`, an island `type`, a line `kind`, and a container name
+this build does not recognize each decode to an opaque `Unknown` carrying the
+tag plus its `attrs` (`props` for an island), round-trip byte-identically, and
+project as their nearest safe neighbor.
+
+| Axis | Unknown value projects as |
+|---|---|
+| Mark `type` | no delimiters (the text renders bare) |
+| Island `type` | a placeholder comment; the props survive in storage |
+| Line `kind` | a paragraph |
+| Container | transparent — its lines render at the enclosing level |
+
+The consequence, and the point: **adding a construct to any of these
+vocabularies is not a schema-version event.** An older reader degrades a future
+callout to a plain paragraph rather than refusing the document, and a reader
+that does understand it sees it whole, because the tag and attrs round-tripped
+untouched. The rule is the same on all four axes: the block axes are open on the
+mark axis' terms, not one step behind it.
+
+Two rules bound the openness:
+
+- **Payload rides `attrs`.** A built-in carries its payload in named sibling
+  keys (`level`, `lang`, `url`); an unknown carries it in one opaque `attrs`
+  object. A *new* construct must therefore put its payload under `attrs` to
+  survive a reader that predates it — a sibling key an old reader does not
+  read is dropped on re-encode.
+- **No reserved name reuse.** An unknown may not take a built-in's name
+  (`heading`, `quote`, `link`, …): it would serialize as the built-in and parse
+  back as one, silently dropping its attrs. `Content::validate` rejects this
+  (`Invariant::ReservedUnknownTag` / `ReservedUnknownLineKind` /
+  `ReservedUnknownContainer`). The enforcement point is **decode**, which every
+  read runs — a host that builds a non-injective tag through the op wire writes
+  a blob that saves and then fails to load, the same gap on all three axes.
+
+The opaque attrs are hash input like everything else in the canonical form, so
+they are recursively key-sorted along with the rest (see Byte-stability). What
+*does* remain a schema event is a change to the content object's own structure
+— a new top-level key beside `text`/`lines`/`marks`/`islands`, or a changed
+meaning for an existing discriminator.
+
 ## Island-id determinism
 
 An island's `id` is part of the canonical form (`{id, type, props, loss}`),

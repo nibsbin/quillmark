@@ -209,23 +209,34 @@ export interface Content {
     islands: ContentIsland[];
 }
 
-/** One `\n`-separated segment of `Content.text`, in order. */
+/** One `\n`-separated segment of `Content.text`, in order. `kind` is an open set
+ * (as on `ContentIsland` and `ContentMark`): a role this build does not know
+ * round-trips with opaque `attrs` and renders as a paragraph, so a document
+ * carrying a future block construct still opens. The open arm blocks discriminant
+ * narrowing, so read `level`/`lang` behind a check of the arm you want. */
 export type ContentLine = {
     containers: ContentContainer[];
     /** A within-block hard line break rather than a new block. Omitted (false) in the common case. */
     continues?: boolean;
-} & (
+} & ContentLineKind;
+
+/** A line's block role, declared once for `ContentLine` and the `setKind` op —
+ * a new role is one edit here, as for `ContentContainer`. */
+export type ContentLineKind =
     | { kind: "para" }
     | { kind: "heading"; level: number }
     | { kind: "code"; lang?: string }
     | { kind: "island" }
     | { kind: "rule" }
-);
+    | { kind: string; attrs: unknown };
 
-/** An ancestor block a line nests inside, outermost first. */
+/** An ancestor block a line nests inside, outermost first. Open like
+ * `ContentLine.kind`: an unrecognized container round-trips with opaque `attrs`
+ * and renders transparently (its lines sit at the enclosing level). */
 export type ContentContainer =
     | { container: "list_item"; ordered: boolean; start: number; ordinal: number }
-    | { container: "quote" };
+    | { container: "quote" }
+    | { container: string; attrs: unknown };
 
 /** A mark over char range `[start, end)` into `Content.text`. The open `type`
  * arm blocks discriminant narrowing (as on `ContentIsland`), so read a
@@ -348,11 +359,7 @@ export type MarkOp =
 export type LineOp =
     | { op: "split"; at: number }
     | { op: "join"; line: number }
-    | ({ op: "setKind"; line: number } & (
-          | { kind: "para" | "island" | "rule" }
-          | { kind: "heading"; level: number }
-          | { kind: "code"; lang?: string }
-      ))
+    | ({ op: "setKind"; line: number } & ContentLineKind)
     | { op: "setContainers"; line: number; containers: ContentContainer[] }
     | { op: "setContinues"; line: number; continues: boolean };
 
