@@ -54,16 +54,10 @@ nav:
       - Reference: cli/reference.md
   - Reference:
       - Markdown Specification: reference/markdown-spec.md
-  - Migration:
-      - Overview: migrations/index.md
-      - 0.97 → 0.98 (block vocabulary opens; LineKind/Container gain Unknown; TS narrowing guards; OutputFormat::Txt retires; backend::format_not_supported): migrations/0.97-to-0.98.md
-      - 0.96 → 0.97 (WASM Document.get → getStored; verbatim transport read gains its own verb): migrations/0.96-to-0.97.md
-      - '0.95 → 0.96 (mutator edit:: codes; [EditError::…] prefix deleted; DocPath parser; null ≡ absent ratified)': migrations/0.95-to-0.96.md
-      - 0.94 → 0.95 (store* verbs; one WASM address; quill.view; RichText → Content; strict date/datetime): migrations/0.94-to-0.95.md
-      - 0.93 → 0.94 (richtext(inline) token retires; ui.order removed, declaration order is the ordering contract): migrations/0.93-to-0.94.md
+  - Migration: migrations/index.md
 
-# Superseded migration guides stay published — reachable from the Migration
-# overview and by URL — but are lifted out of the nav to keep it current.
+# The guides stay published — reachable from the Migration overview and by URL —
+# but the nav carries only the overview, which is the one list to maintain.
 not_in_nav: |
   /migrations/wasm-0.77-to-0.80.md
   /migrations/0.81-to-0.82.md
@@ -77,6 +71,11 @@ not_in_nav: |
   /migrations/0.90-to-0.91.md
   /migrations/0.91-to-0.92.md
   /migrations/0.92-to-0.93.md
+  /migrations/0.93-to-0.94.md
+  /migrations/0.94-to-0.95.md
+  /migrations/0.95-to-0.96.md
+  /migrations/0.96-to-0.97.md
+  /migrations/0.97-to-0.98.md
 
 markdown_extensions:
   - pymdownx.highlight:

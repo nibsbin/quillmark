@@ -8,7 +8,7 @@
 **Quillmark is a schema-driven document engine.** Turn Markdown with card-yaml blocks into a fully typeset document — PDF, SVG, or PNG — with a Quill, via a Typst backend.
 
 !!! warning "Unstable APIs"
-    APIs may change between releases. Breaking changes are tracked in the [migration guides](migrations/index.md).
+    APIs may change between releases. Every break is covered by a guide under Migration.
 
 ## Choose your path
 
