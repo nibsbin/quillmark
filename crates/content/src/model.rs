@@ -264,6 +264,12 @@ impl Loss {
 impl MarkKind {
     /// Formatting marks are a property of a range and union when coincident;
     /// identity/unknown marks are handles and never merge (Spike-A rules).
+    ///
+    /// Class membership is stored meaning, not presentation: promoting an
+    /// open-set tag *into* this class starts unioning adjacent runs that
+    /// round-tripped as two marks, so the promotion moves the canonical bytes of
+    /// documents nobody edited (`DOCUMENT_STORAGE.md` § Promoting a vocabulary
+    /// member).
     pub fn is_formatting(&self) -> bool {
         matches!(
             self,
@@ -278,6 +284,14 @@ impl MarkKind {
 
     /// Total order over kinds for the canonical sort tie-break, after
     /// `(start, end)`. Stable across releases — part of the freeze.
+    ///
+    /// A new variant takes the slot immediately **before** [`MarkKind::Unknown`],
+    /// pushing `Unknown` up by one. That is the only placement where a build that
+    /// knows the type and a build that reads it as `Unknown` order it identically
+    /// against every built-in; anywhere else is two canonical forms for one
+    /// document, one per reader (`DOCUMENT_STORAGE.md` § Promoting a vocabulary
+    /// member). The block axes sort by nothing, so the rule is the mark axis'
+    /// alone.
     pub fn ord(&self) -> u8 {
         match self {
             MarkKind::Strong => 0,

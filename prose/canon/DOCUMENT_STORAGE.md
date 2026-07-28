@@ -200,7 +200,9 @@ Two rules bound the openness:
       was unknown carries `{"kind": "callout", "attrs": {…}}`; the release that
       promotes `callout` to a built-in has to keep opening it. Rejecting at
       `from_canonical_json` would refuse documents at rest exactly when the
-      vocabulary grows — the failure this section exists to prevent.
+      vocabulary grows — the failure this section exists to prevent. Opening it
+      is half: the promoted arm also *reads* the bag rather than dropping it, see
+      Promoting a vocabulary member.
 
 The opaque attrs are hash input like everything else in the canonical form, so
 they are recursively key-sorted along with the rest (see Byte-stability). What
@@ -233,6 +235,57 @@ The bound: **the carrier preserves unknown tags, not unknown payloads on known
 tags.** A future `kind: "footnote"` carrying a sibling `ref` loses `ref` at any
 consumer that predates it, predicates or no — the first rule above (*payload
 rides `attrs`*) read from the other end.
+
+## Promoting a vocabulary member
+
+Adding an unknown is not a schema event; the reverse trip — a later release
+**promoting** a tag to a built-in, which is what the open set exists for — moves
+four things at once.
+
+| What moves | How |
+|---|---|
+| Encoding | `{"kind":"callout","attrs":{…}}` becomes `{"kind":"callout",…}` with named siblings. |
+| Stored blobs | The decoder resolves the built-in name *before* the `Unknown` fallthrough, so the stored `attrs` reach an arm that reads siblings. |
+| Normalization | A promoted mark that `is_formatting()` unions adjacent runs that were two marks. |
+| Sort order | `attrs_key` is `tag\0{json}` for an `Unknown` and whatever its own arm returns for a built-in, so the `(start, end, ord)` tie-break can reorder. |
+
+The first two are data loss on exactly the documents the open set protects; the
+last two move canonical bytes for a document nobody edited. Four rules bound
+them.
+
+**A promoted built-in's decoder also reads the legacy `attrs` form.** This is
+the load-bearing one — without it the first promotion eats every stored blob's
+payload, silently. It is structural rather than a discipline: `fold_legacy_attrs`
+folds an `attrs` bag into the object whenever the discriminator names a reserved
+member, before the built-in arms run, on all three block-and-mark axes. A named
+sibling wins over a bag entry, only reserved names fold, and the discriminator is
+read from the original object. A promotion adds its name to `RESERVED_*` in the
+same edit that adds its arm, so it inherits the fold and carries its own legacy
+form. Re-encoding a folded blob writes the promoted spelling, so the read is a
+byte movement of the read-repair kind § Byte-stability governs.
+
+The island axis has no such gap: `props` is the payload carrier for known and
+unknown types alike, so a promoted island type reads what its unknown wrote. Nor
+does `loss`, which carries no payload.
+
+**A new `MarkKind` takes the ordinal immediately before `Unknown`.** That is the
+one placement where a build that knows the type and a build that reads it as
+`Unknown` order the mark identically against every built-in; any other slot gives
+one document two canonical forms, one per reader. The rule is stated on
+`MarkKind::ord` itself. It is the mark axis' alone — the block axes sort by
+nothing.
+
+**Promoting a mark into the formatting class changes stored meaning**, since
+adjacent runs that round-tripped as two marks begin to union. It is a
+canonical-byte event, and takes the read-repair-or-accept-the-movement treatment
+§ Byte-stability sets out for migrated rows.
+
+**`RESERVED_*` growth rejects previously-valid authored content**, by design. A
+host still authoring `Unknown { tag: "callout" }` after the promotion gets
+`ReservedUnknownLineKind`, and `from_authored_value` starts refusing `attrs`
+beside `"callout"` — the reserved-name rule above, applied to a name that changed
+sides. From the host's seat it reads as a release breaking its writes, so it is a
+release note, not a silent tightening.
 
 ## Island-id determinism
 
