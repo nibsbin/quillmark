@@ -310,6 +310,25 @@ beside `"callout"` — the reserved-name rule above, applied to a name that chan
 sides. From the host's seat it reads as a release breaking its writes, so it is a
 release note, not a silent tightening.
 
+## The three id handles
+
+Islands, anchors, and cards each carry an id, and all three are the same handle:
+**opaque, unique within a scope, hash input, stable for the session, rebased
+through edits and never rewritten.** They differ on one axis — **who mints one,
+and why only they can.** Uniqueness scope, collision response, and markdown
+round-trip all follow from that.
+
+|                     | Island `id`                                        | Anchor `id`                                        | Card `$id`                                                            |
+| ------------------- | -------------------------------------------------- | -------------------------------------------------- | --------------------------------------------------------------------- |
+| Minted by           | the engine, at import                              | the caller                                         | the caller                                                            |
+| Because             | content determines it — the nth island minted      | the referent is external; no content determines it | nothing external does, but the scope that validates it is out of view |
+| Unique across       | the `Content`'s islands                            | the `Content`'s prose marks                        | the document's composable cards                                       |
+| Required            | yes                                                | yes — the empty id is rejected                     | no; the handle is opt-in                                              |
+| On collision        | unreachable — mint is sequential; `validate` scans | `add` rejects                                      | parse repairs, mutators and storage reject                            |
+| Markdown round-trip | re-minted identically                              | lost — export emits none, import mints none        | carried verbatim                                                      |
+
+Each section below states one handle's policy whole.
+
 ## Island-id determinism
 
 An island's `id` is part of the canonical form (`{id, type, props, loss}`),
@@ -339,16 +358,12 @@ id.
 
 ## Anchor-id identity
 
-An anchor (`MarkKind::Anchor { id }`) and an island id are the *same handle* —
-opaque, unique per `Content`, hash input, session-stable, rebased not rewritten
-— differing on exactly one axis: **derivability at the markdown boundary**. An
-island projects to markdown, so its id is a pure function of that projection
-(§ Island-id determinism); an anchor has **no** projection — it names an
-external referent (a comment thread, an editor bookmark) that no content
-determines. The never-ambient rule therefore cannot apply, and need not: that
-rule exists to keep *import* a pure function of markdown, and import mints no
-anchor, so equal markdown still imports to equal bytes. The two sections read as
-one handle model, not a contradiction.
+An anchor (`MarkKind::Anchor { id }`) sits at the caller-minted end of the mint
+axis (§ The three id handles) because it has **no markdown projection** — it
+names an external referent (a comment thread, an editor bookmark) that no
+content determines. The never-ambient rule therefore cannot apply, and need not:
+that rule exists to keep *import* a pure function of markdown, and import mints
+no anchor, so equal markdown still imports to equal bytes.
 
 The policy: **an anchor id is caller-supplied, unique per `Content`, opaque and
 invariant while the mark lives; the mark is best-effort under edits and absent
@@ -387,17 +402,13 @@ position, never the id, so this policy holds either way.
 
 ## Card-id identity
 
-A card's `$id` is the third id-bearing handle beside island and anchor ids:
-the **durable card handle** — the address that survives reorder, kind change,
-and both round-trips, where a card's index does not (`Document::find_card`
-resolves it). The three handles differ on one stated axis — *who can know
-the id*. An island id is determined by content, so the engine mints it at
-import (§ Island-id determinism). An anchor id is determined by an external
-referent only the caller knows (§ Anchor-id identity). A card id is
-determined by nothing external — but the scope that makes one valid, the
-document, is out of view at the creation site (`Quill::seed_card` returns a
-detached card), so the caller mints here too: the engine lacks the scope,
-not the referent.
+A card's `$id` is the **durable card handle** — the address that survives
+reorder, kind change, and both round-trips, where a card's index does not
+(`Document::find_card` resolves it). Unlike an anchor's referent, nothing
+external determines it; the caller still mints it because the scope that makes
+one valid, the document, is out of view at the creation site (`Quill::seed_card`
+returns a detached card). The engine lacks the scope, not the referent — the
+third position on the mint axis (§ The three id handles).
 
 The policy: **a card `$id` is caller-supplied, optional, unique across the
 document's composable cards, opaque and invariant while the card lives;
