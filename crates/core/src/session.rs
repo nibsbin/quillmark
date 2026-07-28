@@ -244,7 +244,7 @@ impl LiveSession {
     /// over the field's `span`-bearing content segments (the "highlight the
     /// focused field" quantity). The convenience that owns the union
     /// [`regions`](Self::regions) leaves derived: it keeps `regions()` as the
-    /// low-level disjoint truth (#829) and folds the span-filter + per-page
+    /// low-level disjoint truth and folds the span-filter + per-page
     /// union here so no consumer reimplements it. Content only — a field placed
     /// solely as a scalar reference or a bound widget carries no `span` and
     /// yields nothing here; its box is a single [`regions`](Self::regions) rect.

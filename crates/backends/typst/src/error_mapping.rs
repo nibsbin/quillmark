@@ -155,7 +155,6 @@ mod tests {
 
     /// A resolvable eval error keeps its real source location: the error
     /// resolves to the call site, so the mapped diagnostic carries a location.
-    /// (Issue #745.)
     #[test]
     fn resolvable_eval_error_is_unchanged() {
         let Some(source) = source_with_plate(EVAL_ERROR_PLATE) else {

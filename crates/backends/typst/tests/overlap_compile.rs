@@ -1,4 +1,4 @@
-//! End-to-end guard for the overlapping wrap+code emit fix (#846): a content
+//! End-to-end guard for the overlapping wrap+code emit fix: a content
 //! that an editor can build but markdown import never produces — `strong[0,4)`
 //! partially overlapping `code[2,6)` — must lower to Typst that actually
 //! *compiles*, not merely markup that "looks balanced". The emitter's output is

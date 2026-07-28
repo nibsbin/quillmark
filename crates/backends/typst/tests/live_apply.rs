@@ -1,5 +1,5 @@
 //! Acceptance tests for `LiveSession::apply` — the incremental edit verb of
-//! a live preview (#778).
+//! a live preview.
 //!
 //! The session persists its `QuillWorld`; `apply` swaps new document data into
 //! the helper package, recompiles, and reports the dirty page set. Commit is
@@ -73,7 +73,7 @@ fn apply_commits_and_dirties_only_the_touched_suffix() {
 
 /// A quill whose sole content-bearing field is a *markdown* field placed
 /// through the span-tracked helper path (`#data.body`), not a scalar reference
-/// into the static plate. This is the shape #801 was reported against: content
+/// into the static plate. This is the dirty-every-reapply shape: content
 /// fields route glyph spans into the helper `lib.typ`, which is regenerated per
 /// `apply` — the frame data `page_hashes` must fingerprint without folding in
 /// those spans.
@@ -101,7 +101,7 @@ main:
 
 #[test]
 fn identical_reapply_of_markdown_content_is_clean() {
-    // #801: a page's fingerprint must not fold in glyph/shape/image `Span`s
+    // A page's fingerprint must not fold in glyph/shape/image `Span`s
     // (source-location metadata, not pixels), so reapplying byte-identical
     // markdown to a content-field session reports NOTHING dirty — every time,
     // including a second consecutive no-op (not a one-time settling artifact).
@@ -166,7 +166,7 @@ main:
 
 #[test]
 fn reapply_with_reordered_fields_same_content_is_clean() {
-    // The web-app's #801 `[0]`, reproduced at the backend. `serde_json` is built
+    // The web-app's reordered-fields repro, at the backend. `serde_json` is built
     // with `preserve_order`, so field insertion order survives on the wire; an
     // editor's mutate path can hand `apply` a document with the SAME content but
     // a different field order than `open` saw. Two independent layers keep that

@@ -468,7 +468,7 @@ card_kinds:
 
 #[test]
 fn date_field_display_surfaces_a_clickable_region() {
-    // #990: a present date lowers to a value-object whose `display` closure
+    // A present date lowers to a value-object whose `display` closure
     // returns `text(v.display(..))` — content born at a generated `text(..)`
     // node inside a recorded segment-less window. Rendering it through the
     // shipping `(data.<field>.display)(..)` call surfaces one whole-placement
@@ -806,7 +806,7 @@ typst:
 
 #[test]
 fn spike_990_text_wrapped_ink_surfaces_a_region() {
-    // #990 spike 2, shipping-API view. The date value-object's `display:`
+    // Spike 2, shipping-API view. The date value-object's `display:`
     // closure emits `text(datetime(..).display(..))` — *content* whose glyphs
     // must carry the constructing node's span, not detached decoration ink, so
     // a recorded window claims them. This pins the load-bearing half through
@@ -992,7 +992,7 @@ main:
 
 #[test]
 fn segment_regions_carry_span_and_field_union_is_striped() {
-    // #829's visible change: a content field breaks into one region **per
+    // The visible change: a content field breaks into one region **per
     // paragraph**, each keyed on its content span. The whole-field highlight is
     // the consumer's union of a page's segment rects — so the inter-paragraph
     // whitespace stays uncovered (striped), unlike the old single solid box.

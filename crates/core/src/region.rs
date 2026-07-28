@@ -86,7 +86,7 @@
 /// plate sites yields one per site, and tracked content plus a bound widget
 /// yields both. Consumers group by `field`; every entry routes to that field.
 /// The whole-field box is **derived** — the union of a page's `span`-bearing
-/// segment rects, so inter-paragraph whitespace stays uncovered (#829); the
+/// segment rects, so inter-paragraph whitespace stays uncovered; the
 /// [`field_boxes`] helper (and
 /// [`LiveSession::field_boxes`](crate::LiveSession::field_boxes)) owns that
 /// union so consumers need not reimplement it.
@@ -135,7 +135,7 @@ impl RenderedRegion {
 /// consumers — filter by field, keep only the segment rects that carry a `span`,
 /// union per page, inherit first-placement-only from the input — so a
 /// "highlight the focused field" consumer never reimplements it and cannot
-/// reintroduce the field-level union the #829 disjointness invariant exists to
+/// reintroduce the field-level union the disjointness invariant exists to
 /// prevent (the input is already striped; this unions the *bounding* box per
 /// page, so inter-paragraph whitespace still is not a separate box but the
 /// derived rect does bound it). Pass the output of

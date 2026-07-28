@@ -956,7 +956,7 @@ mod tests {
         }
     }
 
-    /// Issue #1051: the decoder is the entry point for stored and
+    /// The decoder is the entry point for stored and
     /// caller-supplied content, and export recurses one frame per container. A
     /// 20 000-deep path used to decode clean and abort the process on
     /// `to_markdown`; the shared `validate` cap rejects it at the door.
@@ -986,7 +986,7 @@ mod tests {
         v
     }
 
-    /// Issue #1093: [`deep_container_nesting_is_rejected_at_decode`] on the
+    /// [`deep_container_nesting_is_rejected_at_decode`] on the
     /// payload axis, through the `Value` lane. The string lane is bounded by its
     /// parser (`serde_json::from_str` refuses past 128); the `Value` lane is the
     /// host-authored one — `install` reaches it — and has to refuse the same
@@ -1071,7 +1071,7 @@ mod tests {
         );
     }
 
-    /// Issue #1093: the legacy-attrs fold is the one frame that spends the depth
+    /// The legacy-attrs fold is the one frame that spends the depth
     /// without retaining the bag — it deep-clones the object it folds into, and it
     /// runs for a *built-in* name, where no `Unknown` arm reads the bag at all. A
     /// nested-object bag, since only an object folds.
@@ -1093,7 +1093,7 @@ mod tests {
         );
     }
 
-    /// Issue #1093: an over-deep bag is refused whichever door it arrives at, so
+    /// An over-deep bag is refused whichever door it arrives at, so
     /// the op wire cannot install one either.
     #[test]
     fn deep_json_payload_is_rejected_on_the_op_wire() {
@@ -1110,7 +1110,7 @@ mod tests {
         ));
     }
 
-    /// Issue #1051: a wire position past `usize` is refused, not truncated. On
+    /// A wire position past `usize` is refused, not truncated. On
     /// wasm32 — the deployment target — `as usize` turned `2^32 + 5` into an
     /// in-range `5`, landing a mark at the wrong position in a document that
     /// then validated clean. Rejected on every target, by the checked read here
@@ -1186,7 +1186,7 @@ mod tests {
         ));
     }
 
-    /// Issue #1091: `loss` is the fifth open vocabulary, on the terms the four
+    /// `loss` is the fifth open vocabulary, on the terms the four
     /// below use. A class this build lacks is **carried**, not rewritten, so a
     /// reader that merely opens the document neither destroys the class nor
     /// moves the content hash. Reading it degrades to the safe end.
@@ -1202,7 +1202,7 @@ mod tests {
         assert_eq!(rt.to_canonical_json(), json);
     }
 
-    /// Issue #1054: the block vocabulary is open on the mark axis' terms. A
+    /// The block vocabulary is open on the mark axis' terms. A
     /// `kind`/`container` this build lacks decodes to `Unknown` — the document
     /// **opens** — and re-encodes byte-identically, so a construct a future
     /// reader understands survives the trip through this one.
@@ -1252,7 +1252,7 @@ mod tests {
         }
     }
 
-    /// Issue #1054: an unknown line kind / container may not reuse a built-in
+    /// An unknown line kind / container may not reuse a built-in
     /// name — it would serialize as the built-in and parse back as one, dropping
     /// its attrs (the `ReservedUnknownTag` rule, one axis over).
     #[test]
@@ -1278,12 +1278,12 @@ mod tests {
         );
     }
 
-    /// Issue #1084: the authored lane (`install`) applies the reserved-name rule
+    /// The authored lane (`install`) applies the reserved-name rule
     /// the decoders cannot — by the time a lenient reader has resolved `"para"`
     /// to `Para`, the `attrs` are gone and `validate` has nothing to object to.
     /// Every axis `validate` checks, including cell marks.
     ///
-    /// Issue #1092 adds the last case: a cell mark that will not parse at all.
+    /// The last case: a cell mark that will not parse at all.
     /// It is the one axis with no strict decode behind it — `parse_cell` skips
     /// what it cannot read and `canon_cell` makes the skip permanent — so
     /// without this the host's mark vanishes with no signal.
@@ -1333,7 +1333,7 @@ mod tests {
             .is_empty());
     }
 
-    /// Issue #1084: the authored lane's scan is structural, not a blind walk. An
+    /// The authored lane's scan is structural, not a blind walk. An
     /// unknown's `attrs` is opaque host payload and may contain an object spelled
     /// like a reserved mark; rejecting that would make the carrier unable to
     /// carry the thing it exists to carry.
@@ -1348,7 +1348,7 @@ mod tests {
         assert_eq!(rt.to_canonical_json(), json);
     }
 
-    /// Issue #1054: opaque block attrs are hash input, so their key order must
+    /// Opaque block attrs are hash input, so their key order must
     /// not leak into the canonical bytes — the unknown-mark rule, one axis over.
     #[test]
     fn unknown_block_attrs_key_order_does_not_leak() {
@@ -1394,7 +1394,7 @@ mod tests {
         assert_eq!(back.marks[0].kind, rt.marks[0].kind);
     }
 
-    /// Issue #1094: promotion moves a construct's payload from the opaque bag to
+    /// Promotion moves a construct's payload from the opaque bag to
     /// named siblings, and every blob written before it still spells the payload
     /// the old way. The storage lane folds the bag in, so the promoted decoder
     /// reads what the unknown wrote instead of dropping it. Pinned on the
@@ -1463,7 +1463,7 @@ mod tests {
         );
     }
 
-    /// Issue #1094: `ord` is part of the freeze, and a promoted type takes the
+    /// `ord` is part of the freeze, and a promoted type takes the
     /// slot `Unknown` held. Anywhere else and a build that knows the type orders
     /// it against the built-ins differently from a build that reads it as
     /// `Unknown` — one document, two canonical forms.
@@ -1502,7 +1502,7 @@ mod tests {
         assert!(matches!(all.last(), Some(MarkKind::Unknown { .. })));
     }
 
-    /// Issue #1094: formatting-class membership is stored meaning. Two adjacent
+    /// Formatting-class membership is stored meaning. Two adjacent
     /// unknowns are two marks; two adjacent formatting marks are one. Promoting a
     /// tag into the class therefore rewrites documents nobody edited, which makes
     /// it a canonical-byte event rather than a silent widening.
@@ -1537,7 +1537,7 @@ mod tests {
         assert_eq!(rt.marks.len(), 1);
     }
 
-    /// Issue #1094: promotion grows `RESERVED_*`, and the authored lane then
+    /// Promotion grows `RESERVED_*`, and the authored lane then
     /// refuses a shape it accepted the release before. By design — a host still
     /// authoring the unknown spelling of a name that now means the built-in is
     /// writing the silent drop the rule exists to catch — but from the host's

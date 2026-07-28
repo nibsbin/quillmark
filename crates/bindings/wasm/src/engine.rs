@@ -986,7 +986,7 @@ impl Document {
     /// `addr` is an optional **card address** (`{ card }`, absent = main). A
     /// present `field` throws — a field's markdown is read through the
     /// schema-plane `quill.reader(doc).get(field)`, which interprets by declared
-    /// type (#978). An out-of-range `addr.card` throws.
+    /// type. An out-of-range `addr.card` throws.
     #[wasm_bindgen(js_name = getMarkdown, unchecked_return_type = "string")]
     pub fn get_markdown(
         &self,
@@ -2622,7 +2622,7 @@ impl LiveSession {
     /// The whole-field highlight boxes for `field` — one union rect per page,
     /// over the field's `span`-bearing content segments. The convenience that
     /// owns the union `regions()` leaves derived: it keeps `regions()` the
-    /// low-level disjoint truth (#829) and folds the span-filter + per-page
+    /// low-level disjoint truth and folds the span-filter + per-page
     /// union here, so a "highlight the focused field" consumer stops
     /// reimplementing it. **Content only** — a field placed solely as a scalar
     /// reference or a bound widget carries no `span` and returns `[]`; its box

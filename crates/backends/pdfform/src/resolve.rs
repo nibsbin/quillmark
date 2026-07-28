@@ -158,7 +158,7 @@ fn element_text(e: &Value) -> Option<String> {
 ///
 /// Tables and images carry no plaintext, so a content whose content is only a
 /// table binds nothing here — the field renders blank, no diagnostic. This is
-/// the decided pdfform limitation (issue #880); see `to_plaintext`.
+/// the decided pdfform limitation; see `to_plaintext`.
 fn richtext_plaintext(v: &Value) -> Option<String> {
     let rt = quillmark_content::serial::from_canonical_value(v).ok()?;
     let text = quillmark_content::export::to_plaintext(&rt);

@@ -73,7 +73,7 @@ fn test_invalid_field_names() {
     assert!(!is_valid_field_name("$body")); // $-prefix reserved for metadata
 }
 
-// ── `$`-prefixed names: Document::store_field ──────────────────────────────────
+// ── `$`-prefixed names: Document::store_field ────────────────────────────────
 
 #[test]
 fn test_document_store_field_rejects_dollar_prefixed_names() {
@@ -91,7 +91,7 @@ fn test_document_store_field_rejects_dollar_prefixed_names() {
     }
 }
 
-// ── Document::store_field (happy path) ─────────────────────────────────────────
+// ── Document::store_field (happy path) ───────────────────────────────────────
 
 #[test]
 fn test_document_store_field_updates_existing() {
@@ -239,7 +239,7 @@ fn test_move_card_index_out_of_range() {
     }
 }
 
-// ── Document::set_card_kind ───────────────────────────────────────────────────
+// ── Document::set_card_kind ──────────────────────────────────────────────────
 
 #[test]
 fn test_set_card_kind_renames_in_place() {
@@ -300,7 +300,7 @@ fn test_card_new_invalid_kind_rejected() {
     }
 }
 
-// ── Card::store_field ──────────────────────────────────────────────────────────
+// ── Card::store_field ────────────────────────────────────────────────────────
 
 #[test]
 fn test_card_store_field_valid() {
@@ -341,7 +341,7 @@ fn test_document_new_blank_canvas() {
     assert_eq!(doc, reparsed);
 }
 
-// ── Card::store_fields ─────────────────────────────────────────────────────────
+// ── Card::store_fields ───────────────────────────────────────────────────────
 
 #[test]
 fn test_card_store_fields_inserts_in_iterator_order() {
@@ -717,7 +717,7 @@ fn test_commit_field_richtext_inline_enforced_at_write() {
 /// A multi-block element committed to an `array` of `richtext(inline)` items
 /// classifies as `FieldRichtextNotInline`, not the generic `FieldConform`: the
 /// mapper keys on the coercion target (`richtext(inline)`), so the richtext
-/// constraint is honored even when it is nested under an array. Issue #906.
+/// constraint is honored even when it is nested under an array.
 #[test]
 fn test_commit_field_array_of_inline_richtext_reports_not_inline() {
     use crate::quill::{FieldSchema, FieldType};
@@ -824,7 +824,7 @@ fn test_commit_field_rejects_bad_name() {
 /// `field_richtext` on an absent field is `None`; on a plain non-richtext field
 /// value it is `Some(Err(_))` — the read mirrors the write in needing the caller
 /// to name a field it knows is richtext. `field_markdown` carries the same
-/// shape: `None` absent, `Some(Err)` present-but-undecodable (#968).
+/// shape: `None` absent, `Some(Err)` present-but-undecodable.
 #[test]
 fn test_field_richtext_absent_and_non_richtext() {
     let mut card = Card::new("note").unwrap();
@@ -855,7 +855,7 @@ fn test_content_field_emits_as_markdown_projection() {
     // Projected to a markdown scalar (the `body_markdown` projection — a value,
     // not a file, so no trailing newline), not a block mapping. Still quoted here
     // (the leading `*` is a YAML flow indicator), but the projection no longer
-    // grows a trailing `\n` inside the quotes (issue #965).
+    // grows a trailing `\n` inside the quotes.
     assert!(
         md.contains("intro: \"**bold** intro\""),
         "expected markdown projection, got:\n{md}"
@@ -891,7 +891,7 @@ fn test_non_content_object_field_emits_structurally() {
 /// stays structural — the projection guard is byte-exact (canonical-string
 /// equality), not the order-independent `Value` compare it used to be. Under
 /// the old guard this projected to a flattened markdown scalar, breaking the
-/// field's round-trip. Issue #905.
+/// field's round-trip.
 #[test]
 fn test_noncanonical_order_content_field_stays_structural() {
     // A real content, then its top-level keys rebuilt in reverse (same content,
@@ -1153,7 +1153,7 @@ fn test_invariants_after_mutation_sequence() {
     assert!(doc.main().payload().get("version").is_none());
 }
 
-// ── $ext mutators ──────────────────────────────────────────────────────────────
+// ── $ext mutators ────────────────────────────────────────────────────────────
 
 #[test]
 fn test_store_ext_adds_map_and_strips_from_plate() {
@@ -1425,7 +1425,7 @@ fn wire_card_rejects_value_past_depth_limit_and_bad_names() {
     );
 }
 
-// ── Single-card / $id reads (#956) ───────────────────────────────────────────
+// ── Single-card / $id reads ──────────────────────────────────────────────────
 
 #[test]
 fn find_card_resolves_id_and_card_indexes() {
@@ -1450,7 +1450,7 @@ fn find_card_resolves_id_and_card_indexes() {
     assert!(doc.card(2).is_none());
 }
 
-// ── Card-id identity (#1044) ─────────────────────────────────────────────────
+// ── Card-id identity ─────────────────────────────────────────────────────────
 
 #[test]
 fn push_and_insert_card_reject_duplicate_and_empty_id() {

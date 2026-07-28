@@ -231,7 +231,7 @@ pub struct ChangeSet {
 /// plus a `field:`-bound widget yields both. Group by `field` — every entry
 /// routes to that field. The whole-field highlight is the **union of a page's
 /// `span`-bearing segment rects**, so inter-paragraph whitespace stays
-/// uncovered (#829); `LiveSession.fieldBoxes(field)` owns that union so
+/// uncovered; `LiveSession.fieldBoxes(field)` owns that union so
 /// consumers need not derive it. Later placements of one content value are not
 /// enumerated; `fieldAt` / `positionAt` still resolve clicks on them.
 #[cfg(any(feature = "typst", feature = "pdfform"))]

@@ -13,7 +13,7 @@
 //! (date cells excepted — their block carries the `datetime`, not the data
 //! literal); the schema address tables are a generated literal
 //! `_qm-meta`, and each content field's plaintext projection a generated literal
-//! `_qm-plaintext` (backing the `plaintext(field)` helper, #873). See
+//! `_qm-plaintext` (backing the `plaintext(field)` helper). See
 //! [`generate_lib_typ`].
 //!
 //! Output is **canonical**: dict keys emit in sorted order at every level (via
@@ -73,9 +73,9 @@ pub fn generate_lib_typ(
 
     // Every placeholder is located in the *raw template* — trusted static text
     // — never in already-substituted output, so document data containing the
-    // literal placeholder text cannot hijack a splice point (the #795 hygiene
-    // fix, carried over). Slots are unique and ordered; each `find` starts
-    // after the previous slot, scanning only the static template.
+    // literal placeholder text cannot hijack a splice point. Slots are unique
+    // and ordered; each `find` starts after the previous slot, scanning only the
+    // static template.
     let mut out = String::with_capacity(
         LIB_TYP_TEMPLATE.len() + cg.blocks.len() + data_literal.len() + plaintext_literal.len(),
     );
@@ -132,7 +132,7 @@ fn rebase_segment(mut s: SegmentMap, shift: usize) -> SegmentMap {
 /// bindings, their brackets-included windows + rebased segment maps (relative to
 /// the block section), the `_qm_cN` counter, the first content-lowering error (a
 /// content over the nesting bound; import normally prevents it), and each content
-/// field's plaintext projection (for the `plaintext(field)` helper, #873).
+/// field's plaintext projection (for the `plaintext(field)` helper).
 struct Codegen<'m> {
     meta: &'m SchemaMeta,
     blocks: String,
@@ -142,7 +142,7 @@ struct Codegen<'m> {
     /// number date blocks densely (`_qm_d0`, `_qm_d1`, …) rather than sharing
     /// the content blocks' sequence; the `_qm_c`/`_qm_d` prefixes keep the ID
     /// spaces distinct either way, and both counters are a pure function of
-    /// emission order (sorted keys, semantic card order), so the #801
+    /// emission order (sorted keys, semantic card order), so the
     /// byte-identical-source invariant holds regardless.
     date_counter: usize,
     emit_error: Option<EmitError>,
@@ -247,7 +247,7 @@ impl<'m> Codegen<'m> {
     /// recorded on `self.emit_error` and surfaced by `generate_lib_typ`.
     ///
     /// `inline` selects the lowering: an `inline` field (`richtext(inline)`)
-    /// lowers to pure inline markup (no trailing `parbreak`, #872) via
+    /// lowers to pure inline markup (no trailing `parbreak`) via
     /// [`emit_content_inline`]; every other field keeps the block lowering.
     fn content_field(&mut self, path: &str, value: &serde_json::Value, inline: bool) -> String {
         let emit = if inline {
@@ -471,9 +471,9 @@ fn meta_literal(meta: &SchemaMeta) -> String {
 
 /// The `_qm-plaintext` literal: each content field's plaintext projection
 /// (island slots stripped, marks dropped) keyed by schema address, emitted as a
-/// Typst dict literal for the `plaintext(field)` helper (#873). Keys are sorted
+/// Typst dict literal for the `plaintext(field)` helper. Keys are sorted
 /// so the output is a pure function of the data's values — a reorder-only
-/// `apply` still produces byte-identical source (same #801 invariant as the
+/// `apply` still produces byte-identical source (same invariant as the
 /// content blocks). Content addresses are unique, so no key collides.
 fn plaintext_literal(entries: &[(String, String)]) -> String {
     let mut sorted: Vec<&(String, String)> = entries.iter().collect();
@@ -558,7 +558,7 @@ fn lit(v: &serde_json::Value) -> String {
 /// makes the generated source a pure function of the data's *values*: a
 /// reorder-only `apply` produces byte-identical `lib.typ`, `Source::replace`
 /// sees an empty diff, comemo reuses the whole compile, and no content block's
-/// spans move (#801).
+/// spans move.
 fn sorted(obj: &serde_json::Map<String, serde_json::Value>) -> Vec<(&String, &serde_json::Value)> {
     let mut entries: Vec<_> = obj.iter().collect();
     entries.sort_by(|a, b| a.0.cmp(b.0));
@@ -633,7 +633,7 @@ mod tests {
 
     /// An `inline` richtext field's block carries pure inline markup (no
     /// `parbreak`), while a plain richtext field keeps its `\n\n` terminator —
-    /// so the inline value composes in `par(..)` without warning (#872).
+    /// so the inline value composes in `par(..)` without warning.
     #[test]
     fn inline_field_lowers_without_parbreak() {
         let meta = meta_from(serde_json::json!({ "properties": {
@@ -758,7 +758,7 @@ mod tests {
 
     /// Every non-blank content field gets a `_qm-plaintext` entry keyed by its
     /// schema address — the content text with marks dropped and island slots
-    /// stripped — so `plaintext(field)` returns the field's string (#873). A
+    /// stripped — so `plaintext(field)` returns the field's string. A
     /// blank field is absent (it defaults to `""`).
     #[test]
     fn content_fields_populate_the_plaintext_table() {
@@ -962,7 +962,7 @@ mod tests {
     /// The caller's field order must not reach the emitted source: the same
     /// values in any key order — top-level, card, and nested dicts — produce
     /// byte-identical `lib.typ` and identical windows, so a reorder-only
-    /// `apply` is a `Source::replace` no-op (#801).
+    /// `apply` is a `Source::replace` no-op.
     #[test]
     fn reordered_input_emits_byte_identical_source() {
         let meta = meta_from(serde_json::json!({

@@ -544,7 +544,7 @@ describe('Document editor surface — setQuillRef / install / revise', () => {
     expect(() => doc.install({}, { not: 'a content' })).toThrow()
   })
 
-  // Issue #1093: island `props` and unknown `attrs` are opaque host payload, and
+  // Island `props` and unknown `attrs` are opaque host payload, and
   // every consumer of them — key canonicalization, the hash key, the JS→JSON
   // conversion, the tree's own drop — recurses one frame per level. On wasm32 the
   // stack is 1 MB and an overflow is a trap that takes the module down rather than
@@ -730,7 +730,7 @@ card_kinds:
     ).toThrow()
   })
 
-  it('applyChange setContinues lowers a hard break op-wise (#949)', () => {
+  it('applyChange setContinues lowers a hard break op-wise', () => {
     const doc = blankDoc()
     // Two paragraph lines (a delta-inserted `\n` mints `continues:false`), so
     // export separates them with a blank line — two blocks.

@@ -1,7 +1,7 @@
 //! Markdown import (cold): `normalize → pulldown → content`.
 //!
 //! The one place the `<u>` allowlist runs — once, at the
-//! boundary (issue #831 § Codecs). Input is normalized by
+//! boundary (§ Codecs). Input is normalized by
 //! [`crate::normalize::normalize_markdown`] (CRLF→LF, bidi strip, HTML
 //! comment-fence repair) so the content invariants hold by construction, then
 //! parsed with `pulldown_cmark` (CommonMark + strikethrough + pipe tables) and
@@ -827,7 +827,7 @@ impl Builder {
             // Degraded when a cell dropped an inline image's url — the projection
             // then carries the alt text but not the image (not a fixed point);
             // otherwise the type's ceiling. Recorded, not acted on: `Loss`
-            // describes fidelity for a consumer to surface (issue #1043); no
+            // describes fidelity for a consumer to surface; no
             // projection branches on it.
             let loss = if acc.degraded {
                 Loss::Degraded
@@ -1086,7 +1086,7 @@ mod tests {
         assert_eq!(rt.text, "a b c");
     }
 
-    /// Issue #1053: an asterisk run the author typed reaches the content.
+    /// An asterisk run the author typed reaches the content.
     /// `***a**` is a literal `*` followed by strong `a` (CommonMark's rule of
     /// three: the closing run matches two of the three), and every shape here
     /// keeps its stars — a fixer re-segmenting the run deleted one.
