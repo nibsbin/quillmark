@@ -14,6 +14,28 @@ order; each states its own breaks in full.
     Upgrading from 0.92.1 means following **0.92 → 0.93** and **0.93 → 0.94**
     in sequence.
 
+!!! warning "Crossing 0.92 → 0.93 rewrites stored bytes"
+
+    `@0.92.0` stores a card body as a markdown string; `@0.93.0` embeds it
+    structurally. The hop is a re-parse, not a reshape: a legacy body imports
+    under current parse rules on every read, and re-serializes on the next
+    write. Three consequences for a consumer holding stored blobs.
+
+    **Stored bytes grow on the next save.** The growth lands on the body
+    subtree, and the factor tracks mark and list density — roughly 1.5x for
+    prose carrying no marks, ~2.5x for memo-shaped content, several times that
+    for lists, and highest for nested ones. No single multiplier covers a mixed
+    corpus; measure your own. Re-size any bound sitting on those bytes — a
+    database `CHECK`, a column limit, a quota — before shipping the upgrade.
+
+    **Migration is lazy.** A blob migrates when it is read, so the stored
+    population is mixed for as long as some rows go untouched, and a size
+    failure surfaces on a user's first edit rather than at deploy.
+
+    **The first write is one-way.** A 0.92.1 reader rejects the `@0.93.0`
+    schema tag, so a row saved once cannot be read by the old version. Land the
+    cap change before the upgrade, not after.
+
 ## Guides
 
 | Step | What changes |
