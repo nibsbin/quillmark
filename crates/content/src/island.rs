@@ -36,6 +36,14 @@ use serde_json::Value;
 /// Routing an internal exhaustive enum through a `#[non_exhaustive]` public
 /// re-export would buy the semver back and lose the guarantee — not the trade
 /// this module wants.
+///
+/// The trade runs the other way for [`MarkKind`](crate::model::MarkKind) and
+/// [`LineKind`](crate::model::LineKind), which do carry the attribute. What an
+/// unhandled arm costs there is decoration: the text still renders, the mark
+/// loses its delimiters, the line lowers as a paragraph. An unhandled island
+/// type costs the island — content leaves the projection entirely. A silent
+/// gap in a total function is worth a major bump; a silent gap in a
+/// degradation ladder that already has an `Unknown` rung is not.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KnownIslandType {
     /// `{header, rows, aligns}` with inline `{text, marks}` cells. Mark-carrying,

@@ -606,23 +606,16 @@ impl<'a> Emit<'a> {
                 let g0 = self.out.len();
                 (g0, self.emit_inline(lo, hi))
             }
-            // An unknown block role lowers as a paragraph — its inline content
-            // renders, its role is lost to the projection (it round-trips
-            // through storage).
-            LineKind::Island | LineKind::Para | LineKind::Unknown { .. } => {
-                let g0 = self.out.len();
-                (g0, self.emit_inline(lo, hi))
-            }
             LineKind::Rule => {
                 let g0 = self.out.len();
                 self.out.push_str("#line(length: 100%)");
                 (g0, Vec::new())
             }
             LineKind::Code { .. } => unreachable!("code handled by early return"),
-            // `LineKind` is open (`#[non_exhaustive]`): a block role added after
-            // this build lowers as a paragraph, the same projection
-            // `LineKind::Unknown` gets. Its inline content renders; its role is
-            // lost to the projection and survives in storage.
+            // `Island`, `Para`, `Unknown`, and — `LineKind` being
+            // `#[non_exhaustive]` — any role added after this build: all lower as
+            // a paragraph. The inline content renders; the role is lost to the
+            // projection and survives in storage.
             _ => {
                 let g0 = self.out.len();
                 (g0, self.emit_inline(lo, hi))
@@ -920,11 +913,10 @@ fn wraps_and_codes(marks: &[Mark], lo: usize, hi: usize) -> (Vec<Wrap>, Vec<(usi
                 ord: m.kind.ord(),
                 open: format!("#link(\"{}\")[", escape_string(url)),
             }),
-            // An anchor is identity, not formatting; an unknown mark has no
-            // Typst spelling. Neither contributes a wrap. `MarkKind` is open
-            // (`#[non_exhaustive]`), so a kind this build lacks contributes none
-            // either, matching `wrap_open`'s own fallthrough.
-            MarkKind::Anchor { .. } | MarkKind::Unknown { .. } => {}
+            // `Anchor` is identity, not formatting; `Unknown` has no Typst
+            // spelling; and `MarkKind` being `#[non_exhaustive]`, neither does a
+            // kind added after this build. None contributes a wrap, matching
+            // `wrap_open`'s own fallthrough.
             _ => {}
         }
     }

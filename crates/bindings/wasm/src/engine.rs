@@ -285,8 +285,10 @@ export interface ImageProps {
  * `isImageIsland` guards (from `@quillmark/wasm/runtime`), which narrow it. */
 export type ContentIsland = {
     id: string;
-    /** How faithfully the markdown projection can carry this island. */
-    loss: "lossless" | "degraded" | "unrepresentable";
+    /** How faithfully the markdown projection can carry this island. Open like
+     * `type`: a class this build does not know round-trips verbatim, and reads
+     * as `unrepresentable`. */
+    loss: "lossless" | "degraded" | "unrepresentable" | (string & {});
 } & (
     | { type: "table"; props: TableProps }
     | { type: "image"; props: ImageProps }

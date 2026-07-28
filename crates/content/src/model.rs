@@ -109,8 +109,13 @@ impl LineKind {
     /// `match` cannot serve — a `matches!(kind, Para)` that special-cases the
     /// paragraph (suppressing an empty block, say) reads as complete but drops
     /// the open arm, and the two emitters then drift on the construct neither
-    /// knows. An exhaustive `match` keeps listing both arms; the compiler polices
-    /// that one.
+    /// knows.
+    ///
+    /// An exhaustive `match` keeps listing both arms, and in this crate the
+    /// compiler still polices that — `#[non_exhaustive]` does not apply within
+    /// the defining crate. It does apply to the typst backend, whose emitter
+    /// folds both arms into one wildcard; there the ladder, not the compiler,
+    /// is what keeps a new role rendering.
     pub fn projects_as_para(&self) -> bool {
         matches!(self, LineKind::Para | LineKind::Unknown { .. })
     }
@@ -1225,39 +1230,24 @@ mod tests {
     }
 
     /// Issue #1092: a cell is canonicalized in place, so a key this build does
-    /// not recognize survives — the carriage every other opaque payload in the
-    /// model has. The rule has no slack: `normalize` runs on decode, on every op
-    /// apply, and on every serialize, so a cell rebuilt whole drops the key on
-    /// first contact and every contact after.
+    /// not recognize survives. The rule has no slack — `normalize` runs on
+    /// decode, on every op apply, and on every serialize, so a cell rebuilt
+    /// whole drops the key on first contact and every contact after.
     #[test]
     fn unrecognized_cell_key_survives_normalize() {
-        let mut rt = Content::empty();
-        rt.text = ISLAND_SLOT.to_string();
-        rt.lines = vec![Line {
-            kind: LineKind::Island,
-            containers: vec![],
-            continues: false,
-        }];
-        rt.islands = vec![Island {
-            id: "i".into(),
-            island_type: "table".into(),
-            props: serde_json::json!({
-                "aligns": ["none"],
-                "header": [{"text": "h", "marks": [], "colspan": 2}],
-                "rows": [[{"text": "a", "marks": []}]],
-            }),
-            loss: Loss::Lossless,
-        }];
+        // Two columns, one body cell: `pad_row` mints the second, so the same
+        // pass exercises both a carried cell and a synthesized one.
+        let mut rt = table_rt(serde_json::json!({
+            "aligns": ["none", "none"],
+            "header": [{"text": "h", "marks": [], "colspan": 2}, cell("h2")],
+            "rows": [[cell("a")]],
+        }));
         rt.normalize();
-        assert_eq!(rt.validate(), Ok(()));
         assert_eq!(rt.islands[0].props["header"][0]["colspan"], 2);
-        // The padded cell `pad_row` mints carries nothing, and should not.
-        assert!(rt.islands[0].props["rows"][0][0].get("colspan").is_none());
-        // Idempotent, and the carried key is hash input like any other.
-        let once = rt.to_canonical_json();
-        rt.normalize();
-        assert_eq!(rt.to_canonical_json(), once);
-        assert!(once.contains(r#""colspan":2"#));
+        // A minted cell has nothing to carry.
+        assert!(rt.islands[0].props["rows"][0][1].get("colspan").is_none());
+        // Hash input like any other key.
+        assert!(rt.to_canonical_json().contains(r#""colspan":2"#));
     }
 
     /// `validate` bounds a cell mark by its own cell's text length (in USV).

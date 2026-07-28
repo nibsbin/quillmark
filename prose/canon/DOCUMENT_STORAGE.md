@@ -160,13 +160,23 @@ mark axis' terms, not one step behind it, and `loss` carries its raw tag rather
 than rewriting it — a reader that merely opens a document must not move its
 content hash (§ Byte-stability).
 
-Openness is a property of the *payload carriers*, not only the discriminators.
-Every opaque bag round-trips untouched through normalization — unknown `attrs`
-on all three block axes, island `props`, a table island's own top-level props,
-and a table **cell's** unrecognized keys. The cell is the sub-structure the
-`table` type is likeliest to grow (`colspan`, `rowspan`, a per-cell style
-handle), so canonicalization rewrites a cell's `text` and `marks` in place
-rather than minting a fresh `{text, marks}` object.
+Unknown *keys* survive in designated carriers only, and the boundary is worth
+stating because it is not the discriminator boundary:
+
+- **Opaque carriers keep what they hold.** Unknown `attrs` on all three block
+  axes, island `props`, a table island's top-level props, and a table **cell's**
+  own keys all round-trip untouched.
+- **Envelopes drop what they do not name, by design.** An island, line, mark, or
+  container object is decoded into a struct and re-minted from its fields, so an
+  unrecognized sibling key beside `id`/`kind`/`start` does not survive. Growing
+  those shapes is a schema event; that is what the envelope's version-and-reject
+  discipline is for.
+
+A table cell sits on the first side because it never became a struct, and it
+earns the place: cells are where the `table` type is likeliest to grow
+(`colspan`, `rowspan`, a per-cell style handle). Canonicalization therefore
+rewrites a cell's `text` and `marks` in place rather than minting a fresh
+`{text, marks}` object.
 
 Two rules bound the openness:
 
