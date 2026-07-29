@@ -208,21 +208,46 @@ job in PR CI closes it.
 
 ## Issue index
 
-Every finding above is filed. #1099 first — it is the only one that cannot be
-fixed after the tag.
+| Issue | Covers | State |
+|---|---|---|
+| #1099 | B2 — `serde-saphyr` in the public API | done — owned `YamlError` |
+| #1100 | B1 — `#[non_exhaustive]` | enums done; four structs need constructors |
+| #1101 | S3 — the unbudgeted YAML entry point | done |
+| #1102 | S4 — stderr warnings | done |
+| #1103 | S1, S2 — internal seams and the `Backend` seal | seams hidden; seal is a decision |
+| #1104 | S5 — fuzz coverage on the decode lanes | done |
+| #1105 | B3, B4 — stability policy and MSRV | MSRV done; policy is a decision |
+| #1106 | S6, S9 — license text and publish verification | done |
+| #1107 | S7, S8 — CI matrix, advisory scanning, `SECURITY.md` | done |
+| #1108 | render timeout, cancellation, and the trust boundary | trust model written; the bound is a decision |
 
-| Issue | Covers |
-|---|---|
-| #1099 | B2 — `serde-saphyr` in the public API |
-| #1100 | B1 — `#[non_exhaustive]` |
-| #1101 | S3 — the unbudgeted YAML entry point |
-| #1102 | S4 — stderr warnings |
-| #1103 | S1, S2 — internal seams and the `Backend` seal |
-| #1104 | S5 — fuzz coverage on the decode lanes |
-| #1105 | B3, B4 — stability policy and MSRV |
-| #1106 | S6, S9 — license text and publish verification |
-| #1107 | S7, S8 — CI matrix, advisory scanning, `SECURITY.md` |
-| #1108 | render timeout, cancellation, and the trust boundary |
+Four things are left, and each is a call rather than a task:
+
+1. **Does `Backend` seal, or does `SessionHandle` get promoted?** (#1103) The
+   trait's rustdoc now states the current reality; which way it resolves changes
+   whether third-party backends are a supported surface at 1.0.0.
+2. **What does `1.0.0` cover, per surface?** (#1105) Three registries and two
+   wire formats ship under one version number, and `StoredDocument` already
+   versions itself separately.
+3. **Do `Artifact` / `RenderedRegion` / `ContentHit` / `ChangeSet` get
+   constructors, and `RenderOptions` a builder?** (#1100) Each is constructed
+   across a crate boundary today, so `#[non_exhaustive]` needs the constructor
+   first — and for `RenderOptions` the attribute would break the
+   `..Default::default()` idiom every example teaches.
+4. **Is a compile bound owed to server consumers?** (#1108) `SECURITY.md` now
+   states quills are trusted input, which is the answer if nobody renders an
+   untrusted one. A hosted service is the case that makes it wrong.
+
+## What the work turned up
+
+- `spin v0.9.8` is **yanked** in `Cargo.lock` (surfaced by `cargo package`).
+  The new `audit` job will flag it; it is a transitive dep, so the fix is a bump
+  upstream or a lockfile nudge.
+- `cargo package --workspace` also packages the four `publish = false` crates,
+  and `quillmark-wasm`'s deliberately version-less path dep makes it refuse —
+  the packaging job excludes them.
+- `rust-version` in `[workspace.package]` is inert without
+  `rust-version.workspace = true` in each crate manifest.
 
 ## Suggested order
 
