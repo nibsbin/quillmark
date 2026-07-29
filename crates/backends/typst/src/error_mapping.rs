@@ -32,15 +32,11 @@ fn map_single_diagnostic(error: &SourceDiagnostic, world: &QuillWorld) -> Diagno
         error.message.split(':').next().unwrap_or("error").trim()
     ));
 
-    Diagnostic {
-        severity,
-        code,
-        message: error.message.to_string(),
-        location,
-        path: None,
-        hint,
-        source_chain: Vec::new(),
-    }
+    let mut diag = Diagnostic::new(severity, error.message.to_string());
+    diag.code = code;
+    diag.location = location;
+    diag.hint = hint;
+    diag
 }
 
 fn resolve_span_to_location(span: typst::syntax::DiagSpan, world: &QuillWorld) -> Option<Location> {

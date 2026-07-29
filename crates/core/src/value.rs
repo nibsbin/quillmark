@@ -51,6 +51,7 @@ enum Kind {
 /// This is the canonical path-segment type for the whole crate; the document
 /// layer aliases it as `CommentPathSegment` for nested-comment paths.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum PathSegment {
     Key(String),
     Index(usize),

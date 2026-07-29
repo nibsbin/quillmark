@@ -90,6 +90,15 @@ pub struct FieldSpec {
 /// A field's definition — never a runtime value (that rides in
 /// [`FieldSpec::value`]). `form.json` reuses this directly with no parallel
 /// enum.
+///
+/// **Deliberately exhaustive**, unlike the other public enums here. Two
+/// out-of-crate sites dispatch over the whole set — `pdfform`'s value resolver
+/// and its content-stream flattener — and a variant they do not handle draws
+/// nothing on the page with no error at all. The compile error is the guardrail;
+/// `#[non_exhaustive]` would force a `_` arm at both and trade it for silence.
+///
+/// The cost is that adding a widget type is semver-major. That is paid
+/// knowingly: the set tracks AcroForm's own widget kinds, which do not move.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FieldType {
     /// A text field; `multiline` is the single retained text trait.

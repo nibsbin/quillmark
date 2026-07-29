@@ -244,6 +244,7 @@ impl CardSchema {
 /// the sibling `inline:` key (folded into `FieldType::RichText { inline }`), not
 /// in the `type:` token.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum FieldType {
     String,
     /// Integers and decimals

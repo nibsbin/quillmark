@@ -103,6 +103,7 @@ pub struct Rect {
 /// such tag — their kind is derived from the schema.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum WidgetKind {
     Text {
         #[serde(default)]
@@ -117,6 +118,7 @@ pub enum WidgetKind {
 
 /// Why a `form.json` failed to parse.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum FormParseError {
     /// The bytes were not valid JSON, or did not match the schema.
     Json(serde_json::Error),

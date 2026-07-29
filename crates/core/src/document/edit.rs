@@ -54,6 +54,7 @@ pub fn is_valid_field_name(name: &str) -> bool {
 
 /// Errors returned by document and card mutators.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
+#[non_exhaustive]
 pub enum EditError {
     #[error("invalid field name '{0}': must match [A-Za-z_][A-Za-z0-9_]*")]
     InvalidFieldName(String),
@@ -217,6 +218,7 @@ impl EditError {
 /// depth limit — is enforced once, here, and a constructed `Document` can
 /// never violate it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FieldViolation {
     /// The field name does not match `[A-Za-z_][A-Za-z0-9_]*` (spec §3.4 / §10).
     InvalidName,

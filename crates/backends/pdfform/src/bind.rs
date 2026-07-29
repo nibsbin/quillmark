@@ -43,6 +43,7 @@ pub struct BoundWidget {
 /// point of binding at load is to turn what was a silently-blank (or misplaced)
 /// widget into a diagnostic.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum BindError {
     /// A `schema_field` path does not resolve: a missing root, or a `.segment`
     /// that descends into the wrong shape or a nonexistent key. Names the failing
@@ -311,6 +312,12 @@ pub fn project_kind(
             _ => return Err(unbindable()),
         },
         SchemaType::Object => return Err(unbindable()),
+        // `SchemaType` is `#[non_exhaustive]` — the schema vocabulary grows, and
+        // a quill author does not control which pdfform build reads their quill.
+        // A type this build has no widget shape for is precisely `unbindable`,
+        // the same answer `Object` gets; reporting that beats failing to compile
+        // in a crate the author never touches.
+        _ => return Err(unbindable()),
     })
 }
 

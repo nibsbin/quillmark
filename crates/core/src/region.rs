@@ -305,6 +305,7 @@ pub fn doc_path_to_plate_addr(path: &DocPath, card_kinds: &[Option<&str>]) -> Op
 /// degrades to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub enum HitGranularity {
     /// Cluster-exact: `pos` is the first content char of the grapheme cluster
     /// under the point. The finest resolution — a char that escaped to several

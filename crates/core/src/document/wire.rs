@@ -37,6 +37,7 @@ use quillmark_content::Content;
 /// The `$` system entries are hoisted onto [`CardWire`] itself, never here.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum PayloadItemWire {
     /// A user-defined field.
     Field {
@@ -71,6 +72,7 @@ pub enum PayloadItemWire {
 /// is a plain JS array like `["addr", "street"]` or `["recipients", 0, "name"]`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
+#[non_exhaustive]
 pub enum PathStepWire {
     Index(usize),
     Key(String),
@@ -139,6 +141,7 @@ pub struct CardWire {
 
 /// Failure converting a [`CardWire`] back into a [`Card`].
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum WireError {
     /// The `quill` string is not a valid `name@version` reference.
     InvalidQuillReference { value: String, reason: String },

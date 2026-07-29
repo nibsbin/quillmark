@@ -37,6 +37,11 @@ impl From<quillmark_core::OutputFormat> for OutputFormat {
             quillmark_core::OutputFormat::Pdf => OutputFormat::Pdf,
             quillmark_core::OutputFormat::Svg => OutputFormat::Svg,
             quillmark_core::OutputFormat::Png => OutputFormat::Png,
+            // `OutputFormat` is `#[non_exhaustive]`. A format added to core
+            // after this build has no TS member to name; PDF is the engine's
+            // own default and the only honest fallback from an infallible
+            // `From`. Adding the member here is the real fix.
+            _ => OutputFormat::Pdf,
         }
     }
 }
@@ -137,15 +142,13 @@ impl From<quillmark_core::Diagnostic> for Diagnostic {
 
 impl From<Diagnostic> for quillmark_core::Diagnostic {
     fn from(diag: Diagnostic) -> Self {
-        quillmark_core::Diagnostic {
-            severity: diag.severity.into(),
-            code: diag.code,
-            message: diag.message,
-            location: diag.location.map(Into::into),
-            path: diag.path,
-            hint: diag.hint,
-            source_chain: diag.source_chain,
-        }
+        let mut out = quillmark_core::Diagnostic::new(diag.severity.into(), diag.message);
+        out.code = diag.code;
+        out.location = diag.location.map(Into::into);
+        out.path = diag.path;
+        out.hint = diag.hint;
+        out.source_chain = diag.source_chain;
+        out
     }
 }
 
@@ -295,6 +298,11 @@ impl From<quillmark_core::HitGranularity> for HitGranularity {
         match g {
             quillmark_core::HitGranularity::Cluster => HitGranularity::Cluster,
             quillmark_core::HitGranularity::Segment => HitGranularity::Segment,
+            // `HitGranularity` is `#[non_exhaustive]`. A granularity finer than
+            // `Segment` still describes at least a segment, so degrading to it
+            // keeps the reported precision a lower bound — never a claim of more
+            // exactness than the hit actually carried.
+            _ => HitGranularity::Segment,
         }
     }
 }

@@ -172,5 +172,17 @@ pub(crate) fn render_document_pages(
                 OutputFormat::Pdf,
             ))
         }
+        // `OutputFormat` is `#[non_exhaustive]`, and this backend answers for
+        // the three it declares in `SUPPORTED_FORMATS`. `TypstSession::render`
+        // rejects anything outside that list before reaching here, so this arm
+        // is unreachable through the public path — it restates the same refusal
+        // rather than trusting that to stay true.
+        other => Err(RenderError::from_diag(
+            Diagnostic::new(
+                Severity::Error,
+                format!("{other:?} not supported by typst backend"),
+            )
+            .with_code("backend::format_not_supported".to_string()),
+        )),
     }
 }

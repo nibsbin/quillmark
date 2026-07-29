@@ -2,6 +2,7 @@
 
 /// Output formats supported by backends.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[non_exhaustive]
 pub enum OutputFormat {
     /// Scalable Vector Graphics output
     Svg,
@@ -14,7 +15,12 @@ pub enum OutputFormat {
 impl OutputFormat {
     /// Every output format, in a stable order. Bindings enumerate this for
     /// choice lists and error messages instead of hand-listing the variants.
-    pub const ALL: [OutputFormat; 3] = [OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Png];
+    ///
+    /// A slice, not an array: an array's length is part of its type, so a
+    /// fourth format would break every caller that names this constant's type
+    /// even though [`OutputFormat`] itself is `#[non_exhaustive]`.
+    pub const ALL: &'static [OutputFormat] =
+        &[OutputFormat::Pdf, OutputFormat::Svg, OutputFormat::Png];
 
     /// The lowercase string id (`"pdf"`, `"svg"`, `"png"`). This is the
     /// single source of truth for the format ↔ string mapping every binding and
@@ -82,7 +88,7 @@ mod tests {
 
     #[test]
     fn output_format_str_round_trips() {
-        for fmt in OutputFormat::ALL {
+        for &fmt in OutputFormat::ALL {
             assert_eq!(OutputFormat::from_str(fmt.as_str()), Ok(fmt));
             // Display matches as_str, and parsing is case-insensitive.
             assert_eq!(fmt.to_string(), fmt.as_str());
@@ -98,7 +104,7 @@ mod tests {
         let err = OutputFormat::from_str("docx").unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("docx"), "{msg}");
-        for fmt in OutputFormat::ALL {
+        for &fmt in OutputFormat::ALL {
             assert!(
                 msg.contains(fmt.as_str()),
                 "choices missing {}: {msg}",
@@ -118,6 +124,14 @@ pub struct Artifact {
 }
 
 /// Internal rendering options.
+///
+/// **Deliberately not `#[non_exhaustive]`.** The attribute forbids *every*
+/// struct expression out of crate, functional update included — so
+/// `RenderOptions { output_format: …, ..Default::default() }`, the idiom the
+/// README and every example teach, would stop compiling for all consumers.
+/// Construct it that way and a new field costs nothing; a caller that lists all
+/// fields instead is the one this crate cannot grow under. Closing that gap
+/// takes a builder, not the attribute.
 #[derive(Debug, Clone, Default)]
 pub struct RenderOptions {
     /// Optional output format specification

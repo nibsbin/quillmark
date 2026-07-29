@@ -91,6 +91,7 @@ impl Ord for Version {
 
 /// Specifies which version of a Quill template to use.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum VersionSelector {
     /// Match exactly this version (e.g., "@2.1.0")
     Exact(Version),

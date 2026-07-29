@@ -126,6 +126,11 @@ impl std::error::Error for YamlError {}
 /// stage that emits it, `Warning` never does. There is no lint-level
 /// configuration and no warning-to-error promotion; an informational aside is
 /// a [`Diagnostic::hint`], not a severity.
+///
+/// **Deliberately exhaustive.** "Nothing else" is the contract, so a consumer
+/// matching both arms is matching the whole world and should not be made to
+/// write an unreachable `_`. A third level would be a redesign, and semver-major
+/// is the honest price of one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
@@ -154,6 +159,7 @@ pub struct Location {
 /// every binding boundary.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct Diagnostic {
     pub severity: Severity,
     /// Optional error code (e.g., "E001", "typst::syntax")
@@ -264,6 +270,7 @@ impl std::fmt::Display for Diagnostic {
 }
 
 #[derive(thiserror::Error, Debug)]
+#[non_exhaustive]
 pub enum ParseError {
     #[error("Input too large: {size} bytes (max: {max} bytes)")]
     InputTooLarge { size: usize, max: usize },
@@ -439,6 +446,7 @@ impl From<ParseError> for RenderError {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct RenderResult {
     pub artifacts: Vec<crate::Artifact>,
     pub warnings: Vec<Diagnostic>,

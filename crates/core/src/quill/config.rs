@@ -102,6 +102,7 @@ enum ShapePosition {
 }
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CoercionError {
     #[error("cannot coerce `{value}` to type `{target}` at `{path}`: {reason}")]
     Uncoercible {

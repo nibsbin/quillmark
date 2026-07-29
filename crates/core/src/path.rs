@@ -52,6 +52,7 @@ use std::str::FromStr;
 /// the editor a structured array it routes on, never a string it splits.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "seg", rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum DocSeg {
     /// The main-card root — heads every main-card address (`main.title`,
     /// `main.body`).
