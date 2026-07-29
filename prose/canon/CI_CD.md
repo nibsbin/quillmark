@@ -13,19 +13,21 @@ Published crates, in dependency order: `quillmark-content`, `quillmark-core`, `q
 ## 1) CI (`ci.yml`)
 
 **Trigger**: pull requests and pushes to any ref except version tags (`tags-ignore: v**`).
-**Jobs** (all Linux, parallel):
+**Jobs** (parallel; Linux except `test`, which runs the OS matrix):
 
 | Job | What it does |
 |-----|-------------|
 | `lint` | `node scripts/check-canon.mjs` (the canon spine and link gate — see [prose/README.md](../README.md)), then `cargo doc --no-deps --locked` with `RUSTDOCFLAGS=-Dwarnings` — the standing lint gate; clippy is deliberately not gated |
-| `test` | `cargo test --workspace --all-features --locked`, then `cargo test -p quillmark --no-default-features --locked` — `--all-features` forces `typst` on, so the zero-backend branch compiles only in the second run (the native counterpart of the `wasm` job's `core` variant) |
+| `test` | `cargo test --workspace --all-features --locked`, then `cargo test -p quillmark --no-default-features --locked` — `--all-features` forces `typst` on, so the zero-backend branch compiles only in the second run (the native counterpart of the `wasm` job's `core` variant). Runs on `ubuntu-latest`, `macos-latest`, and `windows-latest` (`fail-fast: false`): the CLI and the wheels ship to all three, and tree paths are `/`-joined while lookups resolve through `Path::components()` — the matrix is what keeps that true rather than assumed |
+| `package` | `cargo package --workspace --locked`, then asserts every resulting `.crate` contains a `LICENSE`. `release.yml` publishes with `--no-verify`, so this is the only place a crate is built from its own archive — and a crates.io version cannot be replaced, so an `include` gap is fixable only before the tag |
+| `audit` | `rustsec/audit-check` over the lockfile's 400+ resolved packages |
 | `release-tooling` | asserts `scripts/strip-seed-comment.sh` both strips a seed block and collapses the surrounding blanks to one, and no-ops on a file without one. `release.yml` runs that script unattended against `CHANGELOG.md` between the version bump and the tag, so a regression corrupts a release commit |
 | `wasm` | first asserts the no-default-features core graph excludes Typst (`cargo tree -i quillmark-typst` must fail), then builds via `./scripts/build-wasm.sh --ci`, then `npx vitest run` |
 | `python` | `maturin develop` into a `uv` venv (Python 3.12, debug profile), then `pytest -q` |
 
 The `wasm` job caches `target/wasm32-unknown-unknown/wasm-ci` under key `wasm-ci-${os}-${hashFiles('Cargo.lock')}` (restore-prefix `wasm-ci-${os}-`), so a lockfile change takes a fresh key while source-only edits restore the prefix and rebuild incrementally. The `wasm-ci-` namespace is deliberately disjoint from `release.yml`'s `wasm-release-` cache so a CI build (debug `wasm-ci` profile) can never be restored into a release job and published to npm.
 
-Excluded: multi-OS matrix, MSRV, security scanners, coverage, benchmarks.
+Excluded: MSRV, coverage, benchmarks. Dependency bumps arrive by dependabot (`.github/dependabot.yml`) — cargo, the wasm binding's npm tree, and the actions themselves, grouped weekly so a routine week is one PR per ecosystem; security updates come ungrouped.
 
 ---
 

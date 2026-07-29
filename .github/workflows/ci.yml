@@ -61,7 +61,15 @@ jobs:
         run: cargo doc --no-deps --locked -p quillmark-wasm
 
   test:
-    runs-on: ubuntu-latest
+    # The CLI ships to crates.io, the wheels to PyPI, and the libraries to
+    # anyone's platform, so the suite runs where consumers run. Tree paths are
+    # `/`-joined and lookups resolve via `Path::components()`, which accepts
+    # either separator — this is what keeps that true.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -81,6 +89,53 @@ jobs:
       # build-wasm.sh + core.test.js; this is the native equivalent.
       - name: Tests (zero-backend configuration)
         run: cargo test -p quillmark --no-default-features --locked
+
+  # release.yml publishes with `--no-verify`, which skips building each crate
+  # from its own `.crate` archive. That check has to happen somewhere it can
+  # still change the outcome: a crates.io version cannot be replaced, so a file
+  # the build needs but `include` omits is only fixable before the tag.
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      # Builds every publishable crate from its packaged archive — the step
+      # `cargo publish --no-verify` drops.
+      - name: Package all publishable crates
+        run: cargo package --workspace --locked
+
+      # `include` lists `LICENSE*`, which resolves against the package
+      # directory, not the workspace root; each published crate carries a
+      # symlink so the Apache-2.0 text actually ships (Apache-2.0 §4(a)).
+      - name: Every published crate ships its license text
+        run: |
+          status=0
+          for crate in target/package/*.crate; do
+            if ! tar tzf "$crate" | grep -qE '/LICENSE$'; then
+              echo "::error::$(basename "$crate") ships no LICENSE"
+              status=1
+            fi
+          done
+          exit $status
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cargo.lock resolves 400+ packages, including the Typst toolchain and a
+      # hand-rolled PDF reader/writer. Advisories against any of them were
+      # previously noticed only by looking.
+      - name: Audit dependencies against RUSTSEC
+        uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   release-tooling:
     runs-on: ubuntu-latest
