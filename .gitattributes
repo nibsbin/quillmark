@@ -1,0 +1,12 @@
+# Fixture quills are engine input and golden output, compared byte-for-byte by
+# the snapshot tests. A CRLF checkout (git-for-windows defaults autocrlf on)
+# rewrites both sides asymmetrically — the golden file gains \r\n, the
+# serialiser still emits \n — so the tree is pinned to LF everywhere instead.
+* text=auto eol=lf
+
+# Vendored upstream assets, byte-identical to what their projects ship.
+*.ttf binary
+*.otf binary
+*.png binary
+*.pdf binary
+crates/fixtures/resources/quills/cmu_letter/0.1.0/packages/tonguetoquill-cmu-letter/fonts/OFL.txt -text
