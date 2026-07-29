@@ -22,9 +22,24 @@
 //! `crate::reader`'s docs for the input contract the base PDF must satisfy.
 
 mod error;
+/// Byte-level reads over an existing PDF — object lookup, dictionary splicing,
+/// incremental-update parsing.
+///
+/// **Workspace-internal; not covered by this crate's semver.** `pub` only so
+/// `quillmark-pdfform` can reach it across the crate boundary; every signature
+/// here is dictated by the current stamping implementation, not by a contract.
+/// The supported surface is [`stamp`], [`regions_of`], [`page_media_boxes`],
+/// [`PdfUpdate`], and the types they name.
+#[doc(hidden)]
 pub mod reader;
 mod stamp;
 mod update;
+/// Byte-level writes — object emission, id allocation, string escaping and
+/// WinAnsi encoding.
+///
+/// **Workspace-internal; not covered by this crate's semver.** See
+/// [`reader`]'s note.
+#[doc(hidden)]
 pub mod writer;
 
 pub use error::PdfError;

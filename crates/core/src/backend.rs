@@ -5,6 +5,18 @@ use crate::quill::Quill;
 use crate::{LiveSession, OutputFormat};
 
 /// Backend trait for rendering different output formats.
+///
+/// # Implementing this outside the workspace
+///
+/// Not supported today, and the shape of the trait is why: [`Backend::open`]
+/// returns a [`LiveSession`], which is built from a `SessionHandle`
+/// implementation through `LiveSession::new` — and both of those are
+/// `#[doc(hidden)]`. An out-of-workspace backend would be writing against items
+/// this crate does not document or hold stable, so `quillmark-typst` and
+/// `quillmark-pdfform` are the two implementations that exist.
+///
+/// A registry that takes `Box<dyn Backend>` still accepts one — nothing enforces
+/// the restriction — but the seam behind it moves without notice.
 pub trait Backend: Send + Sync + std::fmt::Debug {
     /// Get the backend identifier (e.g., "typst", "latex").
     fn id(&self) -> &'static str;

@@ -21,6 +21,11 @@ mod compile;
 /// [`Content`](quillmark_content::Content) and knows the resulting byte
 /// layout, so the only place a source map can be produced. This is the sole
 /// markup-producing path in the render engine — no code parses markdown.
+///
+/// **Workspace-internal; not covered by this crate's semver.** `pub` only so
+/// `quillmark-fuzz` can drive the escapers and the lowering directly. The
+/// supported surface of this crate is [`TypstBackend`].
+#[doc(hidden)]
 pub mod emit;
 mod error_mapping;
 
