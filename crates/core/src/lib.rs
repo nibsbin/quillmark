@@ -37,7 +37,7 @@ pub mod reader;
 pub use reader::{CardReader, ReadValue, TypedReader};
 
 pub mod backend;
-pub use backend::{formats_support_canvas, Backend};
+pub use backend::{formats_support_canvas, unsupported_format, Backend};
 
 pub mod error;
 pub use error::{

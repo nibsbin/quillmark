@@ -52,18 +52,21 @@ pub const MAX_FIELD_COUNT: usize = 1000;
 /// failure — always absent on the emit side, which has no input to point at.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct YamlError {
-    /// The engine's explanation, already rendered.
     message: String,
-    /// 1-indexed line, when the failure has a located source position.
+    hint: Option<String>,
     line: Option<u32>,
-    /// 1-indexed column, paired with [`Self::line`].
     column: Option<u32>,
 }
 
 impl YamlError {
-    /// The engine's explanation.
+    /// What went wrong, in YAML terms.
     pub fn message(&self) -> &str {
         &self.message
+    }
+
+    /// The concrete textual fix, when the failure is one this crate recognizes.
+    pub fn hint(&self) -> Option<&str> {
+        self.hint.as_deref()
     }
 
     /// 1-indexed line of the failure, when the engine located one.
@@ -76,35 +79,48 @@ impl YamlError {
         self.column
     }
 
-    /// A diagnostic under `yaml::parse_error`, carrying the position as a
-    /// [`Location`] against `file` when the engine supplied one.
-    pub fn to_diagnostic(&self, file: &str) -> Diagnostic {
-        let diag = Diagnostic::new(Severity::Error, self.message.clone())
-            .with_code("yaml::parse_error".to_string());
-        match (self.line, self.column) {
-            (Some(line), Some(column)) => diag.with_location(Location {
+    /// A diagnostic under `code`, carrying the hint and — when the engine
+    /// located the failure — a [`Location`] against `file`.
+    pub fn to_diagnostic(&self, code: &str, file: &str) -> Diagnostic {
+        let mut diag = Diagnostic::new(Severity::Error, self.message.clone())
+            .with_code(code.to_string());
+        if let (Some(line), Some(column)) = (self.line, self.column) {
+            diag = diag.with_location(Location {
                 file: file.to_string(),
                 line,
                 column,
-            }),
-            _ => diag,
+            });
+        }
+        match &self.hint {
+            Some(h) => diag.with_hint(h.clone()),
+            None => diag,
         }
     }
 
-    pub(crate) fn from_de(err: serde_saphyr::Error) -> Self {
+    /// `yaml` is the text that failed to parse — the hint derivation inspects
+    /// it to name the offending construct.
+    pub(crate) fn from_de(err: serde_saphyr::Error, yaml: &str) -> Self {
+        // The engine appends its own Rust API names to some messages
+        // (`from_multiple`, `DuplicateKeyPolicy`); the enricher strips them, so
+        // "no public signature names the engine" holds for the message too, not
+        // just the type.
+        let enriched = crate::document::yaml_hints::enrich_yaml_error(&err.to_string(), yaml);
         // `Location`'s accessors widen to u64; the fields behind them are u32,
-        // so the narrowing is lossless and `try_into` cannot fail.
+        // so the narrowing is lossless.
         let loc = err.location();
         Self {
-            message: err.to_string(),
+            message: enriched.message,
+            hint: enriched.hint,
             line: loc.and_then(|l| u32::try_from(l.line()).ok()),
             column: loc.and_then(|l| u32::try_from(l.column()).ok()),
         }
     }
 
+    /// Emission has no input to point at, so no position and no hint.
     pub(crate) fn from_ser(err: serde_saphyr::ser::Error) -> Self {
         Self {
             message: err.to_string(),
+            hint: None,
             line: None,
             column: None,
         }
@@ -113,10 +129,10 @@ impl YamlError {
 
 impl std::fmt::Display for YamlError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match (self.line, self.column) {
-            (Some(line), Some(column)) => write!(f, "{} at line {line}, column {column}", self.message),
-            _ => f.write_str(&self.message),
-        }
+        // The message already opens with the position and carries the engine's
+        // caret diagram; [`Self::line`]/[`Self::column`] are the structured
+        // reading of the same fact, not a second one to append.
+        f.write_str(&self.message)
     }
 }
 

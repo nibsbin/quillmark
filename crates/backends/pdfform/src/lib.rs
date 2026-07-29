@@ -152,13 +152,10 @@ impl SessionHandle for PdfformSession {
     fn render(&self, opts: &RenderOptions) -> Result<RenderResult, RenderError> {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
         if !SUPPORTED_FORMATS.contains(&format) {
-            return Err(RenderError::from_diag(
-                Diagnostic::new(
-                    Severity::Error,
-                    format!("{format:?} not supported by the pdfform backend"),
-                )
-                .with_code("backend::format_not_supported".to_string())
-                .with_hint(format!("Supported formats: {SUPPORTED_FORMATS:?}")),
+            return Err(quillmark_core::unsupported_format(
+                format,
+                "pdfform",
+                SUPPORTED_FORMATS,
             ));
         }
 

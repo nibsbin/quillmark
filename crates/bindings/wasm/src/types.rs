@@ -37,10 +37,10 @@ impl From<quillmark_core::OutputFormat> for OutputFormat {
             quillmark_core::OutputFormat::Pdf => OutputFormat::Pdf,
             quillmark_core::OutputFormat::Svg => OutputFormat::Svg,
             quillmark_core::OutputFormat::Png => OutputFormat::Png,
-            // `OutputFormat` is `#[non_exhaustive]`. A format added to core
-            // after this build has no TS member to name; PDF is the engine's
-            // own default and the only honest fallback from an infallible
-            // `From`. Adding the member here is the real fix.
+            // Forced by `#[non_exhaustive]`, unreachable in practice: this
+            // crate is `publish = false` and path-deps the core beside it, so
+            // the two variant lists ship together. A format added to core needs
+            // a member here.
             _ => OutputFormat::Pdf,
         }
     }

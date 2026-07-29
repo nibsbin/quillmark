@@ -1057,12 +1057,13 @@ impl Document {
                     Some(quillmark_core::ReadValue::Value(v)) => {
                         serialize_or_throw(v.as_json(), "reader.get")
                     }
-                    // `ReadValue` is `#[non_exhaustive]`: a projection added to
-                    // core after this build has no JS shape here. Throwing beats
-                    // returning `undefined`, which reads as "absent field".
-                    Some(_) => Err(JsValue::from_str(
-                        "reader.get: this build does not know how to project that field's value",
-                    )),
+                    // `ReadValue` is `#[non_exhaustive]`, so this arm is
+                    // forced. Throwing beats returning `undefined`, which reads
+                    // as "absent field".
+                    Some(_) => Err(crate::error::WasmError::from(
+                        "reader.get: this build cannot project that field's value",
+                    )
+                    .to_js_value()),
                 }
             }
         }

@@ -1315,11 +1315,12 @@ impl QuillConfig {
         ) {
             Ok(v) => v,
             Err(e) => {
-                return Err(vec![Diagnostic::new(
-                    Severity::Error,
-                    format!("Failed to parse Quill.yaml: {}", e),
-                )
-                .with_code("quill::yaml_parse_error".to_string())]);
+                // Through `YamlError` so this shares the one saphyr adapter:
+                // the engine's Rust API names stripped, the hint derived, and
+                // the position carried as a `Location` — all of which the
+                // hand-rolled `format!` here discarded.
+                return Err(vec![crate::error::YamlError::from_de(e, yaml_content)
+                    .to_diagnostic("quill::yaml_parse_error", "Quill.yaml")]);
             }
         };
 

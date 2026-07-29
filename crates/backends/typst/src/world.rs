@@ -10,6 +10,21 @@ use typst::{Library, World};
 use crate::helper;
 use quillmark_core::{Diagnostic, Quill, Severity};
 
+/// A file Typst's [`VirtualPath`] would not accept, skipped rather than loaded.
+/// One shape for both populations — an asset and a package file fail this the
+/// same way, and a consumer routing on the code should not have to know which.
+fn skipped_path(path: &Path, err: impl std::fmt::Display) -> Diagnostic {
+    Diagnostic::new(
+        Severity::Warning,
+        format!(
+            "Skipping '{}': its path is not usable by Typst ({err})",
+            path.display()
+        ),
+    )
+    .with_code("typst::path_skipped".to_string())
+    .with_hint("Rename it to a plain relative path.".to_string())
+}
+
 /// Build a [`FileId`] for a virtual path, optionally scoped to a package.
 ///
 /// Typst 0.15 routes file ids through [`RootedPath`]: project-local files use
@@ -35,13 +50,15 @@ pub struct QuillWorld {
     source: Source,
     sources: HashMap<FileId, Source>,
     binaries: HashMap<FileId, Bytes>,
-    /// Non-fatal defects found while loading the quill's assets and packages —
-    /// a file the loader had to skip, a manifest it could not read. Each one
-    /// degrades the compile silently otherwise: a skipped package surfaces as
-    /// an unresolved `#import` pointing at the plate, three files from the
-    /// actual defect. Static for the session's lifetime (the world loads its
-    /// files once), so [`crate::TypstSession`] carries them alongside every
-    /// compile's own warnings rather than re-deriving them per `apply`.
+    /// Non-fatal defects from loading the quill's assets and packages: a file
+    /// the loader had to skip, a manifest it could not read.
+    ///
+    /// Without them each defect degrades the compile unattributably — a skipped
+    /// package surfaces as an unresolved `#import` naming the plate, three files
+    /// from the cause.
+    ///
+    /// Static for the session's lifetime, since the world loads its files once.
+    /// [`crate::TypstSession`] carries them alongside every compile's own.
     load_warnings: Vec<Diagnostic>,
 }
 
@@ -114,7 +131,6 @@ impl QuillWorld {
         })
     }
 
-    /// Non-fatal defects from the quill load (see [`Self::load_warnings`]).
     pub(crate) fn load_warnings(&self) -> &[Diagnostic] {
         &self.load_warnings
     }
@@ -239,21 +255,7 @@ impl QuillWorld {
                 let virtual_path = match VirtualPath::new(asset_path.to_string_lossy().as_ref()) {
                     Ok(vpath) => vpath,
                     Err(e) => {
-                        warnings.push(
-                            Diagnostic::new(
-                                Severity::Warning,
-                                format!(
-                                    "Skipping asset '{}': its path is not usable by Typst ({e})",
-                                    asset_path.display()
-                                ),
-                            )
-                            .with_code("typst::asset_skipped".to_string())
-                            .with_hint(
-                                "The plate cannot reference this file; rename it to a plain \
-                                 relative path."
-                                    .to_string(),
-                            ),
-                        );
+                        warnings.push(skipped_path(&asset_path, e));
                         continue;
                     }
                 };
@@ -319,11 +321,7 @@ impl QuillWorld {
                                      parse ({e})"
                                 ),
                             )
-                            .with_code("typst::package_manifest".to_string())
-                            .with_hint(format!(
-                                "Any `#import` of this package will fail to resolve until \
-                                 packages/{package_name}/typst.toml is valid."
-                            )),
+                            .with_code("typst::package_manifest".to_string()),
                         );
                     }
                 }
@@ -375,17 +373,7 @@ impl QuillWorld {
                 {
                     Ok(vpath) => vpath,
                     Err(e) => {
-                        warnings.push(
-                            Diagnostic::new(
-                                Severity::Warning,
-                                format!(
-                                    "Skipping package file '{}': its path is not usable by Typst \
-                                     ({e})",
-                                    file_path.display()
-                                ),
-                            )
-                            .with_code("typst::package_file_skipped".to_string()),
-                        );
+                        warnings.push(skipped_path(&file_path, e));
                         continue;
                     }
                 };
@@ -423,12 +411,7 @@ impl QuillWorld {
                             spec.name
                         ),
                     )
-                    .with_code("typst::package_entrypoint_missing".to_string())
-                    .with_hint(
-                        "An `#import` of this package resolves to nothing until the entrypoint \
-                         file exists."
-                            .to_string(),
-                    ),
+                    .with_code("typst::package_entrypoint_missing".to_string()),
                 );
             }
         }
@@ -693,8 +676,8 @@ name = "minimal-package"
         );
     }
 
-    /// A package that declares an entrypoint it does not ship: importable in
-    /// name only, and previously silent.
+    /// A package that declares an entrypoint it does not ship is importable in
+    /// name only.
     #[test]
     fn missing_package_entrypoint_warns() {
         let quill = quill_with(&[(

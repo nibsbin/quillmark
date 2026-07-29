@@ -228,7 +228,7 @@ impl QuillValue {
             yaml_str,
             crate::document::limits::yaml_parse_options(),
         )
-        .map_err(crate::error::YamlError::from_de)?;
+        .map_err(|e| crate::error::YamlError::from_de(e, yaml_str))?;
         Ok(Self::from_json(json_val))
     }
 
@@ -471,19 +471,31 @@ mod tests {
     }
 
     #[test]
-    fn yaml_error_locates_a_malformed_document() {
+    fn yaml_error_locates_and_sanitizes() {
         let err = QuillValue::from_yaml_str("a: 1\nb: [unclosed\n")
             .expect_err("malformed YAML must not parse");
-        // The engine locates parse failures; the owned type carries the position
-        // through without naming the engine's own error type.
-        assert!(!err.message().is_empty());
-        if let (Some(line), Some(column)) = (err.line(), err.column()) {
-            let diag = err.to_diagnostic("Quill.yaml");
-            let loc = diag.location.expect("located error carries a Location");
-            assert_eq!((loc.line, loc.column), (line, column));
-            assert_eq!(loc.file, "Quill.yaml");
-            assert_eq!(diag.code.as_deref(), Some("yaml::parse_error"));
-        }
+        let (line, column) = (
+            err.line().expect("the engine locates a parse failure"),
+            err.column().expect("column pairs with line"),
+        );
+        let diag = err.to_diagnostic("quill::yaml_parse_error", "Quill.yaml");
+        let loc = diag.location.expect("a located error carries a Location");
+        assert_eq!((loc.line, loc.column, loc.file.as_str()), (line, column, "Quill.yaml"));
+        assert_eq!(diag.code.as_deref(), Some("quill::yaml_parse_error"));
+    }
+
+    /// The engine appends its own Rust API names to some messages. `YamlError`
+    /// promises the engine is invisible, which has to hold for the text too.
+    #[test]
+    fn yaml_error_strips_the_engine_api_names() {
+        let err = QuillValue::from_yaml_str("a: 1\na: 2\n")
+            .expect_err("a duplicate key must not parse");
+        assert!(
+            !err.message().contains("DuplicateKeyPolicy") && !err.message().contains("Options"),
+            "engine API names reached the message: {}",
+            err.message()
+        );
+        assert!(err.message().contains("duplicate"), "{}", err.message());
     }
 
     #[test]

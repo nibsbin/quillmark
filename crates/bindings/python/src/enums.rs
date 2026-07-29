@@ -69,10 +69,10 @@ impl From<OutputFormat> for PyOutputFormat {
             OutputFormat::Pdf => PyOutputFormat::PDF,
             OutputFormat::Svg => PyOutputFormat::SVG,
             OutputFormat::Png => PyOutputFormat::PNG,
-            // `OutputFormat` is `#[non_exhaustive]`. A format added to core
-            // after this extension was built has no Python member to name; PDF
-            // is the engine's own default and the only honest fallback from an
-            // infallible `From`. Adding the member here is the real fix.
+            // Forced by `#[non_exhaustive]`, unreachable in practice: this
+            // crate is `publish = false` and path-deps the core beside it, so
+            // the two variant lists ship together. A format added to core needs
+            // a member here, and the mapping below is what would notice.
             _ => PyOutputFormat::PDF,
         }
     }

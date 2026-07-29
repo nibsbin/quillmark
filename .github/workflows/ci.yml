@@ -167,8 +167,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # Cargo.lock resolves 400+ packages, including the Typst toolchain and a
-      # hand-rolled PDF reader/writer. Advisories against any of them were
-      # previously noticed only by looking.
+      # hand-rolled PDF reader/writer. Nothing else watches them for advisories.
       - name: Audit dependencies against RUSTSEC
         uses: rustsec/audit-check@v2
         with:

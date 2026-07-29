@@ -125,13 +125,14 @@ pub struct Artifact {
 
 /// Internal rendering options.
 ///
-/// **Deliberately not `#[non_exhaustive]`.** The attribute forbids *every*
-/// struct expression out of crate, functional update included — so
-/// `RenderOptions { output_format: …, ..Default::default() }`, the idiom the
-/// README and every example teach, would stop compiling for all consumers.
-/// Construct it that way and a new field costs nothing; a caller that lists all
-/// fields instead is the one this crate cannot grow under. Closing that gap
-/// takes a builder, not the attribute.
+/// **Deliberately not `#[non_exhaustive]`.** The attribute forbids every
+/// out-of-crate struct expression, functional update included, so
+/// `RenderOptions { output_format: …, ..Default::default() }` — the idiom the
+/// README and every example teach — would stop compiling everywhere.
+///
+/// Built that way, a new field costs a caller nothing. A caller that lists all
+/// fields instead is the one this crate cannot grow under, and closing that
+/// gap takes a builder rather than the attribute.
 #[derive(Debug, Clone, Default)]
 pub struct RenderOptions {
     /// Optional output format specification

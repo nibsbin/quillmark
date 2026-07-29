@@ -311,12 +311,10 @@ pub fn project_kind(
             },
             _ => return Err(unbindable()),
         },
-        SchemaType::Object => return Err(unbindable()),
-        // `SchemaType` is `#[non_exhaustive]` — the schema vocabulary grows, and
-        // a quill author does not control which pdfform build reads their quill.
-        // A type this build has no widget shape for is precisely `unbindable`,
-        // the same answer `Object` gets; reporting that beats failing to compile
-        // in a crate the author never touches.
+        // `Object`, plus — `SchemaType` being `#[non_exhaustive]` — any type
+        // this build has no widget shape for. A quill author does not control
+        // which pdfform build reads their quill, so reporting `unbindable`
+        // beats failing to compile in a crate they never touch.
         _ => return Err(unbindable()),
     })
 }

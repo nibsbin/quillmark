@@ -1239,11 +1239,15 @@ fn read_value_to_py<'py>(
         Some(quillmark_core::ReadValue::Markdown(s))
         | Some(quillmark_core::ReadValue::Plaintext(s)) => Ok(Some(s.into_bound_py_any(py)?)),
         Some(quillmark_core::ReadValue::Value(v)) => Ok(Some(quillvalue_to_py(py, &v)?)),
-        // `ReadValue` is `#[non_exhaustive]`: a projection added to core after
-        // this build has no Python shape here. Raising beats returning `None`,
-        // which reads as "absent field".
-        Some(_) => Err(PyValueError::new_err(
-            "this build does not know how to project that field's value",
+        // `ReadValue` is `#[non_exhaustive]`, so this arm is forced. Raising
+        // beats returning `None`, which reads as "absent field".
+        Some(_) => Err(crate::errors::raise_with_diagnostics(
+            vec![quillmark_core::Diagnostic::new(
+                quillmark_core::Severity::Error,
+                "this build cannot project that field's value".to_string(),
+            )
+            .with_code("edit::unprojectable_value".to_string())],
+            "this build cannot project that field's value".to_string(),
         )),
     }
 }
@@ -1292,13 +1296,18 @@ fn card_to_pydict<'py>(
                 entry.set_item("text", text)?;
                 entry.set_item("inline", *inline)?;
             }
-            // `PayloadItemWire` is `#[non_exhaustive]`: an item kind added to
-            // core after this build has no dict shape here. Raising beats
-            // appending an untyped entry the caller cannot read.
+            // `PayloadItemWire` is `#[non_exhaustive]`, so this arm is forced.
+            // Raising beats appending an untyped entry the caller cannot read.
             _ => {
-                return Err(PyValueError::new_err(
-                    "this build does not know how to project one of the card's payload items",
-                ))
+                let msg = "this build cannot project one of the card's payload items";
+                return Err(crate::errors::raise_with_diagnostics(
+                    vec![quillmark_core::Diagnostic::new(
+                        quillmark_core::Severity::Error,
+                        msg.to_string(),
+                    )
+                    .with_code("edit::unprojectable_payload_item".to_string())],
+                    msg.to_string(),
+                ));
             }
         }
         items.append(entry)?;

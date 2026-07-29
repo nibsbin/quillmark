@@ -8,15 +8,14 @@ use crate::{LiveSession, OutputFormat};
 ///
 /// # Implementing this outside the workspace
 ///
-/// Not supported today, and the shape of the trait is why: [`Backend::open`]
-/// returns a [`LiveSession`], which is built from a `SessionHandle`
-/// implementation through `LiveSession::new` — and both of those are
-/// `#[doc(hidden)]`. An out-of-workspace backend would be writing against items
-/// this crate does not document or hold stable, so `quillmark-typst` and
-/// `quillmark-pdfform` are the two implementations that exist.
+/// Unsupported, and the trait's shape is why. [`Backend::open`] returns a
+/// [`LiveSession`], which only a `SessionHandle` implementation can build,
+/// through `LiveSession::new` — and both of those are `#[doc(hidden)]`, so an
+/// out-of-workspace backend writes against items this crate neither documents
+/// nor holds stable.
 ///
-/// A registry that takes `Box<dyn Backend>` still accepts one — nothing enforces
-/// the restriction — but the seam behind it moves without notice.
+/// Nothing enforces this: a registry taking `Box<dyn Backend>` accepts any
+/// implementation. The seam behind it moves without notice.
 pub trait Backend: Send + Sync + std::fmt::Debug {
     /// Get the backend identifier (e.g., "typst", "latex").
     fn id(&self) -> &'static str;
@@ -54,6 +53,23 @@ pub trait Backend: Send + Sync + std::fmt::Debug {
 /// ([`SessionHandle::page_size_pt`](crate::session::SessionHandle::page_size_pt))
 /// — there is no separately maintained capability flag to drift from the
 /// implementation (a canvas backend pairs `render_rgba` with `page_size_pt`).
+/// The refusal every backend owes a format outside its
+/// [`Backend::supported_formats`], under `backend::format_not_supported` —
+/// the one code a caller matches for this condition, so it is built once here
+/// rather than once per backend.
+///
+/// `backend` names the backend in the message; `supported` becomes the hint.
+pub fn unsupported_format(format: OutputFormat, backend: &str, supported: &[OutputFormat]) -> RenderError {
+    RenderError::from_diag(
+        crate::Diagnostic::new(
+            crate::Severity::Error,
+            format!("{format:?} not supported by the {backend} backend"),
+        )
+        .with_code("backend::format_not_supported".to_string())
+        .with_hint(format!("Supported formats: {supported:?}")),
+    )
+}
+
 pub fn formats_support_canvas(formats: &[OutputFormat]) -> bool {
     formats
         .iter()
