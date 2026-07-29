@@ -82,9 +82,20 @@ struct TypstSession {
     /// Per-page content fingerprints of the live compile; diffed against the
     /// next compile's to produce `ChangeSet::dirty_pages`.
     page_hashes: Vec<u128>,
-    /// Typst's non-fatal warnings for the live compile, swapped with it on
-    /// each committed `apply`.
+    /// The quill's load-time warnings (`QuillWorld::load_warnings`) followed by
+    /// Typst's non-fatal warnings for the live compile. The compile half swaps
+    /// on each committed `apply`; the load half is static — the world loads its
+    /// files once — so it is rebuilt onto the front rather than re-derived.
     compile_warnings: Vec<Diagnostic>,
+}
+
+/// The session's warning list: the world's static load warnings, then this
+/// compile's own. One order, built in one place, so `apply` cannot drop the
+/// load half by swapping only what it recompiled.
+fn session_warnings(world: &world::QuillWorld, compile: Vec<Diagnostic>) -> Vec<Diagnostic> {
+    let mut all = world.load_warnings().to_vec();
+    all.extend(compile);
+    all
 }
 
 /// Per-page fingerprints of *visible* content, diffed across compiles for
@@ -344,7 +355,7 @@ impl SessionHandle for TypstSession {
         self.helper_source = helper_source;
         self.page_count = new_hashes.len();
         self.page_hashes = new_hashes;
-        self.compile_warnings = compile_warnings;
+        self.compile_warnings = session_warnings(&self.world, compile_warnings);
 
         Ok(ChangeSet {
             page_count: self.page_count,
@@ -559,6 +570,7 @@ impl Backend for TypstBackend {
         };
         windows.extend(scalar_windows.iter().cloned());
         let (document, compile_warnings) = compile::compile_document(&world)?;
+        let compile_warnings = session_warnings(&world, compile_warnings);
         let helper_src = helper_source(&world)?;
         let page_count = document.pages().len();
         let field_placements = overlay::extract(&document)?;

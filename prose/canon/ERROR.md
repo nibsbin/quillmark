@@ -104,6 +104,15 @@ Typst diagnostics mapped via `map_typst_errors()`:
 
 See `crates/backends/typst/src/error_mapping.rs`.
 
+**Quill-load warnings** are the backend's other warning source, hand-coded
+rather than derived from a Typst diagnostic: `typst::asset_skipped`,
+`typst::package_manifest`, `typst::package_file_skipped`,
+`typst::package_entrypoint_missing`. Each marks a file the world had to skip,
+which otherwise surfaces only as an unresolved `#import` pointing at the plate
+instead of at the defect. They are properties of the quill, not of a compile, so
+`QuillWorld` holds them and the session serves them ahead of every compile's own
+— an `apply` swaps the compile half and keeps these.
+
 ## Validation message contract
 
 Field-level validation diagnostics — `validation::type_mismatch` (fatal) and
