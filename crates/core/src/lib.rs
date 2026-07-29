@@ -40,7 +40,9 @@ pub mod backend;
 pub use backend::{formats_support_canvas, Backend};
 
 pub mod error;
-pub use error::{Diagnostic, Location, ParseError, RenderError, RenderResult, Severity};
+pub use error::{
+    Diagnostic, Location, ParseError, RenderError, RenderResult, Severity, YamlError,
+};
 
 pub mod types;
 pub use types::{Artifact, OutputFormat, RenderOptions};

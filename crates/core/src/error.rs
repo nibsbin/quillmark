@@ -39,6 +39,89 @@ pub const MAX_CARD_COUNT: usize = 1000;
 /// Maximum number of fields allowed per document
 pub const MAX_FIELD_COUNT: usize = 1000;
 
+/// A YAML parse or emit failure, owned by this crate.
+///
+/// The YAML engine is `serde-saphyr`, whose version series is `0.0.x` — every
+/// release of it is a semver break under Cargo's rules. Returning its error
+/// types from a public signature would chain this crate's major version to
+/// that cadence, so the boundary converts to this type instead and no public
+/// signature names the engine. The engine is an implementation detail; this is
+/// what the contract says it is.
+///
+/// `line`/`column` are 1-indexed and present only when the engine located the
+/// failure — always absent on the emit side, which has no input to point at.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct YamlError {
+    /// The engine's explanation, already rendered.
+    message: String,
+    /// 1-indexed line, when the failure has a located source position.
+    line: Option<u32>,
+    /// 1-indexed column, paired with [`Self::line`].
+    column: Option<u32>,
+}
+
+impl YamlError {
+    /// The engine's explanation.
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// 1-indexed line of the failure, when the engine located one.
+    pub fn line(&self) -> Option<u32> {
+        self.line
+    }
+
+    /// 1-indexed column of the failure, paired with [`Self::line`].
+    pub fn column(&self) -> Option<u32> {
+        self.column
+    }
+
+    /// A diagnostic under `yaml::parse_error`, carrying the position as a
+    /// [`Location`] against `file` when the engine supplied one.
+    pub fn to_diagnostic(&self, file: &str) -> Diagnostic {
+        let diag = Diagnostic::new(Severity::Error, self.message.clone())
+            .with_code("yaml::parse_error".to_string());
+        match (self.line, self.column) {
+            (Some(line), Some(column)) => diag.with_location(Location {
+                file: file.to_string(),
+                line,
+                column,
+            }),
+            _ => diag,
+        }
+    }
+
+    pub(crate) fn from_de(err: serde_saphyr::Error) -> Self {
+        // `Location`'s accessors widen to u64; the fields behind them are u32,
+        // so the narrowing is lossless and `try_into` cannot fail.
+        let loc = err.location();
+        Self {
+            message: err.to_string(),
+            line: loc.and_then(|l| u32::try_from(l.line()).ok()),
+            column: loc.and_then(|l| u32::try_from(l.column()).ok()),
+        }
+    }
+
+    pub(crate) fn from_ser(err: serde_saphyr::ser::Error) -> Self {
+        Self {
+            message: err.to_string(),
+            line: None,
+            column: None,
+        }
+    }
+}
+
+impl std::fmt::Display for YamlError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match (self.line, self.column) {
+            (Some(line), Some(column)) => write!(f, "{} at line {line}, column {column}", self.message),
+            _ => f.write_str(&self.message),
+        }
+    }
+}
+
+impl std::error::Error for YamlError {}
+
 /// Fatality is this two-value ladder and nothing else: `Error` blocks the
 /// stage that emits it, `Warning` never does. There is no lint-level
 /// configuration and no warning-to-error promotion; an informational aside is

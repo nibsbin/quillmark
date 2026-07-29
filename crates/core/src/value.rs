@@ -217,9 +217,17 @@ impl QuillValue {
         }
     }
 
-    /// Create a QuillValue from a YAML string
-    pub fn from_yaml_str(yaml_str: &str) -> Result<Self, serde_saphyr::Error> {
-        let json_val: serde_json::Value = serde_saphyr::from_str(yaml_str)?;
+    /// Create a QuillValue from a YAML string.
+    ///
+    /// Carries the same [`MAX_YAML_DEPTH`](crate::document::limits::MAX_YAML_DEPTH)
+    /// budget as every other YAML entry point, so an over-deep document is an
+    /// error here rather than a stack overflow in the parser.
+    pub fn from_yaml_str(yaml_str: &str) -> Result<Self, crate::error::YamlError> {
+        let json_val: serde_json::Value = serde_saphyr::from_str_with_options(
+            yaml_str,
+            crate::document::limits::yaml_parse_options(),
+        )
+        .map_err(crate::error::YamlError::from_de)?;
         Ok(Self::from_json(json_val))
     }
 
@@ -430,6 +438,51 @@ mod tests {
             quill_val.get("count").as_ref().and_then(|v| v.as_i64()),
             Some(42)
         );
+    }
+
+    #[test]
+    fn from_yaml_str_carries_the_shared_depth_budget() {
+        // The third YAML entry point, alongside `decompose`'s card-yaml payloads
+        // (assemble_tests::test_yaml_depth_limit) and `QuillConfig::from_yaml`
+        // (quill::tests::quill_yaml_deep_nesting_is_rejected). Unbudgeted, this
+        // one recursed until the stack gave out.
+        let max = crate::document::limits::MAX_YAML_DEPTH;
+        let nest = |levels: usize| {
+            let mut yaml = String::new();
+            for i in 0..levels {
+                yaml.push_str(&"  ".repeat(i));
+                yaml.push_str("nest:\n");
+            }
+            yaml.push_str(&"  ".repeat(levels));
+            yaml.push_str("leaf: 1\n");
+            yaml
+        };
+
+        assert!(QuillValue::from_yaml_str(&nest(max - 1)).is_ok());
+
+        let err = QuillValue::from_yaml_str(&nest(max + 8))
+            .expect_err("over-deep YAML must be refused, not recursed");
+        let msg = err.to_string().to_lowercase();
+        assert!(
+            msg.contains("depth") || msg.contains("budget") || msg.contains("limit"),
+            "error should name the depth budget, got: {err}"
+        );
+    }
+
+    #[test]
+    fn yaml_error_locates_a_malformed_document() {
+        let err = QuillValue::from_yaml_str("a: 1\nb: [unclosed\n")
+            .expect_err("malformed YAML must not parse");
+        // The engine locates parse failures; the owned type carries the position
+        // through without naming the engine's own error type.
+        assert!(!err.message().is_empty());
+        if let (Some(line), Some(column)) = (err.line(), err.column()) {
+            let diag = err.to_diagnostic("Quill.yaml");
+            let loc = diag.location.expect("located error carries a Location");
+            assert_eq!((loc.line, loc.column), (line, column));
+            assert_eq!(loc.file, "Quill.yaml");
+            assert_eq!(diag.code.as_deref(), Some("yaml::parse_error"));
+        }
     }
 
     #[test]

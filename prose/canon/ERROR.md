@@ -24,6 +24,8 @@ severity.
 
 **`ParseError`**: parsing-stage error enum — `InputTooLarge`, `InvalidStructure`, `EmptyInput`, `MissingQuill`, `InvalidQuillReference`, `YamlErrorWithLocation`; converts to `Diagnostic` via `to_diagnostic()`. The `InvalidQuillReference` case (`parse::invalid_quill_reference`) attaches the canonical `$quill` grammar — `quill_ref_hint()` — as the diagnostic hint. That hint is the single source of truth for the reference grammar: bindings surface it verbatim (e.g. WASM `Document.quillRefHint`) rather than re-stating the rule.
 
+**`YamlError`**: a YAML parse or emit failure at the two entry points that return one directly — `QuillValue::from_yaml_str` and `QuillConfig::schema_yaml`. Carries the engine's message plus an optional 1-indexed line/column (absent on the emit side, which has no input to point at); `to_diagnostic(file)` renders it under `yaml::parse_error`. It exists so no public signature names `serde-saphyr`, whose `0.0.x` series makes every release of it a semver break — the YAML engine is an implementation detail, and the boundary keeps it one. Parse failures on the card-yaml path do not travel this way: they become `ParseError::YamlErrorWithLocation`, which additionally knows the enclosing block.
+
 **`RenderError`**: the main rendering error — a struct carrying a non-empty
 `Vec<Diagnostic>` (`RenderError::new` / `from_diag`; `diagnostics()` borrows,
 `into_diagnostics()` consumes). There is no failure taxonomy beyond the
