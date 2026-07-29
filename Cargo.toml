@@ -26,6 +26,14 @@ resolver = "2"
 [workspace.package]
 version = "0.98.0"
 edition = "2021"
+# The floor the Typst toolchain already forces (typst 0.15 and the krilla/hayro
+# tree all declare 1.92), so for the default build this is a measurement, not a
+# choice. `quillmark-core` and `quillmark-content` pull no Typst and resolve
+# lower on their own — 1.88 and 1.85 by their dependency trees — and could take
+# their own floors if a Typst-less consumer needs one; nothing verifies those
+# today, and an unverified floor is worse than an honest high one. CI's `msrv`
+# job builds on exactly this version, so raising it is a visible edit.
+rust-version = "1.92"
 include = ["src/**", "Cargo.toml", "README*", "LICENSE*"]
 readme = "README.md"
 license = "Apache-2.0"

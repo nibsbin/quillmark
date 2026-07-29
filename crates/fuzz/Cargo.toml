@@ -2,6 +2,7 @@
 name = "quillmark-fuzz"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 description = "Fuzzing tests for Quillmark"
 license.workspace = true
 publish = false  # Don't publish fuzzing tests to crates.io

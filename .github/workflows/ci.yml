@@ -106,9 +106,18 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       # Builds every publishable crate from its packaged archive — the step
-      # `cargo publish --no-verify` drops.
+      # `cargo publish --no-verify` drops. The four `publish = false` crates are
+      # excluded because `--workspace` would package them too, and the wasm
+      # binding deliberately carries a version-less path dep on `quillmark`
+      # (so `default-features = false` is honoured), which `cargo package`
+      # rejects.
       - name: Package all publishable crates
-        run: cargo package --workspace --locked
+        run: |
+          cargo package --workspace --locked \
+            --exclude quillmark-wasm \
+            --exclude quillmark-python \
+            --exclude quillmark-fuzz \
+            --exclude quillmark-fixtures
 
       # `include` lists `LICENSE*`, which resolves against the package
       # directory, not the workspace root; each published crate carries a
@@ -123,6 +132,34 @@ jobs:
             fi
           done
           exit $status
+
+  # Holds `rust-version` in Cargo.toml to something true. Without this a
+  # dependency bump can raise the real floor silently, and a consumer on a
+  # pinned toolchain learns about it from a compile error deep in the tree
+  # rather than from the resolver.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the declared MSRV
+        id: msrv
+        run: |
+          MSRV=$(cargo metadata --format-version=1 --no-deps \
+            | jq -r '.packages[] | select(.name == "quillmark") | .rust_version')
+          echo "version=$MSRV" >> "$GITHUB_OUTPUT"
+          echo "MSRV is $MSRV"
+
+      - name: Setup Rust toolchain (MSRV)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check on the MSRV toolchain
+        run: cargo check --workspace --all-features --locked
 
   audit:
     runs-on: ubuntu-latest
