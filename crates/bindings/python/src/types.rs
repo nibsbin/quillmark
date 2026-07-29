@@ -93,7 +93,7 @@ impl PyQuillmark {
     }
 }
 
-#[pyclass(name = "Quill")]
+#[pyclass(name = "Quill", from_py_object)]
 #[derive(Clone)]
 pub struct PyQuill {
     /// Portable, declarative config data. The declared backend is
@@ -209,7 +209,7 @@ impl PyQuill {
             .map_err(|e| PyValueError::new_err(format!("validate: serialization failed: {e}")))?;
         let py_obj = json_to_py(py, &json_value)?;
         let list = py_obj
-            .downcast::<PyList>()
+            .cast::<PyList>()
             .map_err(|_| PyValueError::new_err("validate: expected a list at top level"))?;
         Ok(list.clone())
     }
@@ -1095,7 +1095,7 @@ impl PyRenderResult {
     }
 }
 
-#[pyclass(name = "Artifact")]
+#[pyclass(name = "Artifact", from_py_object)]
 #[derive(Clone)]
 pub struct PyArtifact {
     pub(crate) inner: Vec<u8>,
@@ -1133,7 +1133,7 @@ impl PyArtifact {
     }
 }
 
-#[pyclass(name = "Diagnostic")]
+#[pyclass(name = "Diagnostic", from_py_object)]
 #[derive(Clone)]
 pub struct PyDiagnostic {
     pub(crate) inner: Diagnostic,
@@ -1194,7 +1194,7 @@ impl PyDiagnostic {
     }
 }
 
-#[pyclass(name = "Location")]
+#[pyclass(name = "Location", from_py_object)]
 #[derive(Clone)]
 pub struct PyLocation {
     pub(crate) inner: Location,
@@ -1484,7 +1484,7 @@ fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json:
         if depth >= quillmark_core::document::limits::MAX_YAML_DEPTH {
             return reject_too_deep();
         }
-        let list = value.downcast::<PyList>()?;
+        let list = value.cast::<PyList>()?;
         let arr: PyResult<Vec<serde_json::Value>> = list
             .iter()
             .map(|item| py_to_json_at(&item, depth + 1))
@@ -1495,7 +1495,7 @@ fn py_to_json_at(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<serde_json:
         if depth >= quillmark_core::document::limits::MAX_YAML_DEPTH {
             return reject_too_deep();
         }
-        let dict = value.downcast::<PyDict>()?;
+        let dict = value.cast::<PyDict>()?;
         let mut map = serde_json::Map::new();
         for (k, v) in dict.iter() {
             let key: String = k.extract()?;

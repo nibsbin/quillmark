@@ -166,12 +166,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Cargo.lock resolves 400+ packages, including the Typst toolchain and a
+      # Cargo.lock resolves 440 packages, including the Typst toolchain and a
       # hand-rolled PDF reader/writer. Nothing else watches them for advisories.
-      - name: Audit dependencies against RUSTSEC
-        uses: rustsec/audit-check@v2
+      #
+      # Deliberately `cargo audit` and not rustsec/audit-check: the action fails
+      # the check on warnings too, and `unmaintained`/`yanked` fire on six crates
+      # Typst pins that no change here can move — a gate that is red no matter
+      # what the PR does gets clicked past, which is worse than no gate. Bare
+      # `cargo audit` fails on vulnerabilities and prints warnings. The two
+      # vulnerabilities that are themselves pinned out of reach are listed, with
+      # reasons, in .cargo/audit.toml.
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          tool: cargo-audit
+
+      - name: Audit dependencies against RUSTSEC
+        run: cargo audit
 
   release-tooling:
     runs-on: ubuntu-latest

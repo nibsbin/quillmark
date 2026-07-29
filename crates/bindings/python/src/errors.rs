@@ -56,9 +56,7 @@ pub fn raise_with_diagnostics(diags: Vec<Diagnostic>, message: String) -> PyErr 
             .into_iter()
             .map(|d| crate::types::PyDiagnostic { inner: d })
             .collect();
-        if let Ok(exc) = py_err.value(py).downcast::<pyo3::types::PyAny>() {
-            let _ = exc.setattr("diagnostics", py_diags);
-        }
+        let _ = py_err.value(py).as_any().setattr("diagnostics", py_diags);
         py_err
     })
 }

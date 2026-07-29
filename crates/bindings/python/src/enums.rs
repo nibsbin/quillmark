@@ -9,7 +9,7 @@ macro_rules! py_enum {
             $($variant:ident),* $(,)?
         }
     ) => {
-        #[pyclass(name = $py_name, eq, eq_int)]
+        #[pyclass(name = $py_name, eq, eq_int, from_py_object)]
         #[derive(Clone, Copy, PartialEq)]
         $(#[$meta])*
         $vis enum $name {
