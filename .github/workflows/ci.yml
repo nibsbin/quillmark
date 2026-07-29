@@ -65,10 +65,18 @@ jobs:
     # anyone's platform, so the suite runs where consumers run. Tree paths are
     # `/`-joined and lookups resolve via `Path::components()`, which accepts
     # either separator — this is what keeps that true.
+    #
+    # Windows is the whole reason this is a matrix: it is the one runner whose
+    # path separator and checkout line endings differ, and it earned the slot by
+    # catching both. macOS is not in it — the tree carries no `target_os`/
+    # `target_family` cfg and loads no system fonts, so against Linux it differs
+    # only in being case-insensitive, which is strictly more permissive and so
+    # catches nothing Linux misses. Add it back when platform-conditional code
+    # or a macOS-only report says otherwise, not on principle.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -86,8 +94,11 @@ jobs:
       # "no backends registered" path in orchestration/engine.rs and the
       # `#[cfg(not(feature = "typst"))]` half of feature_flag_test.rs — never
       # compiles above. The WASM `core` variant has this covered by
-      # build-wasm.sh + core.test.js; this is the native equivalent.
+      # build-wasm.sh + core.test.js; this is the native equivalent. Which
+      # branch a feature gate selects does not vary by OS, so one runner answers
+      # it.
       - name: Tests (zero-backend configuration)
+        if: matrix.os == 'ubuntu-latest'
         run: cargo test -p quillmark --no-default-features --locked
 
   # release.yml publishes with `--no-verify`, which skips building each crate
