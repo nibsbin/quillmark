@@ -7,6 +7,9 @@
 mod coerce_fuzz;
 
 #[cfg(test)]
+mod decode_fuzz;
+
+#[cfg(test)]
 mod convert_fuzz;
 
 #[cfg(test)]
