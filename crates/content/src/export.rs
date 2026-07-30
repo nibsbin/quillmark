@@ -891,7 +891,7 @@ fn split_around_slots(chars: &[char], start: usize, end: usize) -> Vec<(usize, u
         .iter()
         .enumerate()
         .map(|(i, c)| (start + i, c))
-        .filter(|(_, &c)| c == ISLAND_SLOT)
+        .filter(|&(_, &c)| c == ISLAND_SLOT)
     {
         if run < i {
             out.push((run, i));

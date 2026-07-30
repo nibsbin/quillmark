@@ -24,7 +24,7 @@ carrying the merge result. Tags cannot match `branches`, so release tags stay ou
 | `package` | `cargo package --workspace --locked`, then asserts every resulting `.crate` contains a `LICENSE`. `release.yml` publishes with `--no-verify`, so this is the only place a crate is built from its own archive — and a crates.io version cannot be replaced, so an `include` gap is fixable only before the tag |
 | `audit` | bare `cargo audit` over the lockfile's 400+ resolved packages, which fails on vulnerabilities and prints warnings. Not `rustsec/audit-check`: that action fails on warnings too, and `unmaintained`/`yanked` fire on crates Typst pins that no change here can move — a check red no matter what the PR does gets clicked past. The two out-of-reach vulnerabilities are listed with reasons in `.cargo/audit.toml` |
 | `msrv` | reads `rust-version` from `cargo metadata` and runs `cargo check --workspace --all-features --locked` on exactly that toolchain, so a dependency bump cannot raise the real floor silently |
-| `semver` | `cargo semver-checks check-release` over the published crates against their last release — the mechanical half of [COMPATIBILITY.md](COMPATIBILITY.md). Advisory (`continue-on-error`) while the version is `0.x`, where cargo reads a minor bump as major and the tool has no stable baseline; a gate from 1.0.0 |
+| `semver` | `cargo semver-checks check-release` over the published crates against their last release — the mechanical half of [COMPATIBILITY.md](COMPATIBILITY.md). Runs on `release/v*` PRs and `workflow_dispatch`, not on every PR: the working tree carries the last released version until `release-prepare.yml` bumps it, so on a feature PR the tool compares a version against itself, assumes minor, and fails every deliberate break. The release PR is where the bump exists and the question — is this bump big enough for what changed — has an answer. Advisory (`continue-on-error`) until 1.0.0; per-PR and a gate from there |
 | `wasm` | first asserts the no-default-features core graph excludes Typst (`cargo tree -i quillmark-typst` must fail), then builds via `./scripts/build-wasm.sh --ci`, then `npx vitest run` |
 | `python` | `maturin develop` into a `uv` venv (Python 3.12, debug profile), then `pytest -q` |
 
@@ -97,4 +97,8 @@ and the partial-upload skip above makes the re-run that finishes the batch safe.
   `rust-version.workspace = true` (the field does *not* apply without that
   opt-in) and held by CI's `msrv` job. It tracks the floor the Typst toolchain
   forces, so for the default build it is measured rather than chosen.
+- Edition is 2024, set in `[workspace.package]` and inherited the same way. It
+  requires 1.85 — seven releases under the MSRV floor — so it constrains no
+  consumer the floor does not already. `resolver` stays explicit at `"2"`;
+  edition 2024 implies `"3"` only where the resolver is unset.
 - WASM npm version is derived from the workspace version at build time (`scripts/build-wasm.sh`); Python version comes from the workspace `Cargo.toml` via maturin `dynamic = ["version"]`.

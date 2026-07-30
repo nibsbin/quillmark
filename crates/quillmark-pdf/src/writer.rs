@@ -97,7 +97,7 @@ pub(crate) fn apply_producer_stamp(
     let literal = pdf_text_string(producer);
     match info_ref {
         Some((info_id, _)) => {
-            // The existing `/Info` object is overwritten in place at gen 0; a
+            // The existing `/Info` object is overwritten in place at generation 0; a
             // non-zero-generation `/Info` would be silently corrupted.
             assert_overwrite_gen_zero(pdf, info_id, "/Info")?;
             let (s, e) = find_object_bytes(pdf, info_id)
