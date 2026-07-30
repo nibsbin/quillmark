@@ -273,7 +273,7 @@ pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
         .get("kind")
         .and_then(Value::as_str)
         .ok_or(ParseError::Shape("line kind"))?;
-    let o = fold_legacy_attrs(o, tag, &Content::RESERVED_LINE_KINDS, "line attrs")?;
+    let o = fold_legacy_attrs(o, tag, Content::RESERVED_LINE_KINDS, "line attrs")?;
     match tag {
         "para" => Ok(LineKind::Para),
         "heading" => {
@@ -370,7 +370,7 @@ pub fn container_from_value(v: &Value) -> Result<Container, ParseError> {
         .get("container")
         .and_then(Value::as_str)
         .ok_or(ParseError::Shape("container kind"))?;
-    let o = fold_legacy_attrs(o, tag, &Content::RESERVED_CONTAINERS, "container attrs")?;
+    let o = fold_legacy_attrs(o, tag, Content::RESERVED_CONTAINERS, "container attrs")?;
     match tag {
         "list_item" => Ok(Container::ListItem {
             ordered: o.get("ordered").and_then(Value::as_bool).unwrap_or(false),
@@ -471,7 +471,7 @@ pub fn mark_from_value(v: &Value) -> Result<Mark, ParseError> {
     } = mark_shape(v)?;
     // After the shape read, not inside it: the fold's clone is exactly the cost
     // `mark_shape` exists to let a verdict-only caller skip.
-    let o = fold_legacy_attrs(o, ty, &Content::RESERVED_MARK_TYPES, "mark attrs")?;
+    let o = fold_legacy_attrs(o, ty, Content::RESERVED_MARK_TYPES, "mark attrs")?;
     let kind = match ty {
         "strong" => MarkKind::Strong,
         "emph" => MarkKind::Emph,
@@ -622,7 +622,7 @@ fn reject_line_kind_attrs(v: &Value) -> Result<(), ParseError> {
     reject_reserved_attrs(
         v,
         "kind",
-        &Content::RESERVED_LINE_KINDS,
+        Content::RESERVED_LINE_KINDS,
         "attrs beside built-in kind",
     )
 }
@@ -631,7 +631,7 @@ fn reject_container_attrs(v: &Value) -> Result<(), ParseError> {
     reject_reserved_attrs(
         v,
         "container",
-        &Content::RESERVED_CONTAINERS,
+        Content::RESERVED_CONTAINERS,
         "attrs beside built-in container",
     )
 }
@@ -640,7 +640,7 @@ fn reject_mark_attrs(v: &Value) -> Result<(), ParseError> {
     reject_reserved_attrs(
         v,
         "type",
-        &Content::RESERVED_MARK_TYPES,
+        Content::RESERVED_MARK_TYPES,
         "attrs beside built-in mark type",
     )
 }

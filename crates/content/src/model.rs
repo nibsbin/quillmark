@@ -709,7 +709,10 @@ impl Content {
     /// `isUnknown*` guards' tables in
     /// `crates/bindings/wasm/runtime/runtime.js`. Both are pinned to these
     /// constants by `crates/bindings/wasm/tests/known_names_drift.rs`.
-    pub const RESERVED_MARK_TYPES: [&'static str; 7] = [
+    /// Slices, not arrays, on all three: an array's length is part of its type,
+    /// and promoting a name into the projection is the motion these lists exist
+    /// to absorb.
+    pub const RESERVED_MARK_TYPES: &'static [&'static str] = &[
         "strong",
         "emph",
         "underline",
@@ -722,12 +725,12 @@ impl Content {
     /// Line `kind` names the projection reserves — the [`LineKind`] twin of
     /// [`RESERVED_MARK_TYPES`](Self::RESERVED_MARK_TYPES), for the same
     /// injectivity reason.
-    pub const RESERVED_LINE_KINDS: [&'static str; 5] =
-        ["para", "heading", "code", "island", "rule"];
+    pub const RESERVED_LINE_KINDS: &'static [&'static str] =
+        &["para", "heading", "code", "island", "rule"];
 
     /// Container names the projection reserves — the [`Container`] twin of
     /// [`RESERVED_MARK_TYPES`](Self::RESERVED_MARK_TYPES).
-    pub const RESERVED_CONTAINERS: [&'static str; 2] = ["list_item", "quote"];
+    pub const RESERVED_CONTAINERS: &'static [&'static str] = &["list_item", "quote"];
 
     /// Check every invariant. `Ok(())` on a well-formed content. Import
     /// guarantees this; a hand-built content should be run through it in tests.
