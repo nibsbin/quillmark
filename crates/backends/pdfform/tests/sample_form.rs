@@ -27,10 +27,7 @@ fn render(markdown: &str) -> quillmark::RenderResult {
         .render(
             &quill,
             &doc,
-            &RenderOptions {
-                output_format: Some(OutputFormat::Pdf),
-                ..Default::default()
-            },
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         )
         .expect("render ok")
 }
@@ -277,10 +274,7 @@ fn apply_rebinds_values_and_reports_dirty_pages() {
     assert_eq!(cs.dirty_pages, vec![0]);
 
     let result = session
-        .render(&RenderOptions {
-            output_format: Some(OutputFormat::Pdf),
-            ..Default::default()
-        })
+        .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))
         .expect("render ok");
     let pdf = PdfDoc::load_mem(&result.artifacts[0].bytes).unwrap();
     let cat = pdf.catalog().unwrap();

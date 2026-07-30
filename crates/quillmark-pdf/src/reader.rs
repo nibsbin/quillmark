@@ -94,9 +94,17 @@ fn write_preserved_trailer_keys(out: &mut Vec<u8>, prior_trailer: &[u8]) {
 
 /// One object emitted into an incremental update: its number and full
 /// serialized form (`<id> 0 obj … endobj`).
+#[non_exhaustive]
 pub struct UpdatedObject {
     pub id: u32,
     pub bytes: Vec<u8>,
+}
+
+impl UpdatedObject {
+    /// An object's new body, keyed by its PDF object id.
+    pub fn new(id: u32, bytes: Vec<u8>) -> Self {
+        Self { id, bytes }
+    }
 }
 
 /// Append a single incremental update to `pdf`: write each object in

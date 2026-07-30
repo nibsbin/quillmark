@@ -344,20 +344,20 @@ fn type1_font_object(id: u32, base_font: &str, encoding: Option<&str>) -> Update
         Some(name) => format!(" /Encoding /{name}"),
         None => String::new(),
     };
-    UpdatedObject {
+    UpdatedObject::new(
         id,
-        bytes: format!(
+        format!(
             "{id} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /{base_font}{enc} >>\nendobj\n"
         )
         .into_bytes(),
-    }
+    )
 }
 
 fn content_stream_object(id: u32, content: &[u8]) -> UpdatedObject {
     let mut bytes = format!("{id} 0 obj\n<< /Length {} >>\nstream\n", content.len()).into_bytes();
     bytes.extend_from_slice(content);
     bytes.extend_from_slice(b"\nendstream\nendobj\n");
-    UpdatedObject { id, bytes }
+    UpdatedObject::new(id, bytes)
 }
 
 // ── PDF text helpers ──────────────────────────────────────────────────────────
@@ -386,27 +386,26 @@ mod tests {
         include_bytes!("../../../fixtures/resources/quills/sample_form/0.1.0/form.pdf");
 
     fn text_field(name: &str, value: &str) -> FieldSpec {
-        FieldSpec {
-            name: name.to_string(),
-            schema_field: Some(name.to_string()),
-            page: 0,
-            rect: [72.0, 700.0, 300.0, 720.0],
-            field_type: FieldType::Text { multiline: false },
-            value: Some(value.to_string()),
-            tooltip: None,
-        }
+        FieldSpec::new(
+            name.to_string(),
+            0,
+            [72.0, 700.0, 300.0, 720.0],
+            FieldType::Text { multiline: false },
+        )
+        .with_schema_field(name.to_string())
+        .with_value(value.to_string())
     }
 
     fn checkbox_field(name: &str, checked: bool) -> FieldSpec {
-        FieldSpec {
-            name: name.to_string(),
-            schema_field: Some(name.to_string()),
-            page: 0,
-            rect: [72.0, 660.0, 90.0, 678.0],
-            field_type: FieldType::Checkbox,
-            value: checked.then(|| CHECKBOX_ON_STATE.to_string()),
-            tooltip: None,
-        }
+        let mut spec = FieldSpec::new(
+            name.to_string(),
+            0,
+            [72.0, 660.0, 90.0, 678.0],
+            FieldType::Checkbox,
+        )
+        .with_schema_field(name.to_string());
+        spec.value = checked.then(|| CHECKBOX_ON_STATE.to_string());
+        spec
     }
 
     fn flatten_ok(fields: &[FieldSpec]) -> Vec<u8> {

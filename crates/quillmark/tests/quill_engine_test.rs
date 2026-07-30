@@ -76,10 +76,7 @@ fn test_quill_render_succeeds_with_engine_loaded_quill() {
     let result = engine.render(
         &quill,
         &parsed,
-        &RenderOptions {
-            output_format: Some(OutputFormat::Pdf),
-            ..Default::default()
-        },
+        &RenderOptions::default().with_output_format(OutputFormat::Pdf),
     );
 
     assert!(

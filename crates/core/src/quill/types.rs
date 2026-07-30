@@ -14,6 +14,7 @@ use crate::value::QuillValue;
 /// on the emitted-schema wire. The retired `ui.order` key is rejected with a
 /// pointed message (`UI_ORDER_REMOVED_MSG`).
 #[derive(Debug, Clone, PartialEq, Serialize)]
+#[non_exhaustive]
 pub struct UiFieldSchema {
     /// Display label for the field — decoupled from the snake_case wire key.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -63,6 +64,7 @@ impl<'de> Deserialize<'de> for UiFieldSchema {
 /// Body namespace configuration for a card kind
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[non_exhaustive]
 pub struct BodyCardSchema {
     /// When false, consumers must not accept or store body content for instances of this card kind.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -84,6 +86,7 @@ pub struct BodyCardSchema {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[non_exhaustive]
 pub struct UiCardSchema {
     /// Display label for the card kind — literal string or `{field_name}`
     /// template. See `docs/quills/quill-yaml-reference.md`.
@@ -106,6 +109,7 @@ pub struct UiCardSchema {
 /// the label from `id` (`memo_for` → "Memo For"), exactly as they derive a
 /// field label from its key.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct GroupSchema {
     /// snake_case identity; rides the registry map key (or list item) on the wire.
     pub id: String,
@@ -203,6 +207,7 @@ impl Serialize for GroupRegistry {
 
 /// Schema definition for a card kind (composable content blocks)
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct CardSchema {
     /// The map key carries this on the wire; skipped during serialization to avoid duplication.
     #[serde(skip_serializing, default)]
@@ -218,6 +223,20 @@ pub struct CardSchema {
     /// Controls whether a body editor is shown and provides optional guide text.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<BodyCardSchema>,
+}
+
+impl CardSchema {
+    /// A card kind's name and its ordered field map. `description`, `ui`, and
+    /// `body` start absent.
+    pub fn new(name: String, fields: IndexMap<String, FieldSchema>) -> Self {
+        Self {
+            name,
+            description: None,
+            fields,
+            ui: None,
+            body: None,
+        }
+    }
 }
 
 impl CardSchema {
@@ -404,6 +423,7 @@ impl<'de> Deserialize<'de> for FieldType {
 /// wire folds a sibling `inline:` key into the `FieldType` enum, `name` rides
 /// the map key, and the `*_content` caches never serialize.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct FieldSchema {
     /// The map key carries this on the wire; not serialized, to avoid duplication.
     pub name: String,

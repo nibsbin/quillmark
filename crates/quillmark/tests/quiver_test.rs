@@ -55,10 +55,7 @@ fn every_quill_in_quiver_renders() {
         let result = engine.render(
             &quill,
             &parsed,
-            &RenderOptions {
-                output_format: Some(OutputFormat::Pdf),
-                ..Default::default()
-            },
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         );
 
         let rendered = result
@@ -95,10 +92,7 @@ fn every_quill_blueprint_round_trips_and_renders() {
         let result = engine.render(
             &quill,
             &doc1,
-            &RenderOptions {
-                output_format: Some(OutputFormat::Pdf),
-                ..Default::default()
-            },
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         );
         result.unwrap_or_else(|e| {
             panic!("quill '{name}' blueprint failed to render: {e:?}\n---\n{bp}")

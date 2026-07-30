@@ -131,10 +131,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     let mut result = engine.render(
         &quill,
         &parsed,
-        &RenderOptions {
-            output_format: Some(output_format),
-            ..Default::default()
-        },
+        &RenderOptions::default().with_output_format(output_format),
     )?;
 
     // Merge parse-time warnings into the render result so downstream tooling

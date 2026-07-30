@@ -117,10 +117,12 @@ pub(crate) fn render_document_pages(
         OutputFormat::Svg => {
             let artifacts = selected_indices
                 .into_iter()
-                .map(|idx| Artifact {
-                    bytes: typst_svg::svg(&document.pages()[idx], &SvgOptions::default())
-                        .into_bytes(),
-                    output_format: OutputFormat::Svg,
+                .map(|idx| {
+                    Artifact::new(
+                        typst_svg::svg(&document.pages()[idx], &SvgOptions::default())
+                            .into_bytes(),
+                        OutputFormat::Svg,
+                    )
                 })
                 .collect();
             Ok(RenderResult::new(artifacts, OutputFormat::Svg))
@@ -137,10 +139,7 @@ pub(crate) fn render_document_pages(
                             .with_code("typst::png_encoding".to_string()),
                     )
                 })?;
-                artifacts.push(Artifact {
-                    bytes: png_data,
-                    output_format: OutputFormat::Png,
-                });
+                artifacts.push(Artifact::new(png_data, OutputFormat::Png));
             }
             Ok(RenderResult::new(artifacts, OutputFormat::Png))
         }
@@ -158,17 +157,13 @@ pub(crate) fn render_document_pages(
             let field_specs = overlay::build_field_specs(document, field_placements)?;
             // The producer is always stamped (the always-on `/Info` pass); the
             // override threads from the product layer, else the backend default.
-            let producer = Some(
-                producer
-                    .map(str::to_string)
-                    .unwrap_or_else(overlay::default_producer),
-            );
-            let stamped = stamp(pdf, &field_specs, &StampOptions { producer })?;
+            let producer = producer
+                .map(str::to_string)
+                .unwrap_or_else(overlay::default_producer);
+            let opts = StampOptions::default().with_producer(producer);
+            let stamped = stamp(pdf, &field_specs, &opts)?;
             Ok(RenderResult::new(
-                vec![Artifact {
-                    bytes: stamped,
-                    output_format: OutputFormat::Pdf,
-                }],
+                vec![Artifact::new(stamped, OutputFormat::Pdf)],
                 OutputFormat::Pdf,
             ))
         }

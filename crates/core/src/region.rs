@@ -92,6 +92,7 @@
 /// union so consumers need not reimplement it.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct RenderedRegion {
     /// The field's plate-space schema address as the backend keys it —
     /// `"signature_block"` or `"$cards.<kind>.<ordinal>.<field>"` (a per-kind
@@ -115,6 +116,23 @@ pub struct RenderedRegion {
 }
 
 impl RenderedRegion {
+    /// A geometry entry with no content address — a scalar reference site or a
+    /// widget. Content ink adds its slice with [`with_span`](Self::with_span).
+    pub fn new(field: String, page: usize, rect: [f32; 4]) -> Self {
+        Self {
+            field,
+            page,
+            rect,
+            span: None,
+        }
+    }
+
+    /// Set [`span`](Self::span), the USV `[start, end)` this box covers.
+    pub fn with_span(mut self, span: [usize; 2]) -> Self {
+        self.span = Some(span);
+        self
+    }
+
     /// Whether the point (`x`, `y`, PDF points, bottom-left origin) on `page`
     /// falls inside this region, edges inclusive. The one point-in-region
     /// predicate every `field_at` hit-test shares, so a click at a region
@@ -336,6 +354,7 @@ pub enum HitGranularity {
 /// those two happened, so a caret UI need not guess.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct ContentHit {
     /// The content field's schema path (same address space as
     /// [`RenderedRegion::field`]).
@@ -348,6 +367,24 @@ pub struct ContentHit {
     /// Additive-optional: omitted from the wire when `None`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub granularity: Option<HitGranularity>,
+}
+
+impl ContentHit {
+    /// A hit whose precision the backend does not report. A backend with a
+    /// source map adds it with [`with_granularity`](Self::with_granularity).
+    pub fn new(field: String, pos: usize) -> Self {
+        Self {
+            field,
+            pos,
+            granularity: None,
+        }
+    }
+
+    /// Set [`granularity`](Self::granularity).
+    pub fn with_granularity(mut self, granularity: HitGranularity) -> Self {
+        self.granularity = Some(granularity);
+        self
+    }
 }
 
 #[cfg(test)]

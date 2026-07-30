@@ -50,6 +50,7 @@ pub use crate::value::PathSegment as CommentPathSegment;
 /// (`inline = true`), `position` is the host child's index; orphaned inlines
 /// degrade to own-line at emit time.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct NestedComment {
     pub container_path: Vec<CommentPathSegment>,
     pub position: usize,

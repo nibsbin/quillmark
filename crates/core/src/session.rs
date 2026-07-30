@@ -5,6 +5,7 @@ pub use quillmark_content::{ApplyError, Assoc, Delta, LineOp, MarkOp, Op};
 
 /// What a committed [`LiveSession::apply`] changed.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ChangeSet {
     /// Page count after the edit.
     pub page_count: usize,
@@ -12,6 +13,16 @@ pub struct ChangeSet {
     /// including pages the edit added. Pages the edit removed are implied by
     /// `page_count`. A preview repaints `dirty ∩ visible` and nothing else.
     pub dirty_pages: Vec<usize>,
+}
+
+impl ChangeSet {
+    /// Both facts an apply always reports.
+    pub fn new(page_count: usize, dirty_pages: Vec<usize>) -> Self {
+        Self {
+            page_count,
+            dirty_pages,
+        }
+    }
 }
 
 /// Backend-specific session implementation.

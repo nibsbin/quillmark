@@ -71,9 +71,10 @@ impl From<OutputFormat> for PyOutputFormat {
             OutputFormat::Png => PyOutputFormat::PNG,
             // Forced by `#[non_exhaustive]`, unreachable in practice: this
             // crate is `publish = false` and path-deps the core beside it, so
-            // the two variant lists ship together. A format added to core needs
-            // a member here, and the mapping below is what would notice.
-            _ => PyOutputFormat::PDF,
+            // the two variant lists ship together. No fallback format is
+            // honest — every one of them promises bytes the caller did not ask
+            // for — so the arm refuses instead of guessing.
+            other => unreachable!("OutputFormat::{other:?} has no PyOutputFormat member"),
         }
     }
 }
@@ -81,8 +82,10 @@ impl From<OutputFormat> for PyOutputFormat {
 impl From<Severity> for PySeverity {
     fn from(val: Severity) -> Self {
         match val {
-            Severity::Error => PySeverity::ERROR,
             Severity::Warning => PySeverity::WARNING,
+            // `Severity` is `#[non_exhaustive]`. Escalating an unrecognized
+            // level over-reports; the other direction could hide a fatal.
+            Severity::Error | _ => PySeverity::ERROR,
         }
     }
 }

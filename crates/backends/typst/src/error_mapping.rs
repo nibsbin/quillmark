@@ -54,11 +54,11 @@ fn resolve_span_to_location(span: typst::syntax::DiagSpan, world: &QuillWorld) -
     let line = text[..range.start].matches('\n').count() + 1;
     let column = range.start - text[..range.start].rfind('\n').map_or(0, |pos| pos + 1) + 1;
 
-    Some(Location {
-        file: source.id().vpath().get_without_slash().to_string(),
-        line: line as u32,
-        column: column as u32,
-    })
+    Some(Location::new(
+        source.id().vpath().get_without_slash().to_string(),
+        line as u32,
+        column as u32,
+    ))
 }
 
 #[cfg(test)]
@@ -161,10 +161,7 @@ mod tests {
         // either `open` or `render`.
         let diags = match TypstBackend.open(&source, &serde_json::json!({})) {
             Ok(session) => session
-                .render(&RenderOptions {
-                    output_format: Some(OutputFormat::Pdf),
-                    ..Default::default()
-                })
+                .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))
                 .expect_err("eval of `#general` should fail to compile")
                 .into_diagnostics(),
             Err(err) => err.into_diagnostics(),
