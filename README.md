@@ -46,10 +46,7 @@ let doc = Document::parse(markdown)?.document;
 let result = engine.render(
     &quill,
     &doc,
-    &RenderOptions {
-        output_format: Some(OutputFormat::Pdf),
-        ..Default::default()
-    },
+    &RenderOptions::default().with_output_format(OutputFormat::Pdf),
 )?;
 
 let pdf_bytes = &result.artifacts[0].bytes;

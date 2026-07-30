@@ -92,12 +92,10 @@ impl Quillmark {
     ) -> Result<RenderResult, RenderError> {
         let default_format = self.supported_formats(quill)?.first().copied();
         let session = self.open(quill, doc)?;
-        // Struct-update so a new RenderOptions field is carried through by
+        // Clone-and-narrow so a new RenderOptions field is carried through by
         // default; only `output_format` gets the backend-default fallback.
-        let resolved = RenderOptions {
-            output_format: opts.output_format.or(default_format),
-            ..opts.clone()
-        };
+        let mut resolved = opts.clone();
+        resolved.output_format = opts.output_format.or(default_format);
         session.render(&resolved)
     }
 

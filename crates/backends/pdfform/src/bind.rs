@@ -30,6 +30,7 @@ use crate::form::{BoundField, FormSpec, Rect, UnboundWidget, WidgetKind};
 /// value-free [`WidgetType`]. A bound field carries `Some(schema_field)` (its
 /// value is resolved per document); an unbound widget carries `None`.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct BoundWidget {
     pub name: String,
     pub schema_field: Option<String>,

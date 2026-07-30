@@ -23,16 +23,10 @@ fn render(format: OutputFormat, ppi: Option<f32>) -> Vec<quillmark_core::Artifac
         .expect("load sample_form quill");
     let engine = Quillmark::new();
     let doc = Document::parse(FILLED).expect("parse markdown").document;
+    let mut opts = RenderOptions::default().with_output_format(format);
+    opts.ppi = ppi;
     engine
-        .render(
-            &quill,
-            &doc,
-            &RenderOptions {
-                output_format: Some(format),
-                ppi,
-                ..Default::default()
-            },
-        )
+        .render(&quill, &doc, &opts)
         .unwrap_or_else(|e| panic!("render {format:?}: {e:?}"))
         .artifacts
 }

@@ -12,17 +12,19 @@ Published crates, in dependency order: `quillmark-content`, `quillmark-core`, `q
 
 ## 1) CI (`ci.yml`)
 
-**Trigger**: pull requests and pushes to any ref except version tags (`tags-ignore: v**`).
-**Jobs** (parallel; Linux except `test`, which runs the OS matrix):
+**Trigger**: pull requests, and pushes to `main`. A PR branch push would
+otherwise run the whole suite twice for one commit, and the PR event is the one
+carrying the merge result. Tags cannot match `branches`, so release tags stay out.
+**Jobs** (parallel, all Linux):
 
 | Job | What it does |
 |-----|-------------|
-| `lint` | `node scripts/check-canon.mjs` (the canon spine and link gate — see [prose/README.md](../README.md)), then `cargo doc --no-deps --locked` with `RUSTDOCFLAGS=-Dwarnings` — the standing lint gate; clippy is deliberately not gated |
-| `test` | `cargo test --workspace --all-features --locked`, then `cargo test -p quillmark --no-default-features --locked` — `--all-features` forces `typst` on, so the zero-backend branch compiles only in the second run (the native counterpart of the `wasm` job's `core` variant). Runs on `ubuntu-latest`, `macos-latest`, and `windows-latest` (`fail-fast: false`): the CLI and the wheels ship to all three, and tree paths are `/`-joined while lookups resolve through `Path::components()` — the matrix is what keeps that true rather than assumed |
+| `lint` | `node scripts/check-canon.mjs` (the canon spine and link gate — see [prose/README.md](../README.md)), then `cargo doc --no-deps --locked` with `RUSTDOCFLAGS=-Dwarnings` — the standing lint gate; clippy is deliberately not gated. Also asserts `scripts/strip-seed-comment.sh` strips a seed block and no-ops without one: `release.yml` runs it unattended against `CHANGELOG.md` between the version bump and the tag, so a regression corrupts a release commit. It rides here rather than in its own job because the assertions take 0s and a runner for them was pure overhead |
+| `test` | `cargo test --workspace --all-features --locked`, then `cargo test -p quillmark --no-default-features --locked` — `--all-features` forces `typst` on, so the zero-backend branch compiles only in the second run (the native counterpart of the `wasm` job's `core` variant) |
 | `package` | `cargo package --workspace --locked`, then asserts every resulting `.crate` contains a `LICENSE`. `release.yml` publishes with `--no-verify`, so this is the only place a crate is built from its own archive — and a crates.io version cannot be replaced, so an `include` gap is fixable only before the tag |
-| `audit` | `rustsec/audit-check` over the lockfile's 400+ resolved packages |
+| `audit` | bare `cargo audit` over the lockfile's 400+ resolved packages, which fails on vulnerabilities and prints warnings. Not `rustsec/audit-check`: that action fails on warnings too, and `unmaintained`/`yanked` fire on crates Typst pins that no change here can move — a check red no matter what the PR does gets clicked past. The two out-of-reach vulnerabilities are listed with reasons in `.cargo/audit.toml` |
 | `msrv` | reads `rust-version` from `cargo metadata` and runs `cargo check --workspace --all-features --locked` on exactly that toolchain, so a dependency bump cannot raise the real floor silently |
-| `release-tooling` | asserts `scripts/strip-seed-comment.sh` both strips a seed block and collapses the surrounding blanks to one, and no-ops on a file without one. `release.yml` runs that script unattended against `CHANGELOG.md` between the version bump and the tag, so a regression corrupts a release commit |
+| `semver` | `cargo semver-checks check-release` over the published crates against their last release — the mechanical half of [COMPATIBILITY.md](COMPATIBILITY.md). Advisory (`continue-on-error`) while the version is `0.x`, where cargo reads a minor bump as major and the tool has no stable baseline; a gate from 1.0.0 |
 | `wasm` | first asserts the no-default-features core graph excludes Typst (`cargo tree -i quillmark-typst` must fail), then builds via `./scripts/build-wasm.sh --ci`, then `npx vitest run` |
 | `python` | `maturin develop` into a `uv` venv (Python 3.12, debug profile), then `pytest -q` |
 

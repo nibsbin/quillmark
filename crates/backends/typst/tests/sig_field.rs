@@ -20,10 +20,7 @@ fn compile(plate: &str) -> Result<Vec<u8>, RenderError> {
 fn compile_with_data(plate: &str, json_data: &serde_json::Value) -> Result<Vec<u8>, RenderError> {
     let source = source_with_plate(plate);
     let session = TypstBackend.open(&source, json_data)?;
-    let result = session.render(&RenderOptions {
-        output_format: Some(OutputFormat::Pdf),
-        ..Default::default()
-    })?;
+    let result = session.render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))?;
     Ok(result.artifacts[0].bytes.clone())
 }
 

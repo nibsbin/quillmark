@@ -10,6 +10,7 @@ use std::str::FromStr;
 /// Semantic version number (MAJOR.MINOR.PATCH).
 /// Two-segment form (`MAJOR.MINOR`) is also accepted; patch defaults to 0.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub struct Version {
     pub major: u32,
     pub minor: u32,
@@ -190,6 +191,7 @@ pub fn quill_ref_hint() -> &'static str {
 ///
 /// Name charset: `[a-z_][a-z0-9_]*`. Selector defaults to `Latest` when omitted.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub struct QuillReference {
     pub name: String,
     pub selector: VersionSelector,
