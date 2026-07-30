@@ -30,10 +30,7 @@ fn richtext_fields_lower_to_plaintext_field_values() {
         .render(
             &quill,
             &doc,
-            &RenderOptions {
-                output_format: Some(OutputFormat::Pdf),
-                ..Default::default()
-            },
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         )
         .expect("render ok");
     assert_eq!(result.output_format, OutputFormat::Pdf);
@@ -95,10 +92,7 @@ fn richtext_fields_written_as_content_render_identically() {
         .render(
             &quill,
             &doc,
-            &RenderOptions {
-                output_format: Some(OutputFormat::Pdf),
-                ..Default::default()
-            },
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         )
         .expect("render ok");
 

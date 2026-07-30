@@ -54,6 +54,8 @@ const SUPPORTED_FORMATS: &[OutputFormat] =
 #[derive(Debug, Default)]
 pub struct PdfformBackend;
 
+impl quillmark_core::backend::sealed::Sealed for PdfformBackend {}
+
 impl Backend for PdfformBackend {
     fn id(&self) -> &'static str {
         "pdfform"
@@ -174,15 +176,12 @@ impl SessionHandle for PdfformSession {
         // PDF output is always an interactive AcroForm (Technique A / `stamp`);
         // value-flattening is internal raster machinery (SVG/PNG/canvas),
         // never a PDF deliverable.
-        let producer = Some(opts.producer.clone().unwrap_or_else(default_producer));
-        let stamp_opts = StampOptions { producer };
+        let producer = opts.producer.clone().unwrap_or_else(default_producer);
+        let stamp_opts = StampOptions::default().with_producer(producer);
         let stamped = stamp(self.base_pdf.clone(), &self.field_specs, &stamp_opts)?;
 
         Ok(RenderResult::new(
-            vec![Artifact {
-                bytes: stamped,
-                output_format: OutputFormat::Pdf,
-            }],
+            vec![Artifact::new(stamped, OutputFormat::Pdf)],
             OutputFormat::Pdf,
         ))
     }
@@ -246,10 +245,7 @@ impl SessionHandle for PdfformSession {
         self.field_specs = field_specs;
         self.flat_pdf = flat_pdf;
 
-        Ok(ChangeSet {
-            page_count: self.page_boxes.len(),
-            dirty_pages,
-        })
+        Ok(ChangeSet::new(self.page_boxes.len(), dirty_pages))
     }
 }
 
@@ -272,10 +268,7 @@ impl PdfformSession {
             .map(|page| {
                 let cache = SvgCache::new();
                 let svg = hayro_svg_convert(page, &cache, &interp, &svg_settings);
-                Artifact {
-                    bytes: svg.into_bytes(),
-                    output_format: OutputFormat::Svg,
-                }
+                Artifact::new(svg.into_bytes(), OutputFormat::Svg)
             })
             .collect();
 
@@ -305,10 +298,7 @@ impl PdfformSession {
                     format!("failed to encode page as PNG: {e}"),
                 )
             })?;
-            artifacts.push(Artifact {
-                bytes: png,
-                output_format: OutputFormat::Png,
-            });
+            artifacts.push(Artifact::new(png, OutputFormat::Png));
         }
 
         Ok(RenderResult::new(artifacts, OutputFormat::Png))

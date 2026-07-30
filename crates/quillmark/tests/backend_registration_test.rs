@@ -10,6 +10,10 @@ struct MockBackend {
     id: &'static str,
 }
 
+// `Backend` is sealed. A test backend naming the seal is the seam working as
+// documented: it declares that this implementation tracks an unstable trait.
+impl quillmark_core::backend::sealed::Sealed for MockBackend {}
+
 impl Backend for MockBackend {
     fn id(&self) -> &'static str {
         self.id
@@ -44,10 +48,7 @@ struct MockSession {
 
 impl SessionHandle for MockSession {
     fn render(&self, _opts: &RenderOptions) -> Result<RenderResult, RenderError> {
-        let artifacts = vec![Artifact {
-            bytes: self.bytes.clone(),
-            output_format: OutputFormat::Pdf,
-        }];
+        let artifacts = vec![Artifact::new(self.bytes.clone(), OutputFormat::Pdf)];
         Ok(RenderResult::new(artifacts, OutputFormat::Pdf))
     }
 
@@ -95,10 +96,7 @@ fn test_render_with_custom_backend() {
         .render(
             &quill,
             &parsed,
-            &RenderOptions {
-                output_format: Some(OutputFormat::Pdf),
-                ..Default::default()
-            },
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         )
         .expect("render failed");
 

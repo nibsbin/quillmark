@@ -116,6 +116,7 @@ mod tests {
 
 /// An artifact produced by rendering.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct Artifact {
     /// The binary content of the artifact
     pub bytes: Vec<u8>,
@@ -123,17 +124,41 @@ pub struct Artifact {
     pub output_format: OutputFormat,
 }
 
+impl Artifact {
+    /// The two facts an artifact always carries. A field added later is
+    /// optional by construction — it gets a default here and a setter beside
+    /// it, so this signature does not move.
+    pub fn new(bytes: Vec<u8>, output_format: OutputFormat) -> Self {
+        Self {
+            bytes,
+            output_format,
+        }
+    }
+}
+
 /// Internal rendering options.
 ///
-/// **Deliberately not `#[non_exhaustive]`.** The attribute forbids every
-/// out-of-crate struct expression, functional update included, so
-/// `RenderOptions { output_format: …, ..Default::default() }` — the idiom the
-/// README and every example teach — would stop compiling everywhere.
+/// Built from [`Default`] and narrowed by the `with_*` setters:
 ///
-/// Built that way, a new field costs a caller nothing. A caller that lists all
-/// fields instead is the one this crate cannot grow under, and closing that
-/// gap takes a builder rather than the attribute.
+/// ```
+/// use quillmark_core::{OutputFormat, RenderOptions};
+///
+/// let opts = RenderOptions::default()
+///     .with_output_format(OutputFormat::Png)
+///     .with_ppi(300.0);
+/// ```
+///
+/// `#[non_exhaustive]` forbids every out-of-crate struct expression, functional
+/// update included, so the setters are the construction path rather than a
+/// convenience beside one. Reading and assigning an individual field still
+/// works — `opts.ppi = Some(300.0)` is equivalent to the setter.
+///
+/// This is the type in [`COMPATIBILITY`]'s evidence column: two options landed
+/// in six minors. Adding a seventh under the attribute costs a caller nothing.
+///
+/// [`COMPATIBILITY`]: https://github.com/borb-sh/quillmark/blob/main/prose/canon/COMPATIBILITY.md
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct RenderOptions {
     /// Optional output format specification
     pub output_format: Option<OutputFormat>,
@@ -165,4 +190,36 @@ pub struct RenderOptions {
     /// document-space and unaffected by a `pages` subset selection — so it
     /// never disagrees with the geometry of the compile it came from.
     pub regions: bool,
+}
+
+impl RenderOptions {
+    /// Set [`output_format`](Self::output_format).
+    pub fn with_output_format(mut self, output_format: OutputFormat) -> Self {
+        self.output_format = Some(output_format);
+        self
+    }
+
+    /// Set [`ppi`](Self::ppi).
+    pub fn with_ppi(mut self, ppi: f32) -> Self {
+        self.ppi = Some(ppi);
+        self
+    }
+
+    /// Set [`pages`](Self::pages).
+    pub fn with_pages(mut self, pages: Vec<usize>) -> Self {
+        self.pages = Some(pages);
+        self
+    }
+
+    /// Set [`producer`](Self::producer).
+    pub fn with_producer(mut self, producer: String) -> Self {
+        self.producer = Some(producer);
+        self
+    }
+
+    /// Request the geometry sidecar ([`regions`](Self::regions)).
+    pub fn with_regions(mut self, regions: bool) -> Self {
+        self.regions = regions;
+        self
+    }
 }

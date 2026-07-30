@@ -222,10 +222,7 @@ fn apply_is_transactional_on_compile_failure() {
     // Every read still serves the last-good compile.
     assert_eq!(session.page_count(), pages);
     session
-        .render(&RenderOptions {
-            output_format: Some(OutputFormat::Pdf),
-            ..Default::default()
-        })
+        .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))
         .expect("render serves last-good");
 
     // The session recovers on the next good apply.

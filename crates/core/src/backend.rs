@@ -4,6 +4,15 @@ use crate::error::RenderError;
 use crate::quill::Quill;
 use crate::{LiveSession, OutputFormat};
 
+#[doc(hidden)]
+pub mod sealed {
+    /// The seal on [`Backend`](super::Backend). Implemented by the workspace's
+    /// own backends; writing `impl quillmark_core::backend::sealed::Sealed`
+    /// elsewhere is naming a hidden item, which is the declaration that the
+    /// seam behind it may move without notice.
+    pub trait Sealed {}
+}
+
 /// Backend trait for rendering different output formats.
 ///
 /// # Implementing this outside the workspace
@@ -14,9 +23,12 @@ use crate::{LiveSession, OutputFormat};
 /// out-of-workspace backend writes against items this crate neither documents
 /// nor holds stable.
 ///
-/// Nothing enforces this: a registry taking `Box<dyn Backend>` accepts any
-/// implementation. The seam behind it moves without notice.
-pub trait Backend: Send + Sync + std::fmt::Debug {
+/// The [`sealed::Sealed`] supertrait states that in the type system. It is a
+/// declaration, not a barrier — a crate willing to name a `#[doc(hidden)]`
+/// module can still implement both. What it buys is that adding a method here
+/// is a minor release rather than a major one, because no implementation
+/// outside the workspace is one this crate promised to keep compiling.
+pub trait Backend: sealed::Sealed + Send + Sync + std::fmt::Debug {
     /// Get the backend identifier (e.g., "typst", "latex").
     fn id(&self) -> &'static str;
 

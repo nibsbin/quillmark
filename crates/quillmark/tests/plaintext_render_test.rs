@@ -57,10 +57,7 @@ fn plaintext_field_lowers_through_typst_backend() {
     let result = engine.render(
         &quill,
         &parsed,
-        &RenderOptions {
-            output_format: Some(OutputFormat::Svg),
-            ..Default::default()
-        },
+        &RenderOptions::default().with_output_format(OutputFormat::Svg),
     );
     assert!(
         result.is_ok(),

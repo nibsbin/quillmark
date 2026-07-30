@@ -4,12 +4,12 @@ use std::error::Error as StdError;
 use std::path::Path;
 /// A node in the file tree structure
 ///
-/// **Deliberately exhaustive.** A tree is files and directories; there is no
-/// third thing for a quill bundle to hold (symlinks are refused at the loader,
-/// not modelled here). Callers both build these — `Quill::from_tree` takes one
-/// — and match them, so an open set would cost every consumer an unreachable
-/// arm to buy a variant that is not coming.
+/// Out-of-crate callers build these — `Quill::from_tree` takes one — and
+/// `#[non_exhaustive]` leaves variant construction untouched, so the attribute
+/// costs the building direction nothing. Symlinks are refused at the loader
+/// rather than modelled here.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub enum FileTreeNode {
     /// A file with its contents
     File {

@@ -104,6 +104,7 @@ impl From<&PathStepWire> for PathSegment {
 /// loudly rather than deserialize into an empty card.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[non_exhaustive]
 pub struct CardWire {
     /// The block's `$kind` (e.g. `"endorsement"`); empty string when the block
     /// declares no `$kind`. Kept non-optional to match the binding read shape.
@@ -137,6 +138,23 @@ pub struct CardWire {
     /// boundary does it on demand instead.
     #[serde(default)]
     pub body: JsonValue,
+}
+
+impl CardWire {
+    /// A card block with no `$`-prefixed system metadata. `kind` is the empty
+    /// string for a block declaring none; `body` is canonical Content-JSON, or
+    /// a markdown string the reader imports.
+    pub fn new(kind: String, body: JsonValue) -> Self {
+        Self {
+            kind,
+            quill: None,
+            id: None,
+            ext: None,
+            seed: None,
+            payload_items: Vec::new(),
+            body,
+        }
+    }
 }
 
 /// Failure converting a [`CardWire`] back into a [`Card`].

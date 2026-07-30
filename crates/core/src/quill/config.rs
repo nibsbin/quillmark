@@ -52,6 +52,7 @@ fn lenient_string(value: &serde_json::Value) -> Option<String> {
 
 /// Top-level configuration for a Quillmark project
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct QuillConfig {
     /// Quill package name
     pub name: String,
@@ -74,6 +75,27 @@ pub struct QuillConfig {
     /// whose key matches `backend` (e.g. `[typst]`, `[html]`).
     #[serde(default)]
     pub backend_config: HashMap<String, QuillValue>,
+}
+
+impl QuillConfig {
+    /// The four fields `Quill.yaml` requires. `description`, `author`,
+    /// `card_kinds`, and `backend_config` start empty.
+    ///
+    /// This bypasses [`Self::from_yaml`] and its validation, so a config built
+    /// here can hold shapes the parser refuses. Loading a quill goes through
+    /// `from_yaml`; this is for a caller assembling a schema in memory.
+    pub fn new(name: String, backend: String, version: String, main: CardSchema) -> Self {
+        Self {
+            name,
+            description: String::new(),
+            main,
+            card_kinds: Vec::new(),
+            backend,
+            version,
+            author: String::new(),
+            backend_config: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

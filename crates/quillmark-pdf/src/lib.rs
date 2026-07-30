@@ -64,6 +64,7 @@ pub fn page_media_boxes(base: &[u8]) -> Result<Vec<[f32; 4]>, PdfError> {
 /// `[x0, y0, x1, y1]`. The spine never reasons about page height or reflow;
 /// whoever owns the geometry source converts before constructing the spec.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct FieldSpec {
     /// Fully-qualified field name, written to `/T`. A spine-internal AcroForm
     /// identifier — never surfaced to a region consumer.
@@ -85,6 +86,42 @@ pub struct FieldSpec {
     pub value: Option<String>,
     /// Optional `/TU` tooltip / accessible name.
     pub tooltip: Option<String>,
+}
+
+impl FieldSpec {
+    /// The four facts every widget carries. The optional three
+    /// (`schema_field`, `value`, `tooltip`) default to `None`; a resolver that
+    /// already holds them as options assigns them directly.
+    pub fn new(name: String, page: usize, rect: [f32; 4], field_type: FieldType) -> Self {
+        Self {
+            name,
+            schema_field: None,
+            page,
+            rect,
+            field_type,
+            value: None,
+            tooltip: None,
+        }
+    }
+
+    /// Set [`schema_field`](Self::schema_field), the quill address this widget
+    /// maps to. Without it the widget emits no region.
+    pub fn with_schema_field(mut self, schema_field: String) -> Self {
+        self.schema_field = Some(schema_field);
+        self
+    }
+
+    /// Set [`value`](Self::value).
+    pub fn with_value(mut self, value: String) -> Self {
+        self.value = Some(value);
+        self
+    }
+
+    /// Set [`tooltip`](Self::tooltip).
+    pub fn with_tooltip(mut self, tooltip: String) -> Self {
+        self.tooltip = Some(tooltip);
+        self
+    }
 }
 
 /// A field's definition — never a runtime value (that rides in
