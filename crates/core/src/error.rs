@@ -85,11 +85,7 @@ impl YamlError {
         let mut diag = Diagnostic::new(Severity::Error, self.message.clone())
             .with_code(code.to_string());
         if let (Some(line), Some(column)) = (self.line, self.column) {
-            diag = diag.with_location(Location {
-                file: file.to_string(),
-                line,
-                column,
-            });
+            diag = diag.with_location(Location::new(file.to_string(), line, column));
         }
         match &self.hint {
             Some(h) => diag.with_hint(h.clone()),
@@ -143,12 +139,15 @@ impl std::error::Error for YamlError {}
 /// configuration and no warning-to-error promotion; an informational aside is
 /// a [`Diagnostic::hint`], not a severity.
 ///
-/// **Deliberately exhaustive.** "Nothing else" is the contract, so a consumer
-/// matching both arms is matching the whole world and should not be made to
-/// write an unreachable `_`. A third level would be a redesign, and semver-major
-/// is the honest price of one.
+/// A `_` arm over this enum has a safe direction — escalate to
+/// [`Severity::Error`]. Treating an unrecognized level as fatal over-reports;
+/// treating it as a warning could hide one. Nothing here fails silently, so the
+/// enum is open ([`COMPATIBILITY`]).
+///
+/// [`COMPATIBILITY`]: https://github.com/borb-sh/quillmark/blob/main/prose/canon/COMPATIBILITY.md
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Severity {
     /// Fatal error that prevents completion
     Error,
@@ -158,6 +157,7 @@ pub enum Severity {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct Location {
     /// Source file name (e.g., "plate.typ", "template.typ", "input.md")
     pub file: String,
@@ -165,6 +165,14 @@ pub struct Location {
     pub line: u32,
     /// Column number (1-indexed)
     pub column: u32,
+}
+
+impl Location {
+    /// The three coordinates a text anchor always carries. `line` and `column`
+    /// are 1-indexed.
+    pub fn new(file: String, line: u32, column: u32) -> Self {
+        Self { file, line, column }
+    }
 }
 
 /// Structured diagnostic information.

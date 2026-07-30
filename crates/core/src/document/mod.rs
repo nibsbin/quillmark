@@ -166,6 +166,7 @@ mod tests;
 /// wants only the document writes `Document::parse(md)?.document`.
 #[derive(Debug)]
 #[must_use = "carries parse warnings; read `.document`/`.warnings` or bind it"]
+#[non_exhaustive]
 pub struct Parsed {
     pub document: Document,
     pub warnings: Vec<Diagnostic>,
@@ -306,6 +307,7 @@ impl Card {
 /// key `$body` carries the body override; every other user field becomes an
 /// entry, while any other `$`-prefixed key is reserved and dropped.
 #[derive(Debug, Clone, PartialEq, Default)]
+#[non_exhaustive]
 pub struct SeedOverlay {
     /// Field-value overrides, keyed by field name.
     pub fields: indexmap::IndexMap<String, crate::value::QuillValue>,

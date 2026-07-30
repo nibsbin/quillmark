@@ -358,10 +358,7 @@ impl SessionHandle for TypstSession {
         self.page_hashes = new_hashes;
         self.warnings = session_warnings(&self.world, compile_warnings);
 
-        Ok(ChangeSet {
-            page_count: self.page_count,
-            dirty_pages,
-        })
+        Ok(ChangeSet::new(self.page_count, dirty_pages))
     }
 
     /// The quill's load warnings, then this compile's own.
@@ -514,6 +511,8 @@ fn helper_source(world: &world::QuillWorld) -> Result<typst::syntax::Source, Ren
             )
         })
 }
+
+impl quillmark_core::backend::sealed::Sealed for TypstBackend {}
 
 impl Backend for TypstBackend {
     fn id(&self) -> &'static str {

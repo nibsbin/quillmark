@@ -51,10 +51,7 @@ fn render_ref(
     engine.render(
         &quill,
         &doc,
-        &RenderOptions {
-            output_format: Some(OutputFormat::Pdf),
-            ..Default::default()
-        },
+        &RenderOptions::default().with_output_format(OutputFormat::Pdf),
     )
 }
 

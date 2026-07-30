@@ -45,6 +45,7 @@ const MIGRATION_GUIDE: &str = "docs/migrations/0.93-to-0.94.md";
 /// version-gated separately ([`SchemaTag`]) before this is deserialized, so it
 /// is not restated here — any `schema` key in the JSON is ignored.
 #[derive(Debug, Clone, Deserialize)]
+#[non_exhaustive]
 pub struct FormSpec {
     /// Schema-bound widgets — kind/options/multiline/tooltip inherited from the
     /// referenced [`FieldSchema`](quillmark_core::FieldSchema).
@@ -64,6 +65,7 @@ pub struct FormSpec {
 /// `rect` is **top-left** `{x,y,w,h}` in PDF points, page-relative — the loader
 /// flips it to the spine's bottom-left origin.
 #[derive(Debug, Clone, Deserialize)]
+#[non_exhaustive]
 pub struct BoundField {
     pub name: String,
     /// The document field this widget binds to. Resolved against the quill
@@ -78,6 +80,7 @@ pub struct BoundField {
 /// One **unbound** widget: identity + geometry + an explicit kind. Bound to no
 /// schema field (a signer fills it), so its intrinsics are declared, not derived.
 #[derive(Debug, Clone, Deserialize)]
+#[non_exhaustive]
 pub struct UnboundWidget {
     pub name: String,
     pub page: usize,
@@ -90,6 +93,7 @@ pub struct UnboundWidget {
 
 /// A top-left rectangle in PDF points (1/72").
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[non_exhaustive]
 pub struct Rect {
     pub x: f32,
     pub y: f32,

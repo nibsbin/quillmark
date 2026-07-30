@@ -1665,17 +1665,13 @@ impl Document {
                 nested_fills: Vec::new(),
             })
             .collect();
-        let string_wire = quillmark_core::CardWire {
+        // The `body` argument is markdown; `Card::try_from` imports it to the
+        // content (and validates the fields).
+        let mut string_wire = quillmark_core::CardWire::new(
             kind,
-            quill: None,
-            id: None,
-            ext: None,
-            seed: None,
-            payload_items,
-            // The `body` argument is markdown; `Card::try_from` imports it to the
-            // content (and validates the fields).
-            body: serde_json::Value::String(body.unwrap_or_default()),
-        };
+            serde_json::Value::String(body.unwrap_or_default()),
+        );
+        string_wire.payload_items = payload_items;
         // Round-trip through `Card` so the emitted card carries the content body
         // (the source-of-truth shape `cards()` returns), not the raw authored
         // string.

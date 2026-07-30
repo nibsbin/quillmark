@@ -46,13 +46,12 @@ impl PyQuillmark {
         producer: Option<String>,
         regions: bool,
     ) -> PyResult<PyRenderResult> {
-        let opts = quillmark_core::RenderOptions {
-            output_format: format.map(OutputFormat::from),
-            ppi,
-            pages,
-            producer,
-            regions,
-        };
+        let mut opts = quillmark_core::RenderOptions::default();
+        opts.output_format = format.map(OutputFormat::from);
+        opts.ppi = ppi;
+        opts.pages = pages;
+        opts.producer = producer;
+        opts.regions = regions;
         let start = Instant::now();
         let mut result = self
             .inner
@@ -600,17 +599,13 @@ impl PyDocument {
                 });
             }
         }
-        let wire = quillmark_core::CardWire {
+        // The `body` argument is markdown; `Card::try_from` imports it to the
+        // content, and `card_to_pydict` re-emits the content body.
+        let mut wire = quillmark_core::CardWire::new(
             kind,
-            quill: None,
-            id: None,
-            ext: None,
-            seed: None,
-            payload_items,
-            // The `body` argument is markdown; `Card::try_from` imports it to the
-            // content, and `card_to_pydict` re-emits the content body.
-            body: serde_json::Value::String(body.unwrap_or_default()),
-        };
+            serde_json::Value::String(body.unwrap_or_default()),
+        );
+        wire.payload_items = payload_items;
         let card = quillmark_core::Card::try_from(wire)
             .map_err(|e| PyValueError::new_err(e.to_string()))?;
         card_to_pydict(py, &card)

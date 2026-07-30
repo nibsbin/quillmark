@@ -31,15 +31,16 @@ use crate::bind::BoundWidget;
 /// Build a [`FieldSpec`] for `widget`: copy its already-final identity, geometry,
 /// and kind through, and resolve its bound value from `data`.
 pub fn field_spec(widget: &BoundWidget, data: &Value) -> FieldSpec {
-    FieldSpec {
-        name: widget.name.clone(),
-        schema_field: widget.schema_field.clone(),
-        page: widget.page,
-        rect: widget.rect,
-        field_type: widget.field_type.clone(),
-        value: resolve_value(&widget.field_type, widget.schema_field.as_deref(), data),
-        tooltip: widget.tooltip.clone(),
-    }
+    let mut spec = FieldSpec::new(
+        widget.name.clone(),
+        widget.page,
+        widget.rect,
+        widget.field_type.clone(),
+    );
+    spec.value = resolve_value(&widget.field_type, widget.schema_field.as_deref(), data);
+    spec.schema_field = widget.schema_field.clone();
+    spec.tooltip = widget.tooltip.clone();
+    spec
 }
 
 /// Resolve a widget's bound value. `None` (blank) for: an unbound widget
