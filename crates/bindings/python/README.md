@@ -10,6 +10,9 @@ Maintained by [TTQ](https://tonguetoquill.com).
 pip install quillmark
 ```
 
+The package is typed: it ships `py.typed` and stubs for the whole surface, so
+mypy, Pyright, and IDE completion see real signatures rather than `Any`.
+
 ## Quick Start
 
 ```python
@@ -155,6 +158,9 @@ doc.clone()
 doc.equals(other)
 doc.card_count
 doc.main; doc.cards; doc.body; doc.warnings      # total-read snapshots (dicts); body is a content dict
+doc.card(0)                                      # one card, same dict shape as main (out of range raises)
+doc.card_index_by_id("intro")                    # the durable $id handle → index, or None
+doc.seed_overlay("note")                         # one $seed[kind] overlay, or None
 doc.set_quill_ref("other@1.0")
 
 # Structure (quill-free — a card kind is a name, not a schema fact):
@@ -224,7 +230,11 @@ release notes and version history.
 uv venv
 uv pip install -e ".[dev]"
 uv run pytest
+uv run python -m mypy.stubtest --ignore-disjoint-bases quillmark  # .pyi drift guard
 ```
+
+`python/quillmark/_quillmark.pyi` is hand-written and must track `src/`;
+stubtest diffs it against the built module, so a resignatured verb fails there.
 
 ## License
 

@@ -344,10 +344,20 @@ jobs:
         run: |
           uv venv --python 3.12
           source .venv/bin/activate
-          uv pip install pytest maturin
+          uv pip install pytest maturin 'mypy>=1.18'
           maturin develop
 
       - name: Test Python
         working-directory: crates/bindings/python
         run: .venv/bin/pytest -q
+
+      # The `.pyi` drift guard, the Python twin of the WASM `runtime.d.ts`
+      # typecheck above: stubtest diffs the stub against the *built* module, so a
+      # verb added, renamed, or resignatured in `src/` without the stub failing
+      # here is impossible. `--ignore-disjoint-bases` drops PEP-800 layout
+      # complaints only — `@final` already says the stronger thing about every
+      # pyo3 class.
+      - name: Typecheck Python (.pyi drift guard)
+        working-directory: crates/bindings/python
+        run: .venv/bin/python -m mypy.stubtest --ignore-disjoint-bases quillmark
 

@@ -128,7 +128,7 @@ table.
 | Card cursor | `writer.card(i)?` (eager check) | `writer.card(i)` (lazy check) | **FFI** — no borrow to validate against; the index is checked at the write |
 | Cursor kind | `writer.card(i)?.kind()` | `writer.card(i).kind` | identical — the JS getter reads through `doc.card(i)` |
 | Reads (value / body markdown / fill / `$ext`) | `body_markdown(..)` / `payload().get(..)` / `payload().is_fill(..)` / `card.ext()` (borrow chain; index for a card) | `doc.getStored(addr?)` / `doc.getMarkdown(cardAddr?)` / `doc.isFill(addr)` / `doc.getExt(cardAddr?)` / `doc.getExtNamespace(cardAddr, ns)` (JS) | **idiom** / **FFI** / **scope** — WASM fuses the transport reads onto the one `Addr` (a bare string ⇒ `{field}` for `getStored`/`isFill`) and names the verbatim field read `getStored`, not `get`, so it never collides with the interpreted `reader.get` (core's `payload().get` has no such neighbor); *total over the field axis* (absent field → `undefined`, `isFill` → `false`; only an out-of-range card throws); `getMarkdown` is the **body** read (a `CardAddr`; a present `field` throws). Python has no quill-free field read — interpreted field reads go through `quill.reader(doc).get`, and `$ext` / body content read off the `main` / `cards` dict snapshots |
-| Reads (whole card / `$id` / seed) | `card(i)` / `find_card(id)` / `main().seed()` | `doc.card(i)` / `doc.cardIndexById(id)` / `doc.seedOverlay(kind)` | **idiom** — the bindings fuse each into one named verb on `Document`; `card(i)` throws out of range, `find_card`/`cardIndexById` resolve the durable `$id` handle (unique per document — [DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md) § Card-id identity) |
+| Reads (whole card / `$id` / seed) | `card(i)` / `find_card(id)` / `main().seed()` | `doc.card(i)` / `doc.cardIndexById(id)` / `doc.seedOverlay(kind)` (JS), `doc.card(i)` / `doc.card_index_by_id(id)` / `doc.seed_overlay(kind)` (py) | **idiom** — both bindings fuse each into one named verb on `Document`, quill-free structure reads that spare the caller the whole-`cards` / whole-`main` projection; `card(i)` throws out of range, the other two are total (no such `$id` / no such kind → `undefined`/`None`). `find_card`/`cardIndexById`/`card_index_by_id` resolve the durable `$id` handle (unique per document — [DOCUMENT_STORAGE.md](DOCUMENT_STORAGE.md) § Card-id identity); JS returns the `Card` object, Python the same dict shape its `main` / `cards` getters project |
 | Richtext revise (content lane) | `Card::revise_field(name, md)?` (schema-blind, borrow chain) | `doc.revise({card, field}, md)` (addr literal, JS) | **FFI** / **scope** — same model, flattened navigation, schema-blind, `Delta` in hand; WASM-only. Python's anchor-preserving write is the typed `writer.revise_field` |
 | Opaque store | `store_field` / `store_fields` / `store_fill` | `storeField` / `storeFields` / `storeFill` (JS, `Addr`) | **scope** — the quill-free verbatim write, WASM-only; Python has no opaque field store (the typed writer is the only field write). A field write without a loadable quill operates on the storage DTO directly |
 | Parse + warnings | `Document::parse(md) -> Parsed { document, warnings }` | `Document.fromMarkdown(md)` → `doc.warnings` getter | **FFI** — the wrapper fuses `Parsed` + `Document` into one session object: `fromMarkdown` returns the document directly and stashes the parse `warnings` on it (`doc.warnings`). That getter is a deliberate asymmetry with core, where warnings live only on `Parsed`: it is session state, so `equals` and the storage DTO exclude it and `loadJson`/`fromJson` clear it (a reloaded document carries no parse warnings) |
@@ -147,7 +147,8 @@ shared model; one-shot `engine.render` (no canvas).
 > Field I/O flows through `quill.writer(doc)` / `quill.reader(doc)` exclusively;
 > `Document` is quill-free data and structure (parse, the storage DTO,
 > `insert_card` / `remove_card` / `move_card` / `make_card`, `remove_field`,
-> `$ext` / `$seed`). The opaque store (`store_field` / `store_fields` /
+> the `card` / `card_index_by_id` / `seed_overlay` reads, `$ext` / `$seed`).
+> The opaque store (`store_field` / `store_fields` /
 > `store_fill`) and the anchor-preserving content lane (`install` / `revise` /
 > `apply_change` + the `import_markdown` / `export_markdown` / `rebase` /
 > `map_pos` codec) are **WASM-only by scope, not by lag** — their audience,
@@ -159,6 +160,12 @@ Every Python verb is identical to its core/WASM twin or names its one difference
 in the parity table above: `card=None` selectors fold the composable-card `$ext`
 / `remove_field` twins onto one axis, and `revise_field` discards the `Delta`
 (an editor receipt). No half-mirrored lane remains to drift.
+
+**The surface is typed.** pyo3 docstrings are runtime-only, so the wheel ships a
+`py.typed` marker beside a hand-written `_quillmark.pyi` — without them every
+class resolves to `Any`. `mypy.stubtest` diffs that stub against the *built*
+module in CI, the Python twin of WASM's `runtime.d.ts` typecheck: a verb added,
+renamed, or resignatured in `src/` without the stub fails there.
 
 ## WebAssembly — `bindings/quillmark-wasm`
 

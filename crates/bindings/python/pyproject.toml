@@ -33,13 +33,20 @@ Changelog = "https://github.com/borb-sh/quillmark/blob/main/CHANGELOG.md"
 dev = [
     "pytest>=8.0",
     "maturin>=1.7,<2.0",
+    "mypy>=1.18",  # `mypy.stubtest` is the .pyi drift guard; 1.18 for --ignore-disjoint-bases
 ]
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
 python-source = "python"
 module-name = "quillmark._quillmark"
-include = ["python/quillmark/**/*.py"]
+# `py.typed` and the `.pyi` are the typed surface — a wheel without them types
+# as `Any` no matter what the source tree carries, so they ship explicitly.
+include = [
+    "python/quillmark/**/*.py",
+    "python/quillmark/**/*.pyi",
+    "python/quillmark/py.typed",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
