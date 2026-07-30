@@ -128,11 +128,12 @@ fn fixture_renders_structurally_valid_filled_pdf() {
 }
 
 /// The unbound population: widgets a signer fills, whose kind comes from
-/// `form.json`'s own `type` token instead of a schema field. `stamp.rs` owns the
-/// spine's `FieldType` → `/FT` mapping; the half that is this file's is the rest
-/// of that path — the declared token survives bind into the stamped output, the
-/// `options` array reaches the widget, and no document value lands on any of
-/// them.
+/// `form.json`'s own `type` token instead of a schema field.
+///
+/// `stamp.rs` owns the spine's `FieldType` → `/FT` mapping. What this file owns
+/// is the rest of that path: the declared token survives bind into the stamped
+/// output, the `options` array reaches the widget, and no document value lands
+/// on an unbound widget.
 #[test]
 fn unbound_widgets_stamp_their_declared_kind_and_take_no_value() {
     let result = render(FILLED);
@@ -157,8 +158,8 @@ fn unbound_widgets_stamp_their_declared_kind_and_take_no_value() {
         );
     }
 
-    // `options` has no schema counterpart — an unbound choice is the only way to
-    // declare dropdown options, so this is the only path that carries them.
+    // `options` has no schema counterpart: an unbound choice is the only place
+    // dropdown options are declared, so no other path carries them.
     let opts: Vec<String> = widget(&doc, af, "SignerRole")
         .get(b"Opt")
         .unwrap()

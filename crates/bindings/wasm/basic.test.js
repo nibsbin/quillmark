@@ -279,9 +279,9 @@ describe('Document JSON DTO — toJson / fromJson', () => {
 // Authoring text — core's canonical strings, re-exposed
 // ---------------------------------------------------------------------------
 //
-// Four statics whose bodies are `quillmark_core` constants: the single source of
-// truth an LLM/MCP consumer authors against. Wording is core's to assert; what
-// is the binding's is that each one reaches JS at all, since a re-export that
+// Four statics whose bodies are `quillmark_core` constants: the single source
+// of truth an LLM/MCP consumer authors against. Wording is core's to assert.
+// What the binding owns is that each one reaches JS at all — a re-export that
 // returns "" is indistinguishable from a working one until a consumer pastes it
 // into a prompt.
 
