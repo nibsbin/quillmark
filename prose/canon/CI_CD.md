@@ -95,4 +95,8 @@ and the partial-upload skip above makes the re-run that finishes the batch safe.
   `rust-version.workspace = true` (the field does *not* apply without that
   opt-in) and held by CI's `msrv` job. It tracks the floor the Typst toolchain
   forces, so for the default build it is measured rather than chosen.
+- Edition is 2024, set in `[workspace.package]` and inherited the same way. It
+  requires 1.85 — seven releases under the MSRV floor — so it constrains no
+  consumer the floor does not already. `resolver` stays explicit at `"2"`;
+  edition 2024 implies `"3"` only where the resolver is unset.
 - WASM npm version is derived from the workspace version at build time (`scripts/build-wasm.sh`); Python version comes from the workspace `Cargo.toml` via maturin `dynamic = ["version"]`.

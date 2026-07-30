@@ -442,9 +442,9 @@ fn insert_after(pdf: &[u8], needle: &[u8], insertion: &[u8]) -> Vec<u8> {
 fn nonzero_generation_catalog_rejected_cleanly() {
     // A base whose catalog lives at a non-zero generation parses fine for the
     // reader but would silently corrupt an incremental update (the writer
-    // re-emits at gen 0 and points /Root at gen 0). Reject it.
+    // re-emits at generation 0 and points /Root at generation 0). Reject it.
     let mut base = build_base_pdf(1);
-    // Bump the catalog (object 1) header and the trailer /Root ref to gen 2.
+    // Bump the catalog (object 1) header and the trailer /Root ref to generation 2.
     replace_first(&mut base, b"1 0 obj", b"1 2 obj");
     replace_first(&mut base, b"/Root 1 0 R", b"/Root 1 2 R");
     let err = stamp(
