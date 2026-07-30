@@ -32,12 +32,12 @@ jobs:
       # PRs opened with the default GITHUB_TOKEN do not trigger workflow events.
       - name: Generate token
         id: app
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.TAGGER_APP_ID }}
           private-key: ${{ secrets.TAGGER_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ steps.app.outputs.token }}
@@ -46,7 +46,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - name: Install cargo-release
-        uses: taiki-e/install-action@v2
+        uses: taiki-e/install-action@v2.85.2
         with:
           tool: cargo-release
 
