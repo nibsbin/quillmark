@@ -2,9 +2,12 @@ name: CI
 
 on:
   pull_request:
+  # main only. A branch push used to fire this too, so a PR branch ran the
+  # whole suite twice for one commit; the PR event is the one with the merge
+  # result in it, so it wins. Tags cannot match `branches`, so release tags
+  # stay out on their own.
   push:
-    tags-ignore:
-      - 'v**'
+    branches: [main]
 
 permissions:
   contents: read
@@ -31,6 +34,24 @@ jobs:
       # runs before the Rust setup and fails fast on a checkout-only step.
       - name: Check canon spine
         run: node scripts/check-canon.mjs
+
+      # Guards scripts/strip-seed-comment.sh, which release.yml and
+      # release-prepare.yml rely on to keep the release-prepare coverage comment
+      # out of published Release notes and merged CHANGELOG.md. Rides along here
+      # rather than in its own job: the assertions take 0s, so standing up a
+      # runner for them was ~100% overhead. Runs in RUNNER_TEMP so the fixtures
+      # never dirty the checkout.
+      - name: Check strip-seed-comment.sh strips the comment, and is a no-op without one
+        run: |
+          cd "$RUNNER_TEMP"
+          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n\n<!-- seed: commits since v0.9.0 — confirm the entries above cover them, then delete this comment\n- commit a\n- commit b\n-->\n\n## v0.9.0 - 2025-12-01\n\n- old entry\n' > seeded.md
+          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n\n## v0.9.0 - 2025-12-01\n\n- old entry\n' > seeded.expected.md
+          "$GITHUB_WORKSPACE/scripts/strip-seed-comment.sh" seeded.md
+          diff seeded.expected.md seeded.md
+          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n' > clean.md
+          cp clean.md clean.expected.md
+          "$GITHUB_WORKSPACE/scripts/strip-seed-comment.sh" clean.md
+          diff clean.expected.md clean.md
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -61,22 +82,28 @@ jobs:
         run: cargo doc --no-deps --locked -p quillmark-wasm
 
   test:
-    # The CLI ships to crates.io, the wheels to PyPI, and the libraries to
-    # anyone's platform, so the suite runs where consumers run. Tree paths are
-    # `/`-joined and lookups resolve via `Path::components()`, which accepts
-    # either separator — this is what keeps that true.
+    # The CLI ships to crates.io, so the suite has to run on Windows — but on
+    # merge, not on every PR push. It bills at 2x and was 53% of the entire CI
+    # spend to re-run a suite that is overwhelmingly platform-blind: the tree
+    # carries no `target_os`/`target_family` cfg anywhere, so the only surface
+    # that can differ is path handling (tree paths are `/`-joined and resolve
+    # via `Path::components()`, which takes either separator) and checkout line
+    # endings (pinned in .gitattributes after they broke the snapshot test).
+    # Both of those are now structural rather than a thing each PR can regress.
     #
-    # Windows is the whole reason this is a matrix: it is the one runner whose
-    # path separator and checkout line endings differ, and it earned the slot by
-    # catching both. macOS is not in it — the tree carries no `target_os`/
-    # `target_family` cfg and loads no system fonts, so against Linux it differs
-    # only in being case-insensitive, which is strictly more permissive and so
-    # catches nothing Linux misses. Add it back when platform-conditional code
-    # or a macOS-only report says otherwise, not on principle.
+    # The trade is real and one line to undo: a Windows-only break reaches main
+    # and is caught on the merge run instead of in review. Put windows-latest in
+    # the pull_request arm below if that stops being the right side of it.
+    #
+    # macOS is in neither arm — against Linux it differs only in being
+    # case-insensitive, which is strictly more permissive, so it catches nothing
+    # Linux misses. It billed at 10x for that.
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: ${{ github.event_name == 'push'
+          && fromJSON('["ubuntu-latest", "windows-latest"]')
+          || fromJSON('["ubuntu-latest"]') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -195,28 +222,6 @@ jobs:
       - name: Audit dependencies against RUSTSEC
         run: cargo audit
 
-  release-tooling:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # Guards scripts/strip-seed-comment.sh, the tool release.yml and
-      # release-prepare.yml rely on to keep the release-prepare coverage
-      # comment out of published Release notes and merged CHANGELOG.md.
-      - name: Test strip-seed-comment.sh strips the comment and collapses to one blank line
-        run: |
-          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n\n<!-- seed: commits since v0.9.0 — confirm the entries above cover them, then delete this comment\n- commit a\n- commit b\n-->\n\n## v0.9.0 - 2025-12-01\n\n- old entry\n' > fixture.md
-          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n\n## v0.9.0 - 2025-12-01\n\n- old entry\n' > fixture.expected.md
-          ./scripts/strip-seed-comment.sh fixture.md
-          diff fixture.expected.md fixture.md
-
-      - name: Test strip-seed-comment.sh is a no-op without a seed comment
-        run: |
-          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n' > clean.md
-          cp clean.md clean.expected.md
-          ./scripts/strip-seed-comment.sh clean.md
-          diff clean.expected.md clean.md
-
   wasm:
     runs-on: ubuntu-latest
     steps:
@@ -272,9 +277,11 @@ jobs:
       - name: Build WASM
         run: ./scripts/build-wasm.sh --ci
 
+      # `ci` not `install`: installs straight from package-lock.json, so the
+      # lockfile cannot drift silently in CI the way `install` can rewrite it.
       - name: Install npm dependencies
         working-directory: crates/bindings/wasm
-        run: npm install
+        run: npm ci
 
       - name: Test WASM
         working-directory: crates/bindings/wasm
