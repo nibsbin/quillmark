@@ -83,6 +83,16 @@ def test_quill_properties(engine, taro_quill_dir):
     assert OutputFormat.PDF in supported_formats
 
 
+def test_registered_backends(engine):
+    """The engine's backend roster — which backends this build compiled in, as
+    opposed to which formats a given quill supports (`supported_formats`)."""
+    backends = engine.registered_backends()
+    assert isinstance(backends, list)
+    assert all(isinstance(b, str) for b in backends)
+    # The published wheel builds both backends in; order is not guaranteed.
+    assert "typst" in backends
+
+
 def test_full_workflow(engine):
     """Test loading a quill engine-free and rendering through the engine."""
     taro_dir = QUILLS_PATH / "taro"

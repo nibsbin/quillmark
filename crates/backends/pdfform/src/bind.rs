@@ -586,6 +586,50 @@ main:
     }
 
     #[test]
+    fn unbound_widgets_pass_their_declared_kind_through() {
+        // A bound field's kind is projected from the schema (the `kind` cases
+        // above); an unbound widget's comes from its own `type` token with no
+        // schema consulted. `schema_field: None` is what the resolve and region
+        // steps read to skip it — a widget the signer fills, not the document.
+        let spec = FormSpec::parse(
+            br#"{
+              "schema": "quillmark/form@0.2.0",
+              "widgets": [
+                { "name": "T", "page": 0, "rect": { "x": 0, "y": 0, "w": 1, "h": 1 },
+                  "type": "text" },
+                { "name": "M", "page": 0, "rect": { "x": 0, "y": 2, "w": 1, "h": 1 },
+                  "type": "text", "multiline": true },
+                { "name": "C", "page": 0, "rect": { "x": 0, "y": 4, "w": 1, "h": 1 },
+                  "type": "checkbox" },
+                { "name": "Ch", "page": 0, "rect": { "x": 0, "y": 6, "w": 1, "h": 1 },
+                  "type": "choice", "options": ["a", "b"] },
+                { "name": "S", "page": 0, "rect": { "x": 0, "y": 8, "w": 1, "h": 1 },
+                  "type": "signature" }
+              ]
+            }"#,
+        )
+        .unwrap();
+        let bound = bind_widgets(&spec, &config(), &[[0.0, 0.0, 612.0, 792.0]]).unwrap();
+
+        let kinds: Vec<WidgetType> = bound.iter().map(|w| w.field_type.clone()).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                WidgetType::Text { multiline: false },
+                WidgetType::Text { multiline: true },
+                WidgetType::Checkbox,
+                WidgetType::Choice {
+                    options: vec!["a".into(), "b".into()]
+                },
+                WidgetType::Signature,
+            ]
+        );
+        assert!(bound.iter().all(|w| w.schema_field.is_none()));
+        // Geometry is placed exactly as a bound field's is.
+        assert_eq!(bound[0].rect, [0.0, 791.0, 1.0, 792.0]);
+    }
+
+    #[test]
     fn place_flips_to_bottom_left_and_honours_origin() {
         let r = Rect {
             x: 180.0,

@@ -83,6 +83,10 @@ impl PyQuillmark {
             .collect())
     }
 
+    /// The backend ids this build compiled in, in no guaranteed order — the
+    /// engine's roster, as opposed to the per-quill capability probe
+    /// `supported_formats`. Python-only by scope: WASM settles the same question
+    /// at build time through its variant split, so it exposes no runtime read.
     fn registered_backends(&self) -> Vec<String> {
         self.inner
             .registered_backends()
