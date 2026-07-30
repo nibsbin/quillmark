@@ -83,7 +83,7 @@ impl QuillConfig {
     ///
     /// This bypasses [`Self::from_yaml`] and its validation, so a config built
     /// here can hold shapes the parser refuses. Loading a quill goes through
-    /// `from_yaml`; this is for a caller assembling a schema in memory.
+    /// `from_yaml`. This is for a caller assembling a schema in memory.
     pub fn new(name: String, backend: String, version: String, main: CardSchema) -> Self {
         Self {
             name,

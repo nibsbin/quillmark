@@ -4,10 +4,11 @@ use std::error::Error as StdError;
 use std::path::Path;
 /// A node in the file tree structure
 ///
-/// Out-of-crate callers build these — `Quill::from_tree` takes one — and
-/// `#[non_exhaustive]` leaves variant construction untouched, so the attribute
-/// costs the building direction nothing. Symlinks are refused at the loader
-/// rather than modelled here.
+/// Out-of-crate callers build these; `Quill::from_tree` takes one.
+/// `#[non_exhaustive]` leaves variant construction untouched, so the building
+/// direction is unaffected.
+///
+/// Symlinks are refused at the loader rather than modelled here.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub enum FileTreeNode {

@@ -89,9 +89,8 @@ pub struct FieldSpec {
 }
 
 impl FieldSpec {
-    /// The four facts every widget carries. The optional three
-    /// (`schema_field`, `value`, `tooltip`) default to `None`; a resolver that
-    /// already holds them as options assigns them directly.
+    /// The four facts every widget carries. `schema_field`, `value`, and
+    /// `tooltip` start `None`.
     pub fn new(name: String, page: usize, rect: [f32; 4], field_type: FieldType) -> Self {
         Self {
             name,

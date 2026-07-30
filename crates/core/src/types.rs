@@ -125,9 +125,7 @@ pub struct Artifact {
 }
 
 impl Artifact {
-    /// The two facts an artifact always carries. A field added later is
-    /// optional by construction — it gets a default here and a setter beside
-    /// it, so this signature does not move.
+    /// The two facts an artifact always carries.
     pub fn new(bytes: Vec<u8>, output_format: OutputFormat) -> Self {
         Self {
             bytes,
@@ -153,10 +151,8 @@ impl Artifact {
 /// convenience beside one. Reading and assigning an individual field still
 /// works — `opts.ppi = Some(300.0)` is equivalent to the setter.
 ///
-/// This is the type in [`COMPATIBILITY`]'s evidence column: two options landed
-/// in six minors. Adding a seventh under the attribute costs a caller nothing.
-///
-/// [`COMPATIBILITY`]: https://github.com/borb-sh/quillmark/blob/main/prose/canon/COMPATIBILITY.md
+/// This is the render surface's growth point: a new option is a new field here.
+/// Under the attribute that costs a caller nothing.
 #[derive(Debug, Clone, Default)]
 #[non_exhaustive]
 pub struct RenderOptions {

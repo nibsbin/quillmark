@@ -23,8 +23,6 @@ fn render(format: OutputFormat, ppi: Option<f32>) -> Vec<quillmark_core::Artifac
         .expect("load sample_form quill");
     let engine = Quillmark::new();
     let doc = Document::parse(FILLED).expect("parse markdown").document;
-    // `ppi` is already an Option here, so it goes in by assignment rather than
-    // through `with_ppi`.
     let mut opts = RenderOptions::default().with_output_format(format);
     opts.ppi = ppi;
     engine

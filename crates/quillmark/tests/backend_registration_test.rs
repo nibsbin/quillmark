@@ -10,8 +10,8 @@ struct MockBackend {
     id: &'static str,
 }
 
-// `Backend` is sealed. A test backend naming the seal is the seam working as
-// documented: it declares that this implementation tracks an unstable trait.
+// `Backend` is sealed. Naming the seal is how an implementation declares it
+// tracks an unstable trait.
 impl quillmark_core::backend::sealed::Sealed for MockBackend {}
 
 impl Backend for MockBackend {

@@ -142,7 +142,7 @@ pub struct CardWire {
 
 impl CardWire {
     /// A card block with no `$`-prefixed system metadata. `kind` is the empty
-    /// string for a block declaring none; `body` is canonical Content-JSON, or
+    /// string for a block declaring none. `body` is canonical Content-JSON, or
     /// a markdown string the reader imports.
     pub fn new(kind: String, body: JsonValue) -> Self {
         Self {

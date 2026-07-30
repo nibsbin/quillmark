@@ -227,7 +227,7 @@ pub struct CardSchema {
 
 impl CardSchema {
     /// A card kind's name and its ordered field map. `description`, `ui`, and
-    /// `body` are absent; assign them to fill them in.
+    /// `body` start absent.
     pub fn new(name: String, fields: IndexMap<String, FieldSchema>) -> Self {
         Self {
             name,

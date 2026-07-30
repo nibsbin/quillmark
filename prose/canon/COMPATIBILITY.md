@@ -47,8 +47,8 @@ Mark it, unless a downstream `_` arm can be **silently** wrong.
 
 The question is what a missed variant does, not whether the concept feels
 closed. Ontological arguments — "a severity is two levels", "a tree is files and
-directories" — are the ones that get falsified; `OutputFormat` dropped `Txt` in
-0.98. Ask instead:
+directories" — are the ones that get falsified, and `OutputFormat` has already
+lost a variant. Ask instead:
 
 - **Loud on a miss** → mark it. A `_` arm that raises, refuses, or degrades to a
   documented lower bound loses nothing.
@@ -72,8 +72,9 @@ differently. Two rules keep that from drifting:
   every one of them promises bytes the caller did not ask for.
 
 When the arm restates a diagnostic another site already builds, share the
-constructor rather than hand-writing the body — `quillmark_core::unsupported_format`
-exists because three sites had drifted to two payloads under one code.
+constructor rather than hand-writing the body. One code carries one payload, so
+`quillmark_core::unsupported_format` is the single place the format refusal is
+built and three call sites cannot spell it three ways.
 
 ### The struct rule
 
@@ -92,9 +93,11 @@ every field is exactly as brittle as the literal it replaced.
 `RenderOptions` is the type this cost is real for. `#[non_exhaustive]` forbids
 functional update, so `RenderOptions { .., ..Default::default() }` does not
 compile out-of-crate and `RenderOptions::default().with_output_format(…)` is the
-path. That break was taken at the 1.0.0 freeze deliberately: it is the last
-point where it is free, and this is the type that gained two options in six
-minors.
+path.
+
+A tag is the cheapest moment to take a break like that, and the last one for the
+major it opens. Declining at the tag is a decision for the whole `1.x` series:
+an option that cannot be added in 1.4 costs a 2.0.
 
 ## What the attribute does not cover
 
