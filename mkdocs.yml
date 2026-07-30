@@ -76,6 +76,7 @@ not_in_nav: |
   /migrations/0.95-to-0.96.md
   /migrations/0.96-to-0.97.md
   /migrations/0.97-to-0.98.md
+  /migrations/0.98-to-0.99.md
 
 markdown_extensions:
   - pymdownx.highlight:
