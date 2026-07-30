@@ -43,6 +43,7 @@ pub struct BoundWidget {
 /// point of binding at load is to turn what was a silently-blank (or misplaced)
 /// widget into a diagnostic.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum BindError {
     /// A `schema_field` path does not resolve: a missing root, or a `.segment`
     /// that descends into the wrong shape or a nonexistent key. Names the failing
@@ -310,7 +311,11 @@ pub fn project_kind(
             },
             _ => return Err(unbindable()),
         },
-        SchemaType::Object => return Err(unbindable()),
+        // `Object`, plus — `SchemaType` being `#[non_exhaustive]` — any type
+        // this build has no widget shape for. A quill author does not control
+        // which pdfform build reads their quill, so reporting `unbindable`
+        // beats failing to compile in a crate they never touch.
+        _ => return Err(unbindable()),
     })
 }
 
@@ -519,7 +524,7 @@ card_kinds:
     fn card_absolute_index_and_bad_kind_are_dangling() {
         let c = config();
         // `$cards.0.from` — absolute index: `0` is not a card kind, so it dangles
-        // at that segment (absolute addressing is gone in form@0.2.0).
+        // at that segment. Absolute addressing is not part of `form@0.2.0`.
         assert!(matches!(
             bind(&c, "W", "$cards.0.from"),
             Err(BindError::Dangling { .. })

@@ -21,6 +21,11 @@ mod compile;
 /// [`Content`](quillmark_content::Content) and knows the resulting byte
 /// layout, so the only place a source map can be produced. This is the sole
 /// markup-producing path in the render engine — no code parses markdown.
+///
+/// **Workspace-internal; not covered by this crate's semver.** `pub` only so
+/// `quillmark-fuzz` can drive the escapers and the lowering directly. The
+/// supported surface of this crate is [`TypstBackend`].
+#[doc(hidden)]
 pub mod emit;
 mod error_mapping;
 
@@ -82,9 +87,19 @@ struct TypstSession {
     /// Per-page content fingerprints of the live compile; diffed against the
     /// next compile's to produce `ChangeSet::dirty_pages`.
     page_hashes: Vec<u128>,
-    /// Typst's non-fatal warnings for the live compile, swapped with it on
-    /// each committed `apply`.
-    compile_warnings: Vec<Diagnostic>,
+    /// What [`session_warnings`] built for the live compile: the quill's load
+    /// warnings, then this compile's. The compile half swaps on each committed
+    /// `apply`; the load half rides along unchanged.
+    warnings: Vec<Diagnostic>,
+}
+
+/// The session's warning list: the quill's load warnings, then this compile's
+/// own. One order, built in one place, so an `apply` that swaps only what it
+/// recompiled cannot drop the load half.
+fn session_warnings(world: &world::QuillWorld, compile: Vec<Diagnostic>) -> Vec<Diagnostic> {
+    let mut all = world.load_warnings().to_vec();
+    all.extend(compile);
+    all
 }
 
 /// Per-page fingerprints of *visible* content, diffed across compiles for
@@ -289,13 +304,10 @@ impl SessionHandle for TypstSession {
         let format = opts.output_format.unwrap_or(OutputFormat::Pdf);
 
         if !SUPPORTED_FORMATS.contains(&format) {
-            return Err(RenderError::from_diag(
-                Diagnostic::new(
-                    Severity::Error,
-                    format!("{:?} not supported by typst backend", format),
-                )
-                .with_code("backend::format_not_supported".to_string())
-                .with_hint(format!("Supported formats: {:?}", SUPPORTED_FORMATS)),
+            return Err(quillmark_core::unsupported_format(
+                format,
+                "typst",
+                SUPPORTED_FORMATS,
             ));
         }
 
@@ -344,7 +356,7 @@ impl SessionHandle for TypstSession {
         self.helper_source = helper_source;
         self.page_count = new_hashes.len();
         self.page_hashes = new_hashes;
-        self.compile_warnings = compile_warnings;
+        self.warnings = session_warnings(&self.world, compile_warnings);
 
         Ok(ChangeSet {
             page_count: self.page_count,
@@ -352,9 +364,9 @@ impl SessionHandle for TypstSession {
         })
     }
 
-    /// Typst's non-fatal warnings for the current compile.
+    /// The quill's load warnings, then this compile's own.
     fn warnings(&self) -> &[Diagnostic] {
-        &self.compile_warnings
+        &self.warnings
     }
 
     /// Page dimensions in Typst points (1 pt = 1/72 inch). `None` if `page` is
@@ -559,6 +571,7 @@ impl Backend for TypstBackend {
         };
         windows.extend(scalar_windows.iter().cloned());
         let (document, compile_warnings) = compile::compile_document(&world)?;
+        let warnings = session_warnings(&world, compile_warnings);
         let helper_src = helper_source(&world)?;
         let page_count = document.pages().len();
         let field_placements = overlay::extract(&document)?;
@@ -573,7 +586,7 @@ impl Backend for TypstBackend {
             scalar_windows,
             helper_source: helper_src,
             page_hashes: hashes,
-            compile_warnings,
+            warnings,
         };
         Ok(LiveSession::new(Box::new(session)))
     }

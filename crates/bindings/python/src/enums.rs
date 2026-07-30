@@ -9,7 +9,7 @@ macro_rules! py_enum {
             $($variant:ident),* $(,)?
         }
     ) => {
-        #[pyclass(name = $py_name, eq, eq_int)]
+        #[pyclass(name = $py_name, eq, eq_int, from_py_object)]
         #[derive(Clone, Copy, PartialEq)]
         $(#[$meta])*
         $vis enum $name {
@@ -69,6 +69,11 @@ impl From<OutputFormat> for PyOutputFormat {
             OutputFormat::Pdf => PyOutputFormat::PDF,
             OutputFormat::Svg => PyOutputFormat::SVG,
             OutputFormat::Png => PyOutputFormat::PNG,
+            // Forced by `#[non_exhaustive]`, unreachable in practice: this
+            // crate is `publish = false` and path-deps the core beside it, so
+            // the two variant lists ship together. A format added to core needs
+            // a member here, and the mapping below is what would notice.
+            _ => PyOutputFormat::PDF,
         }
     }
 }

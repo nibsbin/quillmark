@@ -1,7 +1,7 @@
 //! Schema-bound typed writer — the front door for typed field writes.
 //!
-//! [`Card::commit_field`](crate::Card::commit_field) still asks the caller to
-//! fetch a [`FieldSchema`] per write. Every consumer that wants typed writes (a
+//! [`Card::commit_field`](crate::Card::commit_field) asks the caller to fetch a
+//! [`FieldSchema`] per write. Every consumer that wants typed writes (a
 //! form editor, an MCP server) already holds the resolved [`QuillConfig`] — it
 //! renders with it. [`Quill::writer`](crate::Quill::writer) binds the schema
 //! once, so callers issue one verb (`set`) and never pass a type token or an

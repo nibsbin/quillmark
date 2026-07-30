@@ -58,6 +58,7 @@ use crate::value::QuillValue;
 /// value verbatim (the transport read, reached through the schema). Absence is
 /// the `None` of the enclosing `Option`, not a variant here.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum ReadValue {
     /// A `richtext` field projected to markdown (`export ∘ decode`) — the lossy,
     /// on-demand view (content-only marks do not survive markdown).

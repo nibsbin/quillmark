@@ -2,9 +2,12 @@ name: CI
 
 on:
   pull_request:
+  # main only. A branch push used to fire this too, so a PR branch ran the
+  # whole suite twice for one commit; the PR event is the one with the merge
+  # result in it, so it wins. Tags cannot match `branches`, so release tags
+  # stay out on their own.
   push:
-    tags-ignore:
-      - 'v**'
+    branches: [main]
 
 permissions:
   contents: read
@@ -31,6 +34,24 @@ jobs:
       # runs before the Rust setup and fails fast on a checkout-only step.
       - name: Check canon spine
         run: node scripts/check-canon.mjs
+
+      # Guards scripts/strip-seed-comment.sh, which release.yml and
+      # release-prepare.yml rely on to keep the release-prepare coverage comment
+      # out of published Release notes and merged CHANGELOG.md. Rides along here
+      # rather than in its own job: the assertions take 0s, so standing up a
+      # runner for them was ~100% overhead. Runs in RUNNER_TEMP so the fixtures
+      # never dirty the checkout.
+      - name: Check strip-seed-comment.sh strips the comment, and is a no-op without one
+        run: |
+          cd "$RUNNER_TEMP"
+          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n\n<!-- seed: commits since v0.9.0 — confirm the entries above cover them, then delete this comment\n- commit a\n- commit b\n-->\n\n## v0.9.0 - 2025-12-01\n\n- old entry\n' > seeded.md
+          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n\n## v0.9.0 - 2025-12-01\n\n- old entry\n' > seeded.expected.md
+          "$GITHUB_WORKSPACE/scripts/strip-seed-comment.sh" seeded.md
+          diff seeded.expected.md seeded.md
+          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n' > clean.md
+          cp clean.md clean.expected.md
+          "$GITHUB_WORKSPACE/scripts/strip-seed-comment.sh" clean.md
+          diff clean.expected.md clean.md
 
       - name: Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -82,27 +103,99 @@ jobs:
       - name: Tests (zero-backend configuration)
         run: cargo test -p quillmark --no-default-features --locked
 
-  release-tooling:
+  # release.yml publishes with `--no-verify`, which skips building each crate
+  # from its own `.crate` archive. That check has to happen somewhere it can
+  # still change the outcome: a crates.io version cannot be replaced, so a file
+  # the build needs but `include` omits is only fixable before the tag.
+  package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      # Guards scripts/strip-seed-comment.sh, the tool release.yml and
-      # release-prepare.yml rely on to keep the release-prepare coverage
-      # comment out of published Release notes and merged CHANGELOG.md.
-      - name: Test strip-seed-comment.sh strips the comment and collapses to one blank line
-        run: |
-          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n\n<!-- seed: commits since v0.9.0 — confirm the entries above cover them, then delete this comment\n- commit a\n- commit b\n-->\n\n## v0.9.0 - 2025-12-01\n\n- old entry\n' > fixture.md
-          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n\n## v0.9.0 - 2025-12-01\n\n- old entry\n' > fixture.expected.md
-          ./scripts/strip-seed-comment.sh fixture.md
-          diff fixture.expected.md fixture.md
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Test strip-seed-comment.sh is a no-op without a seed comment
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      # Builds every publishable crate from its packaged archive — the step
+      # `cargo publish --no-verify` drops. The four `publish = false` crates are
+      # excluded because `--workspace` would package them too, and the wasm
+      # binding deliberately carries a version-less path dep on `quillmark`
+      # (so `default-features = false` is honoured), which `cargo package`
+      # rejects.
+      - name: Package all publishable crates
         run: |
-          printf '## v1.0.0 - 2026-01-01\n\n- entry one\n' > clean.md
-          cp clean.md clean.expected.md
-          ./scripts/strip-seed-comment.sh clean.md
-          diff clean.expected.md clean.md
+          cargo package --workspace --locked \
+            --exclude quillmark-wasm \
+            --exclude quillmark-python \
+            --exclude quillmark-fuzz \
+            --exclude quillmark-fixtures
+
+      # `include` lists `LICENSE*`, which resolves against the package
+      # directory, not the workspace root; each published crate carries a
+      # symlink so the Apache-2.0 text actually ships (Apache-2.0 §4(a)).
+      - name: Every published crate ships its license text
+        run: |
+          status=0
+          for crate in target/package/*.crate; do
+            if ! tar tzf "$crate" | grep -qE '/LICENSE$'; then
+              echo "::error::$(basename "$crate") ships no LICENSE"
+              status=1
+            fi
+          done
+          exit $status
+
+  # Holds `rust-version` in Cargo.toml to something true. Without this a
+  # dependency bump can raise the real floor silently, and a consumer on a
+  # pinned toolchain learns about it from a compile error deep in the tree
+  # rather than from the resolver.
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read the declared MSRV
+        id: msrv
+        run: |
+          MSRV=$(cargo metadata --format-version=1 --no-deps \
+            | jq -r '.packages[] | select(.name == "quillmark") | .rust_version')
+          echo "version=$MSRV" >> "$GITHUB_OUTPUT"
+          echo "MSRV is $MSRV"
+
+      - name: Setup Rust toolchain (MSRV)
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check on the MSRV toolchain
+        run: cargo check --workspace --all-features --locked
+
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cargo.lock resolves 440 packages, including the Typst toolchain and a
+      # hand-rolled PDF reader/writer. Nothing else watches them for advisories.
+      #
+      # Deliberately `cargo audit` and not rustsec/audit-check: the action fails
+      # the check on warnings too, and `unmaintained`/`yanked` fire on six crates
+      # Typst pins that no change here can move — a gate that is red no matter
+      # what the PR does gets clicked past, which is worse than no gate. Bare
+      # `cargo audit` fails on vulnerabilities and prints warnings. The two
+      # vulnerabilities that are themselves pinned out of reach are listed, with
+      # reasons, in .cargo/audit.toml.
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: Audit dependencies against RUSTSEC
+        run: cargo audit
 
   wasm:
     runs-on: ubuntu-latest
@@ -159,6 +252,8 @@ jobs:
       - name: Build WASM
         run: ./scripts/build-wasm.sh --ci
 
+      # `install`, not `ci`: package-lock.json is gitignored (.gitignore:45), so
+      # a fresh checkout has no lockfile for `ci` to install from.
       - name: Install npm dependencies
         working-directory: crates/bindings/wasm
         run: npm install

@@ -2,9 +2,8 @@ use proptest::prelude::*;
 use quillmark_typst::emit::{escape_markup, escape_string};
 
 /// Markdown → Typst markup over the content pipeline: import to a `Content`, then
-/// lower it. This is the render path the former single-step `mark_to_typst`
-/// became — property-fuzzed here (no panic, escaping, formatting → Typst
-/// functions) exactly as that lowering was.
+/// lower it. The render path, property-fuzzed here for no panic, escaping, and
+/// formatting → Typst functions.
 fn mark_to_typst(markdown: &str) -> Result<String, String> {
     let rt = quillmark_content::import::from_markdown(markdown).map_err(|e| e.to_string())?;
     quillmark_typst::emit::emit_content(&rt)
@@ -80,19 +79,15 @@ proptest! {
 
     #[test]
     fn fuzz_mark_to_typst_no_panic(s in "\\PC{0,1000}") {
-        // Just verify it doesn't panic on various inputs
         let _ = mark_to_typst(&s);
     }
 
     #[test]
     fn fuzz_mark_to_typst_special_chars_escaped(s in "[a-zA-Z0-9 *_#\\[\\]$<>@\\\\]{0,100}") {
         let output = mark_to_typst(&s);
-        // If input contains raw special characters (not in markdown syntax),
-        // they should be escaped in output
-        // This is a basic safety check - the conversion should not panic
-        // Note: Some inputs like "<a>" may be treated as HTML and result in empty output
-        // which is valid behavior - we're just checking for no panics
-        let _ = output; // Just verify no panic
+        // No-panic only. Escaping is not asserted here: an input like "<a>" is
+        // markdown HTML and lowers to empty output, which is valid.
+        let _ = output;
     }
 }
 

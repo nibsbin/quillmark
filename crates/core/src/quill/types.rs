@@ -244,6 +244,7 @@ impl CardSchema {
 /// the sibling `inline:` key (folded into `FieldType::RichText { inline }`), not
 /// in the `type:` token.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum FieldType {
     String,
     /// Integers and decimals
@@ -310,8 +311,8 @@ pub enum FieldType {
     /// deprecated `enum:` modifier on `string`). Projects to the idiomatic
     /// JSON-Schema `{type: string, enum: [...]}` — exactly the shape backends
     /// already consume, so promoting the token costs zero backend edits. Scoped
-    /// to string-valued members in v1 (an enum is a branching key; numeric
-    /// domains are range constraints on `number`, not enums).
+    /// to string-valued members: an enum is a branching key, and numeric
+    /// domains are range constraints on `number`, not enums.
     Enum,
 }
 
@@ -448,9 +449,9 @@ struct FieldSchemaDef {
     pub default: Option<QuillValue>,
     pub example: Option<QuillValue>,
     pub ui: Option<UiFieldSchema>,
-    /// The deprecated `enum:` modifier on `type: string`. Accepted for one
-    /// release alongside the promoted `type: enum` + `values:` spelling; both
-    /// land in [`FieldSchema::enum_values`].
+    /// The deprecated `enum:` modifier on `type: string`, accepted alongside
+    /// the promoted `type: enum` + `values:` spelling; both land in
+    /// [`FieldSchema::enum_values`].
     #[serde(rename = "enum")]
     pub enum_values: Option<Vec<String>>,
     /// The `values:` list required by the promoted `type: enum`. Merged with
@@ -490,7 +491,7 @@ impl FieldSchema {
         // Fold the two enum spellings into the one carrier: the promoted
         // `type: enum` requires `values:`; the deprecated `enum:` modifier is
         // accepted only on `string`. On any other type an `enum:`/`values:` key
-        // is a hard error, not the old silent no-op.
+        // is a hard error.
         let enum_values = Self::resolve_enum_values(&r#type, def.enum_values, def.values)?;
         Ok(Self {
             name: key.clone(),
@@ -556,7 +557,7 @@ impl FieldSchema {
     /// Reconcile the two enum spellings into [`FieldSchema::enum_values`]:
     /// the promoted `type: enum` requires a non-empty `values:` list; `type:
     /// string` accepts the deprecated `enum:` modifier; any other type carrying
-    /// either key is an error (the old silent no-op, made loud).
+    /// either key is an error.
     fn resolve_enum_values(
         r#type: &FieldType,
         enum_key: Option<Vec<String>>,
@@ -615,8 +616,9 @@ impl Serialize for FieldSchema {
             + self.enum_values.is_some() as usize
             + self.properties.is_some() as usize
             + self.items.is_some() as usize;
-        // Field order matches the struct declaration (the prior derived output),
-        // so `inline` trails the block — golden schema snapshots don't drift.
+        // Field order matches the struct declaration (what a derived impl
+        // emits), so `inline` trails the block — golden schema snapshots don't
+        // drift.
         let mut map = serializer.serialize_map(Some(len))?;
         map.serialize_entry("type", &self.r#type)?;
         if let Some(v) = &self.description {

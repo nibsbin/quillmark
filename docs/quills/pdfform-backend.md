@@ -156,7 +156,7 @@ A bound field's kind is derived from the **capability of the resolved schema fie
 
 ### Top-left coordinates
 
-`rect` is authored **top-left origin** — `x`/`y` measured from the top-left corner of the page, the way a human reads a form. The backend flips to PDF's native bottom-left origin when it builds the widget, reading the page height from `form.pdf` and honouring a non-zero `/MediaBox` origin. This defuses the single biggest hand-authoring footgun, so you never reason about page height or coordinate flipping yourself.
+`rect` is authored **top-left origin** — `x`/`y` measured from the top-left corner of the page, the way a human reads a form. The backend flips to PDF's native bottom-left origin when it builds the widget, reading the page height from `form.pdf` and honouring a non-zero `/MediaBox` origin. You never reason about page height or coordinate flipping yourself.
 
 ### Schema versioning and unknown keys
 
@@ -210,10 +210,9 @@ The widget is unsigned: Quillmark performs no cryptography. To produce a signed 
 | **SVG** | A `render()` output format — one SVG document per page. |
 | **PNG** | A `render()` output format — one raster per page at `RenderOptions::ppi` (default 144). |
 
-The backend's formats are `[Pdf, Svg, Png]` — every `OutputFormat` there is. The
-guard behind them stays, so a format added to the enum and not to this backend
-errors with `backend::format_not_supported`, the code both built-in backends
-share.
+The backend's formats are `[Pdf, Svg, Png]` — every `OutputFormat` there is. A
+format added to the enum and not to this backend errors with
+`backend::format_not_supported`, the code both built-in backends share.
 
 **Canvas** is a separate surface from the `render()` output formats above: it is
 the WASM `paint()` raster path (`render_rgba`), not an `OutputFormat`. See

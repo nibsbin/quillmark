@@ -69,6 +69,4 @@ and none of them exposes an invalidation API — **by design**:
 
 "Invalidate" therefore means *replace the instance* — a new `Quill` at a new
 ref, or a new `Quiver` — and the downstream caches follow automatically
-(WeakMap + weak refs). There is no invalidation API. One must arrive
-end-to-end with its first real consumer (republish-at-same-ref), which this
-immutability invariant deliberately rules out.
+(WeakMap + weak refs).

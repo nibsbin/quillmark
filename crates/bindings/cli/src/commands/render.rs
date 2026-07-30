@@ -47,7 +47,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         println!("Loading quill from: {}", args.quill.display());
     }
 
-    // Load quill
     let quill = load_quill(&args.quill)?;
 
     if args.verbose {
@@ -57,7 +56,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     // Determine if we have a markdown file or need to seed a starter document.
     let (parsed, parse_warnings, markdown_path_for_output) =
         if let Some(ref markdown_path) = args.markdown_file {
-            // Validate markdown file exists
             if !markdown_path.exists() {
                 return Err(CliError::InvalidArgument(format!(
                     "Markdown file not found: {}",
@@ -69,10 +67,7 @@ pub fn execute(args: RenderArgs) -> Result<()> {
                 println!("Reading markdown from: {}", markdown_path.display());
             }
 
-            // Read markdown file
             let markdown = fs::read_to_string(markdown_path)?;
-
-            // Parse markdown
             let output = Document::parse(&markdown)?;
 
             if args.verbose {
@@ -86,8 +81,8 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         } else {
             // No input file: render the seeded document — the committed
             // "filled-out one" (each field's `example:`, with `default:`/zero
-            // interpolated at the render floor), so the quill renders out of
-            // the box without the caller supplying any field values.
+            // interpolated at the render floor), so the quill renders without
+            // the caller supplying any field values.
             if args.verbose {
                 println!("Using seeded document from quill");
             }
@@ -132,7 +127,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
         }
     }
 
-    // Render
     let engine = Quillmark::new();
     let mut result = engine.render(
         &quill,
@@ -147,7 +141,6 @@ pub fn execute(args: RenderArgs) -> Result<()> {
     // sees them in a single channel.
     result.warnings.splice(0..0, parse_warnings);
 
-    // Display warnings if any
     if !result.warnings.is_empty() && !args.quiet {
         crate::errors::print_warnings(&result.warnings);
     }

@@ -472,8 +472,8 @@ fn date_field_display_surfaces_a_clickable_region() {
     // returns `text(v.display(..))` — content born at a generated `text(..)`
     // node inside a recorded segment-less window. Rendering it through the
     // shipping `(data.<field>.display)(..)` call surfaces one whole-placement
-    // region keyed by the schema path, and a click resolves back to it: the
-    // atomic, picker-editable click-to-edit target the issue is about.
+    // region keyed by the schema path, and a click resolves back to it — an
+    // atomic, picker-editable click-to-edit target.
     const YAML: &str = r#"
 quill:
   name: date_region
@@ -1141,13 +1141,12 @@ main:
 
 #[test]
 fn position_at_on_a_raw_block_degrades_to_the_segment_start() {
-    // The spike's `#raw` correction: every physical line of a multi-line
-    // `#raw(block: true, "…")` fence shares one resolved node wider than any
-    // per-line run, so per-run inversion cannot pick a line. position_at
-    // degrades to the code **segment's** content start — so clicks on different
-    // fence lines resolve to the *same* content position (segment-level
-    // correctness kept, per-line precision unavailable), distinct from the
-    // prose paragraph's.
+    // Every physical line of a multi-line `#raw(block: true, "…")` fence shares
+    // one resolved node wider than any per-line run, so per-run inversion cannot
+    // pick a line. position_at degrades to the code **segment's** content start.
+    // Clicks on different fence lines therefore resolve to the *same* content
+    // position — segment-level correctness kept, per-line precision unavailable
+    // — and to a position distinct from the prose paragraph's.
     const YAML: &str = r#"
 quill:
   name: raw_degrade

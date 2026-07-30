@@ -83,7 +83,15 @@ Field names must be `snake_case` (match `[a-z][a-z0-9_]*`). Capitalized or `$`-p
 
 Metadata resolution:
 - `name`, `description`, `backend`, `version`, `author` are direct struct fields on `QuillConfig`. `description` (required, non-empty in the `quill:` section) describes the quill itself; it is independent of `QuillConfig.main.description`, which is the optional schema description authored under `main:` like any other card kind.
-- `metadata` on `Quill` stores `backend`, `description`, `version`, `author`, and `typst_*` keys from the `typst:` section (so a declared `typst.plate_file` surfaces as `typst_plate_file`). (Note: this identity `metadata` is pure config — the backend's `supportedFormats` is a resolved-backend capability read from the engine, not part of it.) The `quill:` section accepts only `name`, `backend`, `description`, `version`, `author`, and `ui`; unknown keys produce a `quill::unknown_key` error rather than landing in `metadata`. A backend's own settings (e.g. the Typst plate) live under the backend-named section, never in `quill:`.
+- `metadata` on `Quill` stores `backend`, `description`, `version`, `author`, and
+  `typst_*` keys from the `typst:` section (so a declared `typst.plate_file`
+  surfaces as `typst_plate_file`). This identity `metadata` is pure config: the
+  backend's `supportedFormats` is a resolved-backend capability read from the
+  engine, not part of it. The `quill:` section accepts only `name`, `backend`,
+  `description`, `version`, `author`, and `ui`; unknown keys produce a
+  `quill::unknown_key` error rather than landing in `metadata`. A backend's own
+  settings (e.g. the Typst plate) live under the backend-named section, never in
+  `quill:`.
 - `quill.ui` (a `UiCardSchema`, same shape as `card_kinds.<name>.ui`) is a fallback for `main.ui`: the `main` card uses `main.ui` when present, otherwise `quill.ui`.
 
 ## Strict Parsing

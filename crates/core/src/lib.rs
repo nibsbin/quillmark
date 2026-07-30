@@ -37,10 +37,12 @@ pub mod reader;
 pub use reader::{CardReader, ReadValue, TypedReader};
 
 pub mod backend;
-pub use backend::{formats_support_canvas, Backend};
+pub use backend::{formats_support_canvas, unsupported_format, Backend};
 
 pub mod error;
-pub use error::{Diagnostic, Location, ParseError, RenderError, RenderResult, Severity};
+pub use error::{
+    Diagnostic, Location, ParseError, RenderError, RenderResult, Severity, YamlError,
+};
 
 pub mod types;
 pub use types::{Artifact, OutputFormat, RenderOptions};

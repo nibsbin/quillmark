@@ -5,6 +5,17 @@ use crate::quill::Quill;
 use crate::{LiveSession, OutputFormat};
 
 /// Backend trait for rendering different output formats.
+///
+/// # Implementing this outside the workspace
+///
+/// Unsupported, and the trait's shape is why. [`Backend::open`] returns a
+/// [`LiveSession`], which only a `SessionHandle` implementation can build,
+/// through `LiveSession::new` — and both of those are `#[doc(hidden)]`, so an
+/// out-of-workspace backend writes against items this crate neither documents
+/// nor holds stable.
+///
+/// Nothing enforces this: a registry taking `Box<dyn Backend>` accepts any
+/// implementation. The seam behind it moves without notice.
 pub trait Backend: Send + Sync + std::fmt::Debug {
     /// Get the backend identifier (e.g., "typst", "latex").
     fn id(&self) -> &'static str;
@@ -24,6 +35,23 @@ pub trait Backend: Send + Sync + std::fmt::Debug {
         source: &Quill,
         json_data: &serde_json::Value,
     ) -> Result<LiveSession, RenderError>;
+}
+
+/// The refusal every backend owes a format outside its
+/// [`Backend::supported_formats`], under `backend::format_not_supported` —
+/// the one code a caller matches for this condition, so it is built once here
+/// rather than once per backend.
+///
+/// `backend` names the backend in the message; `supported` becomes the hint.
+pub fn unsupported_format(format: OutputFormat, backend: &str, supported: &[OutputFormat]) -> RenderError {
+    RenderError::from_diag(
+        crate::Diagnostic::new(
+            crate::Severity::Error,
+            format!("{format:?} not supported by the {backend} backend"),
+        )
+        .with_code("backend::format_not_supported".to_string())
+        .with_hint(format!("Supported formats: {supported:?}")),
+    )
 }
 
 /// Pre-session hint for whether a backend with these `formats` can paint pages

@@ -70,10 +70,11 @@ to the write by typed commit (below).
 ## Two write disciplines: opaque store vs typed commit
 
 Document mutation is a data primitive that never requires a Quill. `store_field`
-/ `store_fields` (the opaque **store** — verbatim, coercion deferred) hold only a
-`$quill` *reference*, enforce the structural invariants above, and store the
-value verbatim — coercion is deferred to render. Typed
-commit is a schema-bound layer over that primitive: `Quill::writer(&mut doc)`
+/ `store_fields` — the opaque **store** — hold only a `$quill` *reference* and
+enforce the structural invariants above. They store the value verbatim,
+deferring coercion to render.
+
+Typed commit is a schema-bound layer over that primitive: `Quill::writer(&mut doc)`
 binds the resolved schema, and its `set` / `set_all` resolve each field's `type`,
 coerce to the canonical form (`"3"` → `3`, a markdown string → a richtext
 content), and fail at the write on a mismatch — the default whenever a Quill is

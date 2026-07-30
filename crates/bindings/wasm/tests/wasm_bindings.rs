@@ -283,7 +283,7 @@ fn test_quill_metadata_and_schemas() {
         get_str(&meta, "description").as_deref(),
         Some("Metadata quill")
     );
-    // supportedFormats moved off `metadata` onto the engine.
+    // `supportedFormats` is an engine capability, not a `metadata` key.
     let formats = engine.supported_formats(&quill).expect("supported_formats");
     assert!(js_sys::Array::from(&formats).length() > 0);
     assert!(get(&meta, "schema").is_undefined());

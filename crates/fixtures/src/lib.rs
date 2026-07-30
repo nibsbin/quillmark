@@ -1,12 +1,12 @@
 use std::path::{Path, PathBuf};
 
-/// Get the path to a resource file in the fixtures
+/// Path to `resources/<name>` in this crate.
 pub fn resource_path(name: &str) -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     Path::new(manifest_dir).join("resources").join(name)
 }
 
-/// Get the path to a quill fixture in `resources/quills/`.
+/// Path to a quill fixture in `resources/quills/`.
 ///
 /// If the quill directory contains versioned subdirectories (e.g. `0.1.0/`),
 /// the latest version directory is returned automatically.
@@ -42,13 +42,13 @@ pub fn quills_path(name: &str) -> PathBuf {
     quill_dir
 }
 
-/// Get the example output directory path
+/// Path to this crate's `output/` directory, where examples write their artifacts.
 pub fn example_output_dir() -> PathBuf {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     Path::new(manifest_dir).join("output")
 }
 
-/// Write example output to the examples directory
+/// Write `content` to [`example_output_dir`]`/<name>`, creating the directory if absent.
 pub fn write_example_output(name: &str, content: &[u8]) -> Result<(), std::io::Error> {
     use std::fs;
 

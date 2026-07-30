@@ -20,7 +20,6 @@ pub fn execute(args: BlueprintArgs) -> Result<()> {
 
     let blueprint = quill.config().blueprint();
 
-    // Output
     if let Some(output_path) = args.output {
         fs::write(&output_path, blueprint).map_err(CliError::Io)?;
     } else {

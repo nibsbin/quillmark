@@ -3,9 +3,8 @@
 //!
 //! `Document::parse` is a pass-through to `assemble::decompose_with_warnings`,
 //! the same path those modules drive, so a probe here proves nothing extra
-//! about the grammar — every scenario the unit tests already cover has been
-//! dropped. What remains is the §8 input caps (sole coverage in the workspace)
-//! and the `normalize_document` pass, which the unit modules do not run.
+//! about the grammar. What this file carries is what they do not: the §8 input
+//! caps (sole coverage in the workspace) and the `normalize_document` pass.
 
 use quillmark_core::normalize::normalize_document;
 use quillmark_core::Document;

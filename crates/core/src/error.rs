@@ -39,10 +39,114 @@ pub const MAX_CARD_COUNT: usize = 1000;
 /// Maximum number of fields allowed per document
 pub const MAX_FIELD_COUNT: usize = 1000;
 
+/// A YAML parse or emit failure, owned by this crate.
+///
+/// The YAML engine is `serde-saphyr`, whose version series is `0.0.x` — every
+/// release of it is a semver break under Cargo's rules. Returning its error
+/// types from a public signature would chain this crate's major version to
+/// that cadence, so the boundary converts to this type instead and no public
+/// signature names the engine. The engine is an implementation detail; this is
+/// what the contract says it is.
+///
+/// `line`/`column` are 1-indexed and present only when the engine located the
+/// failure — always absent on the emit side, which has no input to point at.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct YamlError {
+    message: String,
+    hint: Option<String>,
+    line: Option<u32>,
+    column: Option<u32>,
+}
+
+impl YamlError {
+    /// What went wrong, in YAML terms.
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// The concrete textual fix, when the failure is one this crate recognizes.
+    pub fn hint(&self) -> Option<&str> {
+        self.hint.as_deref()
+    }
+
+    /// 1-indexed line of the failure, when the engine located one.
+    pub fn line(&self) -> Option<u32> {
+        self.line
+    }
+
+    /// 1-indexed column of the failure, paired with [`Self::line`].
+    pub fn column(&self) -> Option<u32> {
+        self.column
+    }
+
+    /// A diagnostic under `code`, carrying the hint and — when the engine
+    /// located the failure — a [`Location`] against `file`.
+    pub fn to_diagnostic(&self, code: &str, file: &str) -> Diagnostic {
+        let mut diag = Diagnostic::new(Severity::Error, self.message.clone())
+            .with_code(code.to_string());
+        if let (Some(line), Some(column)) = (self.line, self.column) {
+            diag = diag.with_location(Location {
+                file: file.to_string(),
+                line,
+                column,
+            });
+        }
+        match &self.hint {
+            Some(h) => diag.with_hint(h.clone()),
+            None => diag,
+        }
+    }
+
+    /// `yaml` is the text that failed to parse — the hint derivation inspects
+    /// it to name the offending construct.
+    pub(crate) fn from_de(err: serde_saphyr::Error, yaml: &str) -> Self {
+        // The engine appends its own Rust API names to some messages
+        // (`from_multiple`, `DuplicateKeyPolicy`); the enricher strips them, so
+        // "no public signature names the engine" holds for the message too, not
+        // just the type.
+        let enriched = crate::document::yaml_hints::enrich_yaml_error(&err.to_string(), yaml);
+        // `Location`'s accessors widen to u64; the fields behind them are u32,
+        // so the narrowing is lossless.
+        let loc = err.location();
+        Self {
+            message: enriched.message,
+            hint: enriched.hint,
+            line: loc.and_then(|l| u32::try_from(l.line()).ok()),
+            column: loc.and_then(|l| u32::try_from(l.column()).ok()),
+        }
+    }
+
+    /// Emission has no input to point at, so no position and no hint.
+    pub(crate) fn from_ser(err: serde_saphyr::ser::Error) -> Self {
+        Self {
+            message: err.to_string(),
+            hint: None,
+            line: None,
+            column: None,
+        }
+    }
+}
+
+impl std::fmt::Display for YamlError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // The message already opens with the position and carries the engine's
+        // caret diagram; [`Self::line`]/[`Self::column`] are the structured
+        // reading of the same fact, not a second one to append.
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for YamlError {}
+
 /// Fatality is this two-value ladder and nothing else: `Error` blocks the
 /// stage that emits it, `Warning` never does. There is no lint-level
 /// configuration and no warning-to-error promotion; an informational aside is
 /// a [`Diagnostic::hint`], not a severity.
+///
+/// **Deliberately exhaustive.** "Nothing else" is the contract, so a consumer
+/// matching both arms is matching the whole world and should not be made to
+/// write an unreachable `_`. A third level would be a redesign, and semver-major
+/// is the honest price of one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
@@ -71,6 +175,7 @@ pub struct Location {
 /// every binding boundary.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub struct Diagnostic {
     pub severity: Severity,
     /// Optional error code (e.g., "E001", "typst::syntax")
@@ -181,6 +286,7 @@ impl std::fmt::Display for Diagnostic {
 }
 
 #[derive(thiserror::Error, Debug)]
+#[non_exhaustive]
 pub enum ParseError {
     #[error("Input too large: {size} bytes (max: {max} bytes)")]
     InputTooLarge { size: usize, max: usize },
@@ -356,6 +462,7 @@ impl From<ParseError> for RenderError {
 }
 
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct RenderResult {
     pub artifacts: Vec<crate::Artifact>,
     pub warnings: Vec<Diagnostic>,

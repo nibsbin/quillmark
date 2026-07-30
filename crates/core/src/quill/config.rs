@@ -16,7 +16,7 @@ use super::{BodyCardSchema, CardSchema, FieldSchema, FieldType, GroupRegistry, U
 /// string — a boolean (`true`/`false`) or number (`47`, `1.0`). `None` for
 /// `null` (≡ absent), strings (already strings), and collections.
 ///
-/// Shared by [`QuillConfig::coerce_value_strict`] (to adopt the value) and
+/// Shared by `QuillConfig::conform_value` (to adopt the value) and
 /// `validation::validate_value` (to accept it), so coercion and validation
 /// never disagree about which bare scalars a `string` field accepts.
 pub(crate) fn scalar_as_string(value: &serde_json::Value) -> Option<String> {
@@ -102,6 +102,7 @@ enum ShapePosition {
 }
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum CoercionError {
     #[error("cannot coerce `{value}` to type `{target}` at `{path}`: {reason}")]
     Uncoercible {
@@ -120,10 +121,9 @@ pub enum CoercionError {
 /// or *cross type boundaries* branch on this. See `conform_value`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Leniency {
-    /// The render floor's forgiving cascade (today's `coerce_value_strict`
-    /// behavior, unchanged): cross-type scalar coercions apply and a shape a
-    /// type cannot adopt falls through unchanged for the validation layer to
-    /// report.
+    /// The render floor's forgiving cascade: cross-type scalar coercions apply
+    /// and a shape a type cannot adopt falls through unchanged for the
+    /// validation layer to report.
     Render,
     /// A strict typed write ([`Card::commit_field`](crate::document::Card::commit_field)):
     /// value-parsing normalizations still apply (`"3"` → `3`, a bare scalar
@@ -237,9 +237,9 @@ impl QuillConfig {
 
     /// The one write-side per-type dispatch: given a value, a field's schema,
     /// and a [`Leniency`] mode, validate/normalize the value to the canonical
-    /// form the type stores. `Render` is the render floor's forgiving coercion
-    /// (the former `coerce_value_strict`, behavior-preserving); `Write` is the
-    /// strict typed-write commit driving [`Card::commit_field`](crate::document::Card::commit_field).
+    /// form the type stores. `Render` is the render floor's forgiving coercion;
+    /// `Write` is the strict typed-write commit driving
+    /// [`Card::commit_field`](crate::document::Card::commit_field).
     ///
     /// Validation keeps its own read-only dispatch (`validation::validate_value`),
     /// synced with this via the shared helpers `scalar_as_string` /
@@ -756,9 +756,9 @@ impl QuillConfig {
                 ),
             );
         }
-        // `inline` on a non-richtext field is rejected earlier and once, when
+        // `inline` on a non-prose field is rejected earlier and once, when
         // `from_quill_value` folds the wire key into the `FieldType` enum
-        // (`resolve_richtext_inline`); no second check belongs here.
+        // (`resolve_prose_inline`); no second check belongs here.
 
         // `ui.group` clusters card-level fields only — the blueprint's grouping
         // pass never descends into object properties or array items, so a nested
@@ -953,8 +953,8 @@ impl QuillConfig {
     /// reference to an id the registry does not declare is `quill::unknown_group`
     /// (the "no mixing implicit and declared" rule falls out of this — with a
     /// registry there is no implicit fallback). With no registry, each `ui.group`
-    /// is a deprecated implicit group (label-as-identity, today's semantics
-    /// untouched) and the card earns one `quill::implicit_group` warning.
+    /// is a deprecated implicit group (label-as-identity) and the card earns one
+    /// `quill::implicit_group` warning.
     fn validate_card_groups(
         label: &str,
         card: &CardSchema,
@@ -1314,11 +1314,11 @@ impl QuillConfig {
         ) {
             Ok(v) => v,
             Err(e) => {
-                return Err(vec![Diagnostic::new(
-                    Severity::Error,
-                    format!("Failed to parse Quill.yaml: {}", e),
-                )
-                .with_code("quill::yaml_parse_error".to_string())]);
+                // Through `YamlError` so this shares the one saphyr adapter:
+                // the engine's Rust API names stripped, the hint derived, and
+                // the position carried as a `Location`.
+                return Err(vec![crate::error::YamlError::from_de(e, yaml_content)
+                    .to_diagnostic("quill::yaml_parse_error", "Quill.yaml")]);
             }
         };
 

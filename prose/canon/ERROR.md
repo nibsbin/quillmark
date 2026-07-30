@@ -24,6 +24,12 @@ severity.
 
 **`ParseError`**: parsing-stage error enum — `InputTooLarge`, `InvalidStructure`, `EmptyInput`, `MissingQuill`, `InvalidQuillReference`, `YamlErrorWithLocation`; converts to `Diagnostic` via `to_diagnostic()`. The `InvalidQuillReference` case (`parse::invalid_quill_reference`) attaches the canonical `$quill` grammar — `quill_ref_hint()` — as the diagnostic hint. That hint is the single source of truth for the reference grammar: bindings surface it verbatim (e.g. WASM `Document.quillRefHint`) rather than re-stating the rule.
 
+**`YamlError`**: the one adapter every `serde-saphyr` error passes through. Sanitizes the message (the engine appends its own Rust API names — `from_multiple`, `DuplicateKeyPolicy` — which `yaml_hints::enrich_yaml_error` strips), derives the hint, and carries the 1-indexed line/column the engine located; `to_diagnostic(code, file)` renders all three. The emit side has no input to point at, so it carries neither position nor hint.
+
+It exists so no public signature names `serde-saphyr`, whose `0.0.x` series makes every release of it a semver break. That promise covers the message as much as the type, which is why the sanitizer is inside the adapter rather than beside it.
+
+Two surfaces return one directly (`QuillValue::from_yaml_str`, `QuillConfig::schema_yaml`); `QuillConfig::from_yaml_with_warnings` converts through it to `quill::yaml_parse_error`. The card-yaml path does not travel this way — it becomes `ParseError::YamlErrorWithLocation`, which additionally knows the enclosing block.
+
 **`RenderError`**: the main rendering error — a struct carrying a non-empty
 `Vec<Diagnostic>` (`RenderError::new` / `from_diag`; `diagnostics()` borrows,
 `into_diagnostics()` consumes). There is no failure taxonomy beyond the
@@ -101,6 +107,15 @@ Typst diagnostics mapped via `map_typst_errors()`:
 - Error codes: `"typst::<message-prefix>"` (the diagnostic message text up to the first `:`)
 
 See `crates/backends/typst/src/error_mapping.rs`.
+
+**Quill-load warnings** are the backend's other warning source, hand-coded
+rather than derived from a Typst diagnostic: `typst::path_skipped` (a file
+Typst's `VirtualPath` rejected — asset or package file alike),
+`typst::package_manifest`, and `typst::package_entrypoint_missing`. Each marks a
+file the world had to skip, which otherwise surfaces only as an unresolved
+`#import` pointing at the plate instead of at the defect. They are properties of the quill, not of a compile, so
+`QuillWorld` holds them and the session serves them ahead of every compile's own
+— an `apply` swaps the compile half and keeps these.
 
 ## Validation message contract
 

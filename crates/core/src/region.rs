@@ -219,13 +219,6 @@ fn per_kind_ordinal(card_kinds: &[Option<&str>], abs: usize) -> Option<usize> {
     )
 }
 
-/// Translate a backend plate-space geometry address into a canonical
-/// [`DocPath`], resolving the per-kind ordinal to the absolute card index via
-/// `card_kinds`. The grammar handled is exactly what geometry emits: `$body`
-/// (main body), a bare `<field>` (main field), `$cards.<kind>.<ord>.<field>`
-/// (card field), and `$cards.<kind>.<ord>.$body` (card body). `None` for an
-/// address outside that grammar or one naming a card the kind list cannot
-/// place — the caller keeps the original string.
 /// Rewrite each region's plate-space `field` to its [`DocPath`] string — the
 /// translation [`RenderedRegion`] puts at a binding boundary. One funnel for
 /// every region a binding hands out, render sidecar and session query alike, so
@@ -243,6 +236,13 @@ pub fn regions_to_doc_path(
     regions
 }
 
+/// Translate a backend plate-space geometry address into a canonical
+/// [`DocPath`], resolving the per-kind ordinal to the absolute card index via
+/// `card_kinds`. The grammar handled is exactly what geometry emits: `$body`
+/// (main body), a bare `<field>` (main field), `$cards.<kind>.<ord>.<field>`
+/// (card field), and `$cards.<kind>.<ord>.$body` (card body). `None` for an
+/// address outside that grammar or one naming a card the kind list cannot
+/// place — the caller keeps the original string.
 pub fn plate_addr_to_doc_path(addr: &str, card_kinds: &[Option<&str>]) -> Option<DocPath> {
     if addr == "$body" {
         return Some(DocPath::main_body());
@@ -305,6 +305,7 @@ pub fn doc_path_to_plate_addr(path: &DocPath, card_kinds: &[Option<&str>]) -> Op
 /// degrades to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub enum HitGranularity {
     /// Cluster-exact: `pos` is the first content char of the grapheme cluster
     /// under the point. The finest resolution — a char that escaped to several
@@ -412,7 +413,7 @@ mod tests {
 
     /// `granularity` omits when `None` and defaults back on read — the
     /// additive-optional discipline, so a hit straight from a backend (no source
-    /// map) parses the same as the earlier hit shape lacking it.
+    /// map) parses the same as one that reports it.
     #[test]
     fn content_hit_omits_optionals_when_none() {
         let hit = ContentHit {
@@ -439,9 +440,9 @@ mod tests {
     }
 
     /// `field_boxes` unions a page's span-bearing segment rects into one box and
-    /// ignores other fields — the whole-field highlight consumers used to derive
-    /// by hand. The union `span` bounds `[min start, max end)`, and each page
-    /// gets its own box, page-ascending.
+    /// ignores other fields — the whole-field highlight a consumer would
+    /// otherwise derive by hand. The union `span` bounds `[min start, max end)`,
+    /// and each page gets its own box, page-ascending.
     #[test]
     fn field_boxes_unions_span_bearing_segments_per_page() {
         let regions = vec![

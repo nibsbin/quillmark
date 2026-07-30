@@ -172,5 +172,14 @@ pub(crate) fn render_document_pages(
                 OutputFormat::Pdf,
             ))
         }
+        // `OutputFormat` is `#[non_exhaustive]`, so this arm is forced even
+        // though `TypstSession::render` rejects anything outside
+        // `SUPPORTED_FORMATS` before reaching here. Same refusal, same
+        // constructor — one wording and one hint however it is reached.
+        other => Err(quillmark_core::unsupported_format(
+            other,
+            "typst",
+            crate::SUPPORTED_FORMATS,
+        )),
     }
 }

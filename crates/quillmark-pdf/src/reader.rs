@@ -1,7 +1,7 @@
 //! Minimal byte-level PDF reader and incremental-update writer. Not a general
 //! PDF parser — a deliberately small scanner that parses just enough of a base
 //! PDF to splice a single incremental update onto it, and hard-errors on shapes
-//! a modern PDF can carry but this V1 reader does not handle.
+//! a modern PDF can carry but this reader does not handle.
 //!
 //! ## Input contract
 //!
@@ -9,7 +9,7 @@
 //! flat-tree**: a classic `xref` table (not an xref *stream*), no `/Encrypt`,
 //! page `/Annots` written inline (not as an indirect reference), and a page
 //! tree shallow enough to walk. This is the precise inverse of the scanner's
-//! error branches; the qualification layer (and the V1 hand-authored fixture)
+//! error branches; the qualification layer (and the hand-authored fixture)
 //! guarantee it. `hayro-syntax` is read-only and exposes no byte spans, so it
 //! cannot drive a byte-splice append — hence this bespoke scanner.
 

@@ -1,9 +1,8 @@
 //! End-to-end acceptance tests for the unsigned-SigField overlay feature.
 //!
 //! Compiles each plate through the public `Backend`/`LiveSession` path,
-//! parses the output with lopdf, and asserts the AcroForm structure. Manual
-//! Acrobat verification still required per the spec — see `prose/...` or the
-//! PR description.
+//! parses the output with lopdf, and asserts the AcroForm structure. The spec
+//! also requires manual Acrobat verification, which these tests do not cover.
 
 use quillmark_core::{Backend, OutputFormat, RenderError, RenderOptions};
 use quillmark_typst::TypstBackend;
@@ -259,9 +258,9 @@ Just a doc.
 // ─── generalized form-field types ────────────────────────────────────────────
 //
 // These assert the typst→spec *mapping* (the bound `/V`, checkbox truthiness,
-// choice option-matching). The spine bytes they used to re-check — the
-// MULTILINE/COMBO `Ff` flag bits and the `/MK /CA (4)` checkbox glyph — are
-// owned by `quillmark-pdf/tests/stamp.rs` at the spine seam.
+// choice option-matching). The spine bytes — the MULTILINE/COMBO `Ff` flag bits
+// and the `/MK /CA (4)` checkbox glyph — are owned by
+// `quillmark-pdf/tests/stamp.rs` at the spine seam, not re-checked here.
 
 /// case: text fields — single-line and multiline; the bound `/V` string lands
 /// on the widget.

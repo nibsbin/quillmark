@@ -30,7 +30,7 @@
 //!
 //! Rooting makes the grammar total against a field named for a root: a main
 //! field literally named `cards` or `main` is `main.cards` / `main.main`, which
-//! no longer collides. One residual: a field literally named `body` renders
+//! collides with nothing. One residual: a field literally named `body` renders
 //! `<root>.body` and collides with the body terminal — accepted, not guarded (no
 //! fixture field uses the name).
 //!
@@ -52,6 +52,7 @@ use std::str::FromStr;
 /// the editor a structured array it routes on, never a string it splits.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "seg", rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum DocSeg {
     /// The main-card root — heads every main-card address (`main.title`,
     /// `main.body`).
@@ -398,8 +399,8 @@ mod tests {
 
     #[test]
     fn main_field_named_for_a_root_no_longer_collides() {
-        // Rooting makes `cards` / `main` field names total — they were the
-        // bare-form collisions the old grammar could not round-trip.
+        // Rooting makes `cards` / `main` field names total — unrooted, each
+        // would read back as its root rather than as the field it names.
         round_trip(DocPath::main().field("cards"), "main.cards");
         round_trip(DocPath::main().field("main"), "main.main");
         // A bare `cards.foo` (no index) is a config-space chain, not a card.

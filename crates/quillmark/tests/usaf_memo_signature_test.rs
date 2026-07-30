@@ -1,4 +1,4 @@
-//! Regression test for the USAF memo signature-field injection.
+//! Placement of the USAF memo's injected signature field.
 //!
 //! `usaf_memo`'s plate threads an unsigned AcroForm signature widget into the
 //! signature block via the package's `signing_field` parameter. AFH 33-337
@@ -6,7 +6,7 @@
 //! page, and the package overlays the widget there (offset up into the four
 //! blank lines above the typed name) so it consumes no flow. This test renders
 //! the real plate end-to-end and asserts every signature widget sits at the
-//! 4.5in block rather than regressing to the 1in left margin.
+//! 4.5in block, not the 1in left margin.
 
 #![cfg(feature = "typst")]
 

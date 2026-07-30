@@ -8,14 +8,33 @@ Plates get document data through a backend-injected virtual Typst package, not a
 
 ## Overview
 
-1. `Quill::compile_data()` coerces, validates, normalizes, and **zero-fills** the root-block fields — and each composable card's fields against its `card_kind` schema — into a plain JSON object: every absent schema field resolves to its authored value, else the schema `default:`, else its type-empty zero value. Content fields cross as canonical `Content` objects (coercion imports an authored markdown string to the `Content` and re-canonicalizes an editor-supplied one). An incomplete document still renders (an absent or present-null field zero-fills; a `!must_fill` marker uses its suggested value or zero-fills); only a malformed one (a value that won't coerce/validate to its type) errors.
+1. `Quill::compile_data()` coerces, validates, normalizes, and **zero-fills** the
+   root-block fields — and each composable card's fields against its `card_kind`
+   schema — into a plain JSON object: every absent schema field resolves to its
+   authored value, else the schema `default:`, else its type-empty zero value.
+   Content fields cross as canonical `Content` objects (coercion imports an
+   authored markdown string to the `Content` and re-canonicalizes an
+   editor-supplied one). An incomplete document still renders: an absent or
+   present-null field zero-fills, and a `!must_fill` marker uses its suggested
+   value or zero-fills. Only a malformed value — one that won't coerce or
+   validate to its type — errors.
 2. `Backend::open()` receives that JSON and generates the helper package. Content fields lower to Typst markup at codegen via `emit::emit_content`, dates to value-objects wrapping `datetime(..)`; a direct `apply` path revalidates dates. There is no markdown-string transform.
 
 ### Data Shape
 
 - Document-level metadata uses `$`-prefixed keys: `$quill` (quill ref string), `$body` (root prose body, a canonical `Content` object, present when the main enables a body), `$cards` (array of card objects)
 - Each card object carries its user fields flat, a `$kind` discriminator when the card authors one, and a `$body` (card prose body, a content object) when the card's kind enables a body
-- **`$`-metadata is present exactly where the schema defines it** ("absent on undefined"). The rule splits by which definition gates the key: `$kind` is *document-defined* — present iff the card authors one, absent for a kindless card; `$body` is *schema-defined* — present (and, when present, always a content object) iff a declared kind enables a body, absent for a body-disabled or unknown kind. So a present `$body` is never a raw object needing a type check, and absence is the signal. Read `$`-metadata with a total accessor — `card.at("$kind", default: none)`, `card.at("$body", default: "")` — never a bare `card.$body`
+- **`$`-metadata is present exactly where the schema defines it** ("absent on
+  undefined"). Which definition gates the key splits the rule:
+  - `$kind` is *document-defined* — present iff the card authors one, absent for
+    a kindless card.
+  - `$body` is *schema-defined* — present iff a declared kind enables a body,
+    absent for a body-disabled or unknown kind. A present `$body` is always a
+    content object, never a raw object needing a type check.
+
+  Absence is the signal. Read `$`-metadata with a total accessor —
+  `card.at("$kind", default: none)`, `card.at("$body", default: "")` — never a
+  bare `card.$body`
 - User payload fields sit flat at the root next to the `$` keys; field names match `[a-z_][a-z0-9_]*` and therefore never collide with `$` metadata
 
 ## Typst Helper Package
@@ -66,7 +85,15 @@ Helper contents (generated in `backends/typst/helper.rs` from `lib.typ.template`
   `quillmark:plain: true`), so `content_field_names` classifies it identically
   and it lowers through this exact path. The codec differs only at
   authoring/coercion (literal `from_plaintext`), never at codegen.
-- `date` / `datetime` fields (`format: date` / `format: date-time`) lower to a **value-object** — a `#let _qm_dN = { let v = datetime(..); (value: v, display: (..args) => text(v.display(..args))) }` block the data cell references (blank ⇒ `none`). `v` is the three-component `datetime(year:, month:, day:)` for a `date`, the six-component `datetime(year:, .., second:)` (authored wall-clock, seconds zero-filled) for a `datetime` — the distinct transform-schema `format` stamps the backend keys its per-type lowering on. The object exposes two projections and is the date sibling of the content block ([`date_object`](../../crates/backends/typst/src/helper.rs)):
+- `date` / `datetime` fields (`format: date` / `format: date-time`) lower to a
+  **value-object** — a `#let _qm_dN = { let v = datetime(..); (value: v, display:
+  (..args) => text(v.display(..args))) }` block the data cell references (blank ⇒
+  `none`). `v` is the three-component `datetime(year:, month:, day:)` for a
+  `date`, the six-component `datetime(year:, .., second:)` (authored wall-clock,
+  seconds zero-filled) for a `datetime` — the distinct transform-schema `format`
+  stamps the backend keys its per-type lowering on. The object exposes two
+  projections and is the date sibling of the content block
+  ([`date_object`](../../crates/backends/typst/src/helper.rs)):
   - `value` — the native `datetime` `v`, for arithmetic, comparison, `.year()`/`.weekday()`/… components, and datetime-consuming packages. `.value.display(..)` is the native `str`.
   - `display` — a closure `(..args) => text(v.display(..args))` called as
     `(data.<field>.display)(..)` (the paren form; Typst reserves dict-key method

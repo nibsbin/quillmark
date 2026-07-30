@@ -19,6 +19,7 @@ use crate::value::QuillValue;
 /// `Quill::validate`) and field absence (an absent or present-null field
 /// zero-fills at render). Both are handled outside the value-layer checks below.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ValidationError {
     TypeMismatch {
         path: String,
@@ -388,7 +389,7 @@ fn validate_value(
 
     let type_valid = match field.r#type {
         // In a document a bare bool/number is type-valid as a string (the
-        // coercion layer adopts it) — in lockstep with `coerce_value_strict`
+        // coercion layer adopts it) — in lockstep with `conform_value`
         // via `scalar_as_string`. Schema literals stay strict so the blueprint
         // keeps quoting ambiguous string literals.
         // Enum is string-valued data (domain membership is checked separately

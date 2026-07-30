@@ -2,8 +2,8 @@ use super::QuillConfig;
 
 impl QuillConfig {
     /// YAML encoding of [`QuillConfig::schema`].
-    pub fn schema_yaml(&self) -> Result<String, serde_saphyr::ser::Error> {
-        serde_saphyr::to_string(&self.schema())
+    pub fn schema_yaml(&self) -> Result<String, crate::error::YamlError> {
+        serde_saphyr::to_string(&self.schema()).map_err(crate::error::YamlError::from_ser)
     }
 }
 

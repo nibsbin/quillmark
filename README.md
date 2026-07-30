@@ -6,7 +6,7 @@
 [![CI](https://github.com/borb-sh/quillmark/workflows/CI/badge.svg)](https://github.com/borb-sh/quillmark/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-lightgray.svg)](LICENSE)
  
-In a nutshell: quills define document presentation and schema. Use quills to generate fully formatted documents from markdown or code.
+Quills define document presentation and schema. Use a quill to generate a formatted document from markdown or code.
 
 Maintained by [borb-sh](https://github.com/borb-sh).
 

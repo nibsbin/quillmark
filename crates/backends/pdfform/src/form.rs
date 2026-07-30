@@ -2,9 +2,9 @@
 //!
 //! `form.json` is the durable, value-free **placement + binding + widget-identity**
 //! layer of a `pdfform` quill — the *format* side of Quillmark's quill/document
-//! dichotomy. As of `form@0.2.0` it no longer restates what the quill schema
-//! already carries: a bound field names a `schema_field` and inherits its widget
-//! kind, options, multiline, and tooltip from the resolved
+//! dichotomy. It does not restate what the quill schema already carries: a bound
+//! field names a `schema_field` and inherits its widget kind, options,
+//! multiline, and tooltip from the resolved
 //! [`FieldSchema`](quillmark_core::FieldSchema) (see [`crate::bind`]). Only the
 //! two things the schema cannot know — where the widget sits (`page`/`rect`) and
 //! which logical field it binds — live here.
@@ -26,10 +26,10 @@ use serde::Deserialize;
 /// DTO convention (`quillmark/form@<version>`).
 pub const SCHEMA_PREFIX: &str = "quillmark/form@";
 
-/// The `form.json` format version this backend reads. `0.2.0` slimmed bound
-/// fields to a binding layer that derives widget intrinsics from the quill
-/// schema; `0.1.0` (which restated `type`/`options`/`multiline`) is rejected at
-/// load with a migration pointer.
+/// The `form.json` format version this backend reads. Bound fields are a pure
+/// binding layer that derives widget intrinsics from the quill schema. `0.1.0`
+/// (which restated `type`/`options`/`multiline`) is rejected at load with a
+/// migration pointer.
 pub const SCHEMA_VERSION: &str = "0.2.0";
 
 /// The retired format version, rejected with migration guidance.
@@ -43,7 +43,7 @@ const MIGRATION_GUIDE: &str = "docs/migrations/0.93-to-0.94.md";
 
 /// A parsed `form.json`: the two field populations. The `schema` tag is read and
 /// version-gated separately ([`SchemaTag`]) before this is deserialized, so it
-/// is not restated here — any `schema` key in the JSON is simply ignored.
+/// is not restated here — any `schema` key in the JSON is ignored.
 #[derive(Debug, Clone, Deserialize)]
 pub struct FormSpec {
     /// Schema-bound widgets — kind/options/multiline/tooltip inherited from the
@@ -103,6 +103,7 @@ pub struct Rect {
 /// such tag — their kind is derived from the schema.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum WidgetKind {
     Text {
         #[serde(default)]
@@ -117,6 +118,7 @@ pub enum WidgetKind {
 
 /// Why a `form.json` failed to parse.
 #[derive(Debug)]
+#[non_exhaustive]
 pub enum FormParseError {
     /// The bytes were not valid JSON, or did not match the schema.
     Json(serde_json::Error),
@@ -169,7 +171,7 @@ impl FormParseError {
 /// Just the `schema` tag, deserialized ahead of the full spec so the version
 /// gate runs *before* field-shape validation. A retired `form@0.1.0` file
 /// carries `0.1.0`-shaped fields (an unbound `signature` in `fields`, no
-/// `schema_field`) that no longer deserialize into a [`BoundField`]; gating on
+/// `schema_field`) that do not deserialize into a [`BoundField`]; gating on
 /// the tag first guarantees such a file gets the migration error, not a generic
 /// "missing field" JSON error.
 #[derive(Debug, Deserialize)]
@@ -314,7 +316,7 @@ mod tests {
     #[test]
     fn retired_v1_with_v1_shaped_fields_still_gets_migration_error() {
         // A real 0.1.0 file carries an unbound `signature` in `fields` with no
-        // `schema_field` — which no longer deserializes into a BoundField. The
+        // `schema_field` — which does not deserialize into a BoundField. The
         // version gate must fire on the tag *before* that shape is read, so the
         // author gets the migration pointer, not a generic "missing field" error.
         let json = br#"{

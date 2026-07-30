@@ -1,4 +1,4 @@
-//! Phase-1 property suite.
+//! The content property suite.
 //!
 //! The four properties the freeze rests on:
 //!
@@ -20,7 +20,7 @@ use quillmark_content::{Delta, Island, LineKind, LineOp, Loss, MarkOp, Op, Conte
 use serde_json::{json, Value};
 
 // ---------------------------------------------------------------------------
-// A constrained markdown generator: combinations of the phase-1 constructs,
+// A constrained markdown generator: combinations of the model's constructs,
 // with inline tokens space-separated so the property exercises structure and
 // marks without depending on CommonMark's delimiter-adjacency corners (those
 // are pinned by explicit unit tests, not fuzzed here).
@@ -35,7 +35,7 @@ fn clean_word() -> impl Strategy<Value = String> {
 // escaping and USV bounds are exercised by the round-trip. The first char stays
 // alphanumeric, so a block marker never *leads* an item's content (`- >`, `- #`
 // would make pulldown build an empty nested block, not literal text — a
-// degenerate content no editor emits); but the tail now carries `&` and the
+// degenerate content no editor emits); but the tail carries `&` and the
 // block-marker chars (`# > - . +`), exercising `&`-entity escaping and a
 // trailing-`#` heading run through the round-trip, not just
 // the pinned `export::tests::*` unit tests.
@@ -559,7 +559,7 @@ proptest! {
 }
 
 // ---------------------------------------------------------------------------
-// Fixture content: the phase-1 codecs run against real fixture markdown bodies.
+// Fixture content: the codecs run against real fixture markdown bodies.
 // ---------------------------------------------------------------------------
 
 fn fixture_body(name: &str) -> String {

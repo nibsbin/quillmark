@@ -1845,7 +1845,7 @@ fn test_yaml_syntax_error_missing_colon() {
 #[test]
 fn test_body_with_leading_newlines() {
     // The body is a content; markdown is its projection. Leading blank lines are
-    // canonicalized away at import, so the emitted body no longer carries them.
+    // canonicalized away at import, so the emitted body does not carry them.
     let markdown =
         "~~~card-yaml\n$quill: test_quill\n$kind: main\ntitle: Test\n~~~\n\n\n\nBody with leading newlines.";
     let doc = decompose(markdown).unwrap();

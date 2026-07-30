@@ -398,7 +398,7 @@ enum Run {
 /// Scan the compiled document and return each window's **first placement** —
 /// one [`RenderedRegion`] per page the placement's run touches, PDF
 /// bottom-left rects, sorted (page, field, window order). Best-effort like the
-/// widget path: an unresolvable span simply matches no window.
+/// widget path: an unresolvable span matches no window.
 pub(crate) fn scan_content_regions(
     doc: &PagedDocument,
     world: &QuillWorld,
@@ -997,10 +997,10 @@ main:
     /// line's `$body` region. Typst lowers all four wrapping marks the same way
     /// (`#strong[`/`#emph[`/`#underline[`/`#strike[`), but `underline`/`strike`
     /// additionally draw a decoration **`Shape` with a detached span** between
-    /// the decorated glyphs and the trailing plain run. Before the fix that
-    /// shape classified `Foreign` and suspended the run, so the region stopped
-    /// at the mark's start and lost the whole trailing run; here every mark's
-    /// region must span essentially the full line, like the undecorated marks.
+    /// the decorated glyphs and the trailing plain run. That shape must not
+    /// classify `Foreign` and suspend the run — the region would stop at the
+    /// mark's start and lose the whole trailing run. Every mark's region spans
+    /// essentially the full line, like the undecorated marks.
     #[test]
     fn decoration_marks_do_not_truncate_the_region() {
         use quillmark_content::model::{Line, LineKind, Mark, MarkKind, Content};
@@ -1024,7 +1024,7 @@ main:
 #data.body
 "#;
         // The mark [6,11) over "uline" leaves a long trailing plain run — the
-        // part the truncation used to swallow.
+        // part a suspended run would swallow.
         const TEXT: &str = "Start uline and then a long trailing plain run of text.";
         let region_width = |kind: MarkKind| -> f32 {
             let rt = Content {
@@ -1168,15 +1168,11 @@ main:
     /// syntax — does **not** materialize here: Typst's synthesized list
     /// marker carries a **detached** span (`DiagSpanKind::Detached`, printed
     /// as `Span(1)` below), not one resolving into the helper file, so it
-    /// lands in the plain "no window at all" bucket alongside package
-    /// chrome — already-correct, unchanged behavior. A block-quote wrapper
-    /// (`#quote(block: true)[...]`) draws no extra ink at all by default. Both
-    /// were probed by hand (temporarily swapping this test's markdown input
-    /// and eyeballing `Classifier::resolve_range` per glyph) before writing
-    /// this comment; see the findings doc for the transcript. The
-    /// `(window, None)` *mechanism* is still real and still needed — proved
-    /// directly, independent of whichever container syntax does or doesn't
-    /// exercise it today, by
+    /// correctly lands in the plain "no window at all" bucket alongside
+    /// package chrome. A block-quote wrapper (`#quote(block: true)[...]`)
+    /// draws no extra ink at all by default. The `(window, None)` *mechanism*
+    /// is real and needed regardless — proved directly, independent of
+    /// whichever container syntax exercises it, by
     /// [`classify_two_tier_resolves_field_only_ink_between_segments`].
     #[test]
     fn two_tier_classification_resolves_each_segment_independently() {
@@ -1338,9 +1334,8 @@ main:
         }
         nodes.sort_by_key(|(_, r)| r.start);
         // Word-level granularity: plain text and the space beside it are
-        // separate nodes too (an empirical Unknown-2 finding — see the
-        // findings doc), so "before" contributes more than one node. Split
-        // on the node whose text is exactly "BOLD".
+        // separate nodes too, so "before" contributes more than one node.
+        // Split on the node whose text is exactly "BOLD".
         let text = helper.text();
         let bold_idx = nodes
             .iter()
@@ -1652,9 +1647,9 @@ main:
 #set page(width: 400pt, height: 400pt, margin: 40pt)
 #data.body
 "#;
-        // "difficult fickle" carries two "fi"/"ff"-adjacent clusters, probing
-        // (inconclusively, see the findings doc) for shaping-ligature
-        // collapse under Typst's default font.
+        // "difficult fickle" carries two "fi"/"ff"-adjacent clusters, probing —
+        // inconclusively — for shaping-ligature collapse under Typst's default
+        // font.
         let md = "This is **bold** difficult fickle text.\n\n```\nfn add(a, b) {\n    return a + b;\n}\n```";
         let q = quill(YAML, PLATE);
         let plate = crate::read_plate(&q).expect("plate");
@@ -1785,12 +1780,12 @@ main:
     // chase). The design emits each present date as a dict value-object whose
     // `display:` key holds a generated closure `(..args) => text(datetime(..)
     // .display(..args))`, so the glyphs are born inside a recorded helper
-    // window. The two remaining spikes drive real span/classification
-    // machinery; the two that asserted only on Typst's own error wording are
-    // recorded in PLATE_DATA.md instead, where a Typst bump re-checks them.
+    // window. The spikes here drive real span/classification machinery;
+    // assertions that turn only on Typst's own error wording live in
+    // PLATE_DATA.md instead, where a Typst bump re-checks them.
     // -----------------------------------------------------------------
 
-    /// Spike 2 (go/no-go gate #2) — **`text()` over a programmatic string
+    /// Spike 2 — **`text()` over a programmatic string
     /// stamps its glyphs with the constructing node's span, which classifies
     /// into a recorded segment-less window.**
     ///

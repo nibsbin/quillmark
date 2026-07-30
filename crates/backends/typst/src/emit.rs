@@ -1589,9 +1589,9 @@ mod tests {
     }
 
     /// Every formatting mark kind lowers to its Typst function, exactly. The
-    /// `#underline[` / `#strike[` rows were the only mapping coverage in the
-    /// workspace (previously `.contains()` checks in `quillmark-fuzz`, which
-    /// does not own this code).
+    /// `#underline[` / `#strike[` rows are the workspace's only coverage of that
+    /// mapping, and belong here rather than in `quillmark-fuzz`, which does not
+    /// own this code.
     #[test]
     fn every_wrap_mark_lowers_to_its_typst_function() {
         for (kind, expected) in [

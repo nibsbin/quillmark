@@ -77,6 +77,7 @@ pub fn peek_schema_version(json: &str) -> Option<String> {
 /// added as new variants, leaving existing ones byte-stable.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "schema")]
+#[non_exhaustive]
 pub enum StoredDocument {
     /// Current (V0_93_0) document model — the V0_92_0 payload with the card
     /// `body` embedded as the canonical content (a nested object).
@@ -98,6 +99,7 @@ pub enum StoredDocument {
 /// hand-crafted storage DTO (the markdown parser already rejects them)
 /// and is reported through [`Self::Malformed`] with a descriptive message.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum StorageError {
     /// A stored quill reference string could not be parsed.
     InvalidQuillReference {
@@ -222,6 +224,11 @@ pub struct PayloadV0_92_0 {
 /// Frozen `0.92.0` representation of a unified payload item. Carries the `Seed`
 /// variant and a per-`Field` `nested_fills` list: the paths of `!must_fill`
 /// markers nested inside the field value (the JSON `value` is fill-free).
+///
+/// **Deliberately exhaustive**, like every `V0_92_0` type: a shipped schema
+/// version never changes, so there is no variant to leave room for. A new item
+/// kind is a new schema version with its own type tree — which is what
+/// [`StoredDocument`] being `#[non_exhaustive]` makes room for.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum PayloadItemV0_92_0 {

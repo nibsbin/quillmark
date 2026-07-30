@@ -36,6 +36,7 @@ pub(crate) fn import_body(md: &str) -> Result<Content, ImportError> {
 /// can prefix its diagnostic per encoding without re-deriving the dispatch.
 /// Surfaced publicly as the error of [`Card::field_richtext`].
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum RichtextDecodeError {
     /// A JSON object that is not a valid canonical content.
     NotContent(String),

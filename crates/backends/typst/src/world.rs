@@ -8,7 +8,22 @@ use typst::utils::LazyHash;
 use typst::{Library, World};
 
 use crate::helper;
-use quillmark_core::Quill;
+use quillmark_core::{Diagnostic, Quill, Severity};
+
+/// A file Typst's [`VirtualPath`] would not accept, skipped rather than loaded.
+/// One shape for both populations — an asset and a package file fail this the
+/// same way, and a consumer routing on the code should not have to know which.
+fn skipped_path(path: &Path, err: impl std::fmt::Display) -> Diagnostic {
+    Diagnostic::new(
+        Severity::Warning,
+        format!(
+            "Skipping '{}': its path is not usable by Typst ({err})",
+            path.display()
+        ),
+    )
+    .with_code("typst::path_skipped".to_string())
+    .with_hint("Rename it to a plain relative path.".to_string())
+}
 
 /// Build a [`FileId`] for a virtual path, optionally scoped to a package.
 ///
@@ -35,6 +50,16 @@ pub struct QuillWorld {
     source: Source,
     sources: HashMap<FileId, Source>,
     binaries: HashMap<FileId, Bytes>,
+    /// Non-fatal defects from loading the quill's assets and packages: a file
+    /// the loader had to skip, a manifest it could not read.
+    ///
+    /// Without them each defect degrades the compile unattributably — a skipped
+    /// package surfaces as an unresolved `#import` naming the plate, three files
+    /// from the cause.
+    ///
+    /// Static for the session's lifetime, since the world loads its files once.
+    /// [`crate::TypstSession`] carries them alongside every compile's own.
+    load_warnings: Vec<Diagnostic>,
 }
 
 impl QuillWorld {
@@ -45,6 +70,7 @@ impl QuillWorld {
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut sources = HashMap::new();
         let mut binaries = HashMap::new();
+        let mut load_warnings = Vec::new();
 
         // Create a new empty FontBook to ensure proper ordering
         let mut book = FontBook::new();
@@ -72,12 +98,12 @@ impl QuillWorld {
         }
 
         // Load assets from quill's in-memory file system
-        Self::load_assets_from_quill(source, &mut binaries)?;
+        Self::load_assets_from_quill(source, &mut binaries, &mut load_warnings)?;
 
         // Load packages from quill's in-memory file system. Quillmark does
         // not download external packages — every package a quill imports
         // must be vendored under `packages/` in the quill tree.
-        Self::load_packages_from_quill(source, &mut sources, &mut binaries)?;
+        Self::load_packages_from_quill(source, &mut sources, &mut binaries, &mut load_warnings)?;
 
         // The helper package's typst.toml is constant for the session's
         // lifetime, so insert it once here. Re-injecting the helper `lib.typ`
@@ -101,7 +127,12 @@ impl QuillWorld {
             source,
             sources,
             binaries,
+            load_warnings,
         })
+    }
+
+    pub(crate) fn load_warnings(&self) -> &[Diagnostic] {
+        &self.load_warnings
     }
 
     /// Like [`new`](Self::new), but injects `json_data` as a virtual
@@ -213,6 +244,7 @@ impl QuillWorld {
     fn load_assets_from_quill(
         source: &Quill,
         binaries: &mut HashMap<FileId, Bytes>,
+        warnings: &mut Vec<Diagnostic>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get all files that start with "assets/"
         let asset_paths = source.find_files("assets/*");
@@ -223,11 +255,7 @@ impl QuillWorld {
                 let virtual_path = match VirtualPath::new(asset_path.to_string_lossy().as_ref()) {
                     Ok(vpath) => vpath,
                     Err(e) => {
-                        eprintln!(
-                            "Warning: Skipping asset with invalid path {}: {}",
-                            asset_path.display(),
-                            e
-                        );
+                        warnings.push(skipped_path(&asset_path, e));
                         continue;
                     }
                 };
@@ -244,6 +272,7 @@ impl QuillWorld {
         source: &Quill,
         sources: &mut HashMap<FileId, Source>,
         binaries: &mut HashMap<FileId, Bytes>,
+        warnings: &mut Vec<Diagnostic>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Get all subdirectories in packages/
         let package_dirs = source.list_directories("packages");
@@ -277,14 +306,23 @@ impl QuillWorld {
                             binaries,
                             Some(spec),
                             Some(&package_info.entrypoint),
+                            warnings,
                         )?;
                     }
                     Err(e) => {
-                        eprintln!(
-                            "Warning: Failed to parse typst.toml for {}: {}",
-                            package_name, e
+                        // The package is skipped entirely, so the plate's
+                        // `#import` for it fails later with an unresolved-file
+                        // error naming the plate, not this manifest.
+                        warnings.push(
+                            Diagnostic::new(
+                                Severity::Warning,
+                                format!(
+                                    "Skipping package '{package_name}': its typst.toml did not \
+                                     parse ({e})"
+                                ),
+                            )
+                            .with_code("typst::package_manifest".to_string()),
                         );
-                        // Continue with other packages
                     }
                 }
             } else {
@@ -302,6 +340,7 @@ impl QuillWorld {
                     binaries,
                     Some(spec),
                     None,
+                    warnings,
                 )?;
             }
         }
@@ -317,6 +356,7 @@ impl QuillWorld {
         binaries: &mut HashMap<FileId, Bytes>,
         package_spec: Option<PackageSpec>,
         entrypoint: Option<&str>,
+        warnings: &mut Vec<Diagnostic>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Find all files in the package directory
         let package_pattern = format!("{}/*", package_dir.to_string_lossy());
@@ -333,11 +373,7 @@ impl QuillWorld {
                 {
                     Ok(vpath) => vpath,
                     Err(e) => {
-                        eprintln!(
-                            "Warning: Skipping package file with invalid path {}: {}",
-                            file_path.display(),
-                            e
-                        );
+                        warnings.push(skipped_path(&file_path, e));
                         continue;
                     }
                 };
@@ -366,9 +402,16 @@ impl QuillWorld {
             let entrypoint_file_id = file_id(Some(spec.clone()), entrypoint_path);
 
             if !sources.contains_key(&entrypoint_file_id) {
-                eprintln!(
-                    "Warning: Entrypoint {} not found for package {}",
-                    entrypoint_name, spec.name
+                warnings.push(
+                    Diagnostic::new(
+                        Severity::Warning,
+                        format!(
+                            "Package '{}' declares entrypoint '{entrypoint_name}', which it does \
+                             not ship",
+                            spec.name
+                        ),
+                    )
+                    .with_code("typst::package_entrypoint_missing".to_string()),
                 );
             }
         }
@@ -545,6 +588,112 @@ name = "minimal-package"
         assert_eq!(package_info.version, "0.1.0");
         assert_eq!(package_info.namespace, "local");
         assert_eq!(package_info.entrypoint, "lib.typ");
+    }
+
+    /// A minimal in-memory quill, plus whatever extra files the caller wants
+    /// under their `/`-joined tree paths.
+    fn quill_with(extra: &[(&str, &str)]) -> quillmark_core::Quill {
+        use quillmark_core::{FileTreeNode, Quill};
+        let mut root = FileTreeNode::Directory {
+            files: HashMap::new(),
+        };
+        root.insert(
+            "Quill.yaml",
+            FileTreeNode::File {
+                contents: b"quill:\n  name: warn\n  version: 0.1.0\n  backend: typst\n  \
+                            description: load-warning probe\ntypst:\n  plate_file: plate.typ\n\
+                            main:\n  fields:\n    title:\n      type: string\n      \
+                            description: title\n"
+                    .to_vec(),
+            },
+        )
+        .expect("insert Quill.yaml");
+        root.insert(
+            "plate.typ",
+            FileTreeNode::File {
+                contents: b"#set page(width: 100pt, height: 100pt)\n".to_vec(),
+            },
+        )
+        .expect("insert plate");
+        for (path, contents) in extra {
+            root.insert(
+                path,
+                FileTreeNode::File {
+                    contents: contents.as_bytes().to_vec(),
+                },
+            )
+            .expect("insert extra file");
+        }
+        Quill::from_tree(root).expect("load quill")
+    }
+
+    /// A package the loader has to skip is a warning on the session, not a line
+    /// on a stderr nobody reads — on wasm32 there is no stderr at all, and the
+    /// only other signal is an unresolved `#import` naming the plate rather
+    /// than the manifest three files away.
+    #[test]
+    fn unparseable_package_manifest_warns_instead_of_vanishing() {
+        let quill = quill_with(&[
+            ("packages/brokenpkg/typst.toml", "this is not [ valid toml"),
+            ("packages/brokenpkg/lib.typ", "#let x = 1\n"),
+        ]);
+        let world = QuillWorld::new(&quill, "// probe").expect("world builds anyway");
+
+        let codes: Vec<&str> = world
+            .load_warnings()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert!(
+            codes.contains(&"typst::package_manifest"),
+            "expected a package-manifest warning, got {codes:?}"
+        );
+        let warning = &world.load_warnings()[0];
+        assert_eq!(warning.severity, quillmark_core::Severity::Warning);
+        assert!(
+            warning.message.contains("brokenpkg"),
+            "warning must name the package: {}",
+            warning.message
+        );
+    }
+
+    /// The clean case earns its own assertion: a well-formed quill must not
+    /// accumulate advisory noise, or the channel stops being worth reading.
+    #[test]
+    fn a_well_formed_quill_loads_without_warnings() {
+        let quill = quill_with(&[
+            (
+                "packages/goodpkg/typst.toml",
+                "[package]\nname = \"goodpkg\"\nversion = \"0.1.0\"\nentrypoint = \"lib.typ\"\n",
+            ),
+            ("packages/goodpkg/lib.typ", "#let x = 1\n"),
+        ]);
+        let world = QuillWorld::new(&quill, "// probe").expect("world");
+        assert!(
+            world.load_warnings().is_empty(),
+            "clean quill warned: {:?}",
+            world.load_warnings()
+        );
+    }
+
+    /// A package that declares an entrypoint it does not ship is importable in
+    /// name only.
+    #[test]
+    fn missing_package_entrypoint_warns() {
+        let quill = quill_with(&[(
+            "packages/hollow/typst.toml",
+            "[package]\nname = \"hollow\"\nversion = \"0.1.0\"\nentrypoint = \"lib.typ\"\n",
+        )]);
+        let world = QuillWorld::new(&quill, "// probe").expect("world");
+        let codes: Vec<&str> = world
+            .load_warnings()
+            .iter()
+            .filter_map(|d| d.code.as_deref())
+            .collect();
+        assert!(
+            codes.contains(&"typst::package_entrypoint_missing"),
+            "expected an entrypoint warning, got {codes:?}"
+        );
     }
 
     #[test]

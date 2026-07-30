@@ -26,7 +26,7 @@ fn create_test_quill(temp_dir: &TempDir, quill_yaml: &str) -> std::path::PathBuf
 fn test_nested_null_zero_fills_in_plate() {
     // null ≡ absent at every level: a null typed-dict property and a null
     // array element must zero-fill in the plate projection, never leak a bare
-    // null. (Regression for the nested-null leak.)
+    // null.
     let temp_dir = TempDir::new().unwrap();
     let quill_path = create_test_quill(
         &temp_dir,

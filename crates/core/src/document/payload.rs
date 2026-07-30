@@ -55,6 +55,7 @@ use crate::version::QuillReference;
 /// root-only, and (downstream of storage) whether the seeding layer interprets
 /// them: `$ext` is opaque; `$seed` is read by [`crate::SeedOverlay::from_json`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum MetaKey {
     /// `$ext` — opaque out-of-band consumer state (editor renames, agent
     /// annotations). Allowed on any card.
@@ -103,6 +104,7 @@ impl MetaKey {
 /// `Serialize`/`Deserialize`. Storage uses the versioned DTOs in
 /// `document::dto`, and bindings translate to their own wire types.
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub enum PayloadItem {
     /// `$quill` system metadata, holding the parsed quill reference.
     Quill { reference: QuillReference },
@@ -451,9 +453,8 @@ impl Payload {
     /// [`set_quill`](Self::set_quill); the canonical position is after
     /// `$quill` / `$kind` / `$id` and before any user field.
     ///
-    /// Any nested comments previously attached to a replaced `$ext`
-    /// entry are dropped (the new value tree may not contain matching
-    /// positions).
+    /// Nested comments on a replaced `$ext` entry are dropped (the new value
+    /// tree may not contain matching positions).
     pub fn set_ext(&mut self, value: JsonMap<String, JsonValue>) {
         self.set_meta(MetaKey::Ext, value);
     }

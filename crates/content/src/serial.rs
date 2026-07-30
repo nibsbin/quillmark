@@ -958,7 +958,7 @@ mod tests {
 
     /// The decoder is the entry point for stored and
     /// caller-supplied content, and export recurses one frame per container. A
-    /// 20 000-deep path used to decode clean and abort the process on
+    /// 20 000-deep path that decoded clean would abort the process on
     /// `to_markdown`; the shared `validate` cap rejects it at the door.
     #[test]
     fn deep_container_nesting_is_rejected_at_decode() {

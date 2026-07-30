@@ -157,7 +157,7 @@ Examples:
 | `title: "Curriculum Vitae" # string` | Endorsed string — concrete value, shippable as-is (keep or override) |
 | `count: 0 # integer` | Endorsed integer (type-empty default, shippable as-is) |
 | `active: false # boolean` | Endorsed boolean (type-empty default, shippable as-is) |
-| `notes: "" # string` | Endorsed empty string (the "skippable" cell, now Endorsed) |
+| `notes: "" # string` | Endorsed empty string (the "skippable" cell) |
 | `bio: !must_fill # richtext<markdown>` | Unendorsed richtext — bare marker (see "Richtext fields") |
 | `recipient: !must_fill # array<string>` | Unendorsed array of strings |
 | `date: !must_fill # date<YYYY-MM-DD>` | Unendorsed date |

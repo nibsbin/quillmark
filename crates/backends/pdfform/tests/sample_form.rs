@@ -2,7 +2,7 @@
 //! hand-authored stripped background + form.json through the full engine
 //! (pdfform backend registered), then reparse with lopdf and assert the filled
 //! AcroForm. Technique A means values land in `/V`; appearance synthesis is the
-//! viewer's job (human-verified per the issue, not headless).
+//! viewer's job, verified by a human rather than headless.
 
 use lopdf::Document as PdfDoc;
 use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};

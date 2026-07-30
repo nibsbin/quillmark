@@ -22,9 +22,24 @@
 //! `crate::reader`'s docs for the input contract the base PDF must satisfy.
 
 mod error;
+/// Byte-level reads over an existing PDF — object lookup, dictionary splicing,
+/// incremental-update parsing.
+///
+/// **Workspace-internal; not covered by this crate's semver.** `pub` only so
+/// `quillmark-pdfform` can reach it across the crate boundary; every signature
+/// here is dictated by the current stamping implementation, not by a contract.
+/// The supported surface is [`stamp`], [`regions_of`], [`page_media_boxes`],
+/// [`PdfUpdate`], and the types they name.
+#[doc(hidden)]
 pub mod reader;
 mod stamp;
 mod update;
+/// Byte-level writes — object emission, id allocation, string escaping and
+/// WinAnsi encoding.
+///
+/// **Workspace-internal; not covered by this crate's semver.** See
+/// [`reader`]'s note.
+#[doc(hidden)]
 pub mod writer;
 
 pub use error::PdfError;
@@ -75,6 +90,17 @@ pub struct FieldSpec {
 /// A field's definition — never a runtime value (that rides in
 /// [`FieldSpec::value`]). `form.json` reuses this directly with no parallel
 /// enum.
+///
+/// **Deliberately exhaustive**, unlike the other public enums here.
+///
+/// Two out-of-crate sites dispatch over the whole set: `pdfform`'s value
+/// resolver and its content-stream flattener. A variant neither handles draws
+/// nothing on the page and reports nothing, so the compile error is the
+/// guardrail. `#[non_exhaustive]` would force a `_` arm at both and buy semver
+/// room with that silence.
+///
+/// The price is that a new widget type is semver-major. The set tracks
+/// AcroForm's own widget kinds, which do not move.
 #[derive(Debug, Clone, PartialEq)]
 pub enum FieldType {
     /// A text field; `multiline` is the single retained text trait.

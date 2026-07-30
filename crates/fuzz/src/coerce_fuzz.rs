@@ -1,7 +1,8 @@
 //! Property-based fuzz tests for `QuillConfig::coerce_payload`.
 //!
-//! Targets the typed-coercion pipeline (`coerce_value_strict` /
-//! `coerce_object_props`). Exercised entirely through the public
+//! Targets the typed-coercion pipeline (`conform_value` under
+//! `Leniency::Render`, and `coerce_object_props` beneath it). Exercised
+//! entirely through the public
 //! [`QuillConfig::coerce_payload`] entry point so the tests don't depend
 //! on internal helpers.
 //!
@@ -56,7 +57,7 @@ fn arb_leaf_field_type() -> impl Strategy<Value = FieldType> {
 
 /// `FieldSchema` of bounded depth. `Object` carries a `properties` map; an
 /// `Array` carries an `items` element schema (here, an object sharing that
-/// same property map) — the same way `coerce_value_strict` consumes them.
+/// same property map) — the same way `conform_value` consumes them.
 fn arb_field_schema(max_depth: u32) -> impl Strategy<Value = FieldSchema> {
     let leaf = arb_leaf_field_type().prop_map(|ty| FieldSchema::new(String::new(), ty, None));
     leaf.prop_recursive(max_depth, 24, 3, |inner| {
@@ -314,7 +315,9 @@ fn regression_t2_array_of_object_path() {
     let err = config
         .coerce_payload(&single_field_payload(val))
         .expect_err("string-to-integer should fail");
-    let CoercionError::Uncoercible { path, .. } = err;
+    let CoercionError::Uncoercible { path, .. } = err else {
+        panic!("expected an Uncoercible path error, got: {err:?}");
+    };
     assert_eq!(path, "f[0].x");
     assert!(validate_path_grammar(&path));
 }

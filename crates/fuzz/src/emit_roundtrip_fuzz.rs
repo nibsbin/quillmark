@@ -14,14 +14,8 @@
 //! If the first parse fails, the input is discarded (invalid inputs are fine).
 //! Any panic in the emitter or the second parse is a bug.
 //!
-//! ## Running with cargo-fuzz (if installed)
-//!
-//! ```sh
-//! # cargo-fuzz target wiring (add to Cargo.toml [[bin]] if cargo-fuzz installed):
-//! # cargo fuzz run emit_roundtrip_fuzz -- -max_total_time=300
-//! ```
-//!
-//! The proptest variant below runs as part of `cargo test -p quillmark-fuzz`.
+//! The properties below are proptest cases: they run under
+//! `cargo test -p quillmark-fuzz`.
 
 use proptest::prelude::*;
 use quillmark_core::Document;
