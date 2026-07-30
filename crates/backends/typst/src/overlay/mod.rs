@@ -137,20 +137,20 @@ pub(crate) fn build_field_specs(
                 }
                 FieldKind::Signature => (FieldType::Signature, None),
             };
-            Ok(FieldSpec {
-                name: p.name.clone(),
-                // The region keys on the explicit `field:` schema path. A widget
-                // that binds none is not a schema-addressable field — its `/T`
-                // name is a backend identifier, never a schema address — so it
-                // carries no `schema_field` and `regions_of` exposes no region.
-                schema_field: p.schema_field.clone(),
-                page: p.page,
-                // Typst top-left → PDF bottom-left.
-                rect: [x0, page_h - y1, x1, page_h - y0],
+            // Typst top-left → PDF bottom-left.
+            let mut spec = FieldSpec::new(
+                p.name.clone(),
+                p.page,
+                [x0, page_h - y1, x1, page_h - y0],
                 field_type,
-                value,
-                tooltip: None,
-            })
+            );
+            // The region keys on the explicit `field:` schema path. A widget
+            // that binds none is not a schema-addressable field — its `/T`
+            // name is a backend identifier, never a schema address — so it
+            // carries no `schema_field` and `regions_of` exposes no region.
+            spec.schema_field = p.schema_field.clone();
+            spec.value = value;
+            Ok(spec)
         })
         .collect()
 }

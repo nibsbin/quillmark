@@ -21,10 +21,7 @@ fn render(markdown: &str, format: OutputFormat) -> quillmark::RenderResult {
         .render(
             &quill,
             &parsed,
-            &RenderOptions {
-                output_format: Some(format),
-                ..Default::default()
-            },
+            &RenderOptions::default().with_output_format(format),
         )
         .unwrap_or_else(|e| panic!("render failed: {e:?}\n---\n{markdown}"))
 }

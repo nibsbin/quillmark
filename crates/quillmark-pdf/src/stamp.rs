@@ -41,11 +41,20 @@ const DEFAULT_APPEARANCE: &[u8] = b"/Helv 0 Tf 0 g";
 
 /// Options for [`stamp`](crate::stamp).
 #[derive(Debug, Clone, Default)]
+#[non_exhaustive]
 pub struct StampOptions {
     /// `/Info` `/Producer` override, passed down from the product layer. `None`
     /// leaves the base PDF's `/Producer` untouched. The spine never defaults
     /// this from its own crate version.
     pub producer: Option<String>,
+}
+
+impl StampOptions {
+    /// Set [`producer`](Self::producer).
+    pub fn with_producer(mut self, producer: String) -> Self {
+        self.producer = Some(producer);
+        self
+    }
 }
 
 /// Stamp `fields` onto `base` as a fresh AcroForm via one incremental update,
@@ -172,13 +181,12 @@ pub fn regions_of(fields: &[FieldSpec]) -> Vec<RenderedRegion> {
     fields
         .iter()
         .filter_map(|f| {
-            Some(RenderedRegion {
-                field: f.schema_field.clone()?,
-                page: f.page,
-                rect: f.rect,
-                // A widget is a fixed box with no content address.
-                span: None,
-            })
+            // A widget is a fixed box with no content address, so no span.
+            Some(RenderedRegion::new(
+                f.schema_field.clone()?,
+                f.page,
+                f.rect,
+            ))
         })
         .collect()
 }

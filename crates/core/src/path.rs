@@ -183,6 +183,7 @@ impl fmt::Display for DocPath {
 /// A [`DocPath`] parse failure. Carries the offending input for a diagnostic
 /// message; the parser is total over every path [`Display`](std::fmt::Display) emits.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DocPathParseError {
     pub input: String,
     pub reason: &'static str,

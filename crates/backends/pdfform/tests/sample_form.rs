@@ -27,10 +27,7 @@ fn render(markdown: &str) -> quillmark::RenderResult {
         .render(
             &quill,
             &doc,
-            &RenderOptions {
-                output_format: Some(OutputFormat::Pdf),
-                ..Default::default()
-            },
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         )
         .expect("render ok")
 }
@@ -63,7 +60,7 @@ fn fixture_renders_structurally_valid_filled_pdf() {
         .unwrap();
     assert!(af.get(b"NeedAppearances").unwrap().as_bool().unwrap());
     assert_eq!(af.get(b"SigFlags").unwrap().as_i64().unwrap(), 1);
-    assert_eq!(af.get(b"Fields").unwrap().as_array().unwrap().len(), 5);
+    assert_eq!(af.get(b"Fields").unwrap().as_array().unwrap().len(), 8);
 
     // This e2e pins the *binding* layer — markdown/schema → field values,
     // tooltip, array join, regions, producer default. The spine bytes it once
@@ -94,13 +91,15 @@ fn fixture_renders_structurally_valid_filled_pdf() {
 
     // Region geometry is a session-level query (`session.regions()`), not on the
     // render result: one per *schema-bound* field, keyed on the schema path. The
-    // fixture's Signature widget carries no `schema_field`, so it is a
-    // backend-only artifact and emits no region — four regions, not five.
+    // fixture's four unbound widgets carry no `schema_field`, so they are
+    // backend-only artifacts and emit no region — four regions, not eight.
     let regions = open_session(FILLED).regions();
     assert_eq!(regions.len(), 4);
     assert!(
-        regions.iter().all(|r| r.field != "Signature"),
-        "the unbound signature widget produces no region"
+        regions
+            .iter()
+            .all(|r| !r.field.starts_with("Signer") && r.field != "Signature"),
+        "no unbound widget produces a region"
     );
     let r_full = regions.iter().find(|r| r.field == "full_name").unwrap();
     // Geometry rides the sidecar: a real page and a non-degenerate rect.
@@ -122,6 +121,64 @@ fn fixture_renders_structurally_valid_filled_pdf() {
         producer.starts_with(b"Quillmark "),
         "producer = {:?}",
         String::from_utf8_lossy(producer)
+    );
+}
+
+/// The unbound population: widgets a signer fills, whose kind comes from
+/// `form.json`'s own `type` token instead of a schema field.
+///
+/// `stamp.rs` owns the spine's `FieldType` → `/FT` mapping. What this file owns
+/// is the rest of that path: the declared token survives bind into the stamped
+/// output, the `options` array reaches the widget, and no document value lands
+/// on an unbound widget.
+#[test]
+fn unbound_widgets_stamp_their_declared_kind_and_take_no_value() {
+    let result = render(FILLED);
+    let doc = PdfDoc::load_mem(&result.artifacts[0].bytes).expect("lopdf reparse");
+    let cat = doc.catalog().expect("catalog");
+    let af = doc
+        .get_object(cat.get(b"AcroForm").unwrap().as_reference().unwrap())
+        .unwrap()
+        .as_dict()
+        .unwrap();
+
+    for (name, ft) in [
+        ("SignerInitials", &b"Tx"[..]),
+        ("SignerConfirms", &b"Btn"[..]),
+        ("SignerRole", &b"Ch"[..]),
+        ("Signature", &b"Sig"[..]),
+    ] {
+        assert_eq!(
+            widget(&doc, af, name).get(b"FT").unwrap().as_name().unwrap(),
+            ft,
+            "{name}"
+        );
+    }
+
+    // `options` has no schema counterpart: an unbound choice is the only place
+    // dropdown options are declared, so no other path carries them.
+    let opts: Vec<String> = widget(&doc, af, "SignerRole")
+        .get(b"Opt")
+        .unwrap()
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| decode_pdf_text(o.as_str().unwrap()))
+        .collect();
+    assert_eq!(opts, ["witness", "notary", "guardian"]);
+
+    // No `schema_field` means no document value can reach them: text and choice
+    // carry no `/V` at all, and the checkbox is `Off` regardless of how the
+    // document's own `agree: true` resolved on the bound `Agree`.
+    assert!(widget(&doc, af, "SignerInitials").get(b"V").is_err());
+    assert!(widget(&doc, af, "SignerRole").get(b"V").is_err());
+    assert_eq!(
+        widget(&doc, af, "SignerConfirms")
+            .get(b"V")
+            .unwrap()
+            .as_name()
+            .unwrap(),
+        b"Off"
     );
 }
 
@@ -217,10 +274,7 @@ fn apply_rebinds_values_and_reports_dirty_pages() {
     assert_eq!(cs.dirty_pages, vec![0]);
 
     let result = session
-        .render(&RenderOptions {
-            output_format: Some(OutputFormat::Pdf),
-            ..Default::default()
-        })
+        .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))
         .expect("render ok");
     let pdf = PdfDoc::load_mem(&result.artifacts[0].bytes).unwrap();
     let cat = pdf.catalog().unwrap();

@@ -36,10 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .render(
             &gf_quill,
             &gf_doc,
-            &RenderOptions {
-                output_format: Some(OutputFormat::Pdf),
-                ..Default::default()
-            },
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         )
         .expect("sample_form render");
 

@@ -89,11 +89,7 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         .render(
             &quill,
             &parsed,
-            &RenderOptions {
-                output_format: Some(OutputFormat::Pdf),
-                regions: true,
-                ..Default::default()
-            },
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf).with_regions(true),
         )
         .expect("usaf_memo should render to PDF");
     assert_eq!(
@@ -105,10 +101,7 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         .render(
             &quill,
             &parsed,
-            &RenderOptions {
-                output_format: Some(OutputFormat::Pdf),
-                ..Default::default()
-            },
+            &RenderOptions::default().with_output_format(OutputFormat::Pdf),
         )
         .expect("usaf_memo should render to PDF");
     assert!(

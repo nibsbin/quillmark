@@ -109,6 +109,25 @@ See the [Quill.yaml Reference](quill-yaml-reference.md) for the full field-type 
       "type": "signature",
       "page": 0,
       "rect": { "x": 180, "y": 330, "w": 340, "h": 40 }
+    },
+    {
+      "name": "SignerInitials",
+      "type": "text",
+      "page": 0,
+      "rect": { "x": 180, "y": 390, "w": 120, "h": 20 }
+    },
+    {
+      "name": "SignerConfirms",
+      "type": "checkbox",
+      "page": 0,
+      "rect": { "x": 180, "y": 430, "w": 14, "h": 14 }
+    },
+    {
+      "name": "SignerRole",
+      "type": "choice",
+      "options": ["witness", "notary", "guardian"],
+      "page": 0,
+      "rect": { "x": 180, "y": 470, "w": 340, "h": 20 }
     }
   ]
 }

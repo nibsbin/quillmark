@@ -66,10 +66,7 @@ fn usaf_memo_signature_widget_aligns_with_signature_block() {
     let result = engine.render(
         &quill,
         &parsed,
-        &RenderOptions {
-            output_format: Some(OutputFormat::Pdf),
-            ..Default::default()
-        },
+        &RenderOptions::default().with_output_format(OutputFormat::Pdf),
     );
 
     let rendered = result.expect("usaf_memo should render to PDF");

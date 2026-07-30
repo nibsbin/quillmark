@@ -39,9 +39,10 @@ impl From<quillmark_core::OutputFormat> for OutputFormat {
             quillmark_core::OutputFormat::Png => OutputFormat::Png,
             // Forced by `#[non_exhaustive]`, unreachable in practice: this
             // crate is `publish = false` and path-deps the core beside it, so
-            // the two variant lists ship together. A format added to core needs
-            // a member here.
-            _ => OutputFormat::Pdf,
+            // the two variant lists ship together. No fallback format is
+            // honest — every one of them promises bytes the caller did not ask
+            // for — so the arm refuses instead of guessing.
+            other => unreachable!("OutputFormat::{other:?} has no TS member"),
         }
     }
 }
@@ -58,8 +59,10 @@ pub enum Severity {
 impl From<quillmark_core::Severity> for Severity {
     fn from(severity: quillmark_core::Severity) -> Self {
         match severity {
-            quillmark_core::Severity::Error => Severity::Error,
             quillmark_core::Severity::Warning => Severity::Warning,
+            // `Severity` is `#[non_exhaustive]`. Escalating an unrecognized
+            // level over-reports; the other direction could hide a fatal.
+            quillmark_core::Severity::Error | _ => Severity::Error,
         }
     }
 }
@@ -95,11 +98,7 @@ impl From<quillmark_core::Location> for Location {
 
 impl From<Location> for quillmark_core::Location {
     fn from(loc: Location) -> Self {
-        quillmark_core::Location {
-            file: loc.file,
-            line: loc.line as u32,
-            column: loc.column as u32,
-        }
+        quillmark_core::Location::new(loc.file, loc.line as u32, loc.column as u32)
     }
 }
 
@@ -391,13 +390,13 @@ impl Default for RenderOptions {
 #[cfg(any(feature = "typst", feature = "pdfform"))]
 impl From<RenderOptions> for quillmark_core::RenderOptions {
     fn from(opts: RenderOptions) -> Self {
-        Self {
-            output_format: opts.format.map(|f| f.into()),
-            ppi: opts.ppi,
-            pages: opts.pages,
-            producer: opts.producer,
-            regions: opts.regions.unwrap_or(false),
-        }
+        let mut core = Self::default();
+        core.output_format = opts.format.map(|f| f.into());
+        core.ppi = opts.ppi;
+        core.pages = opts.pages;
+        core.producer = opts.producer;
+        core.regions = opts.regions.unwrap_or(false);
+        core
     }
 }
 
@@ -441,11 +440,7 @@ mod tests {
 
         let diag = Diagnostic::new(Severity::Error, "Test error message".to_string())
             .with_code("E001".to_string())
-            .with_location(Location {
-                file: "test.typ".to_string(),
-                line: 10,
-                column: 5,
-            })
+            .with_location(Location::new("test.typ".to_string(), 10, 5))
             .with_hint("This is a hint".to_string());
 
         let render_err = quillmark_core::RenderError::from_diag(diag);
@@ -519,12 +514,8 @@ mod tests {
     fn field_region_from_core_conversion() {
         use quillmark_core::RenderedRegion;
 
-        let core_region = RenderedRegion {
-            field: "agree".to_string(),
-            page: 0,
-            rect: [180.0, 538.0, 194.0, 552.0],
-            span: None,
-        };
+        let core_region =
+            RenderedRegion::new("agree".to_string(), 0, [180.0, 538.0, 194.0, 552.0]);
         let wasm_region: FieldRegion = core_region.into();
         assert_eq!(wasm_region.field, "agree");
         assert_eq!(wasm_region.page, 0);

@@ -21,10 +21,7 @@ fn render_pdf(plate: &str) -> Vec<u8> {
         .open(&source, &serde_json::json!({}))
         .expect("open session");
     let result = session
-        .render(&RenderOptions {
-            output_format: Some(OutputFormat::Pdf),
-            ..Default::default()
-        })
+        .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf))
         .expect("render ok");
     result.artifacts[0].bytes.clone()
 }
@@ -77,11 +74,7 @@ fn producer_override_via_render_options() {
     // Includes (), and \\ to exercise PDF literal-string escaping.
     let override_str = r"ACME (PDF) \ Tool 2.0";
     let result = session
-        .render(&RenderOptions {
-            output_format: Some(OutputFormat::Pdf),
-            producer: Some(override_str.to_string()),
-            ..Default::default()
-        })
+        .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf).with_producer(override_str.to_string()))
         .expect("render ok");
     let pdf = &result.artifacts[0].bytes;
     assert_eq!(producer_of(pdf), override_str.as_bytes());
@@ -98,11 +91,7 @@ fn producer_override_non_ascii_roundtrips() {
         .expect("open session");
     let override_str = "Quillmark 日本語 ✒";
     let result = session
-        .render(&RenderOptions {
-            output_format: Some(OutputFormat::Pdf),
-            producer: Some(override_str.to_string()),
-            ..Default::default()
-        })
+        .render(&RenderOptions::default().with_output_format(OutputFormat::Pdf).with_producer(override_str.to_string()))
         .expect("render ok");
     // lopdf hands back the decoded hex bytes: a UTF-16BE BOM then the code units.
     let bytes = producer_of(&result.artifacts[0].bytes);

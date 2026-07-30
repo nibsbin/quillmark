@@ -16,44 +16,20 @@ fn build_base_pdf(n: usize) -> Vec<u8> {
 
 fn all_four_fields() -> Vec<FieldSpec> {
     vec![
-        FieldSpec {
-            name: "FullName".into(),
-            schema_field: Some("full_name".into()),
-            page: 0,
-            rect: [180.0, 700.0, 520.0, 720.0],
-            field_type: FieldType::Text { multiline: false },
-            value: Some("Ada Lovelace".into()),
-            tooltip: Some("Full legal name".into()),
-        },
-        FieldSpec {
-            name: "Comments".into(),
-            schema_field: Some("comments".into()),
-            page: 0,
-            rect: [180.0, 600.0, 520.0, 680.0],
-            field_type: FieldType::Text { multiline: true },
-            value: None,
-            tooltip: None,
-        },
-        FieldSpec {
-            name: "Agree".into(),
-            schema_field: Some("agree".into()),
-            page: 0,
-            rect: [180.0, 560.0, 194.0, 574.0],
-            field_type: FieldType::Checkbox,
-            value: Some(quillmark_pdf::CHECKBOX_ON_STATE.into()),
-            tooltip: None,
-        },
-        FieldSpec {
-            name: "FavoriteColor".into(),
-            schema_field: Some("favorite_color".into()),
-            page: 0,
-            rect: [180.0, 520.0, 520.0, 540.0],
-            field_type: FieldType::Choice {
+        FieldSpec::new("FullName".into(), 0, [180.0, 700.0, 520.0, 720.0], FieldType::Text { multiline: false })
+            .with_schema_field("full_name".into())
+            .with_value("Ada Lovelace".into())
+            .with_tooltip("Full legal name".into()),
+        FieldSpec::new("Comments".into(), 0, [180.0, 600.0, 520.0, 680.0], FieldType::Text { multiline: true })
+            .with_schema_field("comments".into()),
+        FieldSpec::new("Agree".into(), 0, [180.0, 560.0, 194.0, 574.0], FieldType::Checkbox)
+            .with_schema_field("agree".into())
+            .with_value(quillmark_pdf::CHECKBOX_ON_STATE.into()),
+        FieldSpec::new("FavoriteColor".into(), 0, [180.0, 520.0, 520.0, 540.0], FieldType::Choice {
                 options: vec!["red".into(), "green".into(), "blue".into()],
-            },
-            value: Some("green".into()),
-            tooltip: None,
-        },
+            })
+            .with_schema_field("favorite_color".into())
+            .with_value("green".into()),
     ]
 }
 
@@ -63,9 +39,7 @@ fn stamps_all_four_field_types_into_valid_acroform() {
     let result = stamp(
         base,
         &all_four_fields(),
-        &StampOptions {
-            producer: Some("Quillmark test".into()),
-        },
+        &StampOptions::default().with_producer("Quillmark test".into()),
     )
     .expect("stamp ok");
 
@@ -157,15 +131,8 @@ fn stamps_all_four_field_types_into_valid_acroform() {
 #[test]
 fn signature_field_sets_sigflags() {
     let base = build_base_pdf(2);
-    let fields = vec![FieldSpec {
-        name: "Signature".into(),
-        schema_field: Some("signature".into()),
-        page: 1,
-        rect: [180.0, 100.0, 520.0, 140.0],
-        field_type: FieldType::Signature,
-        value: None,
-        tooltip: None,
-    }];
+    let fields = vec![FieldSpec::new("Signature".into(), 1, [180.0, 100.0, 520.0, 140.0], FieldType::Signature)
+            .with_schema_field("signature".into())];
     let result = stamp(base, &fields, &StampOptions::default()).expect("stamp ok");
 
     let doc = lopdf::Document::load_mem(&result).expect("reparse");
@@ -217,9 +184,7 @@ fn producer_only_no_fields_stamps_info_producer() {
     let result = stamp(
         base,
         &[],
-        &StampOptions {
-            producer: Some("Quillmark test".into()),
-        },
+        &StampOptions::default().with_producer("Quillmark test".into()),
     )
     .expect("stamp ok");
 
@@ -272,15 +237,9 @@ fn rotated_page_rejected_cleanly() {
     pdf.stream(content_id, &content.finish());
     let base = pdf.finish();
 
-    let fields = vec![FieldSpec {
-        name: "FullName".into(),
-        schema_field: Some("full_name".into()),
-        page: 0,
-        rect: [180.0, 700.0, 520.0, 720.0],
-        field_type: FieldType::Text { multiline: false },
-        value: Some("Ada".into()),
-        tooltip: None,
-    }];
+    let fields = vec![FieldSpec::new("FullName".into(), 0, [180.0, 700.0, 520.0, 720.0], FieldType::Text { multiline: false })
+            .with_schema_field("full_name".into())
+            .with_value("Ada".into())];
     let err = stamp(base, &fields, &StampOptions::default()).expect_err("rotated page rejected");
     assert_eq!(err.code, "pdf::rotated_page");
 }
@@ -303,9 +262,7 @@ fn implausible_size_errors_cleanly_without_panic() {
     let err = stamp(
         tampered,
         &[],
-        &StampOptions {
-            producer: Some("Quillmark test".into()),
-        },
+        &StampOptions::default().with_producer("Quillmark test".into()),
     )
     .expect_err("near-u32::MAX /Size should error");
     assert!(err.message.contains("id space"), "{}", err.message);
@@ -314,15 +271,8 @@ fn implausible_size_errors_cleanly_without_panic() {
 #[test]
 fn field_targeting_missing_page_errors() {
     let base = build_base_pdf(1);
-    let fields = vec![FieldSpec {
-        name: "X".into(),
-        schema_field: Some("x".into()),
-        page: 5,
-        rect: [0.0, 0.0, 10.0, 10.0],
-        field_type: FieldType::Signature,
-        value: None,
-        tooltip: None,
-    }];
+    let fields = vec![FieldSpec::new("X".into(), 5, [0.0, 0.0, 10.0, 10.0], FieldType::Signature)
+            .with_schema_field("x".into())];
     let err = stamp(base, &fields, &StampOptions::default()).expect_err("out of range");
     assert!(err.message.contains("page"), "{}", err.message);
 }
@@ -450,9 +400,7 @@ fn nonzero_generation_catalog_rejected_cleanly() {
     let err = stamp(
         base,
         &[],
-        &StampOptions {
-            producer: Some("Quillmark test".into()),
-        },
+        &StampOptions::default().with_producer("Quillmark test".into()),
     )
     .expect_err("non-zero generation catalog rejected");
     assert_eq!(err.code, "pdf::nonzero_generation");
@@ -464,15 +412,9 @@ fn nonzero_generation_page_rejected_cleanly() {
     // Same guard, reached via a page node a field targets (object 3).
     let mut base = build_base_pdf(1);
     replace_first(&mut base, b"3 0 obj", b"3 4 obj");
-    let fields = vec![FieldSpec {
-        name: "X".into(),
-        schema_field: Some("x".into()),
-        page: 0,
-        rect: [10.0, 10.0, 100.0, 30.0],
-        field_type: FieldType::Text { multiline: false },
-        value: Some("hi".into()),
-        tooltip: None,
-    }];
+    let fields = vec![FieldSpec::new("X".into(), 0, [10.0, 10.0, 100.0, 30.0], FieldType::Text { multiline: false })
+            .with_schema_field("x".into())
+            .with_value("hi".into())];
     let err = stamp(base, &fields, &StampOptions::default())
         .expect_err("non-zero generation page rejected");
     assert_eq!(err.code, "pdf::nonzero_generation");
@@ -488,9 +430,7 @@ fn encrypted_pdf_rejected_cleanly() {
     let err = stamp(
         tampered,
         &[],
-        &StampOptions {
-            producer: Some("Quillmark test".into()),
-        },
+        &StampOptions::default().with_producer("Quillmark test".into()),
     )
     .expect_err("encrypted PDF rejected");
     assert_eq!(err.code, "pdf::encrypted");
@@ -506,9 +446,7 @@ fn xref_stream_rejected_cleanly() {
     let err = stamp(
         base,
         &[],
-        &StampOptions {
-            producer: Some("Quillmark test".into()),
-        },
+        &StampOptions::default().with_producer("Quillmark test".into()),
     )
     .expect_err("xref stream rejected");
     assert_eq!(err.code, "pdf::xref_stream");
@@ -528,15 +466,9 @@ fn inline_annots_are_merged_not_replaced() {
     // A page that already has an inline /Annots array must keep its existing
     // entries; the new widget refs are spliced in alongside them.
     let (base, existing) = build_base_with_inline_annot();
-    let fields = vec![FieldSpec {
-        name: "X".into(),
-        schema_field: Some("x".into()),
-        page: 0,
-        rect: [10.0, 10.0, 100.0, 30.0],
-        field_type: FieldType::Text { multiline: false },
-        value: Some("hi".into()),
-        tooltip: None,
-    }];
+    let fields = vec![FieldSpec::new("X".into(), 0, [10.0, 10.0, 100.0, 30.0], FieldType::Text { multiline: false })
+            .with_schema_field("x".into())
+            .with_value("hi".into())];
     let result = stamp(base, &fields, &StampOptions::default()).expect("stamp ok");
 
     let doc = lopdf::Document::load_mem(&result).expect("reparse");
@@ -597,15 +529,9 @@ fn indirect_annots_rejected_cleanly() {
         out.extend_from_slice(&tampered[end..]);
         tampered = out;
     }
-    let fields = vec![FieldSpec {
-        name: "X".into(),
-        schema_field: Some("x".into()),
-        page: 0,
-        rect: [10.0, 10.0, 100.0, 30.0],
-        field_type: FieldType::Text { multiline: false },
-        value: Some("hi".into()),
-        tooltip: None,
-    }];
+    let fields = vec![FieldSpec::new("X".into(), 0, [10.0, 10.0, 100.0, 30.0], FieldType::Text { multiline: false })
+            .with_schema_field("x".into())
+            .with_value("hi".into())];
     let err =
         stamp(tampered, &fields, &StampOptions::default()).expect_err("indirect /Annots rejected");
     assert_eq!(err.code, "pdf::indirect_annots");
@@ -620,9 +546,7 @@ fn xref_emits_multiple_subsections_when_ids_have_gaps() {
     let result = stamp(
         base,
         &all_four_fields(),
-        &StampOptions {
-            producer: Some("Quillmark test".into()),
-        },
+        &StampOptions::default().with_producer("Quillmark test".into()),
     )
     .expect("stamp ok");
 

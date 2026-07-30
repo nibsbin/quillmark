@@ -29,7 +29,6 @@
 //! - **W3 (commit ∘ commit = commit):** a committed value is a fixed point —
 //!   re-committing it yields the same stored value.
 
-use std::collections::HashMap;
 
 use indexmap::IndexMap;
 use proptest::prelude::*;
@@ -128,23 +127,13 @@ fn config_with_one_field(schema: FieldSchema) -> QuillConfig {
     schema.name = ROOT_FIELD.to_string();
     let mut fields = IndexMap::new();
     fields.insert(ROOT_FIELD.to_string(), schema);
-    let main = CardSchema {
-        name: "main".to_string(),
-        description: None,
-        fields,
-        ui: None,
-        body: None,
-    };
-    QuillConfig {
-        name: "test".to_string(),
-        description: String::new(),
+    let main = CardSchema::new("main".to_string(), fields);
+    QuillConfig::new(
+        "test".to_string(),
+        "typst".to_string(),
+        "1.0".to_string(),
         main,
-        card_kinds: Vec::new(),
-        backend: "typst".to_string(),
-        version: "1.0".to_string(),
-        author: String::new(),
-        backend_config: HashMap::new(),
-    }
+    )
 }
 
 fn single_field_payload(value: serde_json::Value) -> IndexMap<String, QuillValue> {

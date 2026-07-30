@@ -10,10 +10,7 @@
 //! let engine = Quillmark::new();
 //!
 //! let parsed = Document::parse("~~~\n$quill: my_quill\n$kind: main\ntitle: Hello\n~~~\n\n# Hello World").unwrap().document;
-//! let result = engine.render(&quill, &parsed, &RenderOptions {
-//!     output_format: Some(OutputFormat::Pdf),
-//!     ..Default::default()
-//! }).unwrap();
+//! let result = engine.render(&quill, &parsed, &RenderOptions::default().with_output_format(OutputFormat::Pdf)).unwrap();
 //! ```
 
 // Re-export core types for convenience. `Quill` is the single quill type
