@@ -275,6 +275,42 @@ describe('Document JSON DTO — toJson / fromJson', () => {
   })
 })
 
+// ---------------------------------------------------------------------------
+// Authoring text — core's canonical strings, re-exposed
+// ---------------------------------------------------------------------------
+//
+// Four statics whose bodies are `quillmark_core` constants: the single source of
+// truth an LLM/MCP consumer authors against. Wording is core's to assert; what
+// is the binding's is that each one reaches JS at all, since a re-export that
+// returns "" is indistinguishable from a working one until a consumer pastes it
+// into a prompt.
+
+describe('Document authoring text', () => {
+  it('formatRules and quillRefHint carry core text through', () => {
+    expect(Document.formatRules().length).toBeGreaterThan(0)
+    expect(Document.quillRefHint().length).toBeGreaterThan(0)
+  })
+
+  it('blueprintInstruction names the quill it introduces', () => {
+    const text = Document.blueprintInstruction('usaf_memo')
+    expect(text.length).toBeGreaterThan(0)
+    expect(text).toContain('usaf_memo')
+  })
+
+  it('formatDiagnostic renders a real diagnostic as pretty text', () => {
+    let diag
+    try {
+      Document.fromMarkdown(TEST_MARKDOWN).storeFields({}, { 'bad-name': 'v' })
+    } catch (err) {
+      diag = err.diagnostics[0]
+    }
+    expect(diag).toBeDefined()
+    const pretty = Document.formatDiagnostic(diag)
+    expect(pretty).toContain(diag.message)
+    expect(pretty).toContain(diag.code)
+  })
+})
+
 describe('Quillmark.quill', () => {
   it('should accept a plain object tree (Record<string, Uint8Array>)', () => {
     const engine = new Quillmark()
@@ -1217,6 +1253,69 @@ describe('Document editor surface — $ext mutators', () => {
 // ---------------------------------------------------------------------------
 // open + session.render
 // ---------------------------------------------------------------------------
+
+describe('Document editor surface — $ext reads', () => {
+  it('getExt returns the whole map, undefined when the card carries none', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    expect(doc.getExt({})).toBeUndefined()
+    doc.storeExt({}, { editor: { title: 'A' }, agent: { pinned: true } })
+    expect(doc.getExt({})).toEqual({ editor: { title: 'A' }, agent: { pinned: true } })
+  })
+
+  it('getExtNamespace reads one slot, non-destructively', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    doc.storeExtNamespace({}, 'tutorial', ['step-1', 'step-2'])
+    expect(doc.getExtNamespace({}, 'tutorial')).toEqual(['step-1', 'step-2'])
+    expect(doc.getExtNamespace({}, 'nope')).toBeUndefined()
+    // Unlike removeExtNamespace, reading twice yields the same value.
+    expect(doc.getExtNamespace({}, 'tutorial')).toEqual(['step-1', 'step-2'])
+  })
+
+  it('both reads are card-indexed and take a card address only', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    doc.insertCard({ kind: 'note', body: 'x' })
+    doc.storeExt({ card: 0 }, { agent: { note: 'y' } })
+    expect(doc.getExt({ card: 0 }).agent.note).toBe('y')
+    expect(doc.getExtNamespace({ card: 0 }, 'agent')).toEqual({ note: 'y' })
+    expect(() => doc.getExt({ field: 'title' })).toThrow(/getExt/)
+    expectEditCode(() => doc.getExt({ card: 5 }), 'edit::index_out_of_range')
+    expectEditCode(() => doc.getExtNamespace({ card: 5 }, 'agent'), 'edit::index_out_of_range')
+  })
+})
+
+describe('Document editor surface — storeFill / isFill', () => {
+  it('storeFill stores the value and marks the field !must_fill', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    doc.storeFill('subject', 'Subject of the Memorandum')
+    expect(doc.isFill('subject')).toBe(true)
+    expect(doc.toMarkdown()).toContain('subject: !must_fill Subject of the Memorandum')
+  })
+
+  it('storeField clears the marker storeFill set', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    doc.storeFill('subject', 'x')
+    doc.storeField('subject', 'x')
+    expect(doc.isFill('subject')).toBe(false)
+  })
+
+  it('isFill is total over the field axis — only a bad card throws', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    // Absent field: truthfully unmarked, not an error.
+    expect(doc.isFill('nonesuch')).toBe(false)
+    // A body address (no `field`) is never a fill.
+    expect(doc.isFill({})).toBe(false)
+    expectEditCode(() => doc.isFill({ card: 5, field: 'title' }), 'edit::index_out_of_range')
+  })
+
+  it('storeFill is card-capable and rejects a body address', () => {
+    const doc = Document.fromMarkdown(TEST_MARKDOWN)
+    doc.insertCard({ kind: 'note', body: 'x' })
+    doc.storeFill({ card: 0, field: 'signer' }, 'TBD')
+    expect(doc.isFill({ card: 0, field: 'signer' })).toBe(true)
+    expect(doc.isFill({ card: 0, field: 'other' })).toBe(false)
+    expect(() => doc.storeFill({}, 'v')).toThrow(/storeFill/)
+  })
+})
 
 describe('quill.open + session.render', () => {
   it('should support open + session.render with pageCount', () => {
