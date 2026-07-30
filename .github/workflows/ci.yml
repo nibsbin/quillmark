@@ -82,29 +82,7 @@ jobs:
         run: cargo doc --no-deps --locked -p quillmark-wasm
 
   test:
-    # The CLI ships to crates.io, so the suite has to run on Windows — but on
-    # merge, not on every PR push. It bills at 2x and was 53% of the entire CI
-    # spend to re-run a suite that is overwhelmingly platform-blind: the tree
-    # carries no `target_os`/`target_family` cfg anywhere, so the only surface
-    # that can differ is path handling (tree paths are `/`-joined and resolve
-    # via `Path::components()`, which takes either separator) and checkout line
-    # endings (pinned in .gitattributes after they broke the snapshot test).
-    # Both of those are now structural rather than a thing each PR can regress.
-    #
-    # The trade is real and one line to undo: a Windows-only break reaches main
-    # and is caught on the merge run instead of in review. Put windows-latest in
-    # the pull_request arm below if that stops being the right side of it.
-    #
-    # macOS is in neither arm — against Linux it differs only in being
-    # case-insensitive, which is strictly more permissive, so it catches nothing
-    # Linux misses. It billed at 10x for that.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: ${{ github.event_name == 'push'
-          && fromJSON('["ubuntu-latest", "windows-latest"]')
-          || fromJSON('["ubuntu-latest"]') }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -121,11 +99,8 @@ jobs:
       # "no backends registered" path in orchestration/engine.rs and the
       # `#[cfg(not(feature = "typst"))]` half of feature_flag_test.rs — never
       # compiles above. The WASM `core` variant has this covered by
-      # build-wasm.sh + core.test.js; this is the native equivalent. Which
-      # branch a feature gate selects does not vary by OS, so one runner answers
-      # it.
+      # build-wasm.sh + core.test.js; this is the native equivalent.
       - name: Tests (zero-backend configuration)
-        if: matrix.os == 'ubuntu-latest'
         run: cargo test -p quillmark --no-default-features --locked
 
   # release.yml publishes with `--no-verify`, which skips building each crate
