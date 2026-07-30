@@ -8,6 +8,9 @@ on:
   # stay out on their own.
   push:
     branches: [main]
+  # On demand, which is also how the `semver` job is reached outside a release
+  # PR — see its own note.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -181,12 +184,19 @@ jobs:
   # trait gaining a method, a public type losing Send/Sync — which is most of
   # what actually breaks a consumer.
   #
-  # Advisory until the 1.0.0 tag: with the version at 0.x, cargo treats a minor
-  # bump as major, so the tool has no stable baseline to judge against yet and
-  # `continue-on-error` keeps a red check from being one reviewers learn to
-  # ignore. Drop the flag when 1.0.0 ships — that is the release the gate exists
-  # for.
+  # Release PRs only, for now. `Cargo.toml` carries the last *released* version
+  # until `release-prepare.yml` bumps it, so a feature PR compares 0.98.0 against
+  # 0.98.0 and the tool assumes minor. Every deliberate break in the 1.0.0 freeze
+  # then fails a check that cannot tell it apart from an accident, on every PR,
+  # which is how a check becomes one reviewers click past. On a `release/v*` PR
+  # the bump exists and the comparison is the one worth making: is this bump big
+  # enough for what changed. `workflow_dispatch` reaches it on demand.
+  #
+  # Restore it per-PR at 1.0.0, dropping `continue-on-error` and the condition
+  # together: past the tag a flagged break is a defect rather than the plan, and
+  # that is the check this job was added to be.
   semver:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.head_ref, 'release/v')
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
