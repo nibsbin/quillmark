@@ -1,7 +1,8 @@
 //! Property-based fuzz tests for Quillmark using `proptest`.
 //!
-//! Covers escaping correctness (`escape_string`, `escape_markup`),
-//! parse/emit round-trip stability, and schema coercion invariants.
+//! Covers escaping correctness (`escape_string`, `escape_markup`), parse/emit
+//! round-trip stability, JSON decode-lane robustness, and schema coercion
+//! invariants.
 
 #[cfg(test)]
 mod coerce_fuzz;

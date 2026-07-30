@@ -140,7 +140,7 @@ quillmark render ./quills/usaf_memo memo.md --stdout > final.pdf
 
 ## Error Handling
 
-The CLI provides clear error messages for common issues:
+Common failures and what the CLI reports:
 
 - **Missing markdown file**: `Markdown file not found: path/to/file.md`
 - **Missing quill**: `Quill directory not found: path/to/quill`

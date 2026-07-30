@@ -524,7 +524,7 @@ card_kinds:
     fn card_absolute_index_and_bad_kind_are_dangling() {
         let c = config();
         // `$cards.0.from` — absolute index: `0` is not a card kind, so it dangles
-        // at that segment (absolute addressing is gone in form@0.2.0).
+        // at that segment. Absolute addressing is not part of `form@0.2.0`.
         assert!(matches!(
             bind(&c, "W", "$cards.0.from"),
             Err(BindError::Dangling { .. })

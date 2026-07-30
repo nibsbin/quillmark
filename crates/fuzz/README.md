@@ -1,6 +1,6 @@
 # Quillmark Fuzzing Tests
 
-This crate contains property-based fuzzing tests for Quillmark using the `proptest` framework. These tests validate the security of Quillmark's escaping functions, markdown parser, and filter inputs.
+Property-based fuzz tests over Quillmark's escaping functions, parsers, and JSON decode lanes, built on `proptest` rather than `cargo-fuzz`.
 
 **Note:** This crate is not published to crates.io and is only used for internal testing.
 
@@ -22,69 +22,37 @@ cargo test
 Run a specific test module:
 
 ```bash
+cargo test --package quillmark-fuzz coerce_fuzz
 cargo test --package quillmark-fuzz convert_fuzz
-cargo test --package quillmark-fuzz filter_fuzz
-cargo test --package quillmark-fuzz parse_fuzz
+cargo test --package quillmark-fuzz decode_fuzz
 cargo test --package quillmark-fuzz emit_roundtrip_fuzz
+cargo test --package quillmark-fuzz parse_fuzz
 ```
 
-**Note:** This crate is excluded from `default-members` to avoid running expensive fuzzing tests on every `cargo test`. Use `cargo test --workspace` to run all tests including fuzzing. This crate uses `proptest` for property-based testing, not `cargo-fuzz`.
+**Note:** This crate is excluded from `default-members` so expensive fuzzing does not run on every `cargo test`. Use `cargo test --workspace` to include it.
 
-## Test Coverage
+## Modules
 
-### Type Coercion (`coerce_fuzz`)
+| Module | Target |
+|---|---|
+| `coerce_fuzz.rs` | `QuillConfig::coerce_payload` — no panic on arbitrary `(FieldSchema, Value)` pairs, well-formed error paths, idempotent successful coercions |
+| `convert_fuzz.rs` | Markdown → Typst: `escape_string` / `escape_markup` in `quillmark-typst`, and the import-then-lower render path |
+| `decode_fuzz.rs` | The four JSON decode lanes — storage DTO, card wire, canonical content, op wire — where arbitrary JSON yields `Err`, never a panic |
+| `emit_roundtrip_fuzz.rs` | `parse → emit → re-parse` stability, and idempotence on the canonical form |
+| `parse_fuzz.rs` | card-yaml payloads: malformed YAML, composable card kinds, nested structures, Unicode and special characters |
 
-Property tests for `QuillConfig::coerce_payload`: no panics on arbitrary `(FieldSchema, Value)` pairs, well-formed error paths, and idempotence of successful coercions.
+## Security properties
 
-### Escaping Function Security (`convert_fuzz`)
-
-Tests for `escape_string` and `escape_markup` functions in `quillmark-typst`:
-- Injection attack vectors with quotes and eval patterns
-- Control character handling (null bytes, ASCII control chars)
-- Property tests ensuring no unescaped quotes can break out of string context
-- Dangerous patterns like `\"); eval(...)` that could enable code injection
-- Validation that all Typst special characters are properly escaped
-- Backslash handling to prevent double-escaping vulnerabilities
-
-### Markdown Parser Fuzzing (`convert_fuzz`)
-
-DoS attack prevention:
-- Deeply nested structures (blockquotes, lists up to 20 levels deep)
-- Large input handling (up to 10,000 characters)
-- Ensures parser doesn't panic on malicious inputs
-
-### YAML Parser Fuzzing (`parse_fuzz`)
-
-card-yaml payload security:
-- Tests malformed YAML handling
-- Validates composable card-kind parsing with random inputs
-- Tests nested YAML structures for stability
-- Unicode and special character handling
-
-## Security Properties Validated
-
-The fuzzing tests validate critical security properties:
-
-1. **No injection vulnerabilities**: Quotes are always escaped in string contexts
-2. **Control character safety**: ASCII control characters are properly escaped as `\u{...}`
-3. **Backslash handling**: Backslashes are escaped first to prevent double-escaping
-4. **DoS resistance**: Parser handles deeply nested and large inputs without panicking
-5. **Unicode safety**: Handles arbitrary Unicode input without crashes
-
-## Architecture
-
-The fuzzing tests are organized into four modules:
-
-- `coerce_fuzz.rs` - Property tests for `QuillConfig::coerce_payload` (no-panic, well-formed error paths, idempotence)
-- `convert_fuzz.rs` - Tests for markdown to Typst conversion and escaping functions
-- `emit_roundtrip_fuzz.rs` - Round-trip stability tests (parse → emit → re-parse)
-- `parse_fuzz.rs` - Tests for card-yaml and markdown parsing
-
-All fuzzing tests use `proptest` for property-based testing, which generates random inputs to validate that security properties hold across a wide range of inputs.
+1. **No injection**: quotes are always escaped in string contexts, so nothing breaks out — including `\"); eval(...)`-shaped payloads.
+2. **Escaping completeness**: every Typst special character is escaped in markup context.
+3. **Control-character safety**: null bytes and ASCII control characters escape as `\u{...}`.
+4. **Backslash handling**: backslashes escape first, so nothing double-escapes.
+5. **DoS resistance**: deeply nested input (blockquotes and lists to 20 levels) and large input (to 10,000 characters) parse without panicking.
+6. **Unicode safety**: arbitrary Unicode input does not crash.
 
 ## Contributing
 
-When adding new features to Quillmark, consider adding corresponding fuzzing tests to this crate to ensure security properties are maintained.
+A new escaping, parsing, or decoding surface gets a fuzz target here.
 
 ## References
 

@@ -841,11 +841,11 @@ impl Card {
 
     /// Revise a richtext field from an authored markdown string — the
     /// field-level twin of [`revise_body`](Self::revise_body), and the
-    /// field-level `diff_import` the write surface previously lacked (the only
-    /// field-content writers were the cold [`commit_field`](Self::commit_field)
-    /// and the splice [`apply_field_richtext_change`](Self::apply_field_richtext_change),
-    /// so an LLM rewriting a richtext field's markdown had no anchor-preserving
-    /// path). Decodes the field's current content as the diff base (an **absent**
+    /// field-level `diff_import`. The other field-content writers are the cold
+    /// [`commit_field`](Self::commit_field) and the splice
+    /// [`apply_field_richtext_change`](Self::apply_field_richtext_change), so this
+    /// is the anchor-preserving path for rewriting a richtext field's markdown
+    /// wholesale. Decodes the field's current content as the diff base (an **absent**
     /// field cold-imports from empty), rebases surviving anchors onto the new
     /// text, re-stores the canonical content, and returns the text [`Delta`].
     ///

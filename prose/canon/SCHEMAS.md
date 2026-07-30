@@ -56,7 +56,16 @@ Coercion rules per type:
 | `richtext` | commits the canonical content form (the model): an authored markdown string imports via `quillmark-content::import`, an editor-supplied content object revalidates and re-canonicalizes. The length-1-array-unwrap and bare-scalar-stringify leniencies feed the import |
 | `date` / `datetime` | per-type strict-grammar validation, stored verbatim: a `date` rejects any time component, a `datetime` rejects offsets/space/fractional/bare-date. Neither truncates |
 | `object` | property recursion |
-- **`inline` richtext enforcement.** A `richtext` field with `inline: true` requires its content to be exactly one `Para` line, in no container, with no islands (`Content::is_inline`). The empty content satisfies it, so a blank or zero-filled inline field passes. The constraint is checked in three places: coercion (`CoercionError` for a document value), validation (`richtext::not_inline`, the `TypeMismatch` fatality class, as a backstop for a content that bypassed coercion), and load-time example import (a schema literal that violates it is a load error). Blueprint still annotates inline fields as `richtext(inline)<markdown>`; `build_transform_schema` emits `quillmark:inline: true`
+- **`inline` richtext enforcement.** A `richtext` field with `inline: true`
+  requires its content to be exactly one `Para` line, in no container, with no
+  islands (`Content::is_inline`). The empty content satisfies it, so a blank or
+  zero-filled inline field passes. The constraint is checked in three places:
+  coercion (`CoercionError` for a document value), validation
+  (`richtext::not_inline`, the `TypeMismatch` fatality class, as a backstop for a
+  content that bypassed coercion), and load-time example import (a schema literal
+  that violates it is a load error). Blueprint still annotates inline fields as
+  `richtext(inline)<markdown>`; `build_transform_schema` emits
+  `quillmark:inline: true`
 - **`plaintext` coercion and enforcement.** A `plaintext` value rides the same
   content as `richtext`, differing only at the codec:
   - a string imports through the **literal** codec (`from_plaintext`, verbatim
@@ -72,7 +81,7 @@ Coercion rules per type:
   caches (`default_content`/`example_content`) and the render-floor zero (the
   empty content) cover `plaintext` exactly as `richtext` — both are content
   leaves (`field_contains_content`)
-- **`enum` domain validation.** An `enum` field (or the deprecated `enum:` modifier on `string`) coerces as a string; domain membership is a *value* check (`validation::enum_violation`), not a type check, so an out-of-domain string is well-typed but invalid. `type: enum` requires a non-empty `values:` list; `enum:`/`values:` on any type other than `string`/`enum` is a load error (`quill::field_parse_error`), closing the pre-promotion silent no-op. Both spellings populate one carrier (`FieldSchema::enum_values`) and project identically to `{type: string, enum: […]}`
+- **`enum` domain validation.** An `enum` field (or the deprecated `enum:` modifier on `string`) coerces as a string; domain membership is a *value* check (`validation::enum_violation`), not a type check, so an out-of-domain string is well-typed but invalid. `type: enum` requires a non-empty `values:` list; `enum:`/`values:` on any type other than `string`/`enum` is a load error (`quill::field_parse_error`). Both spellings populate one carrier (`FieldSchema::enum_values`) and project identically to `{type: string, enum: […]}`
 - **Null short-circuits coercion.** A null value (`field:`, `field: null`,
   `field: ~`) passes coercion unchanged for *every* type — null ≡ absent, so
   it carries no data to coerce. The value reaches the render floor and

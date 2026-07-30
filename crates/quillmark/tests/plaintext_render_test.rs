@@ -1,8 +1,8 @@
 //! End-to-end proof that a `plaintext` field lowers through the typst backend
-//! with **zero backend edits**: it rides the same `contentMediaType` as
-//! richtext, so `content_field_names` classifies it as content and the shared
-//! content-lowering path emits it. The literal codec means markdown delimiters
-//! stay verbatim rather than becoming markup.
+//! with **no backend-side special case**: it rides the same `contentMediaType`
+//! as richtext, so `content_field_names` classifies it as content and the
+//! shared content-lowering path emits it. The literal codec means markdown
+//! delimiters stay verbatim rather than becoming markup.
 
 #![cfg(feature = "typst")]
 

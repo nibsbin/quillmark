@@ -19,10 +19,10 @@
 //! preserves the absence-based completeness signal for fields that have no
 //! `example` to seed.
 //!
-//! Provenance — distinguishing a still-untouched seeded `example` from authored
-//! content — is intentionally out of scope here; correctness and renderability
-//! do not depend on it. A field carrying its seeded `example` reads as ordinary
-//! authored content until that distinction is added.
+//! Provenance — distinguishing an untouched seeded `example` from authored
+//! content — is out of scope by design; correctness and renderability do not
+//! depend on it. A field carrying its seeded `example` reads as ordinary
+//! authored content.
 //!
 //! Composable cards (`card_kinds`, multiplicity `0..N`) are seeded as **one**
 //! instance per declared kind.

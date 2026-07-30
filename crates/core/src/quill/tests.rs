@@ -258,7 +258,7 @@ quill:
     // Test that other fields are in metadata including version
     assert!(quill.metadata.contains_key("description"));
     assert!(quill.metadata.contains_key("author"));
-    assert!(quill.metadata.contains_key("version")); // version should now be included
+    assert!(quill.metadata.contains_key("version"));
     if let Some(version_val) = quill.metadata.get("version") {
         if let Some(version_str) = version_val.as_str() {
             assert_eq!(version_str, "1.0");
@@ -1557,7 +1557,7 @@ main:
 #[test]
 fn ui_group_on_object_property_is_rejected() {
     // `ui.group` clusters card-level fields only; on a typed-dictionary
-    // property it was silently inert, and now loads as a hard error.
+    // property it is a hard load error rather than an inert knob.
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
 main:
@@ -2288,8 +2288,8 @@ main:
     assert_eq!(summary.r#type, FieldType::RichText { inline: false });
     assert_eq!(summary.ui.as_ref().unwrap().multiline, Some(true));
 
-    // A field with no authored `ui:` block now carries `ui: None` — order is
-    // no longer stamped, so nothing fabricates a `ui` block.
+    // A field with no authored `ui:` block carries `ui: None` — nothing
+    // fabricates a `ui` block.
     let notes = config.main.fields.get("notes").unwrap();
     assert_eq!(notes.r#type, FieldType::RichText { inline: false });
     assert!(notes.ui.is_none());
@@ -3250,7 +3250,7 @@ fn plaintext_transform_schema_carries_media_type_and_plain_annotation() {
 }
 
 // ---------------------------------------------------------------------------
-// enum — promoted to a first-class token
+// enum — the promoted `type: enum` token
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -3308,7 +3308,7 @@ fn enum_membership_is_validated_on_a_document_value() {
 
 #[test]
 fn legacy_enum_modifier_on_string_is_still_accepted() {
-    // The deprecated spelling loads for one release and populates the same store.
+    // The deprecated spelling loads and populates the same store.
     let config = quill_with_field("    color:\n      type: string\n      enum: [a, b]\n")
         .expect("legacy enum: on string still loads");
     let field = config.main.fields.get("color").unwrap();
@@ -3321,8 +3321,7 @@ fn legacy_enum_modifier_on_string_is_still_accepted() {
 
 #[test]
 fn enum_or_values_on_a_non_enum_type_is_a_load_error() {
-    // The old silent no-op is now loud: enum:/values: on a non-string, non-enum
-    // type fails to load.
+    // enum:/values: on a non-string, non-enum type fails to load.
     let err = quill_with_field("    n:\n      type: integer\n      enum: [1, 2]\n").unwrap_err();
     assert!(
         err.iter()

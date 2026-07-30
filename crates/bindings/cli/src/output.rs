@@ -33,7 +33,7 @@ pub fn write_output(
     Ok(())
 }
 
-/// Derive output filename from input markdown path
+/// The input markdown path with its extension replaced by `format`.
 pub fn derive_output_path(markdown_path: &Path, format: &str) -> PathBuf {
     let mut output = markdown_path.to_path_buf();
     output.set_extension(format);

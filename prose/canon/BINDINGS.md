@@ -28,8 +28,8 @@ which extras they expose (canvas preview is WASM-only).
   carries a non-empty diagnostic list (`QuillmarkError.diagnostics` /
   thrown `Error.diagnostics`).
 
-The WASM binding is the reference surface; Python mirrors it and catches up
-on a best-effort basis (see its status notes below). New contract work lands
+The WASM binding is the reference surface; Python mirrors it within its scope
+(Tier 1 + storage + render — see the scope note below). New contract work lands
 in WASM first.
 
 ## The write surface: object placement over one primitive

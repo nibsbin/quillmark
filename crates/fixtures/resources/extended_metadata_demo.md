@@ -26,7 +26,7 @@ name: Structured Content
 status: implemented
 ~~~
 
-Break your document into logical sections with their own metadata. Perfect for catalogs, lists, and structured documents.
+Break your document into logical sections with their own metadata. Suits catalogs, lists, and structured documents.
 
 ~~~
 $kind: features
@@ -44,7 +44,7 @@ category: Documentation
 example: Technical specifications with multiple sections
 ~~~
 
-Perfect for API documentation, user manuals, and technical guides where you need structured metadata for each section.
+Applies to API documentation, user manuals, and technical guides where each section carries its own metadata.
 
 ~~~
 $kind: use_cases
@@ -52,7 +52,7 @@ category: Content Management
 example: Product catalogs, blog posts, portfolios
 ~~~
 
-Ideal for content-heavy sites where each item needs its own metadata (price, category, tags, etc.).
+Applies to content-heavy sites where each item carries its own metadata (price, category, tags, etc.).
 
 ## Technical Details
 

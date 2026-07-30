@@ -32,7 +32,6 @@ pub fn execute(args: InfoArgs) -> Result<()> {
 }
 
 fn print_json(quill: &quillmark::Quill) -> Result<()> {
-    // Build a JSON object with the metadata
     let mut info = serde_json::Map::new();
     info.insert(
         "name".to_string(),
@@ -43,7 +42,6 @@ fn print_json(quill: &quillmark::Quill) -> Result<()> {
         serde_json::Value::String(quill.backend_id().to_string()),
     );
 
-    // Extract metadata fields: version, author, description
     let metadata = quill.metadata();
     if let Some(version) = metadata.get("version") {
         info.insert("version".to_string(), version.as_json().clone());
@@ -55,7 +53,6 @@ fn print_json(quill: &quillmark::Quill) -> Result<()> {
         info.insert("description".to_string(), description.as_json().clone());
     }
 
-    // Add counts
     info.insert(
         "field_count".to_string(),
         serde_json::Value::Number(quill.config().main.fields.len().into()),
@@ -67,7 +64,6 @@ fn print_json(quill: &quillmark::Quill) -> Result<()> {
             serde_json::Value::Number(card_count.into()),
         );
     }
-    // Add any additional metadata (excluding the standard fields already included)
     let mut extra_metadata = serde_json::Map::new();
     for (key, value) in metadata {
         if !STANDARD_METADATA_KEYS.contains(&key.as_str()) {
@@ -115,23 +111,19 @@ fn print_human_readable(quill: &quillmark::Quill) {
 
     println!("  Backend:     {}", quill.backend_id());
 
-    // Field count from schema properties
     let field_count = config.main.fields.len();
     println!("  Fields:      {}", field_count);
 
-    // Card count from schema $defs
     let card_count = config.card_kinds.len();
     if card_count > 0 {
         println!("  Cards:       {}", card_count);
     }
 
-    // Defaults
     let defaults_count = config.main.defaults().len();
     if defaults_count > 0 {
         println!("  Defaults:    {}", defaults_count);
     }
 
-    // Additional metadata
     let extra_keys: Vec<&String> = metadata
         .keys()
         .filter(|k| !STANDARD_METADATA_KEYS.contains(&k.as_str()))

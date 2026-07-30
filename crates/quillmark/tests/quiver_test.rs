@@ -72,8 +72,7 @@ fn every_quill_in_quiver_renders() {
 
 /// The `blueprint()` guarantee (BLUEPRINT.md §Guarantees): every bundled quill's
 /// generated blueprint **parses**, **round-trips** idempotently, and **renders**
-/// (its `!must_fill` markers zero-fill). Covers the typed-table synthetic-row
-/// round-trip and the strengthened "blueprint renders" claim across fixtures.
+/// (its `!must_fill` markers zero-fill), including the typed-table synthetic row.
 #[test]
 fn every_quill_blueprint_round_trips_and_renders() {
     let engine = Quillmark::new();

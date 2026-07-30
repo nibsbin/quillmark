@@ -1,10 +1,9 @@
-//! Schema construction utilities for Quill bundles.
+//! Schema construction for Quill bundles.
 //!
-//! This module contains `build_transform_schema`, which maps the abstract
-//! [`FieldSchema`] / [`FieldType`] model to a JSON-Schema-shaped
-//! [`QuillValue`]. The schema is backend-agnostic (no Typst specifics);
-//! backends consume it to drive per-field transforms such as markdown →
-//! backend-markup conversion.
+//! Maps the abstract [`FieldSchema`] / [`FieldType`] model to a
+//! JSON-Schema-shaped [`QuillValue`]. The schema is backend-agnostic (no Typst
+//! specifics); backends consume it to drive per-field transforms such as
+//! markdown → backend-markup conversion.
 
 use super::{FieldSchema, FieldType, QuillConfig};
 use crate::value::QuillValue;
@@ -16,8 +15,8 @@ use crate::value::QuillValue;
 pub const CONTENT_MEDIA_TYPE: &str = "application/quillmark-content+json";
 
 /// Transform-schema keyword marking a single-`Para` richtext field (`inline: true`
-/// in Quill.yaml). Blueprint still emits `richtext(inline)<markdown>`; this key
-/// is the JSON Schema–shaped wire for editor and backend consumers.
+/// in Quill.yaml). The blueprint spells the same fact `richtext(inline)<markdown>`;
+/// this key is the JSON Schema–shaped wire for editor and backend consumers.
 pub const QUILLMARK_INLINE_KEY: &str = "quillmark:inline";
 
 /// Transform-schema keyword marking a `plaintext` field — the literal-codec

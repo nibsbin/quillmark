@@ -130,7 +130,8 @@ fn stamps_all_four_field_types_into_valid_acroform() {
     assert_eq!(opts.len(), 3);
     assert_eq!(color.get(b"V").unwrap().as_str().unwrap(), b"green");
 
-    // Exactly one /Subtype per widget (regression: into_annotation writes it).
+    // Exactly one /Subtype per widget — `into_annotation` writes it, so a
+    // second `.subtype()` would duplicate the key.
     for f in fields {
         let r = f.as_reference().unwrap();
         let header = format!("{} 0 obj", r.0);

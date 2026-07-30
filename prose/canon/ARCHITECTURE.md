@@ -4,7 +4,12 @@
 
 ## TL;DR
 
-Quillmark is a schema-driven document engine: it turns Markdown with card-yaml blocks into a fully typeset document (PDF, SVG, PNG). A `Quill` is portable, declarative data whose schema drives validation and scaffolding (parse / validate / schema / seed / blueprint / compile); the `Quillmark` engine is the thin-but-mandatory core every render routes through — a backend registry + render dispatcher; backends do the heavy compilation.
+Quillmark is a schema-driven document engine: it turns Markdown with card-yaml
+blocks into a fully typeset document (PDF, SVG, PNG). A `Quill` is portable,
+declarative data whose schema drives validation and scaffolding (parse /
+validate / schema / seed / blueprint / compile). The `Quillmark` engine is the
+thin-but-mandatory core every render routes through — a backend registry +
+render dispatcher. Backends do the heavy compilation.
 
 ## Data Flow
 
@@ -60,7 +65,12 @@ seam: [PREVIEW.md](PREVIEW.md).
 
 ### `quillmark-pdf`
 
-The shared PDF stamp spine: Typst-free, `pdf-writer`-only leaf infrastructure consumed by `quillmark-pdfform`. A minimal byte-level reader plus a single incremental-update appender that splices a fresh `/AcroForm` (and `/Info` `/Producer` stamp) onto a base PDF. Deliberately small — it hard-errors on out-of-contract input (xref streams, encryption, indirect `/Annots`, non-zero-generation base objects) rather than parsing the full format.
+The shared PDF stamp spine: Typst-free, `pdf-writer`-only leaf infrastructure
+consumed by `quillmark-pdfform`. A minimal byte-level reader plus a single
+incremental-update appender that splices a fresh `/AcroForm` (and `/Info`
+`/Producer` stamp) onto a base PDF. Deliberately small — it hard-errors on
+out-of-contract input (xref streams, encryption, indirect `/Annots`,
+non-zero-generation base objects) rather than parsing the full format.
 
 ### `bindings/*`
 

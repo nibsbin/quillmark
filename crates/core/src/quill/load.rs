@@ -15,10 +15,6 @@ impl Quill {
     /// in-memory file tree. Filesystem walking belongs upstream (see
     /// `quillmark::quill_from_path`).
     ///
-    /// # Arguments
-    ///
-    /// * `root` - The root node of the file tree
-    ///
     /// # Errors
     ///
     /// Returns a non-empty `Vec<Diagnostic>` describing every problem found.

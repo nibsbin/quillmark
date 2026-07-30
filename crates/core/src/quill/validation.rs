@@ -389,7 +389,7 @@ fn validate_value(
 
     let type_valid = match field.r#type {
         // In a document a bare bool/number is type-valid as a string (the
-        // coercion layer adopts it) — in lockstep with `coerce_value_strict`
+        // coercion layer adopts it) — in lockstep with `conform_value`
         // via `scalar_as_string`. Schema literals stay strict so the blueprint
         // keeps quoting ambiguous string literals.
         // Enum is string-valued data (domain membership is checked separately

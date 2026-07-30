@@ -50,7 +50,6 @@ impl ValidationResult {
 }
 
 pub fn execute(args: ValidateArgs) -> Result<()> {
-    // Validate quill path exists
     if !args.quill_path.exists() {
         return Err(CliError::InvalidArgument(format!(
             "Quill directory not found: {}",
@@ -117,7 +116,6 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
         validate_card_schema(&card_schema.name, card_schema, &mut result);
     }
 
-    // Print results
     print_validation_result(&result, args.verbose);
 
     if result.has_errors() {

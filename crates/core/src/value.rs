@@ -446,7 +446,7 @@ mod tests {
         // The third YAML entry point, alongside `decompose`'s card-yaml payloads
         // (assemble_tests::test_yaml_depth_limit) and `QuillConfig::from_yaml`
         // (quill::tests::quill_yaml_deep_nesting_is_rejected). Unbudgeted, this
-        // one recursed until the stack gave out.
+        // one recurses until the stack gives out.
         let max = crate::document::limits::MAX_YAML_DEPTH;
         let nest = |levels: usize| {
             let mut yaml = String::new();

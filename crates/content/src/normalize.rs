@@ -42,9 +42,9 @@ pub fn strip_bidi_formatting(s: &str) -> String {
 /// Inserts a newline after `-->` when followed by non-whitespace content.
 ///
 /// CommonMark HTML block type 2 ends with the line containing `-->`, so any
-/// text on the same line after `-->` would be swallowed. This function is
-/// context-aware: only closing fences inside a `<!-- ... -->` pair are fixed;
-/// bare `-->` outside a comment is left untouched.
+/// text on the same line after `-->` would be swallowed. Only closing fences
+/// inside a `<!-- ... -->` pair are fixed; bare `-->` outside a comment is left
+/// untouched.
 pub fn fix_html_comment_fences(s: &str) -> String {
     if !s.contains("-->") {
         return s.to_string();

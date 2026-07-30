@@ -19,10 +19,8 @@ pub fn normalize_field_name(name: &str) -> String {
     name.nfc().collect()
 }
 
-/// Primary entry point for normalizing a [`crate::document::Document`] after parsing.
-///
-/// Per-card normalization:
-/// 1. Payload field names → Unicode NFC.
+/// Normalize a [`crate::document::Document`] after parsing: per card, payload
+/// field names → Unicode NFC.
 ///
 /// Card bodies are already-normalized content (import-time); they carry through
 /// unchanged. YAML field *values* pass through verbatim. Idempotent.

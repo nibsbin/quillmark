@@ -336,7 +336,7 @@ fn emit_leaf_block(ctx: &Ctx, range: std::ops::Range<usize>, out: &mut String) {
             let mut inline = render_inline(ctx, range.start, false);
             // A trailing `#` run reads as an ATX closing sequence on re-import
             // (`# a #` → heading text "a", dropping the `#`). Escape the last `#`
-            // so the run no longer reaches end-of-line as a bare hash sequence —
+            // so the run does not reach end-of-line as a bare hash sequence —
             // one escaped hash defeats the whole closer, and `\#` re-imports as a
             // literal `#`.
             if inline.ends_with('#') {

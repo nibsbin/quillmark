@@ -219,7 +219,7 @@ mod tests {
         Document::parse(md).expect("document should parse").document
     }
 
-    /// Look up a resolved row by name — rows are an ordered array now.
+    /// Look up a resolved row by name — rows are an ordered array.
     fn row<'a>(fields: &'a [ResolvedField], name: &str) -> &'a ResolvedField {
         fields
             .iter()

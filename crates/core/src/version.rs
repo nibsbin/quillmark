@@ -2,8 +2,6 @@
 //!
 //! Semantic versioning (MAJOR.MINOR.PATCH) for Quill template references.
 //! Two-segment (`MAJOR.MINOR`) versions are also accepted; patch defaults to 0.
-//!
-//! Key types: [`Version`], [`VersionSelector`], [`QuillReference`].
 
 use std::cmp::Ordering;
 use std::fmt;

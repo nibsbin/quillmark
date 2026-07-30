@@ -18,10 +18,10 @@
 //! iterates), by kind + index: `$cards.<kind>.<i>.<field>` — the `i`-th card
 //! whose `$kind` is `<kind>` (e.g. `$cards.indorsement.1.from` is the second
 //! indorsement). This survives reordering and intervening cards of other kinds.
-//! Absolute-index addressing (`$cards.<i>`) was retired in `form@0.2.0`: a
-//! widget kind must be statically derivable at load, and only the kind names the
-//! field. The path descends the remaining segments into the chosen card exactly
-//! as a top-level binding would.
+//! Absolute-index addressing (`$cards.<i>`) is not supported: a widget kind must
+//! be statically derivable at load, and only the kind names the field. The path
+//! descends the remaining segments into the chosen card exactly as a top-level
+//! binding would.
 
 use quillmark_pdf::{FieldSpec, FieldType, CHECKBOX_ON_STATE};
 use serde_json::Value;
@@ -68,9 +68,9 @@ fn lookup<'a>(data: &'a Value, path: &str) -> Option<&'a Value> {
 }
 
 /// Resolve a `$cards.<kind>.<i>...` path: select the `i`-th card whose `$kind`
-/// is `<kind>`, then descend the remaining segments into it. Absolute indexing
-/// was retired in `form@0.2.0` (the bind step rejects it), so the first segment
-/// is always a kind and the second its instance index.
+/// is `<kind>`, then descend the remaining segments into it. The bind step
+/// rejects absolute indexing, so the first segment is always a kind and the
+/// second its instance index.
 fn lookup_card<'a, 'p, I>(data: &'a Value, mut parts: I) -> Option<&'a Value>
 where
     I: Iterator<Item = &'p str>,

@@ -32,8 +32,7 @@
 //! detector re-homes an anchor onto a **single, verbatim block move** by locating
 //! the moved text in the new content. Text both *moved and rewritten* in one round
 //! (the match is lost) drops the anchor — the accepted residual, stated not
-//! hidden. Tightening verbatim → fuzzy (longest-common-substring) is a hardening
-//! follow-up.
+//! hidden.
 
 use crate::model::{Mark, MarkKind, Content};
 use serde::{Deserialize, Serialize};
@@ -235,7 +234,7 @@ impl Delta {
 }
 
 /// A relocation match shorter than this many chars is too weak to trust — the
-/// verbatim-move detector's length floor (mirrors the spike's `MIN_MOVE`).
+/// verbatim-move detector's length floor.
 const MIN_MOVE: usize = 4;
 
 /// Above this many USV chars, the single-line path skips `similar`'s

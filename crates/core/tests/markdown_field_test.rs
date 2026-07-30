@@ -2,9 +2,8 @@ use quillmark_core::quill::QuillConfig;
 
 #[test]
 fn test_markdown_type_is_a_load_error() {
-    // `type: markdown` was a deprecated alias for block `richtext`; PR-G retires
-    // it outright. A Quill.yaml that still declares it fails to load — no silent
-    // alias, no parallel accepted spelling.
+    // `markdown` is not a field type — no silent alias for block `richtext`, no
+    // parallel accepted spelling. A Quill.yaml that declares it fails to load.
     let err = QuillConfig::from_yaml(
         r#"
 quill:

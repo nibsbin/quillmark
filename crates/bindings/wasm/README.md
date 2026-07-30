@@ -390,7 +390,7 @@ canvas.style.height = `${result.layoutHeight}px`;
   clamped page renders soft at the same `canvas.style` size.
 - `paint` writes the whole backing store with `putImageData`, which
   ignores the 2D context transform, `globalAlpha`, and clip. Give each
-  visible page its own `` element — you cannot composite two pages,
+  visible page its own `<canvas>` element — you cannot composite two pages,
   a sub-rect, or a context transform through `paint`.
 - `paint` is always a full repaint — setting the backing-store width /
   height clears it. No `clearRect` required. Each call re-rasterizes from
@@ -486,11 +486,9 @@ binary is still loading.
 
 The package floor is Node 22+ (`engines: { node: ">=22" }`) and current
 evergreen browsers; `--weak-refs` itself only needs Node 14.6+. The `using`
-sugar shown below ([explicit resource management][erm]) needs Node 24, but is
-optional — the `try` / `finally` fallback runs on the Node 22 floor.
-
-For environments where `using` (the [explicit resource management][erm]
-proposal) hasn't landed, use an explicit `try` / `finally`:
+sugar ([explicit resource management][erm]) needs Node 24 and is optional.
+Where it hasn't landed, an explicit `try` / `finally` runs on the Node 22
+floor:
 
 ```ts
 const session = await engine.open(quill, doc);

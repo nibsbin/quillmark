@@ -2478,7 +2478,7 @@ export interface PaintOptions {
  * write to them. The painter does **not** touch `canvas.style.*`;
  * consumers own layout. The write is a whole-backing-store `putImageData`,
  * which bypasses the 2D context transform, `globalAlpha`, and clip: give
- * each visible page its own `` — you cannot composite two pages, a
+ * each visible page its own `<canvas>` — you cannot composite two pages, a
  * sub-rect, or a context transform through `paint`.
  *
  * For `OffscreenCanvasRenderingContext2D` (Worker rasterization, no
@@ -2723,7 +2723,7 @@ impl LiveSession {
     ///
     /// `put_image_data` writes the whole backing store, bypassing the 2D
     /// context's transform, `globalAlpha`, and clip: the painter owns the entire
-    /// canvas, so each visible page needs its own `` — you cannot composite
+    /// canvas, so each visible page needs its own `<canvas>` — you cannot composite
     /// two pages, a sub-rect, or a context transform through this call.
     ///
     /// Throws if the backend has no canvas painter, `page` is out of range,

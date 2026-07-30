@@ -2,8 +2,8 @@
 //! that binds richtext fields. It exercises the content → plaintext lowering —
 //! a richtext field crosses the seam as canonical content JSON and pdfform lowers
 //! it to `Content.text` (markup dropped, island slots stripped) for the widget
-//! `/V`. (No pdfform field carries rich formatting; Adobe-only `/RV` is
-//! deferred.)
+//! `/V`. No pdfform field carries rich formatting; the Adobe-only `/RV` entry is
+//! never written.
 
 use lopdf::Document as PdfDoc;
 use quillmark::{Document, OutputFormat, Quillmark, RenderOptions};

@@ -453,9 +453,8 @@ impl Payload {
     /// [`set_quill`](Self::set_quill); the canonical position is after
     /// `$quill` / `$kind` / `$id` and before any user field.
     ///
-    /// Any nested comments previously attached to a replaced `$ext`
-    /// entry are dropped (the new value tree may not contain matching
-    /// positions).
+    /// Nested comments on a replaced `$ext` entry are dropped (the new value
+    /// tree may not contain matching positions).
     pub fn set_ext(&mut self, value: JsonMap<String, JsonValue>) {
         self.set_meta(MetaKey::Ext, value);
     }

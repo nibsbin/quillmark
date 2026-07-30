@@ -68,7 +68,7 @@ impl QuillConfig {
             normalized.main().body().clone(),
         );
         // A card's `$body` is defined for the plate iff its kind resolves to a
-        // body-enabled schema — the `$body` half of issue 1030's "absent on
+        // body-enabled schema — the `$body` half of "absent on
         // undefined". Capture it here, where the schema is already in hand for
         // field lowering, and hand it to the plate builder, so the decision is
         // never re-derived from the serialized plate. (`$kind`, the document-

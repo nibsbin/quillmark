@@ -33,11 +33,10 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
     let regions = session.regions();
     let fields: HashSet<&str> = regions.iter().map(|r| r.field.as_str()).collect();
 
-    // The main body regions *through* the package's paragraph rebuild — the
-    // case that was inert under value-level marker tagging — and the widgets
-    // key on their bound schema paths. The seeded indorsement body is empty
-    // (`""`), and a blank field has no inked extent to bound, so its `$body`
-    // must be absent here, not present-and-empty.
+    // The main body regions *through* the package's paragraph rebuild, and the
+    // widgets key on their bound schema paths. The seeded indorsement body is
+    // empty (`""`), and a blank field has no inked extent to bound, so its
+    // `$body` must be absent here, not present-and-empty.
     for expected in [
         "$body",
         "signature_block",
@@ -121,11 +120,11 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
 /// End-to-end on the flagship quill: a real memo date surfaces a clickable
 /// region even though the **vendored package** places it. The plate hands
 /// `data.date` to `frontmatter`, which formats it deep inside `utils.typ`'s
-/// `display-date` — the exact laundered shape that left the memo date's ink
-/// `Foreign` under value-level tagging. The date value-object's `display`
-/// closure is born in the generated helper, so its glyphs carry a helper span
-/// that resolves to the recorded window regardless of where the package calls
-/// it, and the region keys on the schema path `date`.
+/// `display-date` — the laundered shape, where package code and not the plate
+/// inks the value. The date value-object's `display` closure is born in the
+/// generated helper, so its glyphs carry a helper span that resolves to the
+/// recorded window regardless of where the package calls it, and the region
+/// keys on the schema path `date`.
 #[test]
 fn usaf_memo_date_region_rides_the_vendored_display() {
     let engine = Quillmark::new();

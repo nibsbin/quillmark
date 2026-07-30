@@ -66,7 +66,16 @@ The PR uses a GitHub App token (`TAGGER_APP_ID`/`TAGGER_PRIVATE_KEY`) so CI runs
 
 ### Trusted Publishing scope (crates.io)
 
-`crates-io-auth-action` mints an OIDC token scoped to exactly the crates carrying a matching Trusted Publisher config — repo `borb-sh/quillmark`, workflow `release.yml`, environment `Publish`. That config is **per crate**. A publishable crate without one draws `403 … the provided access token is not valid for crate <name>` the moment the dependency-ordered publish reaches it, after earlier crates have already gone up (crates.io versions are immutable, so those uploads stand). Every crate in the published list carries its own config; a new publishable crate needs one added on crates.io before its first release, and the partial-upload skip above makes the re-run that finishes the batch safe.
+`crates-io-auth-action` mints an OIDC token scoped to exactly the crates
+carrying a matching Trusted Publisher config — repo `borb-sh/quillmark`,
+workflow `release.yml`, environment `Publish`. That config is **per crate**.
+
+A publishable crate without one draws `403 … the provided access token is not
+valid for crate <name>` the moment the dependency-ordered publish reaches it,
+after earlier crates have already gone up (crates.io versions are immutable, so
+those uploads stand). Every crate in the published list carries its own config.
+A new publishable crate needs one added on crates.io before its first release,
+and the partial-upload skip above makes the re-run that finishes the batch safe.
 
 ---
 

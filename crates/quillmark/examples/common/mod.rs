@@ -1,4 +1,4 @@
-//! Shared test helpers for integration tests.
+//! Shared driver for the per-quill demo examples.
 
 use quillmark_fixtures::{example_output_dir, quills_path, write_example_output};
 use std::error::Error;

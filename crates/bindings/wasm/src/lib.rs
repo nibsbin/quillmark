@@ -2,8 +2,7 @@
 //!
 //! WebAssembly bindings for Quillmark.
 //!
-//! Three build variants ship from this one crate (see
-//! `docs/migrations/0.89-to-0.90.md`): a Typst-less **core** build
+//! Three build variants ship from this one crate: a Typst-less **core** build
 //! (`pkg/core/`) for load / validate / schema / seed / blueprint, and two
 //! engine-carrying **backend** binaries — `pkg/backends/typst/` (Typst) and
 //! `pkg/backends/pdfform/` (Typst-free PDF-form) — each adding the engine and

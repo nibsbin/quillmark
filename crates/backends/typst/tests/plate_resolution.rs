@@ -1,7 +1,7 @@
 //! The Typst backend resolves its own plate from the `typst.plate_file`
 //! setting in the quill's config, reading the file from the quill's bundle.
-//! Core no longer reads any template at load time, so a missing plate is a
-//! render-time (`open`) error rather than a load-time one.
+//! Core reads no template at load time, so a missing plate is a render-time
+//! (`open`) error rather than a load-time one.
 
 use quillmark_core::Backend;
 use quillmark_typst::TypstBackend;

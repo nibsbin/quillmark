@@ -23,7 +23,6 @@ pub fn execute(args: SchemaArgs) -> Result<()> {
         .schema_yaml()
         .map_err(|e| CliError::InvalidArgument(format!("Failed to serialize schema: {}", e)))?;
 
-    // Output
     if let Some(output_path) = args.output {
         fs::write(&output_path, schema_yaml).map_err(CliError::Io)?;
     } else {

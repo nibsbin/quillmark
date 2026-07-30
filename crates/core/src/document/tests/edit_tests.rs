@@ -854,8 +854,8 @@ fn test_content_field_emits_as_markdown_projection() {
     let md = doc.to_markdown();
     // Projected to a markdown scalar (the `body_markdown` projection — a value,
     // not a file, so no trailing newline), not a block mapping. Still quoted here
-    // (the leading `*` is a YAML flow indicator), but the projection no longer
-    // grows a trailing `\n` inside the quotes.
+    // (the leading `*` is a YAML flow indicator), but the projection does not
+    // grow a trailing `\n` inside the quotes.
     assert!(
         md.contains("intro: \"**bold** intro\""),
         "expected markdown projection, got:\n{md}"
@@ -889,8 +889,8 @@ fn test_non_content_object_field_emits_structurally() {
 
 /// A content-canonical content whose top-level keys are in NON-canonical order
 /// stays structural — the projection guard is byte-exact (canonical-string
-/// equality), not the order-independent `Value` compare it used to be. Under
-/// the old guard this projected to a flattened markdown scalar, breaking the
+/// equality), not an order-independent `Value` compare. An order-independent
+/// guard would project this to a flattened markdown scalar, breaking the
 /// field's round-trip.
 #[test]
 fn test_noncanonical_order_content_field_stays_structural() {
