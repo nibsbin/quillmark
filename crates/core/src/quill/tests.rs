@@ -64,8 +64,8 @@ fn load_dir(
     Ok(FileTreeNode::Directory { files })
 }
 
-/// Test helper: loads a `Quill` from a filesystem path via `Quill::from_tree`
-/// — core is filesystem-agnostic, so production filesystem loading lives in
+/// Test helper: loads a `Quill` from a filesystem path via `Quill::from_tree`,
+/// core is filesystem-agnostic, so production filesystem loading lives in
 /// `quillmark::quill_from_path` instead.
 fn load_from_path<P: AsRef<Path>>(path: P) -> Result<Quill, Box<dyn StdError + Send + Sync>> {
     let tree = load_tree(path.as_ref())?;
@@ -354,7 +354,7 @@ fn test_to_tree_round_trips_from_tree() {
 
     let quill = Quill::from_tree(root).unwrap();
 
-    // to_tree yields every file by its "/"-joined relative path, sorted — and
+    // to_tree yields every file by its "/"-joined relative path, sorted, and
     // the empty `empty/` directory is absent (only files are emitted).
     let flat = quill.to_tree();
     assert_eq!(
@@ -462,7 +462,7 @@ fn test_dir_exists_and_list_apis() {
     assert!(quill.file_exists("assets/fonts/font.ttf"));
     assert!(!quill.file_exists("assets")); // directory, not file
 
-    // The listing pair is read off the tree — `Quill` exposes only
+    // The listing pair is read off the tree: `Quill` exposes only
     // `list_directories`, which is built on `FileTreeNode::list_subdirectories`.
     let root_files_list = tree.list_files("");
     assert_eq!(root_files_list.len(), 2); // Quill.yaml and plate.typ
@@ -601,7 +601,7 @@ ui:
 
 #[test]
 fn test_quill_without_plate_file() {
-    // A quill that declares no backend template loads fine — plate selection is
+    // A quill that declares no backend template loads fine: plate selection is
     // a backend's private concern, not a load-time requirement of core.
     let mut root_files = HashMap::new();
 
@@ -768,8 +768,8 @@ fields:
 
 #[test]
 fn test_quill_config_rejects_non_snake_case_identifiers() {
-    // Each slot where a bare identifier appears — quill name, card-kind name,
-    // main field key, card field key — must reject non-snake_case input and
+    // Each slot where a bare identifier appears (quill name, card-kind name,
+    // main field key, card field key) must reject non-snake_case input and
     // name the offending identifier in the error.
     struct Case {
         yaml: &'static str,
@@ -1017,7 +1017,7 @@ main:
     let config = QuillConfig::from_yaml(yaml_content).unwrap();
 
     // Declaration order is display order, carried structurally by the field
-    // map — no stamped `ui.order` integer. Iterating the map yields the
+    // map: no stamped `ui.order` integer. Iterating the map yields the
     // authored order.
     let names: Vec<&str> = config.main.fields.keys().map(|k| k.as_str()).collect();
     assert_eq!(names, ["first", "second", "third", "fourth"]);
@@ -1511,7 +1511,7 @@ main:
 #[test]
 fn authored_ui_order_on_nested_property_is_rejected() {
     // `ui.order` is retired: display order is declaration order. An authored
-    // `order` on any field — nested or top-level — is a hard load error with
+    // `order` on any field (nested or top-level) is a hard load error with
     // the migration message.
     let yaml = r#"
 quill: { name: x, version: "1.0", backend: typst, description: x }
@@ -2058,7 +2058,7 @@ main:
 
 #[test]
 fn test_array_bare_properties_rejected() {
-    // A bare `properties` map on an array is rejected — element typing goes
+    // A bare `properties` map on an array is rejected: element typing goes
     // under `items`.
     let yaml_content = r#"
 quill:
@@ -2288,7 +2288,7 @@ main:
     assert_eq!(summary.r#type, FieldType::RichText { inline: false });
     assert_eq!(summary.ui.as_ref().unwrap().multiline, Some(true));
 
-    // A field with no authored `ui:` block carries `ui: None` — nothing
+    // A field with no authored `ui:` block carries `ui: None`: nothing
     // fabricates a `ui` block.
     let notes = config.main.fields.get("notes").unwrap();
     assert_eq!(notes.r#type, FieldType::RichText { inline: false });
@@ -2550,7 +2550,7 @@ main:
 
 #[test]
 fn test_field_with_title_key_errors_with_hint() {
-    // 'title' is a common mistake — authors expect it to work like 'description'.
+    // 'title' is a common mistake: authors expect it to work like 'description'.
     // We must fail loudly with an actionable hint rather than silently dropping the field.
     let yaml_content = r#"
 quill:
@@ -2670,8 +2670,8 @@ card_kinds:
 }
 
 // The fence guard delegates to the parser's own opener predicate
-// (`document::fences::is_card_yaml_opener_line`), whose grammar — bare `~~~`,
-// longer runs, indented, four-space, backtick, bare `---` — is exhaustively
+// (`document::fences::is_card_yaml_opener_line`), whose grammar (bare `~~~`,
+// longer runs, indented, four-space, backtick, bare `---`) is exhaustively
 // covered in `document/tests/card_fence_tests.rs`. What is config's own is the
 // wiring: the guard runs over `main.body.example` and every card kind's, and it
 // stays quiet when there is no opener.
@@ -2714,7 +2714,7 @@ card_kinds:
 
 #[test]
 fn body_example_without_a_card_opener_is_accepted() {
-    // A backtick fence is the escape hatch for a literal code block — it never
+    // A backtick fence is the escape hatch for a literal code block: it never
     // opens a card-yaml block, so the guard stays quiet.
     let yaml = "
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
@@ -2776,7 +2776,7 @@ main:
 fn example_default_type_mismatch_cases() {
     // A field whose declared `type` doesn't match its `example`/`default`
     // value fails with a targeted diagnostic naming the field, the declared
-    // type, and the value's actual type — across every scalar/compound type
+    // type, and the value's actual type: across every scalar/compound type
     // and both the `example` and `default` slots.
     struct Case {
         field_yaml: &'static str,
@@ -2787,14 +2787,14 @@ fn example_default_type_mismatch_cases() {
 
     let cases = [
         Case {
-            // type: integer with example: 20.04 fails — float is not an integer.
+            // type: integer with example: 20.04 fails, float is not an integer.
             field_yaml: "    year:\n      type: integer\n      example: 20.04\n",
             code: "quill::example_type_mismatch",
             message_contains: &["year", "integer", "float"],
             hint_contains: &[],
         },
         Case {
-            // The canonical bug: type: string with example: 20.04 — YAML parses
+            // The canonical bug: type: string with example: 20.04, YAML parses
             // the bare token as a float, and the LLM would copy it back unquoted.
             field_yaml: "    min_os_version:\n      type: string\n      example: 20.04\n",
             code: "quill::example_type_mismatch",
@@ -2802,14 +2802,14 @@ fn example_default_type_mismatch_cases() {
             hint_contains: &["Quote", "\"20.04\""],
         },
         Case {
-            // type: boolean with example: "true" — the LLM would emit it as a string.
+            // type: boolean with example: "true", the LLM would emit it as a string.
             field_yaml: "    flag:\n      type: boolean\n      example: \"true\"\n",
             code: "quill::example_type_mismatch",
             message_contains: &["flag", "boolean", "string"],
             hint_contains: &[],
         },
         Case {
-            // type: array with example: foo — a sequence is required.
+            // type: array with example: foo, a sequence is required.
             field_yaml: "    tags:\n      type: array\n      items:\n        type: string\n      example: foo\n",
             code: "quill::example_type_mismatch",
             message_contains: &["tags", "array", "string"],
@@ -2895,7 +2895,7 @@ fn field_with_no_example_or_default_loads_successfully() {
 #[test]
 fn datetime_type_mismatch_reports_datetime_not_string() {
     // The mismatch message must name the field's declared type verbatim
-    // (`datetime`), not the internal string-family collapse — otherwise the
+    // (`datetime`), not the internal string-family collapse: otherwise the
     // author is told they declared `string` when they wrote `datetime`.
     let yaml = example_default_yaml("    signed_on:\n      type: datetime\n      example: 42\n");
     let errors = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
@@ -2914,7 +2914,7 @@ fn datetime_type_mismatch_reports_datetime_not_string() {
 #[test]
 fn richtext_type_mismatch_reports_richtext_not_string() {
     // The mismatch names the declared type verbatim (`richtext`), not the
-    // internal string-family collapse — a non-string, non-content default fails.
+    // internal string-family collapse: a non-string, non-content default fails.
     let yaml = example_default_yaml("    body:\n      type: richtext\n      default: 42\n");
     let errors = QuillConfig::from_yaml_with_warnings(&yaml).unwrap_err();
     let diag = errors
@@ -3157,7 +3157,7 @@ fn richtext_zero_value_is_empty_content() {
 }
 
 // ---------------------------------------------------------------------------
-// plaintext — the literal-codec content sibling of richtext
+// plaintext: the literal-codec content sibling of richtext
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -3214,7 +3214,7 @@ fn inline_plaintext_rejects_multiline_document_value() {
 
 #[test]
 fn plaintext_wire_content_with_marks_is_rejected_not_stripped() {
-    // A content object carrying a mark is not silently downgraded to plain — it
+    // A content object carrying a mark is not silently downgraded to plain: it
     // is rejected, mirroring the inline precedent and keeping coercion lossless.
     let config = quill_with_field("    subject:\n      type: plaintext\n").expect("loads");
     let mut rt = quillmark_content::from_markdown("a **bold** word").unwrap();
@@ -3250,7 +3250,7 @@ fn plaintext_transform_schema_carries_media_type_and_plain_annotation() {
 }
 
 // ---------------------------------------------------------------------------
-// enum — the promoted `type: enum` token
+// enum: the promoted `type: enum` token
 // ---------------------------------------------------------------------------
 
 #[test]

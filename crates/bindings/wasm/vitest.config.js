@@ -8,10 +8,10 @@ const __dirname = path.dirname(__filename)
 
 // Centralized workspace root and bundle paths. `@quillmark-wasm` aliases the
 // Typst backend binary directly (the API superset the basic/canvas suites
-// exercise — it is NOT a public package export), `@quillmark-wasm/core` the
+// exercise: it is NOT a public package export), `@quillmark-wasm/core` the
 // Typst-less core build, and `@quillmark-wasm/runtime` the hand-written
 // canonical layer (the package's public root). NOTE: neither `@quillmark-wasm`
-// nor `@quillmark-wasm/core` is a public package subpath — the package exposes
+// nor `@quillmark-wasm/core` is a public package subpath: the package exposes
 // exactly ONE entry point (the root). These aliases reach internal build
 // artifacts so the bundle suites (`core.test.js`/`basic.test.js`/
 // `canvas.test.js`) can exercise them directly.

@@ -1,4 +1,4 @@
-//! The resolved-value view — [`Quill::resolve`].
+//! The resolved-value view: [`Quill::resolve`].
 //!
 //! A projection that makes field resolution observable *data* rather than an
 //! inferred behavior chain: for every declared field, the value the render
@@ -6,13 +6,13 @@
 //! one commitment ladder (`prose/canon/SCHEMAS.md` § "Value sources and
 //! projections") through the shared producer
 //! `resolve_card_sourced` (in `super::compose`), whose sourced ladder
-//! (`ladder_sourced`) the render plate cuts too — never a parallel precedence
+//! (`ladder_sourced`) the render plate cuts too: never a parallel precedence
 //! policy.
 //!
 //! Values only: diagnostics stay [`Quill::validate`]'s job (the editor merges
 //! `validate()` with its own producers regardless, so bucketing here would
 //! delete no consumer code), and schema guidance (`example:`, labels, groups)
-//! reads from [`Quill::schema`]. The view answers one question — what value
+//! reads from [`Quill::schema`]. The view answers one question: what value
 //! renders, and from which rung.
 
 use indexmap::IndexMap;
@@ -28,7 +28,7 @@ use crate::{Card, Document, QuillValue};
 #[serde(rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum FieldSource {
-    /// The authored value — the document's own content.
+    /// The authored value: the document's own content.
     Authored,
     /// The schema `default:` (or its content form for a content field).
     Default,
@@ -38,7 +38,7 @@ pub enum FieldSource {
 
 /// One resolved row: its `name`, the value the render projection would use, and
 /// the [`FieldSource`] rung that value came from. A row carries its own name so
-/// declaration order is structural — an ordered array, not JSON object key
+/// declaration order is structural: an ordered array, not JSON object key
 /// order. The card body is a [`ResolvedMain::body`] / [`ResolvedCard::body`]
 /// sibling, never a row in `fields`, so a consumer iterating declared fields
 /// never trips over it.
@@ -82,9 +82,9 @@ pub struct Resolved {
 impl Quill {
     /// The resolved-value view of `doc` against this quill's schema.
     ///
-    /// For every declared field, the value [`compile_data`] emits into the plate
-    /// — the two cut the *same* sourced ladder (`ladder_sourced`) over equal
-    /// coerced input, so the value is the plate's by construction — tagged with
+    /// For every declared field, the value [`compile_data`] emits into the plate:
+    /// the two cut the *same* sourced ladder (`ladder_sourced`) over equal
+    /// coerced input, so the value is the plate's by construction: tagged with
     /// the [`FieldSource`] rung it came from. Completeness and errors stay
     /// [`Quill::validate`]'s; this view carries no diagnostics.
     ///
@@ -107,10 +107,10 @@ impl Quill {
 /// [`ResolvedField`] rows and its body row (present iff the kind enables a body).
 ///
 /// The value and source of every field come from the one shared resolver
-/// [`resolve_card_sourced`] — the same producer [`compile_data`] cuts for the
-/// plate — so the two projections cannot drift. This layer only re-cuts the
+/// [`resolve_card_sourced`] (the same producer [`compile_data`] cuts for the
+/// plate) so the two projections cannot drift. This layer only re-cuts the
 /// **presentation order**: declared fields first in declaration order (the canon
-/// ordering contract, carried structurally by the row array — not the validation
+/// ordering contract, carried structurally by the row array, not the validation
 /// walker's alphabetical sort), then undeclared authored fields in authored
 /// order. The body is a sibling row, never an entry in `fields`.
 ///
@@ -120,7 +120,7 @@ fn resolve_card_fields(schema: &CardSchema, card: &Card) -> (Vec<ResolvedField>,
     let mut fields = Vec::new();
 
     // Declared rows in schema declaration order. Every declared field is present
-    // in the map — the resolver's ladder inserts each one — so the lookup holds.
+    // in the map (the resolver's ladder inserts each one) so the lookup holds.
     for (name, _field_schema) in &schema.fields {
         let (value, source) = sourced
             .get(name)
@@ -135,7 +135,7 @@ fn resolve_card_fields(schema: &CardSchema, card: &Card) -> (Vec<ResolvedField>,
 
     // Undeclared authored fields, appended in authored order under their NFC
     // keys: the schema is a floor, not an allowlist, so these reach both
-    // projections too — value verbatim, source Authored.
+    // projections too, value verbatim, source Authored.
     for (name, (value, source)) in &sourced {
         if !schema.fields.contains_key(name) {
             fields.push(ResolvedField {
@@ -152,10 +152,10 @@ fn resolve_card_fields(schema: &CardSchema, card: &Card) -> (Vec<ResolvedField>,
 
 /// Resolve one composable card. A card whose `$kind` names a schema resolves
 /// through the ladder; an unknown-kind card (declared `$kind` with no schema, or
-/// a kindless card) carries its authored fields verbatim — no coercion, no
+/// a kindless card) carries its authored fields verbatim: no coercion, no
 /// ladder, no `$body` row.
 fn card_states(config: &QuillConfig, card: &Card, index: usize) -> ResolvedCard {
-    // The raw authored kind rides the entry even when it names no schema — the
+    // The raw authored kind rides the entry even when it names no schema: the
     // card reports what it *claimed* to be.
     let kind = card.kind().map(String::from);
     match card.kind().and_then(|k| config.card_kind(k)) {
@@ -169,7 +169,7 @@ fn card_states(config: &QuillConfig, card: &Card, index: usize) -> ResolvedCard 
             }
         }
         None => {
-            // An unknown-kind card carries its authored fields verbatim — no
+            // An unknown-kind card carries its authored fields verbatim: no
             // schema, no ladder, and `to_index_map` drops `$` keys, so no body.
             let fields = card
                 .payload()
@@ -219,7 +219,7 @@ mod tests {
         Document::parse(md).expect("document should parse").document
     }
 
-    /// Look up a resolved row by name — rows are an ordered array.
+    /// Look up a resolved row by name: rows are an ordered array.
     fn row<'a>(fields: &'a [ResolvedField], name: &str) -> &'a ResolvedField {
         fields
             .iter()
@@ -316,7 +316,7 @@ card_kinds:
 
     // ── Byte-for-byte with the render projection ─────────────────────────────
     // Both projections cut the one shared ladder (`ladder_sourced`), but over
-    // separately-conformed input — the render gate's fallible conform vs the
+    // separately-conformed input: the render gate's fallible conform vs the
     // view's keep-raw `conform_card_render`. This pins that those two conform
     // paths agree on a gated document, plus the plate-build wiring (order, meta,
     // body) against the row view.
@@ -367,10 +367,10 @@ card_kinds:
         // to ASCII, so a non-NFC key only enters through direct construction
         // (`Payload::from_index_map`). Render NFC-normalizes it between
         // coercion and the ladder; the view mirrors that, rowing it under the
-        // NFC key the plate carries — not the raw decomposed one.
+        // NFC key the plate carries: not the raw decomposed one.
         let quill = quill_from_yaml(QUILL);
         let mut map = IndexMap::new();
-        // `e` + U+0301 combining acute — NFC-composes to U+00E9.
+        // `e` + U+0301 combining acute: NFC-composes to U+00E9.
         map.insert(
             "cafe\u{301}".to_string(),
             QuillValue::from_json(serde_json::json!("hot")),
@@ -454,7 +454,7 @@ card_kinds:
 
         assert_eq!(card.kind.as_deref(), Some("mystery"));
         assert_eq!(card.index, 0);
-        // Authored fields only — no body row, no ladder.
+        // Authored fields only: no body row, no ladder.
         assert_eq!(row(&card.fields, "foo").source, FieldSource::Authored);
         assert_eq!(row(&card.fields, "foo").value.as_json(), &serde_json::json!("bar"));
         assert!(card.body.is_none());

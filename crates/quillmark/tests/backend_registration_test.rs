@@ -29,7 +29,7 @@ impl Backend for MockBackend {
         _json_data: &serde_json::Value,
     ) -> Result<quillmark::LiveSession, RenderError> {
         // Like the real backends, the mock reads its own input from the quill's
-        // files — here a `plate.txt` it echoes back as the rendered bytes.
+        // files: here a `plate.txt` it echoes back as the rendered bytes.
         let plated = source
             .files()
             .get_file("plate.txt")

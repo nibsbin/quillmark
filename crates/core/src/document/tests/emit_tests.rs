@@ -32,7 +32,7 @@ fn assert_round_trip(label: &str, src: &str) {
 
 // ── Fixture content round-trip ─────────────────────────────────────────────────
 
-/// Every top-level `.md` file under `crates/fixtures/resources` — files
+/// Every top-level `.md` file under `crates/fixtures/resources`: files
 /// without a root `~~~card-yaml` block are skipped at parse time.
 #[test]
 fn fixtures_round_trip() {
@@ -55,7 +55,7 @@ fn fixtures_round_trip() {
 
     assert!(
         !fixture_paths.is_empty(),
-        "no fixture files found — check paths"
+        "no fixture files found: check paths"
     );
 
     let mut passed = 0usize;
@@ -118,7 +118,7 @@ fn fixtures_round_trip() {
 
     assert!(
         passed > 0,
-        "No fixtures passed round-trip — did all files get skipped?"
+        "No fixtures passed round-trip: did all files get skipped?"
     );
 
     eprintln!(
@@ -186,7 +186,7 @@ title: No body
 ~~~
 ",
         ),
-        // String containing backslash and quotes — must survive as a string.
+        // String containing backslash and quotes: must survive as a string.
         (
             "string with backslash",
             "~~~card-yaml\n$quill: q\n$kind: main\npath: \"C:\\\\Users\\\\test\"\n~~~\n",

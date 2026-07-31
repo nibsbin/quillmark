@@ -1,7 +1,7 @@
 //! End-to-end coverage for GFM tables: a table in a document
 //! `$body` renders through the full markdown -> Content -> Typst -> artifact
 //! pipeline. The inline codec's unit tests pin `import(export(t))`; this pins
-//! the *rendered* path — the Typst emitter's `#table(...)` lowering, exercised
+//! the *rendered* path: the Typst emitter's `#table(...)` lowering, exercised
 //! with column alignment, formatted cells, and a ragged row that the model
 //! layer normalizes before it reaches the backend.
 
@@ -38,14 +38,14 @@ fn doc(body: &str) -> String {
     format!("{FRONTMATTER}\n{body}\n")
 }
 
-/// A body-borne pipe table — aligned columns, a formatted header cell, and a
-/// short (ragged) row that normalization pads — renders through Typst without a
+/// A body-borne pipe table: aligned columns, a formatted header cell, and a
+/// short (ragged) row that normalization pads: renders through Typst without a
 /// compile error and draws visibly more than the same document with no table.
 ///
 /// A successful render is itself the load-bearing signal: a malformed
 /// `#table(...)` lowering would fail Typst compilation and the helper would
 /// panic. SVG vectorizes text into glyph paths, so the cell strings are not
-/// literal substrings — the size comparison against an empty body is the
+/// literal substrings: the size comparison against an empty body is the
 /// non-fragile proxy for "the table drew a grid and rows onto the page".
 #[test]
 fn table_body_renders_through_typst() {

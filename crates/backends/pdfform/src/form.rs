@@ -1,18 +1,18 @@
 //! `form.json` wire types and parsing (`form@0.2.0`).
 //!
 //! `form.json` is the durable, value-free **placement + binding + widget-identity**
-//! layer of a `pdfform` quill — the *format* side of Quillmark's quill/document
+//! layer of a `pdfform` quill: the *format* side of Quillmark's quill/document
 //! dichotomy. It does not restate what the quill schema already carries: a bound
 //! field names a `schema_field` and inherits its widget kind, options,
 //! multiline, and tooltip from the resolved
 //! [`FieldSchema`](quillmark_core::FieldSchema) (see [`crate::bind`]). Only the
-//! two things the schema cannot know — where the widget sits (`page`/`rect`) and
-//! which logical field it binds — live here.
+//! two things the schema cannot know (where the widget sits (`page`/`rect`) and
+//! which logical field it binds) live here.
 //!
 //! Two field populations, at different altitudes:
-//! - **`fields`** — bound widgets. Each references a `schema_field`; its kind is
+//! - **`fields`**: bound widgets. Each references a `schema_field`; its kind is
 //!   *derived*, never declared, so `form.json` and the schema cannot drift.
-//! - **`widgets`** — unbound widgets with no schema field (a signer-filled
+//! - **`widgets`**: unbound widgets with no schema field (a signer-filled
 //!   signature, an interactively-filled box). Having no schema to inherit from,
 //!   each carries its own `type`.
 //!
@@ -43,26 +43,26 @@ const MIGRATION_GUIDE: &str = "docs/migrations/0.93-to-0.94.md";
 
 /// A parsed `form.json`: the two field populations. The `schema` tag is read and
 /// version-gated separately ([`SchemaTag`]) before this is deserialized, so it
-/// is not restated here — any `schema` key in the JSON is ignored.
+/// is not restated here: any `schema` key in the JSON is ignored.
 #[derive(Debug, Clone, Deserialize)]
 #[non_exhaustive]
 pub struct FormSpec {
-    /// Schema-bound widgets — kind/options/multiline/tooltip inherited from the
+    /// Schema-bound widgets: kind/options/multiline/tooltip inherited from the
     /// referenced [`FieldSchema`](quillmark_core::FieldSchema).
     #[serde(default)]
     pub fields: Vec<BoundField>,
-    /// Unbound widgets — no schema field, so each declares its own `type`.
+    /// Unbound widgets: no schema field, so each declares its own `type`.
     #[serde(default)]
     pub widgets: Vec<UnboundWidget>,
 }
 
 /// One **bound** field: identity + geometry + binding. Its widget kind, choice
-/// options, and multiline flag are *not* here — they are derived from the
+/// options, and multiline flag are *not* here: they are derived from the
 /// resolved [`FieldSchema`](quillmark_core::FieldSchema) at load
 /// ([`crate::bind`]). `tooltip` is an optional override; when absent the field
 /// inherits the schema field's `description`.
 ///
-/// `rect` is **top-left** `{x,y,w,h}` in PDF points, page-relative — the loader
+/// `rect` is **top-left** `{x,y,w,h}` in PDF points, page-relative: the loader
 /// flips it to the spine's bottom-left origin.
 #[derive(Debug, Clone, Deserialize)]
 #[non_exhaustive]
@@ -104,7 +104,7 @@ pub struct Rect {
 /// The declared kind of an [`UnboundWidget`]. Internally tagged by `type` and
 /// flattened into the widget, so the JSON stays flat while invalid combinations
 /// (a `signature` with `options`) are unrepresentable. Bound fields carry no
-/// such tag — their kind is derived from the schema.
+/// such tag: their kind is derived from the schema.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(tag = "type", rename_all = "lowercase")]
 #[non_exhaustive]
@@ -132,7 +132,7 @@ pub enum FormParseError {
     /// own error code and a migration pointer, distinct from a foreign tag.
     RetiredVersion(String),
     /// Two fields/widgets share the same `name`. AcroForm top-level field names
-    /// must be unique across the whole form — duplicates would stamp two
+    /// must be unique across the whole form: duplicates would stamp two
     /// `/T`-colliding fields and render as a single malformed field, so reject
     /// them at parse time (mirroring the Typst producer, which rejects duplicate
     /// `form-field` names).
@@ -150,7 +150,7 @@ impl std::fmt::Display for FormParseError {
             FormParseError::RetiredVersion(s) => write!(
                 f,
                 "form.json `schema` is {s:?}; the `form@{RETIRED_VERSION_MAJOR_MINOR}.x` format is \
-                 retired — bound fields no longer restate `type`/`options`/`multiline` (they are \
+                 retired: bound fields no longer restate `type`/`options`/`multiline` (they are \
                  derived from the quill schema). Migrate to \"{SCHEMA_PREFIX}{SCHEMA_VERSION}\"; \
                  see {MIGRATION_GUIDE}"
             ),
@@ -230,7 +230,7 @@ fn check_version(schema: &str) -> Result<(), FormParseError> {
 }
 
 /// A version string matches `<major.minor>` when it is exactly that or carries a
-/// `.patch` suffix — so `0.2` and `0.2.7` both match `"0.2"`, while `0.20` does
+/// `.patch` suffix, so `0.2` and `0.2.7` both match `"0.2"`, while `0.20` does
 /// not.
 fn version_matches(version: &str, major_minor: &str) -> bool {
     version == major_minor
@@ -320,7 +320,7 @@ mod tests {
     #[test]
     fn retired_v1_with_v1_shaped_fields_still_gets_migration_error() {
         // A real 0.1.0 file carries an unbound `signature` in `fields` with no
-        // `schema_field` — which does not deserialize into a BoundField. The
+        // `schema_field`: which does not deserialize into a BoundField. The
         // version gate must fire on the tag *before* that shape is read, so the
         // author gets the migration pointer, not a generic "missing field" error.
         let json = br#"{

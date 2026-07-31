@@ -6,8 +6,8 @@
 //!
 //! Card bodies are **not** normalized here: a body is already a normalized
 //! [`Content`](quillmark_content::Content) content, established once at import
-//! (`import::from_markdown` runs `normalize_markdown` — line endings, bidi strip,
-//! HTML-comment fence repair — before parsing). This pass only touches field
+//! (`import::from_markdown` runs `normalize_markdown` (line endings, bidi strip,
+//! HTML-comment fence repair) before parsing). This pass only touches field
 //! names and carries each body through unchanged.
 
 use crate::document::Card;

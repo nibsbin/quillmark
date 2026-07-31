@@ -1,16 +1,16 @@
-// @quillmark/wasm/runtime — canonical consumer API.
+// @quillmark/wasm/runtime: canonical consumer API.
 //
 // `Quill`/`Document` are re-exported verbatim from the core build (their full
 // surface, no drift). Render-side types (`RenderResult`, `RenderOptions`,
 // `Artifact`, `OutputFormat`, `PageSize`, `PaintOptions`, `PaintResult`) are
-// defined HERE as the canonical, backend-neutral render contract — NOT sourced
+// defined HERE as the canonical, backend-neutral render contract: NOT sourced
 // from any one private backend build. A type-level drift guard
 // (`runtime.types.test-d.ts`, via `npm run typecheck`) asserts they stay
 // mutually assignable with the Typst backend's generated declarations. `Engine`
 // is the render dispatcher that hides the cross-WASM-memory seam.
 
 // CANONICAL INVARIANT: the root re-exports the core build's `Quill`/`Document`
-// verbatim — they are the SAME classes, never wrappers. There is exactly one
+// verbatim; they are the SAME classes, never wrappers. There is exactly one
 // public entry point, so this is a structural fact. Replacing the re-export
 // with a wrapper is a breaking design change, not a refactor. See runtime.js.
 //
@@ -21,18 +21,18 @@
 export { Quill, Document, init } from '../core/wasm.js';
 // The document-free content codec, re-exported from the core build.
 export { importMarkdown, exportMarkdown, rebase, mapPos } from '../core/wasm.js';
-// The document-model path parser/serializer — route on `Diagnostic.path`
+// The document-model path parser/serializer: route on `Diagnostic.path`
 // segments instead of regexing the string.
 export { parseDocPath, formatDocPath } from '../core/wasm.js';
 
 import type { CardAddr } from '../core/wasm.js';
 
 /**
- * The main card's address — the default target of the card-scoped verbs
+ * The main card's address: the default target of the card-scoped verbs
  * (`storeFields` / `storeExt` / `commitFields` / …). A named, {@link CardAddr}-typed
  * alias for the empty address `{}`, so a main-card write names its target:
  * `doc.storeFields(MAIN_CARD_ADDR, fields)`. It IS `{}` (frozen at runtime), a
- * pure alias — `{}` and `undefined` stay equally valid. A card selector only,
+ * pure alias: `{}` and `undefined` stay equally valid. A card selector only,
  * never a field address.
  */
 export declare const MAIN_CARD_ADDR: CardAddr;
@@ -54,17 +54,17 @@ export type {
 	QuillMetadata
 } from '../core/wasm.js';
 
-// Content edit vocabulary — the op-grained content model `Document`'s methods
+// Content edit vocabulary: the op-grained content model `Document`'s methods
 // speak (`applyChange(addr, bundle)`, `install(addr, rt)`, `revise(…) => Delta`).
 // Declared in the core build; re-exported here so the single public entry point
-// names every type its own re-exported surface already references — `Card.body`
+// names every type its own re-exported surface already references: `Card.body`
 // is a `Content`, `PayloadItem.nestedFills` a `PathStep[][]`, `CardInput.body` a
-// `Content | string` — rather than forcing consumers to derive them structurally
+// `Content | string`: rather than forcing consumers to derive them structurally
 // off the `Document` handle. The content write path (a ProseMirror↔content codec)
 // must name all of them; they are its correctness core, not edge types.
 // `ContentLineKind` is the shared half of `ContentLine` and `setKind`, so lifting
-// a line's kind whole — destructure off `containers`/`continues`, spread the rest
-// into the op — is the version-proof spelling of building a `setKind`. Naming it
+// a line's kind whole (destructure off `containers`/`continues`, spread the rest
+// into the op) is the version-proof spelling of building a `setKind`. Naming it
 // is what makes that spelling type-check without a cast. The alternative, an
 // arm-by-arm switch, means guessing at the open arm's shape and re-editing on
 // every arm added.
@@ -90,7 +90,7 @@ export type {
 	DocPathSeg
 } from '../core/wasm.js';
 
-// The resolved-value view — the return shape of `quill.resolve(doc)`. Value
+// The resolved-value view: the return shape of `quill.resolve(doc)`. Value
 // + source rung per declared field (the body is a `body` sibling on its card,
 // never a row in `fields`); diagnostics stay `quill.validate`, guidance stays
 // `quill.schema`.
@@ -108,14 +108,14 @@ export type {
 // ── Error contract ──────────────────────────────────────────────────────────
 
 /**
- * The error every fallible method in this package throws — parse
+ * The error every fallible method in this package throws: parse
  * (`Document.fromMarkdown`), document mutation, validation
  * (`Quill.fromTree`, `quill.validate`), and rendering (`engine.render`,
  * `engine.open`, `session.render`).
  *
  * This is a STRUCTURAL interface, not a class: the WASM layer throws a real
  * `Error` and attaches `diagnostics` to it, so there is no constructor to
- * `instanceof` against — narrow with {@link isQuillmarkError}. `diagnostics`
+ * `instanceof` against, narrow with {@link isQuillmarkError}. `diagnostics`
  * is always non-empty; `message` is the first diagnostic's message (or an
  * `"N error(s): …"` aggregate for multi-diagnostic failures), so iterate
  * `diagnostics` for per-error detail. The shape is identical to
@@ -137,12 +137,12 @@ export declare function isQuillmarkError(e: unknown): e is QuillmarkError;
 
 // ── Open-set discriminant guards ────────────────────────────────────────────
 // `ContentIsland.type`, `ContentMark.type`, `ContentLine.kind`, and
-// `ContentContainer.container` are open sets — each union has a residual
+// `ContentContainer.container` are open sets: each union has a residual
 // `{ …: string; … }` arm, so a bare discriminant check never narrows the payload
 // (TS keeps the residual arm live, since a `string` can equal the literal).
 // These guards are the checked narrowing path for the pinned arms; an
 // unrecognized discriminant fails every guard and keeps its opaque payload. Only
-// the payload-carrying arms get a guard — the bare marks
+// the payload-carrying arms get a guard: the bare marks
 // (`strong`/`emph`/`underline`/`strike`/`code`), the payload-free lines
 // (`para`/`island`/`rule`), and `quote` narrow to nothing.
 
@@ -197,7 +197,7 @@ export declare function isListItemContainer(
 
 // ── Open-set membership guards ──────────────────────────────────────────────
 // The guards above answer "is this arm X", one pinned arm at a time. These four
-// answer "is this a value this build knows?" — the question a read-modify-write
+// answer "is this a value this build knows?": the question a read-modify-write
 // consumer must ask, since lowering an edit restates every line's kind and
 // containers, and a construct the consumer cannot hold is gone on write-back
 // unless it is carried inertly. Without a predicate a consumer enumerates the
@@ -208,7 +208,7 @@ export declare function isListItemContainer(
 // `kind: "footnote"` carrying a sibling `ref` loses `ref` at any consumer that
 // predates it, with or without these.
 
-/** True when this build does not know `line.kind` — the open arm, carrying opaque `attrs`. */
+/** True when this build does not know `line.kind`: the open arm, carrying opaque `attrs`. */
 export declare function isUnknownLine(
 	line: ContentLine
 ): line is ContentLine & { kind: string; attrs: unknown };
@@ -256,21 +256,21 @@ export interface RenderOptions {
 	/**
 	 * Populate {@link RenderResult.regions} with the schema-field geometry
 	 * sidecar (the same entries {@link LiveSession.regions} serves), for
-	 * consumers without a live session — e.g. overlays over a one-shot SVG
+	 * consumers without a live session; e.g. overlays over a one-shot SVG
 	 * export. Defaults to `false`: exports pay no introspection cost.
 	 */
 	regions?: boolean;
 }
 
 /**
- * How precisely a {@link ContentHit.pos} resolved — the marker a caret UI reads
+ * How precisely a {@link ContentHit.pos} resolved: the marker a caret UI reads
  * to decide whether to trust the offset. Never sub-cluster: `'cluster'` is the
  * finest, `'segment'` the floor it degrades to on origin-less ink.
  *
- * - `'cluster'` — `pos` is the first content char of the cluster under the point
+ * - `'cluster'`: `pos` is the first content char of the cluster under the point
  *   (an escaped/CJK/shaping cluster floors to its first char). Place the caret
  *   at `pos` directly.
- * - `'segment'` — the point hit origin-less ink (list markers, numbering, a
+ * - `'segment'`: the point hit origin-less ink (list markers, numbering, a
  *   multi-line code fence's interior), so `pos` degraded to the containing
  *   segment's start. Treat `pos` as the selected segment, not a caret.
  */
@@ -279,7 +279,7 @@ export type HitGranularity = 'cluster' | 'segment';
 /** A click resolved to a field and USV offset into its Content. */
 export interface ContentHit {
 	/**
-	 * The field's canonical `DocPath` address (`parseDocPath`-routable) — the same
+	 * The field's canonical `DocPath` address (`parseDocPath`-routable): the same
 	 * address {@link LiveSession.fieldAt} returns for that point.
 	 */
 	field: string;
@@ -294,28 +294,28 @@ export interface ContentHit {
 /**
  * A rendered field region: the canonical `DocPath` field address (`field`) plus
  * its geometry (`rect`) on the page. Emitted by backends that place schema fields
- * (`pdfform` AcroForm widgets; Typst form-fields and span-tracked content —
+ * (`pdfform` AcroForm widgets; Typst form-fields and span-tracked content:
  * richtext bodies, `richtext[]` elements, card content fields, direct scalar
- * references). Only fields with a schema address produce a region — a
+ * references). Only fields with a schema address produce a region: a
  * backend-only widget produces none, and the backend widget name never
  * appears.
  *
  * Use it to scroll to / highlight the focused field's rect; for the click
  * direction use {@link LiveSession.fieldAt}, which resolves a point on *any*
- * placement, not just the first one surfaced here. Geometry only —
+ * placement, not just the first one surfaced here. Geometry only:
  * `LiveSession.paint` already bakes every value into the raster (see
  * {@link LiveSession}), so a region is never a compositing input.
  *
  * COORDINATE TRANSFORM. `rect` is in PDF points with a **bottom-left** origin.
  *
  * For an **HTML/CSS overlay** on a `width:100%` canvas, position hotspots as
- * percentages of the page — they track the displayed size across DPI and pane
+ * percentages of the page; they track the displayed size across DPI and pane
  * resize for free, and only the Y axis flips:
  *
  * ```js
  * const [x0, y0, x1, y1] = region.rect;            // PDF pt, bottom-left origin
  * const left   = (x0 / pageWidthPt) * 100;         // % of page (from PageSize.widthPt)
- * const top    = (1 - y1 / pageHeightPt) * 100;    // % — flip Y (from PageSize.heightPt)
+ * const top    = (1 - y1 / pageHeightPt) * 100;    // %: flip Y (from PageSize.heightPt)
  * const width  = ((x1 - x0) / pageWidthPt) * 100;
  * const height = ((y1 - y0) / pageHeightPt) * 100;
  * ```
@@ -341,7 +341,7 @@ export interface FieldRegion {
 	/** `[x0, y0, x1, y1]` in PDF points (1/72″), bottom-left origin. */
 	rect: [number, number, number, number];
 	/**
-	 * The content slice this box covers — USV `[start, end)` into the field's
+	 * The content slice this box covers: USV `[start, end)` into the field's
 	 * `Content` for content ink (one segment), absent for a scalar reference
 	 * site or widget. Consumers key segment highlights on it;
 	 * {@link LiveSession.fieldBoxes} unions same-page segments for the
@@ -357,7 +357,7 @@ export interface RenderResult {
 	outputFormat: OutputFormat;
 	renderTimeMs: number;
 	/**
-	 * Schema-field geometry sidecar — populated only when
+	 * Schema-field geometry sidecar: populated only when
 	 * {@link RenderOptions.regions} requested it; empty otherwise. The same
 	 * entries {@link LiveSession.regions} serves, for consumers without a live
 	 * session. Page indices are document-space even under a `pages` subset
@@ -401,7 +401,7 @@ export interface PaintResult {
 	 */
 	clamped: boolean;
 	/**
-	 * The `densityScale` actually applied — equal to the requested value unless
+	 * The `densityScale` actually applied: equal to the requested value unless
 	 * `clamped`, then reduced proportionally. `layoutScale × effectiveDensityScale`
 	 * is the scale the backing store was rasterized at.
 	 */
@@ -424,7 +424,7 @@ export interface ChangeSet {
  * imported backend build module; `formats`/`canvas` are the REQUIRED static
  * capability manifest. That manifest is what makes
  * `Engine.supportedFormats`/`Engine.supportsCanvas` always FREE: they answer
- * from it directly — no backend binary is loaded and no quill is cloned into
+ * from it directly, no backend binary is loaded and no quill is cloned into
  * backend memory. A malformed descriptor throws at `new Engine(...)`.
  */
 export interface BackendDescriptor {
@@ -437,7 +437,7 @@ export interface EngineOptions {
 	/**
 	 * Extra or overriding backend descriptors, merged over the built-ins. Keys are
 	 * backend ids (as declared by `Quill.yaml`'s `backend:` and reported by
-	 * `Quill.backendId`). Each value is a `BackendDescriptor` — `formats`/`canvas`
+	 * `Quill.backendId`). Each value is a `BackendDescriptor`: `formats`/`canvas`
 	 * are required, so capability probes are ALWAYS free (no binary load, no quill
 	 * clone). Malformed entries throw at construction. The default registry maps
 	 * `"typst"` to the bundled Typst build.
@@ -477,12 +477,12 @@ export declare class Engine {
 	supportedFormats(quill: Quill): Promise<OutputFormat[]>;
 
 	/**
-	 * Whether `quill`'s BACKEND can paint sessions to a canvas — a pre-session
+	 * Whether `quill`'s BACKEND can paint sessions to a canvas: a pre-session
 	 * ESTIMATE, not a fact about any particular compile. Same always-free probe
 	 * as `supportedFormats`: answered from the descriptor's required `canvas`
 	 * manifest, no binary load and no quill clone. Both the Typst and pdfform
 	 * backends report `true` here unconditionally; each paints a complete page
-	 * raster (see {@link LiveSession.paint}) — but a specific compile can still
+	 * raster (see {@link LiveSession.paint}), but a specific compile can still
 	 * refuse to paint (e.g. a 0-page document), so this can answer `true` while
 	 * the resulting {@link LiveSession.supportsCanvas} answers `false`. Gate
 	 * mounting a canvas UI on this; gate the actual `paint` call on the session's
@@ -495,7 +495,7 @@ export declare class Engine {
  * Iterative render session over a compiled snapshot. `free()` when done.
  *
  * CANVAS PAINT IS COMPLETE. {@link LiveSession.paint} writes a complete page
- * raster — every piece of page content is already visible in the painted
+ * raster: every piece of page content is already visible in the painted
  * pixels, with NO compositing required by the caller. Both backends that
  * support canvas satisfy this: Typst rasterizes its laid-out page natively;
  * pdfform pre-flattens bound field values into the page content and rasterizes
@@ -509,7 +509,7 @@ export declare class LiveSession {
 	readonly pageCount: number;
 	readonly backendId: string;
 	/**
-	 * `true` iff `paint`/`pageSize` will succeed for THIS compile — the
+	 * `true` iff `paint`/`pageSize` will succeed for THIS compile: the
 	 * authoritative answer, derived from the session's canvas seam, so it can
 	 * never disagree with what `paint` actually does. This can be `false` even
 	 * when {@link Engine.supportsCanvas} answered `true` for the same `quill`
@@ -520,7 +520,7 @@ export declare class LiveSession {
 	readonly supportsCanvas: boolean;
 	readonly warnings: Diagnostic[];
 	/**
-	 * Recompile the session against `doc` — the edit verb of a live preview.
+	 * Recompile the session against `doc`: the edit verb of a live preview.
 	 * Transactional: on throw every read (`render`, `paint`, `pageSize`,
 	 * `regions`) keeps serving the last-good compile, and the session recovers
 	 * on the next successful `apply`. On success reads serve the new compile;
@@ -540,30 +540,30 @@ export declare class LiveSession {
 	 * (so a highlight covers continuation pages); a scalar referenced at
 	 * several plate sites surfaces each site; tracked content plus a
 	 * `field:`-bound widget yields both, widget ordered first. Group by
-	 * `field` — every entry routes to that field. Later placements of one
+	 * `field`: every entry routes to that field. Later placements of one
 	 * content value are not enumerated; {@link fieldAt} still resolves
 	 * clicks on them.
 	 */
 	regions(): FieldRegion[];
 	/**
 	 * The whole-field highlight boxes for `field` (a canonical `DocPath` address,
-	 * as {@link regions} keys) — one union rect per page, over the field's
+	 * as {@link regions} keys): one union rect per page, over the field's
 	 * `span`-bearing content segments (the "highlight the focused field"
 	 * quantity). Owns the union {@link regions} leaves derived
 	 * (span-filter + per-page union), keeping `regions()` the low-level disjoint
-	 * truth, so a consumer stops reimplementing it. **Content only** — a field
+	 * truth, so a consumer stops reimplementing it. **Content only**: a field
 	 * placed solely as a scalar reference or a bound widget carries no `span`
 	 * and returns `[]`; its box is a single {@link regions} rect. Reflects the
 	 * current compile, like `regions()`.
 	 */
 	fieldBoxes(field: string): FieldRegion[];
 	/**
-	 * The schema field whose content is under a point on `page` — the forward
+	 * The schema field whose content is under a point on `page`, the forward
 	 * (click → field) direction: hit-test a click against the compiled
 	 * document and get back the canonical `DocPath` field address
 	 * (`parseDocPath`-routable) to focus in the editor, or `undefined` off any
 	 * field's ink. `x`/`y` are PDF points with a **bottom-left** origin, the
-	 * same space as {@link FieldRegion.rect} — from a canvas click, invert the
+	 * same space as {@link FieldRegion.rect}, from a canvas click, invert the
 	 * overlay transform documented there:
 	 * `x = clickPx.x / renderScale`,
 	 * `y = pageHeightPt - clickPx.y / renderScale`. Unlike {@link regions},
@@ -576,7 +576,7 @@ export declare class LiveSession {
 	 */
 	positionAt(page: number, x: number, y: number): ContentHit | undefined;
 	/**
-	 * Content position → caret rect — reverse of {@link positionAt}. `field` is a
+	 * Content position → caret rect: reverse of {@link positionAt}. `field` is a
 	 * canonical `DocPath` address (`parseDocPath`-routable), as {@link regions} keys.
 	 */
 	locate(field: string, pos: number): FieldRegion | undefined;
@@ -585,18 +585,18 @@ export declare class LiveSession {
 	/**
 	 * Paint `page` into a 2D canvas context, sizing the backing store itself
 	 * (it owns `canvas.width`/`height`; the caller owns `canvas.style.*`). The
-	 * painted raster is COMPLETE — all page content visible, no caller-side
+	 * painted raster is COMPLETE: all page content visible, no caller-side
 	 * compositing (Typst rasterizes natively; pdfform rasterizes its
 	 * pre-flattened page). Effective rasterization scale is
 	 * `layoutScale × densityScale`, clamped so neither backing dimension exceeds
-	 * 16384 px — {@link PaintResult.clamped} reports the clamp and
+	 * 16384 px: {@link PaintResult.clamped} reports the clamp and
 	 * {@link PaintResult.effectiveDensityScale} the density actually applied.
 	 *
 	 * The write is a whole-backing-store `putImageData`, which bypasses the 2D
 	 * context transform, `globalAlpha`, and clip: the painter owns the entire
 	 * canvas, so give each visible page its own `` element. You cannot
 	 * paint two pages into one canvas, paint into a sub-rect, or apply a context
-	 * transform through this call — the raster is complete precisely so you never
+	 * transform through this call: the raster is complete precisely so you never
 	 * need to. Keep the per-page canvases alive while their pages stay near the
 	 * viewport: each `paint` re-rasterizes from scratch, so reusing (pooling) a
 	 * canvas across pages on scroll re-runs a full render, whereas an idle canvas
@@ -610,7 +610,7 @@ export declare class LiveSession {
 	free(): void;
 }
 
-// ── Typed writer — the schema-bound front door ───────────────────────────────
+// ── Typed writer: the schema-bound front door ───────────────────────────────
 
 // `quill.writer(doc)` is patched onto the re-exported `Quill` prototype (the
 // class is re-exported verbatim, so the method is declared by merging into the
@@ -618,20 +618,20 @@ export declare class LiveSession {
 declare module '../core/wasm.js' {
 	interface Quill {
 		/**
-		 * Bind this quill's schema to `doc` for typed writes — the documented
+		 * Bind this quill's schema to `doc` for typed writes: the documented
 		 * front door, mirroring core's `quill.writer(&mut doc)`. The schema grants
 		 * the typing, so the quill is the factory. The returned writer holds both
 		 * handles by reference and owns neither (nothing to `free()`); it is
-		 * ephemeral by convention — bind, write, discard.
+		 * ephemeral by convention: bind, write, discard.
 		 */
 		writer(doc: Document): DocumentWriter;
 		/**
-		 * Bind this quill's schema to `doc` for interpreted reads — the read twin of
+		 * Bind this quill's schema to `doc` for interpreted reads: the read twin of
 		 * {@link Quill.writer}, mirroring core's `quill.reader(&doc)`. Each field is
 		 * read by its declared type (a richtext field to markdown, every other type
 		 * verbatim) with schema authority, so a name the schema does not declare
 		 * throws rather than reading back `undefined`. Holds both handles by
-		 * reference and owns neither (nothing to `free()`); ephemeral by convention —
+		 * reference and owns neither (nothing to `free()`); ephemeral by convention:
 		 * bind, read, discard.
 		 */
 		reader(doc: Document): DocumentReader;
@@ -639,22 +639,22 @@ declare module '../core/wasm.js' {
 }
 
 /**
- * A `Document` bound to its `Quill` for typed writes — the schema-bound writer,
+ * A `Document` bound to its `Quill` for typed writes: the schema-bound writer,
  * constructed via {@link Quill.writer}. Speaks names, values, and markdown. Bare
  * `set` / `setAll` / `setBody` / `reviseField` / `addCard` / `card(i).set`
  * instead of threading the `quill` handle through the underscored ABI. Holds both
- * handles by reference and owns neither — nothing to `free()`.
+ * handles by reference and owns neither: nothing to `free()`.
  *
  * Typed commit is the default whenever a quill is in hand: it resolves each
  * field's schema type and strict-commits it, throwing `UnknownField` for a name
- * the schema does not declare — on the typed path an undeclared name is a typo,
+ * the schema does not declare, on the typed path an undeclared name is a typo,
  * not a fallback. The raw `Document.storeField` / `storeFields` verbs remain the
  * deliberate quill-free primitive (standalone data, storage/migration infra, or
  * holding not-yet-conforming in-progress input).
  */
 export declare class DocumentWriter {
 	constructor(quill: Quill, doc: Document);
-	/** The bound document — the instance passed in, mutated in place. */
+	/** The bound document: the instance passed in, mutated in place. */
 	readonly document: Document;
 	/**
 	 * Typed-commit one main-card field (strict coerce, mismatch throws now).
@@ -662,19 +662,19 @@ export declare class DocumentWriter {
 	 */
 	set(name: string, value: unknown): void;
 	/**
-	 * Typed-commit several main-card fields atomically — nothing is applied on
+	 * Typed-commit several main-card fields atomically: nothing is applied on
 	 * error (throws a {@link QuillmarkError} carrying one diagnostic per
 	 * offending field, including an `UnknownField` for each undeclared name).
 	 */
 	setAll(fields: Record<string, unknown>): void;
 	/**
 	 * Set the main body from markdown (edit semantics: anchors rebase), discarding
-	 * the delta — the receipt-free body write. Use `doc.revise({}, md)` for the
+	 * the delta, the receipt-free body write. Use `doc.revise({}, md)` for the
 	 * `Delta` receipt.
 	 */
 	setBody(markdown: string): void;
 	/**
-	 * Revise the richtext main-card field `name` from markdown — typed *and*
+	 * Revise the richtext main-card field `name` from markdown: typed *and*
 	 * anchor-preserving. Surviving anchors rebase, then the diffed result is
 	 * schema-conformed (`richtext(inline)` rejects a multi-block result). Throws
 	 * `UnknownField` for a name the schema does not declare. Returns the `Delta`.
@@ -682,7 +682,7 @@ export declare class DocumentWriter {
 	reviseField(name: string, markdown: string): Delta;
 	/**
 	 * Build a composable card of `kind`, typed-commit `fields` onto it, set its
-	 * body from optional markdown, and place it — the fused `makeCard` + typed
+	 * body from optional markdown, and place it: the fused `makeCard` + typed
 	 * commit + insertion. `at` picks the position: omitted appends, a number
 	 * inserts at that index, so a positioned typed insert is one atomic call
 	 * rather than `addCard` + `moveCard`. Transactional: a rejected field (throws
@@ -714,7 +714,7 @@ export declare class CardWriter {
 	readonly index: number;
 	/**
 	 * The bound card's `$kind` (empty string when it carries none), read through
-	 * the document — mirrors core `CardWriter::kind()`. Throws `IndexOutOfRange`
+	 * the document: mirrors core `CardWriter::kind()`. Throws `IndexOutOfRange`
 	 * if the bound index is out of range.
 	 */
 	readonly kind: string;
@@ -723,7 +723,7 @@ export declare class CardWriter {
 	/** Set this card's body from markdown (edit semantics), discarding the delta. */
 	setBody(markdown: string): void;
 	/**
-	 * Revise the richtext field `name` on this card from markdown — typed *and*
+	 * Revise the richtext field `name` on this card from markdown: typed *and*
 	 * anchor-preserving; the card twin of {@link DocumentWriter.reviseField}.
 	 * Throws `UnknownField` for an undeclared name and `IndexOutOfRange` if the
 	 * bound index is out of range. Returns the `Delta`.
@@ -732,12 +732,12 @@ export declare class CardWriter {
 }
 
 /**
- * A `Document` bound to its `Quill` for interpreted reads — the schema-plane read
+ * A `Document` bound to its `Quill` for interpreted reads: the schema-plane read
  * surface, constructed via {@link Quill.reader} and the read twin of
  * {@link DocumentWriter}. One `get` reads each field by its declared type: a
  * richtext field to its markdown projection, a plaintext field to its literal
  * text, every other type its canonical value verbatim. Holds both handles by
- * reference and owns neither — nothing to `free()`.
+ * reference and owns neither: nothing to `free()`.
  *
  * The schema authority is the point: unlike the quill-free transport `Document.getStored`,
  * a name the schema does not declare throws `UnknownField` (a typo) rather than
@@ -748,7 +748,7 @@ export declare class CardWriter {
  */
 export declare class DocumentReader {
 	constructor(quill: Quill, doc: Document);
-	/** The bound document — the instance passed in. */
+	/** The bound document: the instance passed in. */
 	readonly document: Document;
 	/**
 	 * Read the value at `addr`, interpreted by its declared type: a richtext field
@@ -759,7 +759,7 @@ export declare class DocumentReader {
 	 * `IndexOutOfRange` for a bad `addr.card`.
 	 */
 	get(addr: Addr | string): unknown;
-	/** The main body's markdown — the quill-free body read. Equals `get({})`. */
+	/** The main body's markdown: the quill-free body read. Equals `get({})`. */
 	getBody(): string;
 	/**
 	 * A {@link CardReader} for the composable card at `index`. Index validity is
@@ -791,6 +791,6 @@ export declare class CardReader {
 	 * `IndexOutOfRange` for a bad index.
 	 */
 	get(name: string): unknown;
-	/** This card's body markdown — the card twin of {@link DocumentReader.getBody}. */
+	/** This card's body markdown: the card twin of {@link DocumentReader.getBody}. */
 	getBody(): string;
 }

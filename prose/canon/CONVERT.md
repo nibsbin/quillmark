@@ -5,8 +5,8 @@
 ## TL;DR
 
 The Typst backend lowers a `Content` value to Typst markup with
-`emit_content`, which walks the content — lines, anchored marks, embedded
-islands — and never re-parses markdown. Alongside the markup it records a
+`emit_content`, which walks the content: lines, anchored marks, embedded
+islands, and never re-parses markdown. Alongside the markup it records a
 per-segment source map (`content ↔ generated` byte windows). This is the only
 markup-producing path in the render engine. Markdown reaches the content once, at
 ingest, in `quillmark-content::import`; the normative rules for *which* markdown
@@ -28,7 +28,7 @@ container nesting), `marks` (anchored `[start, end)` ranges), and `islands`
 (tables/images at reserved slot chars). The walk is a terminator-model block
 tree over `lines`; the inline pass sweeps `marks` and islands within each line.
 
-A **segment** is a maximal run of lines joined by `Line::continues` — one
+A **segment** is a maximal run of lines joined by `Line::continues`: one
 paragraph, one heading, one whole code fence, one island line. It is what
 "paragraph-level" means against the content, and the unit a region keys on.
 
@@ -36,10 +36,10 @@ paragraph, one heading, one whole code fence, one island line. It is what
 
 Two escapers guard the two Typst contexts; both live in `emit`:
 
-- **`escape_markup`** — text in markup context. Escapes (backslash first)
+- **`escape_markup`**: text in markup context. Escapes (backslash first)
   `\ // ~ * _ ` `` ` `` ` # [ ] { } $ < > @`. Applied to plain text runs and to
   a table cell's text.
-- **`escape_string`** — text inside a Typst string literal. Escapes
+- **`escape_string`**: text inside a Typst string literal. Escapes
   `\ " \n \r \t` and other control characters as `\u{…}`. Applied to `#link` /
   `#image` URLs, code content, and code-fence language tags.
 
@@ -51,7 +51,7 @@ Two escapers guard the two Typst contexts; both live in `emit`:
 | `LineKind::Para` | inline content; a hard break (a `continues` line join) emits `#linebreak()`, a soft break is a space (both settled at import) |
 | `LineKind::Code{lang}` (code fence) | `#raw(block: true, lang: "…", "…")`; `lang:` emitted only when the language tag is non-empty |
 | `LineKind::Rule` (thematic break) | `#line(length: 100%)` |
-| `LineKind::Unknown` (open set) | inline content, as `Para` — the role is lost to the projection, not to storage |
+| `LineKind::Unknown` (open set) | inline content, as `Para`: the role is lost to the projection, not to storage |
 | `MarkKind::Strong` | `#strong[…]` |
 | `MarkKind::Emph` | `#emph[…]` |
 | `MarkKind::Underline` | `#underline[…]` |
@@ -62,17 +62,17 @@ Two escapers guard the two Typst contexts; both live in `emit`:
 | `Container::ListItem` (bullet) | `- ` |
 | `Container::ListItem` (ordered) | `+ ` auto-numbered; first item emits `N. ` when the list starts at `N ≠ 1` |
 | `Container::Quote` | `#quote(block: true)[…]` |
-| `Container::Unknown` (open set) | nothing — transparent; its run lowers at the enclosing level, one block, no wrapper |
+| `Container::Unknown` (open set) | nothing: transparent; its run lowers at the enclosing level, one block, no wrapper |
 | `image` island | `#image("url", alt: "…")`; `alt:` omitted when empty |
 | `table` island | `#table(columns: N, align: (…), table.header(…), …)` |
 
 Table alignment maps `none→auto`, `left`, `center`, `right`; the `align:`
 argument is emitted only when at least one column is non-default. A table cell is
-canonical `{text, marks}`, lowered through the same mark sweep as prose — a
+canonical `{text, marks}`, lowered through the same mark sweep as prose: a
 formatted cell reaches `#strong[…]` / `#emph[…]` / `#raw(…)` / `#link(…)[…]`, not
 an escaped source slice.
 
-**Block quotes render** as `#quote(block: true)[…]` — the one lowering
+**Block quotes render** as `#quote(block: true)[…]`: the one lowering
 divergence from a flat inline pass; a quote's inner blocks lower under the
 block-level discipline.
 
@@ -82,20 +82,20 @@ paragraph and an unknown container as nothing at all: every content vocabulary
 is open, so a build that predates a construct renders it plainly instead of
 failing
 ([DOCUMENT_STORAGE § Open vocabularies](DOCUMENT_STORAGE.md#open-vocabularies)).
-Content that import never admits into the content — raw HTML other than `<u>`,
+Content that import never admits into the content: raw HTML other than `<u>`,
 HTML comments, `<br>`, math, footnotes, task lists, definition lists
-(markdown-spec §6.3) — is absent here.
+(markdown-spec §6.3): is absent here.
 
 ### Island props
 
-An island's `props` is a per-type canonical object — the shape this lowering
+An island's `props` is a per-type canonical object: the shape this lowering
 reads and the shape the WASM boundary pins:
 
 - **`table`** → `{ header: Cell[], rows: Cell[][], aligns: Align[] }`. `header`
   and each row hold `Cell = { text, marks }` (marks lowered through the sweep
   above); `aligns` is one `none | left | center | right` per column. Import
-  normalizes to a single column count — header, every row, and `aligns` padded
-  to the widest — so `columns:` and `align:` agree.
+  normalizes to a single column count: header, every row, and `aligns` padded
+  to the widest, so `columns:` and `align:` agree.
 - **`image`** → `{ url, alt }`; `alt` is the empty string when the source omits it.
 
 The `KnownIslandType` dispatch (`crates/content/src/island.rs`) owns these
@@ -109,7 +109,7 @@ shapes engine-side; the WASM surface pins them as `TableProps` / `ImageProps` /
 Marks anchor freely and may overlap (Peritext semantics from an editor); Typst
 markup nests. The sweep opens marks by priority `(start, longer-span-first,
 kind-ord)` and closes-and-reopens deeper survivors at each overlap boundary, so
-free overlap lowers to properly nested markup — `strong[0,4)` over `emph[2,6)`
+free overlap lowers to properly nested markup: `strong[0,4)` over `emph[2,6)`
 on `abcdef` becomes `#strong[ab#emph[cd]]#emph[ef]`, bracket-balanced. `code`
 marks render atomically as `#raw("…")` (their content is a string literal, so no
 inner mark applies).
@@ -129,8 +129,8 @@ enum EscapeCtx { Markup, StringLit }
 
 A **run** is one plain-text stretch between marks, islands, and line breaks;
 `gen` slices exactly `escape_markup(content_slice)` (or `escape_string` for code /
-string-literal runs). Structural bytes — mark delimiters, container syntax,
-`#linebreak()` — fall between runs, inside `gen` but under no run. This is the
+string-literal runs). Structural bytes: mark delimiters, container syntax,
+`#linebreak()`: fall between runs, inside `gen` but under no run. This is the
 only place a per-segment source map can be produced, because it is the only place
 that both lowers the content and knows the resulting byte layout.
 
@@ -151,7 +151,7 @@ markdown.
 The one other caller is `export` itself, deliberately: its safety net settles a
 line's markdown by re-importing it and dropping marks until the text comes back
 intact, because CommonMark's emphasis algorithm has corners no local rule
-captures. So export's correctness is *defined* by import — the two codecs cannot
+captures. So export's correctness is *defined* by import: the two codecs cannot
 be changed independently, and `to_markdown` transitively depends on the parser.
 A line's re-parses are bounded by a probe budget, not by its mark count; the
 trade is stated in the `export` module doc.
@@ -163,14 +163,14 @@ trade is stated in the `export` module doc.
 emitter's segment map from block-relative to `lib.typ`-relative offsets, yielding
 one `ContentMap { path, block, segments }` per content field. The generated
 `data` dict references `_qm_cN`; a blank content stays an empty string literal.
-The file parser parses each block once — no runtime `eval`, no `json()` blob.
+The file parser parses each block once: no runtime `eval`, no `json()` blob.
 
 ## Gotchas
 
 - **Backslash first.** `escape_markup` replaces `\` before any other character,
   or later escapes would be double-escaped.
 - **All code is `#raw(...)`, not backtick markup.** Both inline code and code
-  fences put content into a string literal where backtick runs are inert — no
+  fences put content into a string literal where backtick runs are inert: no
   delimiter can collide, and `escape_string` covers the only specials (`"` / `\`).
   The function form makes inline-vs-block explicit via `block:`. A fence buffers
   its lines into one string joined by escaped `\n`.

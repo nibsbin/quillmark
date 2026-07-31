@@ -8,7 +8,7 @@ const enc = new TextEncoder()
 /**
  * Invoke `fn`, expect it to throw, and assert the thrown error's primary
  * diagnostic carries the namespaced `edit::*` `code`. Mutator identity rides on
- * `diagnostics[0].code`, not on message text — see prose/canon/ERROR.md.
+ * `diagnostics[0].code`, not on message text; see prose/canon/ERROR.md.
  */
 export function expectEditCode(fn, code) {
   let thrown
@@ -23,7 +23,7 @@ export function expectEditCode(fn, code) {
 
 // Minimal font shipped with quillmark fixtures, loaded once. The Typst world
 // rejects compilation when no fonts are present, so every test quill needs at
-// least one — quills are responsible for shipping their own fonts, since
+// least one: quills are responsible for shipping their own fonts, since
 // quillmark-typst embeds no default fallback.
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const TEST_FONT_PATH = join(

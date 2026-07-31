@@ -1,6 +1,6 @@
 //! Acceptance tests for the stamp spine: build a tiny traditional-xref base
 //! PDF with pdf-writer, stamp all four field types, reparse with lopdf, and
-//! assert the AcroForm structure. Technique A means no `/AP` is baked — values
+//! assert the AcroForm structure. Technique A means no `/AP` is baked: values
 //! land in `/V` and the viewer synthesizes appearances.
 
 use pdf_writer::{Content, Pdf, Rect, Ref};
@@ -104,7 +104,7 @@ fn stamps_all_four_field_types_into_valid_acroform() {
     assert_eq!(opts.len(), 3);
     assert_eq!(color.get(b"V").unwrap().as_str().unwrap(), b"green");
 
-    // Exactly one /Subtype per widget — `into_annotation` writes it, so a
+    // Exactly one /Subtype per widget: `into_annotation` writes it, so a
     // second `.subtype()` would duplicate the key.
     for f in fields {
         let r = f.as_reference().unwrap();
@@ -439,7 +439,7 @@ fn encrypted_pdf_rejected_cleanly() {
 #[test]
 fn xref_stream_rejected_cleanly() {
     // Corrupt the traditional `xref` table marker in place so the reader sees a
-    // non-`xref` byte run at the startxref offset — the xref-stream rejection
+    // non-`xref` byte run at the startxref offset: the xref-stream rejection
     // path. (`xref\n0 ` heads the table; `startxref\n<n>` never matches it.)
     let mut base = build_base_pdf(1);
     replace_first(&mut base, b"xref\n0", b"1 0 \n0");

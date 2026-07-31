@@ -78,6 +78,14 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
 - docs(canon): `COMPATIBILITY.md` states the crate-API promise — what
   `#[non_exhaustive]` does and does not buy, when to mark an enum, and what no
   attribute sweep catches
+- docs(all): the em-dash leaves comments and prose, folded to a colon, comma,
+  semicolon, or parentheses across ~2900 sites. `dense-prose` banned it while
+  every exemplar it named used it; the corpus now matches the rule. A handful of
+  diagnostic and CLI message strings repunctuate with it (`edit::body_only`,
+  `validation::must_fill`, the pdfform bind errors, `--help`); codes, severities,
+  and paths are unchanged. The character stays where it is the subject rather
+  than punctuation: the WinAnsi encoding table, the YAML en/em-dash fixtures, and
+  `docs/migrations/` (#1135)
 
 ## v0.98.0 - 2026-07-28
 

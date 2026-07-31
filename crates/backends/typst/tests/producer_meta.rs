@@ -1,7 +1,7 @@
 //! Acceptance tests for the `/Info` `/Producer` metadata stamp (`overlay`).
 //!
 //! Compiles plates to PDF, reparses with lopdf, and asserts the `/Producer`
-//! string — the default `Quillmark <version>`, a caller override (including
+//! string: the default `Quillmark <version>`, a caller override (including
 //! escaping), preservation of Typst's `/Creator`, and correct composition
 //! with the signature-field overlay in the same incremental update.
 

@@ -6,14 +6,14 @@
 //!
 //! A [`Diagnostic`] carries two independent "where" anchors, both optional:
 //!
-//! - [`Diagnostic::location`] — source-text anchor (`file:line:column`).
+//! - [`Diagnostic::location`]: source-text anchor (`file:line:column`).
 //!   Produced by parsers and backend compilers operating on raw text.
-//! - [`Diagnostic::path`] — document-model anchor into the typed
+//! - [`Diagnostic::path`]: document-model anchor into the typed
 //!   [`crate::document::Document`]. Produced by schema validation and
 //!   coercion, which run on the typed model after line spans are gone.
 //!
 //! [`DocPath`](crate::path::DocPath) is the one type that constructs, renders,
-//! and parses the path — no site assembles one with `format!`. Its module doc
+//! and parses the path, no site assembles one with `format!`. Its module doc
 //! carries the grammar; `prose/canon/ERROR.md` tabulates the anchors.
 
 use crate::OutputFormat;
@@ -26,7 +26,7 @@ pub const MAX_YAML_SIZE: usize = 1024 * 1024;
 
 /// Maximum nesting depth for markdown structures (100 levels). Owned by the
 /// markdown codecs in `quillmark-content` (the import guard) and re-exported
-/// here so the typst backend's markup converter shares one limit — a document
+/// here so the typst backend's markup converter shares one limit: a document
 /// that imports also renders, and vice versa.
 pub use quillmark_content::MAX_NESTING_DEPTH;
 
@@ -41,7 +41,7 @@ pub const MAX_FIELD_COUNT: usize = 1000;
 
 /// A YAML parse or emit failure, owned by this crate.
 ///
-/// The YAML engine is `serde-saphyr`, whose version series is `0.0.x` — every
+/// The YAML engine is `serde-saphyr`, whose version series is `0.0.x`: every
 /// release of it is a semver break under Cargo's rules. Returning its error
 /// types from a public signature would chain this crate's major version to
 /// that cadence, so the boundary converts to this type instead and no public
@@ -49,7 +49,7 @@ pub const MAX_FIELD_COUNT: usize = 1000;
 /// what the contract says it is.
 ///
 /// `line`/`column` are 1-indexed and present only when the engine located the
-/// failure — always absent on the emit side, which has no input to point at.
+/// failure: always absent on the emit side, which has no input to point at.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct YamlError {
     message: String,
@@ -79,8 +79,8 @@ impl YamlError {
         self.column
     }
 
-    /// A diagnostic under `code`, carrying the hint and — when the engine
-    /// located the failure — a [`Location`] against `file`.
+    /// A diagnostic under `code`, carrying the hint and (when the engine
+    /// located the failure) a [`Location`] against `file`.
     pub fn to_diagnostic(&self, code: &str, file: &str) -> Diagnostic {
         let mut diag = Diagnostic::new(Severity::Error, self.message.clone())
             .with_code(code.to_string());
@@ -93,7 +93,7 @@ impl YamlError {
         }
     }
 
-    /// `yaml` is the text that failed to parse — the hint derivation inspects
+    /// `yaml` is the text that failed to parse: the hint derivation inspects
     /// it to name the offending construct.
     pub(crate) fn from_de(err: serde_saphyr::Error, yaml: &str) -> Self {
         // The engine appends its own Rust API names to some messages
@@ -139,7 +139,7 @@ impl std::error::Error for YamlError {}
 /// configuration and no warning-to-error promotion; an informational aside is
 /// a [`Diagnostic::hint`], not a severity.
 ///
-/// A `_` arm over this enum has a safe direction — escalate to
+/// A `_` arm over this enum has a safe direction: escalate to
 /// [`Severity::Error`]. Treating an unrecognized level as fatal over-reports;
 /// treating it as a warning could hide one. Nothing here fails silently, so the
 /// enum is open ([`COMPATIBILITY`]).
@@ -192,11 +192,11 @@ pub struct Diagnostic {
     pub message: String,
     /// Primary source location (text anchor: file/line/column).
     ///
-    /// Set by parsers and backend compilers. May co-exist with [`Self::path`]
-    /// — the two anchors are independent.
+    /// Set by parsers and backend compilers. May co-exist with [`Self::path`]:
+    /// the two anchors are independent.
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub location: Option<Location>,
-    /// Document-model anchor — a dotted/bracketed path into the typed
+    /// Document-model anchor: a dotted/bracketed path into the typed
     /// [`crate::document::Document`].
     ///
     /// Set by schema validation and coercion. See the module-level docs for
@@ -327,7 +327,7 @@ pub enum ParseError {
         reason: String,
     },
 
-    /// A card body's markdown could not be imported into the content model —
+    /// A card body's markdown could not be imported into the content model:
     /// today only when container nesting exceeds
     /// [`MAX_NESTING_DEPTH`]. Code `parse::body_import`.
     #[error("{0}")]
@@ -395,7 +395,7 @@ impl ParseError {
 /// Main error type for rendering operations: a non-empty collection of
 /// [`Diagnostic`]s.
 ///
-/// There is no failure taxonomy beyond the diagnostics themselves — the
+/// There is no failure taxonomy beyond the diagnostics themselves: the
 /// machine-routable identity of a failure is each diagnostic's namespaced
 /// `code` (`parse::*`, `validation::*`, `quill::*`, `typst::*`, `backend::*`,
 /// `engine::*`). Every consumer, and every language binding, handles all
@@ -440,7 +440,7 @@ impl RenderError {
     /// The count-based summary line shared by `Display` and every binding's
     /// exception message: the sole diagnostic's `message` for one, an
     /// `"<N> error(s): <first message>"` aggregate for more. The single source
-    /// of truth for this rule — bindings delegate here rather than re-deriving
+    /// of truth for this rule: bindings delegate here rather than re-deriving
     /// it. An empty slice yields `"render error"` defensively (see
     /// [`RenderError::new`]'s debug-only non-empty invariant).
     pub fn summary_message(diags: &[Diagnostic]) -> String {
@@ -453,7 +453,7 @@ impl RenderError {
 }
 
 /// The primary message for a single diagnostic; an
-/// `"<N> error(s): <first message>"` aggregate for more — the same rule the
+/// `"<N> error(s): <first message>"` aggregate for more: the same rule the
 /// WASM binding applies to thrown `Error.message`.
 impl std::fmt::Display for RenderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

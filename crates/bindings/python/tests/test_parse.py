@@ -1,4 +1,4 @@
-"""Tests for Document — the quill-free transport surface (parse, storage,
+"""Tests for Document: the quill-free transport surface (parse, storage,
 structure). Field I/O is the writer/view surface; see test_api_requirements.py."""
 
 import pytest
@@ -253,7 +253,7 @@ def test_repr_includes_quill_ref(taro_md):
 
 def test_remove_field_on_card_returns_value():
     """remove_field(name, card=i) removes and returns a composable card field's
-    value — `remove` has no lane, one verb over the whole card axis."""
+    value: `remove` has no lane, one verb over the whole card axis."""
     md = (
         "~~~card-yaml\n$quill: q\n$kind: main\n~~~\n\nBody.\n\n"
         "~~~card-yaml\n$kind: note\nfoo: bar\nbaz: qux\n~~~\n"
@@ -325,7 +325,7 @@ def test_depth_bound_matches_core_container_levels():
 
     The cutoff is container levels (100), not nodes: a scalar leaf at the
     bottom is not charged a level, so exactly 100 nested objects are accepted
-    and 101 are rejected — whether the deepest container holds a scalar or
+    and 101 are rejected: whether the deepest container holds a scalar or
     another (non-empty) container. Exercised through `make_card`, whose field
     values cross the same `py_to_json` boundary the writer's `set` does.
     """

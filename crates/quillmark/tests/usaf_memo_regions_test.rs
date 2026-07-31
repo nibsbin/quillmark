@@ -1,7 +1,7 @@
 //! Region coverage on the flagship `usaf_memo` quill.
 //!
 //! The memo package's `render-body` rebuilds body paragraphs through a state
-//! buffer (AFH 33-337 auto-numbering) — the hardest placement context a
+//! buffer (AFH 33-337 auto-numbering): the hardest placement context a
 //! shipped quill exercises. Span tracking rides the rebuilt glyphs' own
 //! origins, so the main `$body` and each indorsement card's body stay
 //! addressable with no recovery step in the plate; the signature widgets bind
@@ -66,8 +66,8 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
         "a click inside the rebuilt body routes to $body"
     );
 
-    // Give the indorsement a real body via apply — the per-field eval windows
-    // regenerate with the helper on every committed edit — and its card
+    // Give the indorsement a real body via apply (the per-field eval windows
+    // regenerate with the helper on every committed edit) and its card
     // address surfaces through the same package rebuild.
     let mut edited = quill.compile_data(&parsed).expect("compile seed data");
     // An editor writes the card body as canonical content JSON through the seam.
@@ -113,7 +113,7 @@ fn usaf_memo_regions_cover_body_signature_and_cards() {
 /// End-to-end on the flagship quill: a real memo date surfaces a clickable
 /// region even though the **vendored package** places it. The plate hands
 /// `data.date` to `frontmatter`, which formats it deep inside `utils.typ`'s
-/// `display-date` — the laundered shape, where package code and not the plate
+/// `display-date`: the laundered shape, where package code and not the plate
 /// inks the value. The date value-object's `display` closure is born in the
 /// generated helper, so its glyphs carry a helper span that resolves to the
 /// recorded window regardless of where the package calls it, and the region

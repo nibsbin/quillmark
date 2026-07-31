@@ -10,8 +10,8 @@ Body content (the prose after each [card-yaml block](card-yaml.md), including an
 
 For the conventional syntax of these elements, refer to:
 
-- [CommonMark spec](https://spec.commonmark.org/0.31.2/) — the base grammar.
-- [GFM spec](https://github.github.com/gfm/) — pipe tables and strikethrough.
+- [CommonMark spec](https://spec.commonmark.org/0.31.2/): the base grammar.
+- [GFM spec](https://github.github.com/gfm/): pipe tables and strikethrough.
 
 ## Selected GFM extensions
 
@@ -41,7 +41,7 @@ Why: Typst (the rendering backend) has no HTML renderer, and arbitrary HTML pass
 
 Consequences:
 
-- `<br>`, `<br/>`, `<br />` produce no output. Use a CommonMark hard break instead — two trailing spaces before a newline, or a trailing `\` before a newline.
+- `<br>`, `<br/>`, `<br />` produce no output. Use a CommonMark hard break instead: two trailing spaces before a newline, or a trailing `\` before a newline.
 - HTML entities and embedded SVG are dropped.
 - HTML comments do not appear in output.
 
@@ -49,15 +49,15 @@ Consequences:
 
 The following are recognised by the parser (so they will not corrupt surrounding content) but produce no output:
 
-- **Math** (`$…$`, `$$…$$`) — `$` is treated as a literal character.
-- **Footnotes**, **task lists**, **definition lists** — not supported.
+- **Math** (`$…$`, `$$…$$`): `$` is treated as a literal character.
+- **Footnotes**, **task lists**, **definition lists**: not supported.
 
-Some constructs (like link titles) are accepted by the parser but may be dropped during rendering when the active backend has no target for them. Those losses are backend-specific — see each backend's documentation.
+Some constructs (like link titles) are accepted by the parser but may be dropped during rendering when the active backend has no target for them. Those losses are backend-specific; see each backend's documentation.
 
 ## Structured data: card-yaml blocks
 
 Quillmark carries structured data in [card-yaml blocks](card-yaml.md),
-each followed by its Markdown prose body. The full block-detection rules —
+each followed by its Markdown prose body. The full block-detection rules:
 fence syntax, the blank-line rule, and the backtick escape hatch for literal
-code blocks — are in
+code blocks: are in
 [§4 of the spec](../reference/markdown-spec.md#4-block-detection).

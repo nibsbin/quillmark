@@ -1,4 +1,4 @@
-//! Tests for [`quillmark::Quill::validate`] — the editor-facing validation
+//! Tests for [`quillmark::Quill::validate`]: the editor-facing validation
 //! surface.
 
 use std::collections::HashMap;
@@ -97,7 +97,7 @@ fn validate_reports_unknown_card_kind() {
 fn validate_warns_on_must_fill_marker() {
     let quill = quill_from_yaml(SIMPLE);
     // The `!must_fill` placeholder surfaces as a non-fatal warning, regardless
-    // of whether it carries a suggested value — and across the main card and
+    // of whether it carries a suggested value, and across the main card and
     // every composable card (the contract is "root and nested, main and cards").
     let md = "~~~card-yaml\n$quill: validate_test\n$kind: main\n\
               title: !must_fill Draft\ncount: !must_fill\n~~~\n\n\

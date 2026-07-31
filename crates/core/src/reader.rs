@@ -1,10 +1,10 @@
-//! Schema-bound typed reader — the read twin of
+//! Schema-bound typed reader: the read twin of
 //! [`TypedWriter`](crate::TypedWriter).
 //!
 //! The read surface's verbs split by read-vs-write, but the deeper fault line is
 //! **interpret-vs-transport**. The verbatim [`payload().get`](crate::Card::payload)
 //! (the WASM binding's `Document.getStored`) is *transport*: it returns the stored
-//! value verbatim, schema-free and round-trippable — the disambiguation / debug
+//! value verbatim, schema-free and round-trippable, the disambiguation / debug
 //! read. Projecting a field to
 //! markdown is *interpretation*: a schema-shaped question ("this field's
 //! richtext, as markdown") that a schema-free `Document` cannot answer without
@@ -12,8 +12,8 @@
 //! projection but has no schema to name the field set, so an unknown field name
 //! reads back as absent rather than as the typo it is.
 //!
-//! [`Quill::reader`](crate::Quill::reader) binds the schema — where the authority
-//! already lives, the writer's twin — so a single verb interprets by the field's
+//! [`Quill::reader`](crate::Quill::reader) binds the schema (where the authority
+//! already lives, the writer's twin) so a single verb interprets by the field's
 //! declared type:
 //!
 //! ```ignore
@@ -28,7 +28,7 @@
 //! **absence returns; mismatch raises; an unknown name is a typo.** A `richtext`
 //! field projects to markdown ([`ReadValue::Markdown`]) and a `plaintext` field
 //! to its literal text ([`ReadValue::Plaintext`]); every other declared type
-//! returns its canonical value verbatim ([`ReadValue::Value`]) — the same
+//! returns its canonical value verbatim ([`ReadValue::Value`]): the same
 //! transport `Document` reads, now reached with schema authority. A present value
 //! that does not decode under a content field raises
 //! [`EditError::FieldRichtextDecode`], the mismatch [`Card::field_markdown`] /
@@ -52,7 +52,7 @@ use crate::document::{Card, Document, EditError, RichtextDecodeError};
 use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
 use crate::value::QuillValue;
 
-/// The interpreted value at a field address — the output of [`TypedReader::get`].
+/// The interpreted value at a field address: the output of [`TypedReader::get`].
 /// A content field decodes to its codec's projection (`richtext` to markdown,
 /// `plaintext` to literal text); every other declared type carries its canonical
 /// value verbatim (the transport read, reached through the schema). Absence is
@@ -60,14 +60,14 @@ use crate::value::QuillValue;
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub enum ReadValue {
-    /// A `richtext` field projected to markdown (`export ∘ decode`) — the lossy,
+    /// A `richtext` field projected to markdown (`export ∘ decode`): the lossy,
     /// on-demand view (content-only marks do not survive markdown).
     Markdown(String),
     /// A `plaintext` field projected through its literal codec (`to_plaintext ∘
-    /// decode`) — verbatim text, marks never interpreted (`*hi*` is four
+    /// decode`): verbatim text, marks never interpreted (`*hi*` is four
     /// characters, not emphasis).
     Plaintext(String),
-    /// A non-content field's canonical value, verbatim — the schema-free
+    /// A non-content field's canonical value, verbatim: the schema-free
     /// transport read a `Document` returns, delivered here with schema authority.
     Value(QuillValue),
 }
@@ -87,7 +87,7 @@ impl<'a> TypedReader<'a> {
         Self { config, doc }
     }
 
-    /// Read a main-card field, interpreted by its declared type — `richtext` to
+    /// Read a main-card field, interpreted by its declared type: `richtext` to
     /// markdown ([`ReadValue::Markdown`]), `plaintext` to literal text
     /// ([`ReadValue::Plaintext`]), every other type verbatim
     /// ([`ReadValue::Value`]). `Ok(None)` when the field is absent;
@@ -99,7 +99,7 @@ impl<'a> TypedReader<'a> {
         read_field(self.doc.main(), Some(&self.config.main.fields), name)
     }
 
-    /// The main body's markdown projection — the quill-free body read
+    /// The main body's markdown projection, the quill-free body read
     /// ([`Card::body_markdown`](crate::Card::body_markdown)). A body's type is a
     /// format fact, not a schema fact, so this consults no schema and never
     /// raises; the body is never absent.
@@ -112,7 +112,7 @@ impl<'a> TypedReader<'a> {
     /// every field name on it is undeclared and reads with
     /// [`EditError::UnknownField`] (read such a card verbatim through
     /// [`Card::payload`]). [`EditError::IndexOutOfRange`] when `index` is out of
-    /// range — a boundary error, not an absent field, as the card write verbs
+    /// range: a boundary error, not an absent field, as the card write verbs
     /// treat it.
     pub fn card(&self, index: usize) -> Result<CardReader<'_>, EditError> {
         let len = self.doc.cards().len();
@@ -139,15 +139,15 @@ impl CardReader<'_> {
         self.card.kind()
     }
 
-    /// Read a field on this card, interpreted by its declared type — the card
+    /// Read a field on this card, interpreted by its declared type: the card
     /// twin of [`TypedReader::get`]. Resolves the field against the card's
-    /// [`CardSchema`]; a name the schema does not declare — or any name when the
-    /// card kind is unknown — reads with [`EditError::UnknownField`].
+    /// [`CardSchema`]; a name the schema does not declare (or any name when the
+    /// card kind is unknown) reads with [`EditError::UnknownField`].
     pub fn get(&self, name: &str) -> Result<Option<ReadValue>, EditError> {
         read_field(self.card, self.schema.map(|s| &s.fields), name)
     }
 
-    /// This card's body markdown — the card twin of [`TypedReader::get_body`],
+    /// This card's body markdown: the card twin of [`TypedReader::get_body`],
     /// quill-free and never raising.
     pub fn get_body(&self) -> String {
         self.card.body_markdown()
@@ -156,10 +156,10 @@ impl CardReader<'_> {
 
 /// The shared read dispatch behind [`TypedReader::get`] and [`CardReader::get`]:
 /// resolve `name` against `fields_schema` (an unknown name, or every name when
-/// the whole schema is `None` — an unknown card kind — is
+/// the whole schema is `None` (an unknown card kind) is
 /// [`EditError::UnknownField`]), then interpret by the field's declared type. A
-/// content field projects through its codec — `richtext` via
-/// [`Card::field_markdown`], `plaintext` via [`Card::field_plaintext`] — each
+/// content field projects through its codec (`richtext` via
+/// [`Card::field_markdown`], `plaintext` via [`Card::field_plaintext`]) each
 /// carrying the projection's absent (`None`) / mismatch
 /// ([`EditError::FieldRichtextDecode`]) outcomes; every other type returns its
 /// canonical value verbatim, `None` when absent.

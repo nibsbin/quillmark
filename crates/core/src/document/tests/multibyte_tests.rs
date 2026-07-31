@@ -26,7 +26,7 @@ fn multibyte_in_quoted_scalar_parses() {
 fn multibyte_yaml_errors_reach_the_renderer_char_bounded() {
     // The renderer's own multibyte guarantee is pinned at its altitude
     // (`yaml_hints::does_not_panic_on_multibyte_content`); what this covers is
-    // the wiring — that `assemble` hands it a char-bounded slice, whether the
+    // the wiring: that `assemble` hands it a char-bounded slice, whether the
     // multibyte chars sit in a key, before a structural bug on the same line, or
     // in the value the caret has to scan past. A parse error is the expected
     // outcome; a panic is not.

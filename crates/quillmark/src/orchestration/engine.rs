@@ -8,7 +8,7 @@ use std::sync::Arc;
 /// High-level engine: a backend registry and render dispatcher.
 ///
 /// The engine resolves a [`Quill`]'s *declared* backend at render time and is
-/// the sole home of backend-dependent surface — capability
+/// the sole home of backend-dependent surface: capability
 /// ([`supported_formats`](Self::supported_formats) /
 /// [`supports_canvas`](Self::supports_canvas)) and rendering
 /// ([`open`](Self::open) / [`render`](Self::render)). Quill loading lives
@@ -53,8 +53,8 @@ impl Quillmark {
     }
 
     /// Resolve a quill's declared backend, erroring with `engine::backend_not_found`
-    /// when none is registered. The backend-existence check lives here — at
-    /// render time, not load time — so a backend-less core can still load and
+    /// when none is registered. The backend-existence check lives here (at
+    /// render time, not load time) so a backend-less core can still load and
     /// validate quills.
     fn resolve_backend(&self, quill: &Quill) -> Result<&Arc<dyn Backend>, RenderError> {
         let backend_id = quill.backend_id();
@@ -99,7 +99,7 @@ impl Quillmark {
         session.render(&resolved)
     }
 
-    /// The output formats `quill`'s backend can emit. Static capability —
+    /// The output formats `quill`'s backend can emit. Static capability:
     /// resolves the backend but compiles nothing.
     pub fn supported_formats(&self, quill: &Quill) -> Result<&'static [OutputFormat], RenderError> {
         Ok(self.resolve_backend(quill)?.supported_formats())
@@ -108,7 +108,7 @@ impl Quillmark {
     /// Pre-session hint for whether `quill`'s backend can paint sessions to a
     /// canvas, derived from the backend's output formats (see
     /// [`quillmark_core::formats_support_canvas`]); `false` when the backend is
-    /// unsupported. Resolves the backend but compiles nothing — use it to decide
+    /// unsupported. Resolves the backend but compiles nothing: use it to decide
     /// whether to offer a canvas preview before opening a session. The
     /// authoritative answer is
     /// [`LiveSession::supports_canvas`](quillmark_core::LiveSession::supports_canvas)

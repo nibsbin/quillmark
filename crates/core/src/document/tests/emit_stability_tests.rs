@@ -95,7 +95,7 @@ fn parse_emit_parse_emit_stability_over_fixtures() {
 
     assert!(
         passed > 0,
-        "No fixtures passed stability check — did all files get skipped?"
+        "No fixtures passed stability check: did all files get skipped?"
     );
 
     eprintln!(

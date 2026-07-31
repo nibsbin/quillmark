@@ -1,13 +1,13 @@
 //! Auto-generated Markdown blueprint for a Quill.
 //!
 //! Produces an annotated reference document dense enough to replace the schema
-//! for LLM consumers. The blueprint shows the document's shape — fields,
-//! constraints, examples — so a consumer can write a fresh document from it.
+//! for LLM consumers. The blueprint shows the document's shape (fields,
+//! constraints, examples) so a consumer can write a fresh document from it.
 //!
 //! ## One emitter
 //!
-//! `blueprint()` does not format YAML itself. It builds a [`Document`] — the
-//! same typed model a parsed `.md` produces — and emits it through the
+//! `blueprint()` does not format YAML itself. It builds a [`Document`] (the
+//! same typed model a parsed `.md` produces) and emits it through the
 //! canonical [`Document::to_markdown`]. The annotation grammar maps cleanly
 //! onto the document model:
 //!
@@ -15,14 +15,14 @@
 //!   own-line [`PayloadItem::Comment`]s before the field (top-level) or
 //!   [`NestedComment`]s at the leaf's slot (typed-container properties).
 //! - **Inline `# <type>[<format>]` annotation** becomes the field's *trailing
-//!   inline* comment — a one-space ` # …` trailer on the value line.
+//!   inline* comment: a one-space ` # …` trailer on the value line.
 //! - **`!must_fill`** becomes the field's `fill` flag (top-level) or a nested
 //!   fill path on the value tree (per-property leaves).
 //! - The `$quill` / `$kind` lines are the document's typed `$` metadata; the
 //!   `# keep verbatim` reminder rides `$quill` as an inline comment.
 //!
 //! Because emission is shared with the parse/round-trip path, the blueprint
-//! round-trips through `Document::parse` and back *by construction* —
+//! round-trips through `Document::parse` and back *by construction*:
 //! there is no second formatter to keep in sync.
 //!
 //! ## Rendering choices that follow from sharing `to_markdown`
@@ -31,11 +31,11 @@
 //!   is a bare `field: !must_fill # richtext<markdown>`; an Endorsed one renders
 //!   its default as an inline (double-quoted, `\n`-escaped) string. `to_markdown`
 //!   emits no `|`/`>` block forms, so neither does the blueprint.
-//! - **Arrays** render in block style at every level — including an
+//! - **Arrays** render in block style at every level; including an
 //!   Unendorsed array's `example`, which rides the `!must_fill` marker as
 //!   block items rather than an inline flow sequence.
 //! - **Typed dictionaries** with `default: {}` expand to the field's
-//!   zero-filled shape (every key present, type-empty value, all unmarked) —
+//!   zero-filled shape (every key present, type-empty value, all unmarked),
 //!   so an empty endorsed object shows its structure instead of a bare `{}`.
 //!   A *non-empty* partial default is rendered verbatim (a deliberate
 //!   "already handled" signal); only `{}` expands.
@@ -53,19 +53,19 @@ use crate::value::{PathSegment, QuillValue};
 use serde_json::{Map as JsonMap, Value as JsonValue};
 
 impl QuillConfig {
-    /// Generate the canonical annotated Markdown blueprint for this quill —
+    /// Generate the canonical annotated Markdown blueprint for this quill:
     /// the authoring surface handed to LLMs and humans, with Unendorsed cells
     /// carrying the `!must_fill` marker. See module docs for the annotation
     /// grammar; the function is total over any valid `QuillConfig`.
     ///
     /// The "filled-out" twin of the blueprint is **seeding**
-    /// ([`Quill::seed_document`](crate::Quill::seed_document)) — a committed
+    /// ([`Quill::seed_document`](crate::Quill::seed_document)), a committed
     /// [`Document`] rather than an annotated string. See
     /// `prose/canon/BLUEPRINT.md`.
     ///
     /// The result is guaranteed schema-valid and parseable (every key
-    /// present, every value type-correct). It is *not* guaranteed to render
-    /// — that is the quill authoring contract on `plate.typ`; see
+    /// present, every value type-correct). It is *not* guaranteed to render:
+    /// that is the quill authoring contract on `plate.typ`; see
     /// `prose/canon/BLUEPRINT.md` §Guarantees.
     ///
     /// [`Document`]: crate::Document
@@ -134,7 +134,7 @@ fn build_main_card(card: &CardSchema, quill_ref: &str, description: Option<&str>
         Payload::from_items(items),
         // The blueprint's output *is* the markdown surface, so it imports the
         // body text (a trusted example or a generated placeholder) here and
-        // re-emits it via `to_markdown`. The empty-content fallback is defensive —
+        // re-emits it via `to_markdown`. The empty-content fallback is defensive:
         // a placeholder or a load-validated example never over-nests.
         crate::document::import_body(&body_text(card, "main"))
             .unwrap_or_else(|_| quillmark_content::Content::empty()),
@@ -236,7 +236,7 @@ fn append_field(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
 }
 
 /// Push the leading prose comments for a *top-level* field: the description,
-/// then the `# e.g.` hint. `eg_when` gates the hint — scalars surface it only
+/// then the `# e.g.` hint. `eg_when` gates the hint: scalars surface it only
 /// when Endorsed (an Unendorsed example inlines as the marker value instead),
 /// while typed containers always surface it (their example never inlines).
 fn push_leading(items: &mut Vec<PayloadItem>, field: &FieldSchema, eg_when: bool) {
@@ -271,8 +271,8 @@ fn scalar_cell(field: &FieldSchema) -> (JsonValue, bool) {
 /// Append a scalar / scalar-array / richtext field as a single payload field
 /// plus its trailing inline type annotation.
 fn append_scalar(items: &mut Vec<PayloadItem>, field: &FieldSchema) {
-    // A richtext field never inlines its `example:` as the marker value, so —
-    // unlike other Unendorsed scalars — the example would vanish entirely.
+    // A richtext field never inlines its `example:` as the marker value, so
+    // (unlike other Unendorsed scalars) the example would vanish entirely.
     // Surface it as a `# e.g.` hint instead (no-ops when no `example:` is set).
     let eg_when = field.default.is_some() || matches!(field.r#type, FieldType::RichText { .. });
     push_leading(items, field, eg_when);
@@ -372,7 +372,7 @@ fn append_typed_dict(
 }
 
 /// Append a typed-table field (`array<object>`). Endorsed: render the default
-/// rows verbatim (including `default: []`, which stays inline `[]` — arrays do
+/// rows verbatim (including `default: []`, which stays inline `[]`: arrays do
 /// not expand). Unendorsed: emit one synthetic row carrying each property's
 /// leaf-level marker and annotation; the container key itself is untagged.
 fn append_typed_table(
@@ -428,8 +428,8 @@ fn push_container_field(
 
 /// Build the inline annotation body (without the leading `# `): purely the
 /// structural type expression `<type>[<format>]`. Shippability is carried by
-/// the value cell alone — a concrete value is shippable as-is, a `!must_fill`
-/// marker asks to be filled — so the annotation needs no cell-state tag.
+/// the value cell alone (a concrete value is shippable as-is, a `!must_fill`
+/// marker asks to be filled) so the annotation needs no cell-state tag.
 fn type_expression(field: &FieldSchema) -> String {
     if let Some(values) = &field.enum_values {
         return format!("enum<{}>", values.join(" | "));
@@ -445,7 +445,7 @@ fn type_expression(field: &FieldSchema) -> String {
         FieldType::RichText { inline: false } => "richtext<markdown>".into(),
         FieldType::RichText { inline: true } => "richtext(inline)<markdown>".into(),
         // The `<plain>` format slot names the literal codec (`from_plaintext`/
-        // `to_plaintext`) — content the author navigates but which takes no
+        // `to_plaintext`): content the author navigates but which takes no
         // markup, distinct from richtext's `<markdown>` surface.
         FieldType::PlainText { inline: false } => "plaintext<plain>".into(),
         FieldType::PlainText { inline: true } => "plaintext(inline)<plain>".into(),
@@ -504,7 +504,7 @@ main:
 
     #[test]
     fn endorsed_field_with_example_does_not_use_example_as_value() {
-        // Examples never render as values — they always surface in `# e.g.`.
+        // Examples never render as values: they always surface in `# e.g.`.
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
@@ -566,7 +566,7 @@ main:
     #[test]
     fn enum_must_fill_renders_bare_marker() {
         // An enum field with no `default:` renders `!must_fill` rather than
-        // the first enum value — the cell is Unendorsed regardless.
+        // the first enum value: the cell is Unendorsed regardless.
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
 main:
@@ -839,7 +839,7 @@ main:
 
     #[test]
     fn typed_table_with_example_keeps_eg_line_and_synthetic_row() {
-        // Examples never render as rows — they surface only in `# e.g.`,
+        // Examples never render as rows: they surface only in `# e.g.`,
         // consistent with every other field type.
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
@@ -883,7 +883,7 @@ main:
 
     #[test]
     fn typed_table_with_empty_default_renders_inline() {
-        // `default: []` means shippable as-is — the value renders inline as `[]`
+        // `default: []` means shippable as-is: the value renders inline as `[]`
         // (no marker). Inline row shape under an empty default belongs in
         // `example:`.
         let t = cfg(r#"
@@ -910,7 +910,7 @@ main:
     fn typed_dict_with_empty_default_expands_to_zero_filled() {
         // `default: {}` is Endorsed (the whole object ships as-is) and expands
         // to the field's zero-filled shape: every key shown with its type-empty
-        // value, all unmarked and unannotated — so the structure is visible
+        // value, all unmarked and unannotated, so the structure is visible
         // instead of a bare `{}`. (Arrays do not expand; only `{}` does.)
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
@@ -983,7 +983,7 @@ main:
 
     #[test]
     fn typed_dict_with_example_keeps_eg_line_and_per_property() {
-        // Examples never render as a concrete mapping — they surface only in
+        // Examples never render as a concrete mapping: they surface only in
         // `# e.g.`, consistent with every other field type.
         let t = cfg(r#"
 quill: { name: x, version: 1.0.0, backend: typst, description: x }
@@ -1117,7 +1117,7 @@ main:
 
     /// String defaults that look numeric/boolean/null must be quoted so
     /// the schema-validated payload still types as `string` after
-    /// round-trip — defaults like `1.0`, `on`, `01234`, or `null` must
+    /// round-trip: defaults like `1.0`, `on`, `01234`, or `null` must
     /// not be emitted bare and re-parsed as the wrong YAML type.
     #[test]
     fn type_ambiguous_string_defaults_round_trip_as_strings() {

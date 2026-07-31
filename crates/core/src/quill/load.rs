@@ -20,7 +20,7 @@ impl Quill {
     /// Returns a non-empty `Vec<Diagnostic>` describing every problem found.
     /// When `Quill.yaml` itself contains multiple errors they are all
     /// reported together. Backend-specific assets (e.g. a Typst plate) are
-    /// not read here — a backend resolves its own inputs at render time.
+    /// not read here: a backend resolves its own inputs at render time.
     pub fn from_tree(root: FileTreeNode) -> Result<Self, Vec<Diagnostic>> {
         Self::from_tree_with_warnings(root).map(|(quill, _)| quill)
     }
@@ -46,7 +46,7 @@ impl Quill {
             )]
         })?;
 
-        // Parse YAML into QuillConfig — propagate the full diagnostic vector
+        // Parse YAML into QuillConfig: propagate the full diagnostic vector
         // so every Quill.yaml error reaches the caller.
         let (config, warnings) = QuillConfig::from_yaml_with_warnings(&quill_yaml_content)?;
 

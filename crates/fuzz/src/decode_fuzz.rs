@@ -13,7 +13,7 @@
 //! module, so the cost is the document, not the operation.
 //!
 //! One property: **arbitrary JSON produces `Err`, never a panic.** Round-trip
-//! preservation is covered per lane by the crate that owns it —
+//! preservation is covered per lane by the crate that owns it,
 //! `document::dto`'s `v0_93_0_round_trips_as_fixed_point`, `document::wire`'s
 //! four `card_wire_round_trips_*`, and `quillmark-content`'s
 //! `canonical_json_fixed_point`.
@@ -68,7 +68,7 @@ proptest! {
         let _ = serde_json::from_str::<Document>(&v.to_string());
     }
 
-    /// The same lane fed a *well-formed envelope* whose payload is arbitrary —
+    /// The same lane fed a *well-formed envelope* whose payload is arbitrary:
     /// past the `schema` discriminator, where the interesting decoding is.
     #[test]
     fn storage_decode_never_panics_past_the_tag(main in arb_json(), cards in arb_json()) {
@@ -87,13 +87,13 @@ proptest! {
         }
     }
 
-    /// Canonical content decode — the `install` lane.
+    /// Canonical content decode: the `install` lane.
     #[test]
     fn canonical_content_decode_never_panics(v in arb_json()) {
         let _ = quillmark_content::serial::from_canonical_value(&v);
     }
 
-    /// The op wire — the `applyChange` lane.
+    /// The op wire: the `applyChange` lane.
     #[test]
     fn op_wire_decode_never_panics(v in arb_json()) {
         let _ = quillmark_content::change_bundle_from_value(&v);

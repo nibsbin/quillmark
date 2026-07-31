@@ -16,7 +16,7 @@ mod seed_tests;
 /// `README.md`/`LICENSE.md` inside bundled quill packages too; those carry no
 /// root card-yaml block and are skipped at parse time.
 ///
-/// Not what `emit_tests::fixtures_round_trip` wants — that one scans the
+/// Not what `emit_tests::fixtures_round_trip` wants: that one scans the
 /// top level only, deliberately.
 pub(super) fn collect_md_files(root: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
     let entries = match std::fs::read_dir(root) {

@@ -1,11 +1,11 @@
 //! Canonical document-model paths.
 //!
 //! [`DocPath`] is the workspace's one serializer and parser for
-//! [`Diagnostic::path`](crate::error::Diagnostic::path) — the anchor into a
+//! [`Diagnostic::path`](crate::error::Diagnostic::path), the anchor into a
 //! typed [`Document`](crate::document::Document). Every emit site (schema
 //! validation, `!must_fill` collection, coercion) constructs a `DocPath` and
 //! renders it once through [`Display`](std::fmt::Display); no site assembles a path with
-//! `format!`, and no consumer regexes one back apart — the exported
+//! `format!`, and no consumer regexes one back apart, the exported
 //! [`FromStr`] parser is the inverse.
 //!
 //! # Grammar
@@ -22,16 +22,16 @@
 //!
 //! Every document-model path is **rooted**: a main field is `main.<field>`
 //! (`main.title`, `main.recipients[0].name`), the main body `main.body`. A card
-//! field is kind-qualified — `cards.<kind>[<i>].<field>` — so a consumer
+//! field is kind-qualified (`cards.<kind>[<i>].<field>`) so a consumer
 //! receives kind and array index without a second lookup; a card whose `$kind`
-//! has no schema — absent, or present but not a declared card kind — stays
+//! has no schema (absent, or present but not a declared card kind) stays
 //! `cards[<i>]`. Field names and card kinds exclude `.`, `[`, `]`, so the
 //! rendered form round-trips.
 //!
 //! Rooting makes the grammar total against a field named for a root: a main
 //! field literally named `cards` or `main` is `main.cards` / `main.main`, which
 //! collides with nothing. One residual: a field literally named `body` renders
-//! `<root>.body` and collides with the body terminal — accepted, not guarded (no
+//! `<root>.body` and collides with the body terminal, accepted, not guarded (no
 //! fixture field uses the name).
 //!
 //! This is the **document-model** namespace, distinct from the plate-JSON
@@ -39,7 +39,7 @@
 //! `$cards` is glue delivered to the backend, unsigiled `cards` is a path into
 //! the document. Config-space anchors (`$seed.<kind>.<field>`, Quill.yaml
 //! schema-literal owner labels) ride the same serializer with their prefix as a
-//! leading [`field`](DocPath::field) segment — the one **unrooted** form,
+//! leading [`field`](DocPath::field) segment: the one **unrooted** form,
 //! config-space not document-model, verbatim and never parsed.
 
 use crate::value::PathSegment;
@@ -54,7 +54,7 @@ use std::str::FromStr;
 #[serde(tag = "seg", rename_all = "lowercase")]
 #[non_exhaustive]
 pub enum DocSeg {
-    /// The main-card root — heads every main-card address (`main.title`,
+    /// The main-card root: heads every main-card address (`main.title`,
     /// `main.body`).
     Main,
     /// A composable card by document-array index. `kind: None` is the
@@ -68,7 +68,7 @@ pub enum DocSeg {
     Body,
 }
 
-/// A canonical document-model path — an ordered [`DocSeg`] list with one
+/// A canonical document-model path, an ordered [`DocSeg`] list with one
 /// [`Display`](std::fmt::Display) serializer and one [`FromStr`] parser. See the [module
 /// docs](self) for the grammar.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize)]
@@ -79,14 +79,14 @@ pub struct DocPath {
 
 impl DocPath {
     /// The empty base for a config-space / opaque-prefix path (`$seed.<kind>`, a
-    /// Quill.yaml schema-literal owner label) — the one unrooted form, not a
+    /// Quill.yaml schema-literal owner label): the one unrooted form, not a
     /// document-model address. A document-model path roots at [`main`](Self::main)
     /// or [`card`](Self::card).
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// The main-card root, `main` — the base every main-card address extends
+    /// The main-card root, `main`: the base every main-card address extends
     /// (`main.title`, `main.recipients[0].name`, `main.body`).
     pub fn main() -> Self {
         Self {
@@ -112,7 +112,7 @@ impl DocPath {
         }
     }
 
-    /// This path extended by a field segment. The name is stored verbatim —
+    /// This path extended by a field segment. The name is stored verbatim:
     /// callers pass validated field names, or a config-space prefix
     /// (`$seed.<kind>`) as an opaque head.
     pub fn field(&self, name: &str) -> Self {
@@ -131,7 +131,7 @@ impl DocPath {
         self.pushing(DocSeg::Body)
     }
 
-    /// This path extended by a value-relative [`PathSegment`] — the bridge
+    /// This path extended by a value-relative [`PathSegment`], the bridge
     /// from the value-tree walk (`!must_fill` collection): [`Key`] becomes a
     /// field, [`Index`] an index.
     ///
@@ -201,7 +201,7 @@ impl FromStr for DocPath {
     type Err = DocPathParseError;
 
     /// The inverse of [`Display`](std::fmt::Display), total over every emitted path. A
-    /// `main` head is the main root — `main.body` the body, `main` alone the bare
+    /// `main` head is the main root: `main.body` the body, `main` alone the bare
     /// root, otherwise a main field chain; a `cards`-headed shape matching a card
     /// root becomes a [`Card`](DocSeg::Card); a trailing `.body` under a root is
     /// [`Body`](DocSeg::Body); an unrooted chain is a config-space anchor
@@ -222,7 +222,7 @@ impl FromStr for DocPath {
         // A `main` head is the main root. `main.body` is the body; `main` alone
         // the bare root; otherwise a main field chain (`main.recipients[0].name`).
         // A main field literally named `body` renders `main.body` and reads back
-        // as the body — the accepted residual collision.
+        // as the body: the accepted residual collision.
         if matches!(segs.first(), Some(DocSeg::Field { name }) if name == "main") {
             let rest = &segs[1..];
             if matches!(rest, [DocSeg::Field { name }] if name == "body") {
@@ -235,7 +235,7 @@ impl FromStr for DocPath {
 
         // A `cards` head that matches a card-root shape is a Card; the tail
         // (a lone `body`, or fields/indices) follows. A `cards` word that does
-        // not fit — no index — is an ordinary field named `cards`.
+        // not fit (no index) is an ordinary field named `cards`.
         if matches!(segs.first(), Some(DocSeg::Field { name }) if name == "cards") {
             if let Some((card, rest)) = parse_card_root(&segs) {
                 let mut segs = vec![card];
@@ -244,7 +244,7 @@ impl FromStr for DocPath {
             }
         }
 
-        // An unrooted field chain — a config-space anchor (`$seed.<kind>`, an
+        // An unrooted field chain: a config-space anchor (`$seed.<kind>`, an
         // owner label), never a document-model address.
         Ok(DocPath { segs })
     }
@@ -292,7 +292,7 @@ fn scan(s: &str) -> Result<Vec<DocSeg>, &'static str> {
     Ok(segs)
 }
 
-/// The index just past a word — the run up to the next `.` or `[`.
+/// The index just past a word: the run up to the next `.` or `[`.
 fn word_end(bytes: &[u8], start: usize) -> usize {
     let mut i = start;
     while i < bytes.len() && bytes[i] != b'.' && bytes[i] != b'[' {
@@ -302,7 +302,7 @@ fn word_end(bytes: &[u8], start: usize) -> usize {
 }
 
 /// Match a `cards` head against the two card-root shapes, returning the root
-/// segment and the remaining segments. `None` when the shape does not fit —
+/// segment and the remaining segments. `None` when the shape does not fit,
 /// then `cards` is a field, not a root.
 fn parse_card_root(segs: &[DocSeg]) -> Option<(DocSeg, &[DocSeg])> {
     match segs {
@@ -400,7 +400,7 @@ mod tests {
 
     #[test]
     fn main_field_named_for_a_root_no_longer_collides() {
-        // Rooting makes `cards` / `main` field names total — unrooted, each
+        // Rooting makes `cards` / `main` field names total: unrooted, each
         // would read back as its root rather than as the field it names.
         round_trip(DocPath::main().field("cards"), "main.cards");
         round_trip(DocPath::main().field("main"), "main.main");
@@ -411,7 +411,7 @@ mod tests {
     #[test]
     fn config_space_anchor_is_the_unrooted_form() {
         // Config-space paths (`$seed` overlays, owner labels) are the one
-        // unrooted shape — a leading field, never reclassed to a root.
+        // unrooted shape: a leading field, never reclassed to a root.
         round_trip(
             DocPath::new()
                 .field("$seed")

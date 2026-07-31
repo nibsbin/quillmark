@@ -1,5 +1,5 @@
 //! The **bind** step: at quill load, resolve every `form.json` field against the
-//! two static inputs — the quill schema and the background geometry — into the
+//! two static inputs (the quill schema and the background geometry) into the
 //! session's value-free widget layer. Everything here is a pure function of the
 //! quill (not the document), so it runs once at open, never per render:
 //! `form.json` never restates what the schema carries, and a widget bound to a
@@ -15,7 +15,7 @@
 //! - An **unbound** widget carries its own declared `type`, copied straight
 //!   through (no schema to consult).
 //!
-//! Both collapse to a [`BoundWidget`] — the value-free intrinsic layer the
+//! Both collapse to a [`BoundWidget`]: the value-free intrinsic layer the
 //! session holds for its lifetime, its `rect` already flipped to final PDF
 //! geometry. Per-document value resolution ([`crate::resolve`]) runs against it
 //! and touches nothing but the value.
@@ -40,7 +40,7 @@ pub struct BoundWidget {
     pub tooltip: Option<String>,
 }
 
-/// Why binding a `form.json` field failed. Every variant is a load error — the
+/// Why binding a `form.json` field failed. Every variant is a load error: the
 /// point of binding at load is to turn what was a silently-blank (or misplaced)
 /// widget into a diagnostic.
 #[derive(Debug)]
@@ -95,7 +95,7 @@ impl std::fmt::Display for BindError {
             BindError::Unbindable { name, path, ty } => write!(
                 f,
                 "form.json field {name:?} binds schema_field {path:?}, which resolves to schema \
-                 type `{ty}` — no widget can render it; bind a scalar, enum, boolean, or an array \
+                 type `{ty}`: no widget can render it; bind a scalar, enum, boolean, or an array \
                  of those instead"
             ),
             BindError::PageOutOfRange {
@@ -114,7 +114,7 @@ impl std::fmt::Display for BindError {
 /// geometry, yielding the session's value-free widget layer. Bound fields
 /// inherit their kind, choice options, multiline, and tooltip from the schema;
 /// unbound widgets pass their declared kind through unchanged; every widget's
-/// rect is flipped to final geometry and its page validated — all of it once,
+/// rect is flipped to final geometry and its page validated: all of it once,
 /// here, so nothing downstream repeats it per document.
 pub fn bind_widgets(
     spec: &FormSpec,
@@ -173,7 +173,7 @@ fn bind_unbound(
 
 /// Flip a widget's top-left, page-relative rect to final bottom-left PDF
 /// geometry against its page's media box, validating the page exists. Runs once
-/// per widget at load — the geometry is fixed for the session's lifetime.
+/// per widget at load: the geometry is fixed for the session's lifetime.
 fn place(
     name: &str,
     page: usize,
@@ -205,13 +205,13 @@ fn flip_rect(r: Rect, media_box: [f32; 4]) -> [f32; 4] {
 /// The root segment resolves in `main.fields`, or is the reserved `$cards`
 /// (below). Thereafter a `.N` segment requires the current schema be `array`
 /// (descend into `items`) and a `.key` segment requires `object` (descend into
-/// `properties[key]`). Any miss — a bad root, a wrong-shape descent, a missing
-/// key, or segments left dangling past a leaf — is a [`BindError::Dangling`].
+/// `properties[key]`). Any miss (a bad root, a wrong-shape descent, a missing
+/// key, or segments left dangling past a leaf) is a [`BindError::Dangling`].
 ///
 /// `$cards.<kind>.<i>.<field>…` addresses a card field: `<kind>` names a card
 /// kind, `<i>` is the (numeric) instance index selected at value time, and
 /// `<field>…` descends into that kind's schema. **Absolute-index addressing
-/// (`$cards.<i>.<field>`) is not accepted in `form@0.2.0`** — a widget kind must
+/// (`$cards.<i>.<field>`) is not accepted in `form@0.2.0`**: a widget kind must
 /// be statically derivable, and only kind+index tells the schema which field it is.
 pub fn bind<'a>(
     config: &'a QuillConfig,
@@ -266,7 +266,7 @@ fn descend<'a>(cur: &'a FieldSchema, seg: &str) -> Option<&'a FieldSchema> {
 }
 
 /// Project a resolved [`FieldSchema`] to its widget kind. Keyed on the field's
-/// *capability*, not its `type` token — crucially, choice keys on
+/// *capability*, not its `type` token: crucially, choice keys on
 /// `enum_values.is_some()`, so both `type: enum` and the deprecated `string` +
 /// `enum:` modifier project to a dropdown (keying on the `Enum` variant would
 /// silently demote the latter to a text box). Total or a load error: an
@@ -312,7 +312,7 @@ pub fn project_kind(
             },
             _ => return Err(unbindable()),
         },
-        // `Object`, plus — `SchemaType` being `#[non_exhaustive]` — any type
+        // `Object`, plus (`SchemaType` being `#[non_exhaustive]`) any type
         // this build has no widget shape for. A quill author does not control
         // which pdfform build reads their quill, so reporting `unbindable`
         // beats failing to compile in a crate they never touch.
@@ -320,7 +320,7 @@ pub fn project_kind(
     })
 }
 
-/// Whether `field`'s widget is multi-line — inherited from the schema's
+/// Whether `field`'s widget is multi-line: inherited from the schema's
 /// `ui.multiline` hint.
 fn is_multiline(field: &FieldSchema) -> bool {
     field
@@ -524,7 +524,7 @@ card_kinds:
     #[test]
     fn card_absolute_index_and_bad_kind_are_dangling() {
         let c = config();
-        // `$cards.0.from` — absolute index: `0` is not a card kind, so it dangles
+        // `$cards.0.from`, absolute index: `0` is not a card kind, so it dangles
         // at that segment. Absolute addressing is not part of `form@0.2.0`.
         assert!(matches!(
             bind(&c, "W", "$cards.0.from"),
@@ -590,7 +590,7 @@ main:
         // A bound field's kind is projected from the schema (the `kind` cases
         // above); an unbound widget's comes from its own `type` token with no
         // schema consulted. `schema_field: None` is what the resolve and region
-        // steps read to skip it — a widget the signer fills, not the document.
+        // steps read to skip it: a widget the signer fills, not the document.
         let spec = FormSpec::parse(
             br#"{
               "schema": "quillmark/form@0.2.0",

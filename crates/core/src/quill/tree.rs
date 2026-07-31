@@ -187,7 +187,7 @@ impl FileTreeNode {
         }
     }
 
-    /// Flatten the tree into `(path, contents)` pairs — the inverse of building
+    /// Flatten the tree into `(path, contents)` pairs: the inverse of building
     /// a tree by `insert`-ing each path. Paths are `"/"`-joined and relative
     /// (no leading slash), exactly the key shape the WASM `Quill.fromTree`
     /// boundary consumes, so `from_tree(flatten(t))` round-trips every file.
@@ -195,9 +195,9 @@ impl FileTreeNode {
     /// side stores children in a `HashMap`, which has no inherent order).
     ///
     /// Only files are emitted: an EMPTY directory yields no entry and so is not
-    /// reconstructed by a `flatten` → `insert` round trip. This is intentional —
-    /// quill bundles are file-addressed and nothing in load/render depends on
-    /// empty directories — but it means the round trip preserves file contents,
+    /// reconstructed by a `flatten` → `insert` round trip. This is intentional
+    /// (quill bundles are file-addressed and nothing in load/render depends on
+    /// empty directories) but it means the round trip preserves file contents,
     /// not exact directory structure.
     pub fn flatten(&self) -> Vec<(String, Vec<u8>)> {
         let mut out = Vec::new();
@@ -207,7 +207,7 @@ impl FileTreeNode {
     }
 
     /// Visit every file in the tree with its `/`-joined path, depth-first in
-    /// `HashMap` order (so unordered — callers that need a stable sequence sort
+    /// `HashMap` order (so unordered: callers that need a stable sequence sort
     /// the result). The one walk: [`flatten`](Self::flatten) copies out of it,
     /// `Quill::find_files` only reads the paths, and neither pays for the
     /// other's work.

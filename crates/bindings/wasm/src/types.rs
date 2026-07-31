@@ -40,8 +40,8 @@ impl From<quillmark_core::OutputFormat> for OutputFormat {
             // Forced by `#[non_exhaustive]`, unreachable in practice: this
             // crate is `publish = false` and path-deps the core beside it, so
             // the two variant lists ship together. No fallback format is
-            // honest — every one of them promises bytes the caller did not ask
-            // for — so the arm refuses instead of guessing.
+            // honest (every one of them promises bytes the caller did not ask
+            // for) so the arm refuses instead of guessing.
             other => unreachable!("OutputFormat::{other:?} has no TS member"),
         }
     }
@@ -198,7 +198,7 @@ pub struct RenderResult {
     pub warnings: Vec<Diagnostic>,
     pub output_format: OutputFormat,
     pub render_time_ms: f64,
-    /// Schema-field geometry sidecar — populated only when
+    /// Schema-field geometry sidecar: populated only when
     /// `RenderOptions.regions` requested it; empty otherwise. The same entries
     /// `LiveSession.regions()` serves, for consumers without a live session.
     /// Page indices are document-space even under a `pages` subset render.
@@ -219,7 +219,7 @@ pub struct ChangeSet {
 }
 
 /// A rendered field region: the quill schema field address plus its geometry on
-/// the page. Emitted for schema-bound fields — span-tracked content (richtext
+/// the page. Emitted for schema-bound fields: span-tracked content (richtext
 /// bodies, `richtext[]` elements, card content fields, direct scalar
 /// references) and form-field widgets (pdfform AcroForm, Typst `form-field`).
 /// Consumers use it to scroll to / highlight the focused field; for the
@@ -230,7 +230,7 @@ pub struct ChangeSet {
 /// `field` is **not** unique: content fields surface one region **per segment**
 /// (paragraph, heading, whole code fence) and per page each touches, a scalar
 /// referenced at several plate sites surfaces each site, and tracked content
-/// plus a `field:`-bound widget yields both. Group by `field` — every entry
+/// plus a `field:`-bound widget yields both. Group by `field`: every entry
 /// routes to that field. The whole-field highlight is the **union of a page's
 /// `span`-bearing segment rects**, so inter-paragraph whitespace stays
 /// uncovered; `LiveSession.fieldBoxes(field)` owns that union so
@@ -242,7 +242,7 @@ pub struct ChangeSet {
 #[serde(rename_all = "camelCase")]
 pub struct FieldRegion {
     /// Canonical `DocPath` field address (e.g. `"signature_block"`,
-    /// `"cards.indorsement[1].from"`, `"main.body"`) — the same grammar
+    /// `"cards.indorsement[1].from"`, `"main.body"`): the same grammar
     /// `parseDocPath` reads and `Diagnostic.path` carries. The session resolves
     /// the backend's plate-space per-kind ordinal to this absolute-index form,
     /// so one parser routes every address. Feed it back to `fieldBoxes` /
@@ -252,7 +252,7 @@ pub struct FieldRegion {
     pub page: usize,
     /// `[x0, y0, x1, y1]` in PDF points (1/72″), bottom-left origin.
     pub rect: [f32; 4],
-    /// The content slice this box covers — USV `[start, end)` into the field's
+    /// The content slice this box covers: USV `[start, end)` into the field's
     /// `Content` for content ink (one segment), `undefined` for a scalar
     /// reference site or widget. Consumers key segment highlights on it;
     /// `fieldBoxes(field)` unions same-page segments for the whole-field box.
@@ -272,7 +272,7 @@ impl From<quillmark_core::RenderedRegion> for FieldRegion {
     }
 }
 
-/// How precisely a `ContentHit.pos` resolved — the marker a caret UI reads to
+/// How precisely a `ContentHit.pos` resolved: the marker a caret UI reads to
 /// decide whether to trust the offset. Never sub-cluster: `cluster` is the
 /// finest this API offers, `segment` the floor it degrades to on origin-less
 /// ink.
@@ -281,11 +281,11 @@ impl From<quillmark_core::RenderedRegion> for FieldRegion {
 #[tsify(into_wasm_abi, from_wasm_abi)]
 #[serde(rename_all = "camelCase")]
 pub enum HitGranularity {
-    /// Cluster-exact — `pos` is the first content char of the cluster under the
+    /// Cluster-exact: `pos` is the first content char of the cluster under the
     /// point (an escaped/CJK/shaping cluster floors to its first char, so not
     /// sub-character). Place the caret at `pos` directly.
     Cluster,
-    /// Segment-floored — the point hit origin-less ink (list markers, numbering,
+    /// Segment-floored: the point hit origin-less ink (list markers, numbering,
     /// a multi-line code fence's interior), so `pos` degraded to the containing
     /// segment's start. Treat `pos` as the selected segment, not a caret.
     Segment,
@@ -299,7 +299,7 @@ impl From<quillmark_core::HitGranularity> for HitGranularity {
             quillmark_core::HitGranularity::Segment => HitGranularity::Segment,
             // `HitGranularity` is `#[non_exhaustive]`. A granularity finer than
             // `Segment` still describes at least a segment, so degrading to it
-            // keeps the reported precision a lower bound — never a claim of more
+            // keeps the reported precision a lower bound: never a claim of more
             // exactness than the hit actually carried.
             _ => HitGranularity::Segment,
         }
@@ -354,8 +354,8 @@ pub struct RenderOptions {
     /// Optional 0-based page indices to render (e.g., `[0, 2]` for the
     /// first and third pages). `undefined` renders all pages. Any index
     /// `>= pageCount` throws with the `typst::page_index_out_of_bounds`
-    /// code — read `LiveSession.pageCount` first if validation is needed.
-    /// **Not supported for PDF output** — passing `pages` with
+    /// code: read `LiveSession.pageCount` first if validation is needed.
+    /// **Not supported for PDF output**: passing `pages` with
     /// `format: "pdf"` throws with the
     /// `typst::pdf_page_selection_not_supported` code.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -366,9 +366,9 @@ pub struct RenderOptions {
     pub producer: Option<String>,
     /// Populate `RenderResult.regions` with the schema-field geometry sidecar
     /// (the same entries `LiveSession.regions()` serves), for consumers
-    /// without a live session — e.g. overlays over a one-shot SVG export.
+    /// without a live session; e.g. overlays over a one-shot SVG export.
     /// Defaults to `false`: exports pay no introspection cost. The sidecar
-    /// always describes the whole document — page indices are document-space
+    /// always describes the whole document: page indices are document-space
     /// even when `pages` selects a subset.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub regions: Option<bool>,

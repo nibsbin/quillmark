@@ -4,7 +4,7 @@
 //! Public entry points: [`extract`] (called from `lib.rs`, once per compile)
 //! walks the Typst document for `form-field` placements; [`build_field_specs`]
 //! (called from `lib.rs` and `compile.rs`) converts those (Typst top-left
-//! origin) into spine [`FieldSpec`]s (PDF bottom-left origin) — coordinate
+//! origin) into spine [`FieldSpec`]s (PDF bottom-left origin), coordinate
 //! ownership lives here, in the backend, so the spine never imports
 //! `typst_layout`. [`default_producer`] (called from `compile.rs`) supplies
 //! the default `/Info` `/Producer` string the product layer threads down.
@@ -54,7 +54,7 @@ pub(crate) enum FieldKind {
 pub(crate) struct FieldPlacement {
     pub name: String,
     /// Schema-field path the region keys on (the `field:` argument). `None`
-    /// when the plate omits it — the widget then exposes no region (its `/T`
+    /// when the plate omits it: the widget then exposes no region (its `/T`
     /// `name` is not a schema address).
     pub schema_field: Option<String>,
     pub page: usize,
@@ -84,7 +84,7 @@ pub(crate) fn default_producer() -> String {
 /// The value coercion here (checkbox truthiness already resolved in the plate;
 /// choice option-matching) mirrors `quillmark-pdfform`'s resolver, but is
 /// duplicated rather than shared because this crate must NOT depend on
-/// `quillmark-pdfform` — the two backends meet only at the `&[FieldSpec]` seam.
+/// `quillmark-pdfform`: the two backends meet only at the `&[FieldSpec]` seam.
 pub(crate) fn build_field_specs(
     doc: &PagedDocument,
     placements: &[FieldPlacement],
@@ -145,8 +145,8 @@ pub(crate) fn build_field_specs(
                 field_type,
             );
             // The region keys on the explicit `field:` schema path. A widget
-            // that binds none is not a schema-addressable field — its `/T`
-            // name is a backend identifier, never a schema address — so it
+            // that binds none is not a schema-addressable field (its `/T`
+            // name is a backend identifier, never a schema address) so it
             // carries no `schema_field` and `regions_of` exposes no region.
             spec.schema_field = p.schema_field.clone();
             spec.value = value;

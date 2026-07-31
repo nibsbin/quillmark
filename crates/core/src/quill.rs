@@ -1,4 +1,4 @@
-//! The `Quill` type — portable, validated quill data.
+//! The `Quill` type: portable, validated quill data.
 
 mod blueprint;
 mod compose;
@@ -45,7 +45,7 @@ pub const STANDARD_METADATA_KEYS: &[&str] =
 /// metadata of an authored quill, tagged with its *declared* backend id.
 ///
 /// A `Quill` holds no backend and needs no engine to construct or use. Every
-/// method here is a pure read of its parsed config — parse / load / validate /
+/// method here is a pure read of its parsed config: parse / load / validate /
 /// schema / seed / blueprint / compile. Rendering is the engine's job; see
 /// `quillmark::Quillmark`. Construct with [`Quill::from_tree`] (pure) or
 /// `quillmark::quill_from_path` (filesystem; fs stays out of core).
@@ -85,7 +85,7 @@ impl Quill {
         crate::TypedWriter::new(&self.config, doc)
     }
 
-    /// A schema-bound [`TypedReader`](crate::TypedReader) over `doc` — the read
+    /// A schema-bound [`TypedReader`](crate::TypedReader) over `doc`: the read
     /// twin of [`writer`](Self::writer). Interprets each field by its declared
     /// type (a `richtext` field to markdown, every other type verbatim) with
     /// schema authority: a name the schema does not declare reads as the typo it
@@ -99,10 +99,10 @@ impl Quill {
         &self.files
     }
 
-    /// Flatten this quill's file bundle into `(path, contents)` pairs — the
+    /// Flatten this quill's file bundle into `(path, contents)` pairs: the
     /// inverse of [`Quill::from_tree`]'s input. `Quill::from_tree` of the
     /// result reproduces an equivalent quill (every file is preserved; empty
-    /// directories are not — see [`FileTreeNode::flatten`]), so this is how a
+    /// directories are not; see [`FileTreeNode::flatten`]), so this is how a
     /// quill crosses a process or WASM linear-memory boundary as plain data.
     pub fn to_tree(&self) -> Vec<(String, Vec<u8>)> {
         self.files.flatten()

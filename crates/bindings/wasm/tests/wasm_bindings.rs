@@ -3,7 +3,7 @@
 //! `run_in_browser` is this file's reason to exist: node/vitest cannot prove
 //! that the `serde_wasm_bindgen` boundary produces the right JS types under a
 //! real browser's WASM instantiation. So the assertions here stay at the
-//! crossing — a verb runs, and its result deserializes into the declared shape.
+//! crossing: a verb runs, and its result deserializes into the declared shape.
 //! Engine semantics belong to core, and the JS-facing API surface to
 //! `basic.test.js`.
 
@@ -40,7 +40,7 @@ fn test_document_body_and_warnings() {
     // Body at EOF: no blank-line separator to strip, so trailing content newlines are
     // preserved verbatim. `toMarkdown` carries the body through unchanged.
     assert!(doc.to_markdown().contains("# Hello\n"));
-    // warnings() returns JsValue (array) — just verify it's defined
+    // warnings() returns JsValue (array): just verify it's defined
     let warnings = doc.warnings().unwrap();
     assert!(!warnings.is_undefined());
 }
@@ -51,7 +51,7 @@ fn test_quill_from_tree() {
     let _ = quill;
 }
 
-/// `quill.render(Document, opts)` — render via pre-parsed document.
+/// `quill.render(Document, opts)`: render via pre-parsed document.
 #[wasm_bindgen_test]
 fn test_render_from_document() {
     let engine = Quillmark::new();
@@ -167,7 +167,7 @@ fn test_session_region_shapes_cross_the_boundary() {
     );
 
     // A click on the segment's ink resolves to a ContentHit, and `locate` maps
-    // the offset back to a caret rect — both crossing as typed structs.
+    // the offset back to a caret rect: both crossing as typed structs.
     let rect = first["rect"].as_array().expect("rect array");
     let page = first["page"].as_u64().unwrap() as usize;
     let (cx, cy) = (
@@ -300,8 +300,8 @@ fn test_quill_metadata_and_schemas() {
 /// The seed verbs cross the boundary with their declared shapes: `seedDocument`
 /// as a `Document`, `seedMain` / `seedCard` as card objects, `seedCard` of an
 /// unknown kind as `undefined`, and `storeSeedNamespace` / `removeSeedNamespace`
-/// writing and clearing `main.seed[kind]`. What the seeds *contain* — example
-/// commitment, overlay layering — is core's (`core/src/quill/seed/tests.rs`,
+/// writing and clearing `main.seed[kind]`. What the seeds *contain* (example
+/// commitment, overlay layering) is core's (`core/src/quill/seed/tests.rs`,
 /// mirrored once in JS by `core.test.js`).
 #[wasm_bindgen_test]
 fn test_seed_verbs_cross_the_boundary() {

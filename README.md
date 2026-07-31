@@ -10,7 +10,7 @@ Quills define document presentation and schema. Use a quill to generate a format
 
 Maintained by [borb-sh](https://github.com/borb-sh).
 
-**UNDER DEVELOPMENT** — APIs may change.
+**UNDER DEVELOPMENT**: APIs may change.
 
 ## Documentation
 

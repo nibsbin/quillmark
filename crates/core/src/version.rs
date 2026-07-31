@@ -105,8 +105,8 @@ pub enum VersionSelector {
 impl VersionSelector {
     /// Whether `v` satisfies this selector: `Exact` the identical version,
     /// `Minor` any patch in the `MAJOR.MINOR` series, `Major` any version in the
-    /// `MAJOR` series, `Latest` anything. A compatibility check, not resolution
-    /// — a `false` is the `quill::version_mismatch` render error.
+    /// `MAJOR` series, `Latest` anything. A compatibility check, not resolution:
+    /// a `false` is the `quill::version_mismatch` render error.
     pub fn matches(&self, v: Version) -> bool {
         match self {
             VersionSelector::Exact(want) => *want == v,
@@ -227,7 +227,7 @@ impl FromStr for QuillReference {
 
         let name = name_part.to_string();
 
-        // Same charset as a card kind, leading underscore included — one
+        // Same charset as a card kind, leading underscore included: one
         // predicate, in `document::meta`. (Quill *config* names are stricter:
         // `config.rs` rejects a leading underscore, so its predicate is not
         // interchangeable with this one.)
@@ -398,7 +398,7 @@ mod tests {
         let ref3 = QuillReference::from_str("resume_template@latest").unwrap();
         assert_eq!(ref3.selector, VersionSelector::Latest);
 
-        // No @ suffix — defaults to Latest
+        // No @ suffix: defaults to Latest
         let ref4 = QuillReference::from_str("resume_template").unwrap();
         assert_eq!(ref4.name, "resume_template");
         assert_eq!(ref4.selector, VersionSelector::Latest);

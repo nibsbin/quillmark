@@ -41,7 +41,7 @@ title: Hi
 
 #[test]
 fn ext_with_empty_mapping_is_preserved() {
-    // `$ext: {}` survives the round-trip as an explicit empty map — it is
+    // `$ext: {}` survives the round-trip as an explicit empty map: it is
     // distinct from "no `$ext` declared at all".
     let doc = parse(
         "\
@@ -264,7 +264,7 @@ $ext:
 
 #[test]
 fn ext_is_stripped_from_plate_json() {
-    // Backends must never see `$ext` — it carries out-of-band UI / agent
+    // Backends must never see `$ext`: it carries out-of-band UI / agent
     // state, not template data.
     let doc = parse(
         "\

@@ -2,8 +2,8 @@
 //!
 //! A document's `$quill: name@selector` reference is checked against the loaded
 //! quill at render time (and in `dry_run`). The document may be perfectly valid,
-//! but rendering it against the wrong quill — a different *name*, or a `version`
-//! outside the selector — is a footgun, so it is a hard error
+//! but rendering it against the wrong quill (a different *name*, or a `version`
+//! outside the selector) is a footgun, so it is a hard error
 //! (`quill::name_mismatch` / `quill::version_mismatch`), never a warning.
 
 use quillmark::Document;
@@ -12,7 +12,7 @@ use std::fs;
 use tempfile::TempDir;
 
 // The reject-path tests drive `engine.render`, which resolves the quill's
-// declared `typst` backend before the reference check runs — without the
+// declared `typst` backend before the reference check runs: without the
 // feature they would fail on `engine::backend_not_found` instead. `dry_run`
 // needs no backend, so the accept-path tests build unconditionally.
 #[cfg(feature = "typst")]
@@ -56,7 +56,7 @@ fn render_ref(
 }
 
 /// `dry_run` a document referencing `quill_ref` against the quill at
-/// `quill_path`. Proves selector acceptance without driving a Typst compile —
+/// `quill_path`. Proves selector acceptance without driving a Typst compile:
 /// the render seam itself is covered by the reject-path tests.
 fn dry_run_ref(quill_path: &std::path::Path, quill_ref: &str) -> Result<(), RenderError> {
     let quill = quillmark::quill_from_path(quill_path).expect("from_path failed");
@@ -91,7 +91,7 @@ fn name_mismatch_is_a_hard_error() {
     let temp_dir = TempDir::new().unwrap();
     let quill_path = make_quill(&temp_dir, "3.0.0");
 
-    // Name differs — render fails on the name, and the version is left
+    // Name differs: render fails on the name, and the version is left
     // unevaluated (a selector against a differently-named quill is moot).
     let err = render_ref(&quill_path, "other_quill@2").expect_err("render should fail");
     assert_eq!(mismatch_code(&err), Some("quill::name_mismatch"));

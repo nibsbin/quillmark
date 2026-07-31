@@ -3,8 +3,8 @@
  *
  * The runtime layer re-exports the core build's `Quill`/`Document` and adds an
  * `Engine` that hides the core→backend WASM-memory crossing. These tests prove,
- * end to end, that a CORE quill + document handed to `Engine` render correctly
- * — i.e. the engine clones them into the Typst backend's memory on demand
+ * end to end, that a CORE quill + document handed to `Engine` render correctly;
+ * i.e. the engine clones them into the Typst backend's memory on demand
  * (`toTree`→`fromTree`, `toJson`→`fromJson`) without the caller ever seeing a
  * backend handle.
  *
@@ -30,7 +30,7 @@ import {
   isUnknownIsland,
 } from '@quillmark-wasm/runtime'
 // Pin that the runtime's Quill IS the internal core build's class (re-export,
-// not a parallel wrapper). This imports the internal core artifact directly —
+// not a parallel wrapper). This imports the internal core artifact directly:
 // `pkg/core` is NOT a public package subpath, it is the build the root
 // re-exports.
 import { Quill as CoreQuill, Document as CoreDocument } from '../../../pkg/core/wasm.js'
@@ -70,11 +70,11 @@ const PKG_DIR = path.resolve(import.meta.dirname, '..', '..', '..', 'pkg')
 const fieldOf = (card, key) =>
   card.payloadItems.find((i) => i.type === 'field' && i.key === key)?.value
 
-describe('@quillmark/wasm/runtime — surface', () => {
+describe('@quillmark/wasm/runtime: surface', () => {
   // IMPLEMENTATION PIN: the root re-exports the internal core build's classes
   // verbatim (never wraps). There is exactly one public entry point, so this is
   // an internal structural fact rather than a cross-entry-point contract. If it
-  // fails, the re-export was replaced by a wrapper — a breaking change, not a
+  // fails, the re-export was replaced by a wrapper: a breaking change, not a
   // refactor. See runtime.js.
   it('re-exports the internal core build classes verbatim (no parallel wrappers)', () => {
     expect(Quill).toBe(CoreQuill)
@@ -85,7 +85,7 @@ describe('@quillmark/wasm/runtime — surface', () => {
     const quill = makeRuntimeQuill()
     expect(quill.backendId).toBe('typst')
 
-    // toTree is the inverse of fromTree — re-materializing reproduces an
+    // toTree is the inverse of fromTree: re-materializing reproduces an
     // equivalent quill (same backend, same files).
     const tree = quill.toTree()
     expect(tree).toBeInstanceOf(Map)
@@ -132,14 +132,14 @@ describe('@quillmark/wasm/runtime — surface', () => {
 })
 
 // The typed-writer sugar binds a quill to a document once, so writes are bare
-// `set` / `setAll` / `reviseField` / `card(i).set` — the JS twin of Rust's
+// `set` / `setAll` / `reviseField` / `card(i).set`: the JS twin of Rust's
 // `quill.writer(doc)`. Every verb is a one-line delegation to the underscored
 // `_commit*` / `_reviseField` ABI on the raw `Document` class (hidden from the
 // `.d.ts`), whose error-code matrix is exercised at that altitude in
 // `basic.test.js`. What is the sugar's own, and what these pin: each verb
 // forwards to the right ABI call with the right address, and errors propagate
 // rather than being swallowed.
-describe('@quillmark/wasm/runtime — DocumentWriter / CardWriter (bind the quill once)', () => {
+describe('@quillmark/wasm/runtime: DocumentWriter / CardWriter (bind the quill once)', () => {
   const EDITOR_QUILL_YAML = `quill:
   name: editor_test
   version: "1.0"
@@ -168,7 +168,7 @@ card_kinds:
     const quill = buildQuill()
     const ed = quill.writer(blankDoc())
     expect(ed).toBeInstanceOf(DocumentWriter)
-    // The factory is sugar over the constructor — same class, no wrapping.
+    // The factory is sugar over the constructor: same class, no wrapping.
     expect(new DocumentWriter(quill, blankDoc())).toBeInstanceOf(DocumentWriter)
   })
 
@@ -251,7 +251,7 @@ card_kinds:
     // Transport reads stay quill-free on the Document.
     expect(ed.document.getStored('qty')).toBe(3)
     expect(ed.document.getStored('missing')).toBeUndefined()
-    // getMarkdown is the body read; a field address throws — a field's markdown
+    // getMarkdown is the body read; a field address throws: a field's markdown
     // reads through the schema-plane view.
     expect(ed.document.getMarkdown()).toBe('Main **body**.')
     expect(() => ed.document.getMarkdown({ field: 'subject' })).toThrow(/body-only/)
@@ -263,10 +263,10 @@ card_kinds:
 })
 
 // The typed-reader sugar is the read twin of the writer above: bind the quill
-// once and read each field by its declared type — a richtext field to markdown,
-// every other type verbatim — with schema authority, so an unknown field name
+// once and read each field by its declared type (a richtext field to markdown,
+// every other type verbatim) with schema authority, so an unknown field name
 // throws rather than reading back `undefined` off the quill-free `Document`.
-describe('@quillmark/wasm/runtime — DocumentReader / CardReader (the schema-plane read)', () => {
+describe('@quillmark/wasm/runtime: DocumentReader / CardReader (the schema-plane read)', () => {
   const VIEW_QUILL_YAML = `quill:
   name: view_test
   version: "1.0"
@@ -358,9 +358,9 @@ card_kinds:
 // MAIN_CARD_ADDR names the empty main-card address `{}` the card-scoped verbs
 // take, so a main-card batch write reads as intent (`storeFields(MAIN_CARD_ADDR,
 // fields)`) rather than as an anonymous `{}`. It IS `{}` (frozen), so it is a
-// pure alias — `{}` and `undefined` stay equally valid.
-describe('@quillmark/wasm/runtime — MAIN_CARD_ADDR (the named main-card address)', () => {
-  it('is a frozen, empty card address — {} with a name', () => {
+// pure alias: `{}` and `undefined` stay equally valid.
+describe('@quillmark/wasm/runtime: MAIN_CARD_ADDR (the named main-card address)', () => {
+  it('is a frozen, empty card address: {} with a name', () => {
     expect(MAIN_CARD_ADDR).toEqual({})
     expect(Object.isFrozen(MAIN_CARD_ADDR)).toBe(true)
   })
@@ -371,7 +371,7 @@ describe('@quillmark/wasm/runtime — MAIN_CARD_ADDR (the named main-card addres
     expect(fieldOf(named.main, 'title')).toBe('Hello')
     expect(fieldOf(named.main, 'qty')).toBe(3)
 
-    // Same effect as the bare empty-address spelling — a pure alias.
+    // Same effect as the bare empty-address spelling: a pure alias.
     const empty = new Document('editor_test')
     empty.storeFields({}, { title: 'Hello', qty: 3 })
     expect(named.main.payloadItems).toEqual(empty.main.payloadItems)
@@ -384,7 +384,7 @@ describe('@quillmark/wasm/runtime — MAIN_CARD_ADDR (the named main-card addres
   })
 })
 
-describe('@quillmark/wasm/runtime — open-set membership guards', () => {
+describe('@quillmark/wasm/runtime: open-set membership guards', () => {
   // One known name per axis, not the whole table: membership is a `Set.has`,
   // uniform across members, and the tables themselves are pinned against the
   // Rust constants by `crates/bindings/wasm/tests/known_names_drift.rs`.
@@ -403,7 +403,7 @@ describe('@quillmark/wasm/runtime — open-set membership guards', () => {
   })
 
   it('reports a missing or non-string discriminant as not-unknown, never throwing', () => {
-    // A malformed value is not an unknown construct — it is malformed, and the
+    // A malformed value is not an unknown construct: it is malformed, and the
     // decoder rejects it. The guard must not turn one into the other.
     for (const bad of [{}, { kind: 7 }, null, undefined]) {
       expect(isUnknownLine(bad)).toBe(false)
@@ -411,10 +411,10 @@ describe('@quillmark/wasm/runtime — open-set membership guards', () => {
   })
 })
 
-describe('@quillmark/wasm/runtime — Engine (hidden core→backend crossing)', () => {
+describe('@quillmark/wasm/runtime: Engine (hidden core→backend crossing)', () => {
   // Warm the lazy Typst-backend import + first Typst compile once, outside any
   // timed test. `Engine.render` dynamically `import()`s the backend wasm binary
-  // on first render — a one-time cost (large module instantiation) that on a
+  // on first render: a one-time cost (large module instantiation) that on a
   // cold CI runner alone can approach the per-test ceiling. Paying it here keeps
   // the individual render tests warm (sub-second, like the SVG case) so a tight
   // per-test `testTimeout` still catches a genuine hang. The hook carries its own
@@ -635,7 +635,7 @@ describe('@quillmark/wasm/runtime — Engine (hidden core→backend crossing)', 
 
   // GUARD for the class of bug where a method is declared in runtime.d.ts and
   // implemented in the backend build, but the hand-written canonical LiveSession
-  // wrapper (runtime.js) forgets to forward it — `fieldAt` is the case in point.
+  // wrapper (runtime.js) forgets to forward it: `fieldAt` is the case in point.
   // The type-level drift test (runtime.types.test-d.ts) only checks structural type
   // compatibility, so a wrapper that TYPE-checks but has no matching JS method
   // sails through it and throws `X is not a function` at runtime. This calls
@@ -693,7 +693,7 @@ A single line of body ink.`
       expect(typeof session.render).toBe('function')
       expect(session.render({ format: 'svg' }).artifacts.length).toBeGreaterThan(0)
 
-      // regions — the body markdown content field auto-tags one region, keyed
+      // regions: the body markdown content field auto-tags one region, keyed
       // by the canonical DocPath `main.body`.
       expect(typeof session.regions).toBe('function')
       const regions = session.regions()
@@ -705,9 +705,9 @@ A single line of body ink.`
       expect(size.widthPt).toBeGreaterThan(0)
       expect(size.heightPt).toBeGreaterThan(0)
 
-      // fieldAt — the delegation that was missing. Hit-test the centre
+      // fieldAt: the delegation that was missing. Hit-test the centre
       // of the body region's rect ([x0, y0, x1, y1], bottom-left PDF points)
-      // — guaranteed ink for the single-line body (see SMOKE_MARKDOWN above) —
+      // (guaranteed ink for the single-line body (see SMOKE_MARKDOWN above))
       // and expect it to resolve back through the wrapper as its DocPath. Off
       // any field's ink (the page corner) the contract is undefined.
       expect(typeof session.fieldAt).toBe('function')
@@ -716,7 +716,7 @@ A single line of body ink.`
       expect(hit).toBe('main.body')
       expect(session.fieldAt(body.page, 1, 1)).toBeUndefined()
 
-      // fieldBoxes — the whole-field union helper. A single-line body has one
+      // fieldBoxes: the whole-field union helper. A single-line body has one
       // span-bearing segment, so its box unions to one rect covering that line.
       expect(typeof session.fieldBoxes).toBe('function')
       const boxes = session.fieldBoxes('main.body')
@@ -726,7 +726,7 @@ A single line of body ink.`
       // A field with no span-bearing region has no derived content box.
       expect(session.fieldBoxes('does_not_exist')).toEqual([])
 
-      // positionAt — the fine-grained click direction, carrying the granularity
+      // positionAt: the fine-grained click direction, carrying the granularity
       // signal. A hit on the single line's ink is cluster-exact.
       expect(typeof session.positionAt).toBe('function')
       const chit = session.positionAt(body.page, (x0 + x1) / 2, (y0 + y1) / 2)
@@ -739,7 +739,7 @@ A single line of body ink.`
       const paintResult = session.paint(ctx, body.page)
       expect(paintResult.pixelWidth).toBeGreaterThan(0)
 
-      // apply — recompile in place.
+      // apply: recompile in place.
       expect(typeof session.apply).toBe('function')
       const cs = session.apply(Document.fromMarkdown(SMOKE_MARKDOWN))
       expect(Array.isArray(cs.dirtyPages)).toBe(true)
@@ -816,7 +816,7 @@ main:
     return { engine, loaded: () => loaded }
   }
 
-  it('does NOT load the backend for sync core work — only on first render (lazy)', async () => {
+  it('does NOT load the backend for sync core work: only on first render (lazy)', async () => {
     const { engine, loaded } = countingEngine()
     const quill = makeRuntimeQuill()
     const doc = Document.fromMarkdown(TEST_MARKDOWN)
@@ -847,7 +847,7 @@ main:
 
   it('caller may free() its handles as soon as render/open returns (pre-await snapshot)', async () => {
     // Both caller handles are snapshotted before the first await inside
-    // render/open (the backend load — a real suspension point on first call),
+    // render/open (the backend load: a real suspension point on first call),
     // so a synchronous free() right after the call cannot race the clone.
     // Regression pin for the "null pointer passed to rust" panic:
     // each engine below is fresh, so its first call has the load pending when
@@ -877,7 +877,7 @@ main:
 
   it('propagates a clone-construction failure (doc clone), leaving the quill clone cached', async () => {
     // Exercises the teardown path when the doc clone (Document.fromJson) throws:
-    // the quill clone is already materialized and cached (NOT freed here — that
+    // the quill clone is already materialized and cached (NOT freed here, that
     // is the T3 caching contract), only the per-call doc clone is freed in the
     // finally. We can only assert the error surfaces (cache/leak state is not
     // observable from JS), but this pins the throw path #withClones guards.

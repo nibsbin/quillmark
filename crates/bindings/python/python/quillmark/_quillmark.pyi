@@ -1,6 +1,6 @@
 """Type stubs for the compiled `quillmark._quillmark` extension.
 
-Signatures only — pyo3 docstrings are runtime-only, so without this file the
+Signatures only: pyo3 docstrings are runtime-only, so without this file the
 whole surface resolves to `Any`. Each declaration mirrors its `#[pymethods]`
 twin in `src/types.rs` / `src/enums.rs`, which carries the prose; the two are
 kept in step by hand.

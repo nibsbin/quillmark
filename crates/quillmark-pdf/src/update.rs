@@ -1,9 +1,9 @@
 //! The incremental-update envelope shared by the stamp and flatten paths.
 //!
 //! Both [`stamp`](crate::stamp) (this crate) and the `pdfform` value-flatten
-//! path open a base PDF the same way — validate it against the reader's input
+//! path open a base PDF the same way: validate it against the reader's input
 //! contract, read the trailer, seed the object-id counter, optionally stamp
-//! `/Info` `/Producer` — then build their own objects, then close the same way
+//! `/Info` `/Producer`, then build their own objects, then close the same way
 //! with one incremental-update append. This module owns that open/close
 //! envelope so the two paths can never drift on it; each path supplies only its
 //! middle (the objects to write).
@@ -71,7 +71,7 @@ impl PdfUpdate {
         // `/Size`) so created objects never collide with the base's, nor with
         // each other. Allocation is checked (`alloc_id`): a malformed
         // near-`u32::MAX` `/Size` yields a clean error rather than an overflow
-        // panic (debug) or a silently-wrapped, colliding id (release) —
+        // panic (debug) or a silently-wrapped, colliding id (release),
         // matching the reader's hard-error contract.
         let mut next_id = size;
         let mut objects: Vec<UpdatedObject> = Vec::new();

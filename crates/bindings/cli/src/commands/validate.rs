@@ -16,7 +16,7 @@ pub struct ValidateArgs {
     verbose: bool,
 }
 
-/// The issues one `validate` run accumulates — real `quillmark_core::Diagnostic`s
+/// The issues one `validate` run accumulates: real `quillmark_core::Diagnostic`s
 /// throughout, the same type `QuillConfig::from_yaml_with_warnings` already
 /// hands this file, printed through the same `fmt_pretty()` every other CLI
 /// diagnostic uses.
@@ -91,7 +91,7 @@ pub fn execute(args: ValidateArgs) -> Result<()> {
     };
     let config = quill.config();
 
-    // Already `Diagnostic`s — carry `code`/`path`/`hint` through instead of
+    // Already `Diagnostic`s: carry `code`/`path`/`hint` through instead of
     // flattening each to its message.
     result.issues.extend(config_warnings);
 

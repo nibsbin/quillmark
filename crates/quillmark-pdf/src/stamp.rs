@@ -4,12 +4,12 @@
 //! **Technique A** is locked: we style the *real* AcroForm fields and set
 //! `/NeedAppearances`; we never bake `/AP` appearance streams. Appearance
 //! synthesis is the viewer's job (Acrobat, Chrome/pdfium, Preview). Flat
-//! rasterizers therefore render the fields blank — values reach non-interactive
+//! rasterizers therefore render the fields blank: values reach non-interactive
 //! output only via the [`RenderedRegion`] sidecar.
 //!
 //! **Opinionated rendering**: the background owns all visual chrome, so the
-//! widget is a transparent input over it. One house style — Helvetica at `0 Tf`
-//! (auto-size), black — registered once in the form `/DR` and named in every
+//! widget is a transparent input over it. One house style (Helvetica at `0 Tf`
+//! (auto-size), black) registered once in the form `/DR` and named in every
 //! `/DA`. The form is built fresh from the spec; we never reconcile a foreign
 //! AcroForm.
 
@@ -59,12 +59,12 @@ impl StampOptions {
 
 /// Stamp `fields` onto `base` as a fresh AcroForm via one incremental update,
 /// optionally stamping `/Info` `/Producer`. Returns the stamped bytes. Field
-/// geometry is not produced here — it is a session-level query (see
+/// geometry is not produced here: it is a session-level query (see
 /// [`regions_of`]).
 ///
 /// `base` must satisfy the reader's input contract (traditional-xref,
 /// unencrypted, inline-annots, flat-tree). Each field's `rect` is final
-/// **bottom-left** PDF-point geometry — the spine never reasons about page
+/// **bottom-left** PDF-point geometry: the spine never reasons about page
 /// height or reflow; the caller converts.
 pub fn stamp(
     base: Vec<u8>,
@@ -172,7 +172,7 @@ pub fn stamp(
     up.finish(pdf)
 }
 
-/// Build the [`RenderedRegion`] geometry sidecar — one region per field that
+/// Build the [`RenderedRegion`] geometry sidecar: one region per field that
 /// carries a schema address, keyed on that address. A widget with no schema
 /// field (`schema_field: None`) is a backend-only artifact and emits nothing.
 /// Shared by `stamp` and any no-stamp render path so the region geometry always
@@ -230,7 +230,7 @@ fn write_widget_object(spec: &FieldSpec, wid: Ref, page_ref: Ref) -> Vec<u8> {
                         Name(b"Off")
                     },
                 );
-                // /MK << /CA (4) >> — the ZapfDingbats check glyph the viewer
+                // /MK << /CA (4) >>: the ZapfDingbats check glyph the viewer
                 // synthesizes under NeedAppearances.
                 {
                     let mut mk = field.insert(Name(b"MK")).dict();
@@ -282,7 +282,7 @@ fn write_widget_object(spec: &FieldSpec, wid: Ref, page_ref: Ref) -> Vec<u8> {
 
 /// Three cases for the existing `/Annots`: absent (write a fresh array);
 /// inline array (splice widget refs before `]`); indirect reference (hard
-/// error — the input contract requires inline annots).
+/// error, the input contract requires inline annots).
 fn rewrite_page_with_annots(pg_dict: &[u8], widget_refs: &[u32]) -> Result<Vec<u8>, PdfError> {
     let widgets_str = widget_refs
         .iter()

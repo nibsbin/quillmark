@@ -44,7 +44,7 @@ impl Quill {
             return Vec::new();
         };
         let mut matches = Vec::new();
-        // Paths only — the visitor lends the contents, so no bundle bytes are
+        // Paths only: the visitor lends the contents, so no bundle bytes are
         // copied to answer a name query.
         self.files.for_each_file(&mut |path, _| {
             if glob_pattern.matches(path) {

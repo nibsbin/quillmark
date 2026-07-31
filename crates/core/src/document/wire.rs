@@ -12,14 +12,14 @@
 //! per schema version so persisted documents keep loading forever. `CardWire`
 //! is the **current** API shape and is free to evolve with the bindings. They
 //! are structurally similar today, but coupling the live API to a frozen
-//! storage schema would chain one to the other's change cadence — so they are
+//! storage schema would chain one to the other's change cadence, so they are
 //! deliberately distinct, both built on the live [`Card`]/[`Payload`] model.
 //!
 //! ## Shape
 //!
 //! The `$` system entries are hoisted to named fields (`kind`, `quill`, `id`,
 //! `ext`, `seed`); `payload_items` carries only user fields and comments, in order.
-//! Field/`$ext` *nested* comments are not represented here — they survive the
+//! Field/`$ext` *nested* comments are not represented here: they survive the
 //! Markdown and storage round-trips, not this editable projection.
 
 use std::str::FromStr;
@@ -68,7 +68,7 @@ pub enum PayloadItemWire {
 }
 
 /// One step in a nested fill path: an object key or an array index. Serializes
-/// **untagged** — a key as a JSON string, an index as a JSON number — so a path
+/// **untagged** (a key as a JSON string, an index as a JSON number) so a path
 /// is a plain JS array like `["addr", "street"]` or `["recipients", 0, "name"]`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
@@ -127,7 +127,7 @@ pub struct CardWire {
     /// User fields and comments, in source order.
     #[serde(default, alias = "payload_items")]
     pub payload_items: Vec<PayloadItemWire>,
-    /// The card body as canonical Content-JSON — the source-of-truth content
+    /// The card body as canonical Content-JSON: the source-of-truth content
     /// model (a content object, `{text, lines, marks, islands}`). The empty content
     /// when absent. A markdown string is also accepted on input (imported), so an
     /// LLM/markdown writer can hand a string here.
@@ -280,8 +280,8 @@ impl TryFrom<CardWire> for Card {
         }
         // No `$kind` check here. This decoder validates only what a detached
         // card can decide alone: field-name grammar, value depth, the `$quill`
-        // reference above. `$kind` validity is positional — `main` is right for
-        // the root and reserved for a composable card — and a `CardWire` carries
+        // reference above. `$kind` validity is positional (`main` is right for
+        // the root and reserved for a composable card) and a `CardWire` carries
         // no signal of which it is. So it belongs to `push_card`/`insert_card`,
         // which know the position and the sibling `$id`s, and which report
         // `edit::invalid_kind_name` / `edit::reserved_kind`.
@@ -396,7 +396,7 @@ mod tests {
     }
 
     /// A richtext field stored as a canonical content object rides the wire
-    /// **structurally and losslessly** — the same opaque-JSON `Field` carrier as
+    /// **structurally and losslessly**: the same opaque-JSON `Field` carrier as
     /// any object value, so identity marks (an `underline` with no markdown
     /// projection) survive Card → wire → Card. This is the lossless carrier the
     /// card-yaml markdown projection (emit) deliberately is not.
@@ -422,7 +422,7 @@ mod tests {
             .unwrap();
 
         let wire = CardWire::from(&card);
-        // Carried as the content object, verbatim — not a markdown projection.
+        // Carried as the content object, verbatim: not a markdown projection.
         let as_json = serde_json::to_value(&wire).unwrap();
         assert!(as_json["payloadItems"][0]["value"].is_object());
 

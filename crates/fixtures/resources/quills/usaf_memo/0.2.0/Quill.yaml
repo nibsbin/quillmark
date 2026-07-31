@@ -118,7 +118,7 @@ main:
       ui:
         group: classification
         compact: true
-      description: "Select the classification marking shown in the header and footer banner. Unclassified documents typically omit this banner entirely — leave blank unless the document is CUI or classified. Mark per DAFI 16-1404 (DoDM 5200.48 for CUI) and applicable DoD guidance."
+      description: "Select the classification marking shown in the header and footer banner. Unclassified documents typically omit this banner entirely, leave blank unless the document is CUI or classified. Mark per DAFI 16-1404 (DoDM 5200.48 for CUI) and applicable DoD guidance."
 
     dissemination:
       type: string

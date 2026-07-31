@@ -56,7 +56,7 @@ pub use region::{
 pub mod session;
 pub use session::{ApplyError, Assoc, ChangeSet, Delta, LineOp, LiveSession, MarkOp, Op};
 
-/// The canonical content model — re-exported so consumers of the
+/// The canonical content model: re-exported so consumers of the
 /// document mutators ([`Card::install_body`], [`Card::apply_body_change`])
 /// can name the type without depending on `quillmark-content` directly.
 pub use quillmark_content::Content;

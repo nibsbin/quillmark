@@ -2,7 +2,7 @@
 //!
 //! The closed set of `$` keys (`$quill`, `$kind`, `$id`, `$ext`, `$seed`) and
 //! their typed values are stored as variants of [`super::PayloadItem`] inside a
-//! card's unified [`super::Payload`] item list — they sit alongside user
+//! card's unified [`super::Payload`] item list: they sit alongside user
 //! fields and comments in source order, which is what makes inline-comment
 //! preservation symmetric across the `$`/non-`$` boundary.
 //!
@@ -39,7 +39,7 @@ pub(super) fn meta_key(item: &PayloadItem) -> Option<&'static str> {
 ///
 /// The accepted keys are the closed set `{$quill, $kind, $id, $ext, $seed}`.
 /// Any other `$`-prefixed key is a parse error. Duplicate keys cannot arise
-/// here — the YAML parser rejects them as duplicate mapping keys before
+/// here: the YAML parser rejects them as duplicate mapping keys before
 /// this function runs.
 ///
 /// `$quill` and `$kind` require string scalars (non-string YAML types are
@@ -75,7 +75,7 @@ pub(super) fn extract_meta_items(payload: &mut JsonValue) -> Result<Vec<PayloadI
                     JsonValue::String(s) => s,
                     other => {
                         return Err(ParseError::InvalidStructure(format!(
-                            "Invalid `$kind` value — a card kind must be a string \
+                            "Invalid `$kind` value: a card kind must be a string \
                              matching `[a-z_][a-z0-9_]*` (got {})",
                             yaml_type_name(&other)
                         )));
@@ -83,7 +83,7 @@ pub(super) fn extract_meta_items(payload: &mut JsonValue) -> Result<Vec<PayloadI
                 };
                 if !is_valid_kind_name(&s) {
                     return Err(ParseError::InvalidStructure(format!(
-                        "Invalid `$kind` value '{}' — a card kind must match \
+                        "Invalid `$kind` value '{}': a card kind must match \
                          `[a-z_][a-z0-9_]*`",
                         s
                     )));
@@ -103,7 +103,7 @@ pub(super) fn extract_meta_items(payload: &mut JsonValue) -> Result<Vec<PayloadI
                     },
                     other => {
                         return Err(ParseError::InvalidStructure(format!(
-                            "Invalid `{}` value — expected a mapping, got {}",
+                            "Invalid `{}` value: expected a mapping, got {}",
                             meta_key.as_str(),
                             yaml_type_name(&other)
                         )));
@@ -112,7 +112,7 @@ pub(super) fn extract_meta_items(payload: &mut JsonValue) -> Result<Vec<PayloadI
             }
             other => {
                 return Err(ParseError::InvalidStructure(format!(
-                    "Unknown `{}` system-metadata key — the card-yaml block \
+                    "Unknown `{}` system-metadata key: the card-yaml block \
                      accepts only `$quill`, `$kind`, `$id`, `$ext`, and `$seed`",
                     other
                 )));
@@ -128,7 +128,7 @@ fn require_string(label: &str, value: JsonValue) -> Result<String, ParseError> {
     match value {
         JsonValue::String(s) => Ok(s),
         other => Err(ParseError::InvalidStructure(format!(
-            "Invalid {} — expected a string scalar, got {}",
+            "Invalid {}: expected a string scalar, got {}",
             label,
             yaml_type_name(&other)
         ))),
@@ -141,7 +141,7 @@ fn scalar_to_string(key: &str, value: JsonValue) -> Result<String, ParseError> {
         JsonValue::Bool(b) => Ok(b.to_string()),
         JsonValue::Number(n) => Ok(n.to_string()),
         JsonValue::Null => Err(ParseError::InvalidStructure(format!(
-            "`{}` cannot be null — provide a scalar value",
+            "`{}` cannot be null: provide a scalar value",
             key
         ))),
         other => Err(ParseError::InvalidStructure(format!(

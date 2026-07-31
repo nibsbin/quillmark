@@ -30,7 +30,7 @@ fn qv(s: &str) -> QuillValue {
 }
 
 /// Commit `value` to a richtext field named `name` via `commit_field` and a
-/// synthesized richtext `FieldSchema` — the typed richtext write.
+/// synthesized richtext `FieldSchema`: the typed richtext write.
 fn commit_richtext(
     card: &mut Card,
     name: &str,
@@ -77,7 +77,7 @@ fn test_invalid_field_names() {
 
 #[test]
 fn test_document_store_field_rejects_dollar_prefixed_names() {
-    // `$`-prefixed keys are reserved for system metadata — the only
+    // `$`-prefixed keys are reserved for system metadata: the only
     // field-name reservation (uppercase is accepted).
     for name in ["$body", "$cards", "$quill", "$kind"] {
         let mut doc = make_doc();
@@ -389,7 +389,7 @@ fn test_card_store_fields_atomic_on_error() {
         ("bad-name".to_string(), qv("v")),
     ]);
     assert!(result.is_err());
-    // Nothing from the failed batch is applied — not even the valid entries.
+    // Nothing from the failed batch is applied: not even the valid entries.
     assert_eq!(
         card.payload().get("existing").unwrap().as_str(),
         Some("old")
@@ -479,14 +479,14 @@ fn test_replace_body_reports_import_error() {
     }
 }
 
-/// `install_body` installs a pre-built content verbatim — value semantics, no
+/// `install_body` installs a pre-built content verbatim: value semantics, no
 /// markdown import, lossless for content-only marks a markdown projection drops.
 #[test]
 fn test_install_body_sets_directly() {
     use quillmark_content::model::{Mark, MarkKind};
 
     let mut content = quillmark_content::import::from_markdown("underlined body").unwrap();
-    // An `underline` mark has no markdown projection — the content path must keep it.
+    // An `underline` mark has no markdown projection: the content path must keep it.
     content.marks.push(Mark {
         start: 0,
         end: 10,
@@ -504,7 +504,7 @@ fn test_install_body_sets_directly() {
         .any(|m| matches!(m.kind, MarkKind::Underline)));
 }
 
-/// `install_field` installs a pre-built content into a richtext field verbatim —
+/// `install_field` installs a pre-built content into a richtext field verbatim:
 /// the field-level twin of `install_body`, lossless for content-only marks, and
 /// reads back through `field_richtext`. A malformed name is rejected.
 #[test]
@@ -545,7 +545,7 @@ fn test_revise_field_diff_imports_and_returns_delta() {
     let delta = card.revise_field("intro", "hello target world").unwrap();
     assert!(!delta.ops.is_empty());
 
-    // Anchor the field, then revise — the anchor rebases onto surviving text.
+    // Anchor the field, then revise: the anchor rebases onto surviving text.
     let mut base = card.field_richtext("intro").unwrap().unwrap();
     base.marks.push(Mark {
         start: 6,
@@ -573,7 +573,7 @@ fn test_revise_field_diff_imports_and_returns_delta() {
 /// `revise_field_checked` is both anchor-preserving (rebases surviving anchors,
 /// like `revise_field`) and schema-enforcing (rejects a multi-block result on a
 /// `richtext(inline)` schema with `FieldRichtextNotInline`, like `commit_field`),
-/// returning the text delta — the typed, anchor-preserving field write.
+/// returning the text delta: the typed, anchor-preserving field write.
 #[test]
 fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
     use crate::quill::{FieldSchema, FieldType};
@@ -592,7 +592,7 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
         .unwrap();
     assert!(!delta.ops.is_empty());
 
-    // Anchor "target", then revise — the anchor rebases onto surviving text and
+    // Anchor "target", then revise: the anchor rebases onto surviving text and
     // the single-line result still conforms.
     let mut base = card.field_richtext("subject").unwrap().unwrap();
     base.marks.push(Mark {
@@ -613,7 +613,7 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
     );
 
     // A multi-block result fails the inline check on the *diffed* content with the
-    // same FieldRichtextNotInline surface commit_field raises — and the field is
+    // same FieldRichtextNotInline surface commit_field raises, and the field is
     // left unchanged (the schema check runs before the store).
     let before = card.field_markdown("subject").unwrap().unwrap();
     let err = card
@@ -633,14 +633,14 @@ fn test_revise_field_checked_preserves_anchors_and_enforces_inline() {
 
 /// `commit_field` on a richtext field accepts a **canonical content object**,
 /// stores it as the field's canonical value (lossless for content-only marks),
-/// and reads back through `field_richtext` — the typed door beside the
+/// and reads back through `field_richtext`: the typed door beside the
 /// value-semantics `install_field` / `body`.
 #[test]
 fn test_commit_field_richtext_content_object_reads_back() {
     use quillmark_content::model::{Mark, MarkKind};
 
     let mut content = quillmark_content::import::from_markdown("underlined intro").unwrap();
-    // `underline` has no markdown projection — the content store must keep it.
+    // `underline` has no markdown projection: the content store must keep it.
     content.marks.push(Mark {
         start: 0,
         end: 10,
@@ -692,7 +692,7 @@ fn test_commit_field_richtext_markdown_null_and_rejects_bad() {
 
 /// A richtext(inline) `commit_field` commits the `richtext(inline)` check at
 /// write: a single-`Para` content stores, a multi-block content is
-/// `EditError::FieldRichtextNotInline` — the write is the strict commit, not a
+/// `EditError::FieldRichtextNotInline`, the write is the strict commit, not a
 /// deferred render failure.
 #[test]
 fn test_commit_field_richtext_inline_enforced_at_write() {
@@ -822,7 +822,7 @@ fn test_commit_field_rejects_bad_name() {
 }
 
 /// `field_richtext` on an absent field is `None`; on a plain non-richtext field
-/// value it is `Some(Err(_))` — the read mirrors the write in needing the caller
+/// value it is `Some(Err(_))`: the read mirrors the write in needing the caller
 /// to name a field it knows is richtext. `field_markdown` carries the same
 /// shape: `None` absent, `Some(Err)` present-but-undecodable.
 #[test]
@@ -837,7 +837,7 @@ fn test_field_richtext_absent_and_non_richtext() {
 }
 
 /// A content-valued field emits to card-yaml as its **markdown projection**, not
-/// a nested `{text, lines, marks, islands}` object — card-yaml stays
+/// a nested `{text, lines, marks, islands}` object: card-yaml stays
 /// markdown-clean. Re-parsing yields a string field (schema-less parse), the
 /// documented on-disk identity boundary; the content survives only via the DTO.
 #[test]
@@ -852,7 +852,7 @@ fn test_content_field_emits_as_markdown_projection() {
     .unwrap();
 
     let md = doc.to_markdown();
-    // Projected to a markdown scalar (the `body_markdown` projection — a value,
+    // Projected to a markdown scalar (the `body_markdown` projection: a value,
     // not a file, so no trailing newline), not a block mapping. Still quoted here
     // (the leading `*` is a YAML flow indicator), but the projection does not
     // grow a trailing `\n` inside the quotes.
@@ -863,7 +863,7 @@ fn test_content_field_emits_as_markdown_projection() {
     assert!(!md.contains("lines:"), "content object leaked into card-yaml:\n{md}");
 
     // Re-parse: schema-less, so the field is now a plain string (identity lost
-    // on disk — the intended boundary), but the markdown content survives.
+    // on disk: the intended boundary), but the markdown content survives.
     let reparsed = Document::parse(&md).unwrap().document;
     assert_eq!(
         reparsed.main().payload().get("intro").unwrap().as_str(),
@@ -872,7 +872,7 @@ fn test_content_field_emits_as_markdown_projection() {
 }
 
 /// A plain object field that is *not* a canonical content emits structurally
-/// (unchanged) — projection fires only on genuine content objects.
+/// (unchanged): projection fires only on genuine content objects.
 #[test]
 fn test_non_content_object_field_emits_structurally() {
     let mut doc = Document::new(QuillReference::from_str("test_quill").unwrap());
@@ -888,7 +888,7 @@ fn test_non_content_object_field_emits_structurally() {
 }
 
 /// A content-canonical content whose top-level keys are in NON-canonical order
-/// stays structural — the projection guard is byte-exact (canonical-string
+/// stays structural: the projection guard is byte-exact (canonical-string
 /// equality), not an order-independent `Value` compare. An order-independent
 /// guard would project this to a flattened markdown scalar, breaking the
 /// field's round-trip.
@@ -920,7 +920,7 @@ fn test_noncanonical_order_content_field_stays_structural() {
 }
 
 /// `revise_body` updates the body and returns the text delta from the old body
-/// to the new — the recordable whole-document (stale-text) writer.
+/// to the new: the recordable whole-document (stale-text) writer.
 #[test]
 fn test_revise_body_returns_delta_and_updates_body() {
     use crate::{Assoc, Delta};
@@ -1023,7 +1023,7 @@ fn test_apply_body_change_reports_out_of_range() {
 }
 
 /// `apply_field_richtext_change` splices a bundle into a richtext field's stored
-/// content and re-stores it — the field-path twin of `apply_body_change`.
+/// content and re-stores it: the field-path twin of `apply_body_change`.
 /// Identity marks (a strong span applied post-delta) survive on the re-stored
 /// content, which is what makes anchors persist on field content across edits.
 #[test]
@@ -1055,7 +1055,7 @@ fn test_apply_field_richtext_change_splices_and_persists() {
 }
 
 /// `apply_field_richtext_change` on an absent or non-richtext field is a
-/// `FieldRichtextDecode` error, not a panic — the caller must address a field it
+/// `FieldRichtextDecode` error, not a panic: the caller must address a field it
 /// knows is richtext.
 #[test]
 fn test_apply_field_richtext_change_rejects_non_richtext() {
@@ -1254,7 +1254,7 @@ fn test_remove_ext_namespace_drops_ext_when_empty() {
         .store_ext_namespace("tutorial", serde_json::json!(["step-1"]))
         .expect("set_ext_namespace");
 
-    // Removing the last namespace clears `$ext` entirely — set/remove of a
+    // Removing the last namespace clears `$ext` entirely: set/remove of a
     // single namespace is a clean inverse for a card that had no `$ext`.
     let removed = doc.main_mut().remove_ext_namespace("tutorial").unwrap();
     assert_eq!(removed, serde_json::json!(["step-1"]));
@@ -1351,7 +1351,7 @@ fn store_field_rejects_value_past_depth_limit() {
 #[test]
 fn storage_dto_rejects_value_past_depth_limit() {
     // A hand-crafted storage DTO with an over-deep field value must be
-    // rejected with a clean error, not abort the process — the §8 bound
+    // rejected with a clean error, not abort the process: the §8 bound
     // holds on the storage path, not just the markdown parse path.
     let stored = serde_json::json!({
         "schema": "quillmark/document@0.92.0",
@@ -1438,7 +1438,7 @@ fn find_card_resolves_id_and_card_indexes() {
     doc.push_card(c0).unwrap();
     doc.push_card(c1).unwrap();
 
-    // `$id` is unique per document — find_card resolves the one holder.
+    // `$id` is unique per document: find_card resolves the one holder.
     let (idx, card) = doc.find_card("first").unwrap();
     assert_eq!(idx, 0);
     assert_eq!(card.id(), Some("first"));
@@ -1480,7 +1480,7 @@ fn push_and_insert_card_reject_duplicate_and_empty_id() {
         EditError::CardIdCollision { id: "dup".into() }
     );
 
-    // A card without `$id` is always insertable — the handle is optional.
+    // A card without `$id` is always insertable: the handle is optional.
     doc.push_card(Card::new("item").unwrap()).unwrap();
     assert_eq!(doc.cards().len(), 2);
 }
@@ -1506,7 +1506,7 @@ fn set_card_id_guards_and_remove_frees_the_handle() {
         EditError::IndexOutOfRange { index: 5, len: 2 }
     ));
 
-    // Removal retires the handle; it is then free for another card — what
+    // Removal retires the handle; it is then free for another card: what
     // makes undo-reconstruction of a deleted card sound.
     assert_eq!(doc.remove_card_id(0), Some("a".to_string()));
     assert_eq!(doc.remove_card_id(0), None);
@@ -1540,7 +1540,7 @@ fn card_id_is_invariant_under_move_and_set_kind() {
     );
 
     // A removed card keeps its stamp, and its handle is free while it is
-    // out — undo reinstates it verbatim.
+    // out: undo reinstates it verbatim.
     let removed = doc.remove_card(0).unwrap();
     assert_eq!(removed.id(), Some("b"));
     doc.push_card(removed).unwrap();

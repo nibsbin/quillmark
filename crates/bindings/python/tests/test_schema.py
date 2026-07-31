@@ -48,7 +48,7 @@ def make_quill(tmp_path, yaml_content=QUILL_YAML_CONTENT, plate=PLATE_TYP):
 
 
 # ---------------------------------------------------------------------------
-# Schema surface — `required:` is gone; cells are inferred from `default:`.
+# Schema surface: `required:` is gone; cells are inferred from `default:`.
 # ---------------------------------------------------------------------------
 
 def test_schema_has_no_required_key(tmp_path):
@@ -74,10 +74,10 @@ def test_schema_default_marks_endorsed(tmp_path):
 
     # Unendorsed: no `default`
     assert "default" not in fields["title"], (
-        "title is Unendorsed — no default should be reported"
+        "title is Unendorsed: no default should be reported"
     )
     assert "default" not in fields["count"], (
-        "count is Unendorsed — no default should be reported"
+        "count is Unendorsed: no default should be reported"
     )
 
     # Endorsed: schema carries `default`
@@ -85,7 +85,7 @@ def test_schema_default_marks_endorsed(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Blueprint surface — annotations and markers
+# Blueprint surface: annotations and markers
 # ---------------------------------------------------------------------------
 
 def test_blueprint_must_fill_marker(tmp_path):
@@ -110,7 +110,7 @@ def test_blueprint_endorsed_value(tmp_path):
     # The Endorsed `status` field renders its default value with a type-only
     # annotation. The exact format is `status: draft # string`.
     assert "status: draft" in bp, f"expected default in blueprint; got:\n{bp}"
-    # Shippability is the value cell — the `; delete-ok` tag is gone entirely.
+    # Shippability is the value cell: the `; delete-ok` tag is gone entirely.
     assert "delete-ok" not in bp, (
         f"expected no `; delete-ok` tag in blueprint; got:\n{bp}"
     )
@@ -131,7 +131,7 @@ def test_blueprint_no_legacy_required_optional_tags(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Validation surface — new diagnostic codes
+# Validation surface: new diagnostic codes
 # ---------------------------------------------------------------------------
 
 def test_render_tolerates_must_fill_marker(engine, tmp_path):
@@ -166,7 +166,7 @@ def test_render_tolerates_must_fill_marker(engine, tmp_path):
         f"validation::must_fill must be a non-fatal warning; got: {fill}"
     )
 
-    # The removed `validation::field_absent` completeness code never surfaces —
+    # The removed `validation::field_absent` completeness code never surfaces:
     # absent Unendorsed fields zero-fill silently.
     codes = [d.get("code") for d in diags]
     assert "validation::field_absent" not in codes, (
@@ -175,7 +175,7 @@ def test_render_tolerates_must_fill_marker(engine, tmp_path):
 
 
 def test_render_succeeds_when_unendorsed_supplied(engine, tmp_path):
-    """Filling every Unendorsed field renders successfully — Endorsed
+    """Filling every Unendorsed field renders successfully: Endorsed
     fields fall back to their declared default."""
     quill = make_quill(tmp_path)
     md = (

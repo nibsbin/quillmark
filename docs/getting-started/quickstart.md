@@ -46,12 +46,12 @@
     // The single root import is the canonical API: Quill/Document (re-exported
     // from the internal Typst-less core build) plus the Engine render
     // dispatcher. An editor that only validates uses Quill/Document and loads
-    // no backend — Typst loads lazily on the first render.
+    // no backend: Typst loads lazily on the first render.
     import { Document, Quill, Engine } from "@quillmark/wasm";
 
     const enc = new TextEncoder();
 
-    // A Quill is portable, declarative data — no engine needed to load it.
+    // A Quill is portable, declarative data: no engine needed to load it.
     const quill = Quill.fromTree(new Map([
       ["Quill.yaml", enc.encode("quill:\n  name: my_quill\n  backend: typst\n  version: 1.0.0\n  description: Demo\n\ntypst:\n  plate_file: plate.typ\n")],
       ["plate.typ", enc.encode("#import \"@local/quillmark-helper:0.1.0\": data\n#data.at(\"$body\")\n")],
@@ -67,7 +67,7 @@
 
     const doc = Document.fromMarkdown(markdown);
 
-    // Rendering goes through the Engine. Its methods are async — the first call
+    // Rendering goes through the Engine. Its methods are async: the first call
     // lazily loads the Typst backend binary; the canonical quill crosses into
     // backend memory internally (no manual fromTree/fromJson needed).
     const engine = new Engine();
@@ -78,9 +78,9 @@
     ## Live Preview (Canvas)
 
     For editor-style previews, paint pages directly into a `<canvas>` instead
-    of round-tripping through PNG/SVG. `paint` is WASM-only — both the Typst
+    of round-tripping through PNG/SVG. `paint` is WASM-only: both the Typst
     and `pdfform` backends support it; probe with `engine.supportsCanvas(quill)`
-    before mounting canvas UI — and shares the cached compile with the
+    before mounting canvas UI, and shares the cached compile with the
     byte-output `render` path.
 
     ```javascript
@@ -107,7 +107,7 @@
     Key contract points:
 
     - The painter owns `canvas.width` / `canvas.height` and rewrites them on
-      every call (so each `paint` is a full repaint — no `clearRect` needed).
+      every call (so each `paint` is a full repaint: no `clearRect` needed).
       The consumer owns `canvas.style.*` and reads `result.layoutWidth` /
       `layoutHeight` to size the display box.
     - Fold `devicePixelRatio` and in-app zoom into `densityScale`;

@@ -1,7 +1,7 @@
 //! Zero-fill of *nested* nulls in the plate projection.
 //!
 //! The authored/default/zero ladder itself is owned by
-//! `quillmark_core::quill::resolved` — which also proves `resolve()` is
+//! `quillmark_core::quill::resolved`: which also proves `resolve()` is
 //! byte-for-byte with `compile_data()`, so drift shows up there first. What
 //! only shows up through a loaded quill is recursion: a null inside an object
 //! property or an array element.

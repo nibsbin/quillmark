@@ -56,7 +56,7 @@ def test_engine_render_name_mismatch_errors(engine, taro_quill_dir):
     """A render error crosses as QuillmarkError with its diagnostic `code` intact.
 
     `$quill` mismatch is the representative case; that it is a hard error at all
-    — and the version-selector half of the rule — is pinned in
+    (and the version-selector half of the rule) is pinned in
     `crates/quillmark/tests/version_mismatch_test.rs`.
     """
     quill = Quill.from_path(str(taro_quill_dir))
@@ -127,7 +127,7 @@ def test_engine_render_regions_sidecar(engine, taro_quill_dir, taro_md):
         assert isinstance(r["rect"], list) and len(r["rect"]) == 4
         assert r["span"] is None or (isinstance(r["span"], list) and len(r["span"]) == 2)
         # Plate-space spellings (`$body`, `$cards.<kind>.<ordinal>.`) must not
-        # reach a caller — they name nothing any document API accepts.
+        # reach a caller: they name nothing any document API accepts.
         assert not r["field"].startswith("$"), (
             f"untranslated plate address: {r['field']}"
         )
@@ -165,7 +165,7 @@ Content
 def test_quill_load_error_carries_diagnostics(tmp_path):
     """Quill-loading failures surface as QuillmarkError with diagnostics.
 
-    A malformed *config* still fails at load time — `Quill.from_path` validates
+    A malformed *config* still fails at load time: `Quill.from_path` validates
     the config eagerly; only backend resolution is deferred to render.
     """
     bogus = tmp_path / "not_a_quill"
