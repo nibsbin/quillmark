@@ -455,6 +455,39 @@ impl PyDocument {
         Ok(result)
     }
 
+    /// One composable card by index, same dict shape as `main` — the
+    /// card-indexed twin of that getter, so reading one card need not project
+    /// every card via `cards`. An out-of-range `index` raises
+    /// `IndexOutOfRange`, matching the card write verbs. Mirrors WASM
+    /// `doc.card(i)`.
+    fn card<'py>(&self, py: Python<'py>, index: usize) -> PyResult<Bound<'py, PyDict>> {
+        let len = self.inner.cards().len();
+        let card = self.inner.card(index).ok_or_else(|| {
+            convert_edit_error(quillmark_core::EditError::IndexOutOfRange { index, len })
+        })?;
+        card_to_pydict(py, card)
+    }
+
+    /// The index of the composable card whose `$id` equals `id`, or `None` when
+    /// none carries it. Resolves the durable card handle without a hand-rolled
+    /// scan over `cards`; `$id` is unique per document, so at most one card
+    /// matches. Mirrors WASM `doc.cardIndexById(id)`.
+    fn card_index_by_id(&self, id: &str) -> Option<usize> {
+        self.inner.find_card(id).map(|(index, _)| index)
+    }
+
+    /// The main card's `$seed[kind]` overlay dict, or `None` when absent. The
+    /// cheap read that feeds `quill.seed_card(kind, overlay)` without
+    /// projecting the whole main card via `main` to fish out one key — and it
+    /// keeps `seed_card` pure: the quill still never reads the document.
+    /// Mirrors WASM `doc.seedOverlay(kind)`.
+    fn seed_overlay<'py>(&self, py: Python<'py>, kind: &str) -> PyResult<Bound<'py, PyAny>> {
+        match self.inner.main().seed().and_then(|seed| seed.get(kind)) {
+            Some(overlay) => json_to_py(py, overlay),
+            None => py.None().into_bound_py_any(py),
+        }
+    }
+
 
     /// Remove a payload field, returning its previous value (or `None` when
     /// absent). `card` selects the target: `None` the main card, `Some(i)` the

@@ -319,6 +319,40 @@ def test_move_card_out_of_range():
         doc.move_card(10, 0)
 
 
+def test_card_reads_one_card_without_projecting_the_rest():
+    """card(i) is the card-indexed twin of `main` — the same dict shape `cards`
+    projects, for one card. Out of range raises, matching the write verbs."""
+    doc = Document.from_markdown(MD_WITH_CARDS)
+    assert doc.card(0)["kind"] == "note"
+    assert doc.card(0) == doc.cards[0]
+    assert doc.card(1)["kind"] == "summary"
+    with raises_edit_code("edit::index_out_of_range"):
+        doc.card(2)
+
+
+def test_card_index_by_id_resolves_the_durable_handle():
+    """card_index_by_id resolves `$id` without a hand-rolled scan over `cards`;
+    total over the id axis — no such id reads back None."""
+    doc = Document.from_markdown(SIMPLE_MD)
+    doc.insert_card({"kind": "note", "id": "first", "body": "A"})
+    doc.insert_card({"kind": "note", "id": "other", "body": "B"})
+    assert doc.card_index_by_id("first") == 0
+    assert doc.card_index_by_id("other") == 1
+    assert doc.card_index_by_id("missing") is None
+
+
+def test_seed_overlay_reads_one_kind_off_the_main_card():
+    """seed_overlay reads one `$seed[kind]` entry — the overlay that feeds
+    quill.seed_card(kind, overlay) — without projecting the whole main card.
+    Total over the kind axis: an absent kind reads back None."""
+    doc = Document.from_markdown(SIMPLE_MD)
+    doc.store_seed_namespace("note", {"author": "Seeded"})
+    assert doc.seed_overlay("note") == {"author": "Seeded"}
+    assert doc.seed_overlay("absent") is None
+    # Same entry the `main` dict carries, read cheaply.
+    assert doc.seed_overlay("note") == doc.main["seed"]["note"]
+
+
 def test_store_ext_adds_map():
     """store_ext stores an opaque map readable via card['ext']."""
     doc = Document.from_markdown(SIMPLE_MD)
