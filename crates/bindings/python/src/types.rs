@@ -1224,6 +1224,22 @@ impl PyDiagnostic {
     fn source_chain(&self) -> Vec<String> {
         self.inner.source_chain.clone()
     }
+
+    /// The facts `message` interpolates, keyed by name — with `code`, the
+    /// substitution unit needed to word this diagnostic in another language.
+    /// Empty for any code outside the structured surface, which is the signal
+    /// to render `message` verbatim. `prose/canon/ERROR.md` tabulates the keys
+    /// per code.
+    #[getter]
+    fn args<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let map = serde_json::Map::from_iter(
+            self.inner
+                .args
+                .iter()
+                .map(|(k, v)| (k.clone(), v.clone())),
+        );
+        json_to_py(py, &serde_json::Value::Object(map))
+    }
 }
 
 #[pyclass(name = "Location", from_py_object)]

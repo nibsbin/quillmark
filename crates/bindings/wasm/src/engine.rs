@@ -2141,7 +2141,8 @@ pub fn map_pos(
 fn edit_error_to_js(err: &quillmark_core::EditError, base: &quillmark_core::DocPath) -> JsValue {
     let mut diagnostic =
         quillmark_core::Diagnostic::new(quillmark_core::Severity::Error, err.to_string())
-            .with_code(err.code().to_string());
+            .with_code(err.code().to_string())
+            .with_args(err.args());
     if let Some(path) = err.doc_path(base) {
         diagnostic = diagnostic.with_path(path.to_string());
     }
@@ -2164,6 +2165,7 @@ fn edit_errors_to_js(
         .map(|(name, err)| {
             quillmark_core::Diagnostic::new(quillmark_core::Severity::Error, err.to_string())
                 .with_code(err.code().to_string())
+                .with_args(err.args())
                 .with_path(base.field(&name).to_string())
         })
         .collect();

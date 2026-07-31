@@ -1,12 +1,12 @@
 //! Quill configuration parsing and normalization.
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::error::Error as StdError;
 
 use indexmap::IndexMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::error::{Diagnostic, Severity};
+use crate::error::{Diagnostic, Severity, diag_args};
 use crate::value::QuillValue;
 
 use super::types::{RICHTEXT_INLINE_TOKEN_MSG, UI_ORDER_REMOVED_MSG};
@@ -133,6 +133,36 @@ pub enum CoercionError {
         target: String,
         reason: String,
     },
+}
+
+impl CoercionError {
+    /// The facts this error's message interpolates. See
+    /// [`Diagnostic::args`](crate::error::Diagnostic::args).
+    ///
+    /// Two of the four fields stay behind. `path` is a schema-space anchor
+    /// (`card_kinds.<kind>.<field>`), which `ERROR.md` § "Three grammars, one
+    /// that crosses" keeps engine-internal — an args key would re-open that
+    /// door under a new name. `reason` is English minted at ~20 coercion arms
+    /// and sometimes wraps a decode error's own prose, so it stays in
+    /// `message` where a consumer reads it as a whole or not at all; carrying
+    /// it under a key would invite it into a translated sentence.
+    ///
+    /// What remains states the failure at lower resolution than the English
+    /// does — "`{value}` is not a `{target}`" — which is the contract: a
+    /// consumer's sentence may be coarser than ours, never half-translated.
+    pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
+        match self {
+            CoercionError::Uncoercible {
+                path: _,
+                value,
+                target,
+                reason: _,
+            } => diag_args! {
+                "value" => value,
+                "target" => target,
+            },
+        }
+    }
 }
 
 /// Write-side leniency mode for [`QuillConfig::conform_value`] — the one axis

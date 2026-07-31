@@ -1,7 +1,9 @@
+use std::collections::BTreeMap;
+
 use indexmap::IndexMap;
 
 use crate::document::Document;
-use crate::error::{Diagnostic, Severity};
+use crate::error::{Diagnostic, Severity, diag_args};
 use crate::path::DocPath;
 use crate::quill::formats::{is_valid_date, is_valid_datetime};
 use crate::quill::{CardSchema, FieldSchema, FieldType, QuillConfig};
@@ -208,6 +210,63 @@ impl ValidationError {
         }
     }
 
+    /// The facts this error's message interpolates. See
+    /// [`Diagnostic::args`](crate::error::Diagnostic::args).
+    ///
+    /// Arms bind every field rather than eliding with `..`, so a new field on
+    /// a variant does not compile until this decides about it.
+    ///
+    /// `path` is deliberately absent: it is the diagnostic's anchor, and an
+    /// anchor reachable by two routes acquires two spellings. `NotInline` and
+    /// `NotPlain` carry nothing else, so their sentence follows from the code
+    /// and the anchor alone.
+    ///
+    /// `default` is present only when the schema declares one — the same
+    /// condition [`type_mismatch_hint`] branches on, so a consumer selects its
+    /// own exit clause from the key's presence rather than re-deriving the
+    /// branch. Emitting it as `null` instead would read as a default spelled
+    /// `null`.
+    pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
+        match self {
+            ValidationError::TypeMismatch {
+                path: _,
+                expected,
+                actual,
+                source_token,
+                default,
+            } => {
+                let mut args = diag_args! {
+                    "expected" => expected,
+                    "actual" => actual,
+                    "sourceToken" => source_token,
+                };
+                if let Some(default) = default {
+                    args.insert("default".to_string(), serde_json::json!(default));
+                }
+                args
+            }
+            ValidationError::EnumViolation {
+                path: _,
+                value,
+                allowed,
+            } => diag_args! {
+                "value" => value,
+                "allowed" => allowed,
+            },
+            ValidationError::FormatViolation { path: _, format } => diag_args! {
+                "format" => format,
+            },
+            ValidationError::UnknownCard { path: _, card } => diag_args! {
+                "card" => card,
+            },
+            ValidationError::BodyDisabled { path: _, card } => diag_args! {
+                "card" => card,
+            },
+            ValidationError::NotInline { path: _ } => diag_args! {},
+            ValidationError::NotPlain { path: _ } => diag_args! {},
+        }
+    }
+
     /// Actionable hint for this error, when defined for the variant — the same
     /// string the `Display` impl bakes in, exposed so consumers can surface it
     /// without re-parsing prose.
@@ -234,7 +293,8 @@ impl ValidationError {
     pub fn to_diagnostic(&self) -> Diagnostic {
         let mut diag = Diagnostic::new(Severity::Error, self.to_string())
             .with_code(self.code().to_string())
-            .with_path(self.path().to_string());
+            .with_path(self.path().to_string())
+            .with_args(self.args());
         if let Some(hint) = self.hint() {
             diag = diag.with_hint(hint);
         }

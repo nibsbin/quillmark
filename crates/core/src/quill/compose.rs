@@ -7,7 +7,7 @@ use std::str::FromStr;
 use indexmap::IndexMap;
 
 use super::resolved::FieldSource;
-use super::{seed, CardSchema, FieldSchema, FieldType, Leniency, Quill, QuillConfig};
+use super::{seed, CardSchema, CoercionError, FieldSchema, FieldType, Leniency, Quill, QuillConfig};
 use crate::normalize::{normalize_document, normalize_field_name};
 use crate::quill::zero_value;
 use crate::path::DocPath;
@@ -318,7 +318,8 @@ fn quill_mismatch(message: String, code: &str, hint: &str) -> RenderError {
 fn seed_violation_diagnostic(v: &super::validation::ValidationError) -> Diagnostic {
     let mut diag = Diagnostic::new(Severity::Warning, v.to_string())
         .with_code(v.code().to_string())
-        .with_path(v.path().to_string());
+        .with_path(v.path().to_string())
+        .with_args(v.args());
     if let Some(hint) = v.hint() {
         diag = diag.with_hint(hint);
     }
@@ -326,11 +327,14 @@ fn seed_violation_diagnostic(v: &super::validation::ValidationError) -> Diagnost
 }
 
 /// Wrap a coercion error into a `validation::coercion_failed` failure.
-/// `Diagnostic::path` is unset — coercion runs before structured validation.
-fn coercion_error(e: impl std::fmt::Display) -> RenderError {
+/// `Diagnostic::path` is unset — coercion runs before structured validation,
+/// and the anchor the error does carry is schema-space (see
+/// [`CoercionError::args`](super::config::CoercionError::args)).
+fn coercion_error(e: CoercionError) -> RenderError {
     RenderError::from_diag(
         Diagnostic::new(Severity::Error, e.to_string())
             .with_code("validation::coercion_failed".to_string())
+            .with_args(e.args())
             .with_hint("Ensure all fields can be coerced to their declared types".to_string()),
     )
 }
