@@ -263,8 +263,8 @@ pub fn line_kind_to_value(kind: &LineKind) -> Value {
 }
 
 /// Decode a [`LineKind`] from an object carrying the canonical `kind` fields.
-/// The inverse of [`line_kind_to_value`]; the shared line-kind reader for
-/// [`line_from_value`] and the line-op wire.
+/// The inverse of [`line_kind_to_value`]; the shared line-kind reader for the
+/// line decoder and the line-op wire.
 pub fn line_kind_from_value(v: &Value) -> Result<LineKind, ParseError> {
     let o = v.as_object().ok_or(ParseError::Shape("line"))?;
     // A missing/non-string `kind` is the one shape error here — the open set

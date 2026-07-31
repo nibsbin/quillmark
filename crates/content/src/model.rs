@@ -501,7 +501,8 @@ pub enum Invariant {
     /// never re-reads the segment, so an unchecked mismatch is silent text loss
     /// (an `Island`-tagged prose line projects to its resolved island alone).
     LineKindMismatch { line: usize, mismatch: LineKindMismatch },
-    /// A line's container path is nested deeper than [`MAX_NESTING_DEPTH`]. Both
+    /// A line's container path is nested deeper than
+    /// [`MAX_NESTING_DEPTH`](crate::MAX_NESTING_DEPTH). Both
     /// emitters recurse one frame per container, so an unbounded path overflows
     /// the stack; import caps it, and this is the same cap for the content that
     /// never went through import (a decoded blob, a hand-built value).
@@ -699,10 +700,10 @@ impl Content {
     /// the built-in name before the `Unknown` fallthrough, so a reserved tag
     /// *becomes* the built-in rather than arriving as an `Unknown`. The authored
     /// lane therefore rejects the shape up front
-    /// ([`serial::mark_from_op_value`](crate::serial::mark_from_op_value), its two
-    /// block-axis twins, and
-    /// [`serial::from_authored_value`](crate::serial::from_authored_value)), while
-    /// storage decode stays lenient by design — see there.
+    /// ([`serial::from_authored_value`](crate::serial::from_authored_value) for
+    /// whole content; [`ops::mark_op_from_value`](crate::ops::mark_op_from_value)
+    /// and [`ops::line_op_from_value`](crate::ops::line_op_from_value) for the op
+    /// wire), while storage decode stays lenient by design; see there.
     ///
     /// This list and its two siblings are re-spelled by hand on the TypeScript
     /// surface: the unions in `crates/bindings/wasm/src/engine.rs` and the

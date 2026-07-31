@@ -66,22 +66,19 @@ jobs:
       # (68c3751a) as not worth the CI time; `cargo doc -Dwarnings` is the
       # standing lint gate. Do not re-add a "make clippy clean" pass expecting
       # CI to enforce it — record the policy change here first if that changes.
+      #
+      # `--workspace`, not a bare `cargo doc`: bare walks default-members, and
+      # a crate outside it is never linted — the blind spot that let two broken
+      # `Delta` links accumulate on the JS surface (#1034) and four more in
+      # quillmark-content, which is published, so its rustdoc is what docs.rs
+      # serves. Every member documents on the host toolchain, the wasm32
+      # cdylib included (it carries an rlib target too), so this needs no
+      # `--exclude` and a crate added outside default-members is covered the
+      # day it lands.
       - name: Build docs
         env:
           RUSTDOCFLAGS: -Dwarnings
-        run: cargo doc --no-deps --locked
-
-      # The step above walks default-members, which omits the binding crates —
-      # crates/bindings/wasm is a wasm32 cdylib excluded from default-members —
-      # so their rustdoc, intra-doc links included, is never linted by it. That
-      # blind spot let two broken `Delta` links accumulate on the JS surface
-      # (#1034). quillmark-wasm also carries an rlib target, so it documents on
-      # the host toolchain; lint it explicitly to catch such breakage going
-      # forward. Separate step so a wasm-only doc failure is legible in the log.
-      - name: Build docs (wasm binding)
-        env:
-          RUSTDOCFLAGS: -Dwarnings
-        run: cargo doc --no-deps --locked -p quillmark-wasm
+        run: cargo doc --no-deps --locked --workspace
 
   test:
     runs-on: ubuntu-latest

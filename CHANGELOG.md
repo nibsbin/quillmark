@@ -1,5 +1,84 @@
 # Changelog
 
+## Unreleased
+
+The 1.0.0 API freeze lands ahead of the tag, and the content codec closes its
+last open gaps. All breaking changes are covered by
+`docs/migrations/0.98-to-0.99.md`. Stored documents are unaffected: a `0.98` blob
+loads byte-identically and `0.99` writes the same bytes for the same content.
+
+- refactor(core,content,pdf,pdfform)!: the public API opens. 75 public types take
+  `#[non_exhaustive]` — nothing in the workspace carried it before — so an
+  exhaustive `match` needs a `_` arm and a struct literal gives way to `new` plus
+  `with_*` setters. `Backend` is sealed, `OutputFormat::ALL` and
+  `Content::RESERVED_{MARK_TYPES,LINE_KINDS,CONTAINERS}` become slices, and
+  `RenderOptions { .., ..Default::default() }` becomes
+  `RenderOptions::default().with_output_format(fmt)`. Two types stay exhaustive
+  and say so: the `V0_92_0` storage DTOs and `quillmark_pdf::FieldType`, where a
+  missed variant draws nothing and reports nothing. The rules are canonized in
+  `prose/canon/COMPATIBILITY.md` (#1090, #1103). See
+  `docs/migrations/0.98-to-0.99.md`
+- refactor(core)!: the YAML engine leaves the public API. `QuillValue::from_yaml_str`
+  and `QuillConfig::schema_yaml` return `quillmark_core::YamlError` instead of
+  `serde_saphyr` types, so a `0.0.x` dependency release is no longer a break to
+  `quillmark-core`. The message is sanitized (the engine's own Rust API names are
+  stripped), and `from_yaml_str` gains the `MAX_YAML_DEPTH` budget its siblings
+  already carried (#1099, #1101). See `docs/migrations/0.98-to-0.99.md`
+- fix(content)!: the reserved-name rule reaches the wire. `attrs` beside a
+  built-in discriminator resolved to the built-in and dropped the payload in
+  silence; the authored lane now refuses it on all four axes, where a host writes
+  it. Reading never got stricter — a blob from before a promotion still opens.
+  A table cell keeps its own unknown keys too, canonicalization now rewriting it
+  in place rather than minting a fresh `{text, marks}` (#1084, #1085, #1086,
+  #1092). See `docs/migrations/0.98-to-0.99.md`
+- fix(content)!: opaque payload depth is bounded at `MAX_JSON_DEPTH` (128) on the
+  `Value` lane, where an unbounded one took the WASM module down with a
+  stack-overflow trap rather than a catchable error. The WASM guard sits on the
+  JS side of the boundary, since `serde_wasm_bindgen` recurses while building the
+  value (#1093). See `docs/migrations/0.98-to-0.99.md`
+- fix(content)!: island `loss` becomes the fifth open set. An unrecognized class
+  round-trips verbatim as `Loss::Unknown` instead of being rewritten to
+  `unrepresentable`, so merely opening a document no longer moves its content
+  hash. `Loss` consequently loses its `Copy` derive; read fidelity through
+  `Loss::fidelity` (#1091). See `docs/migrations/0.98-to-0.99.md`
+- refactor(core,typst,pdf)!: workspace-internal seams leave the published
+  surface. `quillmark-pdf`'s `reader`/`writer` modules and `quillmark_typst::emit`
+  become `#[doc(hidden)]`; the op-wire encoders emit an unknown's `attrs` in
+  caller key order, the redundant per-encoder sort having been dropped (canonical
+  content bytes are unchanged, the terminal sort still running) (#1095). See
+  `docs/migrations/0.98-to-0.99.md`
+- feat(wasm): `isUnknownLine` / `isUnknownContainer` / `isUnknownMark` /
+  `isUnknownIsland` answer known-vs-unknown on each open set, so a consumer no
+  longer enumerates built-in names in its own source. `ContentLineKind` is
+  re-exported from the package entry point, so a `setKind` op type-checks without
+  a cast
+- feat(python): the Tier-1 gaps close. `doc.card(i)`, `doc.card_index_by_id(id)`,
+  and `doc.seed_overlay(kind)` are the single-card, `$id`, and seed reads WASM
+  already had, and the wheel ships `py.typed` plus stubs, so mypy and Pyright see
+  real signatures where the surface used to resolve to `Any` (#1011)
+- fix(typst): four quill-load defects — a skipped asset, an unparseable
+  `typst.toml`, a skipped package file, a declared-but-absent entrypoint —
+  become `RenderResult` warnings (`typst::path_skipped`,
+  `typst::package_manifest`, `typst::package_entrypoint_missing`) instead of
+  `eprintln!` that wasm32 has nowhere to print (#1102)
+- ci: the release gates the tag actually needs. New `package` (builds every
+  publishable crate from its own archive and asserts each ships its `LICENSE`),
+  `msrv` (holds `rust-version` to something true), and `audit` (bare `cargo
+  audit` over the lockfile) jobs; the workspace moves to edition 2024 and
+  declares MSRV 1.92. The `semver` job is dropped — it compared the tree's
+  unbumped version against itself — and `COMPATIBILITY.md` names the writer and
+  reviewer as what holds the promise instead (#1105, #1106, #1107, #1108)
+- ci: the rustdoc gate covers the whole workspace. A bare `cargo doc` walks
+  default-members and never lints a crate outside it — the blind spot that let
+  the `Delta` links rot on the WASM surface and four more in the published
+  `quillmark-content`. `--workspace` needs no `--exclude` and covers the next
+  such crate on the day it lands
+- test(fuzz): the four JSON decode lanes the bindings expose gain coverage
+  (#1104)
+- docs(canon): `COMPATIBILITY.md` states the crate-API promise — what
+  `#[non_exhaustive]` does and does not buy, when to mark an enum, and what no
+  attribute sweep catches
+
 ## v0.98.0 - 2026-07-28
 
 Five breaking changes, all covered by `docs/migrations/0.97-to-0.98.md`.
