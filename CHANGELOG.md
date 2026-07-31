@@ -68,10 +68,11 @@ loads byte-identically and `0.99` writes the same bytes for the same content.
   declares MSRV 1.92. The `semver` job is dropped — it compared the tree's
   unbumped version against itself — and `COMPATIBILITY.md` names the writer and
   reviewer as what holds the promise instead (#1105, #1106, #1107, #1108)
-- ci: `quillmark-content` joins the rustdoc gate. `cargo doc --no-deps` walks
-  default-members, which the crate is not one of, so four broken intra-doc links
-  accumulated in a published crate unseen — the same blind spot that let the
-  `Delta` links rot on the WASM surface
+- ci: the rustdoc gate covers the whole workspace. A bare `cargo doc` walks
+  default-members and never lints a crate outside it — the blind spot that let
+  the `Delta` links rot on the WASM surface and four more in the published
+  `quillmark-content`. `--workspace` needs no `--exclude` and covers the next
+  such crate on the day it lands
 - test(fuzz): the four JSON decode lanes the bindings expose gain coverage
   (#1104)
 - docs(canon): `COMPATIBILITY.md` states the crate-API promise — what

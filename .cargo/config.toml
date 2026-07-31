@@ -1,5 +1,7 @@
 [alias]
-doc-workspace = "doc --no-deps -p quillmark-core -p quillmark -p quillmark-typst"
+# The lint job's gate, minus `--locked`. A hand-listed subset drifts from what
+# CI documents, which is the whole workspace.
+doc-workspace = "doc --no-deps --workspace"
 
 [target.wasm32-unknown-unknown]
 rustflags = ['--cfg', 'getrandom_backend="wasm_js"']
