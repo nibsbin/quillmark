@@ -16,7 +16,23 @@
 //! and parses the path, no site assembles one with `format!`. Its module doc
 //! carries the grammar; `prose/canon/ERROR.md` tabulates the anchors.
 
+use std::collections::BTreeMap;
+
 use crate::OutputFormat;
+
+/// Build a [`Diagnostic::args`] map. Values pass through `serde_json`, so a
+/// list arrives as a list and a count as a number: the shapes a consumer
+/// needs to join and pluralize in its own locale.
+macro_rules! diag_args {
+    ($($key:literal => $value:expr),* $(,)?) => {{
+        #[allow(unused_mut)]
+        let mut map = ::std::collections::BTreeMap::<String, ::serde_json::Value>::new();
+        $(map.insert($key.to_string(), ::serde_json::json!($value));)*
+        map
+    }};
+}
+
+pub(crate) use diag_args;
 
 /// Maximum input size for markdown (10 MiB)
 pub const MAX_INPUT_SIZE: usize = 10 * 1024 * 1024;
@@ -204,7 +220,23 @@ pub struct Diagnostic {
     pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub hint: Option<String>,
-    /// Flattened cause chain (outermost first).
+    /// The facts [`Self::message`] interpolates, keyed by name. With
+    /// [`Self::code`], the substitution unit a consumer needs to word this
+    /// diagnostic in its own language.
+    ///
+    /// One code carries one key set, tabulated per code in
+    /// `prose/canon/ERROR.md`. Values keep their JSON shape: a list stays a
+    /// list and a count stays a number, so joining and pluralizing remain the
+    /// consumer's locale decisions rather than the engine's.
+    ///
+    /// Empty for any code outside the structured surface, which is the signal
+    /// to render `message` verbatim. Engine prose never rides under a key; a
+    /// consumer's own sentence may be coarser than ours, never
+    /// half-translated.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty", default)]
+    pub args: BTreeMap<String, serde_json::Value>,
+    /// Flattened cause chain (outermost first). Upstream English, and
+    /// untranslatable for the same reason the prose it wraps is.
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub source_chain: Vec<String>,
 }
@@ -218,6 +250,7 @@ impl Diagnostic {
             location: None,
             path: None,
             hint: None,
+            args: BTreeMap::new(),
             source_chain: Vec::new(),
         }
     }
@@ -242,6 +275,12 @@ impl Diagnostic {
 
     pub fn with_hint(mut self, hint: String) -> Self {
         self.hint = Some(hint);
+        self
+    }
+
+    /// Attach the message's substitution facts. See [`Self::args`].
+    pub fn with_args(mut self, args: BTreeMap<String, serde_json::Value>) -> Self {
+        self.args = args;
         self
     }
 
@@ -347,8 +386,50 @@ pub enum ParseError {
 }
 
 impl ParseError {
-    pub fn to_diagnostic(&self) -> Diagnostic {
+    /// The facts this error's message interpolates. See [`Diagnostic::args`].
+    ///
+    /// Arms bind every field rather than eliding with `..`, so a new field on
+    /// a variant does not compile until this decides about it.
+    ///
+    /// Four variants carry only prose and so contribute no keys. `EmptyInput`
+    /// is a single fixed sentence a consumer writes from the code alone;
+    /// `InvalidStructure` and `BodyImport` wrap messages minted at ~20 sites
+    /// and by the content importer; `MissingQuill` selects one of three
+    /// sentences by inspecting the source, a branch no structured field
+    /// records. All four render `message` verbatim (see `ERROR.md`
+    /// § "Diagnostic args").
+    pub fn args(&self) -> BTreeMap<String, serde_json::Value> {
         match self {
+            ParseError::InputTooLarge { size, max } => diag_args! {
+                "size" => size,
+                "max" => max,
+            },
+            ParseError::InvalidStructure(_) => diag_args! {},
+            ParseError::EmptyInput(_) => diag_args! {},
+            ParseError::MissingQuill(_) => diag_args! {},
+            ParseError::BodyImport(_) => diag_args! {},
+            // `reason` is the `from_str` violation in English, so it stays in
+            // `message`; `value` alone carries the consumer's sentence.
+            ParseError::InvalidQuillReference { value, reason: _ } => diag_args! {
+                "value" => value,
+            },
+            // No `location` is set on this diagnostic, so `args` is the only
+            // structured route to the coordinates the message names. `message`
+            // is the YAML engine's own prose and keeps no key.
+            ParseError::YamlErrorWithLocation {
+                message: _,
+                line,
+                block_index,
+                hint: _,
+            } => diag_args! {
+                "line" => line,
+                "blockIndex" => block_index,
+            },
+        }
+    }
+
+    pub fn to_diagnostic(&self) -> Diagnostic {
+        let diag = match self {
             ParseError::InputTooLarge { size, max } => Diagnostic::new(
                 Severity::Error,
                 format!("Input too large: {} bytes (max: {} bytes)", size, max),
@@ -387,7 +468,8 @@ impl ParseError {
                 }
                 d
             }
-        }
+        };
+        diag.with_args(self.args())
     }
 }
 

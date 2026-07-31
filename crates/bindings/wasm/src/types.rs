@@ -121,6 +121,19 @@ pub struct Diagnostic {
     pub path: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub hint: Option<String>,
+    /// The facts `message` interpolates, keyed by name. With `code`, the
+    /// substitution unit a consumer needs to word this diagnostic itself.
+    /// Absent for any code outside the structured surface, which is the signal
+    /// to render `message` verbatim. See the Rust `Diagnostic::args` docs and
+    /// `prose/canon/ERROR.md` for the per-code keys.
+    ///
+    /// Declared optional explicitly: `tsify` does not read
+    /// `skip_serializing_if`, so a field omitted at runtime is declared
+    /// required unless said so here (`sourceChain` predates this and still
+    /// carries that mismatch).
+    #[tsify(optional, type = "Record<string, unknown>")]
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty", default)]
+    pub args: std::collections::BTreeMap<String, serde_json::Value>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub source_chain: Vec<String>,
 }
@@ -134,6 +147,7 @@ impl From<quillmark_core::Diagnostic> for Diagnostic {
             location: diag.location.map(Into::into),
             path: diag.path,
             hint: diag.hint,
+            args: diag.args,
             source_chain: diag.source_chain,
         }
     }
@@ -146,6 +160,7 @@ impl From<Diagnostic> for quillmark_core::Diagnostic {
         out.location = diag.location.map(Into::into);
         out.path = diag.path;
         out.hint = diag.hint;
+        out.args = diag.args;
         out.source_chain = diag.source_chain;
         out
     }
