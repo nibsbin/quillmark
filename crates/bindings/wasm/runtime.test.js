@@ -884,21 +884,33 @@ main:
     //
     // The failure is injected through the backend REGISTRY, not through a
     // stand-in Document: both caller handles are checked before the clone runs
-    // (see "handles from another copy" below), so they have to be real.
+    // (see "handles from another copy" below), so they have to be real. Same
+    // Proxy-over-the-real-module shape as fromTreeCountingEngine, so the quill
+    // clone left cached is a real backend quill and only `fromJson` misbehaves.
     const engine = new Engine({
       backends: {
         typst: {
-          load: async () => ({
-            Quill: { fromTree: () => ({ free() {} }) },
-            Document: {
-              fromJson() {
-                throw new Error('doc clone refused')
+          load: async () => {
+            const real = await import('../../../pkg/backends/typst/wasm.js')
+            const refusingDocument = new Proxy(real.Document, {
+              get(target, prop, receiver) {
+                if (prop === 'fromJson') {
+                  return () => {
+                    throw new Error('doc clone refused')
+                  }
+                }
+                return Reflect.get(target, prop, receiver)
               },
-            },
-            Quillmark: class {},
-          }),
-          formats: ['pdf'],
-          canvas: false,
+            })
+            return new Proxy(real, {
+              get(target, prop, receiver) {
+                if (prop === 'Document') return refusingDocument
+                return Reflect.get(target, prop, receiver)
+              },
+            })
+          },
+          formats: ['pdf', 'svg', 'png'],
+          canvas: true,
         },
       },
     })
@@ -910,18 +922,18 @@ main:
 
 // A duplicate install is two copies of this package: two core builds, two
 // linear memories, two distinct `Quill`/`Document` classes. A handle never
-// crosses between them — every seam taking one checks, and throws in contract
+// crosses between them; every seam taking one checks, and throws in contract
 // naming the duplicate install and `npm ls`. See runtime.js § "Handles from
 // another copy". These pin that the rule is UNIFORM: the by-reference core
 // methods (which wasm-bindgen would reject anyway, as a bare `Error`), the
-// writer and reader binds, `Engine`, and `LiveSession.apply` — the last two
-// being the seams that cross as data and would otherwise silently work.
+// writer and reader binds, `Engine`, and `LiveSession.apply`. The last two are
+// the seams that cross as data and would otherwise silently work.
 //
-// A foreign handle is modelled two ways: a stand-in carrying the serializer the
-// old tolerant lane keyed on (the shape most likely to slip through a check),
-// and a second copy of the built core artifact on disk, which is a genuinely
-// different class over a different linear memory.
-describe('@quillmark/wasm/runtime — handles from another copy (duplicate install)', () => {
+// A foreign handle is modelled two ways: a stand-in carrying the serializer a
+// real handle has (the shape most likely to slip a check), and a second copy of
+// the built core artifact on disk, which is a genuinely different class over a
+// different linear memory.
+describe('@quillmark/wasm/runtime: handles from another copy (duplicate install)', () => {
   const foreignDoc = (doc) => ({ toJson: () => doc.toJson() })
   const foreignQuill = (quill) => ({
     toTree: () => quill.toTree(),
@@ -930,49 +942,29 @@ describe('@quillmark/wasm/runtime — handles from another copy (duplicate insta
 
   /** Every rejection is in contract, codes `runtime::foreign_handle`, and names `npm ls`. */
   const assertForeign = (caught, method) => {
-    // The bare `_assertClass` throw (`expected instance of Document` at a value
-    // that IS a Document) is exactly what this replaces, and it fails this.
+    // wasm-bindgen's bare `_assertClass` throw (`expected instance of Document`
+    // at a value that IS a Document) fails every line below.
     expect(isQuillmarkError(caught)).toBe(true)
     expect(caught.diagnostics[0].code).toBe('runtime::foreign_handle')
     expect(caught.message).toContain(method)
     expect(caught.diagnostics[0].hint).toMatch(/npm ls @quillmark\/wasm/)
     return caught
   }
-  const expectForeign = (call, method) => {
-    let caught
+  /** The thrown value, `undefined` if `call` returned. */
+  const caughtFrom = (call) => {
     try {
       call()
     } catch (e) {
-      caught = e
+      return e
     }
-    return assertForeign(caught, method)
   }
+  const expectForeign = (call, method) => assertForeign(caughtFrom(call), method)
+  // Kept separate from the sync form rather than folded into one async helper:
+  // a forgotten `await` on an async assertion passes silently.
   const expectForeignAsync = (promise, method) =>
     promise.then(
       () => expect.unreachable(`${method} resolved instead of refusing a foreign handle`),
       (e) => assertForeign(e, method)
-    )
-
-  // The reader verbs are schema-bound, so they need a quill that DECLARES the
-  // fields TEST_MARKDOWN sets; the default test quill declares none.
-  const READER_QUILL_YAML = `quill:
-  name: test_quill
-  version: "1.0"
-  backend: typst
-  description: Foreign-handle reader test
-
-main:
-  fields:
-    title:
-      type: richtext
-      inline: true
-    author:
-      type: richtext
-      inline: true
-`
-  const readerQuill = () =>
-    Quill.fromTree(
-      makeQuill({ name: 'test_quill', plate: TEST_PLATE, quillYaml: READER_QUILL_YAML })
     )
 
   it('rejects a foreign Document on the by-reference core methods', () => {
@@ -998,12 +990,7 @@ main:
       [() => quill.validate({}), 'Quill.validate'],
       [() => quill.resolve(42), 'Quill.resolve'],
     ]) {
-      let caught
-      try {
-        call()
-      } catch (e) {
-        caught = e
-      }
+      const caught = caughtFrom(call)
       expect(isQuillmarkError(caught)).toBe(true)
       expect(caught.message).toContain(method)
       expect(caught.diagnostics[0].code).toBe('runtime::not_a_document')
@@ -1057,6 +1044,19 @@ main:
     await expectForeignAsync(
       engine.supportsCanvas(foreignQuill(quill)),
       'engine.supportsCanvas(quill)'
+    )
+  })
+
+  // "Every seam checks" is enforced by hand-placed calls, so the set of seams
+  // is pinned like the backend manifest above: a fifth Engine verb fails here
+  // until it is classified, rather than silently accepting a foreign handle.
+  // Inside the class the check is structural (`#backendOf` is the only route to
+  // `backendId`, and `#withClones` checks the doc); this guards the boundary.
+  it('has no Engine verb outside the checked set (drift guard)', () => {
+    const TAKES_A_QUILL = ['render', 'open', 'supportedFormats', 'supportsCanvas']
+    const TAKES_NO_HANDLE = ['constructor']
+    expect(Object.getOwnPropertyNames(Engine.prototype).sort()).toEqual(
+      [...TAKES_A_QUILL, ...TAKES_NO_HANDLE].sort()
     )
   })
 

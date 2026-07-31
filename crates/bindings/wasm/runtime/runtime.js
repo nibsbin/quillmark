@@ -125,52 +125,66 @@ function quillmarkError(code, message, hint) {
 // AND needs handles to cross between the copies, so a crossing is a consumer
 // bug. Every seam taking a core handle says so, uniformly, at the crossing.
 //
-// The alternative — crossing read-only handles as data, since `toJson`/`toTree`
-// make that mechanically possible — was tried and reversed. It leaves a package
-// where some verbs work and some throw, and it hides a cliff: a crossed read is
-// a whole-document `toJson` + `fromJson`, so a form reading fifty fields pays
+// Crossing read-only handles as data is mechanically possible (`toJson` and
+// `toTree` serialize either way) and is not done. It leaves a package where
+// some verbs work and some throw, and it hides a cliff: a crossed read is a
+// whole-document `toJson` + `fromJson`, so a form reading fifty fields pays
 // fifty round trips and the symptom is "the editor got slow". A duplicate
 // install that limps is a duplicate install nobody removes.
 //
-// What the checks below actually deliver is the ERROR, not the rejection.
-// wasm-bindgen's generated glue already rejects a foreign class on every method
-// declaring a reference parameter (`Document.equals`, `Quill.validate`,
-// `Quill.resolve`, the `&Quill`-taking `Document._commitField` and friends): its
-// `_assertClass` is emitted unconditionally and runs before any of our code. But
-// it throws a bare `Error` reading `expected instance of Document` at a value
-// that IS a `Document` — `isQuillmarkError` returns false and the failure leaves
-// this package's error contract, naming neither the cause nor the cure. The
-// checks front-run it with a `QuillmarkError` that names both.
+// What the checks deliver is the ERROR, not the rejection. wasm-bindgen's
+// generated glue already rejects a foreign class on every method declaring a
+// reference parameter (`Document.equals`, `Quill.validate`, `Quill.resolve`,
+// the `&Quill`-taking `Document._commitField` and friends): its `_assertClass`
+// is emitted unconditionally and runs before any of our code. It throws a bare
+// `Error` reading `expected instance of Document` at a value that IS a
+// `Document`, so `isQuillmarkError` returns false and the failure leaves this
+// package's error contract, naming neither the cause nor the cure. The checks
+// front-run it with a `QuillmarkError` that names both.
 //
-// They also cover the seams that have NO `_assertClass` to front-run: `Engine`
-// and `LiveSession.apply` cross into backend memory as data (`toTree`/`toJson`),
-// so a foreign handle there would silently work, at the price of a per-copy
-// quill clone cache (#1134) and the round-trip above.
+// They also cover the seams with NO `_assertClass` to front-run: `Engine` and
+// `LiveSession.apply` cross into backend memory as data (`toTree`/`toJson`), so
+// a foreign handle there would silently work, at the price of the round-trip
+// above and a quill clone cache split per copy.
 //
 // Not an API widening in either direction: the declared parameter types stay
 // `Quill`/`Document`, and the accepted set is exactly this copy's instances.
 
+/** Per class: the code and hint for "not one at all", and the probe for "from another copy". */
+const HANDLE_KINDS = {
+	Quill: {
+		code: 'runtime::not_a_quill',
+		probe: 'toTree',
+		hint: 'Pass a Quill built by Quill.fromTree.'
+	},
+	Document: {
+		code: 'runtime::not_a_document',
+		probe: 'toJson',
+		hint: 'Pass a Document built by Document.fromMarkdown / fromJson or quill.seedDocument.'
+	}
+};
+
 /**
  * The rejection for a value that is not one of this copy's handles. Two cures,
- * so two diagnostics: a value carrying `probe` is that class from ANOTHER copy
- * (dedupe the install), anything else is the wrong argument (fix the call).
+ * so two diagnostics: a value carrying the class's serializer is that class
+ * from ANOTHER copy (dedupe the install), anything else is the wrong argument
+ * (fix the call).
  * @param {unknown} value
  * @param {string} method
  * @param {'Quill' | 'Document'} className
- * @param {string} probe a method the class has, standing in for its shape
- * @param {string} hint what a caller who passed the wrong thing should pass
  * @returns {Error & { diagnostics: import('../core/wasm.js').Diagnostic[] }}
  */
-function notLocal(value, method, className, probe, hint) {
+function notLocal(value, method, className) {
+	const { code, probe, hint } = HANDLE_KINDS[className];
 	if (value && typeof (/** @type {any} */ (value)[probe]) === 'function') {
 		return quillmarkError(
 			'runtime::foreign_handle',
-			`${method}: the ${className} belongs to a different copy of @quillmark/wasm. Handles never cross between copies — each copy is its own WASM linear memory and its own ${className} class.`,
+			`${method}: the ${className} belongs to a different copy of @quillmark/wasm. Handles never cross between copies: each copy is its own WASM linear memory and its own ${className} class.`,
 			'Two copies of @quillmark/wasm are installed. Run `npm ls @quillmark/wasm` and dedupe to one.'
 		);
 	}
 	return quillmarkError(
-		className === 'Quill' ? 'runtime::not_a_quill' : 'runtime::not_a_document',
+		code,
 		`${method}: expected a ${className}, got ${value === null ? 'null' : typeof value}.`,
 		hint
 	);
@@ -184,13 +198,7 @@ function notLocal(value, method, className, probe, hint) {
  */
 function requireLocalDoc(doc, method) {
 	if (doc instanceof Document) return;
-	throw notLocal(
-		doc,
-		method,
-		'Document',
-		'toJson',
-		'Pass a Document built by Document.fromMarkdown / fromJson or quill.seedDocument.'
-	);
+	throw notLocal(doc, method, 'Document');
 }
 
 /**
@@ -201,7 +209,7 @@ function requireLocalDoc(doc, method) {
  */
 function requireLocalQuill(quill, method) {
 	if (quill instanceof Quill) return;
-	throw notLocal(quill, method, 'Quill', 'toTree', 'Pass a Quill built by Quill.fromTree.');
+	throw notLocal(quill, method, 'Quill');
 }
 
 // Marker for the patches below. `Symbol.for`, not a module-local `Symbol()`:
@@ -237,9 +245,11 @@ patchHandleChecked(Document.prototype, 'equals', (original) =>
 	}
 );
 for (const name of /** @type {const} */ (['validate', 'resolve'])) {
+	// Named once per patch, not per call: `validate` runs per keystroke.
+	const method = `Quill.${name}`;
 	patchHandleChecked(Quill.prototype, name, (original) =>
 		function (/** @type {any} */ doc) {
-			requireLocalDoc(doc, `Quill.${name}`);
+			requireLocalDoc(doc, method);
 			return original.call(this, doc);
 		}
 	);
@@ -494,6 +504,20 @@ export class Engine {
 	}
 
 	/**
+	 * `quill`'s backend id, after checking the handle. The ONE way an `Engine`
+	 * verb reaches `backendId`, so "no verb touches a foreign quill" is
+	 * structural rather than four remembered calls. See § "Handles from another
+	 * copy".
+	 * @param {Quill} quill
+	 * @param {string} method the caller's name, for the rejection message
+	 * @returns {string}
+	 */
+	#backendOf(quill, method) {
+		requireLocalQuill(quill, method);
+		return quill.backendId;
+	}
+
+	/**
 	 * Resolve (and lazily load) the backend module + its engine for `backendId`.
 	 * @param {string} backendId
 	 * @returns {Promise<{ mod: any, engine: any }>}
@@ -571,23 +595,24 @@ export class Engine {
 	 * the consumer replaces the instance. A cache miss materializes it once;
 	 * subsequent calls reuse it.
 	 *
-	 * Both handles are this copy's — the public entry points check before they
-	 * read `quill.backendId`. The crossing here is core→backend (always two
+	 * Both handles are checked here, so the crossing is core→backend (always two
 	 * memories, always as data); core→core is a duplicate install and never gets
-	 * this far. See § "Handles from another copy".
-	 * @param {string} backendId
+	 * past the first line. See § "Handles from another copy".
+	 * @param {string} method the caller's name, for the rejection message
 	 * @param {Quill} quill
 	 * @param {Document} doc
 	 * @param {(ctx: { mod: any, engine: any, quill: any, doc: any }) => any} fn
 	 */
-	async #withClones(backendId, quill, doc, fn) {
+	async #withClones(method, quill, doc, fn) {
+		const backendId = this.#backendOf(quill, method);
+		requireLocalDoc(doc, method);
 		const docJson = doc.toJson();
 		const quillTree = this.#quillClones.get(backendId)?.has(quill) ? null : quill.toTree();
 		const { mod, engine } = await this.#resolveBackend(backendId);
 		// The quill clone is cached (see #cachedQuillClone); only the per-call doc
 		// clone is transient. Bring the doc clone + `fn` under one try so the doc
 		// clone is freed even if a later step throws. The cached quill clone is
-		// intentionally NOT freed here. `fn` MUST be synchronous — the doc clone is
+		// intentionally NOT freed here. `fn` MUST be synchronous: the doc clone is
 		// freed as soon as it returns, so an async `fn` would have it freed
 		// mid-flight.
 		const backendQuill = this.#cachedQuillClone(mod, backendId, quill, quillTree);
@@ -610,9 +635,7 @@ export class Engine {
 	 * @returns {Promise<import('./runtime.js').RenderResult>}
 	 */
 	async render(quill, doc, options) {
-		requireLocalQuill(quill, 'engine.render(quill, doc)');
-		requireLocalDoc(doc, 'engine.render(quill, doc)');
-		return this.#withClones(quill.backendId, quill, doc, ({ engine, quill: q, doc: d }) =>
+		return this.#withClones('engine.render(quill, doc)', quill, doc, ({ engine, quill: q, doc: d }) =>
 			engine.render(q, d, options ?? undefined)
 		);
 	}
@@ -629,10 +652,8 @@ export class Engine {
 	 * @returns {Promise<LiveSession>}
 	 */
 	async open(quill, doc) {
-		requireLocalQuill(quill, 'engine.open(quill, doc)');
-		requireLocalDoc(doc, 'engine.open(quill, doc)');
 		return this.#withClones(
-			quill.backendId,
+			'engine.open(quill, doc)',
 			quill,
 			doc,
 			({ mod, engine, quill: q, doc: d }) => new LiveSession(engine.open(q, d), mod)
@@ -648,8 +669,7 @@ export class Engine {
 	 * @returns {Promise<import('./runtime.js').OutputFormat[]>}
 	 */
 	async supportedFormats(quill) {
-		requireLocalQuill(quill, 'engine.supportedFormats(quill)');
-		const descriptor = this.#descriptorFor(quill.backendId);
+		const descriptor = this.#descriptorFor(this.#backendOf(quill, 'engine.supportedFormats(quill)'));
 		// Defensive copy so callers can't mutate the shared manifest.
 		return descriptor.formats.slice();
 	}
@@ -666,8 +686,7 @@ export class Engine {
 	 * @returns {Promise<boolean>}
 	 */
 	async supportsCanvas(quill) {
-		requireLocalQuill(quill, 'engine.supportsCanvas(quill)');
-		const descriptor = this.#descriptorFor(quill.backendId);
+		const descriptor = this.#descriptorFor(this.#backendOf(quill, 'engine.supportsCanvas(quill)'));
 		return descriptor.canvas;
 	}
 }
@@ -1112,9 +1131,8 @@ export class DocumentReader {
 	 * A {@link CardReader} bound to the composable card at `index`. Index validity
 	 * is checked lazily by the underlying read (it throws `IndexOutOfRange` at read
 	 * time), so an out-of-range index does not throw here. Ephemeral like the
-	 * writer cursor —
-	 * it holds `index`, not the card, so a `removeCard`/`addCard` between binding
-	 * and reading silently retargets it.
+	 * writer cursor: it holds `index`, not the card, so a `removeCard`/`addCard`
+	 * between binding and reading silently retargets it.
 	 * @param {number} index
 	 * @returns {CardReader}
 	 */

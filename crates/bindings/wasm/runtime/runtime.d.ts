@@ -17,7 +17,7 @@
 // ONE COPY PER PROCESS: two copies of this package are two WASM linear memories
 // and two `Quill`/`Document` classes. Every method taking a handle refuses one
 // belonging to another copy, with a `QuillmarkError` naming `npm ls
-// @quillmark/wasm`. Errors are the exception — `isQuillmarkError` is structural.
+// @quillmark/wasm`. Errors are the exception: `isQuillmarkError` is structural.
 export { Quill, Document, init } from '../core/wasm.js';
 // The document-free content codec, re-exported from the core build.
 export { importMarkdown, exportMarkdown, rebase, mapPos } from '../core/wasm.js';
@@ -694,10 +694,10 @@ export declare class DocumentWriter {
 	removeCard(index: number): Card | undefined;
 	/**
 	 * A {@link CardWriter} for the composable card at `index`. Index validity is
-	 * checked lazily at commit time, so an out-of-range index does not throw
-	 * here. The cursor is
-	 * ephemeral — a `removeCard`/`addCard` between binding and writing silently
-	 * retargets it; for durable addressing stamp `$id` and re-resolve at write.
+	 * checked lazily at commit time, so an out-of-range index does not throw here.
+	 * The cursor is ephemeral: a `removeCard`/`addCard` between binding and writing
+	 * silently retargets it; for durable addressing stamp `$id` and re-resolve at
+	 * write.
 	 */
 	card(index: number): CardWriter;
 }
@@ -764,8 +764,8 @@ export declare class DocumentReader {
 	/**
 	 * A {@link CardReader} for the composable card at `index`. Index validity is
 	 * checked lazily at read time, so an out-of-range index does not throw here.
-	 * The cursor is ephemeral —
-	 * a `removeCard`/`addCard` between binding and reading silently retargets it.
+	 * The cursor is ephemeral: a `removeCard`/`addCard` between binding and reading
+	 * silently retargets it.
 	 */
 	card(index: number): CardReader;
 }
